@@ -13,4 +13,14 @@ renders_as:
     component: advanced_viz
     kind: complex_heatmap
     roles: { index: sample_id }
+  # The same square matrix read as an ordination. Every sample is a row of
+  # shared-clone counts, so a distance over those rows places samples that share
+  # clones next to each other: the repertoire-overlap MDS immunarch and VDJtools
+  # draw. The coordinates are computed at render time (the tile sets
+  # `compute_method: pcoa`), never stored, so the ordination follows whatever
+  # sample filter is active.
+  - id: overlap_mds
+    component: advanced_viz
+    kind: embedding
+    roles: { sample_id: sample_id, cluster: subject_id }
   - { component: table }

@@ -1,3 +1,5 @@
+from collections.abc import Awaitable
+
 import boto3
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -48,7 +50,7 @@ projects_endpoint_router = APIRouter()
 SEED_PROJECT_IDS: tuple[str, ...] = (
     "646b0f3c1e4a2d7f8e5b8c9a",  # Iris — depictio/projects/init/iris/project.yaml
     "646b0f3c1e4a2d7f8e5b8c9d",  # Penguins — depictio/projects/init/penguins/project.yaml
-    "646b0f3c1e4a2d7f8e5b8ca2",  # nf-core/ampliseq 2.14.0 — depictio/projects/nf-core/ampliseq/2.14.0/project.yaml
+    "646b0f3c1e4a2d7f8e5b8ca2",  # nf-core/ampliseq, latest version seeded: depictio/projects/nf-core/ampliseq/2.18.0/template.yaml
     "646b0f3c1e4a2d7f8e5b8d00",  # Advanced Visualisations — depictio/projects/init/advanced_viz_showcase/project.yaml
     "746b0f3c1e4a2d7f8e5b9ca2",  # nf-core/viralrecon 3.0.0 — depictio/projects/nf-core/viralrecon/3.0.0/template.yaml
 )
@@ -277,6 +279,17 @@ async def get_ingestion_health(project_id: PyObjectId, current_user=Depends(get_
     return build_ingestion_report(project).summary
 
 
+async def _project_exists(lookup: Awaitable[object]) -> bool:
+    """Whether a project lookup found one. A 404, or nothing returned, means the value
+    is free."""
+    try:
+        return await lookup is not None
+    except HTTPException as e:
+        if e.status_code == 404:
+            return False
+        raise
+
+
 @projects_endpoint_router.post("/create")
 async def create_project(project: Project, current_user=Depends(get_user_or_anonymous)):
     """Create a new project.
@@ -298,29 +311,38 @@ async def create_project(project: Project, current_user=Depends(get_user_or_anon
             detail="Project creation is disabled in public/demo mode for non-admin users",
         )
 
-    try:
-        if (
-            current_user.id not in [owner.id for owner in project.permissions.owners]
-            and not current_user.is_admin
-        ):
-            return {
-                "success": False,
-                "message": "User does not have permission to create this project.",
-                "status_code": 403,
-            }
+    if (
+        current_user.id not in [owner.id for owner in project.permissions.owners]
+        and not current_user.is_admin
+    ):
+        return {
+            "success": False,
+            "message": "User does not have permission to create this project.",
+            "status_code": 403,
+        }
 
-        existing_project_using_name = await get_project_from_name(project.name, current_user)
-        existing_project_using_id = await get_project_from_id(project.id, current_user)
-        if existing_project_using_name or existing_project_using_id:
-            reason_tag = "name" if existing_project_using_name else "id"
-            return {
-                "success": False,
-                "message": f"Project already exists using this {reason_tag}.",
-                "status_code": 409,
-            }
+    # Two lookups, each answering 404 when its value is free. They used to share
+    # one try, so a free name raised before the id was ever checked; and the id
+    # lookup took `current_user` positionally, as `skip_enrichment`, so a taken
+    # name failed with a 500 instead of this 409.
+    try:
+        name_taken = await _project_exists(
+            get_project_from_name(project_name=project.name, current_user=current_user)
+        )
+        id_taken = not name_taken and await _project_exists(
+            get_project_from_id(
+                project_id=project.id, skip_enrichment=True, current_user=current_user
+            )
+        )
     except HTTPException as e:
-        if e.status_code != 404:
-            return {"success": False, "message": str(e.detail), "status_code": e.status_code}
+        return {"success": False, "message": str(e.detail), "status_code": e.status_code}
+    if name_taken or id_taken:
+        reason_tag = "name" if name_taken else "id"
+        return {
+            "success": False,
+            "message": f"Project already exists using this {reason_tag}.",
+            "status_code": 409,
+        }
 
     try:
         validate_workflow_uniqueness_in_project(project)

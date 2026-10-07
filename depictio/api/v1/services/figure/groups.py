@@ -41,6 +41,25 @@ CODE_GROUP_KWARGS = "depictio_group_kwargs"
 # below is then handed a column its frame no longer has. Empty list whenever
 # grouping is off, so the same line works ungrouped.
 CODE_GROUP_BY = "depictio_group_by"
+
+
+def code_group_globals(
+    group_kwargs: dict | None = None, group_by: list[str] | None = None
+) -> dict[str, Any]:
+    """The names every code figure is executed with, grouped or not.
+
+    One place for both execution paths, the dashboard render task and the
+    catalog preview, so a figure that spreads ``depictio_group_kwargs`` or
+    ``depictio_group_by`` runs on either. Called with no arguments it binds the
+    ungrouped values (an empty dict and an empty list), which is what a preview
+    with no saved groups renders.
+    """
+    return {
+        CODE_GROUP_KWARGS: dict(group_kwargs or {}),
+        CODE_GROUP_BY: list(group_by or []),
+    }
+
+
 OTHER_LABEL = "Other"
 # Neutral gray for unassigned rows: context, not a category of its own.
 OTHER_COLOR = "#adb5bd"

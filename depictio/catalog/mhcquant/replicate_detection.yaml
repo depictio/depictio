@@ -1,0 +1,14 @@
+id: mhcquant_replicate_detection
+name: Replicate detection matrix
+mode: immunopeptidomics/replicate-detection
+description: >-
+  Peptidoform by replicate membership, one 0/1 column per replicate index
+  (rep_1, rep_2 and so on), for the UpSet view of how much of a sample is seen
+  in every injection.
+find: { path_glob: "*.tsv" }
+recipe: mhcquant/replicate_detection.py
+fixture: replicate_detection.tsv
+renders_as:
+  - { id: replicate_upset, component: advanced_viz, kind: upset_plot }
+  - { component: card, column: replicates_detected, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

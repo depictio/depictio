@@ -102,7 +102,13 @@ def _figure_payload(df, render) -> dict[str, Any]:
         import pandas as pd
         import polars as pl
 
+        from depictio.api.v1.services.figure.groups import code_group_globals
+
         ns.update(pd=pd, pl=pl, np=np)
+        # The grouping names a dashboard render binds, at their ungrouped
+        # values: a recipe that spreads them must preview exactly as it renders
+        # before anyone has saved a group.
+        ns.update(code_group_globals())
         try:
             exec(render.code, ns)  # noqa: S102 — trusted, repo-authored catalog snippet
         except Exception as exc:
@@ -1265,7 +1271,7 @@ def _inject(payload: dict[str, Any], nonce: str | None = None) -> str:
     """
     if not TEMPLATE_PATH.exists():
         raise CatalogPayloadError(
-            f"catalog-preview bundle not built: {TEMPLATE_PATH} is missing — run "
+            f"catalog-preview bundle not built: {TEMPLATE_PATH} is missing. Run "
             f"`cd depictio/viewer && pnpm run build:catalog-preview`"
         )
     blob = json.dumps(json_safe(payload), default=str).replace("</", "<\\/")
@@ -1279,7 +1285,7 @@ def _inject(payload: dict[str, Any], nonce: str | None = None) -> str:
         if marker not in html:
             raise CatalogPayloadError(
                 f"catalog-preview bundle at {TEMPLATE_PATH} has no {marker!r} tag to "
-                "nonce — rebuild it with `cd depictio/viewer && pnpm run build:catalog-preview`"
+                "nonce. Rebuild it with `cd depictio/viewer && pnpm run build:catalog-preview`"
             )
         html = html.replace(marker, f'<script nonce="{nonce}" type="module"', 1)
     # Patch server-relative logo paths → inline data URIs so they render offline.

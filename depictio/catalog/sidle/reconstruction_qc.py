@@ -20,15 +20,25 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="qc",
         path="sidle/DB/3_reconstructed/reconstruction_summary/metadata.tsv",
         format="TSV",
+        input_schema={
+            "feature-id": pl.Utf8,
+            "num-regions": pl.Utf8,
+            "total-kmers-mapped": pl.Utf8,
+            "mean-kmer-per-region": pl.Utf8,
+            "stdv-kmer-per-region": pl.Utf8,
+            "mapped-asvs": pl.Utf8,
+        },
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "feature_id": pl.Utf8,
     "num_regions": pl.Int64,
     "total_kmers_mapped": pl.Int64,
@@ -56,4 +66,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("mean_kmer_per_region").cast(pl.Float64, strict=False),
         pl.col("stdv_kmer_per_region").cast(pl.Float64, strict=False),
     )
-    return df.select(list(EXPECTED_SCHEMA.keys()))
+    return df.select(list(OUTPUT_SCHEMA.keys()))

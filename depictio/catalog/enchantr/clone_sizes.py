@@ -17,6 +17,7 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="clone_sizes",
@@ -25,10 +26,17 @@ SOURCES: list[RecipeSource] = [
             "clone_sizes_table.tsv"
         ),
         format="TSV",
+        input_schema={
+            "sample_id": pl.Utf8,
+            "clone_id": pl.Int64,
+            "seq_count": pl.Int64,
+            "seq_freq": pl.Float64,
+        },
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "subject_id": pl.Utf8,
     "clone_id": pl.Utf8,
@@ -37,7 +45,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "rank": pl.Int64,
     "size_class": pl.Utf8,
 }
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # Clonal-homeostasis bins on clone frequency (upper bound inclusive), the
 # convention immunarch's ``repClonality(.method = "homeo")`` popularised.

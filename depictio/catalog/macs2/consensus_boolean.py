@@ -31,16 +31,26 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="boolean",
         glob_pattern="**/*.consensus_peaks.boolean.txt",
         format="TSV",
+        input_schema={
+            "chr": pl.Utf8,
+            "start": pl.Utf8,
+            "end": pl.Utf8,
+            "interval_id": pl.Utf8,
+            "num_peaks": pl.Utf8,
+            "num_samples": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 0},
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "peak_id": pl.Utf8,
     "consensus_set": pl.Utf8,
     "interval_id": pl.Utf8,
@@ -51,7 +61,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "num_samples": pl.Int64,
 }
 # One Int8 0/1 column per sample follows; the names are run-specific.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _FIXED = ["chr", "start", "end", "interval_id", "num_peaks", "num_samples"]
 _FALLBACK_LABEL = "consensus"
@@ -122,4 +132,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             for s in samples
         ],
     )
-    return typed.select(list(EXPECTED_SCHEMA) + samples).sort(["consensus_set", "chr", "start"])
+    return typed.select(list(OUTPUT_SCHEMA) + samples).sort(["consensus_set", "chr", "start"])

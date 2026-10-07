@@ -15,15 +15,20 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="merged",
         glob_pattern="sylph/sylph_*_combined_reports.tsv",
         format="tsv",
+        input_schema={
+            "clade_name": pl.Utf8,
+        },
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "clade_name": pl.Utf8,
     "taxon": pl.Utf8,
@@ -31,7 +36,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "abundance": pl.Float64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # MetaPhlAn-style lineage prefixes, root to leaf.
 _RANK_BY_PREFIX = {

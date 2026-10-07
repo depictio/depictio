@@ -19,6 +19,7 @@
  */
 
 import { test, expect, getAuthMode, API_URL, API_PREFIX } from "@fixtures/auth";
+import { DASHBOARDS_GRID_URL } from "@fixtures/dashboard";
 
 test.describe("Public Mode", () => {
   test.beforeEach(async () => {
@@ -83,7 +84,7 @@ test.describe("Public Mode", () => {
     });
 
     test("public dashboards are listed and viewable", async ({ page }) => {
-      await page.goto("/dashboards");
+      await page.goto(DASHBOARDS_GRID_URL);
       await expect(page.locator(".mantine-AppShell-root")).toBeVisible({
         timeout: 15_000,
       });

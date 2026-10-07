@@ -118,6 +118,12 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
     }
     case 'manhattan':
       return named;
+    case 'genome_view':
+      // Same reasoning as the Manhattan: a mark is one feature at one locus and
+      // the dashboard has to name the column a pick stands for. The region
+      // brush is a separate path (`genomeRegionFilters` below) that needs no
+      // opt-in, because a chromosome and a position range are never ambiguous.
+      return named;
     case 'profile': {
       const seriesCol =
         typeof config.series_col === 'string' && config.series_col
@@ -132,6 +138,14 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
       const labelCol =
         typeof config.label_col === 'string' && config.label_col ? config.label_col : undefined;
       return named ?? labelCol;
+    }
+    case 'genome_chord': {
+      // A chord is one named link between two loci, so its label is the
+      // identifier. The two chromosome columns are a grouping and the positions
+      // are numeric, so neither could stand in for it.
+      const chordLabelCol =
+        typeof config.label_col === 'string' && config.label_col ? config.label_col : undefined;
+      return named ?? chordLabelCol;
     }
     default:
       return undefined;
@@ -168,6 +182,189 @@ export function advancedVizSelectionFilter(
   };
 }
 
+/** A genomic region as a `genome_view` brush reports it. */
+export interface GenomeRegionSelection {
+  /** Chromosomes the brush covers, in genome order. */
+  chroms: string[];
+  /** Position range inside the chromosome, or null when the brush spans
+   *  several: one `[start, end]` pair has no meaning across contigs. */
+  range: [number, number] | null;
+}
+
+/** Index suffix of the position-range half of a region selection.
+ *
+ *  `mergeFiltersBySource` dedupes by `(index, source)`, so the two halves of a
+ *  region need two keys. Suffixing the emitting component's own index keeps
+ *  them recognisably one selection, keeps "clear" able to drop each half, and
+ *  keeps `clearFiltersBySource(filters, 'genome_selection')` able to drop
+ *  both. */
+export const GENOME_POS_INDEX_SUFFIX = '::pos';
+
+export function genomePosFilterIndex(componentIndex: string): string {
+  return `${componentIndex}${GENOME_POS_INDEX_SUFFIX}`;
+}
+
+/** True for either half of a genome region pair (`source: 'genome_selection'`). */
+export function isRegionFilter(f: InteractiveFilter): boolean {
+  return f.source === 'genome_selection';
+}
+
+/**
+ * The filters a card reads: every active filter except the genome region,
+ * unless the card opts in with `follow_region_filter`.
+ *
+ * A region is a place to look, not a subset to summarise, so a card keeps
+ * summarising the whole collection while the tracks follow the locus. Mirrors
+ * `depictio/api/v1/region_scope.py`, which applies the same rule server-side
+ * in `bulk_compute_cards` and the card preview routes.
+ */
+export function cardScopedFilters(
+  filters: InteractiveFilter[],
+  card: { follow_region_filter?: unknown } | null | undefined,
+): InteractiveFilter[] {
+  if (card?.follow_region_filter === true) return filters;
+  return filters.some(isRegionFilter) ? filters.filter((f) => !isRegionFilter(f)) : filters;
+}
+
+/**
+ * The filter pair a `genome_view` region brush emits.
+ *
+ * A genomic region is not a value, it is a chromosome *and* a position range,
+ * and the dashboard's filter pipeline only knows columns. So the brush becomes
+ * two ordinary entries the existing backend already understands:
+ *
+ * - a `MultiSelect` on the tile's `chr_col`, carrying the brushed chromosomes;
+ * - a `RangeSlider` on the tile's `pos_col`, carrying `[start, end]`
+ *   (`deltatables_utils.add_filter` turns that into
+ *   `col >= start & col <= end`).
+ *
+ * Both carry the emitting tile's `dc_id`, so a second tile bound to the *same*
+ * collection narrows immediately, and a tile on a *different* collection
+ * receives them through the project's links whenever that link joins on the
+ * same chromosome / position columns. Nothing new is needed server-side.
+ *
+ * Passing `null` (or a region with no chromosomes) returns the cleared form of
+ * both entries, which `mergeFiltersBySource` drops.
+ */
+export function genomeRegionFilters(
+  metadata: StoredMetadata,
+  chrColumn: string,
+  posColumn: string,
+  region: GenomeRegionSelection | null,
+): InteractiveFilter[] {
+  const chroms = region?.chroms ?? [];
+  const range = chroms.length ? (region?.range ?? null) : null;
+  return [
+    {
+      index: metadata.index,
+      value: chroms,
+      source: 'genome_selection',
+      column_name: chrColumn,
+      interactive_component_type: 'MultiSelect',
+      metadata: {
+        dc_id: metadata.dc_id,
+        column_name: chrColumn,
+        interactive_component_type: 'MultiSelect',
+        selection_column: chrColumn,
+      },
+    },
+    {
+      index: genomePosFilterIndex(metadata.index),
+      // `[]` rather than `null` so both halves clear through the same rule
+      // `mergeFiltersBySource` applies to every other selection source.
+      value: range ?? [],
+      source: 'genome_selection',
+      column_name: posColumn,
+      interactive_component_type: 'RangeSlider',
+      metadata: {
+        dc_id: metadata.dc_id,
+        column_name: posColumn,
+        interactive_component_type: 'RangeSlider',
+        selection_column: posColumn,
+      },
+    },
+  ];
+}
+
+/**
+ * The columns one genomic tile binds for the region roles.
+ *
+ * Every genomic kind names these three differently (`chr_col`/`pos_col`,
+ * `chromosome_col`/`position_col`, `chrom_col`/`start_col`/`end_col`,
+ * `contig_col`, `chrom1_col`/`start1_col`), so the mapping from a kind's
+ * config to this shape lives in one place:
+ * `components/advanced_viz/genomicAxis.ts`.
+ */
+export interface RegionRoleColumns {
+  chrom: string;
+  start: string;
+  /** Interval kinds only (a bin, an exon, a segment). A range filter on the
+   *  end column widens the region the same way one on the start column does. */
+  end?: string;
+}
+
+/**
+ * Read a region back out of the dashboard's filter list, for a tile that
+ * follows one instead of emitting it.
+ *
+ * Deliberately column-keyed rather than index-keyed: the point of the region
+ * filter is that *any* tile or sidebar control naming the same chromosome and
+ * position columns drives it, so a plain `Chromosome` multi-select in the left
+ * panel zooms a following tile exactly as another tile's brush does. Only a
+ * single chromosome yields a region: "chr1 and chr7" is not somewhere to zoom.
+ *
+ * Two call shapes, because the roles a kind binds are not always two columns:
+ * the historical `(filters, chrColumn, posColumn)` and a role map
+ * `(filters, {chrom, start, end?})` for interval kinds, where a range filter
+ * on either coordinate column contributes to the region.
+ */
+export function regionFromFilters(
+  filters: InteractiveFilter[],
+  roles: RegionRoleColumns,
+): { chrom: string; start: number; end: number } | null;
+export function regionFromFilters(
+  filters: InteractiveFilter[],
+  chrColumn: string,
+  posColumn: string,
+): { chrom: string; start: number; end: number } | null;
+export function regionFromFilters(
+  filters: InteractiveFilter[],
+  chrOrRoles: string | RegionRoleColumns,
+  posColumn?: string,
+): { chrom: string; start: number; end: number } | null {
+  const roles: RegionRoleColumns =
+    typeof chrOrRoles === 'string'
+      ? { chrom: chrOrRoles, start: posColumn ?? '' }
+      : chrOrRoles;
+  let chrom: string | null = null;
+  let range: [number, number] | null = null;
+  for (const f of filters) {
+    const column = f.column_name ?? f.metadata?.column_name;
+    if (column === roles.chrom && Array.isArray(f.value)) {
+      if (f.value.length !== 1) return null;
+      chrom = String(f.value[0]);
+    } else if (
+      (column === roles.start || (roles.end && column === roles.end)) &&
+      Array.isArray(f.value) &&
+      f.value.length === 2
+    ) {
+      const lo = Number(f.value[0]);
+      const hi = Number(f.value[1]);
+      if (Number.isFinite(lo) && Number.isFinite(hi) && hi > lo) {
+        // Start and end columns of the same interval kind describe one span,
+        // so two range filters widen to their union rather than the last seen.
+        range = range
+          ? [Math.min(range[0], lo), Math.max(range[1], hi)]
+          : [lo, hi];
+      }
+    }
+  }
+  if (!chrom) return null;
+  // A chromosome with no range is still somewhere to zoom: the contig.
+  if (!range) return { chrom, start: 0, end: Number.POSITIVE_INFINITY };
+  return { chrom, start: range[0], end: range[1] };
+}
+
 /**
  * The filter list a selection-source component should render against: every
  * dashboard filter *except* the one it emitted itself.
@@ -182,6 +379,80 @@ export function filtersExcludingOwn(
   source: InteractiveFilterSource,
 ): InteractiveFilter[] {
   return filters.filter((f) => !(f.index === componentIndex && f.source === source));
+}
+
+/** Whether the dashboard still holds a non-empty selection this component emitted. */
+export function hasOwnSelection(
+  filters: InteractiveFilter[],
+  componentIndex: string,
+  source: InteractiveFilterSource,
+): boolean {
+  return filters.some(
+    (f) =>
+      f.index === componentIndex &&
+      f.source === source &&
+      Array.isArray(f.value) &&
+      f.value.length > 0,
+  );
+}
+
+/**
+ * The sources a tile's "clear selection" affordance covers: the selections a
+ * reader makes by pointing at the tile itself (a lasso, a row pick, a map
+ * polygon, a thumbnail, a genome brush).
+ *
+ * Left out on purpose: `tree_selection` and `axis_selection`, whose tiles
+ * carry their own clear control and keep their visual state locally, so a
+ * clear from the chrome would drop the filter and leave the clade or the brush
+ * drawn; and `group_filter`, which is never in the user's filter list.
+ */
+const CLEARABLE_SELECTION_SOURCES: ReadonlySet<InteractiveFilterSource> = new Set([
+  'scatter_selection',
+  'table_selection',
+  'map_selection',
+  'image_selection',
+  'genome_selection',
+]);
+
+/** The selection one tile currently contributes to the dashboard. */
+export interface OwnSelection {
+  /** The non-empty entries this tile emitted, the region's position half
+   *  included. Empty when the tile has nothing selected. */
+  filters: InteractiveFilter[];
+  /** How many values are selected, for the "Clear selection (N)" label. A
+   *  region's position half is a range, not picked values, so it adds none. */
+  count: number;
+}
+
+/**
+ * Read back the selection a tile has emitted, keyed on its own index (and the
+ * `::pos` index of a genome region's second half) so another tile's selection
+ * on the same column never counts as this one's.
+ */
+export function ownSelection(
+  filters: readonly InteractiveFilter[],
+  componentIndex: string,
+): OwnSelection {
+  const posIndex = genomePosFilterIndex(componentIndex);
+  const own: InteractiveFilter[] = [];
+  let count = 0;
+  for (const f of filters) {
+    if (f.index !== componentIndex && f.index !== posIndex) continue;
+    if (!f.source || !CLEARABLE_SELECTION_SOURCES.has(f.source)) continue;
+    const v = f.value;
+    if (v == null || (Array.isArray(v) && v.length === 0)) continue;
+    own.push(f);
+    if (f.index === componentIndex) count += Array.isArray(v) ? v.length : 1;
+  }
+  return { filters: own, count };
+}
+
+/** The cleared form of each entry, the `[]` shape `mergeFiltersBySource`
+ *  drops. Emitting these one by one is what "clear this tile" means. */
+export function clearedSelectionFilters(
+  filters: readonly InteractiveFilter[],
+): InteractiveFilter[] {
+  return filters.map((f) => ({ ...f, value: [] }));
 }
 
 /**

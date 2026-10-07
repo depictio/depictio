@@ -208,3 +208,50 @@ class TestLayoutsStayInSync:
         names = set(re.findall(r"'([a-z_]+)'", block.group(1)))
         assert names, "parsed an empty layout list — the guard would pass vacuously"
         assert names == set(BREAKDOWN_LAYOUTS)
+
+
+class TestValueBreakdownForNonAdditiveHeroes:
+    """P8: under a max / average / ... card, the strip used to count rows per
+    group ("K562_R2 542 (17%)"). It now reduces each group with the card's own
+    aggregation and carries no share of a total."""
+
+    @pytest.fixture
+    def reads(self):
+        return pl.DataFrame(
+            {
+                "sample": ["a", "a", "b", "b", "b", "c"],
+                "reads": [10.0, 30.0, 5.0, 7.0, 9.5, 100.0],
+            }
+        )
+
+    def test_max_hero_takes_the_max_per_group(self, reads):
+        payload = compute_breakdown(reads, "reads", "sample", "max", 3)
+        assert [(r["name"], r["count"]) for r in payload["top"]] == [
+            ("c", 100),
+            ("a", 30),
+            ("b", 9.5),
+        ]
+        assert all(r["percent"] is None for r in payload["top"])
+        assert payload["top_share"] is None
+        assert payload["evenness"] is None
+        assert payload["breakdown_kind"] == "max"
+        assert payload["total"] == reads.height
+        assert payload["unique_values"] == 3
+
+    def test_average_keeps_fractional_values(self, reads):
+        payload = compute_breakdown(reads, "reads", "sample", "average", 3)
+        by_name = {r["name"]: r["count"] for r in payload["top"]}
+        assert by_name["a"] == pytest.approx(20.0)
+        assert by_name["b"] == pytest.approx(7.1666666)
+
+    def test_min_ranks_the_lowest_groups_first(self, reads):
+        payload = compute_breakdown(reads, "reads", "sample", "min", 2)
+        assert [r["name"] for r in payload["top"]] == ["b", "a"]
+
+    def test_count_sum_and_nunique_are_unchanged(self, reads):
+        """The tool-studio golden pins these three; they keep their shares."""
+        payload = compute_breakdown(reads, "reads", "sample", "sum", 3)
+        assert payload["top_share"] == pytest.approx(1.0)
+        assert all(isinstance(r["percent"], float) for r in payload["top"])
+        payload = compute_breakdown(reads, "reads", "sample", "count", 3)
+        assert [r["count"] for r in payload["top"]] == [3, 2, 1]

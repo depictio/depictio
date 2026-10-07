@@ -457,6 +457,86 @@ jobs:
           docker tag "${{ steps.image-info.outputs.viewer-image }}" depictio-viewer:local || true
           echo "Tagged images for local use"
 
+  # A stack started with `depictio local up` hands over to Docker Compose: same
+  # dashboards, same table data in S3, and the CLI token still valid (same keys).
+  # Runs on this commit's images: the export is only meant for the same release.
+  local-to-compose:
+    needs: docker-build
+    if: always() && needs.docker-build.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: depictio local up (iris example)
+        run: uv run --python 3.12 --extra local depictio local up --examples iris --no-open
+
+      - name: Wait for the iris Delta table
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS -o /dev/null \
+              http://127.0.0.1:8058/depictio/api/v1/deltatables/specs/646b0f3c1e4a2d7f8e5b8c9c; then
+              echo "iris delta table registered"; exit 0
+            fi
+            sleep 5
+          done
+          echo "iris delta table never appeared"; exit 1
+
+      - name: Export to Docker Compose
+        run: |
+          uv run --python 3.12 --extra local depictio local down
+          uv run --python 3.12 --extra local depictio local export --out "$RUNNER_TEMP/export"
+          ls -la "$RUNNER_TEMP/export"
+
+      - name: docker compose up on the exported data
+        working-directory: ${{ runner.temp }}/export
+        env:
+          API_IMAGE: ${{ needs.docker-build.outputs.api-image }}
+          WORKER_IMAGE: ${{ needs.docker-build.outputs.worker-image }}
+          VIEWER_IMAGE: ${{ needs.docker-build.outputs.viewer-image }}
+        run: |
+          # Swap the release images for this commit's; the export is unchanged.
+          cat > ci-images.yaml <<YAML
+          services:
+            depictio-backend: {image: "$API_IMAGE"}
+            depictio-celery-worker: {image: "$WORKER_IMAGE"}
+            depictio-viewer: {image: "$VIEWER_IMAGE"}
+          YAML
+          docker compose -f docker-compose.yaml -f docker-compose.override.yaml \
+            -f ci-images.yaml up -d --wait --wait-timeout 300
+
+      - name: Check the dashboards, the table data and the CLI token
+        run: |
+          API=http://127.0.0.1:8058/depictio/api/v1
+          curl -fsS http://127.0.0.1:8058/health
+          curl -fsS -o /dev/null "$API/deltatables/specs/646b0f3c1e4a2d7f8e5b8c9c"
+          # Read back from the exported SeaweedFS data by the worker.
+          curl -fsS -o /dev/null "$API/deltatables/preview/646b0f3c1e4a2d7f8e5b8c9c"
+          # Signed by the local server: only valid if the keys came along.
+          TOKEN=$(yq -r .user.token.access_token ~/.depictio/local/cli/admin_config.yaml)
+          curl -fsS -o /dev/null -H "Authorization: Bearer $TOKEN" "$API/auth/me"
+          curl -fsS -o /dev/null http://127.0.0.1:5080/
+
+      - name: Compose logs
+        if: failure()
+        working-directory: ${{ runner.temp }}/export
+        run: |
+          docker compose -f docker-compose.yaml -f docker-compose.override.yaml \
+            -f ci-images.yaml logs --no-color --tail 200
+
   docker-system-init:
     needs: docker-build
     if: always() && needs.docker-build.result == 'success'
@@ -939,7 +1019,8 @@ jobs:
           cd depictio/cli
           uv venv --python 3.12.9 venv
           source venv/bin/activate
-          uv pip install -e ".[multiqc]"
+          # The CLI is the root depictio package, without its server extra.
+          uv pip install -e "../..[multiqc]"
 
       # ============================================
       # PHASE 1: Offline Tests (No Server Required)
@@ -965,7 +1046,7 @@ jobs:
           source venv/bin/activate
           echo "📋 Testing dashboard validate (offline)..."
 
-          depictio-cli dashboard validate ../projects/init/iris/dashboards/overview.yaml
+          depictio-cli dashboard validate --offline ../projects/init/iris/dashboards/overview.yaml
 
           echo "✅ Dashboard validate passed"
 
@@ -999,7 +1080,7 @@ jobs:
             echo "— checking $tpl"
             depictio-cli config check \
               --project-config-path "$tpl" \
-              --CLI-config-path admin_config.yaml 2>&1 || true
+              --server admin_config.yaml 2>&1 || true
           done
 
           echo "✅ Template validation passed"
@@ -1122,13 +1203,13 @@ jobs:
           # Validate project config
           depictio-cli --verbose config check \
             --project-config-path ../projects/init/iris/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Sync project config (with --update for idempotency)
           depictio-cli --verbose config sync \
             --update \
             --project-config-path ../projects/init/iris/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           echo "✅ Config commands passed"
 
@@ -1148,7 +1229,7 @@ jobs:
           # `python3`: this job's `python3` is the actions/setup-python
           # toolcache build, which has no PyYAML, so a bare `import yaml`
           # aborts with ModuleNotFoundError before the first echo. The CLI
-          # venv (created above via `uv pip install -e .[multiqc]`) ships
+          # venv (created above via `uv pip install -e ../..[multiqc]`) ships
           # PyYAML. (docker-system-init's identical line works because that
           # job uses the system python3, which has python3-yaml.)
           ADMIN_TOKEN=$(depictio/cli/venv/bin/python -c "import yaml; print(yaml.safe_load(open('/tmp/admin_config.yaml'))['user']['token']['access_token'])")
@@ -1207,7 +1288,7 @@ jobs:
           # captured stderr/stdout — otherwise the actual error is invisible.
           echo "🔄 Importing dashboard to server..."
           set +e
-          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/init/iris/dashboards/overview.yaml --config admin_config.yaml --overwrite 2>&1)
+          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/init/iris/dashboards/overview.yaml --server admin_config.yaml --overwrite 2>&1)
           IMPORT_EXIT=$?
           set -e
           echo "$IMPORT_OUTPUT"
@@ -1292,24 +1373,24 @@ jobs:
           # Validate project config
           depictio-cli --verbose config check \
             --project-config-path ../projects/test/cli-test/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Sync project to server
           depictio-cli --verbose config sync \
             --project-config-path ../projects/test/cli-test/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Scan data files
           depictio-cli --verbose data scan \
             --sync-files \
             --project-config-path ../projects/test/cli-test/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Process data into deltatables
           depictio-cli --verbose data process \
             --overwrite \
             --project-config-path ../projects/test/cli-test/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           echo "✅ CLI workflow with local test project passed"
 
@@ -1327,13 +1408,13 @@ jobs:
           # Validate project config (tests validation logic with Docker path detection)
           depictio-cli --verbose config check \
             --project-config-path ../projects/init/penguins/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Sync project to server (validates against API)
           depictio-cli --verbose config sync \
             --update \
             --project-config-path ../projects/init/penguins/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Skip scan/process/run - penguins is already initialized as reference dataset
           # The verification step below confirms the project and data exist in the database
@@ -1352,24 +1433,16 @@ jobs:
           # Validate project config (tests Image DC model validation)
           depictio-cli --verbose config check \
             --project-config-path ../projects/test/image_demo/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
-          # Sync project to server
-          depictio-cli --verbose config sync \
-            --project-config-path ../projects/test/image_demo/project.yaml \
-            --CLI-config-path admin_config.yaml
-
-          # Scan data files (syncs images to S3)
-          depictio-cli --verbose data scan \
+          # Ingest: sync the project to the server, scan the data files, build the
+          # delta table from the CSV, then upload local_images_path to s3_base_folder
+          # and check every image the table references is in S3 (fails if one is missing)
+          depictio-cli --verbose ingest \
             --sync-files \
-            --project-config-path ../projects/test/image_demo/project.yaml \
-            --CLI-config-path admin_config.yaml
-
-          # Process data into deltatables (creates delta table from CSV)
-          depictio-cli --verbose data process \
             --overwrite \
             --project-config-path ../projects/test/image_demo/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           echo "✅ Image Demo CLI operations passed"
 
@@ -1380,7 +1453,7 @@ jobs:
           echo "📋 Testing Image Demo dashboard import..."
 
           # Import Image Demo dashboard
-          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/test/image_demo/dashboards/gallery.yaml --config admin_config.yaml 2>&1)
+          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/test/image_demo/dashboards/gallery.yaml --server admin_config.yaml 2>&1)
           echo "$IMPORT_OUTPUT"
 
           # Extract dashboard ID
@@ -1430,7 +1503,7 @@ jobs:
           # Import iris YAML to get a fresh dashboard ID to seed the roundtrip
           IMPORT_OUTPUT=$(depictio-cli dashboard import \
             ../projects/init/iris/dashboards/overview.yaml \
-            --config admin_config.yaml --overwrite 2>&1)
+            --server admin_config.yaml --overwrite 2>&1)
           echo "$IMPORT_OUTPUT"
 
           IRIS_ID=$(echo "$IMPORT_OUTPUT" | grep -oE '[0-9a-f]{24}' | head -1)
@@ -1456,7 +1529,7 @@ jobs:
           echo "📋 Testing backup commands (read-only)..."
 
           # List backups (read-only, won't fail if empty)
-          depictio-cli backup list --CLI-config-path admin_config.yaml || true
+          depictio-cli backup list --server admin_config.yaml || true
 
           echo "✅ Backup commands passed"
 
@@ -1603,7 +1676,7 @@ jobs:
           # template.yaml now declares a phylogenetic_tree_canonical DC (scan: single
           # filename → tree.nwk) and a phylogenetic_tree_metadata_canonical DC whose
           # recipe consumes taxonomy.tsv + rel-table-ASV.tsv. Without these files
-          # `depictio-cli run --template` fails at Project validation
+          # `depictio-cli ingest --template` fails at Project validation
           # (ScanSingle.filename: file does not exist) before any step runs.
           fetch "qiime2/phylogenetic_tree/tree.nwk" "data/qiime2/phylogenetic_tree/tree.nwk"
           fetch "qiime2/taxonomy/taxonomy.tsv" "data/qiime2/taxonomy/taxonomy.tsv"
@@ -1650,14 +1723,14 @@ jobs:
           cd depictio/cli
           source venv/bin/activate
           DATA_DIR="$(pwd)/../../ampliseq-testdata"
-          echo "🚀 Running full template pipeline: depictio run --template..."
+          echo "🚀 Running full template pipeline: depictio ingest --template..."
 
-          depictio-cli run \
+          depictio-cli ingest \
             --template nf-core/ampliseq/latest \
             --data-root "$DATA_DIR" \
             --project-name "Ampliseq CI Template Test" \
             --var SAMPLESHEET_FILE="$DATA_DIR/samplesheet.csv" \
-            --CLI-config-path admin_config.yaml \
+            --server admin_config.yaml \
             --continue-on-error
 
           echo "✅ Full template pipeline execution completed"
@@ -1983,7 +2056,7 @@ jobs:
 
           echo "📦 Installing CLI dependencies..."
           uv pip install --upgrade pip
-          uv pip install -e .
+          uv pip install -e ../..
           echo "✅ CLI dependencies installed"
 
           echo "🔑 Copying admin configuration from backend container..."
@@ -2200,7 +2273,7 @@ jobs:
           # Create backup with strategy-specific prefix
           echo ""
           echo "🚀 Starting backup creation with detailed logging..."
-          echo "Command: depictio-cli -v -vl DEBUG backup create --CLI-config-path admin_config.yaml --include-s3-data --s3-backup-prefix ci_${{ matrix.backup_strategy }}_backup"
+          echo "Command: depictio-cli --log-level DEBUG backup create --server admin_config.yaml --include-s3-data --s3-backup-prefix ci_${{ matrix.backup_strategy }}_backup"
           echo "Strategy: ${{ matrix.backup_strategy }}"
           echo "Expected S3 files: ${{ matrix.expected_s3_files }}"
           echo "Expected local files: ${{ matrix.expected_local_files }}"
@@ -2210,8 +2283,8 @@ jobs:
           START_TIME=$(date +%s)
 
           # Run backup command with full debugging
-          if depictio-cli -v -vl DEBUG backup create \
-            --CLI-config-path admin_config.yaml \
+          if depictio-cli --log-level DEBUG backup create \
+            --server admin_config.yaml \
             --include-s3-data \
             --s3-backup-prefix "ci_${{ matrix.backup_strategy }}_backup"; then
             END_TIME=$(date +%s)
@@ -2350,7 +2423,7 @@ jobs:
           source venv/bin/activate
 
           # List backups and get the latest one
-          BACKUP_LIST=$(depictio-cli backup list --CLI-config-path admin_config.yaml)
+          BACKUP_LIST=$(depictio-cli backup list --server admin_config.yaml)
           echo "Available backups for ${{ matrix.strategy_name }}: $BACKUP_LIST"
 
           # Validate backup integrity
@@ -2358,7 +2431,7 @@ jobs:
           echo "Using backup ID for ${{ matrix.strategy_name }}: $BACKUP_ID"
 
           if [ -n "$BACKUP_ID" ]; then
-            depictio-cli -v -vl DEBUG backup validate "$BACKUP_ID" --CLI-config-path admin_config.yaml
+            depictio-cli --log-level DEBUG backup validate "$BACKUP_ID" --server admin_config.yaml
             echo "✅ Backup validation successful for ${{ matrix.strategy_name }}"
           else
             echo "❌ No backup ID found for ${{ matrix.strategy_name }}"
@@ -2382,13 +2455,13 @@ jobs:
           "
 
           # Get backup ID and restore
-          BACKUP_LIST=$(depictio-cli backup list --CLI-config-path admin_config.yaml)
+          BACKUP_LIST=$(depictio-cli backup list --server admin_config.yaml)
           BACKUP_ID=$(echo "$BACKUP_LIST" | grep -o '"backup_id": "[^"]*"' | head -1 | cut -d'"' -f4)
 
           if [ -n "$BACKUP_ID" ]; then
             echo "🔄 Performing restore test for ${{ matrix.strategy_name }}..."
-            depictio-cli -v -vl DEBUG backup restore "$BACKUP_ID" \
-              --CLI-config-path admin_config.yaml \
+            depictio-cli --log-level DEBUG backup restore "$BACKUP_ID" \
+              --server admin_config.yaml \
               --force
 
             # Verify restoration
@@ -2420,10 +2493,10 @@ jobs:
 
           # Dry-run first — must not change anything
           echo "🏃 Running dry-run migrate..."
-          depictio-cli -v -vl DEBUG migrate \
+          depictio-cli --log-level DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
-            --CLI-config-path admin_config.yaml \
-            --target-config admin_config.yaml \
+            --server admin_config.yaml \
+            --to-server admin_config.yaml \
             --mode metadata \
             --dry-run
           echo "✅ Dry-run migrate completed"
@@ -2437,10 +2510,10 @@ jobs:
           # Real migrate (same instance as source and target — idempotent upsert)
           # --overwrite required because the project already exists on this instance
           echo "🚀 Running real migrate (metadata mode)..."
-          depictio-cli -v -vl DEBUG migrate \
+          depictio-cli --log-level DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
-            --CLI-config-path admin_config.yaml \
-            --target-config admin_config.yaml \
+            --server admin_config.yaml \
+            --to-server admin_config.yaml \
             --mode metadata \
             --overwrite
           echo "✅ Real migrate completed"
@@ -2449,8 +2522,8 @@ jobs:
           echo "🔒 Testing conflict detection (no --overwrite, should fail)..."
           if depictio-cli migrate \
             --project "$IRIS_PROJECT_NAME" \
-            --CLI-config-path admin_config.yaml \
-            --target-config admin_config.yaml \
+            --server admin_config.yaml \
+            --to-server admin_config.yaml \
             --mode metadata 2>&1; then
             echo "❌ Expected conflict exit but command succeeded"
             exit 1
@@ -2491,10 +2564,10 @@ jobs:
 
           # Run migrate and capture output to verify dashboards were actually exported
           MIGRATE_LOG=$(mktemp)
-          depictio-cli -v -vl DEBUG migrate \
+          depictio-cli --log-level DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
-            --CLI-config-path admin_config.yaml \
-            --target-config admin_config.yaml \
+            --server admin_config.yaml \
+            --to-server admin_config.yaml \
             --mode dashboard \
             --overwrite 2>&1 | tee "$MIGRATE_LOG"
 
@@ -2558,10 +2631,10 @@ jobs:
           # Run mode=all (self-migration: same instance as source and target)
           # This exercises the S3 copy code path in addition to MongoDB upserts
           MIGRATE_LOG=$(mktemp)
-          depictio-cli -v -vl DEBUG migrate \
+          depictio-cli --log-level DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
-            --CLI-config-path admin_config.yaml \
-            --target-config admin_config.yaml \
+            --server admin_config.yaml \
+            --to-server admin_config.yaml \
             --mode all \
             --overwrite 2>&1 | tee "$MIGRATE_LOG"
 

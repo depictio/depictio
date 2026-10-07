@@ -4,6 +4,7 @@ import { SimpleGrid, type SimpleGridProps } from '@mantine/core';
 import type { DashboardListEntry } from 'depictio-react-core';
 import DashboardCard from '../DashboardCard';
 import type { CardBadge, CardsPerRow } from '../hooks/useDashboardViewPrefs';
+import { DEFAULT_CARDS_PER_ROW } from '../hooks/useDashboardViewPrefs';
 import type { GroupedDashboards } from '../lib/splitDefaultSections';
 import { isOwnedByEmail } from '../lib/splitDefaultSections';
 
@@ -57,7 +58,7 @@ const DashboardThumbnailView: React.FC<DashboardThumbnailViewProps> = ({
   groups,
   projectNames,
   projectTemplates,
-  cardsPerRow = 'auto',
+  cardsPerRow = DEFAULT_CARDS_PER_ROW,
   visibleBadges,
   currentUserEmail,
   pinnedIds,

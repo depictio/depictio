@@ -51,9 +51,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/depictio/plotly-upset"
-Repository = "https://github.com/depictio/plotly-upset"
-Issues = "https://github.com/depictio/plotly-upset/issues"
+Homepage = "https://github.com/depictio/depictio/tree/main/packages/plotly-upset"
+Repository = "https://github.com/depictio/depictio"
+Issues = "https://github.com/depictio/depictio/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["plotly_upset"]

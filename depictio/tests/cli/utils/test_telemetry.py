@@ -81,6 +81,19 @@ class TestResolveCommandPathHappyCases:
     def test_global_options_are_skipped(self, root_command):
         assert resolve_command_path(["--verbose", "data", "scan"], root_command) == "data scan"
 
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["--log-level", "debug", "ingest"],
+            ["-vl", "DEBUG", "ingest"],
+            ["--verbose-level", "DEBUG", "ingest"],
+            ["--log-level=debug", "ingest"],
+            ["-vv", "--log-level", "info", "ingest"],
+        ],
+    )
+    def test_the_value_of_a_global_option_is_skipped(self, argv, root_command):
+        assert resolve_command_path(argv, root_command) == "ingest"
+
     def test_bare_invocation(self, root_command):
         assert resolve_command_path([], root_command) == UNKNOWN_COMMAND
 
@@ -98,6 +111,8 @@ class TestResolveCommandPathRejectsUserData:
             (["data", "process", "--project-config", "/home/alice/cohort.yaml"], "data process"),
             (["data", "process", "--token", "eyJhbGciOiJIUzI1NiJ9.SECRET"], "data process"),
             (["config", "show", "--CLI-config-path", "~/.depictio/CLI.yaml"], "config show"),
+            # A global option's value is skipped unread, even one that names a command.
+            (["--log-level", "version"], UNKNOWN_COMMAND),
             # Positional arguments.
             (["data", "process", "/absolute/PATIENT_DATA.csv"], "data process"),
             (["dashboard", "export", "s3://private-bucket/key"], "dashboard export"),
@@ -380,6 +395,18 @@ class TestCliVersion:
             side_effect=PackageNotFoundError,
         ):
             assert cli_version() == "dev"
+
+    @pytest.mark.parametrize("installed", ["depictio", "depictio-cli"])
+    def test_reads_the_server_or_the_client_distribution(self, installed):
+        from importlib.metadata import PackageNotFoundError
+
+        def version(dist):
+            if dist != installed:
+                raise PackageNotFoundError(dist)
+            return "1.2.3"
+
+        with patch("depictio.cli.cli.utils.telemetry._pkg_version", side_effect=version):
+            assert cli_version() == "1.2.3"
 
 
 class TestVersionHeader:

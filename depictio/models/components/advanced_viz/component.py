@@ -188,6 +188,22 @@ class AdvancedVizLiteComponent(BaseLiteComponent):
 
     @model_validator(mode="after")
     def _kind_matches_config(self) -> "AdvancedVizLiteComponent":
+        """Keep the mirrored kind in step, following the retired-kind aliases.
+
+        ``config`` is validated through ``VizConfig``, whose before-validator
+        rewrites a retired kind (``ma``, ``qq``, ``enrichment``,
+        ``roc_pr_curve``) into the kind that survived it. The top-level
+        ``viz_kind`` mirrors ``config.viz_kind``, so it follows the same
+        rewrite rather than being reported as a mismatch. Normalising here
+        rather than in a before-validator keeps it independent of the order the
+        two before-validators above run in, and of whether the kind arrived
+        from the payload or from a ``use:`` expansion.
+        """
+        from depictio.models.components.advanced_viz.configs import resolve_viz_kind
+
+        resolved = resolve_viz_kind(self.viz_kind)
+        if resolved != self.viz_kind and resolved == self.config.viz_kind:
+            self.viz_kind = self.config.viz_kind
         if self.viz_kind != self.config.viz_kind:
             raise ValueError(
                 f"viz_kind={self.viz_kind!r} does not match config.viz_kind={self.config.viz_kind!r}"

@@ -16,16 +16,22 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.dimreduction import run_pca
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="summary",
         path="reports/ampcombi2/Ampcombi_summary.tsv",
         format="TSV",
+        input_schema={
+            "sample_id": pl.Utf8,
+            "CDS_id": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 10000, "null_values": ["NA", ""], "quote_char": None},
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "cds_id": pl.Utf8,
     "dim_1": pl.Float64,
     "dim_2": pl.Float64,
@@ -84,4 +90,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .alias("charge_class"),
         "aa_length",
     )
-    return coords.join(meta, on="cds_id", how="inner").select(list(EXPECTED_SCHEMA))
+    return coords.join(meta, on="cds_id", how="inner").select(list(OUTPUT_SCHEMA))

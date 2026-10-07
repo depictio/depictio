@@ -19,7 +19,9 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: every column is read through a presence-guarded helper.
     RecipeSource(
         ref="summary",
         path="reports/combgc/combgc_complete_summary.tsv",
@@ -28,7 +30,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "contig": pl.Utf8,
     "tool": pl.Utf8,
@@ -79,5 +82,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.lit(1, dtype=pl.Int64).alias("regions"),
         )
         .sort("sample", "contig", "start")
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

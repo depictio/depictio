@@ -34,8 +34,6 @@ on:
       - "docker-images/run_celery_worker.sh"
       - "pyproject.toml"
       - "uv.lock"
-      - "depictio/cli/pyproject.toml"
-      - "depictio/cli/uv.lock"
       - "pnpm-workspace.yaml"
       - "pnpm-lock.yaml"
       - ".dockerignore"

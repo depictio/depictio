@@ -26,18 +26,23 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="pca",
         glob_pattern="**/*.plotPCA.tab",
         format="TSV",
+        input_schema={
+            "Component": pl.Utf8,
+        },
         # deepTools opens the file with a `#plotPCA --outFileNameData` line and
         # quotes nothing; `comment_prefix` drops it so the real header is read.
         read_kwargs={"infer_schema_length": 0, "comment_prefix": "#"},
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "pc1": pl.Float64,
     "pc2": pl.Float64,
@@ -107,7 +112,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                 for c in ("pc1", "pc2", "pc3", "pc1_variance", "pc2_variance")
             ],
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort("sample")
     )
 

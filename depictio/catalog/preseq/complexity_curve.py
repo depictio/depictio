@@ -57,11 +57,14 @@ from depictio.recipes.lib.sample_ids import strip_stage_suffixes
 #: scan its per-sample curves into a DC with this tag (see module docstring).
 RAW_DC_TAG = "preseq_ccurve_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: the preseq columns are matched by alias, not by fixed name.
     RecipeSource(ref="curves", dc_ref=RAW_DC_TAG),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "total_reads": pl.Float64,
     "expected_distinct": pl.Float64,
@@ -166,6 +169,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     )
     return (
         thinned.with_columns((pl.col("upper_ci") - pl.col("lower_ci")).alias("ci_width"))
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "total_reads"])
     )

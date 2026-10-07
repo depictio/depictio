@@ -162,6 +162,7 @@ def build_figure_preview(payload: dict) -> dict:
         apply_column_coloring_kwargs,
         apply_facet_kwargs,
         apply_group_coloring_kwargs,
+        code_group_globals,
         group_annotation_expr,
         group_source_columns,
         sanitize_color_by_column,
@@ -487,10 +488,7 @@ def build_figure_preview(payload: dict) -> dict:
             df,
             theme,
             "viewer",
-            extra_globals={
-                CODE_GROUP_KWARGS: code_group_kwargs,
-                CODE_GROUP_BY: code_group_by,
-            },
+            extra_globals=code_group_globals(code_group_kwargs, code_group_by),
         )
         if not ok:
             # `process_code_mode_figure` returns `(False, error_fig, None)` when
@@ -618,6 +616,20 @@ def build_figure_preview(payload: dict) -> dict:
             "frame_bytes": df.estimated_size() if df is not None else 0,
         },
     }
+    # Grid rows this figure's content needs, for a tile whose `fit` is `auto`.
+    # Counted here because a Plotly figure fills whatever box it is given: the
+    # client can measure the box, never the two bars inside it. Absent for the
+    # visu types where the count says nothing about the height a reader wants.
+    try:
+        from depictio.api.v1.services.figure.aggregate import figure_content_demand
+
+        demand = figure_content_demand(visu_type, fig_dict)
+    except Exception as exc:  # a sizing hint is never worth losing a figure over
+        logger.warning(f"celery_tasks.build_figure_preview: content demand skipped: {exc}")
+        demand = None
+    if demand:
+        response_metadata["content_demand"] = demand
+
     if code_error:
         # Surface the underlying Plotly error to the React Code-mode Status
         # alert so it flips to red. The error figure is still in `figure` so
@@ -2129,6 +2141,83 @@ def compute_upset(payload: dict) -> dict:
     }
 
 
+# Rows per sample track above which a coverage track is binned server-side. A
+# track is at most a few thousand pixels wide, so a denser series adds transfer
+# and Plotly layout time (one SVG path per bar for rect marks) and nothing a
+# reader can see. The renderer sends its own budget; this is the fallback.
+COVERAGE_MAX_BINS_PER_TRACK = 4_000
+
+
+def _bin_coverage_frame(
+    df,
+    *,
+    chromosome_col: str,
+    position_col: str,
+    value_col: str,
+    end_col: str | None,
+    sample_col: str | None,
+    category_col: str | None,
+    max_bins: int,
+):
+    """Reduce each sample track to at most about ``max_bins`` bins.
+
+    Returns ``(frame, bin_width)``; ``bin_width`` is ``None`` when the frame
+    was already within budget and is returned untouched.
+
+    One bin width serves every chromosome, sized so the summed span of the
+    chromosomes in the frame splits into ``max_bins`` bins, so a narrow region
+    keeps base-level detail and a whole genome gets one bin per few pixels.
+    Per bin: the first position, the last end, the mean value (the zoom-level
+    summary bigWig uses) and the first category. Bins with no row stay absent,
+    so sparse intervals (peaks) stay sparse.
+    """
+    import math
+
+    import polars as pl
+
+    if max_bins <= 0 or df.height == 0:
+        return df, None
+    track_keys = [sample_col] if sample_col else []
+    per_track = (
+        int(df.group_by(track_keys).len().get_column("len").max()) if track_keys else df.height
+    )
+    if per_track <= max_bins:
+        return df, None
+
+    stop_col = end_col or position_col
+    spans = df.group_by(chromosome_col).agg(
+        pl.col(position_col).min().alias("__lo"), pl.col(stop_col).max().alias("__hi")
+    )
+    total_span = 0
+    for lo, hi in spans.select("__lo", "__hi").iter_rows():
+        if lo is None or hi is None:
+            continue
+        total_span += max(1, int(hi) - int(lo))
+    bin_width = max(1, math.ceil(total_span / max_bins))
+
+    keys = [*track_keys, chromosome_col, "__bin"]
+    aggs = [
+        pl.col(position_col).min(),
+        pl.col(value_col).cast(pl.Float64).mean(),
+    ]
+    taken = {*keys, position_col, value_col}
+    if end_col and end_col not in taken:
+        aggs.append(pl.col(end_col).max())
+        taken.add(end_col)
+    if category_col and category_col not in taken:
+        aggs.append(pl.col(category_col).first())
+
+    binned = (
+        df.join(spans.select(chromosome_col, "__lo"), on=chromosome_col, how="left")
+        .with_columns(((pl.col(position_col) - pl.col("__lo")) // bin_width).alias("__bin"))
+        .group_by(keys)
+        .agg(aggs)
+        .sort([*track_keys, chromosome_col, position_col])
+        .drop("__bin")
+    )
+    return binned, bin_width
+
+
 @celery_app.task(
     name="depictio.advanced_viz.compute_coverage_track",
     soft_time_limit=180,
@@ -2147,6 +2236,7 @@ def compute_coverage_track(payload: dict) -> dict:
           "samples_filter": [str] | null,
           "smoothing_window": int (0 disables),
           "max_rows": int | null,
+          "max_bins_per_track": int | null (0 disables binning),
           "filter_metadata": [...],
         }
 
@@ -2174,6 +2264,8 @@ def compute_coverage_track(payload: dict) -> dict:
     # clamp defensively rather than trust the input.
     smoothing_window = max(0, min(200, int(payload.get("smoothing_window") or 0)))
     max_rows = int(payload.get("max_rows") or 200_000)
+    raw_bins = payload.get("max_bins_per_track")
+    max_bins = COVERAGE_MAX_BINS_PER_TRACK if raw_bins is None else max(0, int(raw_bins))
     filter_metadata = payload.get("filter_metadata") or []
 
     if not wf_id or not dc_id:
@@ -2238,6 +2330,30 @@ def compute_coverage_track(payload: dict) -> dict:
             .alias(value_col)
         )
 
+    # Bin to the pixel budget before the row cap: binning keeps every region
+    # of the track represented, where the cap below drops rows blindly.
+    input_rows = int(df.height)
+    # Cast the value series to Float64 before reducing so Series.mean()/max()
+    # always return float | None, keeping the JSON summary single-typed. Read
+    # before binning, so the summary max is a real value and not a bin mean.
+    if df.height:
+        values_f64 = df.get_column(value_col).cast(pl.Float64)
+        mean_value = values_f64.mean()
+        max_value = values_f64.max()
+    else:
+        mean_value = None
+        max_value = None
+    df, bin_width = _bin_coverage_frame(
+        df,
+        chromosome_col=chromosome_col,
+        position_col=position_col,
+        value_col=value_col,
+        end_col=end_col,
+        sample_col=sample_col,
+        category_col=category_col,
+        max_bins=max_bins,
+    )
+
     if df.height > max_rows:
         # Last-ditch decimation for runaway DCs — pick every Nth row inside
         # each (sample, chrom) group so each track stays continuous.
@@ -2249,15 +2365,6 @@ def compute_coverage_track(payload: dict) -> dict:
         if col and col not in rows:
             rows[col] = df.get_column(col).to_list()
 
-    # Cast the value series to Float64 before reducing so Series.mean()/max()
-    # always return float | None — keeps the JSON summary single-typed.
-    if df.height:
-        values_f64 = df.get_column(value_col).cast(pl.Float64)
-        mean_value = values_f64.mean()
-        max_value = values_f64.max()
-    else:
-        mean_value = None
-        max_value = None
     summary = {
         "row_count": int(df.height),
         "chromosomes": chromosomes,
@@ -2265,6 +2372,10 @@ def compute_coverage_track(payload: dict) -> dict:
         "n_samples": len(samples),
         "mean_value": mean_value,
         "max_value": max_value,
+        # Set when the track was binned: the bin width in bp and the rows it
+        # was binned from, so the renderer can say the track is a summary.
+        "bin_width": bin_width,
+        "input_rows": input_rows,
     }
     compute_ms = int((time.monotonic() - compute_started) * 1000)
     logger.info(
@@ -2300,15 +2411,29 @@ def _sankey_result_from_frame(
     sort_mode: str,
     min_link_value: float,
     step_filters: dict,
+    option_cols: list[str] | None = None,
 ) -> dict:
     """Aggregate an already-loaded frame into a Plotly Sankey and its metadata.
 
     Split out of :func:`compute_sankey` so the catalog gallery can draw the same
     flow off a bundled fixture. The caller owns loading and its own ``load_ms``.
+
+    ``option_cols`` (default: ``step_cols``) are the columns whose distinct
+    values come back as ``step_options``, read before the step filters so a
+    picked value never hides the others. They are what the renderer's step
+    pickers list, so it needs no capped row fetch of its own.
     """
     import polars as pl
 
     compute_started = time.monotonic()
+    input_rows = int(df.height)
+
+    step_options: dict[str, list[str]] = {}
+    for col in option_cols or step_cols:
+        if col not in df.columns or col in step_options:
+            continue
+        values = df.get_column(col).cast(pl.Utf8).fill_null("").unique().to_list()
+        step_options[col] = sorted(str(v) for v in values)
 
     # Per-step filters applied AFTER global filter_metadata.
     for col, allowed in step_filters.items():
@@ -2463,6 +2588,9 @@ def _sankey_result_from_frame(
         "link_count": len(values),
         "total_flow": total_flow,
         "row_count": int(df.height),
+        # Rows before the step filters; the flow above aggregates all of them.
+        "input_rows": input_rows,
+        "step_options": step_options,
         "compute_ms": compute_ms,
     }
 
@@ -2483,10 +2611,12 @@ def compute_sankey(payload: dict) -> dict:
           "sort_mode": "alphabetical" | "total_flow" | "input",
           "min_link_value": float,
           "step_filters": {col: [value, ...]} | null,
+          "option_cols": [str] | null  (columns to list distinct values for),
           "filter_metadata": [...],
         }
 
-    Returns a Plotly figure JSON ready for react-plotly.js plus node/link
+    Every row of the filtered frame is aggregated into the flow: there is no
+    row cap here. Returns a Plotly figure JSON ready for react-plotly.js plus node/link
     metadata so the renderer can recolour client-side without re-dispatching.
     """
 
@@ -2500,6 +2630,7 @@ def compute_sankey(payload: dict) -> dict:
     sort_mode = str(payload.get("sort_mode") or "total_flow")
     min_link_value = max(0.0, float(payload.get("min_link_value") or 0.0))
     step_filters = payload.get("step_filters") or {}
+    option_cols = [str(c) for c in (payload.get("option_cols") or []) if c]
     filter_metadata = payload.get("filter_metadata") or []
 
     if not wf_id or not dc_id:
@@ -2523,7 +2654,9 @@ def compute_sankey(payload: dict) -> dict:
         }
     }
 
-    project_cols = [*step_cols, value_col] if value_col else list(step_cols)
+    project_cols = list(dict.fromkeys([*step_cols, *option_cols]))
+    if value_col and value_col not in project_cols:
+        project_cols.append(value_col)
 
     started = time.monotonic()
     df = load_deltatable_lite(
@@ -2544,8 +2677,334 @@ def compute_sankey(payload: dict) -> dict:
             sort_mode=sort_mode,
             min_link_value=min_link_value,
             step_filters=step_filters,
+            option_cols=option_cols or None,
         ),
         "load_ms": load_ms,
+    }
+
+
+def _given(payload: dict, key: str, default: float | int) -> float | int:
+    """A value the caller sent, or the service default when the key is absent.
+
+    ``payload.get(key) or default`` would turn an explicit 0 (no fold-change
+    threshold, no labels) into the fallback; only a missing or null key does.
+    """
+    value = payload.get(key)
+    return default if value is None else value
+
+
+@celery_app.task(
+    name="depictio.advanced_viz.compute_group_compare",
+    soft_time_limit=300,
+    time_limit=600,
+)
+def compute_group_compare(payload: dict) -> dict:
+    """Test every feature of a wide matrix between two groups of its rows.
+
+    Input payload:
+        {
+          "wf_id": str, "dc_id": str,
+          "index_col": str,
+          "group_a": {"label": str, "column": str, "values": [str]},
+          "group_b": {"label": str, "column": str, "values": [str]},
+          "test": "wilcoxon" | "t_test",
+          "log_transform": bool,
+          "max_features": int,
+          "min_observations": int,
+          "fdr_threshold": float,
+          "log2fc_threshold": float,
+          "top_n_labels": int,
+          "filter_metadata": [...],
+        }
+
+    The whole frame is loaded rather than a column projection: the features
+    are inferred from the schema, the way ``complex_heatmap`` infers its
+    matrix, so there is no column list to push down. ``filter_metadata`` is
+    applied exactly as the ``/data`` endpoint applies it, which is what makes
+    the comparison respect the dashboard's filters.
+
+    Returns the ranked per-feature rows plus the group sizes; the volcano and
+    the marker table are both drawn client-side from them.
+    """
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.api.v1.services.group_compare import group_compare_from_frame
+
+    wf_id = payload.get("wf_id")
+    dc_id = payload.get("dc_id")
+    group_a = payload.get("group_a") or {}
+    group_b = payload.get("group_b") or {}
+    filter_metadata = payload.get("filter_metadata") or []
+
+    if not wf_id or not dc_id:
+        raise ValueError("compute_group_compare: wf_id and dc_id are required")
+    if not group_a or not group_b:
+        raise ValueError("compute_group_compare: two groups are required")
+
+    dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+    if not dt_doc or not dt_doc.get("delta_table_location"):
+        raise ValueError("compute_group_compare: DC has no materialised Delta table")
+    init_data = {
+        str(dc_id): {
+            "delta_location": dt_doc["delta_table_location"],
+            "dc_type": "table",
+            "size_bytes": 0,
+        }
+    }
+
+    started = time.monotonic()
+    df = load_deltatable_lite(
+        workflow_id=ObjectId(str(wf_id)),
+        data_collection_id=str(dc_id),
+        metadata=filter_metadata or None,
+        init_data=init_data,
+    )
+    load_ms = int((time.monotonic() - started) * 1000)
+    logger.info("compute_group_compare: loaded %d rows in %dms", df.height, load_ms)
+
+    return {
+        **group_compare_from_frame(
+            df,
+            index_col=str(payload.get("index_col") or "index"),
+            group_a=group_a,
+            group_b=group_b,
+            test=str(payload.get("test") or "wilcoxon"),
+            log_transform=bool(payload.get("log_transform", True)),
+            max_features=int(_given(payload, "max_features", 2000)),
+            min_observations=int(_given(payload, "min_observations", 3)),
+            fdr_threshold=float(_given(payload, "fdr_threshold", 0.05)),
+            log2fc_threshold=float(_given(payload, "log2fc_threshold", 1.0)),
+            top_n_labels=int(_given(payload, "top_n_labels", 20)),
+        ),
+        "load_ms": load_ms,
+    }
+
+
+@celery_app.task(
+    name="depictio.advanced_viz.compute_contact_map",
+    soft_time_limit=180,
+    time_limit=300,
+)
+def compute_contact_map(payload: dict) -> dict:
+    """One region of a Hi-C matrix at one resolution.
+
+    Input payload:
+        {
+          "wf_id": str, "dc_id": str,
+          "chrom1_col": str, "start1_col": str,
+          "chrom2_col": str, "start2_col": str, "count_col": str,
+          "end1_col": str | null, "end2_col": str | null,
+          "sample_col": str | null, "resolution_col": str | null,
+          "chrom": str | null, "start": number | null, "end": number | null,
+          "resolution": int | null,   # null = the server picks one
+          "pixels": int | null,       # tile width, drives the pick
+          "target_bins_per_pixel": number | null,
+          "sample": str | null,
+          "max_cells": int | null,
+          "filter_metadata": [...],
+        }
+
+    The resolution is a partition of the DC (``cooler/contact_matrix.py``
+    writes one row set per bin size), so choosing it is a filter, not a
+    computation: the cost of a zoomed-out view is paid by reading fewer, wider
+    bins rather than by coarsening millions of fine ones after the fact.
+
+    A DC with no resolution column is not multi-resolution. Then this returns
+    the requested region of the whole frame, which is what the renderer got
+    before the column existed.
+    """
+    import polars as pl
+
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import load_deltatable_lite
+    from depictio.api.v1.services.contact_map import (
+        DEFAULT_MAX_CELLS,
+        apply_window,
+        choose_resolution,
+        coarsest_within_budget,
+        resolve_resolution_column,
+        summarise,
+    )
+
+    wf_id = payload.get("wf_id")
+    dc_id = payload.get("dc_id")
+    chrom1_col = payload.get("chrom1_col")
+    start1_col = payload.get("start1_col")
+    chrom2_col = payload.get("chrom2_col")
+    start2_col = payload.get("start2_col")
+    count_col = payload.get("count_col")
+    end1_col = payload.get("end1_col")
+    end2_col = payload.get("end2_col")
+    sample_col = payload.get("sample_col")
+    filter_metadata = payload.get("filter_metadata") or []
+
+    if not wf_id or not dc_id:
+        raise ValueError("compute_contact_map: wf_id and dc_id are required")
+    if not (chrom1_col and start1_col and chrom2_col and start2_col and count_col):
+        raise ValueError(
+            "compute_contact_map: chrom1_col, start1_col, chrom2_col, start2_col "
+            "and count_col are required"
+        )
+
+    dt_doc = deltatables_collection.find_one({"data_collection_id": ObjectId(str(dc_id))})
+    if not dt_doc or not dt_doc.get("delta_table_location"):
+        raise ValueError("compute_contact_map: DC has no materialised Delta table")
+    init_data = {
+        str(dc_id): {
+            "delta_location": dt_doc["delta_table_location"],
+            "dc_type": "table",
+            "size_bytes": 0,
+        }
+    }
+
+    # Whether this DC is multi-resolution is a property of the table, not of
+    # the dashboard: ask the scan rather than trust the component config, so a
+    # YAML written before the column existed still zooms.
+    resolution_col: str | None = None
+    try:
+        from depictio.api.v1.deltatables_utils import _create_delta_scan
+
+        scan = _create_delta_scan(dt_doc["delta_table_location"], "table")
+        resolution_col = resolve_resolution_column(
+            list(scan.collect_schema().names()), payload.get("resolution_col")
+        )
+    except Exception as exc:  # pragma: no cover - introspection is best effort
+        logger.warning("compute_contact_map: schema introspection failed: %s", exc)
+
+    project_cols = [
+        c
+        for c in (
+            chrom1_col,
+            start1_col,
+            end1_col,
+            chrom2_col,
+            start2_col,
+            end2_col,
+            count_col,
+            sample_col,
+            resolution_col,
+        )
+        if c
+    ]
+
+    started = time.monotonic()
+    df = load_deltatable_lite(
+        workflow_id=ObjectId(str(wf_id)),
+        data_collection_id=str(dc_id),
+        metadata=filter_metadata or None,
+        select_columns=list(dict.fromkeys(project_cols)),
+        init_data=init_data,
+    )
+    load_ms = int((time.monotonic() - started) * 1000)
+    compute_started = time.monotonic()
+
+    sample = payload.get("sample")
+    if sample and sample_col:
+        df = df.filter(pl.col(sample_col) == sample)
+
+    resolutions: list[int] = []
+    if resolution_col and df.height:
+        resolutions = sorted(
+            {
+                int(v)
+                for v in df.get_column(resolution_col).unique().to_list()
+                if v is not None and int(v) > 0
+            }
+        )
+
+    chrom = payload.get("chrom") or None
+    start = payload.get("start")
+    end = payload.get("end")
+    span = (
+        float(end) - float(start)
+        if start is not None and end is not None and float(end) > float(start)
+        else None
+    )
+    max_cells = int(payload.get("max_cells") or DEFAULT_MAX_CELLS)
+
+    requested = payload.get("resolution")
+    resolution: int | None = None
+    if resolutions:
+        if requested and int(requested) in resolutions:
+            resolution = int(requested)
+        else:
+            resolution = choose_resolution(
+                resolutions, span, payload.get("pixels"), payload.get("target_bins_per_pixel")
+            )
+            resolution = coarsest_within_budget(resolutions, resolution, span, max_cells)
+        df = df.filter(pl.col(resolution_col) == resolution)
+
+    df = apply_window(
+        df,
+        chrom1_col=chrom1_col,
+        start1_col=start1_col,
+        chrom2_col=chrom2_col,
+        start2_col=start2_col,
+        end1_col=end1_col,
+        end2_col=end2_col,
+        chrom=chrom,
+        start=None if start is None else float(start),
+        end=None if end is None else float(end),
+        resolution=resolution,
+    )
+    df = df.sort([chrom1_col, start1_col, start2_col])
+
+    truncated = df.height > max_cells
+    if truncated:
+        # Only reachable on a single-resolution DC too fine for the window  -
+        # there is no coarser partition to step up to. Keep the densest cells
+        # (they are sorted by position, so this keeps a contiguous corner) and
+        # say so, rather than pretend the matrix is complete.
+        df = df.head(max_cells)
+
+    region = (
+        {"chrom": chrom, "start": start, "end": end}
+        if chrom and start is not None and end is not None
+        else ({"chrom": chrom, "start": None, "end": None} if chrom else None)
+    )
+
+    rows: dict[str, list] = {}
+    for col in project_cols:
+        if col and col not in rows:
+            rows[col] = df.get_column(col).to_list()
+
+    compute_ms = int((time.monotonic() - compute_started) * 1000)
+    logger.info(
+        "compute_contact_map: %d cells, resolution=%s, chrom=%s in %dms (load %dms)",
+        df.height,
+        resolution,
+        chrom,
+        compute_ms,
+        load_ms,
+    )
+    return {
+        "rows": rows,
+        "columns": {
+            "chrom1": chrom1_col,
+            "start1": start1_col,
+            "end1": end1_col,
+            "chrom2": chrom2_col,
+            "start2": start2_col,
+            "end2": end2_col,
+            "count": count_col,
+            "sample": sample_col,
+            "resolution": resolution_col,
+        },
+        "summary": summarise(
+            df,
+            chrom1_col=chrom1_col,
+            start1_col=start1_col,
+            resolution_col=resolution_col,
+            sample_col=sample_col,
+            resolutions=resolutions,
+            resolution=resolution,
+            region=region,
+            pixels=payload.get("pixels"),
+            truncated=truncated,
+        ),
+        "row_count": int(df.height),
+        "load_ms": load_ms,
+        "compute_ms": compute_ms,
     }
 
 
@@ -2558,5 +3017,7 @@ __all__: list[str] = [
     "compute_complex_heatmap",
     "compute_upset",
     "compute_coverage_track",
+    "compute_contact_map",
     "compute_sankey",
+    "compute_group_compare",
 ]

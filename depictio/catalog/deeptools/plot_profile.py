@@ -46,7 +46,9 @@ _READ_KWARGS = {
     "null_values": ["nan", "NA", ""],
 }
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: a headerless file read by position.
     RecipeSource(
         ref="profiles",
         glob_pattern="**/*.plotProfile.tab",
@@ -55,7 +57,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "group": pl.Utf8,
     "bin": pl.Int64,
@@ -133,6 +136,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.col("bin_label").cast(pl.Utf8),
             pl.col("signal").cast(pl.Float64, strict=False),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "group", "bin"])
     )

@@ -189,3 +189,42 @@ class TestDCImageConfig:
         )
         assert config.columns_description["sample_id"] == "Unique sample identifier"
         assert config.columns_description["image_path"] == "Path to image file"
+
+
+class TestLocalImagesNeedAnS3Folder:
+    """`depictio ingest` uploads local_images_path to s3_base_folder, and the
+    dashboard reads the images from there: in the CLI, one needs the other."""
+
+    @pytest.fixture
+    def context(self, monkeypatch):
+        from depictio.models.models.data_collections_types import image
+
+        return lambda value: monkeypatch.setattr(image, "DEPICTIO_CONTEXT", value)
+
+    def test_the_cli_refuses_local_images_without_a_folder(self, context):
+        context("CLI")
+
+        with pytest.raises(ValidationError, match="s3_base_folder is not"):
+            DCImageConfig(format="csv", image_column="img", local_images_path="/data/images")
+
+    def test_the_cli_accepts_both(self, context):
+        context("CLI")
+
+        config = DCImageConfig(
+            format="csv",
+            image_column="img",
+            local_images_path="/data/images",
+            s3_base_folder="s3://bucket/images",
+        )
+        assert config.s3_base_folder == "s3://bucket/images/"
+
+    def test_a_folder_alone_is_still_valid(self, context):
+        context("CLI")
+
+        assert DCImageConfig(format="csv", image_column="img", s3_base_folder="s3://b/i/")
+
+    def test_the_server_still_loads_a_collection_stored_without_one(self, context):
+        context("server")
+
+        config = DCImageConfig(format="csv", image_column="img", local_images_path="/data/images")
+        assert config.s3_base_folder is None

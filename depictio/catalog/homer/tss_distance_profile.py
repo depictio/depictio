@@ -41,11 +41,20 @@ from depictio.models.models.transforms import RecipeSource
 #: Data-collection tag the recipe reads: the tidy per-peak annotation table.
 SOURCE_DC_TAG = "homer_annotated_peaks"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="peaks", dc_ref=SOURCE_DC_TAG),
+    RecipeSource(
+        ref="peaks",
+        dc_ref=SOURCE_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "distance_to_tss": pl.Int64,
+        },
+    ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "distance_to_tss": pl.Int64,
     "peak_count": pl.Int64,
@@ -89,7 +98,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             ((pl.col("distance_to_tss") // BIN_BP) * BIN_BP + BIN_BP // 2).alias("distance_to_tss")
         )
         .group_by(["sample", "distance_to_tss"])
-        # `pl.len()` is UInt64; EXPECTED_SCHEMA says Int64, and the schema check
+        # `pl.len()` is UInt64; OUTPUT_SCHEMA says Int64, and the schema check
         # is exact, so cast here rather than letting the recipe fail at ingest
         # (a TSV fixture round-trips back to Int64 and hides this).
         .agg(pl.len().cast(pl.Int64).alias("peak_count"))
@@ -98,6 +107,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         binned.with_columns(
             (pl.col("peak_count") / pl.col("peak_count").sum().over("sample")).alias("fraction")
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort(["sample", "distance_to_tss"])
     )

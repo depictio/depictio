@@ -10,7 +10,7 @@
  */
 
 import { test, expect } from "@fixtures/auth";
-import { createDashboard, deleteDashboard } from "@fixtures/dashboard";
+import { DASHBOARDS_GRID_URL, createDashboard, deleteDashboard } from "@fixtures/dashboard";
 
 type Page = import("@playwright/test").Page;
 
@@ -35,7 +35,7 @@ test.describe("Font size control", () => {
     page,
   }) => {
     await loginAsAdmin();
-    await page.goto("/dashboards");
+    await page.goto(DASHBOARDS_GRID_URL);
     await expect(page).toHaveURL(/\/dashboards/);
 
     const title = `Font Scale ${new Date().toISOString().replace(/:/g, "-")}`;
@@ -83,7 +83,7 @@ test.describe("Font size control", () => {
     expect(await scaleVarOn(page, "[data-testid='dashboard-content']")).toBe("1");
 
     // Cleanup.
-    await page.goto("/dashboards");
+    await page.goto(DASHBOARDS_GRID_URL);
     await deleteDashboard(page, title);
   });
 });

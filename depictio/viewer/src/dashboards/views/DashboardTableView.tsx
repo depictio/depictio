@@ -436,6 +436,9 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
               component="a"
               href={dashboardHref(String(r.dashboard.dashboard_id))}
               onClick={dashboardLinkClickHandler(() => onView(r.dashboard))}
+              // Same anchor as the thumbnail card, so the public tour's
+              // "Open a dashboard" step finds a target in either view.
+              data-tour-id="dashboard-card"
               style={{ textAlign: 'left', color: 'inherit' }}
             >
               <Text fw={500} size="sm">

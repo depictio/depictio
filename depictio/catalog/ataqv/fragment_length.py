@@ -43,16 +43,21 @@ _LINE_READ_KWARGS = {
     "infer_schema_length": 0,
 }
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="reports",
         glob_pattern="**/*.ataqv.json",
         format="CSV",
+        input_schema={
+            "raw": pl.Utf8,
+        },
         read_kwargs=_LINE_READ_KWARGS,
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "fragment_length": pl.Int64,
     "read_count": pl.Int64,
@@ -129,4 +134,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("read_count").cast(pl.Int64, strict=False),
         pl.col("fraction_of_all_reads").cast(pl.Float64, strict=False),
     ).with_columns(_classify(pl.col("fragment_length")).alias("fragment_class"))
-    return df.select(list(EXPECTED_SCHEMA)).sort(["sample", "fragment_length"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["sample", "fragment_length"])

@@ -11,9 +11,12 @@ Use the depictio CLI dashboard validation tool to check YAML files:
    - Directory path
    - No args = validate current directory recursively
 
-2. **Run validation** using the appropriate command:
-   - Single file: `depictio dashboard validate <file>`
-   - Directory: `depictio dashboard validate-dir <dir> --recursive`
+2. **Run validation** using the appropriate command. `--offline` keeps it a YAML-only
+   check: without it, a default CLI config (`~/.depictio/CLI.yaml`) makes the command
+   resolve the project on that server too.
+   - Single file: `depictio dashboard validate --offline <file>`
+   - Directory (the command takes one file, so loop):
+     `find <dir> -name '*.yaml' -exec depictio dashboard validate --offline {} \;`
 
 3. **Report results clearly**:
    - Show validation status (✓ Valid / ✗ Invalid)
@@ -138,7 +141,7 @@ components: []
 
 Use the project Python environment: `/Users/tweber/Gits/workspaces/depictio-workspace/depictio/depictio-venv-dash-v3/bin/python`
 
-Run as module: `python -m depictio.cli.depictio_cli dashboard validate <args>`
+Run as module: `python -m depictio.cli.depictio_cli dashboard validate --offline <args>`
 
 ## Notes
 

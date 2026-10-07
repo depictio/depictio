@@ -2,6 +2,14 @@ import { expect, Page } from "@playwright/test";
 import { IRIS_PROJECT_LABEL } from "./projects";
 
 /**
+ * The listing in its thumbnail grid. The default view is the table, and the
+ * `dashboard-card` locators below only exist in the grid. `?view=` counts as
+ * the visitor's own choice and is stored, so later visits in the same test
+ * keep the grid.
+ */
+export const DASHBOARDS_GRID_URL = "/dashboards?view=thumbnails";
+
+/**
  * Opens the "New Dashboard" modal, fills title + project, submits,
  * and waits for the new card to appear. Returns the unique title used.
  */
@@ -36,13 +44,18 @@ export async function deleteDashboard(page: Page, title: string): Promise<void> 
     .filter({ hasText: title })
     .first();
 
-  // Open the ⋮ actions menu.
-  await card.locator("[data-tour-id='dashboard-actions']").click();
-
-  // Wait for the dropdown to be visible then click delete.
+  // Open the ⋮ actions menu and click Delete. The item stays disabled until the
+  // listing knows the current user owns the card, and the menu re-renders when
+  // that lands, so a menu opened too early holds a stale disabled item: close
+  // it and reopen until Delete is enabled.
   const deleteItem = page.locator("[data-testid='delete-dashboard-btn']");
-  await expect(deleteItem).toBeVisible({ timeout: 8_000 });
-  await deleteItem.click();
+  await expect(async () => {
+    if (await deleteItem.isVisible()) await page.keyboard.press("Escape");
+    await expect(deleteItem).toBeHidden({ timeout: 2_000 });
+    await card.locator("[data-tour-id='dashboard-actions']").click();
+    await expect(deleteItem).toBeEnabled({ timeout: 2_000 });
+    await deleteItem.click({ timeout: 2_000 });
+  }).toPass({ timeout: 20_000 });
 
   // Confirm in the modal.
   await page.locator("[data-testid='confirm-delete-btn']").click();

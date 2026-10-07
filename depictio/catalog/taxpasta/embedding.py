@@ -16,11 +16,25 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.dimreduction import run_pcoa
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="profiles", dc_ref="taxpasta_profiles"),
+    RecipeSource(
+        ref="profiles",
+        dc_ref="taxpasta_profiles",
+        input_schema={
+            "sample": pl.Utf8,
+            "profiler": pl.Utf8,
+            "database": pl.Utf8,
+            "profiler_db": pl.Utf8,
+            "platform": pl.Utf8,
+            "taxonomy_id": pl.Utf8,
+            "rel_abundance": pl.Float64,
+        },
+    ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "dim_1": pl.Float64,
     "dim_2": pl.Float64,
@@ -31,7 +45,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "platform": pl.Utf8,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

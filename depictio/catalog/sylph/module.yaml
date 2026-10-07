@@ -1,5 +1,8 @@
-# sylph. Lightweight: identity is derived from the nf-core meta.yml that
-# `nf_core_url` points at (not duplicated). Override a field here only on drift.
 id: sylph
 name: sylph
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/sylph/profile
+description: >-
+  Sylph quickly enables querying of genomes against even low-coverage shotgun
+  metagenomes to find nearest neighbour ANI.
+homepage: https://github.com/bluenote-1577/sylph
+biotools_url: https://bio.tools/sylph

@@ -42,13 +42,16 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: the id column is matched by alias, then one column per sample.
     RecipeSource(
         ref="matrix",
         path="salmon/salmon.merged.gene_tpm.tsv",
         format="tsv",
         read_kwargs={"null_values": ["NA"], "infer_schema_length": 10000},
     ),
+    # No input_schema: the sample-id and factor columns are detected from the values.
     RecipeSource(
         ref="samplesheet",
         path="input/samplesheet.csv",
@@ -58,11 +61,12 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "gene_name": pl.Utf8,
 }
 # Sample columns are run-dependent; validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 TOP_N = 500
 MAX_ANNOTATIONS = 4

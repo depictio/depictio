@@ -24,13 +24,29 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="profiles", glob_pattern="melon/*/*/*.tsv", format="tsv"),
+    RecipeSource(
+        ref="profiles",
+        glob_pattern="melon/*/*/*.tsv",
+        format="tsv",
+        input_schema={
+            "superkingdom": pl.Utf8,
+            "phylum": pl.Utf8,
+            "class": pl.Utf8,
+            "order": pl.Utf8,
+            "family": pl.Utf8,
+            "genus": pl.Utf8,
+            "species": pl.Utf8,
+            "abundance": pl.Float64,
+        },
+    ),
 ]
 
 _RANKS = ["superkingdom", "phylum", "class", "order", "family", "genus", "species"]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     **{rank: pl.Utf8 for rank in _RANKS},
     "copy_number": pl.Float64,
     "abundance": pl.Float64,
@@ -38,7 +54,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "lineages": pl.Int64,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _UNCLASSIFIED = "unclassified"
 

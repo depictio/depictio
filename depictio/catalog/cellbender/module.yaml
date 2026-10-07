@@ -1,0 +1,8 @@
+id: cellbender
+name: CellBender
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/cellbender/removebackground
+homepage: https://cellbender.readthedocs.io/
+description: >-
+  CellBender is a software package for eliminating technical artifacts from
+  high-throughput single-cell RNA sequencing (scRNA-seq) data.
+biotools_url: https://bio.tools/CellBender

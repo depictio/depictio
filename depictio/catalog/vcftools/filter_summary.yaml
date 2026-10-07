@@ -1,0 +1,21 @@
+id: vcftools_filter_summary
+name: Filter breakdown
+mode: filter-summary
+description: >-
+  One row per caller and FILTER value: how many calls carry it, how they split
+  between transitions and transversions, and what share of the callset they
+  are. The per-caller view the pooled MultiQC panel cannot give.
+find:
+  path_glob: "**/*.FILTER.summary"
+recipe: vcftools/filter_summary.py
+fixture: filter_summary.tsv
+renders_as:
+  - { id: filter_partition, component: figure, visu_type: bar,
+      dict_kwargs: {x: caller, y: n_variants, color: filter_label, barmode: stack} }
+  - { component: card, column: pct_of_calls, aggregation: average, secondary_layout: donut,
+      breakdown_col: filter_label }
+  - { component: card, column: n_variants, aggregation: sum, secondary_layout: top_n,
+      breakdown_col: caller, top_n_count: 3 }
+  - { component: card, column: ts_tv, aggregation: median, aggregations: [box_plot_stats],
+      secondary_layout: box_plot }
+  - { component: table }

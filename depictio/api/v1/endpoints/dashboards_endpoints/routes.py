@@ -6,7 +6,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import yaml
@@ -70,7 +70,7 @@ dashboards_endpoint_router = APIRouter()
 
 # Screenshots PVC mount inside the backend container; bundled image ships
 # default PNGs here for the seeded reference dashboards.
-_SCREENSHOTS_DIR = "/app/depictio/api/static/screenshots"
+_SCREENSHOTS_DIR = str(settings.performance.screenshots_path)
 # Mirrors the Dash auto-screenshot callback's 1h heuristic so the two
 # trigger sites agree on "stale".
 _SCREENSHOT_STALE_AFTER_S = 3600
@@ -622,6 +622,11 @@ async def save_dashboard(
     if existing_dashboard and not save_payload.get("screenshot_ts"):
         save_payload.pop("screenshot_ts", None)
 
+    # `source_key` belongs to the YAML import. A client that never loaded it would
+    # save None over it, and a duplicate round-trips its source's key, which would
+    # make the next refresh of that source pick either copy.
+    save_payload.pop("source_key", None)
+
     if existing_dashboard:
         project_id = existing_dashboard.get("project_id")
         if not project_id:
@@ -695,7 +700,9 @@ async def save_dashboard(
         # explicit Save click passes `force_screenshot=true` to bypass
         # the 1h window and always regenerate.
         try:
-            if force_screenshot or _should_enqueue_screenshot(dashboard_id_str):
+            if settings.performance.screenshots_enabled and (
+                force_screenshot or _should_enqueue_screenshot(dashboard_id_str)
+            ):
                 # Lazy import keeps API startup independent of the worker
                 # module; broad except so a Celery/broker outage never
                 # breaks the save response itself.
@@ -2166,6 +2173,15 @@ def bulk_compute_cards(
     # extend_filters_via_links).
     base_filter_metadata = _build_filter_metadata(filters)
 
+    # A genome region (a locus navigator's brush or default_region) is a place
+    # to look, not a subset to summarise: cards drop it unless they opt in with
+    # ``follow_region_filter`` (see ``region_scope``). Two filter lists, then,
+    # and every per-DC cache below is keyed on which one a card reads.
+    from depictio.api.v1.region_scope import follows_region, scope_region_filters
+
+    region_free_filters = scope_region_filters(filters, "card")
+    has_region_free_filters = len(_build_filter_metadata(region_free_filters)) > 0
+
     # Dedupe Delta loads per (wf_id, dc_id). One load can serve N cards.
     df_cache: dict[tuple, Any] = {}
     # Per-DC precomputed aggregation specs cache (one DB hit per unique dc_id).
@@ -2187,20 +2203,21 @@ def bulk_compute_cards(
     # Per-DC link-resolved filter cache so we only call the link API once per
     # target DC. The result already includes the original React-supplied
     # filters, so it can be passed straight to load_deltatable_lite.
-    resolved_per_dc: dict[str, list[dict]] = {}
+    resolved_per_dc: dict[tuple[str, bool], list[dict]] = {}
 
-    def _resolved_filters_for(dc_id_str: str) -> list[dict]:
-        if dc_id_str in resolved_per_dc:
-            return resolved_per_dc[dc_id_str]
+    def _resolved_filters_for(dc_id_str: str, follow_region: bool = False) -> list[dict]:
+        key = (dc_id_str, follow_region)
+        if key in resolved_per_dc:
+            return resolved_per_dc[key]
         merged = _resolve_link_filters_cached(
-            filters=filters,
+            filters=filters if follow_region else region_free_filters,
             target_dc_id=dc_id_str,
             project_id=project_id,
             access_token=access_token,
             component_type="card",
         )
-        resolved_per_dc[dc_id_str] = _build_filter_metadata(merged)
-        return resolved_per_dc[dc_id_str]
+        resolved_per_dc[key] = _build_filter_metadata(merged)
+        return resolved_per_dc[key]
 
     def _get_specs(dc_id_str: str) -> dict[str, dict]:
         """Return precomputed column aggregations as ``{column_name: specs_dict}``.
@@ -2247,7 +2264,9 @@ def bulk_compute_cards(
             )
         return groups_per_dc[dc_id_str]
 
-    def _card_cache_key(wf_id: Any, dc_id: Any, filter_expr: str | None = None) -> tuple:
+    def _card_cache_key(
+        wf_id: Any, dc_id: Any, filter_expr: str | None = None, follow_region: bool = False
+    ) -> tuple:
         """``(wf_id, dc_id, filter signature, filter_expr)`` — the dedupe key for a
         card's Delta load. Cards sharing it share one loaded frame (via
         ``df_cache``), so a projected load must carry the union of their columns.
@@ -2255,7 +2274,7 @@ def bulk_compute_cards(
         ``filter_expr`` is part of the key because the cached frame is stored
         *after* the expression has been applied: two cards on the same DC with
         different expressions must not read each other's rows."""
-        card_filters = _resolved_filters_for(str(dc_id))
+        card_filters = _resolved_filters_for(str(dc_id), follow_region)
         filter_sig = tuple(
             sorted(
                 (
@@ -2266,7 +2285,7 @@ def bulk_compute_cards(
                 for fm in card_filters
             )
         )
-        return (str(wf_id), str(dc_id), filter_sig, filter_expr or "")
+        return (str(wf_id), str(dc_id), filter_sig, filter_expr or "", follow_region)
 
     # Column projection (#7) pre-pass: the slow Delta load is shared across
     # every card with the same (wf_id, dc_id, filter) signature, so the
@@ -2284,7 +2303,7 @@ def bulk_compute_cards(
             continue
         card_filter_expr = card.get("filter_expr")
         key_cols = needed_cols_by_key.setdefault(
-            _card_cache_key(wf_id, dc_id, card_filter_expr), set()
+            _card_cache_key(wf_id, dc_id, card_filter_expr, follows_region(card)), set()
         )
         key_cols.add(column)
         key_cols |= _card_payload_columns(card)
@@ -2306,7 +2325,10 @@ def bulk_compute_cards(
         if not (card.get("wf_id") and card.get("dc_id") and card.get("column_name")):
             continue
         cards_by_key.setdefault(
-            _card_cache_key(card["wf_id"], card["dc_id"], card.get("filter_expr")), []
+            _card_cache_key(
+                card["wf_id"], card["dc_id"], card.get("filter_expr"), follows_region(card)
+            ),
+            [],
         ).append(card)
 
     # ``(component_index, aggregation) -> value`` filled by the pushdown pass.
@@ -2355,7 +2377,8 @@ def bulk_compute_cards(
         scan = open_deltatable_scan(
             workflow_id=ObjectId(str(wf_id)) if not isinstance(wf_id, ObjectId) else wf_id,
             data_collection_id=str(dc_id),
-            metadata=_resolved_filters_for(str(dc_id)) or None,
+            # The key's last slot is whether its cards follow the region.
+            metadata=_resolved_filters_for(str(dc_id), bool(cache_key[-1])) or None,
             init_data=init_data,
             select_columns=sorted(needed_cols_by_key.get(cache_key, set())) or None,
         )
@@ -2406,7 +2429,9 @@ def bulk_compute_cards(
         # A card-level ``filter_expr`` narrows the rows before aggregating, so the
         # precomputed specs — computed over the whole collection — are the wrong
         # answer for it. Skip straight to a path that can apply the expression.
-        if not has_filters and not card_filter_expr:
+        card_follows = follows_region(card)
+        card_has_filters = has_filters if card_follows else has_region_free_filters
+        if not card_has_filters and not card_filter_expr:
             specs = _get_specs(str(dc_id))
             col_specs = specs.get(column) or {}
             specs_value = _spec_value(col_specs, aggregation)
@@ -2448,8 +2473,8 @@ def bulk_compute_cards(
         # changed the input set, or the aggregation isn't in the specs).
         # Cache key includes the filter signature so two cards on the same DC
         # with different (link-resolved) filter sets don't collide.
-        card_filters = _resolved_filters_for(str(dc_id))
-        cache_key = _card_cache_key(wf_id, dc_id, card_filter_expr)
+        card_filters = _resolved_filters_for(str(dc_id), card_follows)
+        cache_key = _card_cache_key(wf_id, dc_id, card_filter_expr, card_follows)
 
         # Try the scan-level pushdown once per cache key before considering a
         # load. It answers every expressible aggregation for all cards sharing
@@ -2936,6 +2961,11 @@ async def render_figure_endpoint(
     # whole duration, so a burst of filtered figure renders stalls not just each
     # other but every unrelated request that worker owns. (The other render
     # endpoints are plain ``def`` and already get a threadpool for free.)
+    # A genome region reaches a figure only when its encodings name a region
+    # column, or when it opts in (``region_scope``).
+    from depictio.api.v1.region_scope import scope_region_filters
+
+    filters = scope_region_filters(filters, "figure", component)
     merged_filters = await run_in_threadpool(
         _resolve_link_filters_cached,
         filters,
@@ -4240,6 +4270,7 @@ def _resolve_multiqc_sample_filter(
     from depictio.api.v1.services.multiqc.patching import (
         expand_canonical_samples_to_variants,
     )
+    from depictio.cli.cli.utils.sample_mapping import remap_mappings_to_hub
 
     # Each constraint is expressed in variant space so intersection is
     # well-defined regardless of whether the filter emitted canonical IDs,
@@ -4247,8 +4278,9 @@ def _resolve_multiqc_sample_filter(
     constraint_sets: list[set[str]] = []
 
     for values in direct_sample_filters:
+        wanted = list(dict.fromkeys(values))
         expanded = expand_canonical_samples_to_variants(
-            list(dict.fromkeys(values)), sample_mappings
+            wanted, remap_mappings_to_hub(sample_mappings, wanted)
         )
         constraint_sets.append({str(s) for s in expanded})
 
@@ -4333,7 +4365,9 @@ def _resolve_multiqc_sample_filter(
                 canonical = [str(s) for s in meta_df[link_source_column].unique().to_list()]
                 # Always run the canonical→variants expansion. When no
                 # mappings are available, this returns canonical unchanged.
-                expanded = expand_canonical_samples_to_variants(canonical, sample_mappings)
+                expanded = expand_canonical_samples_to_variants(
+                    canonical, remap_mappings_to_hub(sample_mappings, canonical)
+                )
                 logger.debug(
                     f"_resolve_multiqc_sample_filter: dc={metadata_dc_id} "
                     f"join_col={link_source_column!r} canonical={len(canonical)} "
@@ -5059,18 +5093,40 @@ def _resolve_workflow_tags(component: dict, project_id: PyObjectId | None = None
             return
 
 
-def _regenerate_component_fields(component: dict) -> None:
+def _project_dc_properties(dc_id: Any, project_id: PyObjectId | None) -> dict:
+    """The `dc_specific_properties` a project stores for one of its data collections.
+
+    They live under the DC's `config`, which `_resolve_workflow_tags` does not copy
+    into the component's `dc_config`.
+    """
+    if not dc_id or not project_id:
+        return {}
+    project = projects_collection.find_one({"_id": ObjectId(project_id)})
+    for wf in (project or {}).get("workflows", []):
+        for dc in wf.get("data_collections", []):
+            if str(dc.get("_id")) == str(dc_id):
+                return (dc.get("config") or {}).get("dc_specific_properties") or {}
+    return {}
+
+
+def _regenerate_component_fields(component: dict, project_id: PyObjectId | None = None) -> None:
     """Regenerate component fields from dc_config after tag resolution.
 
-    For Image components: Regenerate s3_base_folder from dc_config.
+    For Image components: Regenerate s3_base_folder from dc_config, else from the
+    data collection in the project. An export leaves it out, so without this an
+    exported image dashboard came back without a folder to load its images from.
     For MultiQC components: Additional regeneration handled in MultiQC models.
     """
     comp_type = component.get("component_type", "")
 
     # Image component: Regenerate s3_base_folder from DC config if not present
     if comp_type == "image" and not component.get("s3_base_folder"):
-        dc_config = component.get("dc_config", {})
-        dc_specific_props = dc_config.get("dc_specific_properties", {})
+        # Either key can be present and None: `_resolve_workflow_tags` copies a
+        # top-level `dc_specific_properties` that a project's DCs do not have.
+        dc_config = component.get("dc_config") or {}
+        dc_specific_props = dc_config.get("dc_specific_properties") or _project_dc_properties(
+            component.get("dc_id"), project_id
+        )
         s3_base_folder = dc_specific_props.get("s3_base_folder")
         if s3_base_folder:
             component["s3_base_folder"] = s3_base_folder
@@ -5085,6 +5141,7 @@ def _regenerate_component_indices(dashboard_dict: dict) -> None:
         return
 
     layout_keys = ["left_panel_layout_data", "right_panel_layout_data", "stored_layout_data"]
+    renamed: dict[str, str] = {}
 
     for component in dashboard_dict["stored_metadata"]:
         old_index = component.get("index", "")
@@ -5097,11 +5154,19 @@ def _regenerate_component_indices(dashboard_dict: dict) -> None:
 
         new_index = str(uuid.uuid4())
         component["index"] = new_index
+        renamed[old_index] = new_index
 
         for layout_key in layout_keys:
             for layout_item in dashboard_dict.get(layout_key, []):
                 if layout_item.get("i") == f"box-{old_index}":
                     layout_item["i"] = f"box-{new_index}"
+
+    # A record card's `linked_component` holds its source's index (see
+    # `DashboardDataLite.to_full`), so it has to follow the source's new one.
+    for component in dashboard_dict["stored_metadata"]:
+        config = component.get("config")
+        if isinstance(config, dict) and config.get("linked_component") in renamed:
+            config["linked_component"] = renamed[config["linked_component"]]
 
 
 # Component types that carry a visualisation — a tab needs at least one of these
@@ -5514,11 +5579,120 @@ def _tab_meets_minimum(
     return has_filter and _tab_has_visualization_components(dashboard_dict, dc_meta)
 
 
+def _existing_import_target(
+    project_id: PyObjectId,
+    title: str,
+    source_key: str | None,
+    overwrite: bool,
+    parent_dashboard_id: Any = None,
+) -> dict | None:
+    """The dashboard an import replaces, or None when it inserts a new one.
+
+    With overwrite, the dashboard imported from the same source (`source_key`)
+    comes first, so a dashboard renamed since (in the viewer, or by
+    `--dashboard-name`) is refreshed instead of joined by a second copy. The title
+    is the fallback, which is also how a dashboard imported before keys existed
+    gets one. Without overwrite, either match is a 409.
+    """
+    in_project: dict[str, Any] = {"project_id": ObjectId(project_id)}
+    by_key = (
+        dashboards_collection.find_one({**in_project, "source_key": source_key})
+        if source_key
+        else None
+    )
+    title_query = {**in_project, "title": title}
+    if parent_dashboard_id is not None:
+        title_query["parent_dashboard_id"] = parent_dashboard_id
+    by_title = dashboards_collection.find_one(title_query)
+
+    if overwrite:
+        return by_key or by_title
+    if by_title:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Dashboard '{title}' already exists in this project. "
+            "Use --overwrite to update it.",
+        )
+    if by_key:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Dashboard '{by_key.get('title')}' in this project was already imported "
+            f"from {source_key}. Use --overwrite to update it.",
+        )
+    return None
+
+
+def _import_title(
+    yaml_title: str,
+    existing: dict | None,
+    keep_titles: bool,
+    title: str | None = None,
+) -> str:
+    """The title an imported dashboard gets.
+
+    `title` when given (`main_title`, for the main dashboard), else under
+    `keep_titles` the current title of the dashboard it replaces, which may have
+    been renamed in the viewer since, else the YAML's.
+    """
+    if title:
+        return title
+    if keep_titles and existing and existing.get("title"):
+        return existing["title"]
+    return yaml_title
+
+
+def _keep_existing_dashboard(
+    existing: dict,
+    project_id: PyObjectId,
+    source_key: str | None,
+    title: str | None,
+    with_tabs: bool = False,
+) -> dict[str, Any]:
+    """The response of an import that leaves a dashboard the project has as it is.
+
+    Its layout and components stay as edited in the viewer. Only `title`
+    (`main_title`) renames it, and a dashboard imported before keys existed takes
+    `source_key`, so that later imports still find it once renamed.
+    """
+    changes: dict[str, Any] = {}
+    if title and title != existing.get("title"):
+        changes["title"] = title
+    if source_key and not existing.get("source_key"):
+        changes["source_key"] = source_key
+    if changes:
+        dashboards_collection.update_one({"_id": existing["_id"]}, {"$set": changes})
+    kept = {**existing, **changes}
+    response: dict[str, Any] = {
+        "success": True,
+        "updated": False,
+        "status": "kept",
+        "message": "Dashboard kept as it is" + (", renamed" if "title" in changes else ""),
+        "dashboard_id": str(kept["dashboard_id"]),
+        "title": kept.get("title"),
+        "project_id": str(project_id),
+        "dash_url": settings.viewer.external_url,
+    }
+    if with_tabs:
+        # The tabs it has now. One the YAML has and the family lacks is not added:
+        # it may be a tab removed in the viewer.
+        tabs = dashboards_collection.find(
+            {"parent_dashboard_id": kept["dashboard_id"]}, {"title": 1, "dashboard_id": 1}
+        ).sort("tab_order", 1)
+        response["tabs"] = [
+            {"title": tab.get("title"), "dashboard_id": str(tab["dashboard_id"])} for tab in tabs
+        ]
+    return response
+
+
 def _import_multi_tab_dashboard(
     yaml_data: dict,
     project_id: PyObjectId,
     overwrite: bool,
     current_user: User,
+    source_key: str | None = None,
+    keep_titles: bool = False,
+    main_title: str | None = None,
+    keep_existing: bool = False,
 ) -> dict[str, Any]:
     """
     Import a multi-tab dashboard from YAML data with main_dashboard and tabs structure.
@@ -5526,8 +5700,18 @@ def _import_multi_tab_dashboard(
     Args:
         yaml_data: Parsed YAML dictionary with main_dashboard and tabs keys
         project_id: Target project ID
-        overwrite: Whether to update existing dashboards with same titles
+        overwrite: Whether to update the dashboards this one replaces (same
+            source_key, else same title)
         current_user: Current authenticated user
+        source_key: Stable origin of the main dashboard. Each tab gets
+            "<source_key>#<tab title as written in the YAML>".
+        keep_titles: The main dashboard and the tabs an overwrite replaces keep
+            their current titles instead of taking the YAML's
+        main_title: Title of the main dashboard, over the YAML's and over
+            keep_titles; the tabs are not affected
+        keep_existing: A main dashboard the project has (same source_key, else
+            same title) is left as it is, tabs included; main_title still
+            renames it
 
     Returns:
         Import result with main dashboard ID and child tab IDs
@@ -5539,21 +5723,24 @@ def _import_multi_tab_dashboard(
         raise HTTPException(status_code=400, detail="Multi-tab YAML missing 'main_dashboard' key")
 
     # Import main dashboard first
-    main_yaml = yaml.dump(main_dashboard_data, default_flow_style=False, allow_unicode=True)
+    main_yaml = yaml.dump(
+        main_dashboard_data, default_flow_style=False, allow_unicode=True, sort_keys=False
+    )
     main_lite = DashboardDataLite.from_yaml(main_yaml)
 
-    # Check for existing main dashboard
-    existing_main = dashboards_collection.find_one(
-        {"title": main_lite.title, "project_id": ObjectId(project_id)}
+    existing_main = _existing_import_target(
+        project_id, main_lite.title, source_key, overwrite or keep_existing
     )
-    if existing_main and not overwrite:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Dashboard '{main_lite.title}' already exists in this project. "
-            "Use --overwrite to update it.",
+    if keep_existing and existing_main is not None:
+        return _keep_existing_dashboard(
+            existing_main, project_id, source_key, main_title, with_tabs=True
         )
 
     main_dashboard_dict = main_lite.to_full()
+    main_dashboard_dict["title"] = _import_title(
+        main_lite.title, existing_main, keep_titles, main_title
+    )
+    main_dashboard_dict["source_key"] = source_key or (existing_main or {}).get("source_key")
     main_dashboard_dict["is_main_tab"] = True  # Ensure it's marked as main tab
     # Visibility is project-driven; `to_full()` defaults to private, which
     # would also reset an existing public dashboard on --overwrite.
@@ -5590,7 +5777,7 @@ def _import_multi_tab_dashboard(
     # Resolve tags and regenerate fields for main dashboard components
     for component in main_dashboard_dict.get("stored_metadata", []):
         _resolve_workflow_tags(component, project_id=project_id)
-        _regenerate_component_fields(component)
+        _regenerate_component_fields(component, project_id=project_id)
     # Hide components whose DC is absent/unpopulated (self-adapting dashboard)
     _filter_unresolved_components(main_dashboard_dict, project_id=project_id)
     _regenerate_component_indices(main_dashboard_dict)
@@ -5620,21 +5807,29 @@ def _import_multi_tab_dashboard(
         [main_dashboard_data, *(tabs_data or [])],
     )
     for idx, tab_data in enumerate(tabs_data):
-        tab_yaml = yaml.dump(tab_data, default_flow_style=False, allow_unicode=True)
+        tab_yaml = yaml.dump(
+            tab_data, default_flow_style=False, allow_unicode=True, sort_keys=False
+        )
         tab_lite = DashboardDataLite.from_yaml(tab_yaml)
+
+        # The tab's key comes from its title in the YAML, not in the database, so
+        # a tab renamed in the viewer is still the one this tab refreshes.
+        tab_source_key = f"{source_key}#{tab_lite.title}" if source_key else None
 
         # Check for existing tab if overwrite is requested
         existing_tab = None
         if overwrite:
-            existing_tab = dashboards_collection.find_one(
-                {
-                    "title": tab_lite.title,
-                    "parent_dashboard_id": main_dashboard_id,
-                    "project_id": ObjectId(project_id),
-                }
+            existing_tab = _existing_import_target(
+                project_id,
+                tab_lite.title,
+                tab_source_key,
+                overwrite,
+                parent_dashboard_id=main_dashboard_id,
             )
 
         tab_dashboard_dict = tab_lite.to_full()
+        tab_dashboard_dict["title"] = _import_title(tab_lite.title, existing_tab, keep_titles)
+        tab_dashboard_dict["source_key"] = tab_source_key or (existing_tab or {}).get("source_key")
         tab_dashboard_dict["is_public"] = project_is_public
         tab_dashboard_dict["is_main_tab"] = False
         tab_dashboard_dict["parent_dashboard_id"] = main_dashboard_id
@@ -5668,7 +5863,7 @@ def _import_multi_tab_dashboard(
         # Resolve tags and regenerate fields for tab components
         for component in tab_dashboard_dict.get("stored_metadata", []):
             _resolve_workflow_tags(component, project_id=project_id)
-            _regenerate_component_fields(component)
+            _regenerate_component_fields(component, project_id=project_id)
         before_filtering = len(tab_dashboard_dict.get("stored_metadata") or [])
         _filter_unresolved_components(tab_dashboard_dict, project_id=project_id)
         was_pruned = len(tab_dashboard_dict.get("stored_metadata") or []) < before_filtering
@@ -5719,7 +5914,7 @@ def _import_multi_tab_dashboard(
                 logger.error(f"Failed to import tab '{tab_lite.title}'")
                 continue
 
-        imported_tabs.append({"title": tab_lite.title, "dashboard_id": str(tab_dashboard_id)})
+        imported_tabs.append({"title": tab_dashboard.title, "dashboard_id": str(tab_dashboard_id)})
 
     action = "Updated" if is_update else "Imported"
     logger.info(
@@ -5730,6 +5925,7 @@ def _import_multi_tab_dashboard(
     return {
         "success": True,
         "updated": is_update,
+        "status": "replaced" if is_update else "created",
         "message": f"Multi-tab dashboard {'updated' if is_update else 'imported'} successfully",
         "dashboard_id": str(main_dashboard_id),
         "title": main_dashboard.title,
@@ -5744,6 +5940,11 @@ async def import_dashboard_from_yaml(
     yaml_content: str = Body(..., media_type="text/plain"),
     project_id: PyObjectId | None = None,
     overwrite: bool = False,
+    source_key: str | None = None,
+    keep_titles: bool = False,
+    main_title: str | None = None,
+    parent_source_key: str | None = None,
+    existing: Literal["keep", "replace"] | None = None,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -5755,18 +5956,52 @@ async def import_dashboard_from_yaml(
 
     A new dashboard_id will be generated, and the current user will be set as owner.
 
-    If `overwrite=True` and a dashboard with the same title exists in the project,
-    the existing dashboard will be updated instead of creating a new one.
+    If `overwrite=True`, the dashboard imported earlier from the same `source_key`
+    is updated instead of creating a new one, whatever its title is now; without
+    one, a dashboard with the same title in the project is. Either kind of match
+    is a 409 without `overwrite`.
+
+    `existing` says what becomes of a dashboard so matched, over `overwrite`:
+    - `replace`: as `overwrite=True`;
+    - `keep`: it is left as it is, its layout and components as edited in the
+      viewer, and the response says `"status": "kept"` with its id. `main_title`
+      still renames a kept main dashboard, which changes nothing else. A kept
+      multi-tab main keeps its tabs as they are: a tab the YAML adds is not
+      imported. A dashboard with no match is created as usual.
+    Every response says what happened in `status`: `created`, `replaced` or `kept`.
+
+    Titles: a dashboard takes the title in the YAML, unless
+    - `keep_titles=True` and the import replaces an existing dashboard: that
+      dashboard keeps its current title, so a refresh does not undo a rename made
+      in the viewer. Applies to the main dashboard and to every tab;
+    - `main_title` is given: the main dashboard (the multi-tab `main_dashboard`,
+      or a single dashboard that is not a child tab) is titled that, over the YAML
+      and over `keep_titles`. The tabs are not affected. A 400 on a child tab.
+
+    A single-format child tab names its parent by title (`parent_dashboard_tag`).
+    `parent_source_key`, the `source_key` the parent was imported under, finds
+    the parent first, so a parent renamed in the viewer keeps its tabs. Without a
+    match by key or by title, a refreshed child tab stays under its current parent.
 
     Project identification:
-    - If `project_id` is provided, uses that project directly
+    - If `project_id` is provided, uses that project directly (404 if it does not exist)
     - If `project_id` is not provided, extracts `project_tag` from YAML and
       looks up the project by name
 
     Args:
         yaml_content: The YAML content defining the dashboard(s)
         project_id: Optional project ID (if not provided, uses project_tag from YAML)
-        overwrite: If True, update existing dashboard with same title (default: False)
+        overwrite: If True, update the dashboard this one replaces (default: False)
+        source_key: Optional stable origin of the YAML (e.g.
+            "nf-core/rnaseq:dashboards/base.yaml"), stored on the dashboard so a
+            later import of the same source finds it after a rename
+        keep_titles: If True, a dashboard this import replaces keeps its current
+            title (default: False, the YAML's title)
+        main_title: Optional title for the main dashboard, over the YAML's and
+            over keep_titles
+        parent_source_key: Optional source_key of a child tab's parent dashboard
+        existing: Optional "keep" or "replace", for a dashboard the project
+            already has; without it, `overwrite` decides
         current_user: The authenticated user (will be set as owner)
 
     Returns:
@@ -5788,6 +6023,18 @@ async def import_dashboard_from_yaml(
                 status_code=403,
                 detail="Anonymous users cannot import dashboards. Please login to continue.",
             )
+
+    # The permission check below answers True for an admin without looking the
+    # project up, so an unknown id used to import an orphan dashboard.
+    if project_id is not None and not projects_collection.find_one(
+        {"_id": ObjectId(project_id)}, {"_id": 1}
+    ):
+        raise HTTPException(status_code=404, detail=f"Project {project_id} not found.")
+
+    # `existing` wins over `overwrite`, which clients from before it still send.
+    if existing is not None:
+        overwrite = existing == "replace"
+    keep_existing = existing == "keep"
 
     # Parse YAML to detect format
     try:
@@ -5823,13 +6070,27 @@ async def import_dashboard_from_yaml(
                 detail="You don't have permission to create dashboards in this project.",
             )
 
-        return _import_multi_tab_dashboard(yaml_data, project_id, overwrite, current_user)
+        return _import_multi_tab_dashboard(
+            yaml_data,
+            project_id,
+            overwrite,
+            current_user,
+            source_key=source_key,
+            keep_titles=keep_titles,
+            main_title=main_title,
+            keep_existing=keep_existing,
+        )
 
     # Single dashboard format
     try:
         lite = DashboardDataLite.from_yaml(yaml_content)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}") from e
+    if main_title and not lite.is_main_tab:
+        raise HTTPException(
+            status_code=400,
+            detail=f"main_title titles a main dashboard; '{lite.title}' is a child tab.",
+        )
 
     # Resolve project_id from YAML project_tag if not provided
     if project_id is None:
@@ -5853,37 +6114,42 @@ async def import_dashboard_from_yaml(
             detail="You don't have permission to create dashboards in this project.",
         )
 
-    # Check for existing dashboard with same title
-    existing_dashboard = dashboards_collection.find_one(
-        {"title": lite.title, "project_id": ObjectId(project_id)}
+    existing_dashboard = _existing_import_target(
+        project_id, lite.title, source_key, overwrite or keep_existing
     )
-    if existing_dashboard and not overwrite:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Dashboard '{lite.title}' already exists in this project. "
-            "Use --overwrite to update it.",
-        )
+    if keep_existing and existing_dashboard is not None:
+        return _keep_existing_dashboard(existing_dashboard, project_id, source_key, main_title)
     if existing_dashboard:
         logger.info(
-            f"Found existing dashboard '{lite.title}' "
+            f"Found existing dashboard '{existing_dashboard.get('title')}' "
             f"(ID: {existing_dashboard['dashboard_id']}) - will update"
         )
 
     dashboard_dict = lite.to_full()
+    dashboard_dict["title"] = _import_title(lite.title, existing_dashboard, keep_titles, main_title)
+    dashboard_dict["source_key"] = source_key or (existing_dashboard or {}).get("source_key")
     # Visibility is project-driven; `to_full()` defaults to private, which
     # would also reset an existing public dashboard on --overwrite.
     dashboard_dict["is_public"] = get_project_visibility(project_id)
 
     # Handle tab relationships for child tabs
     if not lite.is_main_tab and lite.parent_dashboard_tag:
-        # Find parent dashboard by title in the same project
-        parent_dashboard = dashboards_collection.find_one(
-            {
-                "title": lite.parent_dashboard_tag,
-                "project_id": ObjectId(project_id),
-                "is_main_tab": {"$ne": False},
-            }
-        )
+        # The parent by its key first: renamed in the viewer, it kept its key but
+        # not the title the YAML names it by. Last, the current parent of the tab
+        # this import replaces, for a client that sends no parent key.
+        current_parent = (existing_dashboard or {}).get("parent_dashboard_id")
+        lookups = [
+            {"source_key": parent_source_key} if parent_source_key else None,
+            {"title": lite.parent_dashboard_tag},
+            {"dashboard_id": current_parent} if current_parent else None,
+        ]
+        parent_dashboard = None
+        for lookup in filter(None, lookups):
+            parent_dashboard = dashboards_collection.find_one(
+                {"project_id": ObjectId(project_id), "is_main_tab": {"$ne": False}, **lookup}
+            )
+            if parent_dashboard:
+                break
         if not parent_dashboard:
             raise HTTPException(
                 status_code=400,
@@ -5920,9 +6186,8 @@ async def import_dashboard_from_yaml(
     # Resolve tags to MongoDB IDs, regenerate fields from DC config, and regenerate component indices
     for component in dashboard_dict.get("stored_metadata", []):
         _resolve_workflow_tags(component, project_id=project_id)
-        _regenerate_component_fields(
-            component
-        )  # Regenerate s3_base_folder, etc. after dc_config is populated
+        # Regenerate s3_base_folder, etc. after dc_config is populated
+        _regenerate_component_fields(component, project_id=project_id)
     _filter_unresolved_components(dashboard_dict, project_id=project_id)
     _regenerate_component_indices(dashboard_dict)
 
@@ -5954,6 +6219,7 @@ async def import_dashboard_from_yaml(
     return {
         "success": True,
         "updated": is_update,
+        "status": "replaced" if is_update else "created",
         "message": f"Dashboard {'updated' if is_update else 'imported'} successfully",
         "dashboard_id": str(new_dashboard_id),
         "title": dashboard.title,
@@ -6518,10 +6784,15 @@ async def import_dashboard_from_json(
             detail="project_id is required. Either provide it as a parameter or ensure project_tag in JSON matches an existing project.",
         )
 
-    # Validate project exists and user has editor access
-    project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
+    # Validate project exists and user has editor access. `project_id` is a plain
+    # string here, so a malformed one is "not found" too, not a 500 from ObjectId().
+    project_doc = (
+        projects_collection.find_one({"_id": ObjectId(project_id)})
+        if ObjectId.is_valid(project_id)
+        else None
+    )
     if not project_doc:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail=f"Project {project_id} not found.")
 
     if not check_project_permission(project_id, current_user, "editor"):
         raise HTTPException(
@@ -7123,6 +7394,7 @@ def funnel_values_endpoint(
     include_stages = bool(request.get("include_stages", False))
 
     active_filters = [f for f in filters if _funnel_filter_is_active(f)]
+    from depictio.api.v1.region_scope import scope_region_filters
 
     # Indexed over the whole tab FAMILY, not this document alone. A persistent
     # filter section is declared on one tab and rendered on every tab of the
@@ -7158,6 +7430,10 @@ def funnel_values_endpoint(
             targets[index] = {"status": "unsupported"}
             continue
         remaining = [f for f in active_filters if str(f.get("index") or "") != index]
+        # A locus navigator's region does not narrow a sidebar selector (a
+        # contig picker would offer one contig) unless it opts in, same rule
+        # as cards (``region_scope``).
+        remaining = scope_region_filters(remaining, "interactive", meta)
         result = _funnel_target_values(dashboard_data, project_id, access_token, meta, remaining)
         result.setdefault("column", meta.get("column_name"))
         result.setdefault("dc_id", str(meta.get("dc_id") or ""))

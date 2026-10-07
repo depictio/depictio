@@ -148,9 +148,23 @@ const SliderRenderer: React.FC<{
         column_name: metadata.column_name,
         interactive_component_type: 'Slider',
         filter_expr: metadata.filter_expr,
+        // The comparison the server applies (gte when absent).
+        metadata: {
+          dc_id: metadata.dc_id,
+          column_name: metadata.column_name,
+          interactive_component_type: 'Slider',
+          slider_mode: metadata.slider_mode,
+        },
       });
     },
-    [onChange, metadata.index, metadata.column_name, metadata.filter_expr],
+    [
+      onChange,
+      metadata.index,
+      metadata.column_name,
+      metadata.filter_expr,
+      metadata.dc_id,
+      metadata.slider_mode,
+    ],
   );
 
   if (error) {

@@ -87,8 +87,8 @@ run_one() {
     # The script runs with `set -uo pipefail` (no `-e`), so a non-zero CLI exit
     # does NOT abort the harness — we capture it in $code. No set +e/-e sandwich
     # is needed (and re-enabling -e here would wrongly abort later runs).
-    "$CLI_VENV" -m depictio.cli run \
-        --CLI-config-path "$CLI_CONFIG" \
+    "$CLI_VENV" -m depictio.cli ingest \
+        --server "$CLI_CONFIG" \
         --template "$template" \
         --data-root "$data_root" \
         --project-name "$project" \

@@ -1,10 +1,13 @@
-"""Recipe loader and executor with 4 automatic validation checkpoints."""
+"""Recipe loader and executor with 5 automatic validation checkpoints."""
 
 from __future__ import annotations
 
 import importlib.util
+import inspect
+import re
 from pathlib import Path
 from types import ModuleType
+from typing import Any
 
 import polars as pl
 
@@ -25,6 +28,15 @@ CATALOG_DIR = Path(__file__).parent.parent / "catalog"
 
 class RecipeError(Exception):
     """Raised when a recipe fails validation."""
+
+
+# Pre-#863 constant names. A recipe still using them fails loudly instead of
+# half-working: the optional schema is read with a ``None`` default, so a module
+# that only renamed the required schema would silently skip optional validation.
+_RENAMED_CONSTANTS = {
+    "EXPECTED_SCHEMA": "OUTPUT_SCHEMA",
+    "OPTIONAL_SCHEMA": "OPTIONAL_OUTPUT_SCHEMA",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +96,8 @@ def load_recipe(recipe_name: str, pipeline_version: str | None = None) -> Module
         recipe_name: Pipeline-qualified recipe name (e.g. 'nf-core/ampliseq/alpha_diversity.py').
         pipeline_version: Optional pipeline version for version-specific recipe lookup.
 
-    Validates that the module has SOURCES, EXPECTED_SCHEMA, and a callable transform().
+    Validates that the module has SOURCES, OUTPUT_SCHEMA, and a callable transform(),
+    and rejects the pre-rename constant names (EXPECTED_SCHEMA, OPTIONAL_SCHEMA).
     """
     recipe_path = resolve_recipe_path(recipe_name, pipeline_version)
 
@@ -97,11 +110,18 @@ def load_recipe(recipe_name: str, pipeline_version: str | None = None) -> Module
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
 
+    # Reject the old constant names before the required-attribute checks, so a
+    # half-renamed recipe gets the migration hint rather than a generic error.
+    legacy = [old for old in _RENAMED_CONSTANTS if hasattr(module, old)]
+    if legacy:
+        renames = " and ".join(f"{old} to {_RENAMED_CONSTANTS[old]}" for old in legacy)
+        raise RecipeError(f"Recipe {recipe_name}: rename {renames}")
+
     # Validate required attributes
     if not hasattr(module, "SOURCES"):
         raise RecipeError(f"Recipe {recipe_name} missing SOURCES")
-    if not hasattr(module, "EXPECTED_SCHEMA"):
-        raise RecipeError(f"Recipe {recipe_name} missing EXPECTED_SCHEMA")
+    if not hasattr(module, "OUTPUT_SCHEMA"):
+        raise RecipeError(f"Recipe {recipe_name} missing OUTPUT_SCHEMA")
     if not callable(getattr(module, "transform", None)):
         raise RecipeError(f"Recipe {recipe_name} missing callable transform()")
 
@@ -111,6 +131,12 @@ def load_recipe(recipe_name: str, pipeline_version: str | None = None) -> Module
     for s in sources:
         if not isinstance(s, RecipeSource):
             raise RecipeError(f"Recipe {recipe_name} SOURCES must contain RecipeSource instances")
+        for col_name, dtype in (s.input_schema or {}).items():
+            if not _is_polars_dtype(dtype):
+                raise RecipeError(
+                    f"Recipe {recipe_name}: source '{s.ref}' input_schema column "
+                    f"'{col_name}' is not a polars dtype: {dtype!r}"
+                )
 
     return module
 
@@ -120,18 +146,38 @@ def load_recipe(recipe_name: str, pipeline_version: str | None = None) -> Module
 # ---------------------------------------------------------------------------
 
 
-def _read_source_file(file_path: Path, source: RecipeSource) -> pl.DataFrame:
-    """Read a single source file into a DataFrame."""
+def _read_source_file(
+    file_path: Path, source: RecipeSource, data_dir: Path | None = None
+) -> pl.DataFrame:
+    """Read a single source file into a DataFrame.
+
+    When the source declares ``source_path``, a column of that name is added
+    holding the file's path relative to ``data_dir`` (absolute when the file is
+    outside it), so the recipe can derive a key the content lacks.
+    """
     kwargs = source.read_kwargs or {}
 
     if source.format == "csv":
-        return pl.read_csv(file_path, **kwargs)
+        df = pl.read_csv(file_path, **kwargs)
     elif source.format == "tsv":
-        return pl.read_csv(file_path, separator="\t", **kwargs)
+        df = pl.read_csv(file_path, separator="\t", **kwargs)
     elif source.format == "parquet":
-        return pl.read_parquet(file_path, **kwargs)
+        df = pl.read_parquet(file_path, **kwargs)
     else:
         raise RecipeError(f"Unsupported format: {source.format}")
+
+    if source.source_path:
+        if source.source_path in df.columns:
+            raise RecipeError(
+                f"Source '{source.ref}': source_path column '{source.source_path}' "
+                f"already exists in {file_path}"
+            )
+        try:
+            rel = file_path.relative_to(data_dir) if data_dir is not None else file_path
+        except ValueError:
+            rel = file_path
+        df = df.with_columns(pl.lit(rel.as_posix(), dtype=pl.Utf8).alias(source.source_path))
+    return df
 
 
 def _resolve_glob_source(
@@ -153,7 +199,7 @@ def _resolve_glob_source(
 
     frames: list[pl.DataFrame] = []
     for file_path in matched_files:
-        df = _read_source_file(file_path, source)
+        df = _read_source_file(file_path, source, data_dir)
         if not df.is_empty():
             frames.append(df)
 
@@ -217,7 +263,7 @@ def resolve_sources(
                 continue
             raise RecipeError(f"Source '{source.ref}': file not found: {file_path}")
 
-        df = _read_source_file(file_path, source)
+        df = _read_source_file(file_path, source, data_dir)
         if df.is_empty():
             raise RecipeError(f"Source '{source.ref}' loaded 0 rows from {file_path}")
 
@@ -227,25 +273,82 @@ def resolve_sources(
 
 
 # ---------------------------------------------------------------------------
-# Checkpoint 3 & 4: Execute transform and validate output
+# Checkpoints 3 to 5: check inputs, execute transform, validate output
 # ---------------------------------------------------------------------------
+
+
+def _is_polars_dtype(dtype: object) -> bool:
+    return isinstance(dtype, pl.DataType) or (
+        isinstance(dtype, type) and issubclass(dtype, pl.DataType)
+    )
+
+
+def _dtype_compatible(actual: pl.DataType, declared: pl.DataType) -> bool:
+    """Whether a column read as ``actual`` can feed a recipe that expects ``declared``.
+
+    Readers infer types from the data, so the check is deliberately loose: a text
+    or all-null column may still hold what the recipe casts itself, and one numeric
+    type stands for another (a count column of whole numbers reads as Int64 even
+    where the recipe declares Float64). A structural mismatch, such as a list
+    where a number is expected, still fails.
+    """
+    if actual == declared or actual in (pl.String, pl.Null):
+        return True
+    if actual.is_numeric() and declared.is_numeric():
+        return True
+    return declared == pl.String and not actual.is_nested()
+
+
+def validate_sources(
+    module: ModuleType, sources: dict[str, pl.DataFrame | None], recipe_name: str
+) -> list[str]:
+    """Check every resolved source against its ``input_schema``.
+
+    Runs between resolving the sources and ``transform()``, so a pipeline output
+    that lacks a column names the source and the column instead of failing inside
+    the transform. Sources without an ``input_schema``, optional sources resolved
+    to ``None`` and empty ``dc_ref`` frames (an upstream DC with no rows, which the
+    recipe handles itself; empty files already fail while resolving) are skipped.
+
+    Returns the refs of the sources that were checked.
+    """
+    checked: list[str] = []
+    for source in module.SOURCES:
+        df = sources.get(source.ref)
+        if not source.input_schema or df is None or df.is_empty():
+            continue
+        missing = [c for c in source.input_schema if c not in df.columns]
+        if missing:
+            raise RecipeError(
+                f"Recipe {recipe_name}: source '{source.ref}' lacks input column(s) "
+                f"{missing}. Got columns: {df.columns}"
+            )
+        for col_name, declared in source.input_schema.items():
+            actual = df[col_name].dtype
+            if not _dtype_compatible(actual, declared):
+                raise RecipeError(
+                    f"Recipe {recipe_name}: source '{source.ref}' input column "
+                    f"'{col_name}' expected {declared}, got {actual}"
+                )
+        checked.append(source.ref)
+    return checked
 
 
 def validate_schema(
     result: pl.DataFrame,
-    expected_schema: dict,
+    output_schema: dict,
     recipe_name: str,
-    optional_schema: dict | None = None,
+    optional_output_schema: dict | None = None,
 ) -> None:
-    """Validate that the result DataFrame matches the expected schema.
+    """Validate that the result DataFrame matches the recipe's output schema.
 
     Args:
         result: Output DataFrame from transform().
-        expected_schema: Dict of column_name → polars dtype. All must be present.
+        output_schema: Dict of column_name → polars dtype. All must be present.
         recipe_name: Recipe name used in error messages.
-        optional_schema: Dict of column_name → polars dtype. Validated only if present.
+        optional_output_schema: Dict of column_name → polars dtype. Validated only if present.
     """
-    for col_name, expected_type in expected_schema.items():
+    for col_name, expected_type in output_schema.items():
         if col_name not in result.columns:
             raise RecipeError(
                 f"Recipe {recipe_name}: missing output column '{col_name}'. "
@@ -257,8 +360,8 @@ def validate_schema(
                 f"Recipe {recipe_name}: column '{col_name}' expected {expected_type}, "
                 f"got {actual_type}"
             )
-    if optional_schema:
-        for col_name, expected_type in optional_schema.items():
+    if optional_output_schema:
+        for col_name, expected_type in optional_output_schema.items():
             if col_name in result.columns:
                 actual_type = result[col_name].dtype
                 if actual_type != expected_type:
@@ -268,12 +371,33 @@ def validate_schema(
                     )
 
 
+_UNRESOLVED_PLACEHOLDER = re.compile(r"^\{[A-Z0-9_]+\}$")
+
+
+def call_transform(module: Any, sources: dict, params: dict[str, str] | None = None) -> Any:
+    """Call ``module.transform``, passing template ``params`` when the recipe takes them.
+
+    A recipe opts in by declaring a ``params`` keyword. Values that are still an
+    unresolved ``{VAR}`` placeholder (the template variable was not set) are dropped,
+    so the recipe sees the parameter as absent and uses its own fallback.
+    """
+    if params is not None and "params" in inspect.signature(module.transform).parameters:
+        clean = {
+            k: v
+            for k, v in params.items()
+            if v is not None and not _UNRESOLVED_PLACEHOLDER.match(str(v).strip())
+        }
+        return module.transform(sources, params=clean)
+    return module.transform(sources)
+
+
 def execute_recipe(
     recipe_name: str,
     data_dir: str | Path,
     overrides: dict[str, str] | None = None,
     extra_sources: dict[str, pl.DataFrame] | None = None,
     pipeline_version: str | None = None,
+    params: dict[str, str] | None = None,
 ) -> pl.DataFrame:
     """Full pipeline: load → resolve → transform → validate.
 
@@ -283,6 +407,8 @@ def execute_recipe(
         overrides: Optional source path overrides.
         extra_sources: Optional pre-loaded DataFrames for dc_ref sources.
         pipeline_version: Optional pipeline version for version-specific recipe lookup.
+        params: Optional template parameters, passed to ``transform(sources, params=...)``
+            when the recipe accepts them (see ``call_transform``).
 
     Returns:
         Validated output DataFrame.
@@ -308,8 +434,11 @@ def execute_recipe(
                     f"If it uses dc_ref, provide it via extra_sources."
                 )
 
-    # Checkpoint 3: transform
-    result = module.transform(sources)
+    # Checkpoint 3: input schema
+    validate_sources(module, sources, recipe_name)
+
+    # Checkpoint 4: transform
+    result = call_transform(module, sources, params)
     if not isinstance(result, pl.DataFrame):
         raise RecipeError(
             f"Recipe {recipe_name}: transform() must return pl.DataFrame, "
@@ -318,12 +447,12 @@ def execute_recipe(
     if result.is_empty():
         raise RecipeError(f"Recipe {recipe_name}: transform() produced empty DataFrame")
 
-    # Checkpoint 4: schema validation (required + optional columns)
+    # Checkpoint 5: output schema (required + optional columns)
     validate_schema(
         result,
-        module.EXPECTED_SCHEMA,
+        module.OUTPUT_SCHEMA,
         recipe_name,
-        getattr(module, "OPTIONAL_SCHEMA", None),
+        getattr(module, "OPTIONAL_OUTPUT_SCHEMA", None),
     )
 
     return result

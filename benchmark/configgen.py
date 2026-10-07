@@ -8,7 +8,7 @@ the server, and in the harness test via ``DashboardDataLite``.
 Key decisions (mirroring known-good authored projects like ``penguins``):
 
 - **Static ObjectIds** for project / workflow / each DC / each joined DC. Link
-  references use the target DC's real id directly, because ``depictio run`` only
+  references use the target DC's real id directly, because ``depictio ingest`` only
   auto-resolves ``tag:``-prefixed link ids in *template* mode (see run.py).
 - **Recursive ``run_*`` scan** so the sharded CSVs from :mod:`benchmark.datagen`
   are picked up: ``data_location.structure: sequencing-runs`` + ``runs_regex``.
@@ -263,9 +263,7 @@ def _multiqc_dc_block(tag: str, dc_id: str) -> dict:
     }
 
 
-def _image_dc_block(
-    tag: str, dc_id: str, metadata_csv: str, images_dir: str, s3_base_folder: str
-) -> dict:
+def _image_dc_block(tag: str, dc_id: str, metadata_csv: str, s3_base_folder: str) -> dict:
     return {
         "data_collection_tag": tag,
         "id": dc_id,
@@ -287,7 +285,9 @@ def _image_dc_block(
                 },
                 "image_column": "image_path",
                 "s3_base_folder": s3_base_folder,
-                "local_images_path": str(images_dir),
+                # No local_images_path: ingest would upload the images itself, skipping
+                # the ones already there. The runner pushes them with --overwrite
+                # instead, so every repetition pays the full upload it measures.
                 "supported_formats": [".png", ".jpg", ".jpeg"],
                 "thumbnail_size": 150,
             },
@@ -301,7 +301,6 @@ def build_ingest_project(
     *,
     s3_bucket: str = "depictio-bucket",
     metadata_csv: str | None = None,
-    images_dir: str | None = None,
     run_tag: str = "",
 ) -> dict:
     """Build a minimal ingestion project for one :class:`IngestCell`.
@@ -345,7 +344,6 @@ def build_ingest_project(
                 "sample_images",
                 static_id("dc", scope, "images"),
                 metadata_csv=metadata_csv or str(Path(resolved_dir) / "images_data.csv"),
-                images_dir=images_dir or str(Path(resolved_dir) / "images"),
                 s3_base_folder=s3_base_folder,
             )
         ]
@@ -617,7 +615,9 @@ def _advanced_viz_config(viz_kind: str, feature_id_col: str = "individual_id") -
     synthetic, ``qq`` reads the uniform ``frac_expressing`` as its p-value (so
     the QQ line is the ideal diagonal), and the taxonomy kinds treat
     ``feature_class`` as a taxon. The three sampling policies are all covered:
-    tail (volcano/ma/manhattan), hash (qq/lollipop), none (the rest).
+    tail (volcano with its ``ma``/``qq`` views, manhattan), hash (lollipop), none
+    (the rest). ``ma`` and ``qq`` are kept under their legacy kind names so the
+    benchmark exercises the alias that stored dashboards rely on.
     """
     configs: dict[str, dict] = {
         # ── tail: keep the significant end whole, stride the middle ──────────
@@ -1360,7 +1360,7 @@ class GeneratedIngestConfig:
     project_path: str
     project_name: str
     project_id: str
-    # For IMAGES only: where the runner should ``depictio images push`` the PNGs
+    # For IMAGES only: where the runner should ``depictio data push-images`` the PNGs
     # (must equal the DC's s3_base_folder so the DC resolves them at render time).
     s3_base_folder: str | None = None
 
@@ -1372,7 +1372,6 @@ def write_ingest_config(
     *,
     s3_bucket: str = "depictio-bucket",
     metadata_csv: str | None = None,
-    images_dir: str | None = None,
     run_tag: str = "",
 ) -> GeneratedIngestConfig:
     """Build + write the ingestion ``project.yaml`` for one cell.
@@ -1388,7 +1387,6 @@ def write_ingest_config(
         dataset_dir,
         s3_bucket=s3_bucket,
         metadata_csv=metadata_csv,
-        images_dir=images_dir,
         run_tag=run_tag,
     )
     project_path = out_dir / "project.yaml"

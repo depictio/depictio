@@ -14,11 +14,24 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="profiles", dc_ref="taxpasta_profiles"),
+    RecipeSource(
+        ref="profiles",
+        dc_ref="taxpasta_profiles",
+        input_schema={
+            "sample": pl.Utf8,
+            "profiler": pl.Utf8,
+            "taxonomy_id": pl.Utf8,
+            "name": pl.Utf8,
+            "rank": pl.Utf8,
+            "count": pl.Float64,
+        },
+    ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "taxonomy_id": pl.Utf8,
     "taxon": pl.Utf8,
@@ -27,7 +40,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
 }
 
 # One 0/1 column per profiler; the names are run-dependent, so they are not declared.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

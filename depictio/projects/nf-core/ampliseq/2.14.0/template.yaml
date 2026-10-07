@@ -1,7 +1,7 @@
 # nf-core/ampliseq Template - Microbial Community Analysis
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio-cli run --template nf-core/ampliseq/2.14.0 --data-root /path/to/your/data
+#   depictio-cli ingest --template nf-core/ampliseq/2.14.0 --data-root /path/to/your/data
 #
 # The original project.yaml (with hardcoded paths) is kept as a fixture for
 # Docker init. This template.yaml uses {DATA_ROOT} placeholders for reuse.

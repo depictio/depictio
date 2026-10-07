@@ -12,7 +12,11 @@ import { Icon } from '@iconify/react';
 
 import { useBrandAccents } from 'depictio-react-core';
 import type { CardBadge, CardsPerRow } from './hooks/useDashboardViewPrefs';
-import { CARD_BADGES, CARDS_PER_ROW_OPTIONS } from './hooks/useDashboardViewPrefs';
+import {
+  CARD_BADGES,
+  CARDS_PER_ROW_OPTIONS,
+  DEFAULT_CARDS_PER_ROW,
+} from './hooks/useDashboardViewPrefs';
 
 export interface CardDisplayMenuProps {
   cardsPerRow: CardsPerRow;
@@ -51,7 +55,8 @@ const CardDisplayMenu: React.FC<CardDisplayMenuProps> = ({
 }) => {
   const accent = useBrandAccents();
   const customised =
-    cardsPerRow !== 'auto' || CARD_BADGES.some((b) => !cardBadges.includes(b));
+    cardsPerRow !== DEFAULT_CARDS_PER_ROW ||
+    CARD_BADGES.some((b) => !cardBadges.includes(b));
 
   // Rebuilt from CARD_BADGES rather than appended to, so the stored selection
   // always follows the card's own badge order.
@@ -121,7 +126,7 @@ const CardDisplayMenu: React.FC<CardDisplayMenuProps> = ({
           leftSection={<Icon icon="mdi:restore" width={14} />}
           disabled={!customised}
           onClick={() => {
-            onCardsPerRowChange('auto');
+            onCardsPerRowChange(DEFAULT_CARDS_PER_ROW);
             onCardBadgesChange([...CARD_BADGES]);
           }}
         >

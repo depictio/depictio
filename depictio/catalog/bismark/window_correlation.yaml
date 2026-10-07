@@ -1,0 +1,18 @@
+id: bismark_window_correlation
+name: Library methylation correlation
+mode: exploratory/correlation
+description: >-
+  Pairwise Pearson correlation of the libraries over their shared 10 kb
+  windows, square (libraries x libraries). Replicates of a condition correlate
+  with each other and less with everything else; a library that sits in the
+  wrong block is a swap, a mislabelled sheet, or a conversion failure that
+  flattened its methylome.
+find:
+  path_glob: "**/*.bedGraph.gz"
+recipe: bismark/window_correlation.py
+fixture: window_correlation.tsv
+renders_as:
+  # `index` is not optional in practice: ComplexHeatmapConfig.index_column
+  # falls back to the literal "sample_id", which this matrix does not have.
+  - { id: correlation_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: sample} }
+  - { component: table }

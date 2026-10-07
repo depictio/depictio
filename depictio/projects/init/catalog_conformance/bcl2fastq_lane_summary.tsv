@@ -1,0 +1,2 @@
+flowcell	lane	lane_label	clusters_raw	clusters_pf	pct_pf	yield_gb	pct_q30	mean_quality	n_libraries	library_reads	undetermined_reads	pct_undetermined	library_reads_cv	lowest_library_pct_of_mean
+000000000-BDNBC	1	Lane 1	34153016	30721480	89.95246569146339	9.27788696	91.3277065514064	35.615537118055165	18	20060237	10661243	34.70289517301901	73.66611601104232	0.007178379796808981

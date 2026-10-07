@@ -25,25 +25,44 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="asv", path="dada2/ASV_table.tsv", format="TSV"),
+    RecipeSource(
+        ref="asv",
+        path="dada2/ASV_table.tsv",
+        format="TSV",
+        input_schema={
+            "ASV_ID": pl.Utf8,
+        },
+    ),
     # The sintax filename carries the reference-DB tag (e.g. `unite-fungi_8_2`),
     # so glob on it. The clean table's stem ends in the DB version digit
     # (`..._8_2.tsv`), so `*[0-9].tsv` matches it; the `.raw.tsv` variant always
     # has `raw` (no trailing digit) immediately before `.tsv`, so it never matches.
-    RecipeSource(ref="tax", glob_pattern="sintax/ASV_tax_sintax.*[0-9].tsv", format="TSV"),
+    RecipeSource(
+        ref="tax",
+        glob_pattern="sintax/ASV_tax_sintax.*[0-9].tsv",
+        format="TSV",
+        input_schema={
+            "ASV_ID": pl.Utf8,
+            "Kingdom": pl.Utf8,
+            "Phylum": pl.Utf8,
+        },
+    ),
+    # No input_schema: user-defined metadata, the id column is picked from a list of aliases.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "taxonomy": pl.Utf8,
     "rel_abundance": pl.Float64,
     "Kingdom": pl.Utf8,
     "Phylum": pl.Utf8,
 }
-# Metadata columns are user-defined; validated dynamically via OPTIONAL_SCHEMA = {}.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+# Metadata columns are user-defined; validated dynamically via OPTIONAL_OUTPUT_SCHEMA = {}.
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _UNCLASSIFIED = "Unclassified"
 

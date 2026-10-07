@@ -17,5 +17,5 @@ renders_as:
   - { component: card, column: num_peaks, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
   - { component: card, column: width_median, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: total_bp, aggregation: sum, secondary_layout: histogram }
-  - { component: card, column: signal_density_median, aggregation: average, secondary_layout: threshold, threshold_value: 50.0 }
+  - { component: card, column: signal_density_median, aggregation: average, secondary_layout: histogram }
   - { component: table }

@@ -71,7 +71,7 @@ services:
     restart: unless-stopped
 
   depictio-backend:
-    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.11.2}
+    image: ghcr.io/depictio/depictio-api:${DEPICTIO_VERSION:-1.12.0-b1}
     container_name: depictio-backend
     ports:
       # Loopback-only: front with a TLS proxy for external access.
@@ -100,7 +100,7 @@ services:
       DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "${DEPICTIO_TELEMETRY_DEPLOYMENT_KIND:-docker-compose}"
       # Which view /dashboards opens in for someone who never picked one, and
       # the geometry of the thumbnails it shows. See .env.example.
-      DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: "${DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW:-thumbnails}"
+      DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: "${DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW:-table}"
       DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH: "${DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH:-1440}"
       DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT: "${DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT:-900}"
       DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE: "${DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE:-2.0}"
@@ -139,7 +139,7 @@ services:
         required: false
 
   depictio-viewer:
-    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.11.2}
+    image: ghcr.io/depictio/depictio-viewer:${DEPICTIO_VERSION:-1.12.0-b1}
     container_name: depictio-viewer
     ports:
       - 5080:8080
@@ -157,7 +157,7 @@ services:
   depictio-celery-worker:
     container_name: depictio-celery-worker
     # Always enabled — the dashboard editor (stepper / design mode) needs it.
-    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.11.2}
+    image: ghcr.io/depictio/depictio-worker:${DEPICTIO_VERSION:-1.12.0-b1}
     volumes:
       - depictio_keys:/app/depictio/keys
       # Shared with the backend (see above) — worker writes screenshots here.

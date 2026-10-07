@@ -218,10 +218,20 @@ async def create_initial_dashboards(
     from depictio.api.v1.db_init_reference_datasets import STATIC_IDS, ReferenceDatasetRegistry
 
     projects_base = os.path.join(os.path.dirname(__file__), "..", "..", "projects")
+
+    def rel_path(name: str) -> str:
+        try:
+            return ReferenceDatasetRegistry.resolve_dataset_rel_path(name)
+        except FileNotFoundError:
+            # Left out of the installed package (the published wheel ships iris
+            # and penguins only). Its dashboard JSONs are missing too, and
+            # create_dashboard_from_json skips a JSON that does not exist.
+            return ReferenceDatasetRegistry.DATASET_PATHS[name]
+
     # Resolve each dataset's (possibly versioned) path once — dashboards_config
     # below references the same dataset up to 23 times (advanced_viz_showcase).
     rel_paths = {
-        name: ReferenceDatasetRegistry.resolve_dataset_rel_path(name)
+        name: rel_path(name)
         for name in (
             "iris",
             "penguins",
@@ -349,7 +359,7 @@ async def create_initial_dashboards(
         # The two demo tabs the reference project adds on top of the nf-core
         # template (build_reference_dashboard.py). They bind the coordinates,
         # sampling date and CTD readings only this dataset's metadata carries,
-        # so a real `depictio run --template` never receives them.
+        # so a real `depictio ingest --template` never receives them.
         {
             "name": "ampliseq_sampling_campaign",
             "json_path": os.path.join(
@@ -397,13 +407,10 @@ async def create_initial_dashboards(
                 "rarefaction",
                 "ancombc",
                 "da_barplot",
-                "enrichment",
                 "complex_heatmap",
                 "upset",
-                "ma",
                 "dotplot",
                 "lollipop",
-                "qq",
                 "sunburst",
                 "oncoplot",
                 "coverage_track",
@@ -415,6 +422,20 @@ async def create_initial_dashboards(
                 "gsea_running_score",
                 "sashimi",
                 "scatter_xy",
+                "genome_view",
+                "contact_map",
+                "knee_plot",
+                "damage_profile",
+                "group_compare",
+                "transcript_structure",
+                "cnv_profile",
+                "genome_chord",
+                "record_card",
+                "parallel_coordinates",
+                "locus_section",
+                "benchmark_pr",
+                "benchmark_confusion",
+                "benchmark_ci",
             )
         ),
         # nf-core/viralrecon multi-tab dashboard. Seed JSONs are snapshotted

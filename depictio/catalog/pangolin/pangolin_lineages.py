@@ -4,7 +4,9 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
+    # No input_schema: every column is read behind a presence check.
     RecipeSource(
         ref="pangolin_raw",
         glob_pattern="variants/ivar/consensus/bcftools/pangolin/*.pangolin.csv",
@@ -12,7 +14,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "lineage": pl.Utf8,
     "conflict": pl.Float64,

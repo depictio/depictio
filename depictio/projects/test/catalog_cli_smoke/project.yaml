@@ -1,5 +1,5 @@
 # Catalog CLI smoke — a small project the catalog picker should recognise, that
-# gets there the way a real user does: `depictio-cli run` on staged pipeline
+# gets there the way a real user does: `depictio-cli ingest` on staged pipeline
 # output, recipes executed for real.
 #
 # The seeded companion, depictio/projects/init/catalog_conformance/, covers every
