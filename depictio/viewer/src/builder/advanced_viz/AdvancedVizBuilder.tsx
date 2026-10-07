@@ -46,6 +46,12 @@ import AdvancedVizPreview from './AdvancedVizPreview';
 import StickyPreview from '../shared/StickyPreview';
 import { BuilderSection, BuilderSections } from '../shared/BuilderSections';
 import { bindingSchemaDcId, mergedPresetConfig, rolesFromConfigBlob } from './configBlob';
+import {
+  PhyloReadsSection,
+  PhyloSourcesSection,
+  usePhyloPrefill,
+  usePhyloProjectDcs,
+} from './PhylogeneticSections';
 
 /** Acceptable polars dtype names per canonical role (mirrors
  *  depictio/models/components/advanced_viz/schemas.py). */
@@ -264,6 +270,8 @@ function exampleInputRow(
 const AdvancedVizBuilder: React.FC = () => {
   const dcId = useBuilderStore((s) => s.dcId);
   const wfId = useBuilderStore((s) => s.wfId);
+  const dashboardId = useBuilderStore((s) => s.dashboardId);
+  const dcConfigType = useBuilderStore((s) => s.dcConfigType);
   const config = useBuilderStore((s) => s.config) as {
     viz_kind?: AdvancedVizKind;
     column_mapping?: Record<string, string | string[]>;
@@ -295,6 +303,10 @@ const AdvancedVizBuilder: React.FC = () => {
 
   const [kinds, setKinds] = useState<AdvancedVizKindDescriptor[] | null>(null);
   const [schema, setSchema] = useState<Record<string, string> | null>(null);
+  // Which DC `schema` was read from. The schema lags its DC by a render when
+  // the tree's metadata table is swapped, and the tree's pre-fill must not
+  // pick a tip-label column of the table it just left.
+  const [schemaOf, setSchemaOf] = useState<string | null>(null);
   const [schemaError, setSchemaError] = useState<string | null>(null);
   const [kindsError, setKindsError] = useState<string | null>(null);
   // Graded fit scores for every viz kind against the bound DC, from the backend
@@ -336,7 +348,9 @@ const AdvancedVizBuilder: React.FC = () => {
     setSchema(null);
     fetchPolarsSchema(schemaDcId)
       .then((res) => {
-        if (!cancelled) setSchema(res);
+        if (cancelled) return;
+        setSchema(res);
+        setSchemaOf(schemaDcId);
       })
       .catch((err: unknown) => {
         if (!cancelled) {
@@ -514,6 +528,56 @@ const AdvancedVizBuilder: React.FC = () => {
     patchConfig({ column_mapping: next });
   };
 
+  // Several roles in one write, read through getState() like setVizOverride:
+  // the phylogenetic pre-fill calls it from an effect, where the subscribed
+  // mapping can be a render behind a write made in the same commit.
+  const patchRoles = useCallback(
+    (patch: Record<string, string | null>) => {
+      const next = {
+        ...((useBuilderStore.getState().config as { column_mapping?: Record<string, string | string[]> })
+          .column_mapping ?? {}),
+      };
+      for (const [role, value] of Object.entries(patch)) {
+        if (value == null) delete next[role];
+        else next[role] = value;
+      }
+      patchConfig({ column_mapping: next });
+    },
+    [patchConfig],
+  );
+  const bindTaxon = useCallback((column: string) => patchRoles({ taxon: column }), [patchRoles]);
+
+  // A tree reads up to three data collections, none of them a column binding;
+  // see PhylogeneticSections.tsx for how they are bound and pre-filled.
+  const isTree = selectedKind === 'phylogenetic';
+  const phyloProject = usePhyloProjectDcs(dashboardId, isTree);
+  usePhyloPrefill({
+    enabled: isTree,
+    project: phyloProject,
+    dcId,
+    wfId,
+    merged: mergedPreset,
+    setVizOverride,
+    metadataSchema: isTree && schemaDcId && schemaOf === schemaDcId ? schema : null,
+    taxonBound: Boolean(columnMapping.taxon),
+    bindTaxon,
+  });
+  // What a tree cannot be saved without, beyond its column bindings. The tree
+  // itself gates the preview too (there is nothing to draw); the summary's
+  // table only gates Save, so the preview stays up to switch back from.
+  const treeMissing = isTree && !mergedPreset?.tree_dc_id;
+  const summaryWithoutMetadata =
+    isTree &&
+    Boolean(mergedPreset?.collapse_rank) &&
+    !mergedPreset?.metadata_dc_id &&
+    !mergedPreset?.metadata_dc_tag;
+  const phyloErrors = [
+    ...(treeMissing ? ['Pick the tree (a phylogeny data collection)'] : []),
+    ...(summaryWithoutMetadata
+      ? ['The summary reads its ranks from the tip metadata: pick that table, or switch the preview to Full tree']
+      : []),
+  ];
+
   // In embedding live-compute mode the renderer ignores dim_1/dim_2 (the
   // Celery task derives them), so only sample_id is required from the DC.
   const liveEmbedding = selectedKind === 'embedding' && embeddingMode === 'live';
@@ -591,8 +655,11 @@ const AdvancedVizBuilder: React.FC = () => {
       setSaveError(schemaError || 'Loading DC schema…');
       return;
     }
-    setSaveError(validation.ok ? null : validation.errors.join(' • '));
-  }, [selectedKind, schema, schemaError, validation, setSaveError]);
+    const errors = [...validation.errors, ...phyloErrors];
+    setSaveError(errors.length === 0 ? null : errors.join(' • '));
+    // `phyloErrors` is a fresh array each render; its content is the dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedKind, schema, schemaError, validation, setSaveError, phyloErrors.join('|')]);
 
   // Dropdown options for a role: dtype-exact columns first, then castable ones
   // (flagged), so the tolerant binding can still offer an Int column for a
@@ -640,11 +707,20 @@ const AdvancedVizBuilder: React.FC = () => {
     }));
     const scoreOf = (d: RankedKind) => d.suggestion?.score ?? -1;
     decorated.sort((a, b) => scoreOf(b) - scoreOf(a) || a.k.label.localeCompare(b.k.label));
+    // A tree has no table, so the suggestion engine has no schema to score and
+    // answers nothing; but only one kind draws a Newick DC, and it is the one
+    // to recommend.
+    if (dcConfigType === 'phylogeny') {
+      return {
+        recommendedKinds: decorated.filter((d) => d.k.viz_kind === 'phylogenetic'),
+        otherKinds: decorated.filter((d) => d.k.viz_kind !== 'phylogenetic'),
+      };
+    }
     if (suggestions == null) return { recommendedKinds: [], otherKinds: decorated };
     const rec = decorated.filter((d) => (d.suggestion?.score ?? 0) >= RECOMMENDED_SCORE);
     const rest = decorated.filter((d) => (d.suggestion?.score ?? 0) < RECOMMENDED_SCORE);
     return { recommendedKinds: rec, otherKinds: rest };
-  }, [matchedKinds, scoreMap, suggestions]);
+  }, [matchedKinds, scoreMap, suggestions, dcConfigType]);
 
   // Every required role already has a column — which is the state a component
   // arrives in when it came from the catalog, and the state a manual build ends
@@ -792,8 +868,24 @@ const AdvancedVizBuilder: React.FC = () => {
                 nothing left to do here. */}
             <BuilderSections
               builder="advanced_viz"
-              required={allRequiredBound ? [] : ['bindings']}
+              required={[
+                ...(allRequiredBound ? [] : ['bindings']),
+                ...(isTree && (treeMissing || !mergedPreset?.metadata_dc_id) ? ['phylo-sources'] : []),
+              ]}
             >
+              {isTree ? (
+                <PhyloSourcesSection
+                  project={phyloProject}
+                  merged={mergedPreset}
+                  wfId={wfId}
+                  setVizOverride={setVizOverride}
+                  metadataSchema={schemaDcId && schemaOf === schemaDcId ? schema : null}
+                  taxonCol={typeof columnMapping.taxon === 'string' ? columnMapping.taxon : null}
+                  metadataError={
+                    summaryWithoutMetadata ? 'The summary view needs this table' : undefined
+                  }
+                />
+              ) : null}
               <BuilderSection
                 value="bindings"
                 icon="mdi:link-variant"
@@ -812,6 +904,7 @@ const AdvancedVizBuilder: React.FC = () => {
                   ) : nothingToBind ? (
                     <Text size="sm" c="dimmed">
                       This tree has no tip-metadata table, so there are no columns to bind.
+                      Pick one under Tree and tip metadata to colour, label or summarise it.
                     </Text>
                   ) : (
                     <>
@@ -1002,6 +1095,17 @@ const AdvancedVizBuilder: React.FC = () => {
                 </Stack>
               </BuilderSection>
 
+              {isTree ? (
+                <PhyloReadsSection
+                  project={phyloProject}
+                  merged={mergedPreset}
+                  wfId={wfId}
+                  setVizOverride={setVizOverride}
+                  columnMapping={columnMapping}
+                  patchRoles={patchRoles}
+                />
+              ) : null}
+
               <BuilderSection
                 value="roles"
                 icon="mdi:information-outline"
@@ -1066,7 +1170,7 @@ const AdvancedVizBuilder: React.FC = () => {
                   columnMapping={columnMapping}
                   wfId={wfId}
                   dcId={dcId}
-                  bindingsValid={validation.ok}
+                  bindingsValid={validation.ok && !treeMissing}
                   onReady={setPreviewReady}
                   presetConfig={mergedPreset}
                   onVizControlChange={setVizOverride}
