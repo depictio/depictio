@@ -144,7 +144,7 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   const hasAbundance = Boolean(abundanceWf && abundanceDc);
   const valueCol = config.abundance_col || 'rel_abundance';
   const sampleCol = config.abundance_sample_col || 'sample';
-  const splitCol = config.abundance_split_col ?? null;
+  const splitColConfigured = config.abundance_split_col ?? null;
 
   // ---- Tier-2 controls ------------------------------------------------------
   // The rank belongs to the router, which mounts this renderer only while one
@@ -154,6 +154,14 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   const [topN, setTopN] = usePersistedVizControl<number>(metadata, 'top_n', 10);
   const [sizeBy, setSizeBy] = usePersistedVizControl<SizeBy>(metadata, 'size_by', 'tips');
   const useAbundance = sizeBy === 'abundance' && hasAbundance;
+  // The strip of per-site dots, which the viewer can take away to read the
+  // lineages alone.
+  const [showSplitPick, setShowSplit] = usePersistedVizControl<boolean | null>(
+    metadata,
+    'show_split',
+    null,
+  );
+  const splitCol = showSplitPick === false ? null : splitColConfigured;
   // The % beside each lineage. Unset, it follows the sizing: a share of the
   // reads is worth reading as a number, a share of the tree's tips (which are
   // the most abundant ASVs, not all of them) mostly is not.
@@ -757,18 +765,15 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
             {measure}
           </Text>
         ) : null}
-        {abundanceMissing ? (
-          <Text size="xs" c="orange">
-            no {rank} in the abundance table: sized by ASVs
-          </Text>
-        ) : null}
       </Group>
     ) : null;
 
   // ---- Controls (Settings popover) --------------------------------------------
-  // Every control is shown whether or not it can act, the way the switch above
-  // them is: "Reads" with no abundance table bound is disabled and says what it
-  // needs, rather than missing, which is how a user finds out the view exists.
+  // What the reads need is offered only where they are: with no abundance table
+  // bound, the summary is the tree sized by its ASVs and the settings say
+  // nothing of reads (binding a table is authoring, in the builder's Read
+  // shares step). Bound, a rank the table lacks disables Reads and says why.
+  const readsAtRank = hasAbundance && !abundanceMissing;
   const controls = (
     <Stack gap="xs">
       <PhyloViewSwitch view={view} />
@@ -789,26 +794,37 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
         min={1}
         max={60}
       />
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Size by
-        </Text>
-        <SegmentedControl
-          size="xs"
-          fullWidth
-          value={hasAbundance ? sizeBy : 'tips'}
-          onChange={(v) => setSizeBy(v as SizeBy)}
-          data={[
-            { value: 'abundance', label: 'Reads', disabled: !hasAbundance },
-            { value: 'tips', label: 'ASVs' },
-          ]}
-        />
-        {!hasAbundance ? (
-          <Text size="xs" c="dimmed">
-            Reads need an abundance table with a {rank} column (abundance_dc_tag).
+      {hasAbundance ? (
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Size by
           </Text>
-        ) : null}
-      </Stack>
+          <SegmentedControl
+            size="xs"
+            fullWidth
+            value={readsAtRank ? sizeBy : 'tips'}
+            onChange={(v) => setSizeBy(v as SizeBy)}
+            data={[
+              { value: 'abundance', label: 'Reads', disabled: !readsAtRank },
+              { value: 'tips', label: 'ASVs' },
+            ]}
+          />
+          {!readsAtRank ? (
+            <Text size="xs" c="dimmed">
+              The abundance table has no {rank} column: sized by ASVs.
+            </Text>
+          ) : null}
+        </Stack>
+      ) : null}
+      {splitColConfigured && useAbundance && !abundanceMissing ? (
+        <Switch
+          size="xs"
+          label={`Columns by ${splitColConfigured}`}
+          description={`Each lineage's share in each ${splitColConfigured}, as a dot`}
+          checked={showSplitPick !== false}
+          onChange={(e) => setShowSplit(e.currentTarget.checked)}
+        />
+      ) : null}
       <Switch
         size="xs"
         label="Show %"

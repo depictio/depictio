@@ -914,6 +914,13 @@ class PhylogeneticConfig(_BaseVizConfig):
             "a strip of dots beside the tips"
         ),
     )
+    show_split: bool | None = Field(
+        default=None,
+        description=(
+            "Summary mode: draw the abundance_split_col strip. Unset, drawn whenever "
+            "abundance_split_col is set; off, the summary shows the lineages alone"
+        ),
+    )
 
     @model_validator(mode="after")
     def _summary_is_coherent(self) -> PhylogeneticConfig:
