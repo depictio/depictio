@@ -645,10 +645,10 @@ def register_run_command(app: typer.Typer):
             str | None,
             typer.Option(
                 "--dashboard-name",
-                help="Custom title for the main dashboard (defaults to the title defined in "
-                "the dashboard YAML). Child tabs keep their titles and stay attached to it. "
-                "A refresh finds the dashboards by the file they came from, so it renames "
-                "the existing dashboard rather than adding a second one.",
+                help="Custom title for the main dashboard. Without it, a new dashboard takes "
+                "the title in its YAML and a refresh keeps the current one, even if renamed "
+                "in the viewer. With it, a refresh renames the existing main dashboard rather "
+                "than adding a second one. Child tabs keep their titles and stay attached.",
             ),
         ] = None,
         var: Annotated[
@@ -742,9 +742,10 @@ def register_run_command(app: typer.Typer):
             False,
             "--update-config",
             help="Refresh the project in place: its configuration, its tables (every run "
-            "rescanned) and its dashboards (each found by the file it came from, even "
-            "after a rename). Runs added with --attach-run "
-            "are kept. A project not on the server yet is created. Same as --overwrite",
+            "rescanned) and its dashboards (each found by the file it came from; titles "
+            "renamed in the viewer are kept, --dashboard-name renames the main one). Runs "
+            "added with --attach-run are kept. A project not on the server yet is created. "
+            "Same as --overwrite",
         ),
         # Scan options
         rescan_folders: bool = typer.Option(

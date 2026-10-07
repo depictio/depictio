@@ -5575,12 +5575,33 @@ def _existing_import_target(
     return None
 
 
+def _import_title(
+    yaml_title: str,
+    existing: dict | None,
+    keep_titles: bool,
+    title: str | None = None,
+) -> str:
+    """The title an imported dashboard gets.
+
+    `title` when given (`main_title`, for the main dashboard), else under
+    `keep_titles` the current title of the dashboard it replaces, which may have
+    been renamed in the viewer since, else the YAML's.
+    """
+    if title:
+        return title
+    if keep_titles and existing and existing.get("title"):
+        return existing["title"]
+    return yaml_title
+
+
 def _import_multi_tab_dashboard(
     yaml_data: dict,
     project_id: PyObjectId,
     overwrite: bool,
     current_user: User,
     source_key: str | None = None,
+    keep_titles: bool = False,
+    main_title: str | None = None,
 ) -> dict[str, Any]:
     """
     Import a multi-tab dashboard from YAML data with main_dashboard and tabs structure.
@@ -5593,6 +5614,10 @@ def _import_multi_tab_dashboard(
         current_user: Current authenticated user
         source_key: Stable origin of the main dashboard. Each tab gets
             "<source_key>#<tab title as written in the YAML>".
+        keep_titles: The main dashboard and the tabs an overwrite replaces keep
+            their current titles instead of taking the YAML's
+        main_title: Title of the main dashboard, over the YAML's and over
+            keep_titles; the tabs are not affected
 
     Returns:
         Import result with main dashboard ID and child tab IDs
@@ -5610,6 +5635,9 @@ def _import_multi_tab_dashboard(
     existing_main = _existing_import_target(project_id, main_lite.title, source_key, overwrite)
 
     main_dashboard_dict = main_lite.to_full()
+    main_dashboard_dict["title"] = _import_title(
+        main_lite.title, existing_main, keep_titles, main_title
+    )
     main_dashboard_dict["source_key"] = source_key or (existing_main or {}).get("source_key")
     main_dashboard_dict["is_main_tab"] = True  # Ensure it's marked as main tab
     # Visibility is project-driven; `to_full()` defaults to private, which
@@ -5696,6 +5724,7 @@ def _import_multi_tab_dashboard(
             )
 
         tab_dashboard_dict = tab_lite.to_full()
+        tab_dashboard_dict["title"] = _import_title(tab_lite.title, existing_tab, keep_titles)
         tab_dashboard_dict["source_key"] = tab_source_key or (existing_tab or {}).get("source_key")
         tab_dashboard_dict["is_public"] = project_is_public
         tab_dashboard_dict["is_main_tab"] = False
@@ -5780,7 +5809,7 @@ def _import_multi_tab_dashboard(
                 logger.error(f"Failed to import tab '{tab_lite.title}'")
                 continue
 
-        imported_tabs.append({"title": tab_lite.title, "dashboard_id": str(tab_dashboard_id)})
+        imported_tabs.append({"title": tab_dashboard.title, "dashboard_id": str(tab_dashboard_id)})
 
     action = "Updated" if is_update else "Imported"
     logger.info(
@@ -5806,6 +5835,9 @@ async def import_dashboard_from_yaml(
     project_id: PyObjectId | None = None,
     overwrite: bool = False,
     source_key: str | None = None,
+    keep_titles: bool = False,
+    main_title: str | None = None,
+    parent_source_key: str | None = None,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -5822,6 +5854,19 @@ async def import_dashboard_from_yaml(
     one, a dashboard with the same title in the project is. Either kind of match
     is a 409 without `overwrite`.
 
+    Titles: a dashboard takes the title in the YAML, unless
+    - `keep_titles=True` and the import replaces an existing dashboard: that
+      dashboard keeps its current title, so a refresh does not undo a rename made
+      in the viewer. Applies to the main dashboard and to every tab;
+    - `main_title` is given: the main dashboard (the multi-tab `main_dashboard`,
+      or a single dashboard that is not a child tab) is titled that, over the YAML
+      and over `keep_titles`. The tabs are not affected. A 400 on a child tab.
+
+    A single-format child tab names its parent by title (`parent_dashboard_tag`).
+    `parent_source_key`, the `source_key` the parent was imported under, finds
+    the parent first, so a parent renamed in the viewer keeps its tabs. Without a
+    match by key or by title, a refreshed child tab stays under its current parent.
+
     Project identification:
     - If `project_id` is provided, uses that project directly (404 if it does not exist)
     - If `project_id` is not provided, extracts `project_tag` from YAML and
@@ -5834,6 +5879,11 @@ async def import_dashboard_from_yaml(
         source_key: Optional stable origin of the YAML (e.g.
             "nf-core/rnaseq:dashboards/base.yaml"), stored on the dashboard so a
             later import of the same source finds it after a rename
+        keep_titles: If True, a dashboard this import replaces keeps its current
+            title (default: False, the YAML's title)
+        main_title: Optional title for the main dashboard, over the YAML's and
+            over keep_titles
+        parent_source_key: Optional source_key of a child tab's parent dashboard
         current_user: The authenticated user (will be set as owner)
 
     Returns:
@@ -5898,7 +5948,13 @@ async def import_dashboard_from_yaml(
             )
 
         return _import_multi_tab_dashboard(
-            yaml_data, project_id, overwrite, current_user, source_key=source_key
+            yaml_data,
+            project_id,
+            overwrite,
+            current_user,
+            source_key=source_key,
+            keep_titles=keep_titles,
+            main_title=main_title,
         )
 
     # Single dashboard format
@@ -5906,6 +5962,11 @@ async def import_dashboard_from_yaml(
         lite = DashboardDataLite.from_yaml(yaml_content)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}") from e
+    if main_title and not lite.is_main_tab:
+        raise HTTPException(
+            status_code=400,
+            detail=f"main_title titles a main dashboard; '{lite.title}' is a child tab.",
+        )
 
     # Resolve project_id from YAML project_tag if not provided
     if project_id is None:
@@ -5937,6 +5998,7 @@ async def import_dashboard_from_yaml(
         )
 
     dashboard_dict = lite.to_full()
+    dashboard_dict["title"] = _import_title(lite.title, existing_dashboard, keep_titles, main_title)
     dashboard_dict["source_key"] = source_key or (existing_dashboard or {}).get("source_key")
     # Visibility is project-driven; `to_full()` defaults to private, which
     # would also reset an existing public dashboard on --overwrite.
@@ -5944,14 +6006,22 @@ async def import_dashboard_from_yaml(
 
     # Handle tab relationships for child tabs
     if not lite.is_main_tab and lite.parent_dashboard_tag:
-        # Find parent dashboard by title in the same project
-        parent_dashboard = dashboards_collection.find_one(
-            {
-                "title": lite.parent_dashboard_tag,
-                "project_id": ObjectId(project_id),
-                "is_main_tab": {"$ne": False},
-            }
-        )
+        # The parent by its key first: renamed in the viewer, it kept its key but
+        # not the title the YAML names it by. Last, the current parent of the tab
+        # this import replaces, for a client that sends no parent key.
+        current_parent = (existing_dashboard or {}).get("parent_dashboard_id")
+        lookups = [
+            {"source_key": parent_source_key} if parent_source_key else None,
+            {"title": lite.parent_dashboard_tag},
+            {"dashboard_id": current_parent} if current_parent else None,
+        ]
+        parent_dashboard = None
+        for lookup in filter(None, lookups):
+            parent_dashboard = dashboards_collection.find_one(
+                {"project_id": ObjectId(project_id), "is_main_tab": {"$ne": False}, **lookup}
+            )
+            if parent_dashboard:
+                break
         if not parent_dashboard:
             raise HTTPException(
                 status_code=400,

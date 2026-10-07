@@ -1525,32 +1525,36 @@ def dashboard_source_key(
     return f"file:{resolved.name}"
 
 
-def _rename_main_dashboard(documents: list[Any], dashboard_name: str) -> None:
+def _main_dashboard_of(document: Any) -> dict | None:
+    """The main dashboard a dashboard file holds: a multi-tab file's
+    ``main_dashboard``, or the file itself unless it is a child tab."""
+    if not isinstance(document, dict):
+        return None
+    if isinstance(document.get("main_dashboard"), dict):
+        return document["main_dashboard"]
+    if document.get("parent_dashboard_tag") or document.get("is_main_tab") is False:
+        return None
+    return document
+
+
+def _rename_main_dashboard(documents: list[Any], dashboard_name: str) -> Any:
     """Title the first main dashboard ``dashboard_name`` and keep its tabs attached.
 
-    A main dashboard is a multi-tab file's ``main_dashboard``, or a single-dashboard
-    file that is not a child tab. A child-tab file names its parent by title
-    (``parent_dashboard_tag``), so the files that named the old title follow the
-    rename; they keep their own titles.
+    A child-tab file names its parent by title (``parent_dashboard_tag``), so the
+    files that named the old title follow the rename; they keep their own titles.
+    Returns the document that holds the renamed main dashboard, None without one.
     """
-    old_title = None
-    for doc in documents:
-        if not isinstance(doc, dict):
-            continue
-        if isinstance(doc.get("main_dashboard"), dict):
-            main = doc["main_dashboard"]
-        elif doc.get("parent_dashboard_tag") or doc.get("is_main_tab") is False:
-            continue
-        else:
-            main = doc
-        old_title = main.get("title")
-        main["title"] = dashboard_name
-        break
-    if old_title is None:
-        return
-    for doc in documents:
-        if isinstance(doc, dict) and doc.get("parent_dashboard_tag") == old_title:
-            doc["parent_dashboard_tag"] = dashboard_name
+    renamed = next((doc for doc in documents if _main_dashboard_of(doc) is not None), None)
+    main = _main_dashboard_of(renamed)
+    if main is None:
+        return None
+    old_title = main.get("title")
+    main["title"] = dashboard_name
+    if old_title is not None:
+        for doc in documents:
+            if isinstance(doc, dict) and doc.get("parent_dashboard_tag") == old_title:
+                doc["parent_dashboard_tag"] = dashboard_name
+    return renamed
 
 
 def import_dashboards_from_template(
@@ -1569,6 +1573,9 @@ def import_dashboards_from_template(
     Called after project sync during ``depictio ingest --template`` to automatically
     create the template's default dashboards.
 
+    A dashboard this refreshes keeps its current title, so a rename made in the
+    viewer survives; only ``dashboard_name`` changes the main dashboard's title.
+
     Args:
         dashboard_paths: Absolute paths to dashboard YAML files.
         api_url: Base API URL (e.g., ``http://localhost:8058``).
@@ -1579,8 +1586,8 @@ def import_dashboards_from_template(
             before (matched by ``dashboard_source_key``, else by title).
         variables: Template variables to substitute in dashboard YAML
             (e.g., ``{GROUP_COL}`` placeholders).
-        dashboard_name: When provided, overrides the main dashboard's title
-            (child tabs keep their own titles and stay attached to it).
+        dashboard_name: When provided, titles the main dashboard, on a refresh
+            too (child tabs keep their own titles and stay attached to it).
         template_id: The resolved template's id, for the source keys of the
             template's own dashboards.
         base_dir: Directory of the --project-config-path file, for the source
@@ -1601,24 +1608,34 @@ def import_dashboards_from_template(
             logger.debug(f"Template {template_id} not found: dashboards keyed by file name")
 
     # Read every file first: --dashboard-name has to know which file holds the
-    # main dashboard before it can re-point the child-tab files that name it.
+    # main dashboard before it can re-point the child-tab files that name it, and
+    # a child tab is sent with the key of the file that holds its parent.
     edited = bool(variables or dashboard_name)
+    keys = [
+        dashboard_source_key(path, template_id, template_dir, base_dir) for path in dashboard_paths
+    ]
     loaded: list[tuple[str, Any] | Exception] = []
     for path in dashboard_paths:
         try:
             text = path.read_text(encoding="utf-8")
-            parsed = yaml.safe_load(text) if edited else None
+            parsed = yaml.safe_load(text)
             if variables:
                 parsed = substitute_template_variables(parsed, variables)
             loaded.append((text, parsed))
         except Exception as exc:
             loaded.append(exc)
+    renamed = None
     if dashboard_name:
-        _rename_main_dashboard(
+        renamed = _rename_main_dashboard(
             [item[1] for item in loaded if isinstance(item, tuple)], dashboard_name
         )
+    main_keys: dict[str, str] = {}
+    for key, item in zip(keys, loaded, strict=True):
+        main = _main_dashboard_of(item[1]) if isinstance(item, tuple) else None
+        if main is not None and isinstance(main.get("title"), str):
+            main_keys.setdefault(main["title"], key)
 
-    for path, item in zip(dashboard_paths, loaded, strict=True):
+    for path, key, item in zip(dashboard_paths, keys, loaded, strict=True):
         entry: dict[str, Any] = {"path": str(path), "success": False}
         try:
             if isinstance(item, Exception):
@@ -1629,9 +1646,15 @@ def import_dashboards_from_template(
                 yaml.dump(parsed, default_flow_style=False, allow_unicode=True) if edited else text
             )
 
-            params: dict[str, str | bool] = {
-                "source_key": dashboard_source_key(path, template_id, template_dir, base_dir)
-            }
+            # A refresh keeps the titles the dashboards have now (renamed in the
+            # viewer, say); --dashboard-name still titles the main one. The parent
+            # is found by its key, as its title may be one the YAML does not know.
+            params: dict[str, str | bool] = {"source_key": key, "keep_titles": True}
+            if dashboard_name and renamed is not None and parsed is renamed:
+                params["main_title"] = dashboard_name
+            parent_tag = parsed.get("parent_dashboard_tag") if isinstance(parsed, dict) else None
+            if parent_tag in main_keys:
+                params["parent_source_key"] = main_keys[parent_tag]
             if project_id:
                 params["project_id"] = project_id
             if overwrite:

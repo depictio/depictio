@@ -5,6 +5,9 @@ Covers:
   viewer, or by `--dashboard-name`) updates it in place instead of adding a
   second family;
 - the title fallback, which also gives a key to dashboards imported before keys;
+- `keep_titles`: a refresh keeps the titles given in the viewer, and `main_title`
+  (`--dashboard-name`) still titles the main dashboard; a child tab file finds a
+  renamed parent by `parent_source_key`;
 - a project id that does not exist is a 404, not an orphan dashboard;
 - an exported image dashboard imports again (it used to fail with a 500);
 - a save from the viewer can neither drop nor copy the key.
@@ -84,13 +87,25 @@ def project_id(db, user):
     return pid
 
 
-def _import(content, user, project_id=None, overwrite=False, source_key=None):
+def _import(
+    content,
+    user,
+    project_id=None,
+    overwrite=False,
+    source_key=None,
+    keep_titles=False,
+    main_title=None,
+    parent_source_key=None,
+):
     return asyncio.run(
         dash_routes.import_dashboard_from_yaml(
             yaml_content=content,
             project_id=PyObjectId(project_id) if project_id else None,
             overwrite=overwrite,
             source_key=source_key,
+            keep_titles=keep_titles,
+            main_title=main_title,
+            parent_source_key=parent_source_key,
             current_user=user,
         )
     )
@@ -98,6 +113,12 @@ def _import(content, user, project_id=None, overwrite=False, source_key=None):
 
 def _single(title):
     return yaml.safe_dump({"title": title, "components": []})
+
+
+def _child(title, parent):
+    return yaml.safe_dump(
+        {"title": title, "is_main_tab": False, "parent_dashboard_tag": parent, "components": []}
+    )
 
 
 def _multi(main_title, tab_titles):
@@ -195,6 +216,207 @@ class TestSourceKeyMatching:
         tabs = list(db["dashboards"].find({"is_main_tab": False}))
         assert {t["parent_dashboard_id"] for t in tabs} == {main["dashboard_id"]}
         assert sorted(t["title"] for t in tabs) == ["Expression", "QC"]
+
+
+def _rename(db, title, new_title):
+    """What a rename in the viewer does: only the stored title changes."""
+    db["dashboards"].update_one({"title": title}, {"$set": {"title": new_title}})
+
+
+def _titles(db):
+    return {str(d["dashboard_id"]): d["title"] for d in db["dashboards"].find()}
+
+
+class TestKeepTitles:
+    """`ingest --update-config` sends keep_titles; only --dashboard-name renames."""
+
+    MAIN_KEY = "file:dashboards/main.yaml"
+    TAB_KEY = "file:dashboards/tab.yaml"
+
+    def _refresh(self, content, user, project_id, **kwargs):
+        return _import(content, user, project_id, overwrite=True, keep_titles=True, **kwargs)
+
+    def test_main_renamed_in_the_viewer_keeps_its_title(self, db, user, project_id):
+        first = _import(_single("RNA-seq overview"), user, project_id, source_key=KEY)
+        _rename(db, "RNA-seq overview", "Projet Dupont : RNA-seq")
+
+        second = self._refresh(_single("RNA-seq overview"), user, project_id, source_key=KEY)
+
+        assert second["dashboard_id"] == first["dashboard_id"]
+        assert second["title"] == "Projet Dupont : RNA-seq"
+        assert _titles(db) == {first["dashboard_id"]: "Projet Dupont : RNA-seq"}
+
+    def test_multi_tab_main_and_tab_renamed_in_the_viewer_keep_their_titles(
+        self, db, user, project_id
+    ):
+        _import(_multi("RNA-seq overview", ["QC", "Expression"]), user, project_id, source_key=KEY)
+        _rename(db, "RNA-seq overview", "Projet Dupont : RNA-seq")
+        _rename(db, "QC", "Quality")
+        before = _titles(db)
+
+        result = self._refresh(
+            _multi("RNA-seq overview", ["QC", "Expression"]), user, project_id, source_key=KEY
+        )
+
+        assert _titles(db) == before
+        assert result["title"] == "Projet Dupont : RNA-seq"
+        assert sorted(t["title"] for t in result["tabs"]) == ["Expression", "Quality"]
+
+    def test_main_title_renames_the_main_and_the_tabs_keep_theirs(self, db, user, project_id):
+        first = _import(
+            _multi("RNA-seq overview", ["QC", "Expression"]), user, project_id, source_key=KEY
+        )
+        _rename(db, "RNA-seq overview", "Projet Dupont : RNA-seq")
+        _rename(db, "QC", "Quality")
+        ids = sorted(_titles(db))
+
+        # --dashboard-name New: the CLI also writes it into the YAML.
+        self._refresh(
+            _multi("New", ["QC", "Expression"]),
+            user,
+            project_id,
+            source_key=KEY,
+            main_title="New",
+        )
+
+        assert sorted(_titles(db)) == ids
+        main = db["dashboards"].find_one({"is_main_tab": True})
+        assert main["dashboard_id"] == ObjectId(first["dashboard_id"])
+        assert main["title"] == "New"
+        tabs = db["dashboards"].find({"is_main_tab": False})
+        assert sorted(t["title"] for t in tabs) == ["Expression", "Quality"]
+
+    def test_main_title_renames_a_single_dashboard(self, db, user, project_id):
+        first = _import(_single("RNA-seq overview"), user, project_id, source_key=KEY)
+        _rename(db, "RNA-seq overview", "Projet Dupont : RNA-seq")
+
+        second = self._refresh(_single("New"), user, project_id, source_key=KEY, main_title="New")
+
+        assert _titles(db) == {first["dashboard_id"]: "New"}
+        assert second["title"] == "New"
+
+    def test_main_title_on_a_child_tab_is_a_400(self, db, user, project_id):
+        _import(_single("Main"), user, project_id)
+
+        with pytest.raises(HTTPException) as exc:
+            _import(_child("Tab", "Main"), user, project_id, main_title="New")
+
+        assert exc.value.status_code == 400
+        assert db["dashboards"].count_documents({}) == 1
+
+    def _main_and_child(self, user, project_id):
+        main = _import(_single("Main"), user, project_id, source_key=self.MAIN_KEY)
+        tab = _import(
+            _child("Tab", "Main"),
+            user,
+            project_id,
+            source_key=self.TAB_KEY,
+            parent_source_key=self.MAIN_KEY,
+        )
+        return main["dashboard_id"], tab["dashboard_id"]
+
+    def test_child_tab_file_keeps_its_title_and_its_renamed_parent(self, db, user, project_id):
+        main_id, tab_id = self._main_and_child(user, project_id)
+        _rename(db, "Main", "My study")
+        _rename(db, "Tab", "My tab")
+
+        self._refresh(_single("Main"), user, project_id, source_key=self.MAIN_KEY)
+        self._refresh(
+            _child("Tab", "Main"),
+            user,
+            project_id,
+            source_key=self.TAB_KEY,
+            parent_source_key=self.MAIN_KEY,
+        )
+
+        assert _titles(db) == {main_id: "My study", tab_id: "My tab"}
+        tab = db["dashboards"].find_one({"dashboard_id": ObjectId(tab_id)})
+        assert tab["parent_dashboard_id"] == ObjectId(main_id)
+
+    def test_main_title_reaches_the_child_tab_file_by_key(self, db, user, project_id):
+        main_id, tab_id = self._main_and_child(user, project_id)
+        _rename(db, "Tab", "My tab")
+
+        # --dashboard-name New re-points the child file's parent_dashboard_tag too.
+        self._refresh(_single("New"), user, project_id, source_key=self.MAIN_KEY, main_title="New")
+        self._refresh(
+            _child("Tab", "New"),
+            user,
+            project_id,
+            source_key=self.TAB_KEY,
+            parent_source_key=self.MAIN_KEY,
+        )
+
+        assert _titles(db) == {main_id: "New", tab_id: "My tab"}
+        tab = db["dashboards"].find_one({"dashboard_id": ObjectId(tab_id)})
+        assert tab["parent_dashboard_id"] == ObjectId(main_id)
+
+    def test_refreshed_child_stays_under_its_renamed_parent_without_a_parent_key(
+        self, db, user, project_id
+    ):
+        main_id, tab_id = self._main_and_child(user, project_id)
+        _rename(db, "Main", "My study")
+
+        self._refresh(_child("Tab", "Main"), user, project_id, source_key=self.TAB_KEY)
+
+        tab = db["dashboards"].find_one({"dashboard_id": ObjectId(tab_id)})
+        assert tab["parent_dashboard_id"] == ObjectId(main_id)
+
+    def test_new_child_tab_finds_a_renamed_parent_by_its_key(self, db, user, project_id):
+        main = _import(_single("Main"), user, project_id, source_key=self.MAIN_KEY)
+        _rename(db, "Main", "My study")
+
+        with pytest.raises(HTTPException) as exc:
+            self._refresh(_child("Tab", "Main"), user, project_id, source_key=self.TAB_KEY)
+        assert exc.value.status_code == 400
+
+        tab = self._refresh(
+            _child("Tab", "Main"),
+            user,
+            project_id,
+            source_key=self.TAB_KEY,
+            parent_source_key=self.MAIN_KEY,
+        )
+
+        stored = db["dashboards"].find_one({"dashboard_id": ObjectId(tab["dashboard_id"])})
+        assert stored["parent_dashboard_id"] == ObjectId(main["dashboard_id"])
+        assert stored["title"] == "Tab"
+
+    @pytest.mark.parametrize("keep_titles", [False, True])
+    def test_first_import_takes_the_yaml_titles(self, db, user, project_id, keep_titles):
+        _import(
+            _multi("Main", ["QC"]),
+            user,
+            project_id,
+            overwrite=True,
+            source_key=KEY,
+            keep_titles=keep_titles,
+        )
+
+        assert sorted(_titles(db).values()) == ["Main", "QC"]
+
+    def test_without_keep_titles_the_yaml_titles_come_back(self, db, user, project_id):
+        _import(_multi("Overview", ["QC"]), user, project_id, source_key=KEY)
+        main_id, tab_id = self._main_and_child(user, project_id)
+        for title in ("Overview", "QC", "Main", "Tab"):
+            _rename(db, title, f"My {title}")
+
+        _import(_multi("Overview", ["QC"]), user, project_id, overwrite=True, source_key=KEY)
+        _import(_single("Main"), user, project_id, overwrite=True, source_key=self.MAIN_KEY)
+        _import(
+            _child("Tab", "Main"),
+            user,
+            project_id,
+            overwrite=True,
+            source_key=self.TAB_KEY,
+            parent_source_key=self.MAIN_KEY,
+        )
+
+        assert sorted(_titles(db).values()) == ["Main", "Overview", "QC", "Tab"]
+        assert _titles(db)[main_id] == "Main"
+        tab = db["dashboards"].find_one({"dashboard_id": ObjectId(tab_id)})
+        assert tab["title"] == "Tab"
+        assert tab["parent_dashboard_id"] == ObjectId(main_id)
 
 
 class TestUnknownProject:

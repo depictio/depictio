@@ -2,7 +2,9 @@
 
 The server files an imported dashboard under its source key and a refresh with
 overwrite updates the dashboard with the same key, so the key has to stay put
-across a rename and across template versions.
+across a rename and across template versions. A refresh keeps the titles given
+in the viewer (`keep_titles`); `--dashboard-name` is sent as `main_title` with
+the main dashboard's file, and a child tab file names its parent's key.
 """
 
 from pathlib import Path
@@ -155,6 +157,82 @@ class TestImportDashboards:
         ((_, doc),) = _sent(post)
         assert doc["main_dashboard"]["title"] == "Renamed"
         assert doc["tabs"] == [{"title": "QC"}]
+
+    def test_every_import_keeps_the_titles_it_finds(self, tmp_path: Path, post: MagicMock) -> None:
+        paths = [
+            _write(tmp_path / "main.yaml", {"title": "Main"}),
+            _write(tmp_path / "multi.yaml", {"main_dashboard": {"title": "M"}, "tabs": []}),
+        ]
+
+        import_dashboards_from_template(paths, "http://api", {}, base_dir=tmp_path)
+
+        for params, _ in _sent(post):
+            assert params["keep_titles"] is True
+            assert "main_title" not in params
+
+    def test_dashboard_name_is_sent_as_the_main_title_of_the_main_file_only(
+        self, tmp_path: Path, post: MagicMock
+    ) -> None:
+        paths = [
+            _write(
+                tmp_path / "tab.yaml",
+                {"title": "Tab", "is_main_tab": False, "parent_dashboard_tag": "Main"},
+            ),
+            _write(tmp_path / "main.yaml", {"title": "Main"}),
+            _write(tmp_path / "other.yaml", {"title": "Other"}),
+        ]
+
+        import_dashboards_from_template(
+            paths, "http://api", {}, dashboard_name="Renamed", base_dir=tmp_path
+        )
+
+        (tab, _), (main, _), (other, _) = _sent(post)
+        assert main["main_title"] == "Renamed"
+        assert "main_title" not in tab
+        assert "main_title" not in other
+
+    def test_dashboard_name_is_sent_with_a_multi_tab_file(
+        self, tmp_path: Path, post: MagicMock
+    ) -> None:
+        path = _write(
+            tmp_path / "base.yaml",
+            {"main_dashboard": {"title": "Main"}, "tabs": [{"title": "QC"}]},
+        )
+
+        import_dashboards_from_template([path], "http://api", {}, dashboard_name="Renamed")
+
+        ((params, _),) = _sent(post)
+        assert params["main_title"] == "Renamed"
+        assert params["keep_titles"] is True
+
+    @pytest.mark.parametrize("dashboard_name", [None, "Renamed"])
+    def test_child_tab_file_is_sent_with_its_parent_key(
+        self, tmp_path: Path, post: MagicMock, dashboard_name: str | None
+    ) -> None:
+        paths = [
+            _write(
+                tmp_path / "dashboards" / "main.yaml",
+                {"main_dashboard": {"title": "Main"}, "tabs": []},
+            ),
+            _write(
+                tmp_path / "dashboards" / "tab.yaml",
+                {"title": "Tab", "is_main_tab": False, "parent_dashboard_tag": "Main"},
+            ),
+            _write(
+                tmp_path / "dashboards" / "stray.yaml",
+                {"title": "Stray", "is_main_tab": False, "parent_dashboard_tag": "Elsewhere"},
+            ),
+        ]
+
+        import_dashboards_from_template(
+            paths, "http://api", {}, dashboard_name=dashboard_name, base_dir=tmp_path
+        )
+
+        (main, _), (tab, _), (stray, _) = _sent(post)
+        assert "parent_source_key" not in main
+        assert tab["parent_source_key"] == "file:dashboards/main.yaml"
+        # A parent this import does not bring is still found by its title.
+        assert "parent_source_key" not in stray
 
     def test_failure_is_returned_not_logged_as_an_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, post: MagicMock
