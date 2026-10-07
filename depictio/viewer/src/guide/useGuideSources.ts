@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   analysisCardRank,
   analysisFigureRank,
+  analysisSelectableFigureRank,
   analysisTableRank,
   demoSectionsOf,
   familyOrder,
@@ -22,6 +23,7 @@ import {
   pickFilterDemo,
   pickFromFamily,
   tabDisplayName,
+  takesSelection,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -91,6 +93,8 @@ export interface SectionsDemoSource {
 
 /** What the Analysis demo selects on and reads, each from its own tab. */
 export interface AnalysisDemoSource {
+  /** What the groups are drawn on, overlaid or split; selected on too when
+   *  it takes a lasso. */
   figure: GuideComponentSource | null;
   table: GuideComponentSource | null;
   card: GuideComponentSource | null;
@@ -290,20 +294,40 @@ export function useGuideSources(input: GuideSourcesInput): GuideSources {
     };
   }, [ownSections, pinned, siblingFound, dashboardId, dashboard, tabs]);
 
-  // ---- Analysis: a figure to lasso, a table to tick, a card to read per
-  // group. The figure is the best of the family's — one that shows the groups
-  // in colour beats a nearer one that cannot. The table and the card follow
-  // it: a table keying its rows on the figure's column, a card on its data.
-  const figure = pickedSource(
+  // ---- Analysis: a figure to draw the groups on, a table to tick, a card to
+  // read per group. The figure is the best of the family's — one that draws
+  // the groups both overlaid and split beats a nearer one that answers one of
+  // the two (see `analysisFigureRank`). The table and the card follow it: a
+  // table keying its rows on the figure's points, a card on its data. A figure
+  // that takes no lasso is drawn the groups ticked in that table; with no
+  // table to make them, the best figure that does take one stands in.
+  const best = pickedSource(
     family,
     useFamilyPick(family, analysisFigureRank, { acrossTabs: true }),
   );
-  const figureMeta = figure?.metadata ?? null;
-  const tableRank = useMemo(() => analysisTableRank(figureMeta), [figureMeta]);
-  const table = pickedSource(
+  const bestMeta = best?.metadata ?? null;
+  const bestTableRank = useMemo(() => analysisTableRank(bestMeta), [bestMeta]);
+  const bestTable = pickedSource(
     family,
-    useFamilyPick(family, tableRank, { acrossTabs: true, enabled: figure !== undefined }),
+    useFamilyPick(family, bestTableRank, { acrossTabs: true, enabled: best !== undefined }),
   );
+  const stranded = bestMeta !== null && bestTable === null && !takesSelection(bestMeta);
+  const selectable = pickedSource(
+    family,
+    useFamilyPick(family, analysisSelectableFigureRank, { acrossTabs: true, enabled: stranded }),
+  );
+  const selectableMeta = stranded ? (selectable?.metadata ?? null) : null;
+  const selectableTableRank = useMemo(() => analysisTableRank(selectableMeta), [selectableMeta]);
+  const selectableTable = pickedSource(
+    family,
+    useFamilyPick(family, selectableTableRank, {
+      acrossTabs: true,
+      enabled: stranded && selectable !== undefined,
+    }),
+  );
+  const figure = stranded ? selectable : best;
+  const table = stranded ? selectableTable : bestTable;
+  const figureMeta = figure?.metadata ?? null;
   const tableDc = table?.metadata.dc_id as string | undefined;
   const figureDc = figureMeta?.dc_id as string | undefined;
   const cardRank = useMemo(() => analysisCardRank([tableDc, figureDc]), [tableDc, figureDc]);

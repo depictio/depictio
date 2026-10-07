@@ -247,6 +247,39 @@ export function groupingModeForKind(vizKind: string): GroupingMode {
     : 'split';
 }
 
+/** What the dashboard's Overlay / Split switch does to a component: whether
+ *  the groups show in colour in one panel, and whether it is dealt into a
+ *  panel per group. */
+export interface GroupDisplays {
+  overlay: boolean;
+  split: boolean;
+}
+
+/**
+ * Split kinds that also colour their marks by group when drawn whole, in the
+ * Overlay display. Their points are rows, matched to the groups by identity
+ * (`splitFigureByGroups`, reported through `useReportGroupColouring`). The
+ * other split kinds aggregate — a bar or a band is already a sum — and an
+ * overlay draws them as they were.
+ */
+const SPLIT_KINDS_COLOURED_WHOLE: ReadonlySet<string> = new Set<AdvancedVizKind>([
+  'qq',
+  'rarefaction',
+  'coverage_track',
+]);
+
+/**
+ * `groupingModeForKind` as the two displays see it: a 'colour' kind overlays
+ * and is never split, a 'split' kind is split and overlays only when its
+ * renderer colours by group, a 'none' kind does neither.
+ */
+export function groupDisplaysForKind(vizKind: string): GroupDisplays {
+  const mode = groupingModeForKind(vizKind);
+  if (mode === 'colour') return { overlay: true, split: false };
+  if (mode === 'split') return { overlay: SPLIT_KINDS_COLOURED_WHOLE.has(vizKind), split: true };
+  return { overlay: false, split: false };
+}
+
 /** Whether the dashboard is asking for this split, the kind takes it, and it
  *  is small enough to honour. Read by the dispatch before it decides how to
  *  render. */

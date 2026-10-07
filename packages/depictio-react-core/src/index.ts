@@ -609,7 +609,12 @@ export type {
   ColorByState,
   GroupingDisplay,
 } from './selectionGroups';
-export { groupBadgeLabel, summarizeGroupStatus } from './groupStatus';
+export {
+  GROUP_DECLINED_REASONS,
+  GROUP_KIND_NOT_SPLIT_REASON,
+  groupBadgeLabel,
+  summarizeGroupStatus,
+} from './groupStatus';
 export type { GroupStatusEntry, GroupStatusSummary } from './groupStatus';
 export { useSelectionGroups } from './hooks/useSelectionGroups';
 export type { SelectionGroupsApi } from './hooks/useSelectionGroups';
@@ -864,15 +869,18 @@ export {
   actionsTileRank,
   analysisCardRank,
   analysisFigureRank,
+  analysisSelectableFigureRank,
   analysisTableRank,
   demoSectionsOf,
   familyOrder,
   figureDrawsGroups,
   foldableSectionsOf,
+  groupDisplaysOf,
   hasCards,
   pickFilterDemo,
   pickFromFamily,
   selectionColumnOf,
+  takesSelection,
 } from './guide/demoSources';
 export type {
   GuideDemoSection,

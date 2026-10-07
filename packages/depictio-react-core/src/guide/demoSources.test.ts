@@ -5,10 +5,13 @@ import {
   actionsTileRank,
   analysisCardRank,
   analysisFigureRank,
+  analysisSelectableFigureRank,
   analysisTableRank,
   demoSectionsOf,
   familyOrder,
+  figureDrawsGroups,
   foldableSectionsOf,
+  groupDisplaysOf,
   pickFilterDemo,
   pickFromFamily,
   type GuideDemoSection,
@@ -172,48 +175,95 @@ describe('pickFromFamily', () => {
 });
 
 describe('the Analysis demo picks', () => {
-  it('wants a figure a lasso can make a group on', () => {
+  const lassoScatter = (extra: Partial<StoredMetadata> = {}) =>
+    meta({
+      index: 'f',
+      component_type: 'figure',
+      visu_type: 'scatter',
+      selection_enabled: true,
+      selection_column: 'sample_id',
+      ...extra,
+    });
+  const view = (viz_kind: string, config: Record<string, unknown> = {}) =>
+    meta({
+      index: viz_kind,
+      component_type: 'advanced_viz',
+      viz_kind,
+      config: { viz_kind, ...config },
+    });
+  const embedding = view('embedding', { sample_id_col: 'sample_id', selection_enabled: true });
+  const rarefaction = view('rarefaction', { sample_id_col: 'sample_id' });
+
+  it('wants a figure that draws the groups overlaid and split, and takes a lasso', () => {
+    expect(analysisFigureRank(lassoScatter())).toBe(0);
+    // Drawn both ways, the groups made in a table: before a lasso that only
+    // colours them, which is what an ordination does.
+    const box = meta({ index: 'b', component_type: 'figure', visu_type: 'box' });
+    expect(analysisFigureRank(box)).toBe(1);
+    expect(analysisFigureRank(rarefaction)).toBe(1);
+    expect(analysisFigureRank(embedding)).toBe(2);
+    expect(analysisFigureRank(embedding)! > analysisFigureRank(rarefaction)!).toBe(true);
+  });
+
+  it('leaves out what draws no group and takes no lasso', () => {
+    // A heatmap is drawn whole from its frame, a stacked bar overlaid is a sum.
     expect(
-      analysisFigureRank(
-        meta({
-          index: 'f',
-          component_type: 'figure',
-          visu_type: 'scatter',
-          selection_enabled: true,
-          selection_column: 'sample_id',
-        }),
-      ),
-    ).toBe(0);
-    expect(
-      analysisFigureRank(meta({ index: 'f', component_type: 'figure', visu_type: 'box' })),
+      analysisFigureRank(meta({ index: 'h', component_type: 'figure', visu_type: 'heatmap' })),
     ).toBeNull();
+    expect(analysisFigureRank(view('stacked_taxonomy', { sample_id_col: 'sample_id' }))).toBeNull();
+    expect(analysisFigureRank(view('phylogenetic'))).toBeNull();
+    expect(analysisFigureRank(meta({ index: 't', component_type: 'table' }))).toBeNull();
   });
 
   it('puts a code figure that never draws the groups last', () => {
-    const scatter = (code_content: string) =>
+    const code = (code_content: string) => lassoScatter({ mode: 'code', code_content });
+    expect(analysisFigureRank(code('px.scatter(df, **depictio_group_kwargs)'))).toBe(0);
+    expect(analysisFigureRank(code('px.scatter(df, color="city")'))).toBe(3);
+    // No lasso, and code that spreads no group: nothing to show in any step.
+    const box = meta({ index: 'c', component_type: 'figure', mode: 'code', code_content: '' });
+    expect(analysisFigureRank(box)).toBeNull();
+  });
+
+  it('falls back to a figure that takes a lasso, whatever it draws', () => {
+    expect(analysisSelectableFigureRank(rarefaction)).toBeNull();
+    expect(analysisSelectableFigureRank(embedding)).toBe(2);
+    expect(analysisSelectableFigureRank(lassoScatter())).toBe(0);
+  });
+
+  it('says how a figure draws the groups, by the rules it is drawn by', () => {
+    expect(groupDisplaysOf(lassoScatter())).toEqual({ overlay: true, split: true });
+    expect(groupDisplaysOf(embedding)).toEqual({ overlay: true, split: false });
+    expect(groupDisplaysOf(rarefaction)).toEqual({ overlay: true, split: true });
+    expect(groupDisplaysOf(meta({ index: 't', component_type: 'table' }))).toEqual({
+      overlay: false,
+      split: false,
+    });
+    const figure = (visu_type: string) => meta({ index: 'g', component_type: 'figure', visu_type });
+    expect(figureDrawsGroups(figure('scatter_geo'))).toBe(false);
+    expect(figureDrawsGroups(figure('Heatmap'))).toBe(false);
+    expect(figureDrawsGroups(figure('violin'))).toBe(true);
+  });
+
+  it("wants a table keyed on the figure's points, and one that reaches them for no lasso", () => {
+    const table = (index: string, row_selection_column: string, dc_id: string) =>
       meta({
-        index: 'f',
-        component_type: 'figure',
-        visu_type: 'scatter',
-        mode: 'code',
-        code_content,
-        selection_enabled: true,
-        selection_column: 'sample_id',
+        index,
+        component_type: 'table',
+        row_selection_enabled: true,
+        row_selection_column,
+        dc_id,
       });
-    expect(
-      analysisFigureRank(scatter('px.scatter(df, x="a", y="b", **depictio_group_kwargs)')),
-    ).toBe(0);
-    expect(analysisFigureRank(scatter('px.scatter(df, x="a", y="b", color="city")'))).toBe(2);
-    expect(
-      analysisFigureRank(
-        meta({
-          index: 'e',
-          component_type: 'advanced_viz',
-          viz_kind: 'embedding',
-          config: { viz_kind: 'embedding', sample_id_col: 'sample_id', selection_enabled: true },
-        }),
-      ),
-    ).toBe(1);
+    const curves = { ...rarefaction, dc_id: 'curves' } as StoredMetadata;
+    const forCurves = analysisTableRank(curves);
+    expect(forCurves(table('alpha', 'sample_id', 'alpha'))).toBe(0);
+    expect(forCurves(table('own', 'run', 'curves'))).toBe(1);
+    expect(forCurves(table('meta', 'ID', 'meta'))).toBeNull();
+    // A figure that takes a lasso makes its own groups: any table adds a way.
+    const forLasso = analysisTableRank({ ...embedding, dc_id: 'ord' } as StoredMetadata);
+    expect(forLasso(table('alpha', 'sample_id', 'alpha'))).toBe(0);
+    expect(forLasso(table('meta', 'ID', 'meta'))).toBe(2);
+    expect(analysisTableRank(null)(table('meta', 'ID', 'meta'))).toBe(0);
+    expect(forLasso(meta({ index: 'x', component_type: 'table' }))).toBeNull();
   });
 
   it('prefers a card on the same data, and one that is not a count', () => {
