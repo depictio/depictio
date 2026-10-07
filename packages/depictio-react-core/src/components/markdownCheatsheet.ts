@@ -110,8 +110,8 @@ export const MARKDOWN_CHEATSHEET: MarkdownExampleGroup[] = [
       {
         label: 'Steps',
         example:
-          '1. ![](icon:mdi:dna) **Amplicon** V4–V5\n2. ![](icon:mdi:filter-variant) **Denoise** DADA2 to ASVs',
-        note: 'A numbered fact list with an icon on every item, drawn as steps. Without the icons it stays a numbered list.',
+          '::: steps\n1. ![](icon:mdi:dna) **Amplicon** V4–V5\n2. **Denoise** DADA2 to ASVs\n:::',
+        note: "A list inside `::: steps` is drawn as steps. Each item: an icon (else its number), a bold label, what was done; only the last is needed. Quarto's `::: {.steps}` works too.",
         renders: 'steps',
       },
       {

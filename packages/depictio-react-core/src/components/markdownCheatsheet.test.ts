@@ -64,13 +64,20 @@ describe('MARKDOWN_CHEATSHEET', () => {
       case 'rule':
         expect(blocks).toEqual([{ type: 'rule' }]);
         break;
-      case 'facts':
-      case 'steps': {
+      case 'facts': {
         const list = onlyList(blocks);
-        expect(list.ordered).toBe(ex.renders === 'steps');
+        expect(list.ordered).toBe(false);
         expect(allRead(list.items, parseStatRow)).toBe(false);
         expect(allRead(list.items, parseFact)).toBe(true);
         expect(list.items.every((item) => parseFact(item)?.icon)).toBe(true);
+        break;
+      }
+      case 'steps': {
+        expect(blocks).toHaveLength(1);
+        const div = blocks[0] as Extract<Block, { type: 'div' }>;
+        expect(div.type).toBe('div');
+        expect(div.name).toBe('steps');
+        expect(onlyList(div.blocks).ordered).toBe(true);
         break;
       }
       case 'results':

@@ -12,7 +12,7 @@ import {
   parseFact,
   parseLinkRow,
   parseStatRow,
-  readsAsSteps,
+  parseStep,
   StatRow,
 } from './blockMarkdown';
 import { CARD_FRAME, CARD_RULE, RESTING_ICON_OPACITY } from './cardFrame';
@@ -436,7 +436,9 @@ const MarkdownBody: React.FC<{
   /** On a framed tile: a leading heading becomes the headline figure, the
    *  line under it its caption. */
   framed?: boolean;
-}> = ({ blocks, alignment, accentColor = null, framed = false }) => {
+  /** Inside `::: steps`: every list is drawn as steps. */
+  listsAs?: 'steps' | null;
+}> = ({ blocks, alignment, accentColor = null, framed = false, listsAs = null }) => {
   const resolveTab = useTabLinkResolver();
   const inline = (text: string) => renderInlineMarkdown(text, resolveTab);
   // A framed tile opening on a figure (`# 41%`) sets it as a headline number;
@@ -481,6 +483,16 @@ const MarkdownBody: React.FC<{
               </Title>
             );
           case 'list': {
+            if (listsAs === 'steps') {
+              return (
+                <StepFlow
+                  key={idx}
+                  steps={block.items.map(parseStep)}
+                  inline={inline}
+                  accentColor={accentColor}
+                />
+              );
+            }
             const stats = block.items.map(parseStatRow);
             if (stats.length && stats.every(Boolean)) {
               return (
@@ -493,18 +505,8 @@ const MarkdownBody: React.FC<{
               );
             }
             const facts = block.items.map(parseFact);
-            // Numbered facts with an icon each are steps: their order is what
-            // they say. Without the icons, a numbered list stays a list.
-            if (block.ordered && readsAsSteps(block.items)) {
-              return (
-                <StepFlow
-                  key={idx}
-                  steps={facts as Fact[]}
-                  inline={inline}
-                  accentColor={accentColor}
-                />
-              );
-            }
+            // A numbered list stays a list, bold labels and icons or not:
+            // steps are asked for with `::: steps`.
             if (!block.ordered && facts.length && facts.every(Boolean)) {
               return framed ? (
                 <FactTable key={idx} facts={facts as Fact[]} inline={inline} />
@@ -572,6 +574,19 @@ const MarkdownBody: React.FC<{
             );
           case 'rule':
             return <Divider key={idx} my={4} />;
+          case 'div':
+            // The div's name says how what it holds is drawn. One this
+            // renderer does not know draws its content as plain blocks, as a
+            // markdown renderer without fenced divs would.
+            return (
+              <MarkdownBody
+                key={idx}
+                blocks={block.blocks}
+                alignment={alignment}
+                accentColor={accentColor}
+                listsAs={block.name === 'steps' ? 'steps' : listsAs}
+              />
+            );
           default: {
             const linkRow = parseLinkRow(block.text);
             if (linkRow) {

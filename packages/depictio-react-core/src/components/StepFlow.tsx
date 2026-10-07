@@ -1,14 +1,14 @@
 import React from 'react';
 import { Tooltip } from '@mantine/core';
 
-import { splitStepValue, type Fact } from './blockMarkdown';
+import { splitStepValue, type Step } from './blockMarkdown';
 import Glyph from './Glyph';
 import './stepFlow.css';
 
 /**
- * A numbered list of facts — `1. ![](icon:mdi:dna) **Amplicon** V4–V5` —
- * drawn as the steps of a process: marks joined by a rail, each step's label
- * over its value. A pipeline summary read as a table loses its order, the one
+ * The list of a `::: steps` div — `1. ![](icon:mdi:dna) **Amplicon** V4–V5` —
+ * drawn as the steps of a process: marks joined by a rail (an item's icon, or
+ * its number), each step's label over its value. A pipeline summary read as a table loses its order, the one
  * thing that explains it; read as a flow it says what was done to the data,
  * in the order it was done.
  *
@@ -22,7 +22,7 @@ function linkLabel(link: string): string {
 }
 
 const StepFlow: React.FC<{
-  steps: Fact[];
+  steps: Step[];
   inline: (text: string) => React.ReactNode[];
   /** The marks' colour; the theme's primary when the tile sets none. */
   accentColor?: string | null;
@@ -39,37 +39,39 @@ const StepFlow: React.FC<{
       {steps.map((step, i) => {
         const { text, links } = splitStepValue(step.value);
         return (
-        <li key={i} className="depictio-step">
-          <span className="depictio-step-rail" aria-hidden>
-            <span className="depictio-step-mark">
-              {step.icon ? <Glyph icon={step.icon} color="currentColor" size={18} /> : i + 1}
+          <li key={i} className="depictio-step">
+            <span className="depictio-step-rail" aria-hidden>
+              <span className="depictio-step-mark">
+                {step.icon ? <Glyph icon={step.icon} color="currentColor" size={18} /> : i + 1}
+              </span>
+              <span className="depictio-step-line" />
             </span>
-            <span className="depictio-step-line" />
-          </span>
-          <span className="depictio-step-body">
-            <span className="depictio-step-head">
-              <span className="depictio-step-label">{step.label}</span>
-              {links.length > 0 && (
-                // The parameters and tabs behind a step, as small icons
-                // beside its name: there when looked for, out of the way of
-                // the value, which is what the step says.
-                <span className="depictio-step-links">
-                  {links.map((link, j) => {
-                    const name = linkLabel(link);
-                    return (
-                      <Tooltip key={j} label={name} withArrow openDelay={150}>
-                        <span className="depictio-step-link" aria-label={name}>
-                          {inline(link)}
-                        </span>
-                      </Tooltip>
-                    );
-                  })}
+            <span className="depictio-step-body">
+              {(step.label || links.length > 0) && (
+                <span className="depictio-step-head">
+                  {step.label && <span className="depictio-step-label">{step.label}</span>}
+                  {links.length > 0 && (
+                    // The parameters and tabs behind a step, as small icons
+                    // beside its name: there when looked for, out of the way of
+                    // the value, which is what the step says.
+                    <span className="depictio-step-links">
+                      {links.map((link, j) => {
+                        const name = linkLabel(link);
+                        return (
+                          <Tooltip key={j} label={name} withArrow openDelay={150}>
+                            <span className="depictio-step-link" aria-label={name}>
+                              {inline(link)}
+                            </span>
+                          </Tooltip>
+                        );
+                      })}
+                    </span>
+                  )}
                 </span>
               )}
+              <span className="depictio-step-value">{inline(text)}</span>
             </span>
-            <span className="depictio-step-value">{inline(text)}</span>
-          </span>
-        </li>
+          </li>
         );
       })}
     </ol>

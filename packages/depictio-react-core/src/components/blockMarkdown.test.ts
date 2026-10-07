@@ -6,7 +6,7 @@ import {
   parseFact,
   parseLinkRow,
   parseStatRow,
-  readsAsSteps,
+  parseStep,
   splitStepValue,
 } from './blockMarkdown';
 
@@ -78,6 +78,35 @@ describe('parseBlocks', () => {
 
   it('normalises CRLF line endings', () => {
     expect(parseBlocks('- a\r\n- b')).toEqual([{ type: 'list', ordered: false, items: ['a', 'b'] }]);
+  });
+
+  it('reads a fenced div, by name or by Pandoc class', () => {
+    const steps = { type: 'list', ordered: true, items: ['one', 'two'] };
+    expect(parseBlocks('Intro\n::: steps\n1. one\n2. two\n:::\nafter')).toEqual([
+      { type: 'paragraph', text: 'Intro' },
+      { type: 'div', name: 'steps', blocks: [steps] },
+      { type: 'paragraph', text: 'after' },
+    ]);
+    expect(parseBlocks('::::: {#flow .Steps} :::::\n1. one\n2. two\n:::::')).toEqual([
+      { type: 'div', name: 'steps', blocks: [steps] },
+    ]);
+  });
+
+  it('nests divs, runs an unclosed one to the end and drops a stray fence', () => {
+    expect(parseBlocks('::: outer\n::: steps\n- a\n:::\ntail\n:::')).toEqual([
+      {
+        type: 'div',
+        name: 'outer',
+        blocks: [
+          { type: 'div', name: 'steps', blocks: [{ type: 'list', ordered: false, items: ['a'] }] },
+          { type: 'paragraph', text: 'tail' },
+        ],
+      },
+    ]);
+    expect(parseBlocks('::: steps\n1. typing')).toEqual([
+      { type: 'div', name: 'steps', blocks: [{ type: 'list', ordered: true, items: ['typing'] }] },
+    ]);
+    expect(parseBlocks('text\n:::')).toEqual([{ type: 'paragraph', text: 'text' }]);
   });
 });
 
@@ -186,16 +215,22 @@ describe('splitStepValue', () => {
   });
 });
 
-describe('readsAsSteps', () => {
-  it('needs an icon on every item', () => {
-    expect(
-      readsAsSteps(['![](icon:mdi:dna) **Amplicon** V4–V5', '![](icon:mdi:sigma) **Test** PERMANOVA']),
-    ).toBe(true);
+describe('parseStep', () => {
+  it('reads an icon, a bold label and a value', () => {
+    expect(parseStep('![](icon:mdi:dna) **Amplicon** V4–V5')).toEqual({
+      icon: 'mdi:dna',
+      label: 'Amplicon',
+      value: 'V4–V5',
+    });
   });
 
-  it('leaves a bold-led numbered list a list', () => {
-    expect(readsAsSteps(['**Install** the CLI', '**Run** the pipeline'])).toBe(false);
-    expect(readsAsSteps(['![](icon:mdi:dna) **Amplicon** V4–V5', '**Denoise** DADA2'])).toBe(false);
-    expect(readsAsSteps([])).toBe(false);
+  it('reads any item, the label and the icon being optional', () => {
+    expect(parseStep('**Denoise** DADA2')).toEqual({ icon: null, label: 'Denoise', value: 'DADA2' });
+    expect(parseStep('![](icon:mdi:sigma) Test with PERMANOVA')).toEqual({
+      icon: 'mdi:sigma',
+      label: null,
+      value: 'Test with PERMANOVA',
+    });
+    expect(parseStep('Install the CLI')).toEqual({ icon: null, label: null, value: 'Install the CLI' });
   });
 });

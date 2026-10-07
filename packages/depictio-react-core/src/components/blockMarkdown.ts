@@ -3,7 +3,8 @@
  *
  * `inlineMarkdown.ts` handles what goes inside a line; this splits a body into
  * the blocks a landing page or a methods note needs: paragraphs, `#` headings,
- * bullet and numbered lists, pipe tables and `---` rules. Still no HTML and no
+ * bullet and numbered lists, pipe tables, `---` rules and `:::` fenced divs.
+ * Still no HTML and no
  * dependency: the grammar is the small subset dashboard prose uses, and every
  * block's text is handed back to the inline tokenizer, so links keep their
  * scheme allowlist.
@@ -17,7 +18,10 @@ export type Block =
   | { type: 'paragraph'; text: string }
   | { type: 'list'; ordered: boolean; items: string[] }
   | { type: 'table'; header: string[]; align: ('left' | 'center' | 'right')[]; rows: string[][] }
-  | { type: 'rule' };
+  | { type: 'rule' }
+  /** A fenced div, `::: steps` … `:::`: its name says how what it holds is
+   *  drawn. */
+  | { type: 'div'; name: string; blocks: Block[] };
 
 const HEADING = /^(#{1,3})\s+(.+?)\s*#*\s*$/;
 const BULLET = /^\s*[-*+]\s+(.*)$/;
@@ -25,6 +29,9 @@ const NUMBERED = /^\s*\d+[.)]\s+(.*)$/;
 const RULE = /^\s*(-{3,}|\*{3,}|_{3,})\s*$/;
 const TABLE_ROW = /^\s*\|.*\|\s*$/;
 const TABLE_SEP = /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)*\|?\s*$/;
+// `::: steps`, or Pandoc's `::: {.steps}` as Quarto writes it.
+const DIV_OPEN = /^\s*:{3,}\s*(?:\{[^}]*?\.([A-Za-z][\w-]*)[^}]*\}|([A-Za-z][\w-]*))\s*:*\s*$/;
+const DIV_CLOSE = /^\s*:{3,}\s*$/;
 
 function splitRow(line: string): string[] {
   const inner = line.trim().replace(/^\|/, '').replace(/\|$/, '');
@@ -51,6 +58,30 @@ export function parseBlocks(input: string): Block[] {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     if (!line.trim()) {
+      flush();
+      continue;
+    }
+    const div = DIV_OPEN.exec(line);
+    if (div) {
+      flush();
+      // Up to the fence that closes it, counting the divs opened inside. An
+      // unclosed div runs to the end, so the preview reads while it is typed.
+      const inner: string[] = [];
+      let depth = 1;
+      for (i++; i < lines.length; i++) {
+        if (DIV_OPEN.test(lines[i])) depth++;
+        else if (DIV_CLOSE.test(lines[i]) && --depth === 0) break;
+        inner.push(lines[i]);
+      }
+      blocks.push({
+        type: 'div',
+        name: (div[1] ?? div[2]).toLowerCase(),
+        blocks: parseBlocks(inner.join('\n')),
+      });
+      continue;
+    }
+    if (DIV_CLOSE.test(line)) {
+      // A closing fence with nothing open: dropped rather than shown.
       flush();
       continue;
     }
@@ -134,13 +165,26 @@ export function parseFact(item: string): Fact | null {
   return { icon: m[1] ?? null, label: m[2].trim(), value: m[3].trim() };
 }
 
+/** One step of a `::: steps` list. */
+export interface Step {
+  icon: string | null;
+  label: string | null;
+  value: string;
+}
+
+const LEADING_ICON = /^!\[[^\]\n]*\]\(icon:([a-z0-9-]+:[a-z0-9-]+)\)\s*(.*)$/;
+
 /**
- * Whether a numbered list is drawn as steps: every item a fact with its icon.
- * The icon is what asks for it. `1. **Bold** text` is how a plain numbered
- * list is usually written, and stays one.
+ * Reads a list item inside `::: steps` as a step: an optional icon (the mark
+ * shows the step's number without one), an optional bold label, then what was
+ * done. Every item reads, so the list is drawn as steps however it is written:
+ * the div asked for them.
  */
-export function readsAsSteps(items: string[]): boolean {
-  return items.length > 0 && items.every((item) => Boolean(parseFact(item)?.icon));
+export function parseStep(item: string): Step {
+  const fact = parseFact(item);
+  if (fact) return fact;
+  const m = LEADING_ICON.exec(item.trim());
+  return m ? { icon: m[1], label: null, value: m[2] } : { icon: null, label: null, value: item.trim() };
 }
 
 const LINKS_ONLY = /^(?:\s*\[[^\]\n]+\]\([^)\n]+(?:\([^)\n]*\))?[^)\n]*\)\s*[·|,]?)+\s*$/;
