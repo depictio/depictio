@@ -1484,6 +1484,75 @@ def resolve_template(
     return resolved_config, template_metadata, template_origin, dashboard_paths, variables
 
 
+def template_family(template_id: str) -> str:
+    """A template id without its version: ``nf-core/rnaseq`` for ``nf-core/rnaseq/3.26.0``."""
+    return "/".join(
+        part
+        for part in template_id.split("/")
+        if part and part != "latest" and not _VERSION_DIR_RE.match(part)
+    )
+
+
+def dashboard_source_key(
+    path: Path,
+    template_id: str | None = None,
+    template_dir: Path | None = None,
+    base_dir: Path | None = None,
+) -> str:
+    """The stable origin the server files an imported dashboard under.
+
+    A re-import with overwrite updates the dashboard with the same key, so the
+    key must not change when the dashboard is renamed, and should not change
+    when nothing about where it came from did:
+
+    - a template's own dashboard: ``<template id without version>:<path in the
+      template>``, e.g. ``nf-core/rnaseq:dashboards/base.yaml``. Without the
+      version, moving a project to a newer template refreshes the same dashboards;
+    - another file under ``base_dir`` (the directory of --project-config-path):
+      ``file:<path relative to it>``, e.g. ``file:dashboards/main.yaml``, so two
+      files with the same name in different folders stay apart;
+    - anything else: ``file:<file name>``.
+    """
+    resolved = path.resolve()
+    if template_id and template_dir is not None:
+        root = template_dir.resolve()
+        if resolved.is_relative_to(root):
+            return f"{template_family(template_id)}:{resolved.relative_to(root).as_posix()}"
+    if base_dir is not None:
+        root = base_dir.resolve()
+        if resolved.is_relative_to(root):
+            return f"file:{resolved.relative_to(root).as_posix()}"
+    return f"file:{resolved.name}"
+
+
+def _rename_main_dashboard(documents: list[Any], dashboard_name: str) -> None:
+    """Title the first main dashboard ``dashboard_name`` and keep its tabs attached.
+
+    A main dashboard is a multi-tab file's ``main_dashboard``, or a single-dashboard
+    file that is not a child tab. A child-tab file names its parent by title
+    (``parent_dashboard_tag``), so the files that named the old title follow the
+    rename; they keep their own titles.
+    """
+    old_title = None
+    for doc in documents:
+        if not isinstance(doc, dict):
+            continue
+        if isinstance(doc.get("main_dashboard"), dict):
+            main = doc["main_dashboard"]
+        elif doc.get("parent_dashboard_tag") or doc.get("is_main_tab") is False:
+            continue
+        else:
+            main = doc
+        old_title = main.get("title")
+        main["title"] = dashboard_name
+        break
+    if old_title is None:
+        return
+    for doc in documents:
+        if isinstance(doc, dict) and doc.get("parent_dashboard_tag") == old_title:
+            doc["parent_dashboard_tag"] = dashboard_name
+
+
 def import_dashboards_from_template(
     dashboard_paths: list[Path],
     api_url: str,
@@ -1492,6 +1561,8 @@ def import_dashboards_from_template(
     overwrite: bool = True,
     variables: dict[str, str] | None = None,
     dashboard_name: str | None = None,
+    template_id: str | None = None,
+    base_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
     """Import dashboard YAML files from a template into the server.
 
@@ -1504,11 +1575,16 @@ def import_dashboards_from_template(
         headers: Auth headers (from ``generate_api_headers``).
         project_id: Project ObjectId string. When provided, overrides
             ``project_tag`` inside the YAML.
-        overwrite: If True, update existing dashboards with the same title.
+        overwrite: If True, update the dashboards imported from the same files
+            before (matched by ``dashboard_source_key``, else by title).
         variables: Template variables to substitute in dashboard YAML
             (e.g., ``{GROUP_COL}`` placeholders).
         dashboard_name: When provided, overrides the main dashboard's title
-            (child tabs keep their own titles).
+            (child tabs keep their own titles and stay attached to it).
+        template_id: The resolved template's id, for the source keys of the
+            template's own dashboards.
+        base_dir: Directory of the --project-config-path file, for the source
+            keys of the dashboards under it.
 
     Returns:
         List of result dicts, one per dashboard file.  Each contains
@@ -1517,26 +1593,45 @@ def import_dashboards_from_template(
     results: list[dict[str, Any]] = []
     url = f"{api_url}/depictio/api/v1/dashboards/import/yaml"
 
+    template_dir = None
+    if template_id:
+        try:
+            template_dir = locate_template(template_id).parent
+        except FileNotFoundError:
+            logger.debug(f"Template {template_id} not found: dashboards keyed by file name")
+
+    # Read every file first: --dashboard-name has to know which file holds the
+    # main dashboard before it can re-point the child-tab files that name it.
+    edited = bool(variables or dashboard_name)
+    loaded: list[tuple[str, Any] | Exception] = []
     for path in dashboard_paths:
+        try:
+            text = path.read_text(encoding="utf-8")
+            parsed = yaml.safe_load(text) if edited else None
+            if variables:
+                parsed = substitute_template_variables(parsed, variables)
+            loaded.append((text, parsed))
+        except Exception as exc:
+            loaded.append(exc)
+    if dashboard_name:
+        _rename_main_dashboard(
+            [item[1] for item in loaded if isinstance(item, tuple)], dashboard_name
+        )
+
+    for path, item in zip(dashboard_paths, loaded, strict=True):
         entry: dict[str, Any] = {"path": str(path), "success": False}
         try:
-            yaml_content = path.read_text(encoding="utf-8")
+            if isinstance(item, Exception):
+                raise item
+            text, parsed = item
+            # Substituted and/or renamed: send the edited document, else the file as is.
+            yaml_content = (
+                yaml.dump(parsed, default_flow_style=False, allow_unicode=True) if edited else text
+            )
 
-            # Substitute template variables and/or override the dashboard title.
-            if variables or dashboard_name:
-                parsed = yaml.safe_load(yaml_content)
-                if variables:
-                    parsed = substitute_template_variables(parsed, variables)
-                if dashboard_name and isinstance(parsed, dict):
-                    # Override only the main dashboard's title; child-tab files
-                    # (which carry their own top-level `title`) keep theirs.
-                    if isinstance(parsed.get("main_dashboard"), dict):
-                        parsed["main_dashboard"]["title"] = dashboard_name
-                    elif "title" in parsed:
-                        parsed["title"] = dashboard_name
-                yaml_content = yaml.dump(parsed, default_flow_style=False, allow_unicode=True)
-
-            params: dict[str, str | bool] = {}
+            params: dict[str, str | bool] = {
+                "source_key": dashboard_source_key(path, template_id, template_dir, base_dir)
+            }
             if project_id:
                 params["project_id"] = project_id
             if overwrite:
@@ -1567,11 +1662,12 @@ def import_dashboards_from_template(
                 except Exception:
                     pass
                 entry["error"] = f"HTTP {response.status_code}: {detail}"
-                logger.error(f"Dashboard import failed for {path.name}: {entry['error']}")
+                # Debug, not error: the caller prints this as its ✗ line.
+                logger.debug(f"Dashboard import failed for {path.name}: {entry['error']}")
 
         except Exception as exc:
             entry["error"] = str(exc)
-            logger.error(f"Dashboard import failed for {path.name}: {exc}")
+            logger.debug(f"Dashboard import failed for {path.name}: {exc}")
 
         results.append(entry)
 

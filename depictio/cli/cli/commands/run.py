@@ -640,10 +640,10 @@ def register_run_command(app: typer.Typer):
             str | None,
             typer.Option(
                 "--dashboard-name",
-                help="Custom title for the template's main dashboard "
-                "(defaults to the title defined in the dashboard YAML). Child tabs keep their titles. "
-                "Dashboards are matched by title, so a refresh with a different name adds a "
-                "new dashboard instead of updating the existing one.",
+                help="Custom title for the main dashboard (defaults to the title defined in "
+                "the dashboard YAML). Child tabs keep their titles and stay attached to it. "
+                "A refresh finds the dashboards by the file they came from, so it renames "
+                "the existing dashboard rather than adding a second one.",
             ),
         ] = None,
         var: Annotated[
@@ -737,7 +737,8 @@ def register_run_command(app: typer.Typer):
             False,
             "--update-config",
             help="Refresh the project in place: its configuration, its tables (every run "
-            "rescanned) and its dashboards (matched by title). Runs added with --attach-run "
+            "rescanned) and its dashboards (each found by the file it came from, even "
+            "after a rename). Runs added with --attach-run "
             "are kept. A project not on the server yet is created. Same as --overwrite",
         ),
         # Scan options
@@ -1762,6 +1763,12 @@ def register_run_command(app: typer.Typer):
                         overwrite=overwrite,
                         variables=template_variables,
                         dashboard_name=dashboard_name,
+                        # What each dashboard's source key is built from, so a
+                        # refresh finds the dashboards this ingest made last time.
+                        template_id=(
+                            template_metadata.template_id if template_metadata is not None else None
+                        ),
+                        base_dir=Path(project_config_path).parent if project_config_path else None,
                     )
 
                     imported, failed = [], []
