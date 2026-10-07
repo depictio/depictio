@@ -1287,7 +1287,7 @@ class SankeyConfig(_BaseVizConfig):
     # Display defaults — editable from the Settings popover.
     sort_mode: Literal["alphabetical", "total_flow", "input"] = Field(default="total_flow")
     color_mode: Literal["source", "target", "step"] = Field(default="source")
-    link_opacity: float = Field(default=0.5, ge=0.05, le=1.0)
+    link_opacity: float = Field(default=0.4, ge=0.05, le=1.0)
     min_link_value: float = Field(
         default=0.0,
         ge=0.0,
