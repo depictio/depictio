@@ -140,6 +140,13 @@ Known limits:
 - **MultiQC**: one tab, every plot present.
 - **Other data**: only when asked for.
 
+Composed from nf-core megatest results: taxprofiler's Taxonomy & diversity tab
+(sections per tool, the one Samples filter for every tab), and funcscan's Other
+data tab (files the catalog does not know, one collection per shape):
+
+| ![taxprofiler, Taxonomy & diversity](../../docs/images/v1.4/compose/taxonomy_tab.png) | ![funcscan, Other data](../../docs/images/v1.4/compose/other_data_tab.png) |
+|---|---|
+
 The deterministic layout of #1028 (`ai_endpoints/dashboard_layout.py`: 8-column grid,
 full card rows, figures in pairs) moves out of `ai_endpoints` so the CLI can use
 it, and learns tabs.
