@@ -8,6 +8,9 @@
  *   `[label](https://…)`  -> link
  *   `[label](tab:Name)`   -> link to the sibling tab called Name (see tabLinks.ts)
  *   `![](icon:mdi:dna)`   -> an Iconify icon, inline (image syntax, icon scheme)
+ *   `![Athens](color:#1a4f8f)` -> a dot of that colour: the legend key of a
+ *                            category named beside it (`color:teal` takes a
+ *                            palette name too; the alt text labels it)
  *
  * We deliberately do NOT pull in react-markdown / remark / rehype — the body
  * is a single paragraph, and a regex pass is ~40 lines vs ~30 KB of deps.
@@ -23,7 +26,8 @@ export type InlineToken =
   | { type: 'italic'; value: string }
   | { type: 'code'; value: string }
   | { type: 'link'; value: string; href: string; external: boolean }
-  | { type: 'icon'; name: string };
+  | { type: 'icon'; name: string }
+  | { type: 'swatch'; color: string; label: string };
 
 // The href half is a scheme allowlist, not a catch-all: dashboard bodies are
 // authored content, and a permissive matcher would accept `javascript:`. Only
@@ -38,9 +42,14 @@ const LINK_HREF = String.raw`(?:https?:\/\/[^)\s]+|\/[^)\s]*|${TAB_TARGET}|${PAR
 // An Iconify id: `prefix:name`, lower-case letters, digits and dashes only.
 const ICON_NAME = String.raw`[a-z0-9-]+:[a-z0-9-]+`;
 const ICON = new RegExp(String.raw`^!\[[^\]\n]*\]\(icon:(${ICON_NAME})\)$`);
+// A swatch's colour: a hex literal or a palette name (`teal`, `teal.6`). Not
+// any CSS: the value lands in a style, and a closed grammar keeps it a colour.
+const SWATCH_COLOR = String.raw`(?:#[0-9a-fA-F]{3,8}|[a-z]+(?:\.[0-9])?)`;
+const SWATCH = new RegExp(String.raw`^!\[([^\]\n]*)\]\(color:(${SWATCH_COLOR})\)$`);
 const PATTERN = new RegExp(
   [
     String.raw`!\[[^\]\n]*\]\(icon:${ICON_NAME}\)`, // ![](icon:mdi:dna)
+    String.raw`!\[[^\]\n]*\]\(color:${SWATCH_COLOR}\)`, // ![Athens](color:#1a4f8f)
     '`[^`\\n]+`', // `code`
     '\\*\\*[^*\\n]+\\*\\*', // **bold**
     '\\*[^*\\n]+\\*', // *italic*
@@ -74,6 +83,11 @@ export const parseInlineMarkdown = (input: string): InlineToken[] => {
     const icon = part.startsWith('![') ? ICON.exec(part) : null;
     if (icon) {
       tokens.push({ type: 'icon', name: icon[1] });
+      continue;
+    }
+    const swatch = part.startsWith('![') ? SWATCH.exec(part) : null;
+    if (swatch) {
+      tokens.push({ type: 'swatch', color: swatch[2], label: swatch[1].trim() });
       continue;
     }
     const link = part.startsWith('[') ? LINK_PARTS.exec(part) : null;

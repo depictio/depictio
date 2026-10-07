@@ -49,7 +49,10 @@ import {
  * its share, coloured by `color_col` like the full tree's tips, and, when an
  * abundance table is bound, a strip of dots giving the same share within each
  * value of `abundance_split_col` (a site). The strip's dots keep the row's
- * colour: colour says which lineage, size says how much, on every dot.
+ * colour (colour says which lineage, size says how much) unless the split
+ * column has a palette in `category_palettes`: then each column wears its
+ * site's colour, the colour that site has on every other tile, and the
+ * lineage's colour stays on its branch, its own dot and its name.
  *
  * Filters reach it the way they reach the full tree: the tip metadata is
  * fetched with the dashboard's filters and the tree is pruned to the tips that
@@ -343,6 +346,11 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
   const colourFor = (g: RankGroup): string =>
     tint(colorCol && g.colourValue ? colourScale.get(g.colourValue) : palette[0]);
 
+  // A palette for the split column (the cities, say) colours its columns.
+  const splitPalette = splitCol ? (config.category_palettes || {})[splitCol] || null : null;
+  const splitColour = (s: string, rowColour: string): string =>
+    splitPalette?.[s] ? tint(splitPalette[s]) : rowColour;
+
   const splitValues = useMemo<string[]>(() => {
     if (!summary || !sizedByReads || !abundance || !abundance.split) return [];
     return sortCategoryValues([...(splitUniverse ?? []), ...abundance.splitValues]);
@@ -567,7 +575,7 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
                       cx={cx}
                       cy={y}
                       r={Math.min(radius(v), L.cellW / 2 - 3)}
-                      fill={colour}
+                      fill={splitColour(s, colour)}
                     />
                   ) : (
                     <text
@@ -591,10 +599,23 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
 
     const headers = splitValues.map((s, k) => {
       const cx = L.stripX0 + (k + 0.5) * L.cellW;
+      const label = headerWidth(s) <= L.cellW - 4 ? s : s.slice(0, 3);
+      // The column's key: a dot of its colour before the name, where it fits.
+      const key = splitPalette?.[s] && headerWidth(label) + 12 <= L.cellW - 4;
+      const textX = key ? cx + 5 : cx;
       return (
+        <g key={s}>
+        {key ? (
+          <circle
+            cx={textX - headerWidth(label) / 2 - 7}
+            cy={L.headerH - 10.5}
+            r={3.5}
+            fill={splitColour(s, neutralEdge)}
+            opacity={splitInView.has(s) ? 1 : 0.4}
+          />
+        ) : null}
         <text
-          key={s}
-          x={cx}
+          x={textX}
           y={L.headerH - 7}
           textAnchor="middle"
           fontSize={10.5}
@@ -604,8 +625,9 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
           <title>{s}</title>
           {/* A name that does not fit is cut to three letters, an abbreviation
               rather than an ellipsis; the full name is in the tooltip. */}
-          {headerWidth(s) <= L.cellW - 4 ? s : s.slice(0, 3)}
+          {label}
         </text>
+        </g>
       );
     });
 

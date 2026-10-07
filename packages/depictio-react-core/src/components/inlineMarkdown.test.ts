@@ -120,4 +120,19 @@ describe('run parameter links', () => {
   it('keeps a params: link with anything but a plain search as text', () => {
     expect(parseInlineMarkdown('[x](params:a b)').some((t) => t.type === 'link')).toBe(false);
   });
+
+  it('draws a colour swatch, labelled by its alt text', () => {
+    expect(parseInlineMarkdown('![Athens](color:#1a4f8f) Athens · ![](color:teal.6) sea')).toEqual([
+      { type: 'swatch', color: '#1a4f8f', label: 'Athens' },
+      { type: 'text', value: ' Athens · ' },
+      { type: 'swatch', color: 'teal.6', label: '' },
+      { type: 'text', value: ' sea' },
+    ]);
+  });
+
+  it('leaves a swatch whose colour is not a hex or a palette name as text', () => {
+    expect(parseInlineMarkdown('![](color:red;x:1)')).toEqual([
+      { type: 'text', value: '![](color:red;x:1)' },
+    ]);
+  });
 });

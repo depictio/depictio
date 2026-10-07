@@ -52,6 +52,29 @@ const renderInlineMarkdown = (
             style={{ display: 'inline-block', verticalAlign: '-0.15em' }}
           />
         );
+      case 'swatch':
+        // A legend key, not decoration: it carries a category's colour into
+        // prose, so the name beside it stays in ink and the dot does the
+        // matching (text in a series colour fails contrast on half of them).
+        return (
+          <span
+            key={idx}
+            role={token.label ? 'img' : undefined}
+            aria-label={token.label || undefined}
+            aria-hidden={token.label ? undefined : true}
+            style={{
+              display: 'inline-block',
+              width: '0.6em',
+              height: '0.6em',
+              borderRadius: '50%',
+              background: /^[a-z]+\.[0-9]$/.test(token.color)
+                ? `var(--mantine-color-${token.color.replace('.', '-')})`
+                : glyphColorVar(token.color),
+              marginRight: '0.3em',
+              verticalAlign: '0.02em',
+            }}
+          />
+        );
       case 'code':
         return (
           <code
