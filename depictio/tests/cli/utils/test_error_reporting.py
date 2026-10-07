@@ -135,6 +135,81 @@ def test_a_project_the_server_refuses_is_one_x_line_with_its_reason(capsys, cli_
     assert err == ""
 
 
+_PROJECT_WITH_AN_ENV_VALUE = """\
+name: demo
+project_type: basic
+workflows:
+  - name: wf
+    engine:
+      name: python
+    data_location:
+      structure: flat
+      locations:
+        - ${DEPICTIO_TEST_SECRET}/runs
+    data_collections:
+      - data_collection_tag: table
+        config:
+          type: Table
+          metatype: Metadata
+          scan:
+            mode: single
+            scan_parameters:
+              filename: ${DEPICTIO_TEST_SECRET}/runs/table.csv
+          dc_specific_properties:
+            format: CSV
+"""
+
+
+@pytest.mark.parametrize("on_server", [False, True], ids=["first-ingest", "refresh"])
+def test_verbose_validation_and_sync_log_no_substituted_value(
+    capsys, cli_config, tmp_path, monkeypatch, on_server
+):
+    # `depictio -v` logs at INFO, and its output ends up in CI and Nextflow logs.
+    monkeypatch.setenv("DEPICTIO_TEST_SECRET", "secret-value-in-config")
+    project = tmp_path / "project.yaml"
+    project.write_text(_PROJECT_WITH_AN_ENV_VALUE)
+    login, load = _logged_in(cli_config)
+    not_found = httpx.Response(404, json={"detail": "not found"})
+    with (
+        login,
+        load,
+        patch.object(config_utils, "api_get_project_from_name", return_value=not_found),
+    ):
+        _, validation = config_utils.validate_project_config_and_check_S3_storage(
+            CLI_config_path="cli.yaml", project_config_path=str(project)
+        )
+    payload = validation["config"].model_dump(mode="json")
+    remote = httpx.Response(200, json=payload) if on_server else not_found
+
+    verbose = _cli(capsys, verbose=True)
+    with (
+        login,
+        load,
+        patch.object(config_utils, "api_get_project_from_name", return_value=remote),
+        patch("depictio.cli.cli.utils.api_calls.api_get_project_from_name", return_value=remote),
+        patch(
+            "depictio.cli.cli.utils.api_calls.api_create_project",
+            return_value=httpx.Response(200, json={"success": True}),
+        ),
+        patch(
+            "depictio.cli.cli.utils.api_calls.api_update_project",
+            return_value=httpx.Response(200, json={"success": True}),
+        ),
+    ):
+        _, validation = config_utils.validate_project_config_and_check_S3_storage(
+            CLI_config_path="cli.yaml", project_config_path=str(project)
+        )
+        api_sync_project_config_to_server(
+            CLI_config=cli_config,
+            ProjectConfig=validation["config"].model_dump(mode="json"),
+            update=on_server,
+        )
+
+    out, err = verbose.readouterr()
+    assert "secret-value-in-config" not in out + err
+    assert "Pipeline configuration validated: demo" in out + err
+
+
 class TestMultiQCLogging:
     """MultiQC's own lines only at -v, and no second copy of the CLI's records."""
 

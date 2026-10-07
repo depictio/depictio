@@ -260,7 +260,7 @@ def api_sync_project_config_to_server(
     rich_print_checked_statement("Syncing pipeline configuration to server...", "info")
 
     # Check if the project exists on the server
-    logger.info(f"Project configuration: {ProjectConfig}")
+    logger.debug(f"Project configuration: {ProjectConfig}")
     project_config = ProjectConfig
 
     # First try to find project by ID (for updates to existing projects with new names)
@@ -285,11 +285,9 @@ def api_sync_project_config_to_server(
             f"Checked project by name '{ProjectConfig['name']}': status {response.status_code}"
         )
 
-    logger.info(f"Project configuration: {project_config}")
-
     if response.status_code == 200:
         rich_print_checked_statement("Project configuration found on server", "info")
-        logger.info(f"Project configuration found on server: {response.json()}")
+        logger.debug(f"Project configuration found on server: {response.json()}")
 
         # Already on the server and no update requested: hand the decision back.
         if not update:
