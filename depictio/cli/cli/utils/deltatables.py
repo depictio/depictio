@@ -67,7 +67,7 @@ def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> list[File]:
     response = api_get_files_by_dc_id(dc_id, CLI_config)
     if response.status_code != 200:
         error_msg = f"Error fetching files for Data Collection {dc_id}: {response.text}"
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
 
     files_data = response.json()
@@ -90,7 +90,7 @@ def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> list[File]:
             logger.warning(f"Skipping stale file record (path does not exist): {loc}")
     if not valid_files_data:
         error_msg = f"No valid files found for Data Collection {dc_id} (all file paths are stale)."
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
     files_data = valid_files_data
 
@@ -132,7 +132,7 @@ def convert_to_file_objects(files_data: list) -> list:
         files = [File.from_mongo(file_dict) for file_dict in files_data]
     except Exception as e:
         error_msg = f"Error converting file dictionaries to File objects: {str(e)}"
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
     return files
 
@@ -186,7 +186,7 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
             lf = df.lazy()
         else:
             error_msg = f"Unsupported file format: {file_format}"
-            logger.error(error_msg)
+            logger.debug(error_msg)
             raise ValueError(error_msg)
 
         # Optionally, add a column from file_info if available (e.g., run_id)
@@ -196,7 +196,7 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
 
     except Exception as e:
         error_msg = f"Error scanning file {file_path}: {e}"
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
 
 
@@ -218,7 +218,7 @@ def read_files_lazy(files: list, file_format: str, polars_kwargs: dict) -> list:
         lazy_frames.append(lf)
     if not lazy_frames:
         error_msg = "No LazyFrames were generated from the files."
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
     return lazy_frames
 
@@ -304,7 +304,7 @@ def aggregate_lazy_dataframes(lazy_frames: list) -> pl.DataFrame:
 
     except Exception as e:
         error_msg = f"Error collecting concatenated LazyFrame: {e}"
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
 
 
@@ -812,7 +812,7 @@ def client_aggregate_data(
     logger.debug(f"API upsert response status: {api_upsert_result.status_code}")
     if api_upsert_result.status_code != 200:
         error_msg = f"Error upserting Delta table metadata: {api_upsert_result.text}"
-        logger.error(error_msg)
+        logger.debug(error_msg)
         return {"result": "error", "message": error_msg}
     result = api_upsert_result.json()
 

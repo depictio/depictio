@@ -825,8 +825,8 @@ def scan_files_for_data_collection(
         error_msg = (
             f"Data collection {data_collection_id} not found in workflow {workflow.workflow_tag}."
         )
-        logger.error(error_msg)
-        rich_print_checked_statement(error_msg, "error")
+        # Raised to the scan step, whose ✗ line prints it.
+        logger.debug(error_msg)
         raise ValueError(error_msg)
 
     # Only handle single file mode here

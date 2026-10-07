@@ -2,6 +2,7 @@ from typing import Annotated
 
 import httpx
 import typer
+from rich.markup import escape
 
 from depictio.cli.cli.utils.api_calls import api_login
 from depictio.cli.cli.utils.common import load_depictio_config, report_unreachable
@@ -146,7 +147,8 @@ def create(
                 rich_print_json("Backup details:", backup_details)
             else:
                 rich_print_checked_statement(
-                    f"Backup failed: {backup_result.get('message', 'Unknown error')}", "error"
+                    f"Backup failed: {escape(str(backup_result.get('message', 'Unknown error')))}",
+                    "error",
                 )
                 raise typer.Exit(1)
 
@@ -189,7 +191,9 @@ def list(
                 rich_print_checked_statement("No backup files found", "info")
         else:
             rich_print_checked_statement(
-                f"Failed to list backups: {list_result.get('message', 'Unknown error')}", "error"
+                "Failed to list backups: "
+                f"{escape(str(list_result.get('message', 'Unknown error')))}",
+                "error",
             )
             raise typer.Exit(1)
 
@@ -258,7 +262,9 @@ def validate(
                 raise typer.Exit(1)
         else:
             rich_print_checked_statement(
-                f"Validation failed: {validation_result.get('message', 'Unknown error')}", "error"
+                "Validation failed: "
+                f"{escape(str(validation_result.get('message', 'Unknown error')))}",
+                "error",
             )
             raise typer.Exit(1)
 
@@ -472,7 +478,8 @@ def restore(
                 raise typer.Exit(1)
         else:
             rich_print_checked_statement(
-                f"Restore failed: {restore_result.get('message', 'Unknown error')}", "error"
+                f"Restore failed: {escape(str(restore_result.get('message', 'Unknown error')))}",
+                "error",
             )
             errors = restore_result.get("errors", [])
             if errors:

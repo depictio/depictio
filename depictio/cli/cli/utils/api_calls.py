@@ -6,6 +6,7 @@ from urllib.parse import quote
 import httpx
 import typer
 from pydantic import validate_call
+from rich.markup import escape
 
 from depictio.cli.cli.utils.common import (
     generate_api_headers,
@@ -72,18 +73,19 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
                 "email": response_data.get("email"),
             }
         else:
-            logger.error(
+            logger.debug(
                 f"Depictio CLI configuration was not validated by the server: {response.text}"
             )
             rich_print_checked_statement(
-                f"Depictio CLI configuration was not validated by the server: {response.text}",
+                "Depictio CLI configuration was not validated by the server: "
+                f"{escape(response.text)}",
                 "error",
             )
             return {"success": False}
     else:
-        logger.error(f"Depictio CLI configuration is invalid: {response.text}")
+        logger.debug(f"Depictio CLI configuration is invalid: {response.text}")
         rich_print_checked_statement(
-            f"Depictio CLI configuration is invalid: {response.text}", "error"
+            f"Depictio CLI configuration is invalid: {escape(response.text)}", "error"
         )
         return {"success": False}
 
@@ -289,8 +291,10 @@ def api_sync_project_config_to_server(
         response = api_update_project(project_config, CLI_config)
         succeeded, detail = _project_write_outcome(response)
         if not succeeded:
-            rich_print_checked_statement(f"Failed to update project on server: {detail}", "error")
-            logger.error(f"Failed to update project on server: {detail}")
+            logger.debug(f"Failed to update project on server: {detail}")
+            rich_print_checked_statement(
+                f"Failed to update project on server: {escape(str(detail))}", "error"
+            )
             raise typer.Exit(code=1)
         rich_print_checked_statement("Project updated on server", "success")
         logger.info("Project updated on server")
@@ -305,8 +309,10 @@ def api_sync_project_config_to_server(
         response = api_create_project(project_config, CLI_config)
         succeeded, detail = _project_write_outcome(response)
         if not succeeded:
-            logger.error(f"Failed to create project on server: {detail}")
-            rich_print_checked_statement(f"Failed to create project on server: {detail}", "error")
+            logger.debug(f"Failed to create project on server: {detail}")
+            rich_print_checked_statement(
+                f"Failed to create project on server: {escape(str(detail))}", "error"
+            )
             raise typer.Exit(code=1)
         logger.info("Project created on server")
         rich_print_checked_statement("Project created on server", "success")
@@ -314,7 +320,8 @@ def api_sync_project_config_to_server(
 
     else:
         rich_print_checked_statement(
-            f"Could not look up project on server (HTTP {response.status_code}): {response.text}",
+            f"Could not look up project on server (HTTP {response.status_code}): "
+            f"{escape(response.text)}",
             "error",
         )
         raise typer.Exit(code=1)
@@ -442,7 +449,7 @@ def api_upsert_runs_batch(
 
 def api_monitoring_ingestion_start(
     CLI_config: CLIConfig,
-    command: str = "run",
+    command: str = "ingest",
     project_id: str | None = None,
     project_name: str | None = None,
     cli_version: str | None = None,
@@ -622,12 +629,13 @@ def api_upsert_deltatable(
             timeout=300.0,  # 5 minutes timeout for large deltatable processing
         )
         return response
-    except httpx.TimeoutException:
-        logger.error(
-            f"Deltatable upsert timed out after 300 seconds for data collection {data_collection_id}"
-        )
-        # Re-raise the exception to be handled by the caller
-        raise
+    except httpx.TimeoutException as exc:
+        # The caller reports the exception: said here what timed out, which httpx's own
+        # "timed out" does not.
+        raise httpx.TimeoutException(
+            f"Deltatable upsert timed out after 300 seconds for data collection "
+            f"{data_collection_id}"
+        ) from exc
 
 
 @validate_call
@@ -735,19 +743,19 @@ def api_create_backup(
         if response.status_code == 200:
             return response.json()
         else:
-            logger.error(f"Backup creation failed: {response.text}")
+            logger.debug(f"Backup creation failed: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",
             }
     except httpx.TimeoutException:
-        logger.error("Backup creation timed out")
+        logger.debug("Backup creation timed out")
         return {
             "success": False,
             "message": "Request timed out. The backup operation may still be running on the server.",
         }
     except Exception as e:
-        logger.error(f"Backup creation failed: {e}")
+        logger.debug(f"Backup creation failed: {e}")
         return {
             "success": False,
             "message": f"Request failed: {str(e)}",
@@ -779,7 +787,7 @@ def api_list_backups(CLI_config: CLIConfig) -> dict:
         if response.status_code == 200:
             return response.json()
         else:
-            logger.error(f"Failed to list backups: {response.text}")
+            logger.debug(f"Failed to list backups: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",
@@ -820,7 +828,7 @@ def api_validate_backup(CLI_config: CLIConfig, backup_id: str) -> dict:
         if response.status_code == 200:
             return response.json()
         else:
-            logger.error(f"Backup validation failed: {response.text}")
+            logger.debug(f"Backup validation failed: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",
@@ -882,7 +890,7 @@ def api_restore_backup(
             logger.debug(f"Restore result: {result}")
             return result
         else:
-            logger.error(
+            logger.debug(
                 f"Backup restore failed: status={response.status_code}, response={response.text}"
             )
             return {
@@ -1044,11 +1052,11 @@ def api_create_multiqc_report(multiqc_report: dict, CLI_config: "CLIConfig"):
         )
         logger.debug(f"HTTP response received: {response.status_code}")
         return response
-    except httpx.TimeoutException:
-        logger.error("API request timed out after 30 seconds")
-        raise
+    except httpx.TimeoutException as exc:
+        # The caller reports the exception: said here how long it waited.
+        raise httpx.TimeoutException("the API did not answer within 30 seconds") from exc
     except httpx.RequestError as e:
-        logger.error(f"HTTP request failed: {e}")
+        logger.debug(f"HTTP request failed: {e}")
         raise
 
 
@@ -1087,11 +1095,11 @@ def api_update_multiqc_report(report_id: str, multiqc_report: dict, CLI_config: 
         )
         logger.debug(f"HTTP response received: {response.status_code}")
         return response
-    except httpx.TimeoutException:
-        logger.error("API request timed out after 30 seconds")
-        raise
+    except httpx.TimeoutException as exc:
+        # The caller reports the exception: said here how long it waited.
+        raise httpx.TimeoutException("the API did not answer within 30 seconds") from exc
     except httpx.RequestError as e:
-        logger.error(f"HTTP request failed: {e}")
+        logger.debug(f"HTTP request failed: {e}")
         raise
 
 
@@ -1112,7 +1120,7 @@ def _post_migrate_endpoint(
         if response.status_code == 200:
             return response.json()
         else:
-            logger.error(f"{operation} failed: {response.text}")
+            logger.debug(f"{operation} failed: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",
@@ -1149,7 +1157,7 @@ def api_export_project(
             timeout=600.0,
         )
         if response.status_code != 200:
-            logger.error(f"Export failed: {response.text}")
+            logger.debug(f"Export failed: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",

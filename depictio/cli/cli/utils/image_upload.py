@@ -179,7 +179,10 @@ def upload_images(
             logger.debug(f"Uploaded: {rel_path} → s3://{bucket}/{s3_key}")
             return "replaced" if exists else "uploaded"
         except Exception as e:
-            logger.error(f"Failed to upload {rel_path}: {e}")
+            # The count of failures names none of them: each is said here.
+            rich_print_checked_statement(
+                f"Failed to upload {escape(rel_path)}: {escape(str(e))}", "error"
+            )
             return "error"
 
     counts = {"uploaded": 0, "replaced": 0, "skipped": 0, "error": 0}

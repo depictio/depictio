@@ -127,22 +127,14 @@ def _require_bundle() -> None:
         raise typer.Exit(code=1)
 
 
-@contextlib.contextmanager
-def _quiet_multiqc() -> Iterator[None]:
-    """MultiQC's warnings off while the outputs build, unless -v asked for logs: its
-    fixtures log one per colour it cannot convert, some 200 for the gallery."""
+def _quiet_multiqc() -> contextlib.AbstractContextManager[None]:
+    """MultiQC's warnings off too while the outputs build, unless -v asked for logs:
+    its fixtures log one per colour it cannot convert, some 200 for the gallery."""
     import logging
 
-    from depictio.cli.cli_logging import logger as cli_logger
+    from depictio.cli.cli_logging import multiqc_logging
 
-    multiqc_logger = logging.getLogger("multiqc")
-    level = multiqc_logger.level
-    if not cli_logger.isEnabledFor(logging.INFO):
-        multiqc_logger.setLevel(logging.ERROR)
-    try:
-        yield
-    finally:
-        multiqc_logger.setLevel(level)
+    return multiqc_logging(quiet_level=logging.ERROR)
 
 
 def _emit_html(html: str, out_path: Path, message: str, no_open: bool) -> None:

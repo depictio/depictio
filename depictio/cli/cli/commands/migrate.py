@@ -24,6 +24,7 @@ from typing import Annotated
 
 import httpx
 import typer
+from rich.markup import escape
 
 from depictio.cli.cli.utils.api_calls import api_export_project, api_import_project, api_login
 from depictio.cli.cli.utils.common import (
@@ -195,7 +196,7 @@ def migrate(
 
     if "success" in bundle and not bundle["success"]:
         rich_print_checked_statement(
-            f"Export failed: {bundle.get('message', 'unknown error')}", "error"
+            f"Export failed: {escape(str(bundle.get('message', 'unknown error')))}", "error"
         )
         raise typer.Exit(1)
 
@@ -253,7 +254,7 @@ def migrate(
 
     if not import_result.get("success"):
         rich_print_checked_statement(
-            f"Import failed: {import_result.get('message', 'unknown error')}", "error"
+            f"Import failed: {escape(str(import_result.get('message', 'unknown error')))}", "error"
         )
         raise typer.Exit(1)
 

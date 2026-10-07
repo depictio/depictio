@@ -176,7 +176,7 @@ def process_project_data_collections(
                     f"{escape(str(e))}",
                     "error",
                 )
-                logger.error(f"Detailed error for {dc.data_collection_tag}: {e}", exc_info=True)
+                logger.debug(f"Detailed error for {dc.data_collection_tag}: {e}", exc_info=True)
                 failed_tags.append(dc.data_collection_tag)
 
         rich_print_checked_statement(
@@ -305,7 +305,11 @@ def process_single_data_collection(
             }
 
     except Exception as e:
-        logger.error(f"Error processing data collection {data_collection.data_collection_tag}: {e}")
+        # Reported by the caller, which prints the message.
+        logger.debug(
+            f"Error processing data collection {data_collection.data_collection_tag}: {e}",
+            exc_info=True,
+        )
         return {
             "success": False,
             "message": str(e),
