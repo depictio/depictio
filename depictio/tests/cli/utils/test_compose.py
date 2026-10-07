@@ -296,7 +296,9 @@ def test_include_unknown_adds_an_other_data_tab(run_with_unknown, tmp_path):
     project, dashboard = _load(result)
     tab = next(t for t in dashboard["tabs"] if t["title"] == "Other data")
     kinds = sorted(c["component_type"] for c in tab["components"])
-    assert kinds == ["card", "card", "figure", "interactive", "table"]
+    assert kinds == ["card", "card", "card", "figure", "interactive", "table"]
+    layouts = [c["secondary_layout"] for c in tab["components"] if c["component_type"] == "card"]
+    assert layouts == ["box_plot", "histogram", "donut"]  # each card its own summary
     # A section per tool directory, the file's kind on its tiles, not its path.
     assert [s["name"] for s in tab["grid_sections"]] == ["Stats"]
     assert tab["grid_sections"][0]["description"] == "1 file, in stats/"
@@ -678,7 +680,9 @@ def test_a_cards_icon_comes_from_its_columns_words():
     assert icon_for("GC content (%)") == "mdi:dna"
     assert icon_for("percent_duplicates") == "mdi:percent"
     assert icon_for("shannon_entropy") == "mdi:chart-bell-curve"
-    assert icon_for("taxonomy_id") == "mdi:bacteria-outline"
+    assert icon_for("taxonomy_id") == "mdi:bacteria"
+    assert icon_for("sample_id") == "mdi:flask"
+    assert icon_for("x7", "median", layout="box_plot") == "mdi:chart-box-outline"
     assert icon_for("readsMapped") == "mdi:counter"
     assert icon_for("kappa", "nunique") == "mdi:shape-outline"
 
@@ -720,25 +724,54 @@ def test_sections_take_the_tabs_colour_then_others_tables_stay_gray():
 
 
 def test_a_composed_dashboard_is_styled(run_with_unknown, tmp_path):
-    from depictio.cli.cli.utils.compose_style import hex6
+    """After the reference dashboards: a card's colour says what it measures, no
+    section shows one twice, and the samples are teal with a flask everywhere."""
+    from depictio.cli.cli.utils.compose_style import SAMPLE_COLOR
 
     result = compose_template(run_with_unknown, out_dir=tmp_path / "out", include=["stats/*.tsv"])
     assert isinstance(result, ComposedTemplate)
     _, dashboard = _load(result)
     main = dashboard["main_dashboard"]
     cards = [c for c in main["components"] if c["component_type"] == "card"]
-    assert cards[0]["title"] == "Samples" and cards[0]["icon_name"] == "mdi:test-tube"
-    assert all(c.get("icon_name") and c.get("icon_color", "").startswith("#") for c in cards)
+    assert cards[0]["title"] == "Samples" and cards[0]["icon_name"] == "mdi:flask"
+    assert cards[0]["icon_color"] == SAMPLE_COLOR
+    for document in (main, *dashboard["tabs"]):
+        by_section: dict[str, list[str]] = {}
+        for card in (c for c in document["components"] if c["component_type"] == "card"):
+            assert card["icon_name"] and card["icon_color"].startswith("#")
+            by_section.setdefault(card["section"], []).append(card["icon_color"])
+        for section, colors in by_section.items():
+            assert len(colors) == len(set(colors)), (document["title"], section, colors)
     tab = next(t for t in dashboard["tabs"] if t["title"] == "Other data")
-    section = tab["grid_sections"][0]
-    for card in (c for c in tab["components"] if c["component_type"] == "card"):
-        assert card["icon_color"] == hex6(section["color"])
-        assert (
-            card["aggregations"] == ["median", "min", "max"] and card["secondary_layout"] == "grid"
-        )
     table = next(c for c in tab["components"] if c["component_type"] == "table")
     assert "depictio_run_id" not in table["columns"] and "reads" in table["columns"]
     (sample_filter,) = [c for c in main["components"] if c["component_type"] == "interactive"]
-    assert sample_filter["icon_name"] == "mdi:test-tube" and sample_filter[
-        "custom_color"
-    ].startswith("#")
+    assert (
+        sample_filter["icon_name"] == "mdi:flask" and sample_filter["custom_color"] == SAMPLE_COLOR
+    )
+    # Sections take an icon from what they hold, not one icon for all.
+    icons = {s["icon"] for t in dashboard["tabs"] for s in t.get("grid_sections", [])}
+    assert len(icons) > 2
+
+
+def test_titles_quiet_shouted_column_names_but_keep_acronyms():
+    from depictio.cli.cli.utils.compose import card_title, pretty
+
+    assert pretty("COVERAGE_MAP") == "Coverage map"
+    assert pretty("STRAND") == "Strand"
+    assert pretty("GC") == "GC" and pretty("adjusted_ani") == "Adjusted ani"
+    assert pretty("GC_CONTENT") == "GC content" and pretty("%IDENTITY") == "%identity"
+    assert card_title("LR", "average") == "Mean LR"
+
+
+def test_a_section_shows_one_row_of_cards_the_samples_once():
+    from depictio.cli.cli.utils.compose import _glance_row
+
+    def cards(group: str, n: int) -> list[dict]:
+        samples = {"component_type": "card", "column_name": "sample", "secondary_layout": "top_n"}
+        rest = [{"component_type": "card", "column_name": f"{group}{i}"} for i in range(n)]
+        return [samples, *rest, {"component_type": "table"}]
+
+    row = _glance_row([cards("a", 3), cards("b", 3)])
+    assert len(row) == 4
+    assert [c["column_name"] for c in row] == ["sample", "b0", "a0", "b1"]

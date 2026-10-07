@@ -274,7 +274,17 @@ def slug(text: str, length: int = 48) -> str:
 
 
 def pretty(column: str) -> str:
+    """``mean_read_length`` → "Mean read length"; ``COVERAGE_MAP`` → "Coverage map".
+
+    A name shouted in capitals is set in lower case, but for its two-letter
+    words (``GC_CONTENT`` → "GC content"); a lone acronym (``GC``, ``ANI``,
+    ``TPM``) keeps its capitals, and so does one inside a mixed-case name.
+    """
     words = column.replace("_", " ").replace(".", " ").split()
+    shouted = column.isupper() and not (len(words) == 1 and len(words[0]) <= 4)
+    words = [
+        w.lower() if (shouted and len(w) > 2) or (w.isupper() and len(w) > 4) else w for w in words
+    ]
     text = " ".join(words)
     return text[:1].upper() + text[1:] if text else column
 
@@ -852,6 +862,7 @@ MAX_SCANNED = 2000
 MAX_WILDCARD_VALUES = 500
 MAX_GROUP_READ = 20
 MAX_GROUP_FILTERS = 2
+MAX_TOOL_CARDS = 8
 MAX_GROUP_FILTER_VALUES = 12
 
 
@@ -1729,6 +1740,77 @@ def _collection_tiles(
     return tiles
 
 
+# How a group's numeric columns are shown, in turn, so a row of cards reads
+# like the reference dashboards': each card the summary its shape calls for.
+_NUMERIC_LAYOUTS = (
+    ("median", "box_plot", "{} (distribution)"),
+    ("median", "histogram", "{} (histogram)"),
+    ("median", "grid", "{} (quartiles)"),
+)
+
+
+def _glance_cards(
+    proposal: dict[str, Any], samples: set[str] | frozenset[str] = frozenset()
+) -> list[dict[str, str]]:
+    """At most four cards for a group, none like its neighbour.
+
+    The samples it covers (when its paths name them), its numeric columns as a
+    box plot, a histogram and quartiles in turn, and a few-valued category as
+    a donut. A column named after a sample (a matrix's) is a value per sample,
+    not a measure: it gets no card.
+    """
+    group: FileGroup = proposal["_group"]
+    numeric = [c for c in proposal["_numeric"] if c not in samples]
+    cards: list[dict[str, str]] = []
+    if group.wildcard == "sample" and "sample" in proposal["_types"]:
+        cards.append(
+            {"column": "sample", "aggregation": "nunique", "layout": "top_n", "title": "Samples"}
+        )
+    category = next((c for c in proposal["_filters"] if c != "file"), None)
+    room = 4 - len(cards) - (1 if category else 0)
+    for i, column in enumerate(numeric[:room]):
+        aggregation, layout, title = _NUMERIC_LAYOUTS[i % len(_NUMERIC_LAYOUTS)]
+        cards.append(
+            {
+                "column": column,
+                "aggregation": aggregation,
+                "layout": layout,
+                "title": title.format(pretty(column)),
+            }
+        )
+    if category:
+        cards.append(
+            {
+                "column": category,
+                "aggregation": "nunique",
+                "layout": "donut",
+                "title": pretty(category),
+            }
+        )
+    return cards
+
+
+def _glance_row(per_group: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    """One row of cards for a section: four at most, the samples once, then a
+    card from each group in turn, so no group fills the row alone."""
+    queues = [[c for c in tiles if c["component_type"] == "card"] for tiles in per_group]
+    row: list[dict[str, Any]] = []
+    seen_samples = False
+    while len(row) < 4 and any(queues):
+        for queue in queues:
+            while queue:
+                card = queue.pop(0)
+                if card.get("column_name") == "sample" and card.get("secondary_layout") == "top_n":
+                    if seen_samples:
+                        continue
+                    seen_samples = True
+                row.append(card)
+                break
+            if len(row) == 4:
+                break
+    return row
+
+
 def _unknown_tiles(
     collection: Collection,
     proposal: dict[str, Any],
@@ -1737,6 +1819,7 @@ def _unknown_tiles(
     models: dict[str, Any],
     skipped: list[Skipped],
     shared: bool = False,
+    samples: set[str] | frozenset[str] = frozenset(),
 ) -> list[dict[str, Any]]:
     """A group's tiles, in its tool's section, titled by what the group holds.
 
@@ -1754,20 +1837,27 @@ def _unknown_tiles(
     }
     types = proposal["_types"]
     built: list[dict[str, Any]] = []
-    for column in proposal["_numeric"]:
+    for spec in _glance_cards(proposal, samples):
+        column, aggregation, layout = spec["column"], spec["aggregation"], spec["layout"]
+        extra: dict[str, Any] = {}
+        if layout == "box_plot":
+            extra["aggregations"] = ["box_plot_stats"]
+        elif layout == "grid":
+            extra["aggregations"] = ["min", "q1", "q3", "max"]
+        elif layout in ("top_n", "donut"):
+            extra |= {"breakdown_col": column, "top_n_count": 3}
         built.append(
             _component(
                 tagger,
                 f"{collection.tag}-card",
                 "card",
                 **base,
-                title=tell + card_title(column, "average"),
+                title=tell + spec["title"],
                 column_name=column,
-                aggregation="average",
+                aggregation=aggregation,
                 column_type=column_type(types[column]),
-                # The mean, and under it the median and range in one card.
-                aggregations=["median", "min", "max"],
-                secondary_layout="grid",
+                secondary_layout=layout,
+                **extra,
             )
         )
     for column in proposal["_filters"]:
@@ -1783,8 +1873,16 @@ def _unknown_tiles(
                 column_type=column_type(types[column]),
             )
         )
-    if proposal["_figure"]:
-        kw = proposal["_figure"]["dict_kwargs"]
+    figure = proposal["_figure"]
+    # Numbered columns, or one sample against another (a matrix's), plot
+    # nothing anyone asked about.
+    if figure and (
+        proposal.get("_headerless")
+        or {figure["dict_kwargs"]["x"], figure["dict_kwargs"]["y"]} & set(samples)
+    ):
+        figure = None
+    if figure:
+        kw = figure["dict_kwargs"]
         built.append(
             _component(
                 tagger,
@@ -1793,7 +1891,7 @@ def _unknown_tiles(
                 **base,
                 title=tell
                 + f"{_short(pretty(kw['y']))} against {_lower_first(_short(pretty(kw['x'])))}",
-                **proposal["_figure"],
+                **figure,
             )
         )
     # The file's own columns, the sample first: not ingestion's bookkeeping.
@@ -2302,17 +2400,37 @@ def write_template(
     tabs: list[dict[str, Any]] = []
     headline: list[tuple[int, Tile]] = []
 
-    def home_sections(stage: str) -> tuple[list[dict], list[dict], list[dict]]:
-        """Components, grid sections and filter sections of a stage's placed groups."""
+    sample_names = set(hub.samples) if hub is not None else set()
+
+    def home_sections(
+        stage: str, recognised: Iterable[str] = ()
+    ) -> tuple[list[dict], list[dict], list[dict]]:
+        """Components, grid sections and filter sections of a stage's placed groups.
+
+        A section shows one row of cards at most, like the reference
+        dashboards' "at a glance" rows; a tool whose recognised outputs
+        already have cards (``recognised``) gets none from its other files.
+        """
         components: list[dict[str, Any]] = []
         sections: list[dict[str, Any]] = []
         filter_sections: list[dict[str, Any]] = []
         for name, members in placed.get(stage, {}).items():
-            built: list[dict[str, Any]] = []
-            for proposal, collection in members:
-                built += _unknown_tiles(
-                    collection, proposal, workflow, tagger, models, skipped, shared=len(members) > 1
+            per_group = [
+                _unknown_tiles(
+                    collection,
+                    proposal,
+                    workflow,
+                    tagger,
+                    models,
+                    skipped,
+                    shared=len(members) > 1,
+                    samples=sample_names,
                 )
+                for proposal, collection in members
+            ]
+            cards = [] if name in set(recognised) else _glance_row(per_group)
+            built = [c for tiles in per_group for c in tiles if c["component_type"] != "card"]
+            built = cards + built
             if not built:
                 continue
             components += built
@@ -2329,6 +2447,7 @@ def write_template(
         tables: list[dict[str, Any]] = []
         filters: list[dict[str, Any]] = []
         filter_section = f"{STAGE_LABELS[stage]} filters"
+        cards_by_section: dict[str, list[str]] = {}
         tools: list[str] = []
         described: dict[str, list[str]] = {}
         for collection in members:
@@ -2350,6 +2469,14 @@ def write_template(
                         continue  # the dashboard's own Samples filter covers it
                     component["section"] = filter_section
                     filters.append(component)
+                elif component["component_type"] == "card":
+                    # Two rows of cards per tool at most, none said twice (a
+                    # tool's outputs often count the same samples).
+                    shown_cards = cards_by_section.setdefault(component["section"], [])
+                    if component["title"] in shown_cards or len(shown_cards) >= MAX_TOOL_CARDS:
+                        continue
+                    shown_cards.append(component["title"])
+                    components.append(component)
                 else:
                     components.append(component)
                 if tile.headline:
@@ -2365,7 +2492,7 @@ def write_template(
             for tool in tools
             if tool in shown
         ]
-        extra, extra_sections, extra_filters = home_sections(stage)
+        extra, extra_sections, extra_filters = home_sections(stage, recognised=tools)
         named = {section["name"] for section in sections}
         sections += [section for section in extra_sections if section["name"] not in named]
         tools += [section["name"] for section in extra_sections if section["name"] not in tools]
@@ -2417,8 +2544,6 @@ def write_template(
     # Overview.
     headline.sort(key=lambda rt: rt[0])
     key_metrics: list[dict[str, Any]] = []
-    # Each key metric keeps the colour of the stage (and tab) it comes from.
-    card_colors: dict[str, str] = {}
     if hub is not None:
         samples_card = _component(
             tagger,
@@ -2434,8 +2559,7 @@ def write_template(
         )
         if _validate(samples_card, models) is None:
             key_metrics.append(samples_card)
-            card_colors[samples_card["tag"]] = "blue"
-    for rank, tile in headline[: 8 - len(key_metrics)]:
+    for _, tile in headline[: 8 - len(key_metrics)]:
         copy = dict(tile.component)
         tag = tagger(f"overview-{copy['tag']}")
         title = copy["title"]
@@ -2447,8 +2571,6 @@ def write_template(
             "title": f"{tile.output_label}: {title[:1].lower()}{title[1:]}",
         }
         key_metrics.append(copy)
-        if rank < len(STAGE_ORDER):
-            card_colors[tag] = STAGE_STYLE[STAGE_ORDER[rank]][1]
     general: list[dict[str, Any]] = []
     for collection in multiqc:
         if collection.general_stats:
@@ -2529,9 +2651,16 @@ def write_template(
             }
         ]
 
-    style_document(main, main["tab_icon_color"], card_colors)
+    style_document(
+        main,
+        main["tab_icon_color"],
+        keep_icons=("About this run", "Key metrics", "General statistics"),
+    )
     for tab in tabs:
-        style_document(tab, tab.get("tab_icon_color") or "gray")
+        # A MultiQC tab's sections are stages: they keep the stages' icons.
+        multiqc_only = all(c["component_type"] == "multiqc" for c in tab["components"])
+        keep = [s["name"] for s in tab.get("grid_sections", [])] if multiqc_only else []
+        style_document(tab, tab.get("tab_icon_color") or "gray", keep_icons=keep)
     # The Overview's per-sample tables are as tall as their samples, no taller.
     heights: dict[str, int] = {}
     for component in general:
