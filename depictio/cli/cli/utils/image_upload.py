@@ -14,6 +14,8 @@ import re
 from collections.abc import Iterable
 from pathlib import Path
 
+from rich.markup import escape
+
 from depictio.cli.cli.utils.rich_utils import console, rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 
@@ -71,14 +73,33 @@ def get_content_type(path: Path) -> str:
 
 def parse_s3_folder(uri: str) -> tuple[str, str]:
     """``s3://bucket/some/folder`` as ``("bucket", "some/folder/")``, the prefix
-    empty for the bucket root. Raises ValueError for anything but an s3:// path."""
+    empty for the bucket root and without empty segments ('a//b' is 'a/b').
+    Raises ValueError for anything but an s3:// path."""
     if not uri.startswith("s3://"):
         raise ValueError(f"S3 path must start with 's3://' (e.g., s3://bucket/path/): {uri}")
     bucket, _, path = uri[5:].partition("/")
     if not bucket:
         raise ValueError(f"S3 path names no bucket: {uri}")
-    path = path.strip("/")
+    path = "/".join(segment for segment in path.split("/") if segment)
     return bucket, f"{path}/" if path else ""
+
+
+def image_key(s3_base_folder: str, relative_path: str) -> str:
+    """The S3 key of an image path relative to ``s3_base_folder``: where the upload
+    puts a local image, and where the dashboard reads an ``image_column`` value.
+
+    Mirrors ``buildImageUrl`` in the viewer's ImageRenderer: the path goes under the
+    folder, less its leading slashes and a leading copy of the folder's last
+    segment, so 'images/a.png' under 's3://b/images/' is 'images/a.png', not
+    'images/images/a.png'. At the bucket root that segment is the bucket's name, as
+    in the viewer. The folder's slashes are normalised by ``parse_s3_folder``.
+    """
+    bucket, prefix = parse_s3_folder(s3_base_folder)
+    last = prefix.rstrip("/").rsplit("/", 1)[-1] if prefix else bucket
+    rel = relative_path.lstrip("/")
+    if rel.startswith(f"{last}/"):
+        rel = rel[len(last) + 1 :]
+    return f"{prefix}{rel}"
 
 
 def s3_client(CLI_config):
@@ -124,11 +145,12 @@ def upload_images(
     concurrency: int = 8,
     label: str,
 ) -> dict[str, int]:
-    """Upload ``images`` to ``prefix``, keeping their paths relative to ``source_root``.
+    """Upload ``images`` under ``prefix``, each at the ``image_key`` of its path
+    relative to ``source_root``.
 
-    Keys already in storage are skipped unless ``overwrite``. ``label`` names the
-    upload in the DEPICTIO_INGEST_TIMINGS marker. Returns how many images were
-    uploaded, skipped and failed.
+    Keys already in storage are skipped, or with ``overwrite`` uploaded again.
+    ``label`` names the upload in the DEPICTIO_INGEST_TIMINGS marker. Returns how
+    many images were uploaded new, replaced an older copy, were skipped and failed.
     """
     # Uploads are independent and network-bound, so they run in parallel; boto3
     # low-level clients are thread-safe, so one client is shared.
@@ -138,28 +160,29 @@ def upload_images(
 
     from depictio.cli.cli.utils.ingest_timing import ingest_run, record, timed
 
-    existing_keys: set[str] = set()
-    if not overwrite:
-        with timed("list_existing"):
-            existing_keys = list_existing_keys(s3_client, bucket, prefix)
-        logger.debug(f"Found {len(existing_keys)} existing object(s) under {prefix}")
+    folder = f"s3://{bucket}/{prefix}"
+    # Listed with overwrite too, to tell a replaced image from a new one.
+    with timed("list_existing"):
+        existing_keys = list_existing_keys(s3_client, bucket, prefix)
+    logger.debug(f"Found {len(existing_keys)} existing object(s) under {prefix}")
 
     def _upload_one(img: Path) -> str:
-        rel_path = img.relative_to(source_root)
-        s3_key = f"{prefix}{rel_path}".replace("\\", "/")
+        rel_path = img.relative_to(source_root).as_posix()
+        s3_key = image_key(folder, rel_path)
+        exists = s3_key in existing_keys
+        if exists and not overwrite:
+            return "skipped"
         try:
-            if not overwrite and s3_key in existing_keys:
-                return "skipped"
             s3_client.upload_file(
                 str(img), bucket, s3_key, ExtraArgs={"ContentType": get_content_type(img)}
             )
             logger.debug(f"Uploaded: {rel_path} → s3://{bucket}/{s3_key}")
-            return "uploaded"
+            return "replaced" if exists else "uploaded"
         except Exception as e:
             logger.error(f"Failed to upload {rel_path}: {e}")
             return "error"
 
-    counts = {"uploaded": 0, "skipped": 0, "error": 0}
+    counts = {"uploaded": 0, "replaced": 0, "skipped": 0, "error": 0}
     with (
         ingest_run(label, "image"),
         Progress(
@@ -180,21 +203,6 @@ def upload_images(
                 counts[future.result()] += 1
                 progress.update(task, advance=1)
     return counts
-
-
-def image_key(s3_base_folder: str, relative_path: str) -> str:
-    """The key the dashboard reads for an ``image_column`` value.
-
-    Mirrors the viewer's image component: the path goes under ``s3_base_folder``,
-    less a leading copy of the folder's last segment, so 'images/a.png' under
-    's3://b/images/' is 'images/a.png', not 'images/images/a.png'.
-    """
-    base = s3_base_folder.rstrip("/")
-    last = base.rsplit("/", 1)[-1]
-    rel = relative_path.lstrip("/")
-    if last and rel.startswith(f"{last}/"):
-        rel = rel[len(last) + 1 :]
-    return f"{base}/{rel}"[5:].partition("/")[2]
 
 
 def verify_s3_images(
@@ -244,13 +252,21 @@ def resolve_local_images_path(value: str) -> Path:
     return Path(value).expanduser().resolve()
 
 
-def image_collections_to_upload(project_config) -> list:
-    """The project's image data collections that name a ``local_images_path``."""
+def image_collections_to_upload(
+    project_config,
+    workflow_name: str | None = None,
+    data_collection_tag: str | None = None,
+) -> list:
+    """The project's image data collections that name a ``local_images_path``,
+    narrowed like the scan: to the workflow whose tag is ``workflow_name`` and the
+    data collection tagged ``data_collection_tag``, when given."""
     return [
         dc
         for workflow in project_config.workflows
+        if not workflow_name or workflow.workflow_tag == workflow_name
         for dc in workflow.data_collections
-        if dc.config.type == "image"
+        if (not data_collection_tag or dc.data_collection_tag == data_collection_tag)
+        and dc.config.type == "image"
         and getattr(dc.config.dc_specific_properties, "local_images_path", None)
     ]
 
@@ -273,38 +289,56 @@ def _referenced_images(data_collection, CLI_config) -> list[str] | None:
     return [str(v) for v in df[column].drop_nulls().unique().to_list() if str(v).strip()]
 
 
-def upload_collection_images(data_collection, CLI_config) -> dict:
+def upload_collection_images(data_collection, CLI_config, overwrite: bool = False) -> dict:
     """Upload an image data collection's ``local_images_path`` to its
     ``s3_base_folder``, then check every image its table references is there.
 
+    Images already in storage are skipped, or with ``overwrite`` uploaded again.
     Raises ImageUploadError, with a message for the user, when that fails.
     """
     tag = data_collection.data_collection_tag
     props = data_collection.config.dc_specific_properties
     s3_base_folder = props.s3_base_folder
+    bucket, prefix = parse_s3_folder(s3_base_folder)
+    served = CLI_config.s3_storage.bucket
+    # Both checked before uploading: the dashboard could show none of the images.
+    if bucket != served:
+        # The server's image route refuses any other bucket.
+        raise ImageUploadError(
+            f"'{tag}': s3_base_folder {s3_base_folder} is in bucket '{bucket}', but the "
+            f"server serves images from its bucket '{served}' only. Set s3_base_folder "
+            f"to a folder in it, e.g. s3://{served}/{prefix}"
+        )
+    if f"s3://{bucket}/{prefix}".rstrip("/") != s3_base_folder.rstrip("/"):
+        # The viewer keeps the empty segment in the key, which the server refuses.
+        raise ImageUploadError(
+            f"'{tag}': s3_base_folder {s3_base_folder} has an empty segment ('//'), and "
+            f"the dashboard cannot read images from it. Write it as s3://{bucket}/{prefix}"
+        )
     source = resolve_local_images_path(props.local_images_path)
     if not source.is_dir():
         raise ImageUploadError(
             f"'{tag}': local_images_path is not a directory: {source} "
             f"(from '{props.local_images_path}'; a relative path is read from {Path.cwd()})"
         )
-    bucket, prefix = parse_s3_folder(s3_base_folder)
-    if bucket != CLI_config.s3_storage.bucket:
-        # The server only serves images from its own bucket.
-        rich_print_checked_statement(
-            f"'{tag}': s3_base_folder is in bucket '{bucket}', but the server serves "
-            f"images from '{CLI_config.s3_storage.bucket}' only",
-            "warning",
-        )
 
     images = scan_directory_for_images(source, extensions=set(props.supported_formats))
+    replacing = ", replacing those already in storage" if overwrite else ""
     rich_print_checked_statement(
-        f"'{tag}': uploading {len(images)} image(s) from {source} to {s3_base_folder}", "info"
+        f"'{escape(tag)}': uploading {len(images)} image(s) from {escape(str(source))} "
+        f"to {escape(s3_base_folder)}{replacing}",
+        "info",
     )
-    counts = {"uploaded": 0, "skipped": 0, "error": 0}
+    counts = {"uploaded": 0, "replaced": 0, "skipped": 0, "error": 0}
     if images:
         counts = upload_images(
-            images, source, s3_client(CLI_config), bucket, prefix, label=s3_base_folder
+            images,
+            source,
+            s3_client(CLI_config),
+            bucket,
+            prefix,
+            overwrite=overwrite,
+            label=s3_base_folder,
         )
     if counts["error"]:
         raise ImageUploadError(
@@ -326,16 +360,21 @@ def upload_collection_images(data_collection, CLI_config) -> dict:
             f"keeping the paths the column gives"
         )
 
-    stored = f"{counts['uploaded']} uploaded, {counts['skipped']} already in storage"
+    # With overwrite nothing is skipped, without it nothing is replaced.
+    kept = (
+        f"{counts['replaced']} replaced" if overwrite else f"{counts['skipped']} already in storage"
+    )
+    stored = f"'{escape(tag)}': {counts['uploaded']} uploaded, {kept}"
+    folder = escape(s3_base_folder)
     if referenced is None:
         rich_print_checked_statement(
-            f"'{tag}': {stored}; {verified['count']} image(s) in {s3_base_folder}. "
+            f"{stored}; {verified['count']} image(s) in {folder}. "
             f"Its table could not be read, so the paths it references were not checked",
             "warning",
         )
     else:
         rich_print_checked_statement(
-            f"'{tag}': {stored}; {verified['count']} image(s) in {s3_base_folder}, "
+            f"{stored}; {verified['count']} image(s) in {folder}, "
             f"including all {len(referenced)} the table references",
             "success",
         )

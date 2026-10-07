@@ -271,6 +271,16 @@ class TestPushImages:
         assert [p.name for p in push.params] == [p.name for p in push_images.params]
         assert {"server", "CLI_config_path"} <= {p.name for p in push_images.params}
 
+    def test_the_former_name_says_what_it_is_now(self, data_app):
+        from typer.main import get_command
+
+        push_images = get_command(data_app).commands["push-images"]
+        push = get_command(app).commands["push"]
+
+        assert "former name of `depictio data push-images`" in push.help
+        assert "Formerly `images push`" not in push.help
+        assert "Formerly `images push`" in push_images.help
+
     def test_a_dry_run_lists_the_keys(self, runner, data_app, img_dir):
         result = runner.invoke(
             data_app, ["push-images", str(img_dir), "s3://bucket/imgs", "--dry-run"]

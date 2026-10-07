@@ -27,7 +27,16 @@ from depictio.cli.cli.utils.server_target import (
 
 app = typer.Typer()
 
-app.command("push")(push_images)
+# Its own help, not push_images's docstring: that is data push-images's help, which
+# says "Formerly `images push`".
+app.command(
+    "push",
+    help=(
+        "The former name of `depictio data push-images`, kept for compatibility: it "
+        "takes the same arguments and options and does the same. "
+        "See `depictio data push-images --help`."
+    ),
+)(push_images)
 
 
 @app.command()

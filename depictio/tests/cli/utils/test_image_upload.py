@@ -6,11 +6,13 @@ storage and read back what was uploaded.
 
 from __future__ import annotations
 
+import io
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import polars as pl
 import pytest
+from rich.console import Console
 
 from depictio.cli.cli.utils import image_upload
 from depictio.cli.cli.utils.image_upload import (
@@ -64,9 +66,9 @@ def images_dir(tmp_path):
     return folder
 
 
-def _collection(local_images_path, s3_base_folder=FOLDER, **props):
+def _collection(local_images_path, s3_base_folder=FOLDER, tag="sample_images", **props):
     return SimpleNamespace(
-        data_collection_tag="sample_images",
+        data_collection_tag=tag,
         id="650a1b2c3d4e5f6a7b8c9d10",
         config=SimpleNamespace(
             type="image",
@@ -127,6 +129,18 @@ class TestKeys:
         assert image_key(FOLDER, "image_demo/sample_001.png") == "image_demo/sample_001.png"
         assert image_key(FOLDER, "/sub/a.png") == "image_demo/sub/a.png"
 
+    def test_only_one_leading_copy_is_dropped(self):
+        assert image_key(FOLDER, "image_demo/image_demo/a.png") == "image_demo/image_demo/a.png"
+
+    def test_at_the_bucket_root_the_bucket_name_is_dropped_as_the_viewer_does(self):
+        assert image_key(f"s3://{BUCKET}/", f"{BUCKET}/a.png") == "a.png"
+        assert image_key(f"s3://{BUCKET}/", "sub/a.png") == "sub/a.png"
+
+    def test_empty_segments_in_the_folder_are_dropped(self):
+        assert parse_s3_folder("s3://bucket//a//b/") == ("bucket", "a/b/")
+        assert image_key(f"s3://{BUCKET}//image_demo/", "a.png") == "image_demo/a.png"
+        assert image_key("s3://b/x//images/", "images/a.png") == "x/images/a.png"
+
 
 class TestUpload:
     def test_existing_keys_are_skipped(self, images_dir):
@@ -135,14 +149,14 @@ class TestUpload:
 
         counts = upload_images(images, images_dir, s3, BUCKET, "image_demo/", label=FOLDER)
 
-        assert counts == {"uploaded": 2, "skipped": 1, "error": 0}
+        assert counts == {"uploaded": 2, "replaced": 0, "skipped": 1, "error": 0}
         assert sorted(key for _, key, _ in s3.uploads) == [
             "image_demo/sample_002.png",
             "image_demo/sub/sample_003.png",
         ]
         assert all(extra == {"ContentType": "image/png"} for _, _, extra in s3.uploads)
 
-    def test_overwrite_uploads_every_image(self, images_dir):
+    def test_overwrite_uploads_every_image_and_counts_the_replaced_ones(self, images_dir):
         s3 = FakeS3(keys={"image_demo/sample_001.png"})
         images = sorted(images_dir.rglob("*.png"))
 
@@ -150,7 +164,8 @@ class TestUpload:
             images, images_dir, s3, BUCKET, "image_demo/", overwrite=True, label=FOLDER
         )
 
-        assert counts["uploaded"] == 3
+        assert counts == {"uploaded": 2, "replaced": 1, "skipped": 0, "error": 0}
+        assert len(s3.uploads) == 3
 
     def test_a_failed_upload_is_counted(self, images_dir):
         s3 = FakeS3()
@@ -160,7 +175,40 @@ class TestUpload:
             [images_dir / "sample_001.png"], images_dir, s3, BUCKET, "x/", label="x"
         )
 
-        assert counts == {"uploaded": 0, "skipped": 0, "error": 1}
+        assert counts == {"uploaded": 0, "replaced": 0, "skipped": 0, "error": 1}
+
+
+class TestUploadAndVerifyAgree:
+    """The upload puts each image where the check, and the dashboard, look for it."""
+
+    def _round_trip(self, source, folder, referenced, cli_config):
+        s3 = FakeS3()
+        bucket, prefix = parse_s3_folder(folder)
+        upload_images(sorted(source.rglob("*.png")), source, s3, bucket, prefix, label=folder)
+        with patch.object(image_upload, "s3_client", return_value=s3):
+            return s3, verify_s3_images(folder, cli_config, referenced)
+
+    def test_paths_that_start_with_the_folder_name(self, images_dir, cli_config):
+        # local_images_path holds images/, and the column says images/...: the folder
+        # ends in images/ too, so neither side doubles it.
+        s3, result = self._round_trip(
+            images_dir.parent,
+            f"s3://{BUCKET}/proj/images/",
+            ["images/sample_001.png", "images/sub/sample_003.png", "sample_002.png"],
+            cli_config,
+        )
+
+        assert "proj/images/sample_001.png" in s3.keys
+        assert not any("images/images" in key for key in s3.keys)
+        assert result["missing"] == []
+
+    def test_a_folder_with_double_slashes(self, images_dir, cli_config):
+        s3, result = self._round_trip(
+            images_dir, f"s3://{BUCKET}//image_demo//", ["sample_001.png"], cli_config
+        )
+
+        assert "image_demo/sample_001.png" in s3.keys
+        assert result["missing"] == []
 
 
 class TestVerify:
@@ -187,12 +235,21 @@ class TestVerify:
 
 
 class TestCollectionUpload:
-    def _upload(self, dc, cli_config, s3, referenced):
+    def _upload(self, dc, cli_config, s3, referenced, **kwargs):
         with (
             patch.object(image_upload, "s3_client", return_value=s3),
             patch.object(image_upload, "_referenced_images", return_value=referenced),
         ):
-            return upload_collection_images(dc, cli_config)
+            return upload_collection_images(dc, cli_config, **kwargs)
+
+    @pytest.fixture
+    def printed(self, monkeypatch):
+        """What the status lines print, through a real console: markup is rendered."""
+        from depictio.cli.cli.utils import rich_utils
+
+        out = Console(file=io.StringIO(), width=500, color_system=None)
+        monkeypatch.setattr(rich_utils, "console", out)
+        return lambda: " ".join(out.file.getvalue().split())
 
     def test_the_local_images_land_in_the_folder_and_are_verified(self, images_dir, cli_config):
         s3 = FakeS3(keys={"image_demo/sample_001.png"})
@@ -224,18 +281,55 @@ class TestCollectionUpload:
         with pytest.raises(ImageUploadError, match="not a directory"):
             self._upload(_collection(tmp_path / "nowhere"), cli_config, FakeS3(), [])
 
-    def test_a_folder_in_another_bucket_is_warned_about(self, images_dir, cli_config, monkeypatch):
-        printed: list[tuple[str, str]] = []
-        monkeypatch.setattr(
-            image_upload, "rich_print_checked_statement", lambda m, mode: printed.append((m, mode))
-        )
-        s3 = MagicMock()
-        s3.get_paginator.side_effect = RuntimeError("stop here")
+    def test_a_folder_in_another_bucket_fails_before_any_upload(self, images_dir, cli_config):
+        s3 = FakeS3()
 
-        with pytest.raises(ImageUploadError):
+        with pytest.raises(ImageUploadError, match=f"serves images from its bucket '{BUCKET}'"):
             self._upload(_collection(images_dir, "s3://elsewhere/imgs/"), cli_config, s3, [])
 
-        assert any(mode == "warning" and "elsewhere" in m for m, mode in printed)
+        assert s3.uploads == []
+
+    def test_a_folder_with_an_empty_segment_fails_before_any_upload(self, images_dir, cli_config):
+        # The viewer would ask the server for '/image_demo/...', which it refuses.
+        s3 = FakeS3()
+
+        with pytest.raises(ImageUploadError, match=f"Write it as s3://{BUCKET}/image_demo/"):
+            self._upload(_collection(images_dir, f"s3://{BUCKET}//image_demo/"), cli_config, s3, [])
+
+        assert s3.uploads == []
+
+    def test_a_changed_image_is_replaced_with_overwrite(self, images_dir, cli_config, printed):
+        s3 = FakeS3(keys={"image_demo/sample_001.png", "image_demo/sample_002.png"})
+
+        result = self._upload(
+            _collection(images_dir), cli_config, s3, ["sample_001.png"], overwrite=True
+        )
+
+        assert (result["uploaded"], result["replaced"], result["skipped"]) == (1, 2, 0)
+        assert "image_demo/sample_001.png" in [key for _, key, _ in s3.uploads]
+        assert "'sample_images': 1 uploaded, 2 replaced;" in printed()
+
+    def test_without_overwrite_the_summary_counts_what_was_already_there(
+        self, images_dir, cli_config, printed
+    ):
+        s3 = FakeS3(keys={"image_demo/sample_001.png"})
+
+        self._upload(_collection(images_dir), cli_config, s3, ["sample_001.png"])
+
+        assert "'sample_images': 2 uploaded, 1 already in storage;" in printed()
+
+    def test_brackets_in_paths_and_tags_are_printed_as_they_are(
+        self, tmp_path, cli_config, printed
+    ):
+        source = tmp_path / "[/run]" / "[x]"
+        source.mkdir(parents=True)
+        (source / "a.png").write_bytes(b"x")
+        dc = _collection(source, tag="[b]imgs")
+
+        self._upload(dc, cli_config, FakeS3(), ["a.png"])
+
+        assert f"'[b]imgs': uploading 1 image(s) from {source}" in printed()
+        assert "'[b]imgs': 1 uploaded, 0 already in storage;" in printed()
 
 
 class TestWhichCollections:
@@ -248,6 +342,25 @@ class TestWhichCollections:
         )
 
         assert image_collections_to_upload(project) == [with_path]
+
+    def test_narrowed_by_workflow_and_tag_as_the_scan_is(self, images_dir):
+        first, second = _collection(images_dir, tag="first"), _collection(images_dir, tag="second")
+        other = _collection(images_dir, tag="first")
+        table = SimpleNamespace(
+            data_collection_tag="first",
+            config=SimpleNamespace(type="table", dc_specific_properties=None),
+        )
+        project = SimpleNamespace(
+            workflows=[
+                SimpleNamespace(workflow_tag="wf", data_collections=[first, second, table]),
+                SimpleNamespace(workflow_tag="other_wf", data_collections=[other]),
+            ]
+        )
+
+        assert image_collections_to_upload(project, workflow_name="wf") == [first, second]
+        assert image_collections_to_upload(project, data_collection_tag="first") == [first, other]
+        assert image_collections_to_upload(project, "wf", "second") == [second]
+        assert image_collections_to_upload(project, "missing_wf") == []
 
 
 class TestReferencedImages:
