@@ -32,6 +32,7 @@ import type {
   AdvancedVizDataRequest,
   AuthStatusResponse,
   DashboardData,
+  DashboardSummary,
   AdvancedVizDataResponse,
   AdvancedVizKindDescriptor,
   BreakdownPayloadDTO,
@@ -661,6 +662,13 @@ export async function fetchDashboard(dashboardId: string): Promise<DashboardData
     stored_metadata: allComponents() as never,
     filter_sections: [],
   };
+}
+
+/** The builders offer the dashboard's tabs as link targets (a card's or a
+ *  figure's `tab:` link). The Studio's one dashboard has no tabs, so the link
+ *  fields take a typed value and suggest nothing. */
+export async function fetchAllDashboards(): Promise<DashboardSummary[]> {
+  return [];
 }
 
 /** The real api navigates to `/auth` when a request 401s. There is no session
