@@ -163,12 +163,11 @@ class TestCardFollowRegionFilter:
 
     @pytest.mark.parametrize("follow", [True, False])
     def test_reaches_stored_metadata_and_round_trips(self, follow):
-        from depictio.api.v1.region_scope import follows_region
-
+        # How the API reads the flag (`region_scope.follows_region`) is covered in
+        # tests/unit: this module runs on the CLI base install, without the server.
         dash = DashboardDataLite(title="t", components=[self._card(follow_region_filter=follow)])
         stored = dash.to_full()["stored_metadata"][0]
         assert stored["follow_region_filter"] is follow
-        assert follows_region(stored) is follow
 
         back = DashboardDataLite.from_full(dash.to_full())
         comp = back.components[0]
