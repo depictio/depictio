@@ -141,16 +141,24 @@ The deterministic layout of #1028 (`ai_endpoints/dashboard_layout.py`: 8-column 
 full card rows, figures in pairs) moves out of `ai_endpoints` so the CLI can use
 it, and learns tabs.
 
-Icons and colours (`compose_style.py`), from structure and words only:
+Icons and colours (`compose_style.py`), after the seeded reference dashboards
+(iris, penguins, nf-core/ampliseq, nf-core/viralrecon), from words and structure
+only:
 
-- a tab keeps its stage's icon and colour; its first section takes the tab's
-  colour, the next ones cycle through hues apart from it, tables stay gray;
-- a card takes its section's colour (hex: Mantine shade 6 for the icon, 7 for
-  the title) and an icon from its column's words (`reads` → counter, `length`
-  → ruler, `coverage` → layers, `%` → percent); a filter likewise; the
-  Overview's key metrics keep their stage's colour, after a Samples count;
-- cards of files the catalog does not know show the mean with the median and
-  range under it (`aggregations: [median, min, max]`, `secondary_layout: grid`);
+- a card's colour and icon say what it measures, not where it sits: samples
+  teal with a flask on every tab, coverage cyan, a percentage blue, taxa green;
+  a card nothing names takes a free colour of the references' palette; no
+  section shows one colour twice; filters likewise, on the seaborn palette;
+- a tab's first section wears the tab's colour, the next ones change hue
+  (starting at a different place on each tab) and take an icon from what they
+  hold (a sunburst's donut, a dot plot's grid, a scatter); tables stay gray;
+- a section shows one row of cards (two for a recognised tool, none twice);
+  files the catalog does not know get the references' varied row: the samples
+  (top N), a distribution (box plot), a histogram, quartiles, a category's
+  donut; a column named after a sample (a matrix's) gets no card, and
+  numbered columns or sample-against-sample get no figure;
+- an all-capitals column name is set in lower case (`STRAND` → "Strand"),
+  acronyms kept (`GC content`);
 - every icon used is one the viewer's production icon subset carries
   (`generate-icon-subset.mjs` scans viewer sources and shipped dashboards
   only); a unit test guards it. The viewer shows a card's icon on hover.
