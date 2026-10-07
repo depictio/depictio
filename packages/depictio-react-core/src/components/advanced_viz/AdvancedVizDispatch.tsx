@@ -2,7 +2,7 @@ import React from 'react';
 
 import { InteractiveFilter, StoredMetadata } from '../../api';
 import { wrapWithChrome } from '../chrome';
-import VolcanoRenderer from './VolcanoRenderer';
+import VolcanoViews from './VolcanoViews';
 import EmbeddingRenderer from './EmbeddingRenderer';
 import ManhattanRenderer from './ManhattanRenderer';
 import StackedTaxonomyRenderer from './StackedTaxonomyRenderer';
@@ -123,7 +123,8 @@ interface AdvancedVizDispatchProps {
  * string and need the same renderer.
  */
 const RENDERERS: Record<string, React.ComponentType<any>> = {
-  volcano: VolcanoRenderer,
+  // A volcano that binds an MA or QQ view switches between them in place.
+  volcano: VolcanoViews,
   embedding: EmbeddingRenderer,
   manhattan: ManhattanRenderer,
   stacked_taxonomy: StackedTaxonomyRenderer,

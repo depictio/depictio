@@ -24,12 +24,13 @@ function isLive(item: HTMLElement): boolean {
  * change of value, so a control never jumps between the two while it is used.
  *
  * Titled, so the panel reads as the plot's settings rather than as part of the
- * figure.
+ * figure. `lead` (a view switch) comes first and is never folded.
  */
-const DockedControls: React.FC<{ controls: React.ReactNode; side: DockSide }> = ({
-  controls,
-  side,
-}) => {
+const DockedControls: React.FC<{
+  controls: React.ReactNode;
+  side: DockSide;
+  lead?: React.ReactNode;
+}> = ({ controls, side, lead }) => {
   const ref = useRef<HTMLDivElement | null>(null);
   const [expanded, setExpanded] = useState(false);
   const [extra, setExtra] = useState(0);
@@ -83,6 +84,7 @@ const DockedControls: React.FC<{ controls: React.ReactNode; side: DockSide }> = 
         {side === 'top' ? more : null}
       </div>
       <div className="dpx-viz-dock__body">
+        {lead ? <div className="dpx-viz-dock__lead">{lead}</div> : null}
         <div ref={ref} className="dpx-viz-dock__controls">
           {controls}
         </div>

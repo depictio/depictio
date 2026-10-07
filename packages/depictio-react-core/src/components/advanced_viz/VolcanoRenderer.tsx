@@ -382,17 +382,12 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
           onChange={(e) => setSearch(e.currentTarget.value)}
           placeholder="gene / taxon"
         />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Top-n
-          </Text>
-          <Switch
-            size="xs"
-            checked={showLabels}
-            onChange={(e) => setShowLabels(e.currentTarget.checked)}
-            label="Top-N labels"
-          />
-        </Stack>
+        <Switch
+          size="xs"
+          checked={showLabels}
+          onChange={(e) => setShowLabels(e.currentTarget.checked)}
+          label="Show labels"
+        />
       </Stack>
     ),
     [sigThreshold, effectThreshold, topN, search, showLabels],

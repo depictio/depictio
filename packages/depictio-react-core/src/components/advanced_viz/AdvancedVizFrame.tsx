@@ -21,7 +21,7 @@ import {
 import { useAdvancedVizShowcase } from './advancedVizShowcase';
 import { CARD_FRAME } from '../cardFrame';
 import FigureHeader from '../FigureHeader';
-import { ControlsDockContext, resolveDock } from './controlsDock';
+import { ControlsDockContext, ControlsLeadContext, resolveDock } from './controlsDock';
 import DockedControls from './DockedControls';
 import './controlsDock.css';
 
@@ -168,6 +168,20 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
 }) => {
   const publish = useContext(AdvancedVizExtrasContext);
   const dock = useContext(ControlsDockContext);
+  // A view switch a router put ahead of this renderer's controls (see
+  // VolcanoViews). Behind the icon it heads the popover's list; docked it sits
+  // above the fold.
+  const lead = useContext(ControlsLeadContext);
+  const panel = useMemo(
+    () =>
+      lead && controls ? (
+        <Stack gap="xs">
+          {lead}
+          {controls}
+        </Stack>
+      ) : (controls ?? lead ?? null),
+    [lead, controls],
+  );
   // "not grouped", when the dispatch found the analysis groups cannot reach
   // this component. Null otherwise, and with no provider.
   const groupBadge = useContext(GroupStatusBadgeContext);
@@ -229,7 +243,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     return () => ro.disconnect();
   }, []);
   const showcase = useAdvancedVizShowcase();
-  const dockSide = controls
+  const dockSide = panel
     ? resolveDock(dock?.placement, { ...measure, showcase: Boolean(showcase) })
     : null;
   const docked = dockSide != null;
@@ -241,7 +255,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   // left the inspector with nothing it could re-present.
   const extras = useMemo<AdvancedVizExtrasPayload | null>(() => {
     const payload: AdvancedVizExtrasPayload = {};
-    if (controls) payload.controls = controls;
+    if (panel) payload.controls = panel;
     if (docked) payload.docked = true;
     if (dataRows) {
       payload.data = { rows: dataRows, columns: dataColumns, tierAnnotation };
@@ -257,7 +271,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     }
     return Object.keys(payload).length ? payload : null;
   }, [
-    controls,
+    panel,
     dataRows,
     dataColumns,
     tierAnnotation,
@@ -400,7 +414,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
             gap: dockSide === 'right' ? 10 : 0,
           }}
         >
-        {dockOpen && dockSide === 'top' ? <DockedControls controls={controls} side="top" /> : null}
+        {dockOpen && dockSide === 'top' ? <DockedControls controls={controls} lead={lead} side="top" /> : null}
         <div style={{ flex: '1 1 auto', minHeight: 0, minWidth: 0, position: 'relative' }}>
           {loading ? (
             <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
@@ -428,7 +442,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           )}
         </div>
         {dockOpen && dockSide === 'right' ? (
-          <DockedControls controls={controls} side="right" />
+          <DockedControls controls={controls} lead={lead} side="right" />
         ) : null}
         </div>
       </Paper>

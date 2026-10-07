@@ -46,12 +46,18 @@
   color: var(--mantine-color-dimmed);
 }
 
+.dpx-viz-dock--right .dpx-viz-dock__lead {
+  margin-bottom: var(--mantine-spacing-xs);
+}
 .dpx-viz-dock--top .dpx-viz-dock__body {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-end;
   column-gap: 12px;
   row-gap: 4px;
+}
+.dpx-viz-dock--top .dpx-viz-dock__lead {
+  flex: 0 0 auto;
 }
 .dpx-viz-dock--top .dpx-viz-dock__body > .dpx-viz-dock__controls {
   flex: 1 1 auto;

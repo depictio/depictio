@@ -1,4 +1,4 @@
-import { createContext } from 'react';
+import { createContext, type ReactNode } from 'react';
 
 /**
  * Where an advanced visualisation's controls sit.
@@ -56,6 +56,13 @@ export interface ControlsDockState {
 }
 
 export const ControlsDockContext = createContext<ControlsDockState | null>(null);
+
+/**
+ * A control that a router puts ahead of the renderer's own, above the "More
+ * options" fold: the switch between the views of one component (volcano, MA,
+ * QQ), which belongs to none of the renderers it picks between.
+ */
+export const ControlsLeadContext = createContext<ReactNode>(null);
 
 /** How many controls a docked panel shows before "More options". */
 export const DOCK_ESSENTIALS = 3;

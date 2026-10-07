@@ -38,7 +38,13 @@ LEGACY_KIND_ALIASES = {"ancombc_differentials"}
 # Renderers that hand part of a kind to another module, which reads the same
 # config. The phylogenetic renderer draws the summary view (`collapse_rank`) in
 # its own module; its keys are the kind's keys as much as the full tree's are.
-COMPANION_SOURCES = {"phylogenetic": ["PhyloSummaryRenderer"]}
+# A volcano is dispatched to the router that switches it to its MA and QQ
+# views, and drawn by VolcanoRenderer; the views' own controls are mapped back
+# onto volcano keys in diffViews.ts.
+COMPANION_SOURCES = {
+    "phylogenetic": ["PhyloSummaryRenderer"],
+    "volcano": ["VolcanoRenderer"],
+}
 
 
 def _kind_to_model() -> dict[str, type]:

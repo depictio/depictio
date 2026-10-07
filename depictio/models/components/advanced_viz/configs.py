@@ -58,6 +58,46 @@ class VolcanoConfig(_BaseVizConfig):
         default=True, description="Draw text labels on the highlighted points"
     )
 
+    # Other views of the same test, offered by a View switch in the viz
+    # controls when bound: an MA plot (effect size against mean abundance) and
+    # a QQ plot of the raw p-values. Neither is a second component to author.
+    p_value_col: str | None = Field(
+        default=None,
+        description="Raw p-value column (0-1): adds a QQ view of the test's p-values",
+    )
+    avg_log_intensity_col: str | None = Field(
+        default=None,
+        description=(
+            "Mean (log) abundance column of the same table: adds an MA view, the "
+            "effect size against it"
+        ),
+    )
+    # An MA view from a table of its own, in the MA plot's canonical columns
+    # (feature_id, avg_log_intensity, log2_fold_change, significance, label),
+    # for a test whose table has no mean abundance.
+    ma_wf_id: str | None = Field(default=None, description="Workflow id of the MA table DC")
+    ma_dc_id: str | None = Field(default=None, description="Data-collection id of the MA table DC")
+    ma_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the MA table DC (resolved to ids at import)",
+    )
+    default_view: Literal["volcano", "ma", "qq"] = Field(
+        default="volcano", description="The view drawn first: volcano, MA or QQ"
+    )
+
+    @model_validator(mode="after")
+    def _views_are_bound(self) -> VolcanoConfig:
+        if self.default_view == "qq" and not self.p_value_col:
+            raise ValueError("default_view: qq reads the raw p-values: bind p_value_col")
+        if self.default_view == "ma" and not (
+            self.avg_log_intensity_col or self.ma_dc_id or self.ma_dc_tag
+        ):
+            raise ValueError(
+                "default_view: ma needs the mean abundance: bind avg_log_intensity_col, "
+                "or an MA table with ma_dc_tag (or ma_dc_id)"
+            )
+        return self
+
 
 class EmbeddingConfig(_BaseVizConfig):
     """2D/3D embedding scatter — supports two modes:
