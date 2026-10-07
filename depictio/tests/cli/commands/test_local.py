@@ -849,6 +849,30 @@ def test_a_signal_during_startup_stops_what_was_started(paths, fake_start, monke
     assert signal.getsignal(signum) == before
 
 
+@pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGHUP], ids=["SIGTERM", "SIGHUP"])
+def test_a_signal_inside_spawn_still_stops_that_service(paths, fake_start, monkeypatch, signum):
+    started: list[subprocess.Popen] = []
+
+    def spawn(paths, name, cmd, env=None):
+        proc = subprocess.Popen(["sleep", "60"], start_new_session=True)
+        started.append(proc)
+        # Before spawn returns, as on a loaded machine: nothing has the pid yet.
+        os.kill(os.getpid(), signum)
+        return proc
+
+    monkeypatch.setattr(local_stack, "spawn", spawn)
+    try:
+        with pytest.raises(local_stack.Interrupted) as err:
+            local_stack.start_stack(paths, None, "none", False, log=lambda _: None)
+
+        assert err.value.signum == signum
+        assert len(started) == 1
+        assert started[0].wait(timeout=10) is not None
+    finally:
+        for proc in started:
+            proc.kill()
+
+
 @pytest.mark.parametrize(
     "first",
     [KeyboardInterrupt(), LocalStackError("Timed out")],

@@ -209,6 +209,42 @@ def test_a_signal_during_the_build_stops_pnpm_and_what_it_runs(repo, tmp_path, m
     assert not _running(vite)
 
 
+def _signal_inside_popen(monkeypatch, signum, ready):
+    """subprocess.Popen, but the signal arrives before it returns, as on a loaded CI
+    runner where the child runs `kill $PPID` before the parent is scheduled again."""
+    real = subprocess.Popen
+    sent = []
+
+    def popen(*args, **kwargs):
+        proc = real(*args, **kwargs)
+        if not sent:
+            sent.append(signum)
+            deadline = time.monotonic() + 10
+            while not ready() and time.monotonic() < deadline:
+                time.sleep(0.05)
+            os.kill(os.getpid(), signum)
+        return proc
+
+    monkeypatch.setattr(subprocess, "Popen", popen)
+
+
+@pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGHUP], ids=["SIGTERM", "SIGHUP"])
+def test_a_signal_inside_popen_still_stops_what_pnpm_runs(repo, tmp_path, monkeypatch, signum):
+    bin_dir, child = tmp_path / "bin", tmp_path / "child.pid"
+    _write(bin_dir / "pnpm", f"#!/bin/sh\nsleep 60 &\necho $! > '{child}'\nwait\n").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    _signal_inside_popen(monkeypatch, signum, ready=lambda: child.exists() and child.read_text())
+
+    with pytest.raises(local_stack.Interrupted):
+        build_viewer(repo, tmp_path / "viewer-build.log")
+
+    vite = int(child.read_text())
+    deadline = time.monotonic() + 10
+    while _running(vite) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not _running(vite)
+
+
 def test_without_pnpm_the_build_says_what_to_install(repo, monkeypatch, tmp_path):
     monkeypatch.setattr(local_stack.shutil, "which", lambda name: None)
 

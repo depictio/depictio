@@ -904,9 +904,12 @@ def _start_services(
     record: Callable[[str, subprocess.Popen], None] | None = None,
 ) -> None:
     def start(name: str, cmd: list[str], env: dict) -> None:
-        procs[name] = spawn(paths, name, cmd, env=env)
-        if record is not None:
-            record(name, procs[name])
+        # Held until the process is in procs and its pid on disk, where the cleanup
+        # finds it.
+        with _signals_held():
+            procs[name] = spawn(paths, name, cmd, env=env)
+            if record is not None:
+                record(name, procs[name])
 
     base_env = inherited_env()
     start(
@@ -1671,25 +1674,28 @@ def build_viewer(workspace: Path, log_path: Path) -> None:
             logger.debug("Building the viewer: %s in %s, output in %s", step, cwd, log_path)
             log.write(f"$ {step}  (in {cwd})\n")
             log.flush()
-            # Its own session, as the services: stopping it stops what pnpm runs (node,
-            # vite) too.
-            proc = subprocess.Popen(
-                cmd,
-                cwd=cwd,
-                env=env,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                stdin=subprocess.DEVNULL,
-                start_new_session=True,
-            )
+            proc = None
             try:
+                # Its own session, as the services: stopping it stops what pnpm runs
+                # (node, vite) too.
+                with _signals_held():
+                    proc = subprocess.Popen(
+                        cmd,
+                        cwd=cwd,
+                        env=env,
+                        stdout=log,
+                        stderr=subprocess.STDOUT,
+                        stdin=subprocess.DEVNULL,
+                        start_new_session=True,
+                    )
                 code = proc.wait(timeout=VIEWER_BUILD_TIMEOUT)
             except BaseException as exc:
                 # Ctrl-C does not reach another session: stop it here, whatever the cause.
-                with _signals_ignored():
-                    terminate_group(proc.pid, timeout=5, alive=lambda p=proc: p.poll() is None)
-                    with contextlib.suppress(subprocess.TimeoutExpired):
-                        proc.wait(timeout=5)
+                if proc is not None:
+                    with _signals_ignored():
+                        terminate_group(proc.pid, timeout=5, alive=lambda p=proc: p.poll() is None)
+                        with contextlib.suppress(subprocess.TimeoutExpired):
+                            proc.wait(timeout=5)
                 if isinstance(exc, subprocess.TimeoutExpired):
                     raise LocalStackError(
                         f"{step} did not finish in {VIEWER_BUILD_TIMEOUT // 60} minutes "
@@ -1823,30 +1829,70 @@ class Interrupted(KeyboardInterrupt):
         self.signum = signum
 
 
+class _InterruptState:
+    """The signal _signals_interrupt received, and whether _signals_held holds it."""
+
+    def __init__(self) -> None:
+        self.received: list[int] = []
+        self.holding = False
+
+
+# Set while _signals_interrupt is active (main thread only).
+_interrupts: _InterruptState | None = None
+
+
 @contextlib.contextmanager
 def _signals_interrupt() -> Iterator[None]:
     """Raise Interrupted on SIGTERM and SIGHUP, as Ctrl-C raises KeyboardInterrupt, so
     the startup stops what it started. A second signal is ignored, so it cannot cut
     that cleanup short. The previous handlers are restored on exit."""
+    global _interrupts
     if threading.current_thread() is not threading.main_thread():
         yield
         return
-    received: list[int] = []
+    state = _InterruptState()
 
     def handler(signum, _frame):
-        if received:
-            logger.debug("Ignored %s: already stopping", signal.Signals(signum).name)
+        name = signal.Signals(signum).name
+        if state.received:
+            logger.debug("Ignored %s: already stopping", name)
             return
-        received.append(signum)
+        state.received.append(signum)
+        if state.holding:
+            logger.debug("%s held until the process being started is recorded", name)
+            return
         raise Interrupted(signum)
 
     signums = [getattr(signal, name) for name in ("SIGTERM", "SIGHUP") if hasattr(signal, name)]
     previous = {signum: signal.signal(signum, handler) for signum in signums}
+    outer, _interrupts = _interrupts, state
     try:
         yield
     finally:
+        _interrupts = outer
         for signum, old in previous.items():
             signal.signal(signum, old)
+
+
+@contextlib.contextmanager
+def _signals_held() -> Iterator[None]:
+    """Hold the Interrupted of a SIGTERM or SIGHUP until the end of the block.
+
+    Raised inside subprocess.Popen, after its fork, it would leave the new process
+    running with no caller knowing its pid. Held, it is raised once the block has
+    recorded that process, so the cleanup stops it.
+    """
+    state = _interrupts
+    if state is None or state.holding or state.received:
+        yield
+        return
+    state.holding = True
+    try:
+        yield
+    finally:
+        state.holding = False
+    if state.received:
+        raise Interrupted(state.received[0])
 
 
 @contextlib.contextmanager
