@@ -2461,7 +2461,7 @@
           "category": "specific",
           "default": false,
           "depends_on": null,
-          "description": "If True or a string, the x or y or z values will be displayed as text, depending on the orientation A string like '.2f' will be interpreted as a texttemplate numeric formatting directive. Also applies to marginal_x/marginal_y='heatmap', in which case the z values are always displayed.",
+          "description": "If True or a string, the x or y or z values will be displayed as text, depending on the orientation A string like '.2f' will be interpreted as a texttemplate numeric formatting directive.",
           "label": "text_auto",
           "max_value": null,
           "min_value": null,
