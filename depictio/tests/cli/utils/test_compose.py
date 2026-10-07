@@ -19,8 +19,12 @@ from depictio.cli.cli.utils.compose import (
     _resolve_recipe_sources,
     compose_run,
     compose_template,
+    distinct_labels,
     glob_regex,
+    include_regex,
+    looks_headerless,
     match_files,
+    propose_unrecognised,
     walk,
 )
 from depictio.cli.cli.utils.compose_layout import card_row_widths
@@ -318,3 +322,78 @@ def test_template_compose_command_on_nothing(tmp_path):
 
     result = CliRunner().invoke(app, ["compose", str(tmp_path)])
     assert result.exit_code == 1
+
+
+def test_multiqc_tabs_are_named_by_what_tells_their_reports_apart():
+    """nf-core/sarek writes one report per test profile: the tab says which."""
+    paths = [
+        "test_aws/multiqc/multiqc_data/multiqc.parquet",
+        "test_full_aws/multiqc/multiqc_data/multiqc.parquet",
+    ]
+    assert distinct_labels(paths) == ["test_aws", "test_full_aws"]
+    assert distinct_labels(
+        [
+            "multiqc/star_salmon/multiqc_report_data/multiqc.parquet",
+            "multiqc/star_rsem/multiqc_report_data/multiqc.parquet",
+        ]
+    ) == ["star_salmon", "star_rsem"]
+    nested = distinct_labels(["a/multiqc.parquet", "a/b/multiqc.parquet"])
+    assert len(set(nested)) == 2 and all(nested)
+
+
+def test_a_headerless_report_is_read_without_a_header(tmp_path):
+    """A Kraken-style report has no header row: its first line is data, not names."""
+    (tmp_path / "sample.kraken2.report.txt").write_text(
+        "100.00\t438151\t0\tR\t1\troot\n"
+        "99.50\t435960\t12\tD\t2\tBacteria\n"
+        "40.10\t175699\t3\tS\t562\tEscherichia coli\n"
+    )
+    assert looks_headerless(["100.00", "438151", "0", "R", "1", "root"])
+    assert not looks_headerless(["sample", "reads", "percent"])
+
+    proposal = propose_unrecognised(tmp_path, "sample.kraken2.report.txt")
+    assert proposal is not None
+    assert proposal["_headerless"] is True
+    assert proposal["proposal"][0] == "no header row: columns numbered"
+    assert all(c.startswith("column_") for c in proposal["columns"])
+    assert not any("100.00" in item for item in proposal["proposal"])
+
+
+def test_identifier_columns_are_not_averaged(tmp_path):
+    (tmp_path / "abundance.tsv").write_text(
+        "name\ttaxonomy_id\ttaxID\treads\tfraction\n"
+        "E. coli\t562\t562\t1200\t0.4\n"
+        "B. subtilis\t1423\t1423\t900\t0.3\n"
+        "S. aureus\t1280\t1280\t600\t0.2\n"
+    )
+    proposal = propose_unrecognised(tmp_path, "abundance.tsv")
+    assert proposal is not None
+    assert proposal["_numeric"] == ["reads", "fraction"]
+
+
+@pytest.mark.parametrize(
+    ("pattern", "path", "matches"),
+    [
+        ("amp/**", "amp/macrel/s1.macrel/s1.prediction.tsv", True),
+        ("amp*/**", "amp/macrel/s1.tsv", True),
+        ("amp/**", "arg/rgi/s1.tsv", False),
+        ("*.prediction.tsv", "amp/macrel/s1.prediction.tsv", True),
+        ("*penguins*", "extra_penguins.csv", True),
+        ("amp/*.tsv", "amp/macrel/s1.tsv", False),
+    ],
+)
+def test_include_globs_read_as_a_person_means_them(pattern, path, matches):
+    import re
+
+    assert bool(re.match(include_regex(pattern), path)) is matches
+
+
+def test_a_named_file_is_included_past_the_listing_cap(tmp_path, monkeypatch):
+    import depictio.cli.cli.utils.compose as compose
+
+    monkeypatch.setattr(compose, "MAX_UNRECOGNISED", 2)
+    for i in range(4):
+        (tmp_path / f"t{i}.tsv").write_text("sample\treads\nA\t1\nB\t2\n")
+    composition = compose_run(tmp_path, include=["t3.tsv"])
+    included = [p["path"] for p in composition.unrecognised if p.get("_include")]
+    assert included == ["t3.tsv"]

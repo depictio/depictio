@@ -150,6 +150,20 @@ def filename_regex(pattern: str) -> str:
     return "^(?:.*/)?" + _segment_regex(pattern) + "$"
 
 
+def include_regex(pattern: str) -> str:
+    """A regex for an ``--include`` glob, read the way a person means it.
+
+    A pattern with no ``/`` matches a file name at any depth (``'*.tsv'``), and a
+    trailing ``**`` takes every file below (``'amp/**'``); otherwise it is
+    ``Path.glob``'s pattern, relative to the results directory.
+    """
+    if "/" not in pattern:
+        return filename_regex(pattern)
+    if pattern.rstrip("/").endswith("**"):
+        return glob_regex(pattern.rstrip("/") + "/*")
+    return glob_regex(pattern)
+
+
 def find_regexes(output: CatalogOutput) -> list[str]:
     find = output.find
     if find.path_glob:
@@ -197,7 +211,7 @@ def table_format(path: str) -> tuple[str, str | None] | None:
     return TABULAR.get(PurePosixPath(path).suffix.lower())
 
 
-def read_sample(path: Path, rows: int = 1000):  # -> pl.DataFrame | None
+def read_sample(path: Path, rows: int = 1000, has_header: bool = True):  # -> pl.DataFrame | None
     """The first ``rows`` rows of a tabular file, or None when it cannot be read as one."""
     import polars as pl
 
@@ -213,6 +227,7 @@ def read_sample(path: Path, rows: int = 1000):  # -> pl.DataFrame | None
             n_rows=rows,
             infer_schema_length=rows,
             truncate_ragged_lines=True,
+            has_header=has_header,
         )
     except Exception as exc:
         logger.debug(f"Could not read {path} as a table: {exc}")
@@ -720,15 +735,19 @@ def compose_run(
         and _is_results_file(f)
         and str(PurePosixPath(f).parent) not in report_dirs
     ]
-    include_regexes = [re.compile(glob_regex(g)) for g in include]
+    include_regexes = [re.compile(include_regex(g)) for g in include]
     unrecognised: list[dict[str, Any]] = []
     for path in candidates:
-        if len(unrecognised) >= MAX_UNRECOGNISED:
-            break
+        # The listing is capped; a file asked for by name is not.
+        named = any(r.match(path) for r in include_regexes)
+        if len(unrecognised) >= MAX_UNRECOGNISED and not named:
+            if not include_regexes:
+                break
+            continue
         proposal = propose_unrecognised(root, path)
         if proposal is None:
             continue
-        wanted = include_unknown or any(r.match(path) for r in include_regexes)
+        wanted = include_unknown or named
         proposal["_include"] = wanted
         unrecognised.append(proposal)
         if wanted:
@@ -749,6 +768,57 @@ def compose_run(
 # ---------------------------------------------------------------------------
 
 
+def _is_number(text: str) -> bool:
+    try:
+        float(text)
+    except ValueError:
+        return False
+    return True
+
+
+def distinct_labels(paths: Sequence[str]) -> list[str]:
+    """The part of each path that tells it apart from the others.
+
+    ``test_aws/multiqc/multiqc_data/multiqc.parquet`` and
+    ``test_full_aws/multiqc/multiqc_data/multiqc.parquet`` give ``test_aws`` and
+    ``test_full_aws``: the directories every path shares, at the start or the
+    end, are dropped. A path left with nothing keeps its parent directory.
+    """
+    parts = [PurePosixPath(p).parts for p in paths]
+    if len(parts) < 2:
+        return [str(PurePosixPath(p).parent) for p in paths]
+    shortest = min(len(p) for p in parts)
+    head = 0
+    while head < shortest and len({p[head] for p in parts}) == 1:
+        head += 1
+    tail = 0
+    while tail < shortest - head and len({p[len(p) - 1 - tail] for p in parts}) == 1:
+        tail += 1
+    labels = []
+    for path, p in zip(paths, parts):
+        middle = p[head : len(p) - tail]
+        labels.append("/".join(middle) if middle else str(PurePosixPath(path).parent))
+    return labels
+
+
+def looks_headerless(columns: Sequence[str]) -> bool:
+    """Whether a table's "header" is really its first data row.
+
+    Kraken-style reports and per-read outputs have no header row: read with one,
+    their column names are numbers (``100.00``, ``438151``) or duplicates that
+    polars renames ``<name>_duplicated_<n>``.
+    """
+    suspicious = [c for c in columns if _is_number(c) or "_duplicated_" in c]
+    return len(suspicious) * 2 >= len(columns)
+
+
+def _is_identifier(column: str) -> bool:
+    """`taxonomy_id`, `taxID`, `gene_id`: numeric labels, not quantities to average."""
+    return bool(re.search(r"(?:^|[_\-\s.])id$", column, re.IGNORECASE)) or bool(
+        re.search(r"[a-z]I[dD]$", column)
+    )
+
+
 def propose_unrecognised(data_root: Path, path: str) -> dict[str, Any] | None:
     """What a tabular file nothing recognised could show: a deterministic first guess.
 
@@ -760,13 +830,21 @@ def propose_unrecognised(data_root: Path, path: str) -> dict[str, Any] | None:
     frame = read_sample(data_root / path)
     if frame is None:
         return None
+    headerless = looks_headerless(frame.columns)
+    if headerless:
+        frame = read_sample(data_root / path, has_header=False)
+        if frame is None:
+            return None
     fmt = (table_format(path) or ("tsv", None))[0]
     types = column_types(frame)
-    sample = _sample_column(types)
+    sample = None if headerless else _sample_column(types)
     numeric = [
         c
         for c, t in types.items()
-        if column_type(t) in ("int64", "float64") and c != sample and frame[c].n_unique() > 1
+        if column_type(t) in ("int64", "float64")
+        and c != sample
+        and not _is_identifier(c)
+        and frame[c].n_unique() > 1
     ][:4]
     categorical = [
         c
@@ -787,7 +865,8 @@ def propose_unrecognised(data_root: Path, path: str) -> dict[str, Any] | None:
         figure = {"visu_type": "scatter", "dict_kwargs": kwargs}
     elif numeric and groups:
         figure = {"visu_type": "box", "dict_kwargs": {"x": groups[0], "y": numeric[0]}}
-    proposal = [f"card: mean of {c}" for c in numeric]
+    proposal = ["no header row: columns numbered"] if headerless else []
+    proposal += [f"card: mean of {c}" for c in numeric]
     proposal += [f"filter: {c}" for c in categorical]
     if figure:
         kw = figure["dict_kwargs"]
@@ -801,6 +880,7 @@ def propose_unrecognised(data_root: Path, path: str) -> dict[str, Any] | None:
         "sample_column": sample,
         "proposal": proposal,
         "_types": types,
+        "_headerless": headerless,
         "_numeric": numeric,
         "_categorical": categorical,
         "_figure": figure,
@@ -809,11 +889,15 @@ def propose_unrecognised(data_root: Path, path: str) -> dict[str, Any] | None:
 
 def _unknown_collection(proposal: dict[str, Any]) -> Collection:
     path = proposal["path"]
+    config = _table_config([path])
+    if proposal.get("_headerless"):
+        properties = config["dc_specific_properties"]
+        properties["polars_kwargs"] = {**properties.get("polars_kwargs", {}), "has_header": False}
     return Collection(
         tag=slug(PurePosixPath(path).with_suffix("").as_posix()),
         kind="unknown",
         description=f"{path}, not recognised by the catalog, included on request",
-        config=_table_config([path]),
+        config=config,
         files=[path],
         columns=proposal["_types"],
     )
@@ -1412,8 +1496,9 @@ def write_template(
             tab["filter_sections"] = [_section(filter_section, stage, icon="mdi:filter-variant")]
         tabs.append(tab)
 
-    for i, collection in enumerate(multiqc):
-        title = "MultiQC" if len(multiqc) == 1 else f"MultiQC ({collection.files[0]})"
+    labels = distinct_labels([c.files[0] for c in multiqc])
+    for collection, label in zip(multiqc, labels):
+        title = "MultiQC" if len(multiqc) == 1 else f"MultiQC ({label})"
         tab = _multiqc_tab(collection, workflow, tagger, models, title)
         if tab:
             tabs.append(tab)
