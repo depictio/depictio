@@ -28,12 +28,30 @@ _ORDER = {"text": 0, "card": 1, "figure": 2, "multiqc": 2, "advanced_viz": 3, "t
 
 
 def card_row_widths(n: int) -> list[int]:
-    """Widths for ``n`` cards so every row is full: rows of four, then 3/3/2, 4/4 or 8."""
+    """Widths for ``n`` cards so every row is full: rows of four, then 3/3/2, 4/4 or 8.
+
+    One card left over after full rows borrows one of them: five cards are
+    3/3/2 then 4/4, not four and a lone card stretched across the grid.
+    """
     widths: list[int] = []
     full, rest = divmod(n, 4)
+    if rest == 1 and full:
+        full -= 1
+        widths += [CARD[0]] * (4 * full) + [3, 3, 2, 4, 4]
+        return widths
     widths += [CARD[0]] * (4 * full)
     widths += {0: [], 1: [8], 2: [4, 4], 3: [3, 3, 2]}[rest]
     return widths
+
+
+def table_height(rows: int, paginated: bool = True) -> int:
+    """Grid rows for a table of ``rows`` rows: its header, rows and footer, no more.
+
+    About 100 px a grid row, 32 px a table row; a long table keeps the default
+    height and scrolls.
+    """
+    pixels = 110 + 32 * rows + (50 if paginated else 0)
+    return max(3, min(TABLE[1], -(-pixels // 100)))
 
 
 def text_height(body: str) -> int:
@@ -44,7 +62,7 @@ def _set(component: dict, x: int, y: int, w: int, h: int) -> None:
     component["layout"] = {"x": x, "y": y, "w": w, "h": h}
 
 
-def layout_section(components: list[dict]) -> int:
+def layout_section(components: list[dict], heights: dict[str, int] | None = None) -> int:
     """Lay one grid section out in place, ordered by kind; returns its height."""
     ordered = sorted(components, key=lambda c: _ORDER.get(c["component_type"], 5))
     y = 0
@@ -76,10 +94,13 @@ def layout_section(components: list[dict]) -> int:
     for i in range(0, len(charts), 2):
         pair = charts[i : i + 2]
         if len(pair) == 1:
-            _set(pair[0], 0, y, GRID_COLS, CHART[1])
-        else:
-            _set(pair[0], 0, y, CHART[0], CHART[1])
-            _set(pair[1], CHART[0], y, CHART[0], CHART[1])
+            # A lone tile (a MultiQC table among them) may say how tall it is.
+            h = (heights or {}).get(pair[0].get("tag", ""), CHART[1])
+            _set(pair[0], 0, y, GRID_COLS, h)
+            y += h
+            continue
+        _set(pair[0], 0, y, CHART[0], CHART[1])
+        _set(pair[1], CHART[0], y, CHART[0], CHART[1])
         y += CHART[1]
 
     for comp in [*advanced, *other]:
@@ -87,8 +108,9 @@ def layout_section(components: list[dict]) -> int:
         y += ADVANCED[1]
 
     for table in tables:
-        _set(table, 0, y, *TABLE)
-        y += TABLE[1]
+        h = (heights or {}).get(table.get("tag", ""), TABLE[1])
+        _set(table, 0, y, TABLE[0], h)
+        y += h
 
     components[:] = ordered
     return y
@@ -102,8 +124,11 @@ def layout_filters(components: Iterable[dict]) -> None:
         y += FILTER[1]
 
 
-def layout_dashboard(dashboard: dict) -> None:
-    """Lay out every section of one dashboard (or tab) document in place."""
+def layout_dashboard(dashboard: dict, heights: dict[str, int] | None = None) -> None:
+    """Lay out every section of one dashboard (or tab) document in place.
+
+    ``heights``: a tile's height by tag, for tables whose length is known.
+    """
     # A filter section and a grid section may share a name (the import keys them
     # by kind and name): a filter is an interactive component of a filter section.
     filter_names = {s["name"] for s in dashboard.get("filter_sections") or []}
@@ -116,4 +141,4 @@ def layout_dashboard(dashboard: dict) -> None:
         if is_filter:
             layout_filters(members)
         else:
-            layout_section(members)
+            layout_section(members, heights)

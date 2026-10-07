@@ -39,7 +39,8 @@ from typing import Any
 
 import yaml
 
-from depictio.cli.cli.utils.compose_layout import layout_dashboard
+from depictio.cli.cli.utils.compose_layout import layout_dashboard, table_height
+from depictio.cli.cli.utils.compose_style import style_document
 from depictio.cli.cli.utils.multiqc_parquet import (
     MultiQCPlot,
     parquet_has_general_stats,
@@ -1764,7 +1765,9 @@ def _unknown_tiles(
                 column_name=column,
                 aggregation="average",
                 column_type=column_type(types[column]),
-                secondary_layout="histogram",
+                # The mean, and under it the median and range in one card.
+                aggregations=["median", "min", "max"],
+                secondary_layout="grid",
             )
         )
     for column in proposal["_filters"]:
@@ -1793,6 +1796,11 @@ def _unknown_tiles(
                 **proposal["_figure"],
             )
         )
+    # The file's own columns, the sample first: not ingestion's bookkeeping.
+    columns = list(types)
+    if group.wildcard in columns:
+        columns.remove(group.wildcard)
+        columns.insert(0, group.wildcard)
     built.append(
         _component(
             tagger,
@@ -1800,6 +1808,7 @@ def _unknown_tiles(
             "table",
             **base,
             title=kind or "Table",
+            columns=columns,
         )
     )
     kept: list[dict[str, Any]] = []
@@ -2408,7 +2417,25 @@ def write_template(
     # Overview.
     headline.sort(key=lambda rt: rt[0])
     key_metrics: list[dict[str, Any]] = []
-    for _, tile in headline[:8]:
+    # Each key metric keeps the colour of the stage (and tab) it comes from.
+    card_colors: dict[str, str] = {}
+    if hub is not None:
+        samples_card = _component(
+            tagger,
+            "overview-samples",
+            "card",
+            workflow_tag=workflow,
+            data_collection_tag=hub.collection.tag,
+            section="Key metrics",
+            title="Samples",
+            column_name="sample",
+            column_type="object",
+            aggregation="nunique",
+        )
+        if _validate(samples_card, models) is None:
+            key_metrics.append(samples_card)
+            card_colors[samples_card["tag"]] = "blue"
+    for rank, tile in headline[: 8 - len(key_metrics)]:
         copy = dict(tile.component)
         tag = tagger(f"overview-{copy['tag']}")
         title = copy["title"]
@@ -2420,6 +2447,8 @@ def write_template(
             "title": f"{tile.output_label}: {title[:1].lower()}{title[1:]}",
         }
         key_metrics.append(copy)
+        if rank < len(STAGE_ORDER):
+            card_colors[tag] = STAGE_STYLE[STAGE_ORDER[rank]][1]
     general: list[dict[str, Any]] = []
     for collection in multiqc:
         if collection.general_stats:
@@ -2482,6 +2511,12 @@ def write_template(
         "grid_sections": grid_sections,
         "components": overview_components,
     }
+    if pipeline_name and pipeline_name.startswith("nf-core/"):
+        main |= {
+            "icon": "/assets/images/workflows/nf-core.png",
+            "icon_color": "green",
+            "workflow_system": "nf-core",
+        }
     if overview_filters:
         main["filter_sections"] = [
             {
@@ -2494,8 +2529,24 @@ def write_template(
             }
         ]
 
+    style_document(main, main["tab_icon_color"], card_colors)
+    for tab in tabs:
+        style_document(tab, tab.get("tab_icon_color") or "gray")
+    # The Overview's per-sample tables are as tall as their samples, no taller.
+    heights: dict[str, int] = {}
+    for component in general:
+        if component["component_type"] == "table" and stats is not None:
+            heights[component["tag"]] = table_height(stats.height)
+        elif component["component_type"] == "multiqc":
+            found = _sample_values(
+                next(c for c in multiqc if c.tag == component["data_collection_tag"]),
+                root,
+                frame_of,
+            )
+            if found and found[1]:
+                heights[component["tag"]] = table_height(len(found[1]), paginated=False)
     for document in (main, *tabs):
-        layout_dashboard(document)
+        layout_dashboard(document, heights)
     _check_dashboard(main, tabs)
 
     dashboard = {"main_dashboard": main, "tabs": tabs}
@@ -2545,22 +2596,29 @@ def write_template(
 
 
 def _intro(composition: Composition, tools: list[str], tabs: list[str], multiqc: bool) -> str:
+    """What was found, a line each: tools, the MultiQC report, the tabs, the rest.
+
+    The text tile renders inline markdown only (bold, links), so the list is
+    bullet characters on their own lines, not a markdown list.
+    """
     lines = []
     if tools:
         noun = "tool" if len(tools) == 1 else "tools"
-        lines.append(f"Recognised outputs of **{len(tools)} {noun}**: {', '.join(tools)}.")
+        lines.append(f"• **{len(tools)} {noun} recognised**: {', '.join(tools)}")
     if multiqc:
-        lines.append("A **MultiQC** report, every plot of which is in the MultiQC tab.")
+        lines.append("• **A MultiQC report**: every plot of it in the MultiQC tab")
     if tabs:
-        lines.append("Tabs follow the pipeline: " + ", ".join(f"**{t}**" for t in tabs) + ".")
+        lines.append("• **Tabs**, in pipeline order: " + " → ".join(f"**{t}**" for t in tabs))
     left = [p for p in composition.unrecognised if not p.get("_include")]
     if composition.unrecognised_total:
+        files = sum(p.get("n_files", 1) for p in left)
         lines.append(
-            f"{len(left)} other tabular file{'s' if len(left) != 1 else ''} not recognised by the "
-            "catalog: the project page lists them, with what each could show "
-            "(`--include-unknown` adds them)."
+            f"• **{files} other tabular file{'s' if files != 1 else ''}** the catalog does not "
+            "know: the project page lists them, with what each could show "
+            "(`--include-unknown` adds them)"
             if left
-            else "Every other tabular file is in the **Other data** tab."
+            else "• **Every other tabular file** is in the tab of the tool that wrote it, "
+            "or in **Other data**"
         )
     return "\n".join(lines) or "Nothing the catalog recognises."
 

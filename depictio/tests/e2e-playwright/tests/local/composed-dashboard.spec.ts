@@ -115,6 +115,8 @@ test.describe("Composed dashboard (depictio local up --data-root)", () => {
 
       if (screenshotDir) {
         fs.mkdirSync(screenshotDir, { recursive: true });
+        // The grid scrolls in its own container: back to its first tile.
+        await tiles.first().scrollIntoViewIfNeeded().catch(() => {});
         await page.evaluate(() => window.scrollTo(0, 0));
         await page.screenshot({
           path: path.join(screenshotDir, `${String(i).padStart(2, "0")}-${tab.title}.png`.replace(/[^\w.-]+/g, "_")),
