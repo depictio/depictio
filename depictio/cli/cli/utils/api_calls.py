@@ -1,6 +1,7 @@
 import io
 import json
 import zipfile
+from urllib.parse import quote
 
 import httpx
 import typer
@@ -33,9 +34,12 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     # secret — the server only reads ``user.token`` from this payload, so the
     # masked value is fine (and keeps the secret out of logs and transit).
     depictio_CLI_config = loaded_config.model_dump(mode="json")
-    # DEBUG, not INFO: the dump still contains the live access token at
-    # user.token.access_token — keep it out of default-level logs.
-    logger.debug(f"Depictio CLI configuration loaded: {depictio_CLI_config}")
+    # Not the dump itself: it holds the live access token, and verbose logs of a
+    # pipeline run are archived.
+    logger.debug(
+        f"Depictio CLI configuration loaded: {loaded_config.api_base_url}, "
+        f"user {loaded_config.user.email}"
+    )
     rich_print_checked_statement("Checking server accessibility...", "info")
 
     # Connect to depictio API. Generous timeout because this is the CLI's
@@ -143,8 +147,11 @@ def api_get_project_from_name(project_name: str, CLI_config: CLIConfig):
     Get a project from the server using the project ID.
     """
     # First check if the project exists on the server DB for existing IDs and if the same metadata hash is used
+    # Quoted: a '#' or '?' in the name would otherwise end the path, so the project a
+    # run created under that name could never be found again.
     response = get_http_client().get(
-        f"{CLI_config.api_base_url}/depictio/api/v1/projects/get/from_name/{project_name}",
+        f"{CLI_config.api_base_url}/depictio/api/v1/projects/get/from_name/"
+        f"{quote(project_name, safe='')}",
         # params={"project_name": project_name},
         headers=generate_api_headers(CLI_config),
         timeout=60.0,  # cold-start safety net (httpx default of 5 s is too aggressive)
@@ -362,9 +369,8 @@ def api_get_files_by_dc_id(dc_id: str, CLI_config: CLIConfig) -> httpx.Response:
         httpx.Response: The response from the server.
     """
     logger.info(f"Getting files for data collection ID: {dc_id}")
-    logger.debug(f"CLI Config: {CLI_config}")
+    # The URL only: the config and the headers carry the access token.
     logger.info(f"{CLI_config.api_base_url}/depictio/api/v1/files/list/{dc_id}")
-    logger.info(generate_api_headers(CLI_config))
     response = get_http_client().get(
         f"{CLI_config.api_base_url}/depictio/api/v1/files/list/{dc_id}",
         headers=generate_api_headers(CLI_config),
@@ -499,9 +505,19 @@ def api_monitoring_ingestion_finish(
             "project_id": project_id,
             "data_collections": data_collections or [],
         }
-        get_http_client().post(
-            url, json=payload, headers=generate_api_headers(CLI_config), timeout=timeout
-        )
+        headers = generate_api_headers(CLI_config)
+        try:
+            get_http_client().post(url, json=payload, headers=headers, timeout=timeout)
+        except httpx.TransportError as exc:
+            # A timeout is not retried: that would double the wait the short
+            # ``timeout`` of an error exit is there to cap.
+            if isinstance(exc, httpx.TimeoutException):
+                raise
+            # After a server error the server may drop the pooled keep-alive connection,
+            # and this call is often the next one to use it: retried once on a
+            # connection of its own, or the run stays recorded as running forever.
+            logger.debug(f"Monitoring ingestion finish retried after: {exc}")
+            httpx.post(url, json=payload, headers=headers, timeout=timeout)
     except Exception as exc:
         logger.debug(f"Monitoring ingestion finish failed (non-fatal): {exc}")
 
@@ -1013,8 +1029,8 @@ def api_create_multiqc_report(multiqc_report: dict, CLI_config: "CLIConfig"):
     url = f"{CLI_config.api_base_url}/depictio/api/v1/multiqc/reports"
     headers = generate_api_headers(CLI_config)
 
+    # Not the headers: they carry the access token.
     logger.debug(f"POST URL: {url}")
-    logger.debug(f"Headers: {headers}")
     logger.debug(
         f"Payload keys: {list(multiqc_report.keys()) if isinstance(multiqc_report, dict) else 'not a dict'}"
     )
@@ -1056,8 +1072,8 @@ def api_update_multiqc_report(report_id: str, multiqc_report: dict, CLI_config: 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/multiqc/reports/{report_id}"
     headers = generate_api_headers(CLI_config)
 
+    # Not the headers: they carry the access token.
     logger.debug(f"PUT URL: {url}")
-    logger.debug(f"Headers: {headers}")
     logger.debug(
         f"Payload keys: {list(multiqc_report.keys()) if isinstance(multiqc_report, dict) else 'not a dict'}"
     )

@@ -1,11 +1,14 @@
 import os
 from typing import Any, cast
 
+import httpx
 import typer
+import yaml
 from pydantic import validate_call
 
 from depictio.cli.cli.utils.api_calls import api_get_project_from_name, api_login
-from depictio.cli.cli.utils.common import load_depictio_config
+from depictio.cli.cli.utils.common import load_depictio_config, report_unreachable
+from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.cli import CLIConfig
@@ -17,24 +20,45 @@ from depictio.models.utils import get_config, validate_model_config
 def validate_project_config_and_check_S3_storage(CLI_config_path: str, project_config_path: str):
     """
     Validate the project configuration and check S3 storage.
+
+    A missing or unparsable project file, and a server that does not answer, end the
+    command with exit code 1 after saying which file or server: a traceback names
+    neither.
     """
     logger.info(f"Creating workflow from {CLI_config_path}...")
     logger.info(f"Validating pipeline configuration from {project_config_path}...")
 
-    response = api_login(CLI_config_path)
-    logger.info(response)
-
-    if response["success"]:
-        # Reload the config from the YAML rather than from api_login's return:
-        # that payload is a ``mode="json"`` dump whose SecretStr S3 secret is
-        # MASKED ('**********') — rebuilding CLIConfig from it silently breaks
-        # every downstream direct-to-S3 Delta write (SignatureDoesNotMatch).
-        CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
-        # Validate the project configuration
-        response_validation = local_validate_project_config(CLI_config, project_config_path)
-        return CLI_config, response_validation
-    else:
+    # Checked before the login: a typo in the path needs no server to be reported.
+    if not os.path.isfile(project_config_path):
+        rich_print_checked_statement(
+            f"Project configuration file not found: {project_config_path}", "error"
+        )
         raise typer.Exit(code=1)
+
+    try:
+        response = api_login(CLI_config_path)
+    except httpx.HTTPError as exc:
+        report_unreachable(CLI_config_path, exc)
+        raise typer.Exit(code=1) from exc
+    # The verdict only: the response embeds the configuration, access token included.
+    logger.info(f"Login successful: {response['success']}")
+
+    if not response["success"]:
+        raise typer.Exit(code=1)
+    # Reload the config from the YAML rather than from api_login's return:
+    # that payload is a ``mode="json"`` dump whose SecretStr S3 secret is
+    # MASKED ('**********'): rebuilding CLIConfig from it silently breaks
+    # every downstream direct-to-S3 Delta write (SignatureDoesNotMatch).
+    CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
+    try:
+        response_validation = local_validate_project_config(CLI_config, project_config_path)
+    except yaml.YAMLError as exc:
+        rich_print_checked_statement(f"{project_config_path} is not valid YAML: {exc}", "error")
+        raise typer.Exit(code=1) from exc
+    except httpx.HTTPError as exc:
+        report_unreachable(CLI_config_path, exc)
+        raise typer.Exit(code=1) from exc
+    return CLI_config, response_validation
 
 
 def find_matching_entry(collection, new_item):
@@ -156,7 +180,8 @@ def local_validate_project_config(CLI_config: CLIConfig, project_yaml_config_pat
         logger.info("Validating pipeline configuration...")
         # Load and prepare the pipeline configuration
         project_config = load_and_prepare_config(CLI_config, project_yaml_config_path)
-        logger.debug(f"CLI config: {CLI_config}")
+        # The URL only: the config holds the access token.
+        logger.debug(f"CLI config: {CLI_config.api_base_url}")
         logger.debug(f"Project config: {project_config}")
 
         # Validate configuration against the Project model
@@ -209,7 +234,8 @@ def validate_template_project_config(
         typer.Exit: If login fails.
     """
     response = api_login(CLI_config_path)
-    logger.info(response)
+    # The verdict only: the response embeds the configuration, access token included.
+    logger.info(f"Login successful: {response['success']}")
 
     if not response["success"]:
         raise typer.Exit(code=1)

@@ -30,7 +30,7 @@ from depictio.cli.cli.commands.data import app as data
 from depictio.cli.cli.commands.dev import app as dev
 from depictio.cli.cli.commands.images import app as images
 from depictio.cli.cli.commands.local import app as local
-from depictio.cli.cli.commands.migrate import app as migrate
+from depictio.cli.cli.commands.migrate import migrate
 from depictio.cli.cli.commands.run import register_run_command
 from depictio.cli.cli.commands.standalone import register_standalone_commands
 from depictio.cli.cli.utils import logo_art
@@ -226,8 +226,9 @@ app.add_typer(dashboard, name="dashboard", help="Validate, import and export das
 # Out of the help: `images push` is `data push-images` now, kept for the scripts that
 # call it, and `images list-bucket` with it.
 app.add_typer(images, name="images", hidden=True)
-# No help here: migrate's own docstring, which also describes its modes, is shown.
-app.add_typer(migrate, name="migrate")
+# A plain command, so `depictio migrate --project p` takes its options directly; its
+# docstring, which also describes its modes, is its help.
+app.command("migrate")(migrate)
 app.add_typer(
     backup,
     name="backup",

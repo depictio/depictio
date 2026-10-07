@@ -104,6 +104,14 @@ def valid_yaml_file(tmp_path: Path, valid_yaml_content: str) -> Path:
 
 
 @pytest.fixture
+def tagged_yaml_file(tmp_path: Path, valid_yaml_content: str) -> Path:
+    """A valid YAML naming its project: what the server schema check looks columns up in."""
+    yaml_file = tmp_path / "tagged.yaml"
+    yaml_file.write_text(f"project_tag: Iris Dataset\n{valid_yaml_content}", encoding="utf-8")
+    return yaml_file
+
+
+@pytest.fixture
 def invalid_yaml_file(tmp_path: Path) -> Path:
     """Create a temporary invalid YAML file."""
     yaml_file = tmp_path / "invalid.yaml"
@@ -148,7 +156,7 @@ class TestCLIConfigRequirement:
         assert "Dry run mode" in result.output
 
     def test_import_with_config_attempts_server(self, valid_yaml_file: Path, tmp_path: Path):
-        """Import with --config should attempt server connection."""
+        """Import with --config reads it, and says what is wrong with an incomplete one."""
         # Create a fake config file
         config_file = tmp_path / "config.yaml"
         config_file.write_text(
@@ -168,8 +176,10 @@ access_token: fake-token
                 str(config_file),
             ],
         )
-        # Should fail to connect (no server), but should NOT fail on missing config
-        assert "Error loading CLI config" in result.output or "Cannot connect" in result.output
+        # Not a missing file: the one it read lacks its user section, and it says so.
+        assert result.exit_code == 1
+        assert "has no 'user' key" in " ".join(result.output.split())
+        assert "not found" not in result.output
 
     def test_export_without_config_fails(self):
         """Export with no --server and no default configuration names the file it missed."""
@@ -185,15 +195,8 @@ access_token: fake-token
         assert "configuration file not found" in result.output
 
     def test_export_with_config_attempts_server(self, tmp_path: Path):
-        """Export with --config should attempt server connection."""
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text(
-            """
-api_base_url: http://localhost:9999
-access_token: fake-token
-""",
-            encoding="utf-8",
-        )
+        """Export with --config tries the server it names, and says it cannot connect."""
+        config_file = _write_cli_config(tmp_path / "config.yaml", "http://127.0.0.1:1")
 
         result = runner.invoke(
             app,
@@ -202,10 +205,14 @@ access_token: fake-token
                 "some-dashboard-id",
                 "--config",
                 str(config_file),
+                "-o",
+                str(tmp_path / "out.yaml"),
             ],
         )
-        # Should fail to connect (no server), but config is provided
-        assert "Error loading CLI config" in result.output or "Error" in result.output
+        assert result.exit_code == 1
+        assert "Exporting dashboard some-dashboard-id" in result.output
+        assert "Error:" in result.output
+        assert not (tmp_path / "out.yaml").exists()
 
 
 # ============================================================================
@@ -241,8 +248,11 @@ class TestServerSelection:
 
             assert result.exit_code == 0
             assert "--server" in result.output
-            for legacy in ("--config", "-c ", "--api"):
+            for legacy in ("-c ", "--api", "--CLI-config-path"):
                 assert legacy not in result.output, f"{command} --help shows {legacy}"
+            # Named once, as what --server was called before, and not listed as an option.
+            assert "Formerly" in result.output
+            assert result.output.count("--config") == 1, f"{command} --help lists --config"
 
     def test_import_reads_the_default_configuration_and_its_url(
         self, valid_yaml_file: Path, isolated_home: Path, http_client
@@ -339,6 +349,158 @@ class TestServerSelection:
         assert http_client.get.call_args.args[0].startswith("http://named.test/")
 
 
+class TestImportAndExportFailures:
+    """What import and export say, and exit with, when an option or the disk is wrong."""
+
+    PROJECT_ID = "646b0f3c1e4a2d7f8e5b8c9a"
+
+    def test_api_says_on_stderr_which_url_it_replaces(
+        self, valid_yaml_file: Path, tmp_path: Path, http_client
+    ):
+        config = _write_cli_config(tmp_path / "named.yaml", "http://named.test")
+
+        result = runner.invoke(
+            app,
+            [
+                "import",
+                str(valid_yaml_file),
+                "--server",
+                str(config),
+                "--api",
+                "http://other.test",
+                "--offline",
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        line = " ".join(result.stderr.split())
+        assert "Server: http://other.test (from --api, instead of http://named.test" in line
+        # Said once, and not as the configuration's own server.
+        assert result.output.count("Server:") == 1
+
+    @pytest.mark.parametrize("bad", ["Iris Dataset", "646b0f3c", "z" * 24])
+    def test_a_project_that_is_not_an_id_is_refused(self, valid_yaml_file: Path, http_client, bad):
+        result = runner.invoke(app, ["import", str(valid_yaml_file), "--project", bad])
+
+        assert result.exit_code == 1
+        assert "24 hexadecimal characters" in " ".join(result.output.split())
+        http_client.post.assert_not_called()
+
+    def test_the_online_check_looks_in_the_project_given_by_id(
+        self, tagged_yaml_file: Path, tmp_path: Path, http_client
+    ):
+        config = _write_cli_config(tmp_path / "named.yaml", "http://named.test")
+
+        with patch(
+            "depictio.cli.cli.commands.dashboard.validate_schema_online", return_value=[]
+        ) as online:
+            result = runner.invoke(
+                app,
+                [
+                    "import",
+                    str(tagged_yaml_file),
+                    "--server",
+                    str(config),
+                    "--project",
+                    self.PROJECT_ID,
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        assert online.call_args.kwargs["project_id"] == self.PROJECT_ID
+        assert http_client.post.call_args.kwargs["params"]["project_id"] == self.PROJECT_ID
+
+    def test_validate_schema_online_fetches_a_project_id_by_id(self, tagged_yaml_file: Path):
+        from depictio.cli.cli.commands.dashboard import validate_schema_online
+        from depictio.models.models.dashboards import DashboardDataLite
+
+        lite = DashboardDataLite.from_yaml(tagged_yaml_file.read_text())
+        response = MagicMock(status_code=404)
+        with patch("depictio.cli.cli.commands.dashboard.httpx.get", return_value=response) as get:
+            errors = validate_schema_online(lite, "http://s.test", {}, project_id=self.PROJECT_ID)
+
+        assert get.call_args.args[0] == "http://s.test/depictio/api/v1/projects/get/from_id"
+        assert get.call_args.kwargs["params"] == {"project_id": self.PROJECT_ID}
+        assert self.PROJECT_ID in errors[0]["message"]
+
+    def test_validate_schema_online_quotes_the_project_name(self, tagged_yaml_file: Path):
+        from depictio.cli.cli.commands.dashboard import validate_schema_online
+        from depictio.models.models.dashboards import DashboardDataLite
+
+        lite = DashboardDataLite.from_yaml(tagged_yaml_file.read_text())
+        lite.project_tag = "a#b?c"
+        response = MagicMock(status_code=404)
+        with patch("depictio.cli.cli.commands.dashboard.httpx.get", return_value=response) as get:
+            validate_schema_online(lite, "http://s.test", {})
+
+        assert get.call_args.args[0].endswith("/projects/get/from_name/a%23b%3Fc")
+
+    def test_import_without_a_project_says_the_online_check_was_skipped(
+        self, valid_yaml_file: Path, tmp_path: Path, http_client
+    ):
+        config = _write_cli_config(tmp_path / "named.yaml", "http://named.test")
+
+        with patch("depictio.cli.cli.commands.dashboard.validate_schema_online") as online:
+            result = runner.invoke(app, ["import", str(valid_yaml_file), "--server", str(config)])
+
+        assert "Server schema check skipped: no --project" in " ".join(result.output.split())
+        online.assert_not_called()
+
+    def test_local_without_a_local_server_still_validates_offline(
+        self, valid_yaml_file: Path, tmp_path: Path, monkeypatch
+    ):
+        """--server local names a server only the import needs: a dry run reads nothing."""
+        monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path / "no-local"))
+
+        dry = runner.invoke(app, ["import", str(valid_yaml_file), "--server", "local", "--dry-run"])
+        offline = runner.invoke(
+            app, ["validate", str(valid_yaml_file), "--server", "local", "--offline"]
+        )
+
+        assert dry.exit_code == 0, dry.output
+        assert offline.exit_code == 0, offline.output
+
+    def test_import_into_a_missing_local_server_says_how_to_start_one(
+        self, valid_yaml_file: Path, tmp_path: Path, monkeypatch
+    ):
+        monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path / "no-local"))
+
+        result = runner.invoke(app, ["import", str(valid_yaml_file), "--server", "local"])
+
+        assert result.exit_code == 1
+        assert "depictio local up" in result.output
+
+    def test_export_creates_the_parent_directories(self, tmp_path: Path, http_client):
+        config = _write_cli_config(tmp_path / "named.yaml", "http://named.test")
+        out = tmp_path / "new" / "dir" / "d.yaml"
+
+        result = runner.invoke(app, ["export", "abc123", "--server", str(config), "-o", str(out)])
+
+        assert result.exit_code == 0, result.output
+        assert out.read_text() == "title: exported\n"
+
+    def test_export_to_a_path_it_cannot_write_is_an_error(self, tmp_path: Path, http_client):
+        config = _write_cli_config(tmp_path / "named.yaml", "http://named.test")
+        # A directory where the file should go.
+        out = tmp_path / "taken"
+        out.mkdir()
+
+        result = runner.invoke(app, ["export", "abc123", "--server", str(config), "-o", str(out)])
+
+        assert result.exit_code == 1
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+        assert f"Cannot write the dashboard to {out}" in " ".join(result.output.split())
+
+    def test_export_quotes_the_dashboard_id(self, tmp_path: Path, http_client):
+        config = _write_cli_config(tmp_path / "named.yaml", "http://named.test")
+
+        runner.invoke(
+            app, ["export", "a/b", "--server", str(config), "-o", str(tmp_path / "o.yaml")]
+        )
+
+        assert http_client.get.call_args.args[0].endswith("/dashboards/a%2Fb/yaml")
+
+
 class TestValidateServer:
     """validate checks against a server only when one is configured."""
 
@@ -358,25 +520,37 @@ class TestValidateServer:
         online.assert_not_called()
 
     def test_the_default_configuration_is_used_with_its_url(
-        self, valid_yaml_file: Path, isolated_home: Path, online
+        self, tagged_yaml_file: Path, isolated_home: Path, online
     ):
         _write_cli_config(isolated_home / ".depictio" / "CLI.yaml", "http://default.test")
 
-        result = runner.invoke(app, ["validate", str(valid_yaml_file)])
+        result = runner.invoke(app, ["validate", str(tagged_yaml_file)])
 
         assert result.exit_code == 0, result.output
         assert online.call_args.args[1] == "http://default.test"
 
     def test_the_env_var_configuration_is_used(
-        self, valid_yaml_file: Path, tmp_path: Path, monkeypatch, online
+        self, tagged_yaml_file: Path, tmp_path: Path, monkeypatch, online
     ):
         config = _write_cli_config(tmp_path / "env.yaml", "http://from-env.test")
         monkeypatch.setenv("DEPICTIO_CLI_CONFIG_PATH", str(config))
 
-        result = runner.invoke(app, ["validate", str(valid_yaml_file)])
+        result = runner.invoke(app, ["validate", str(tagged_yaml_file)])
 
         assert result.exit_code == 0, result.output
         assert online.call_args.args[1] == "http://from-env.test"
+
+    def test_a_yaml_without_project_tag_says_the_server_check_was_skipped(
+        self, valid_yaml_file: Path, tmp_path: Path, online
+    ):
+        config = _write_cli_config(tmp_path / "named.yaml", "http://named.test")
+
+        result = runner.invoke(app, ["validate", str(valid_yaml_file), "--server", str(config)])
+
+        assert result.exit_code == 0, result.output
+        assert "skipped: the YAML has no project_tag" in " ".join(result.output.split())
+        assert "Server schema OK" not in result.output
+        online.assert_not_called()
 
     @pytest.mark.parametrize("flag", ["--server", "--config", "-c"])
     def test_a_named_configuration_that_is_missing_is_an_error(
@@ -388,28 +562,108 @@ class TestValidateServer:
         assert "configuration file not found" in result.output
         online.assert_not_called()
 
-    def test_an_unreachable_default_server_does_not_fail_the_file(
+    def test_a_named_configuration_that_is_broken_is_an_error(
+        self, valid_yaml_file: Path, tmp_path: Path, online
+    ):
+        config = tmp_path / "broken.yaml"
+        config.write_text("api_base_url: [unclosed\n")
+
+        result = runner.invoke(app, ["validate", str(valid_yaml_file), "--server", str(config)])
+
+        assert result.exit_code == 1
+        assert "is not valid YAML" in " ".join(result.output.split())
+        online.assert_not_called()
+
+    def test_a_broken_default_configuration_only_skips_the_server_check(
         self, valid_yaml_file: Path, isolated_home: Path, online
+    ):
+        config = isolated_home / ".depictio" / "CLI.yaml"
+        config.parent.mkdir(parents=True)
+        config.write_text("api_base_url: [unclosed\n")
+
+        result = runner.invoke(app, ["validate", str(valid_yaml_file)])
+
+        assert result.exit_code == 0, result.output
+        assert "Server schema check skipped" in result.output
+        assert "Validation passed" in result.output
+        online.assert_not_called()
+
+    def test_an_unreachable_default_server_does_not_fail_the_file(
+        self, tagged_yaml_file: Path, isolated_home: Path, online
     ):
         _write_cli_config(isolated_home / ".depictio" / "CLI.yaml", "http://down.test")
         online.return_value = [
             {"component_id": "-", "field": "-", "message": "Server unreachable: refused"}
         ]
 
-        result = runner.invoke(app, ["validate", str(valid_yaml_file)])
+        result = runner.invoke(app, ["validate", str(tagged_yaml_file)])
 
         assert result.exit_code == 0, result.output
         assert "unreachable" in result.output
 
-    def test_an_unreachable_named_server_fails(self, valid_yaml_file: Path, tmp_path: Path, online):
+    def test_an_unreachable_named_server_fails(
+        self, tagged_yaml_file: Path, tmp_path: Path, online
+    ):
         config = _write_cli_config(tmp_path / "named.yaml", "http://down.test")
         online.return_value = [
             {"component_id": "-", "field": "-", "message": "Server unreachable: refused"}
         ]
 
-        result = runner.invoke(app, ["validate", str(valid_yaml_file), "--server", str(config)])
+        result = runner.invoke(app, ["validate", str(tagged_yaml_file), "--server", str(config)])
 
         assert result.exit_code == 1
+        assert "http://down.test is unreachable" in result.output
+
+    def test_what_the_default_server_reports_is_a_warning(
+        self, tagged_yaml_file: Path, isolated_home: Path, online
+    ):
+        """A project or token the default server lacks says nothing about the file."""
+        _write_cli_config(isolated_home / ".depictio" / "CLI.yaml", "http://default.test")
+        online.return_value = [
+            {"component_id": "-", "field": "project", "message": "Project not found"}
+        ]
+
+        result = runner.invoke(app, ["validate", str(tagged_yaml_file)])
+
+        assert result.exit_code == 0, result.output
+        assert "1 warning(s) from the default server" in " ".join(result.output.split())
+        assert "Project not found" in result.output
+        assert "Validation passed" in result.output
+
+    def test_what_a_named_server_reports_is_an_error(
+        self, tagged_yaml_file: Path, tmp_path: Path, online
+    ):
+        config = _write_cli_config(tmp_path / "named.yaml", "http://named.test")
+        online.return_value = [
+            {"component_id": "-", "field": "project", "message": "Project not found"}
+        ]
+
+        result = runner.invoke(app, ["validate", str(tagged_yaml_file), "--server", str(config)])
+
+        assert result.exit_code == 1
+        assert "Validation failed (1 error(s))" in result.output
+
+    def test_a_named_local_server_that_is_down_says_how_to_start_it(
+        self, tagged_yaml_file: Path, tmp_path: Path, monkeypatch, online
+    ):
+        monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path / "local"))
+        _write_cli_config(tmp_path / "local" / "cli" / "admin_config.yaml", "http://local.test")
+        online.return_value = [
+            {"component_id": "-", "field": "-", "message": "Server unreachable: refused"}
+        ]
+
+        result = runner.invoke(app, ["validate", str(tagged_yaml_file), "--server", "local"])
+
+        assert result.exit_code == 1
+        assert "depictio local up" in result.output
+
+    def test_verbose_is_accepted_and_its_help_says_where_logs_come_from(self, valid_yaml_file):
+        result = runner.invoke(app, ["validate", str(valid_yaml_file), "-v"])
+        assert result.exit_code == 0, result.output
+
+        help_text = runner.invoke(app, ["validate", "--help"]).output
+        # The help is boxed and wrapped: compare its words, without the box edges.
+        assert "depictio -v dashboard validate" in " ".join(help_text.replace("│", " ").split())
 
     def test_offline_skips_even_a_named_server(self, valid_yaml_file: Path, tmp_path: Path, online):
         config = _write_cli_config(tmp_path / "named.yaml", "http://named.test")
@@ -530,24 +784,26 @@ class TestCLIImportOverwrite:
         assert "configuration file not found" in result.output
 
     def test_import_overwrite_with_config_attempts_server(
-        self, valid_yaml_file: Path, tmp_path: Path
+        self, valid_yaml_file: Path, tmp_path: Path, http_client
     ):
         """--overwrite with --config should attempt server connection."""
-        config_file = tmp_path / "config.yaml"
-        config_file.write_text(
-            """
-api_base_url: http://localhost:9999
-access_token: fake-token
-""",
-            encoding="utf-8",
-        )
+        config_file = _write_cli_config(tmp_path / "config.yaml", "http://named.test")
 
         result = runner.invoke(
             app,
-            ["import", str(valid_yaml_file), "--config", str(config_file), "--overwrite"],
+            [
+                "import",
+                str(valid_yaml_file),
+                "--config",
+                str(config_file),
+                "--overwrite",
+                "--offline",
+            ],
         )
         # Should show "Updating" instead of "Importing"
-        assert "Updating" in result.output or "Error" in result.output
+        assert result.exit_code == 0, result.output
+        assert "Updating" in result.output
+        assert http_client.post.call_args.kwargs["params"]["overwrite"] is True
 
 
 # ============================================================================

@@ -37,8 +37,8 @@ def get_config(filename: str) -> dict:
     """
     Get the config file.
     """
-    if not filename.endswith(".yaml"):
-        raise ValueError("Invalid config file. Must be a YAML file.")
+    if not filename.endswith((".yaml", ".yml")):
+        raise ValueError(f"Invalid config file '{filename}': it must be a .yaml or .yml file.")
     if not os.path.exists(filename):
         raise ValueError(f"The file '{filename}' does not exist.")
     if not os.path.isfile(filename):

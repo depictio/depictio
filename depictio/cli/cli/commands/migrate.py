@@ -1,5 +1,5 @@
 """
-depictio migrate — project-scoped cross-instance migration
+depictio migrate: project-scoped cross-instance migration
 
 Exports one project from a source instance and upserts it into a target
 instance.  Never wipes existing data on the target.
@@ -19,39 +19,81 @@ Usage examples:
         --to-server ~/.depictio/CLI_remote.yaml --mode dashboard
 """
 
+from enum import Enum
 from typing import Annotated
 
+import httpx
 import typer
 
 from depictio.cli.cli.utils.api_calls import api_export_project, api_import_project, api_login
-from depictio.cli.cli.utils.common import load_depictio_config
+from depictio.cli.cli.utils.common import (
+    describe_api_target,
+    env_overrides_ignored,
+    load_depictio_config,
+)
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
     rich_print_json,
 )
 from depictio.cli.cli.utils.server_target import (
-    DEFAULT_CLI_CONFIG,
     DEFAULT_TARGET_CLI_CONFIG,
+    SERVER_HELP,
     LegacyConfigPathOption,
     resolve_server,
     resolve_target_server,
 )
 
-app = typer.Typer(invoke_without_command=True)
+# A single command: `depictio migrate --project ...`, with no subcommand to name.
+app = typer.Typer()
 
-_MODES = ["all", "metadata", "dashboard", "files"]
+
+# An Enum, not click.Choice: typer runs its own copy of click, which would not turn a
+# click.Choice rejection into a usage error (exit 2) but into a traceback.
+class Mode(str, Enum):
+    all = "all"
+    metadata = "metadata"
+    dashboard = "dashboard"
+    files = "files"
 
 
-@app.callback()
+# How the server words the fix for a conflict: for its API, not for this command.
+_SERVER_OVERWRITE_FIX = "Set overwrite=true to replace it."
+
+
+def _login_as_admin(config_path: str, role: str) -> None:
+    """Log in with ``config_path``; exit 1 unless the server takes it for an administrator.
+
+    api_login reports a rejected token by returning success False, with no is_admin:
+    checked first, so an expired token is not reported as missing admin rights.
+    """
+    rich_print_checked_statement(f"Authenticating with {role.lower()} instance...", "info")
+    try:
+        auth = api_login(config_path)
+    except httpx.HTTPError as exc:
+        rich_print_checked_statement(f"{role}: cannot reach the server: {exc}", "error")
+        rich_print_checked_statement(f"Tried {describe_api_target(config_path)}", "info")
+        raise typer.Exit(1) from exc
+    if not auth.get("success"):
+        rich_print_checked_statement(
+            f"{role}: authentication failed, the server rejected this configuration's "
+            "token, which is invalid or expired",
+            "error",
+        )
+        raise typer.Exit(1)
+    if not auth.get("is_admin"):
+        rich_print_checked_statement(f"{role}: admin access required", "error")
+        raise typer.Exit(1)
+    rich_print_checked_statement(f"{role}: authenticated as admin", "success")
+
+
+@app.command()
 def migrate(
     project: Annotated[str, typer.Option("--project", help="Project name to migrate")],
     server: Annotated[
         str | None,
         typer.Option(
             "--server",
-            help="Server to migrate from: 'local' for the one `depictio local up` runs, or a "
-            "CLI configuration file. Default: $DEPICTIO_CLI_CONFIG_PATH, else "
-            f"{DEFAULT_CLI_CONFIG}",
+            help=f"Server to migrate from. {SERVER_HELP} Formerly `--CLI-config-path`.",
             show_default=False,
         ),
     ] = None,
@@ -61,19 +103,16 @@ def migrate(
         typer.Option(
             "--to-server",
             help="Server to migrate to, given the same way as --server. "
-            f"Default: {DEFAULT_TARGET_CLI_CONFIG}",
+            f"Default: {DEFAULT_TARGET_CLI_CONFIG}. Formerly `--target-config`.",
             show_default=False,
         ),
     ] = None,
     # The target's option before --to-server. Still accepted, out of the help.
     target_config: Annotated[str | None, typer.Option("--target-config", hidden=True)] = None,
-    mode: Annotated[
-        str,
-        typer.Option(
-            "--mode",
-            help="Migration scope: all | metadata | dashboard | files",
-        ),
-    ] = "all",
+    mode_choice: Annotated[
+        Mode,
+        typer.Option("--mode", help="Migration scope, described below."),
+    ] = Mode.all,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Preview changes without writing anything")
     ] = False,
@@ -89,47 +128,38 @@ def migrate(
     Migrate a project from one Depictio instance to another (non-destructive).
 
     The project is read from --server and written to --to-server.
+    DEPICTIO_CLI_TOKEN and DEPICTIO_CLI_API_BASE_URL apply to --server only.
 
     Mode descriptions:
-      all       – MongoDB docs + S3 files  (default, full first-time migration)
-      metadata  – MongoDB docs only        (both instances share S3 storage)
-      dashboard – Dashboards only          (project already exists on remote)
-      files     – S3 files only            (metadata already migrated)
+      all       : MongoDB docs + S3 files  (default, full first-time migration)
+      metadata  : MongoDB docs only        (both instances share S3 storage)
+      dashboard : Dashboards only          (project already exists on remote)
+      files     : S3 files only            (metadata already migrated)
     """
-    if mode not in _MODES:
-        rich_print_checked_statement(
-            f"Invalid mode '{mode}'. Choose from: {', '.join(_MODES)}", "error"
-        )
-        raise typer.Exit(1)
-
+    mode = mode_choice.value
     source_path = resolve_server(server, CLI_config_path)
     target_path = resolve_target_server(to_server, target_config)
 
     # Load configs --------------------------------------------------------
-    source_config = load_depictio_config(yaml_config_path=source_path)
-    remote_config = load_depictio_config(yaml_config_path=target_path)
+    # Labelled, and both always announced: even when they are one server, the
+    # output says which one each side is.
+    source_config = load_depictio_config(yaml_config_path=source_path, label="Source server")
+    # The env overrides stand in for the one server a command talks to: here, the
+    # source. Applied to the target too, both would point at the same server.
+    with env_overrides_ignored():
+        remote_config = load_depictio_config(
+            yaml_config_path=target_path, option="--to-server", label="Target server"
+        )
 
-    # Authenticate source
-    rich_print_checked_statement("Authenticating with source instance...", "info")
-    auth_source = api_login(source_path)
-    if not auth_source.get("is_admin"):
-        rich_print_checked_statement("Source: admin access required", "error")
-        raise typer.Exit(1)
-    rich_print_checked_statement("Source: authenticated as admin", "success")
-
-    # Authenticate target
-    rich_print_checked_statement("Authenticating with target instance...", "info")
-    auth_target = api_login(target_path)
-    if not auth_target.get("is_admin"):
-        rich_print_checked_statement("Target: admin access required", "error")
-        raise typer.Exit(1)
-    rich_print_checked_statement("Target: authenticated as admin", "success")
+    _login_as_admin(source_path, "Source")
+    with env_overrides_ignored():
+        _login_as_admin(target_path, "Target")
 
     if dry_run:
-        rich_print_checked_statement("DRY RUN mode — no data will be written", "info")
+        rich_print_checked_statement("DRY RUN mode: no data will be written", "info")
 
     # Build target S3 config for S3 copy.
-    # Skip S3 copy when source and target point to the same API instance — the S3 data is
+    # Skip S3 copy when source and target point to the same API instance: the S3 data is
     # already there and the external endpoint URL sent by the CLI would be unreachable from
     # inside the backend container (e.g. localhost:9000 vs minio:9000 in Docker).
     target_s3_config: dict | None = None
@@ -148,10 +178,10 @@ def migrate(
         )
     elif mode in ("all", "files") and same_instance:
         rich_print_checked_statement(
-            "S3 copy skipped — source and target are the same instance", "info"
+            "S3 copy skipped: source and target are the same instance", "info"
         )
 
-    # Step 1 – Export from source -----------------------------------------
+    # Step 1: Export from source ------------------------------------------
     rich_print_checked_statement(
         f"Exporting project '{project}' (mode={mode}) from source...", "info"
     )
@@ -172,7 +202,7 @@ def migrate(
     meta = bundle.get("migrate_metadata", {})
     doc_counts = meta.get("document_counts", {})
     rich_print_checked_statement(
-        f"Export complete — project '{meta.get('project_name')}' (id={meta.get('project_id')})",
+        f"Export complete: project '{meta.get('project_name')}' (id={meta.get('project_id')})",
         "success",
     )
     if doc_counts:
@@ -193,12 +223,17 @@ def migrate(
 
     # For files-only mode there is nothing to import into MongoDB
     if mode == "files":
-        rich_print_checked_statement(
-            "Files-only mode: S3 sync complete, no MongoDB import.", "success"
-        )
+        if dry_run:
+            rich_print_checked_statement(
+                "Files-only mode, dry run: no S3 file copied, no MongoDB import.", "success"
+            )
+        else:
+            rich_print_checked_statement(
+                "Files-only mode: S3 sync complete, no MongoDB import.", "success"
+            )
         raise typer.Exit(0)
 
-    # Step 2 – Import into target -----------------------------------------
+    # Step 2: Import into target ------------------------------------------
     rich_print_checked_statement(f"Importing bundle into target instance (mode={mode})...", "info")
     import_result = api_import_project(
         remote_config,
@@ -208,9 +243,10 @@ def migrate(
     )
 
     if import_result.get("conflict"):
+        detail = import_result.get("message", "the project already exists on the target")
+        detail = detail.replace(_SERVER_OVERWRITE_FIX, "").strip().rstrip(".")
         rich_print_checked_statement(
-            f"Conflict: {import_result.get('message', 'project already exists')}. "
-            "Use --overwrite to replace it.",
+            f"Conflict: {detail}. Use --overwrite to replace it.",
             "error",
         )
         raise typer.Exit(1)
@@ -226,6 +262,6 @@ def migrate(
     rich_print_json("Upserted per collection:", import_result.get("upserted", {}))
 
     rich_print_checked_statement(
-        f"Migration {'dry-run' if dry_run else ''} complete for project '{project}'",
+        f"Migration {'dry run ' if dry_run else ''}complete for project '{project}'",
         "success",
     )

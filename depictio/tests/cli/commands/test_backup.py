@@ -107,7 +107,10 @@ class TestBackupCLI:
             result = runner.invoke(app, ["create", "--CLI-config-path", config_file, "--dry-run"])
 
             assert result.exit_code == 0
-            assert "DRY RUN" in result.stdout
+            # Honest about what a dry run checks: the server and the admin rights only.
+            out = " ".join(result.stdout.split())
+            assert "DRY RUN: no backup created" in out
+            assert "not what a backup would contain" in out
 
     @patch("depictio.cli.cli.commands.backup.api_login")
     @patch("depictio.cli.cli.utils.api_calls.api_list_backups")
@@ -444,6 +447,82 @@ class TestRestoreCLI:
         assert "Document 0 in users" in result.stdout
 
 
+class TestBackupFailures:
+    """A rejected token, an unanswered prompt, a dry run with errors: each says what it is."""
+
+    @patch("depictio.cli.cli.commands.backup.load_depictio_config")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_a_rejected_token_is_an_authentication_failure(
+        self, mock_api_login, mock_load_config, runner
+    ):
+        mock_load_config.return_value = Mock()
+        # What api_login returns when the server refuses the token: no is_admin at all.
+        mock_api_login.return_value = {"success": False}
+
+        result = runner.invoke(app, ["create"])
+
+        assert result.exit_code == 1
+        out = " ".join(result.output.split())
+        assert "Authentication failed" in out
+        assert "invalid or expired" in out
+        assert "Access denied" not in out
+
+    @patch("depictio.cli.cli.commands.backup.load_depictio_config")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_an_unreachable_server_is_named(self, mock_api_login, mock_load_config, runner):
+        import httpx
+
+        mock_load_config.return_value = Mock()
+        mock_api_login.side_effect = httpx.ConnectError("refused")
+
+        result = runner.invoke(app, ["list"])
+
+        assert result.exit_code == 1
+        assert "Cannot reach the Depictio server: refused" in " ".join(result.output.split())
+        assert result.exception is None or isinstance(result.exception, SystemExit)
+
+    @patch("depictio.cli.cli.utils.api_calls.api_restore_backup")
+    @patch("depictio.cli.cli.commands.backup.load_depictio_config")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_an_unanswered_confirmation_aborts_without_restoring(
+        self, mock_api_login, mock_load_config, mock_api_restore, runner
+    ):
+        mock_load_config.return_value = Mock()
+        mock_api_login.return_value = {"success": True, "is_admin": True}
+
+        # No input at all: stdin is closed when the prompt reads it.
+        result = runner.invoke(app, ["restore", "20250101_010101"])
+
+        assert result.exit_code == 1
+        assert "Aborted" in result.output
+        assert "Restore operation failed" not in result.output
+        mock_api_restore.assert_not_called()
+
+    @patch("depictio.cli.cli.utils.api_calls.api_restore_backup")
+    @patch("depictio.cli.cli.commands.backup.load_depictio_config")
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_a_dry_run_with_errors_fails(
+        self, mock_api_login, mock_load_config, mock_api_restore, runner
+    ):
+        mock_load_config.return_value = Mock()
+        mock_api_login.return_value = {"success": True, "is_admin": True}
+        mock_api_restore.return_value = {
+            "success": True,
+            "restored_collections": {},
+            "total_restored": 0,
+            "errors": ["Collection nope not found in backup"],
+        }
+
+        result = runner.invoke(
+            app, ["restore", "20250101_010101", "--dry-run", "--collections", "nope"]
+        )
+
+        assert result.exit_code == 1
+        assert "DRY RUN completed with errors" in result.output
+        assert "completed successfully" not in result.output
+        assert "Collection nope not found in backup" in result.output
+
+
 class TestBackupServer:
     """--server picks the configuration; the hidden --CLI-config-path still does."""
 
@@ -459,13 +538,16 @@ class TestBackupServer:
 
         assert result.exit_code == 0
         assert "--server" in result.output
-        assert "--CLI-config-path" not in result.output
+        # Named once, in the --server help as its former name, and not listed itself.
+        assert "Formerly" in result.output
+        assert result.output.count("--CLI-config-path") == 1
 
     def test_check_coverage_help_hides_the_legacy_option(self, runner):
         result = runner.invoke(dev_app, ["backup", "check-coverage", "--help"])
 
         assert "--server" in result.output
-        assert "--CLI-config-path" not in result.output
+        assert "Formerly" in result.output
+        assert result.output.count("--CLI-config-path") == 1
 
     @pytest.mark.parametrize("flag", ["--server", "--CLI-config-path"])
     @patch("depictio.cli.cli.commands.backup.api_login")

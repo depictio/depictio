@@ -1,12 +1,23 @@
 import atexit
+import contextlib
 import os
+from collections.abc import Iterator
 from datetime import datetime
+from urllib.parse import urlparse
 
 import httpx
 import typer
-from pydantic import validate_call
+import yaml
+from pydantic import ValidationError, validate_call
+from rich.markup import escape
 
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
+from depictio.cli.cli.utils.server_target import (
+    DEFAULT_TARGET_CLI_CONFIG,
+    is_local,
+    is_local_cli_config,
+    local_cli_config,
+)
 from depictio.cli.cli_logging import logger
 from depictio.models.models.cli import CLIConfig
 from depictio.models.utils import get_config
@@ -100,7 +111,11 @@ def validate_depictio_cli_config(depictio_cli_config: dict) -> CLIConfig:
         # via this path — the admin monitoring UI showed hostnames only.
         instance_label=depictio_cli_config.get("instance_label"),
     )
-    logger.info(f"Depictio CLI configuration validated: {config}")
+    # The URL and the user only: the configuration holds the access token, and
+    # verbose logs of a pipeline run are archived.
+    logger.info(
+        f"Depictio CLI configuration validated: {config.api_base_url}, user {config.user.email}"
+    )
     return config
 
 
@@ -110,19 +125,52 @@ def describe_api_target(yaml_config_path: str) -> str:
     "Connection refused" on its own sends people restarting a server that is
     already up: the usual cause is a config pointing at a different instance.
     That is the default failure of an automated run, where nobody passed
-    --server and it fell back to ``~/.depictio/CLI.yaml``.
+    --server and it fell back to ``~/.depictio/CLI.yaml``. For the local server,
+    the usual cause is that it is stopped, and this says so.
 
-    Never raises. It is only ever called while already reporting another error,
-    and a failure to read the config is itself part of the answer.
+    Never raises, and prints nothing. It is only ever called while already
+    reporting another error, and a failure to read the config is itself part of
+    the answer.
     """
     # The file actually read: DEPICTIO_CLI_CONFIG_PATH may stand in for the default.
-    config_file = display_path(cli_config_file(yaml_config_path))
+    config_file = cli_config_file(yaml_config_path)
+    shown = display_path(config_file)
+    if not os.path.isfile(config_file):
+        return f"a missing configuration at {shown}"
     try:
-        config = load_depictio_config(yaml_config_path=yaml_config_path, quiet=True)
+        config, _ = _read_cli_config(yaml_config_path)
     except Exception as exc:
         logger.debug(f"Could not resolve the API base URL to report it: {exc}")
-        return f"an unreadable configuration at {config_file}"
-    return f"{config.api_base_url}, read from {config_file}"
+        return f"an unreadable configuration at {shown}"
+    hint = local_server_hint(config_file)
+    return f"{config.api_base_url}, read from {shown}" + (f" ({hint})" if hint else "")
+
+
+def report_unreachable(yaml_config_path: str, exc: Exception) -> None:
+    """Say that the server did not answer, and which one: see describe_api_target."""
+    rich_print_checked_statement(f"Cannot reach the Depictio server: {exc}", "error")
+    rich_print_checked_statement(f"Tried {describe_api_target(yaml_config_path)}", "info")
+
+
+def local_server_hint(yaml_config_path: str) -> str | None:
+    """How to start the local server, when ``yaml_config_path`` is its configuration and
+    it is stopped: a bare "Connection refused" does not say that. None otherwise."""
+    try:
+        if not is_local_cli_config(cli_config_file(yaml_config_path)):
+            return None
+        from depictio.cli.cli.local_stack import Paths, local_home, running_status
+
+        if running_status(Paths(local_home())).get("api"):
+            return None
+    except Exception as exc:
+        # Only ever a hint added to another error: it must not replace that error.
+        logger.debug(f"Could not tell whether the local server runs: {exc}")
+        return None
+    return "the local server is not running: start it with `depictio local up`"
+
+
+class CLIConfigError(ValueError):
+    """A CLI configuration that cannot be used. The message names the file and the fix."""
 
 
 # CLI config paths considered "default" - only these are overridden by
@@ -133,11 +181,33 @@ _DEFAULT_CLI_CONFIG_PATHS = ("~/.depictio/cli.yaml", "~/.depictio/CLI.yaml")
 # configuration at several steps (login, then each step), and once is enough.
 _announced: set[str] = set()
 
+# Off for migrate's target, see env_overrides_ignored.
+_env_overrides_enabled = True
+
+
+@contextlib.contextmanager
+def env_overrides_ignored() -> Iterator[None]:
+    """Load configurations as written, without DEPICTIO_CLI_TOKEN and DEPICTIO_CLI_API_BASE_URL.
+
+    For migrate's target. Those variables stand in for the one server a command
+    talks to, the source, like DEPICTIO_CLI_CONFIG_PATH does: applied to the target
+    too, they would point both at the same server.
+    """
+    global _env_overrides_enabled
+    previous, _env_overrides_enabled = _env_overrides_enabled, False
+    try:
+        yield
+    finally:
+        _env_overrides_enabled = previous
+
 
 def _config_file(yaml_config_path: str) -> tuple[str, bool]:
     """The file a load of ``yaml_config_path`` reads, expanded, and whether the env var chose it."""
     env_path = os.environ.get("DEPICTIO_CLI_CONFIG_PATH")
     if env_path and yaml_config_path in _DEFAULT_CLI_CONFIG_PATHS:
+        # The --server help says the variable is its default, so it takes 'local' too.
+        if is_local(env_path):
+            return local_cli_config(), True
         return os.path.expanduser(env_path), True
     return os.path.expanduser(yaml_config_path), False
 
@@ -186,9 +256,130 @@ def _apply_env_overrides(config: dict) -> dict:
     return config
 
 
+def _origin(yaml_config_path: str, from_env: bool, option: str) -> tuple[str, str]:
+    """Where a configuration file came from, and how to point the command at another."""
+    if from_env:
+        return (
+            "from DEPICTIO_CLI_CONFIG_PATH",
+            "point DEPICTIO_CLI_CONFIG_PATH at an existing config",
+        )
+    if yaml_config_path in (*_DEFAULT_CLI_CONFIG_PATHS, DEFAULT_TARGET_CLI_CONFIG):
+        # Nobody chose this file, so naming the option as its source would mislead.
+        where = "the default" if option == "--server" else f"the default for {option}"
+        return where, f"pass {option}: 'local' or an existing config"
+    return f"from {option}", f"point {option} at an existing config"
+
+
+def _summarise(exc: ValidationError) -> str:
+    """The first few problems pydantic found, one line each joined, without its URLs."""
+    problems = [
+        f"{'.'.join(str(part) for part in err['loc']) or 'top level'}: {err['msg']}"
+        for err in exc.errors()[:3]
+    ]
+    return "; ".join(problems)
+
+
+def _read_cli_config(yaml_config_path: str, option: str = "--server") -> tuple[CLIConfig, str]:
+    """The configuration a load of ``yaml_config_path`` reads, and where its URL came from.
+
+    Prints nothing. Raises CLIConfigError, whose message names the file, what is
+    wrong with it and, for a missing one, the option that chose it: ``option`` is
+    the one that resolved ``yaml_config_path``.
+    """
+    # DEPICTIO_CLI_CONFIG_PATH overrides the path only when the caller left it at a
+    # default: an explicit --server always wins.
+    expanded, from_env = _config_file(yaml_config_path)
+    shown = display_path(expanded)
+    local = is_local_cli_config(expanded)
+    # `get_config` signals a missing/unsuitable file with ValueError, so checking
+    # here is what turns a typo into a usable message. That matters most for an
+    # automated trigger, where the path usually arrives from DEPICTIO_CLI_CONFIG_PATH.
+    if not os.path.isfile(expanded):
+        where, fix = _origin(yaml_config_path, from_env, option)
+        if local:
+            raise CLIConfigError(
+                f"No local server configuration at {shown} ({where}): "
+                "start one with `depictio local up`."
+            )
+        if os.path.isdir(expanded):
+            raise CLIConfigError(
+                f"{shown} is a directory, not a Depictio CLI configuration file ({where}). "
+                f"Name the YAML file in it, or {fix}."
+            )
+        raise CLIConfigError(
+            f"Depictio CLI configuration file not found: {shown} ({where}). Create it, or {fix}."
+        )
+    try:
+        raw = get_config(expanded)
+    except yaml.YAMLError as exc:
+        raise CLIConfigError(f"{shown} is not valid YAML: {exc}") from exc
+    except (OSError, ValueError) as exc:
+        raise CLIConfigError(f"Cannot read the Depictio CLI configuration {shown}: {exc}") from exc
+
+    # The local server's configuration is complete as `depictio local up` wrote it.
+    # The variables are what the Nextflow docs tell people to export for their
+    # remote server: applied here, `--server local` would reach that one instead.
+    url_from_env = False
+    if _env_overrides_enabled and not local:
+        url_from_env = bool(os.environ.get("DEPICTIO_CLI_API_BASE_URL"))
+        raw = _apply_env_overrides(raw)
+    if not isinstance(raw.get("user"), dict):
+        raise CLIConfigError(
+            f"{shown} has no 'user' key: it is not a Depictio CLI configuration, "
+            "or an incomplete one."
+        )
+    try:
+        config = validate_depictio_cli_config(raw)
+    except ValidationError as exc:
+        raise CLIConfigError(
+            f"{shown} is not a valid Depictio CLI configuration: {_summarise(exc)}"
+        ) from exc
+    source = f"configuration {shown}"
+    if url_from_env:
+        source = f"from DEPICTIO_CLI_API_BASE_URL, {source}"
+    return config, source
+
+
+def read_depictio_config(yaml_config_path: str = "~/.depictio/CLI.yaml") -> CLIConfig:
+    """load_depictio_config without a word: a configuration it cannot use raises
+    CLIConfigError, naming the file, instead of ending the command.
+
+    For a command that can do without a server, and so must not fail on a default
+    configuration it cannot use.
+    """
+    return _read_cli_config(yaml_config_path)[0]
+
+
+# Where the local server and the services `depictio local up` starts listen.
+_LOOPBACK_HOSTS = ("127.0.0.1", "localhost")
+_PROXY_VARS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
+
+
+def _bypass_proxy_for_loopback(api_base_url: str) -> None:
+    """Keep requests to a server on this machine away from a proxy set in the environment.
+
+    httpx and boto3 send through HTTP(S)_PROXY, and a usual no_proxy=localhost does
+    not cover 127.0.0.1, where the local server listens: the proxy cannot reach this
+    machine's loopback, so every call would fail. Set before the first request,
+    since an HTTP client reads these variables when it is created.
+    """
+    if urlparse(api_base_url).hostname not in (*_LOOPBACK_HOSTS, "::1"):
+        return
+    if not any(os.environ.get(var) for var in _PROXY_VARS):
+        return
+    current = os.environ.get("no_proxy") or os.environ.get("NO_PROXY") or ""
+    entries = [entry.strip() for entry in current.split(",") if entry.strip()]
+    missing = [host for host in _LOOPBACK_HOSTS if host not in entries]
+    if missing:
+        os.environ["no_proxy"] = os.environ["NO_PROXY"] = ",".join(entries + missing)
+
+
 @validate_call(validate_return=True)
 def load_depictio_config(
-    yaml_config_path: str = "~/.depictio/CLI.yaml", quiet: bool = False
+    yaml_config_path: str = "~/.depictio/CLI.yaml",
+    quiet: bool = False,
+    option: str = "--server",
+    label: str | None = None,
 ) -> CLIConfig:
     """
     Load the Depictio configuration file.
@@ -197,41 +388,24 @@ def load_depictio_config(
     which file: the wrong server is the usual reason a command fails. ``quiet`` is
     for callers that re-read an already-loaded config only to name a field (the API
     URL in an error message, the viewer URL in the summary).
+
+    ``option`` is the option that named ``yaml_config_path``, so that a missing file
+    is blamed on the one the user typed. ``label`` replaces "Server" in the
+    announcement, for a command that talks to two servers, and always prints.
+
+    A configuration it cannot use is reported as such, naming the file, and ends
+    the command with exit code 1.
     """
     try:
-        # DEPICTIO_CLI_CONFIG_PATH overrides the path only when the caller left it
-        # at a default - an explicit --server always wins.
-        expanded, from_env = _config_file(yaml_config_path)
-        # `get_config` signals a missing/unsuitable file with ValueError, not
-        # FileNotFoundError, so checking here is what turns a typo into a usable
-        # message instead of a traceback. That matters most for an automated
-        # trigger, where the path usually arrives from DEPICTIO_CLI_CONFIG_PATH.
-        if not os.path.isfile(expanded):
-            if from_env:
-                where = "from DEPICTIO_CLI_CONFIG_PATH"
-                fix = "point DEPICTIO_CLI_CONFIG_PATH at an existing config"
-            elif yaml_config_path in _DEFAULT_CLI_CONFIG_PATHS:
-                # Nobody chose this file, so naming --server as its source would mislead.
-                where, fix = "the default", "pass --server: 'local' or an existing config"
-            else:
-                where, fix = "from --server", "point --server at an existing config"
-            logger.debug(f"Depictio CLI configuration file not found: {expanded} ({where})")
-            rich_print_checked_statement(
-                f"Depictio CLI configuration file not found: {display_path(expanded)} ({where}). "
-                f"Create it, or {fix}.",
-                "error",
-            )
-            raise typer.Exit(code=1)
-        config = get_config(expanded)
-        config = _apply_env_overrides(config)
-        config = validate_depictio_cli_config(config)
-        announcement = f"Server: {config.api_base_url} (configuration {display_path(expanded)})"
-        if not quiet and announcement not in _announced:
-            _announced.add(announcement)
-            rich_print_checked_statement(announcement, "info")
-        return config
-    except FileNotFoundError:
-        logger.error(
-            "Depictio configuration file not found. Please create a new user and generate a token."
-        )
-        raise typer.Exit(code=1)
+        config, source = _read_cli_config(yaml_config_path, option)
+    except CLIConfigError as exc:
+        logger.debug(f"Unusable Depictio CLI configuration: {exc}")
+        # Paths, YAML and pydantic errors can hold brackets Rich would read as markup.
+        rich_print_checked_statement(escape(str(exc)), "error")
+        raise typer.Exit(code=1) from exc
+    _bypass_proxy_for_loopback(str(config.api_base_url))
+    target = f"{config.api_base_url} ({source})"
+    if not quiet and (label or target not in _announced):
+        _announced.add(target)
+        rich_print_checked_statement(f"{label or 'Server'}: {target}", "info")
+    return config

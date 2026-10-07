@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from depictio.cli.cli.commands.config import app
@@ -131,7 +132,22 @@ class TestInstallEnablesTheTriggerGlobally:
     def test_install_and_uninstall_together_are_refused(self, monkeypatch, tmp_path):
         result = self._run(monkeypatch, tmp_path, "--install", "--uninstall")
 
-        assert result.exit_code == 1
+        assert result.exit_code == 2
+
+    @pytest.mark.parametrize("other", ["--install", "--uninstall"])
+    def test_print_with_install_or_uninstall_is_refused(self, monkeypatch, tmp_path, other):
+        """One of the two used to be dropped without a word."""
+        result = self._run(monkeypatch, tmp_path, "--print", other)
+
+        assert result.exit_code == 2
+        assert "pass only one" in result.output
+        assert not (tmp_path / ".nextflow" / "config").exists()
+
+    def test_default_disabled_without_install_is_refused(self, monkeypatch, tmp_path):
+        result = self._run(monkeypatch, tmp_path, "--default-disabled")
+
+        assert result.exit_code == 2
+        assert "only applies with --install" in result.output
 
 
 class TestInstallDefaultToggle:

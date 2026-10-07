@@ -441,3 +441,283 @@ class TestCommon:
                 "Server: https://quiet.example.org" in str(call) and str(config_file) in str(call)
                 for call in printer.call_args_list
             )
+
+
+def _valid_config(api_base_url: str = "http://127.0.0.1:8058") -> dict:
+    """A loadable CLI configuration whose api_base_url marks which file was read."""
+    return {
+        "api_base_url": api_base_url,
+        "user": {
+            "email": "admin@example.com",
+            "is_admin": True,
+            "id": "507f1f77bcf86cd799439011",
+            "token": {
+                "user_id": "507f1f77bcf86cd799439011",
+                "access_token": "secret-access-token",
+                "refresh_token": "secret-refresh-token",
+                "token_type": "bearer",
+                "token_lifetime": "short-lived",
+                "expire_datetime": "2099-12-31T23:59:59",
+                "refresh_expire_datetime": "2099-12-31T23:59:59",
+                "name": "test_token",
+                "created_at": "2025-06-30T18:00:00",
+                "logged_in": False,
+            },
+        },
+        "s3_storage": {
+            "service_name": "localhost",
+            "service_port": 9000,
+            "external_host": "localhost",
+            "external_port": 9000,
+            "external_protocol": "http",
+            "root_user": "depictio",
+            "root_password": "s3-password",
+            "bucket": "depictio-bucket",
+        },
+    }
+
+
+class TestConfigurationProblems:
+    """What a configuration that cannot be used is reported as: the file, and what is wrong.
+
+    HOME and the local home point under ``tmp_path``: no real configuration is read.
+    """
+
+    @pytest.fixture(autouse=True)
+    def isolated(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path / "local"))
+        for var in ("DEPICTIO_CLI_CONFIG_PATH", "DEPICTIO_CLI_API_BASE_URL", "DEPICTIO_CLI_TOKEN"):
+            monkeypatch.delenv(var, raising=False)
+
+    @pytest.fixture
+    def printed(self):
+        """The status lines load_depictio_config prints, on one line each."""
+        with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
+            yield lambda: [" ".join(str(call.args[0]).split()) for call in printer.call_args_list]
+
+    def _fails_with(self, printed, path: str, **kwargs) -> str:
+        with pytest.raises(Exit) as caught:
+            load_depictio_config(path, **kwargs)
+        assert caught.value.exit_code == 1
+        (message,) = printed()
+        return message
+
+    def test_broken_yaml_names_the_file(self, tmp_path, printed):
+        config = tmp_path / "broken.yaml"
+        config.write_text("api_base_url: [unclosed\n")
+
+        assert f"{config} is not valid YAML" in self._fails_with(printed, str(config))
+
+    def test_a_directory_is_reported_as_one(self, tmp_path, printed):
+        message = self._fails_with(printed, str(tmp_path))
+
+        assert f"{tmp_path} is a directory, not a Depictio CLI configuration file" in message
+        assert "not found" not in message
+
+    def test_a_missing_user_key_is_named(self, tmp_path, printed):
+        config = tmp_path / "CLI.yaml"
+        config.write_text(yaml.safe_dump({"api_base_url": "http://x.test"}))
+
+        assert "has no 'user' key" in self._fails_with(printed, str(config))
+
+    def test_an_invalid_field_is_named(self, tmp_path, printed):
+        broken = _valid_config()
+        broken["api_base_url"] = "not-a-url"
+        config = tmp_path / "CLI.yaml"
+        config.write_text(yaml.safe_dump(broken))
+
+        message = self._fails_with(printed, str(config))
+        assert "is not a valid Depictio CLI configuration: api_base_url:" in message
+
+    def test_a_yml_file_is_read(self, tmp_path, printed):
+        config = tmp_path / "CLI.yml"
+        config.write_text(yaml.safe_dump(_valid_config("http://from-yml.test")))
+
+        assert load_depictio_config(str(config)).api_base_url == "http://from-yml.test"
+
+    def test_the_env_var_takes_local(self, tmp_path, monkeypatch, printed):
+        local = tmp_path / "local" / "cli" / "admin_config.yaml"
+        local.parent.mkdir(parents=True)
+        local.write_text(yaml.safe_dump(_valid_config("http://local.test")))
+        monkeypatch.setenv("DEPICTIO_CLI_CONFIG_PATH", "local")
+
+        assert load_depictio_config().api_base_url == "http://local.test"
+
+    def test_the_env_var_local_without_a_local_server(self, monkeypatch, printed):
+        monkeypatch.setenv("DEPICTIO_CLI_CONFIG_PATH", "LOCAL")
+
+        message = self._fails_with(printed, "~/.depictio/CLI.yaml")
+        assert "No local server configuration at" in message
+        assert "(from DEPICTIO_CLI_CONFIG_PATH)" in message
+        assert "depictio local up" in message
+
+    def test_the_default_file_named_on_purpose_beats_the_env_var(self, tmp_path, monkeypatch):
+        from depictio.cli.cli.utils.server_target import resolve_server
+
+        default = tmp_path / "home" / ".depictio" / "CLI.yaml"
+        default.parent.mkdir(parents=True)
+        default.write_text(yaml.safe_dump(_valid_config("http://named.test")))
+        elsewhere = tmp_path / "env.yaml"
+        elsewhere.write_text(yaml.safe_dump(_valid_config("http://from-env.test")))
+        monkeypatch.setenv("DEPICTIO_CLI_CONFIG_PATH", str(elsewhere))
+
+        with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
+            named = load_depictio_config(resolve_server("~/.depictio/CLI.yaml"))
+            implicit = load_depictio_config(resolve_server(None))
+
+        assert named.api_base_url == "http://named.test"
+        assert implicit.api_base_url == "http://from-env.test"
+        # Still shown the way it was typed.
+        assert "configuration ~/.depictio/CLI.yaml" in str(printer.call_args_list[0])
+
+
+class TestEnvOverridesAndTheServerLine:
+    """DEPICTIO_CLI_TOKEN and DEPICTIO_CLI_API_BASE_URL: where they apply, and that the
+    Server line says when the URL came from the environment."""
+
+    @pytest.fixture(autouse=True)
+    def isolated(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path / "local"))
+        monkeypatch.delenv("DEPICTIO_CLI_CONFIG_PATH", raising=False)
+        monkeypatch.setenv("DEPICTIO_CLI_API_BASE_URL", "https://remote.example.org")
+        monkeypatch.setenv("DEPICTIO_CLI_TOKEN", "remote-token")
+
+    @pytest.fixture
+    def named(self, tmp_path):
+        path = tmp_path / "named.yaml"
+        path.write_text(yaml.safe_dump(_valid_config("http://named.test")))
+        return str(path)
+
+    @pytest.fixture
+    def local(self, tmp_path):
+        path = tmp_path / "local" / "cli" / "admin_config.yaml"
+        path.parent.mkdir(parents=True)
+        path.write_text(yaml.safe_dump(_valid_config("http://127.0.0.1:8058")))
+        return path
+
+    def test_the_server_line_names_the_env_var(self, named):
+        with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
+            config = load_depictio_config(named)
+
+        assert config.api_base_url == "https://remote.example.org"
+        line = str(printer.call_args)
+        assert "Server: https://remote.example.org (from DEPICTIO_CLI_API_BASE_URL," in line
+
+    def test_the_local_server_ignores_them(self, local):
+        from depictio.cli.cli.utils.server_target import resolve_server
+
+        with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
+            config = load_depictio_config(resolve_server("local"))
+
+        assert config.api_base_url == "http://127.0.0.1:8058"
+        assert config.user.token.access_token == "secret-access-token"
+        assert "DEPICTIO_CLI_API_BASE_URL" not in str(printer.call_args)
+
+    def test_they_can_be_set_aside(self, named):
+        from depictio.cli.cli.utils.common import env_overrides_ignored
+
+        with patch("depictio.cli.cli.utils.common.rich_print_checked_statement"):
+            with env_overrides_ignored():
+                config = load_depictio_config(named)
+            after = load_depictio_config(named)
+
+        assert config.api_base_url == "http://named.test"
+        assert after.api_base_url == "https://remote.example.org"
+
+    def test_a_label_is_always_announced(self, named):
+        with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
+            load_depictio_config(named, label="Source server")
+            load_depictio_config(named, label="Target server")
+            load_depictio_config(named)
+
+        lines = [str(call.args[0]) for call in printer.call_args_list]
+        assert [line.split(":")[0] for line in lines] == ["Source server", "Target server"]
+
+    def test_the_log_names_no_token(self, named):
+        with (
+            patch("depictio.cli.cli.utils.common.rich_print_checked_statement"),
+            patch("depictio.cli.cli.utils.common.logger") as log,
+        ):
+            load_depictio_config(named)
+
+        logged = str(log.mock_calls)
+        assert "remote-token" not in logged
+        assert "admin@example.com" in logged
+
+
+class TestLoopbackProxy:
+    """A proxy in the environment cannot reach this machine's loopback."""
+
+    @pytest.fixture
+    def config(self, tmp_path, monkeypatch):
+        for var in ("DEPICTIO_CLI_API_BASE_URL", "DEPICTIO_CLI_TOKEN", "no_proxy", "NO_PROXY"):
+            monkeypatch.delenv(var, raising=False)
+        path = tmp_path / "CLI.yaml"
+        path.write_text(yaml.safe_dump(_valid_config("http://127.0.0.1:8058")))
+        return str(path)
+
+    def test_a_loopback_server_is_kept_off_the_proxy(self, config, monkeypatch):
+        monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example.org:3128")
+        monkeypatch.setenv("no_proxy", ".example.org")
+
+        with patch("depictio.cli.cli.utils.common.rich_print_checked_statement"):
+            load_depictio_config(config)
+            load_depictio_config(config)
+
+        assert os.environ["no_proxy"] == ".example.org,127.0.0.1,localhost"
+        assert os.environ["NO_PROXY"] == os.environ["no_proxy"]
+
+    def test_without_a_proxy_nothing_changes(self, config):
+        with patch("depictio.cli.cli.utils.common.rich_print_checked_statement"):
+            load_depictio_config(config)
+
+        assert "no_proxy" not in os.environ
+
+
+class TestDescribeApiTarget:
+    """describe_api_target is called while reporting another error: it prints nothing."""
+
+    @pytest.fixture(autouse=True)
+    def isolated(self, monkeypatch, tmp_path):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(tmp_path / "local"))
+        for var in ("DEPICTIO_CLI_CONFIG_PATH", "DEPICTIO_CLI_API_BASE_URL", "DEPICTIO_CLI_TOKEN"):
+            monkeypatch.delenv(var, raising=False)
+
+    def test_a_missing_file_is_missing_not_unreadable(self):
+        with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
+            described = describe_api_target("~/.depictio/CLI.yaml")
+
+        assert described == "a missing configuration at ~/.depictio/CLI.yaml"
+        printer.assert_not_called()
+
+    def test_a_broken_file_is_unreadable(self, tmp_path):
+        config = tmp_path / "home" / "broken.yaml"
+        config.parent.mkdir(parents=True)
+        config.write_text("user: [unclosed\n")
+
+        with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
+            described = describe_api_target(str(config))
+
+        assert described == "an unreadable configuration at ~/broken.yaml"
+        printer.assert_not_called()
+
+    def test_a_stopped_local_server_says_how_to_start_it(self, tmp_path):
+        from depictio.cli.cli.utils.server_target import resolve_server
+
+        local = tmp_path / "local" / "cli" / "admin_config.yaml"
+        local.parent.mkdir(parents=True)
+        local.write_text(yaml.safe_dump(_valid_config("http://127.0.0.1:8058")))
+
+        described = describe_api_target(resolve_server("local"))
+
+        assert described.startswith("http://127.0.0.1:8058, read from ")
+        assert "(the local server is not running: start it with `depictio local up`)" in described
+
+    def test_another_server_gets_no_local_hint(self, tmp_path):
+        config = tmp_path / "CLI.yaml"
+        config.write_text(yaml.safe_dump(_valid_config("http://127.0.0.1:8058")))
+
+        assert "depictio local up" not in describe_api_target(str(config))

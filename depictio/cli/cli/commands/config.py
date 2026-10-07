@@ -1,6 +1,7 @@
 import re
 from typing import Annotated
 
+import httpx
 import typer
 
 from depictio.cli.cli.utils.api_calls import (
@@ -8,7 +9,11 @@ from depictio.cli.cli.utils.api_calls import (
     api_login,
     api_sync_project_config_to_server,
 )
-from depictio.cli.cli.utils.common import describe_api_target, load_depictio_config
+from depictio.cli.cli.utils.common import (
+    describe_api_target,
+    load_depictio_config,
+    report_unreachable,
+)
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
@@ -21,6 +26,7 @@ from depictio.cli.cli.utils.server_target import (
     resolve_server,
 )
 from depictio.cli.cli_logging import logger
+from depictio.models.models.cli import CLIConfig
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
 
@@ -49,27 +55,53 @@ def show(
     config_path = resolve_server(server, CLI_config_path)
     try:
         cli_config = load_depictio_config(yaml_config_path=config_path)
-        # mode="json" masks the SecretStr fields. The tokens are plain strings but
-        # credentials all the same: masked too, so the output can be shared.
-        shown = cli_config.model_dump(mode="json")
-        token = (shown.get("user") or {}).get("token") or {}
-        for key in ("access_token", "refresh_token"):
-            if token.get(key):
-                token[key] = "**********"
-        rich_print_json("Current Depictio CLI Configuration: ", shown)
-        if project_name:
-            metadata = api_get_project_from_name(project_name, cli_config).json()
-            rich_print_json(f"Server metadata for project '{project_name}': ", metadata)
     except typer.Exit:
-        # load_depictio_config already said which file it could not read.
+        # load_depictio_config already said which file it could not use, and why.
         raise
     except Exception as e:
         rich_print_checked_statement(f"Unable to load configuration - {e}", "error")
         raise typer.Exit(code=1)
+    # mode="json" masks the SecretStr fields. The tokens are plain strings but
+    # credentials all the same: masked too, so the output can be shared.
+    shown = cli_config.model_dump(mode="json")
+    token = (shown.get("user") or {}).get("token") or {}
+    for key in ("access_token", "refresh_token"):
+        if token.get(key):
+            token[key] = "**********"
+    rich_print_json("Current Depictio CLI Configuration: ", shown)
+    if project_name:
+        _show_project(project_name, cli_config, config_path)
+
+
+def _show_project(project_name: str, cli_config: CLIConfig, config_path: str) -> None:
+    """Print the server's metadata for ``project_name``, or exit 1 saying why there is none.
+
+    The configuration is on screen by then, so a failure here is the project's or
+    the server's, never the configuration's.
+    """
+    try:
+        response = api_get_project_from_name(project_name, cli_config)
+    except httpx.HTTPError as exc:
+        report_unreachable(config_path, exc)
+        raise typer.Exit(code=1) from exc
+    if response.status_code == 404:
+        rich_print_checked_statement(
+            f"No project named '{project_name}' on {cli_config.api_base_url}", "error"
+        )
+        raise typer.Exit(code=1)
+    if response.status_code != 200:
+        rich_print_checked_statement(
+            f"Cannot fetch project '{project_name}' from {cli_config.api_base_url}: "
+            f"HTTP {response.status_code} {response.text}",
+            "error",
+        )
+        raise typer.Exit(code=1)
+    rich_print_json(f"Server metadata for project '{project_name}': ", response.json())
 
 
 @app.command()
 def nextflow(
+    ctx: typer.Context,
     print_: Annotated[
         bool,
         typer.Option(
@@ -109,7 +141,7 @@ def nextflow(
     reason it exists: the snippet lives inside the installed package, and that is
     not a path anyone should have to type or keep in sync.
 
-        nextflow run nf-core/ampliseq --outdir results -c $(depictio-cli config nextflow)
+        nextflow run nf-core/ampliseq --outdir results -c $(depictio config nextflow)
 
     For an nf-core pipeline that is the entire setup. The snippet reads the
     pipeline's own manifest and hands it to the CLI as --pipeline-id, which
@@ -117,17 +149,29 @@ def nextflow(
 
     Use --print to read the snippet, or to copy it somewhere you can edit:
 
-        depictio-cli config nextflow --print > depictio.config
+        depictio config nextflow --print > depictio.config
 
     Use --install to stop repeating the -c, once per machine:
 
-        depictio-cli config nextflow --install
+        depictio config nextflow --install
 
     Every later `nextflow run` then triggers Depictio with no extra flag, and
     `--uninstall` reverses it. Add --default-disabled to install it opt-in
     instead: pipelines then need `--depictio_enabled true` to trigger. Either
     way, `--depictio_enabled true/false` on a given `nextflow run` always wins.
     """
+    # Usage errors (exit code 2), refused rather than one of the options silently dropped.
+    if install and uninstall:
+        ctx.fail("--install and --uninstall are opposites: pass only one.")
+    if print_ and (install or uninstall):
+        other = "--install" if install else "--uninstall"
+        ctx.fail(
+            f"--print writes the snippet to stdout, {other} changes the Nextflow "
+            "configuration: pass only one."
+        )
+    if not default_enabled and not install:
+        ctx.fail("--default-disabled only applies with --install.")
+
     # Deliberately no rich_print_command_usage and no decoration: the only
     # useful form of this output is a bare path on stdout, inside $(...).
     # Anything else printed here ends up in the Nextflow command line.
@@ -141,18 +185,13 @@ def nextflow(
         # hand, simply will not have it, and a bare traceback would not say so.
         rich_print_checked_statement(
             f"The bundled Nextflow snippet is missing from this installation "
-            f"(expected at {snippet}). Upgrade depictio-cli, or take the file "
+            f"(expected at {snippet}). Upgrade depictio, or take the file "
             f"from depictio/cli/configs/nextflow/depictio.config in the repository.",
             "error",
         )
         raise typer.Exit(code=1)
 
     if install or uninstall:
-        if install and uninstall:
-            rich_print_checked_statement(
-                "--install and --uninstall are opposites; pass only one.", "error"
-            )
-            raise typer.Exit(code=1)
         _apply_nextflow_install(snippet, enable=install, default_enabled=default_enabled)
         return
 
@@ -163,7 +202,9 @@ def nextflow(
 
 
 # Fenced so the block can be found and replaced on a re-install, and removed on
-# --uninstall, without touching whatever else the user keeps in this file.
+# --uninstall, without touching whatever else the user keeps in this file. It still
+# says `depictio-cli`: the marker is matched exactly, and a reworded one would no
+# longer find the blocks earlier releases installed.
 _NXF_BEGIN = "// >>> depictio (managed by `depictio-cli config nextflow --install`) >>>"
 _NXF_END = "// <<< depictio <<<"
 
@@ -262,7 +303,7 @@ def _apply_nextflow_install(snippet, enable: bool, default_enabled: bool = True)
         rich_print_checked_statement(
             "`nextflow run <pipeline>` now triggers Depictio with no extra flag. "
             "Add --depictio_enabled false to skip a given run, "
-            "or undo with: depictio-cli config nextflow --uninstall",
+            "or undo with: depictio config nextflow --uninstall",
             "info",
         )
     else:
@@ -271,7 +312,7 @@ def _apply_nextflow_install(snippet, enable: bool, default_enabled: bool = True)
         )
         rich_print_checked_statement(
             "Add --depictio_enabled true to a `nextflow run` to trigger Depictio for it, "
-            "or undo the install with: depictio-cli config nextflow --uninstall",
+            "or undo the install with: depictio config nextflow --uninstall",
             "info",
         )
 
@@ -302,20 +343,40 @@ def check(
         _, response = validate_project_config_and_check_S3_storage(
             CLI_config_path=config_path, project_config_path=project_config_path
         )
-        if response["success"]:
-            rich_print_checked_statement("Depictio Project configuration validated", "success")
-            project_config = convert_model_to_dict(response["project_config"])
-            rich_print_json("Validated Depictio Project Configuration: ", project_config)
-        else:
+        if not response["success"]:
             rich_print_checked_statement(
                 "Pipeline configuration invalid, use --verbose for more details.", "error"
             )
+            raise typer.Exit(code=1)
+        rich_print_checked_statement("Depictio Project configuration validated", "success")
+        project_config = convert_model_to_dict(response["project_config"])
+        rich_print_json("Validated Depictio Project Configuration: ", project_config)
         return
 
-    # Environment doctor: server accessibility + S3 storage.
+    # Environment doctor: server accessibility + S3 storage. The S3 check runs even
+    # when the server check failed, so one run reports both; the exit code says
+    # whether either failed, for a script gating a pipeline on this command.
+    failed = False
     try:
         login_result = api_login(config_path)
-        logger.info(f"Login result: {login_result}")
+    except typer.Exit:
+        # load_depictio_config said what is wrong with the configuration, and the S3
+        # check reads the same file: nothing else to report.
+        raise
+    except Exception as e:
+        # This is the command the docs tell you to run before trusting a long
+        # pipeline to the trigger, so a bare "Connection refused" is the one
+        # answer it must not give: it says nothing about which instance was
+        # tried, which is the thing that is usually wrong.
+        if isinstance(e, httpx.HTTPError):
+            report_unreachable(config_path, e)
+        else:
+            rich_print_checked_statement(f"Unable to access server - {e}", "error")
+            rich_print_checked_statement(f"Tried {describe_api_target(config_path)}", "info")
+        failed = True
+    else:
+        # The verdict only: the result embeds the configuration, access token included.
+        logger.info(f"Login successful: {login_result.get('success')}")
         if login_result.get("success"):
             user_info = []
             if login_result.get("email"):
@@ -329,13 +390,7 @@ def check(
                 "Server check failed - Invalid credentials or token expired", "error"
             )
             rich_print_checked_statement(f"Tried {describe_api_target(config_path)}", "info")
-    except Exception as e:
-        # This is the command the docs tell you to run before trusting a long
-        # pipeline to the trigger, so a bare "Connection refused" is the one
-        # answer it must not give: it says nothing about which instance was
-        # tried, which is the thing that is usually wrong.
-        rich_print_checked_statement(f"Unable to access server - {e}", "error")
-        rich_print_checked_statement(f"Tried {describe_api_target(config_path)}", "info")
+            failed = True
 
     try:
         # Announced, and read quietly: probing an unreachable endpoint blocks
@@ -346,12 +401,19 @@ def check(
         cli_config = load_depictio_config(yaml_config_path=config_path, quiet=True)
         S3_storage_checks(cli_config.s3_storage)
         rich_print_checked_statement("S3 storage configuration is valid", "success")
+    except typer.Exit:
+        raise
     except Exception as e:
         rich_print_checked_statement(f"Unable to check S3 storage - {e}", "error")
+        failed = True
+
+    if failed:
+        raise typer.Exit(code=1)
 
 
 @app.command()
 def sync(
+    ctx: typer.Context,
     server: ServerOption = None,
     CLI_config_path: LegacyConfigPathOption = None,
     project_config_path: Annotated[
@@ -367,20 +429,27 @@ def sync(
     Validate the Depictio project configuration and sync it to the server.
     """
     rich_print_command_usage("config sync")
+    config_path = resolve_server(server, CLI_config_path)
+    if not project_config_path:
+        ctx.fail("config sync needs --project-config-path: the project configuration to sync.")
     CLI_config, validation_response = validate_project_config_and_check_S3_storage(
-        CLI_config_path=resolve_server(server, CLI_config_path),
+        CLI_config_path=config_path,
         project_config_path=project_config_path,
     )
     if not validation_response["success"]:
         rich_print_checked_statement(
             "Pipeline configuration invalid, use --verbose for more details.", "error"
         )
-        return
+        raise typer.Exit(code=1)
     rich_print_checked_statement("Pipeline configuration validated", "success")
     project_config = convert_model_to_dict(validation_response["project_config"])
-    sync_verdict = api_sync_project_config_to_server(
-        CLI_config=CLI_config, ProjectConfig=project_config, update=update
-    )
+    try:
+        sync_verdict = api_sync_project_config_to_server(
+            CLI_config=CLI_config, ProjectConfig=project_config, update=update
+        )
+    except httpx.HTTPError as exc:
+        report_unreachable(config_path, exc)
+        raise typer.Exit(code=1) from exc
     # The sync reports "exists" instead of raising, so this caller has to speak up:
     # otherwise refusing to touch an existing project looks exactly like success.
     if sync_verdict.get("action") == "exists":
