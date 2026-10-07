@@ -553,7 +553,12 @@ def validate_project_locally(config: dict):
     try:
         return Project(**substitute_env_vars(config))
     except ValidationError as exc:
-        raise ValueError(f"Project configuration validation failed: {exc}") from exc
+        from depictio.cli.cli.utils.config import describe_invalid_config
+
+        # One line per problem, as a real run reports it, not pydantic's dump.
+        raise ValueError(
+            f"Project configuration validation failed:\n{describe_invalid_config(exc)}"
+        ) from exc
 
 
 def register_run_command(app: typer.Typer):
