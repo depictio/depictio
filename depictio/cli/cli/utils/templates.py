@@ -1538,7 +1538,9 @@ def dashboard_source_key(
     - another file under ``base_dir`` (the directory of --project-config-path):
       ``file:<path relative to it>``, e.g. ``file:dashboards/main.yaml``, so two
       files with the same name in different folders stay apart;
-    - anything else: ``file:<file name>``.
+    - anything else, a --dashboard file next to --template say: ``file:<absolute
+      path>``, e.g. ``file:/data/qc/dashboard.yaml``. Its name alone would file
+      ``qc/dashboard.yaml`` and ``expr/dashboard.yaml`` as one dashboard.
     """
     resolved = path.resolve()
     if template_id and template_dir is not None:
@@ -1549,7 +1551,16 @@ def dashboard_source_key(
         root = base_dir.resolve()
         if resolved.is_relative_to(root):
             return f"file:{resolved.relative_to(root).as_posix()}"
-    return f"file:{resolved.name}"
+    return f"file:{resolved.as_posix()}"
+
+
+def dashboard_outcome(result: dict[str, Any]) -> str:
+    """What an import did to a dashboard, as printed: ``created``, ``replaced``,
+    ``kept``, or ``kept (2 tabs added)`` for a kept family that gained tabs."""
+    added = result.get("tabs_added") or 0
+    if not added:
+        return str(result["status"])
+    return f"{result['status']} ({added} tab{'s' if added > 1 else ''} added)"
 
 
 def _main_dashboard_of(document: Any) -> dict | None:
@@ -1602,8 +1613,9 @@ def import_dashboards_from_template(
 
     A dashboard the project already has (imported from the same file, found by
     ``dashboard_source_key``, else by title) is kept as it is, edits made in the
-    viewer included; only ``dashboard_name`` renames the main one. With ``reset``
-    it is replaced by the file's, keeping its current title.
+    viewer included; only ``dashboard_name`` renames the main one, and a kept
+    multi-tab dashboard gains the tabs of the file it lacks. With ``reset`` it is
+    replaced by the file's, keeping its current title.
 
     Args:
         dashboard_paths: Absolute paths to dashboard YAML files.
@@ -1625,7 +1637,8 @@ def import_dashboards_from_template(
     Returns:
         List of result dicts, one per dashboard file.  Each contains
         ``path``, ``success``, and either ``dashboard_id``/``title``/``status``
-        (``created``, ``kept`` or ``replaced``) or ``error``.
+        (``created``, ``kept`` or ``replaced``) or ``error``, and
+        ``tabs_added`` for a kept multi-tab dashboard that gained tabs.
     """
     results: list[dict[str, Any]] = []
     url = f"{api_url}/depictio/api/v1/dashboards/import/yaml"
@@ -1635,7 +1648,7 @@ def import_dashboards_from_template(
         try:
             template_dir = locate_template(template_id).parent
         except FileNotFoundError:
-            logger.debug(f"Template {template_id} not found: dashboards keyed by file name")
+            logger.debug(f"Template {template_id} not found: dashboards keyed by file path")
 
     # Read every file first: --dashboard-name has to know which file holds the
     # main dashboard before it can re-point the child-tab files that name it, and
@@ -1683,15 +1696,17 @@ def import_dashboards_from_template(
 
             # A dashboard the project has is kept, or replaced under its current
             # title (renamed in the viewer, say); --dashboard-name still titles the
-            # main one. overwrite too, for a server from before `existing`: it
-            # replaces them, titles kept, as a refresh used to. The parent is
-            # found by its key, as its title may be one the YAML does not know.
+            # main one. The parent is found by its key, as its title may be one
+            # the YAML does not know. A server from before `existing` reads
+            # overwrite instead, so it is sent only to replace: without it, that
+            # server answers 409 for a dashboard the project has, which is kept.
             params: dict[str, str | bool] = {
                 "source_key": key,
                 "keep_titles": True,
-                "overwrite": True,
                 "existing": "replace" if reset else "keep",
             }
+            if reset:
+                params["overwrite"] = True
             if dashboard_name and renamed is not None and parsed is renamed:
                 params["main_title"] = dashboard_name
             parent_tag = parsed.get("parent_dashboard_tag") if isinstance(parsed, dict) else None
@@ -1720,7 +1735,18 @@ def import_dashboards_from_template(
                     status=data.get("status") or ("replaced" if updated else "created"),
                     dash_url=data.get("dash_url"),
                 )
-                logger.info(f"Dashboard {entry['status']}: {data.get('title')} ({path.name})")
+                if data.get("tabs_added"):
+                    entry["tabs_added"] = data["tabs_added"]
+                logger.info(
+                    f"Dashboard {dashboard_outcome(entry)}: {data.get('title')} ({path.name})"
+                )
+            elif response.status_code == 409 and not reset:
+                # A server from before `existing`: the project has this dashboard.
+                entry.update(success=True, updated=False, status="kept")
+                doc = _main_dashboard_of(parsed) or parsed
+                if isinstance(doc, dict) and doc.get("title"):
+                    entry["title"] = doc["title"]
+                logger.info(f"Dashboard kept: {entry.get('title')} ({path.name})")
             else:
                 detail = response.text
                 try:

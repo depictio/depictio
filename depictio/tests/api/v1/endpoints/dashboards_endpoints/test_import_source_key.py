@@ -12,8 +12,11 @@ Covers:
 - an exported image dashboard imports again (it used to fail with a 500);
 - a save from the viewer can neither drop nor copy the key;
 - `existing=keep` (`ingest --update-config`): a dashboard the project has is left
-  as edited in the viewer, `main_title` only renames it, a missing one is created;
-  `existing=replace` is `overwrite`, and every response says which it was.
+  as edited in the viewer, `main_title` only renames it, a missing one is created,
+  a kept multi-tab family gains the tabs it lacks; `existing=replace` is
+  `overwrite`, and every response says which it was;
+- what a match can be: a main dashboard only a main one, a tab only a tab of its
+  parent, and by title only a dashboard without a key.
 """
 
 import asyncio
@@ -503,10 +506,13 @@ class TestExistingKeep:
         assert (result["status"], result["dashboard_id"]) == ("kept", legacy["dashboard_id"])
         assert db["dashboards"].find_one()["source_key"] == KEY
 
-    def test_a_kept_multi_tab_main_keeps_its_tabs_as_they_are(self, db, user, project_id):
+    def test_a_kept_multi_tab_family_keeps_its_tabs_and_gains_those_it_lacks(
+        self, db, user, project_id
+    ):
         first = _import(_multi("RNA-seq", ["QC", "Expression"]), user, project_id, source_key=KEY)
-        # Edited in the viewer: a tab renamed, a tab removed, the main's layout changed.
+        # Edited in the viewer: a tab renamed and edited, a tab removed, the main edited.
         _rename(db, "QC", "Quality")
+        _edit(db, "Quality")
         db["dashboards"].delete_one({"title": "Expression"})
         _edit(db, "RNA-seq")
         before = list(db["dashboards"].find())
@@ -516,9 +522,94 @@ class TestExistingKeep:
         )
 
         assert (result["status"], result["dashboard_id"]) == ("kept", first["dashboard_id"])
-        assert [tab["title"] for tab in result["tabs"]] == ["Quality"]
-        # Nothing written: the removed tab stays removed, the new one is not added.
+        assert result["tabs_added"] == 2
+        # The removed tab comes back, as a single-file tab does; both after the last one.
+        assert [tab["title"] for tab in result["tabs"]] == ["Quality", "Expression", "New tab"]
+        for doc in before:
+            assert db["dashboards"].find_one({"_id": doc["_id"]}) == doc
+        added = {d["title"]: d for d in db["dashboards"].find({"title": {"$ne": "Quality"}})}
+        main = added.pop("RNA-seq")
+        assert {t["tab_order"] for t in added.values()} == {2, 3}
+        assert added["Expression"]["tab_order"] < added["New tab"]["tab_order"]
+        for title, tab in added.items():
+            assert tab["parent_dashboard_id"] == main["dashboard_id"]
+            assert tab["source_key"] == f"{KEY}#{title}"
+
+    def test_a_kept_multi_tab_family_with_every_tab_adds_none(self, db, user, project_id):
+        _import(_multi("RNA-seq", ["QC", "Expression"]), user, project_id, source_key=KEY)
+        before = list(db["dashboards"].find())
+
+        result = self._keep(
+            _multi("RNA-seq", ["QC", "Expression"]), user, project_id, source_key=KEY
+        )
+
+        assert (result["status"], result["tabs_added"]) == ("kept", 0)
+        assert result["message"] == "Dashboard kept as it is"
         assert list(db["dashboards"].find()) == before
+
+    def test_a_tab_imported_before_keys_is_kept_and_takes_its_key(self, db, user, project_id):
+        _import(_multi("RNA-seq", ["QC"]), user, project_id)
+        tab_before = _edit(db, "QC")
+
+        result = self._keep(_multi("RNA-seq", ["QC"]), user, project_id, source_key=KEY)
+
+        assert result["tabs_added"] == 0
+        assert db["dashboards"].find_one({"title": "QC"}) == {
+            **tab_before,
+            "source_key": f"{KEY}#QC",
+        }
+
+    def test_a_tab_pruned_at_the_first_import_comes_in_once_its_data_does(
+        self, db, user, project_id
+    ):
+        """A kept nf-core family gains the tab an attached run brings the data for."""
+        gallery = {
+            "title": "Gallery",
+            "components": [
+                {
+                    "tag": "qc-gallery",
+                    "component_type": "image",
+                    "workflow_tag": "python/image_workflow",
+                    "data_collection_tag": "qc_images",
+                    "image_column": "image_path",
+                }
+            ],
+        }
+        content = yaml.safe_dump(
+            {
+                "main_dashboard": {"title": "RNA-seq", "components": []},
+                "tabs": [{"title": "QC", "components": []}, gallery],
+            }
+        )
+        first = self._keep(content, user, project_id, source_key=KEY)
+        # Its only component has no data collection yet: the tab is left out.
+        assert [tab["title"] for tab in first["tabs"]] == ["QC"]
+
+        self._keep(content, user, project_id, source_key=KEY)
+        assert db["dashboards"].count_documents({"title": "Gallery"}) == 0
+
+        db["projects"].update_one(
+            {"_id": project_id},
+            {
+                "$push": {
+                    "workflows.0.data_collections": {
+                        "_id": ObjectId(),
+                        "data_collection_tag": "qc_images",
+                        "config": {
+                            "type": "image",
+                            "dc_specific_properties": {
+                                "s3_base_folder": "s3://depictio-bucket/qc/",
+                                "image_column": "image_path",
+                            },
+                        },
+                    }
+                }
+            },
+        )
+        result = self._keep(content, user, project_id, source_key=KEY)
+
+        assert (result["status"], result["tabs_added"]) == ("kept", 1)
+        assert [tab["title"] for tab in result["tabs"]] == ["QC", "Gallery"]
 
     def test_a_multi_tab_family_the_project_lacks_is_created_whole(self, db, user, project_id):
         result = self._keep(
@@ -610,6 +701,150 @@ class TestExistingKeep:
         with pytest.raises(HTTPException) as exc:
             _import(_single("Other"), user, project_id, source_key=KEY)
         assert exc.value.status_code == 409
+
+
+class TestMatchScope:
+    """What an import can take for the dashboard it refreshes: a main dashboard
+    only a main one, a tab only one of its parent's, and by title only one
+    imported before keys existed."""
+
+    REFRESH = {"overwrite": True, "keep_titles": True}
+
+    @pytest.mark.parametrize("existing", ["keep", "replace"])
+    def test_a_main_dashboard_does_not_take_a_tab_of_another_family(
+        self, db, user, project_id, existing
+    ):
+        _import(_multi("Overview", ["QC"]), user, project_id)
+        tab = db["dashboards"].find_one({"title": "QC"})
+
+        result = _import(
+            _single("QC"),
+            user,
+            project_id,
+            source_key="file:qc.yaml",
+            existing=existing,
+            **self.REFRESH,
+        )
+
+        assert result["status"] == "created"
+        assert result["dashboard_id"] != str(tab["dashboard_id"])
+        assert db["dashboards"].find_one({"_id": tab["_id"]}) == tab
+
+    def test_a_multi_tab_main_does_not_take_a_tab_of_another_family(self, db, user, project_id):
+        _import(_multi("Overview", ["QC"]), user, project_id, source_key="file:a.yaml")
+        tab = db["dashboards"].find_one({"title": "QC"})
+
+        result = _import(
+            _multi("QC", ["Details"]),
+            user,
+            project_id,
+            source_key="file:b.yaml",
+            existing="keep",
+            **self.REFRESH,
+        )
+
+        assert result["status"] == "created"
+        assert db["dashboards"].find_one({"_id": tab["_id"]}) == tab
+        assert db["dashboards"].count_documents({"title": "Details"}) == 1
+
+    def test_a_main_dashboard_with_the_title_of_a_tab_is_not_a_conflict(self, db, user, project_id):
+        _import(_multi("Overview", ["QC"]), user, project_id)
+
+        result = _import(_single("QC"), user, project_id)
+
+        assert result["status"] == "created"
+
+    @pytest.mark.parametrize("existing", ["keep", "replace"])
+    def test_a_child_tab_file_does_not_take_a_tab_of_another_family(
+        self, db, user, project_id, existing
+    ):
+        _import(_multi("Overview", ["QC"]), user, project_id)
+        other = db["dashboards"].find_one({"title": "QC"})
+        main = _import(_single("Main"), user, project_id, source_key="file:main.yaml")
+
+        result = _import(
+            _child("QC", "Main"),
+            user,
+            project_id,
+            source_key="file:qc.yaml",
+            parent_source_key="file:main.yaml",
+            existing=existing,
+            **self.REFRESH,
+        )
+
+        assert result["status"] == "created"
+        assert db["dashboards"].find_one({"_id": other["_id"]}) == other
+        stored = db["dashboards"].find_one({"dashboard_id": ObjectId(result["dashboard_id"])})
+        assert stored["parent_dashboard_id"] == ObjectId(main["dashboard_id"])
+
+    def test_a_child_tab_file_takes_a_tab_of_its_parent_imported_before_keys(
+        self, db, user, project_id
+    ):
+        _import(_single("Main"), user, project_id)
+        legacy = _import(_child("QC", "Main"), user, project_id)
+
+        result = _import(
+            _child("QC", "Main"),
+            user,
+            project_id,
+            source_key="file:qc.yaml",
+            existing="keep",
+            **self.REFRESH,
+        )
+
+        assert (result["status"], result["dashboard_id"]) == ("kept", legacy["dashboard_id"])
+        assert db["dashboards"].find_one({"title": "QC"})["source_key"] == "file:qc.yaml"
+
+    @pytest.mark.parametrize("existing", ["keep", "replace"])
+    def test_the_title_does_not_take_a_dashboard_keyed_to_another_source(
+        self, db, user, project_id, existing
+    ):
+        first = _import(_single("Overview"), user, project_id, source_key="file:a.yaml")
+
+        result = _import(
+            _single("Overview"),
+            user,
+            project_id,
+            source_key="file:b.yaml",
+            existing=existing,
+            **self.REFRESH,
+        )
+
+        assert result["status"] == "created"
+        keys = {d["source_key"] for d in db["dashboards"].find()}
+        assert keys == {"file:a.yaml", "file:b.yaml"}
+        assert (
+            db["dashboards"].find_one({"dashboard_id": ObjectId(first["dashboard_id"])})[
+                "source_key"
+            ]
+            == "file:a.yaml"
+        )
+
+    def test_a_tab_renamed_to_the_title_of_another_is_not_overwritten_by_it(
+        self, db, user, project_id
+    ):
+        _import(_multi("Main", ["QC"]), user, project_id, source_key=KEY)
+        _rename(db, "QC", "Quality")
+
+        _import(_multi("Main", ["QC", "Quality"]), user, project_id, source_key=KEY, **self.REFRESH)
+
+        keys = sorted(d["source_key"] for d in db["dashboards"].find({"is_main_tab": False}))
+        assert keys == [f"{KEY}#QC", f"{KEY}#Quality"]
+
+    def test_a_tab_key_is_looked_up_in_its_own_family(self, db, user, project_id):
+        _import(_multi("Other", ["QC"]), user, project_id, source_key="file:other.yaml")
+        other_main = db["dashboards"].find_one({"title": "Other"})
+        other_tab = db["dashboards"].find_one({"title": "QC"})
+        # A tab of another family that carries the key a tab of this one gets.
+        db["dashboards"].update_one({"_id": other_tab["_id"]}, {"$set": {"source_key": "K#QC"}})
+        other_tab = db["dashboards"].find_one({"_id": other_tab["_id"]})
+
+        _import(_multi("Fresh", ["QC"]), user, project_id, source_key="K", existing="replace")
+
+        assert db["dashboards"].find_one({"_id": other_tab["_id"]}) == other_tab
+        fresh = db["dashboards"].find_one({"title": "Fresh"})
+        assert db["dashboards"].count_documents({"parent_dashboard_id": fresh["dashboard_id"]}) == 1
+        assert db["dashboards"].count_documents({"parent_dashboard_id": other_main["_id"]}) == 1
 
 
 class TestUnknownProject:

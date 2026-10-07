@@ -4,6 +4,7 @@ import boto3
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ValidationError
+from pymongo.errors import DuplicateKeyError
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -290,6 +291,14 @@ async def _project_exists(lookup: Awaitable[object]) -> bool:
         raise
 
 
+def _project_taken(reason_tag: str) -> dict:
+    return {
+        "success": False,
+        "message": f"Project already exists using this {reason_tag}.",
+        "status_code": 409,
+    }
+
+
 @projects_endpoint_router.post("/create")
 async def create_project(project: Project, current_user=Depends(get_user_or_anonymous)):
     """Create a new project.
@@ -335,12 +344,7 @@ async def create_project(project: Project, current_user=Depends(get_user_or_anon
     except HTTPException as e:
         return {"success": False, "message": str(e.detail), "status_code": e.status_code}
     if name_taken or id_taken:
-        reason_tag = "name" if name_taken else "id"
-        return {
-            "success": False,
-            "message": f"Project already exists using this {reason_tag}.",
-            "status_code": 409,
-        }
+        return _project_taken("name" if name_taken else "id")
 
     try:
         validate_workflow_uniqueness_in_project(project)
@@ -350,7 +354,11 @@ async def create_project(project: Project, current_user=Depends(get_user_or_anon
     create_payload = project.mongo()
     create_payload["registration_time"] = utc_now_str()
     create_payload["last_modified"] = create_payload["registration_time"]
-    projects_collection.insert_one(create_payload)
+    try:
+        projects_collection.insert_one(create_payload)
+    except DuplicateKeyError:
+        # The id lookup above only sees the projects this user may read.
+        return _project_taken("id")
 
     return {
         "success": True,
