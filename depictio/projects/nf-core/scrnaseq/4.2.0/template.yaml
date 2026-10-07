@@ -1,7 +1,7 @@
 # nf-core/scrnaseq Template v4.2.0 - single-cell RNA-seq
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/scrnaseq/4.2.0 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/scrnaseq/4.2.0 --data-root /path/to/your/data
 #
 # Tested against nf-core/scrnaseq AWS megatest results:
 #   s3://nf-core-awsmegatests/scrnaseq/results-3fc17b4f971a89e47c88337de71d0e777ffad8cc/

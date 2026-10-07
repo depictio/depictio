@@ -130,10 +130,10 @@ post_fetch_help: |
   === Quick test commands ===
 
   # 1. Dry run (validates the template against the data, no ingestion)
-  depictio-cli run --template nf-core/mag/5.5.0 --data-root {dest} --dry-run
+  depictio-cli ingest --template nf-core/mag/5.5.0 --data-root {dest} --dry-run
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
-  depictio-cli run --template nf-core/mag/5.5.0 --data-root {dest}
+  depictio-cli ingest --template nf-core/mag/5.5.0 --data-root {dest}
 # Megatest facts that must never appear in a dashboard text (lint rule e,
 # depictio/tests/models/test_template_conventions.py): sample ids, a bin id,
 # the organism a default record used to open on, and the run's counts.

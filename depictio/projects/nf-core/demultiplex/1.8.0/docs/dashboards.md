@@ -119,7 +119,7 @@ select: their collections have no outgoing link.
 
 ```bash
 bash depictio/projects/nf-core/demultiplex/1.8.0/download_test_data.sh
-depictio-cli run --template nf-core/demultiplex/1.8.0 \
+depictio-cli ingest --template nf-core/demultiplex/1.8.0 \
   --data-root ~/Data/depictio-nfcore/demultiplex/1.8.0/megatest \
   --var METADATA_FILE=depictio/projects/nf-core/demultiplex/1.8.0/input/library_metadata.tsv
 ```

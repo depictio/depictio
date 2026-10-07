@@ -98,6 +98,6 @@ tabs, the map, group colours on the UpSet and heatmaps, and the tree's
 
 ```bash
 python scripts/nfcore_megatest.py fetch --pipeline ampliseq --version 2.18.0 --dest <DATA_ROOT>
-depictio-cli run --template nf-core/ampliseq/2.18.0 --data-root <DATA_ROOT> --var GROUP_COL=habitat
+depictio-cli ingest --template nf-core/ampliseq/2.18.0 --data-root <DATA_ROOT> --var GROUP_COL=habitat
 python depictio/projects/nf-core/ampliseq/2.18.0/build_reference_dashboard.py
 ```

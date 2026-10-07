@@ -78,7 +78,7 @@ post_fetch_help: |
   # there). Pass --var METADATA_FILE=... for another run.
 
   # 1. Dry run (validates the template against the data, no ingestion)
-  depictio-cli run --template nf-core/mhcquant/3.2.0 --data-root {dest} --var GROUP_COL=Condition --dry-run
+  depictio-cli ingest --template nf-core/mhcquant/3.2.0 --data-root {dest} --var GROUP_COL=Condition --dry-run
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
-  depictio-cli run --template nf-core/mhcquant/3.2.0 --data-root {dest} --var GROUP_COL=Condition
+  depictio-cli ingest --template nf-core/mhcquant/3.2.0 --data-root {dest} --var GROUP_COL=Condition

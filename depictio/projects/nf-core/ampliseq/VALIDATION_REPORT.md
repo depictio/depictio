@@ -314,7 +314,7 @@ What changed in `2.18.0/dashboards/base.yaml` (and the regenerated `reference_ex
   catchment name stay allowed: the generated reference layer names them on purpose).
 
 Verified offline: shipped-YAML, conventions (top_n and intro-length rules now xpass), catalog
-and reference-dashboard drift tests; `depictio-cli run --dry-run` on `test/`; the two edited
+and reference-dashboard drift tests; `depictio-cli ingest --dry-run` on `test/`; the two edited
 code figures executed on the seed TSVs.
 
 Still open: `.db_seeds` regeneration (main session); `sankey_canonical` and `ma_canonical`

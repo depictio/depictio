@@ -88,7 +88,7 @@ not either), the three new panels got stub builders in
 ## Validation performed (no server available)
 
 ```bash
-depictio/cli/.venv/bin/depictio-cli run --template nf-core/sarek/3.10.0 \
+depictio/cli/.venv/bin/depictio-cli ingest --template nf-core/sarek/3.10.0 \
   --data-root ~/Data/depictio-nfcore/sarek/3.10.0/megatest --dry-run
 # -> 8/8 steps passed: template resolved, DC scans matched real files, dashboard imported
 ```
@@ -154,7 +154,7 @@ filter both samples together on that column (the hub has no such column to filte
 `bcftools stats` writes `SN` rows (4 tab fields) before any `TSTV` row (8 fields), and
 `has_header: false` infers the scanned CSV's column count from the file's first data row. A
 first design using `new_columns: [c0..c7]` with `truncate_ragged_lines: true` failed at
-`depictio-cli run --dry-run` time with `polars.exceptions.ShapeError: The length of the new
+`depictio-cli ingest --dry-run` time with `polars.exceptions.ShapeError: The length of the new
 names list should be equal to or less than the original column length`: the SN row (4 fields)
 sets the inferred width, and no `new_columns` list longer than that is ever accepted, so `TSTV`'s
 columns 5-8 (`ts`, `tv`, `ts/tv`, ...) could never be read. Fixed by scanning with a separator
@@ -255,11 +255,11 @@ own tab-local filters; box-plot cards went from 0/5 to present on every distribu
 ## Live validation performed
 
 ```bash
-depictio-cli run --template nf-core/sarek/3.10.0 --data-root <megatest> --dry-run
+depictio-cli ingest --template nf-core/sarek/3.10.0 --data-root <megatest> --dry-run
 # -> 8/8 steps passed, 0 errors, 0 warnings
 
 # project lot2-sarek wiped first (DELETE /projects/delete), then ingested once:
-uv run python -m depictio.cli run --template nf-core/sarek/3.10.0 \
+uv run python -m depictio.cli ingest --template nf-core/sarek/3.10.0 \
   --data-root ~/Data/depictio-nfcore/sarek/3.10.0/megatest --project-name lot2-sarek
 # -> 8/8 steps, 29 data collections processed, 4 optional skipped, no other error
 
@@ -475,7 +475,7 @@ template: it takes down every advanced-viz tile in the repo equally.
 
 ### Validation performed
 
-- `depictio-cli run --template nf-core/sarek/3.10.0 --data-root <megatest> --dry-run`: 8/8
+- `depictio-cli ingest --template nf-core/sarek/3.10.0 --data-root <megatest> --dry-run`: 8/8
   steps, after the last template edit.
 - `pytest depictio/tests/recipes/test_sarek_locus_recipes.py` plus
   `test_shipped_dashboard_yamls.py -k "sarek or double_track"`: 15 passed, 1 xpassed.

@@ -1,7 +1,7 @@
 # nf-core/riboseq Template v2.0.0 - Ribo-seq, translational efficiency and ORF discovery
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/riboseq/2.0.0 --data-root /path/to/results \
+#   depictio ingest --template nf-core/riboseq/2.0.0 --data-root /path/to/results \
 #     [--var METADATA_FILE=/path/to/design.tsv]
 #
 # Tested against the nf-core/riboseq AWS megatest results:

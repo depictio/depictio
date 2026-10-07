@@ -13,7 +13,7 @@ replicates each, one per condition). Fetched subset: 71 MB (`bash download_test_
 | `test_shipped_dashboard_yamls.py -k mhcquant` | 10 passed (catalog load with other agents' in-progress dirs skipped) |
 | `test_template_conventions.py -k mhcquant` | 6 passed |
 | `test_catalog.py` on the mhcquant, openms and multiqc/percolator entries | pass |
-| `depictio-cli run --template nf-core/mhcquant/3.2.0 --var GROUP_COL=Condition --dry-run` | 8/8 steps |
+| `depictio-cli ingest --template nf-core/mhcquant/3.2.0 --var GROUP_COL=Condition --dry-run` | 8/8 steps |
 
 ## Collection sizes on the megatest
 

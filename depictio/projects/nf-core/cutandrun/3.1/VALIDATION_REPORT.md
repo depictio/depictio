@@ -305,7 +305,7 @@ Fixed from the audit, in the order the findings were raised:
 
 ## Post-ingest verification (2026-09-22)
 
-`depictio-cli run --template nf-core/cutandrun/3.1 --data-root
+`depictio-cli ingest --template nf-core/cutandrun/3.1 --data-root
 ~/Data/depictio-nfcore/cutandrun/3.1/megatest`: 18 / 18 data collections processed, 8 / 8
 steps, exit 0. No pre-existing "CUT&RUN Chromatin Profiling" project needed deleting.
 Project `6ab2aa3ad486f8485e1a87ed`; dashboards `6ab2aa58fbe776a1a573e2a1` through
@@ -350,7 +350,7 @@ uv run pytest depictio/tests/recipes/test_bowtie2_spikein_factors.py \
               depictio/tests/recipes/test_cutandrun_frip.py \
               depictio/tests/recipes/test_seacr_fragment_classes.py   # 15 passed
 uv run pytest depictio/tests/models/test_catalog.py                   # 93 passed, 6 failed
-depictio-cli run --template nf-core/cutandrun/3.1 --data-root <megatest>   # 8/8 steps, exit 0
+depictio-cli ingest --template nf-core/cutandrun/3.1 --data-root <megatest>   # 8/8 steps, exit 0
 ```
 
 None of the six `test_catalog.py` failures names `bowtie2`, `cutandrun` or `seacr`: four are
@@ -503,7 +503,7 @@ recipe without a `module.yaml`. `load_catalog_entries()` refuses the whole catal
 than skipping the offending directory.
 
 The three tools added or changed here were checked individually through
-`load_catalog_entries()` and load cleanly, and the end-to-end `depictio-cli run` above went
+`load_catalog_entries()` and load cleanly, and the end-to-end `depictio-cli ingest` above went
 through the same loader successfully. This is a property of the shared tree at validation
 time, not of the template, but it means the bundled-catalog gate cannot be read as green
 until every tool in the lot lands.
@@ -585,7 +585,7 @@ Commands and results:
 - Recipe on the real megatest files: 122 000 rows, 0 duplicate genomic bins; mean fragments
   per million at the summit against 3 kb: H3K4me3 140.5 / 59.3 against 2.2 / 2.6, H3K27me3
   15.0 / 5.9 against 4.3 / 1.8.
-- `depictio.cli run --dry-run`: 8/8 steps.
+- `depictio.cli ingest --dry-run`: 8/8 steps.
 - Ingest on the lot 2 stack: 22/22 collections, `seacr_frags_raw` 7 051 185 rows,
   `seacr_frags_profile` 122 000, `samtools_flagstat` 6 (targets 1.0 to 6.5 % duplicates, IgG
   35 and 86 %). The three new `use:` tiles were stored without `viz_kind` because the backend

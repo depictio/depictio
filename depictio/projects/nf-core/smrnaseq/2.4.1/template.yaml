@@ -2,7 +2,7 @@
 # isomiRs, novel miRNA discovery)
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/smrnaseq/2.4.1 --data-root /path/to/your/data \
+#   depictio ingest --template nf-core/smrnaseq/2.4.1 --data-root /path/to/your/data \
 #     [--var METADATA_FILE=/path/to/design.tsv]
 #
 # Tested against the nf-core/smrnaseq AWS megatest results:

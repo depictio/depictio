@@ -71,8 +71,8 @@ renames: {}
 post_fetch_help: |
   === Quick test commands ===
 
-  depictio-cli run --template nf-core/demultiplex/1.8.0 --data-root {dest} --dry-run
-  depictio-cli run --template nf-core/demultiplex/1.8.0 --data-root {dest} \
+  depictio-cli ingest --template nf-core/demultiplex/1.8.0 --data-root {dest} --dry-run
+  depictio-cli ingest --template nf-core/demultiplex/1.8.0 --data-root {dest} \
     --var METADATA_FILE=depictio/projects/nf-core/demultiplex/1.8.0/input/library_metadata.tsv
 
 # Megatest-specific names a dashboard text must never carry (lint-checked).

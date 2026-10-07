@@ -98,6 +98,6 @@ conditions, a contrast and its mirror), since no AWS megatest results are publis
 ```bash
 bash download_test_data.sh            # tables only
 python -m depictio.dev_scripts.multiqc_reprocess --src <dest> --dest <dest>/multiqc/multiqc_data
-depictio-cli run --template nf-core/rnasplice/1.0.4 --data-root <dest> \
+depictio-cli ingest --template nf-core/rnasplice/1.0.4 --data-root <dest> \
   --var METADATA_FILE=<dest>/input/metadata.tsv --var GENOME=hg19
 ```

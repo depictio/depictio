@@ -230,8 +230,8 @@ layer between the assembly and the four screens.
 ## Ingestion result: 19 / 19 data collections processed, exit 0
 
 ```bash
-uv run python -m depictio.cli run \
-  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml \
+uv run python -m depictio.cli ingest \
+  --server ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml \
   --template nf-core/funcscan/4.0.0 \
   --data-root ~/Data/depictio-nfcore/funcscan/4.0.0/megatest
 ```
@@ -282,8 +282,8 @@ and a four-card glance strip.
 | `uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -k funcscan` | 10 passed |
 | `uv run pytest depictio/tests/recipes/test_funcscan_screens.py` | 7 passed |
 | `uv run pytest depictio/tests/models/test_catalog.py` | 95 passed, 4 failed, none in a funcscan tool (see FS-D14) |
-| `uv run python -m depictio.cli run --template nf-core/funcscan/4.0.0 --data-root ... --dry-run` | 8 / 8 steps |
-| `uv run python -m depictio.cli run --template nf-core/funcscan/4.0.0 --data-root ...` | 8 / 8 steps, 19 / 19 collections |
+| `uv run python -m depictio.cli ingest --template nf-core/funcscan/4.0.0 --data-root ... --dry-run` | 8 / 8 steps |
+| `uv run python -m depictio.cli ingest --template nf-core/funcscan/4.0.0 --data-root ...` | 8 / 8 steps, 19 / 19 collections |
 | `ruff format` and `ruff check` on the touched files | clean |
 | `uv run pre-commit run --files ...` | Passed or Skipped throughout |
 
@@ -396,7 +396,7 @@ Commands and results:
 | `uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k funcscan` | 10 passed |
 | `... -k double_track --runxfail` | funcscan no longer listed |
 | `uv run pytest -q depictio/tests/models/test_catalog.py` | 99 passed |
-| `depictio.cli run --template nf-core/funcscan/4.0.0 ... --dry-run` | 8/8 steps |
+| `depictio.cli ingest --template nf-core/funcscan/4.0.0 ... --dry-run` | 8/8 steps |
 | delete + re-ingest | project `6ab3c9f17129744458ef4194`, dashboard `6ab3ca0ee8b8ace33d32c787`; 18/18 table DCs have rows (combgc_region_track 155) |
 | Playwright, 1600x1000 | `/tmp/shots-funcscan/` (one per tab + BGC region maps) |
 
@@ -465,7 +465,7 @@ Typing the same name in the locus field is refused ("Not a locus on this collect
 - Recipes on local data (`execute_recipe`): megatest and nf-core `test` profile.
   `contig_annotation` has no null length on either; dbCAN recipes give `sample_1`,
   `sample_2` on `test` and the 19 sample ids on the megatest.
-- `depictio-cli run --dry-run` on both data roots: 8/8 steps.
+- `depictio-cli ingest --dry-run` on both data roots: 8/8 steps.
 
 ## Still open
 

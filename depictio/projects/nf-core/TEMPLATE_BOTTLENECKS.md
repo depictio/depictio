@@ -550,7 +550,7 @@ are not narrowed by the library filter.
 Any template with a `multiqc` collection fails its live ingest from
 `depictio/cli/.venv` with `No module named 'multiqc'`, and the failure aborts the
 run before steps 7 and 8, so no dashboard is imported at all (nanoseq, 2026-09-22).
-Run the CLI from the repo venv (`.venv/bin/python -m depictio.cli run ...`) or
+Run the CLI from the repo venv (`.venv/bin/python -m depictio.cli ingest ...`) or
 `uv sync --extra multiqc` the CLI venv. The dry run does not catch it.
 
 ## 18. Integer factor columns only take sliders

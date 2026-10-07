@@ -3,7 +3,7 @@
 **Date:** 2026-09-17
 **Worktree / branch:** `depictio-worktrees/feat-nfcore-templates-lot2`
 **Validator:** local recipe/model validation against the real AWS megatest data
-(`~/Data/depictio-nfcore/hic/2.0.0/megatest/`); `depictio-cli run --dry-run`
+(`~/Data/depictio-nfcore/hic/2.0.0/megatest/`); `depictio-cli ingest --dry-run`
 against a running local instance. No server-side ingestion was performed for
 this report (out of scope for this pass, see Ingestion status below).
 
@@ -87,7 +87,7 @@ pipeline's tool built concurrently in this shared worktree) was observed
 mid-session and had already been fixed by its owning agent by the time this
 report was written.
 
-`depictio-cli run --template nf-core/hic/2.0.0 --data-root
+`depictio-cli ingest --template nf-core/hic/2.0.0 --data-root
 ~/Data/depictio-nfcore/hic/2.0.0/megatest --dry-run` completes all 8/8 steps
 against the local instance that happened to be running (template resolution,
 server/S3 checks, project-config validation and sync, data scanning,
@@ -384,16 +384,16 @@ uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k hic
 # 8 passed, 2 failed -- both failures are the shared catalog being all-or-nothing
 # (another agent's half-written gtdbtk/ and mag/ dirs), see HC-D13
 
-uv run python -m depictio.cli run --template nf-core/hic/2.0.0 \
+uv run python -m depictio.cli ingest --template nf-core/hic/2.0.0 \
   --data-root ~/Data/depictio-nfcore/hic/2.0.0/megatest \
-  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml --dry-run
+  --server ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml --dry-run
 # 8/8 steps
 
 # wipe + one ingest against the live stack
 curl -X DELETE ".../projects/delete?project_id=6aabb19d423d80d6bc9c8f2b"
-uv run python -m depictio.cli run --template nf-core/hic/2.0.0 \
+uv run python -m depictio.cli ingest --template nf-core/hic/2.0.0 \
   --data-root ~/Data/depictio-nfcore/hic/2.0.0/megatest \
-  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml \
+  --server ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml \
   --project-name lot2-hic
 # 8/8 steps, 19 data collections, project 6ab2a86eba071d50de877855,
 # dashboard 6ab2a8a8fbe776a1a573e1dc
@@ -559,9 +559,9 @@ with the pinned four-card `Run at a glance` strip and carries the tab-local `Fun
 ```bash
 uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k hic   # 10 passed
 uv run pytest -q depictio/tests/models/test_catalog.py                          # 99 passed
-uv run python -m depictio.cli run --template nf-core/hic/2.0.0 \
+uv run python -m depictio.cli ingest --template nf-core/hic/2.0.0 \
   --data-root ~/Data/depictio-nfcore/hic/2.0.0/megatest \
-  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml --dry-run   # 8/8
+  --server ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml --dry-run   # 8/8
 # wipe lot2-hic + ingest with --project-name lot2-hic: 8/8 steps
 # project 6ab3cbb16a92d99821c48a7c, dashboard 6ab3cc90e8b8ace33d32c9bc (tabs ...9bc to ...9c2)
 ```
@@ -647,7 +647,7 @@ HC-D16 workaround. Screenshots in `/tmp/shots-hic/`.
 uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py \
   depictio/tests/models/test_template_conventions.py -q -rxX -k hic   # 15 passed, 1 xpassed
 uv run pytest depictio/tests/recipes/test_cooltools_eigenvector.py -q  # 3 passed
-uv run python -m depictio.cli run --template nf-core/hic/2.0.0 \
+uv run python -m depictio.cli ingest --template nf-core/hic/2.0.0 \
   --data-root ~/Data/depictio-nfcore/hic/2.0.0/megatest --dry-run      # 8/8, with and without --var GENOME=mm10
 ```
 

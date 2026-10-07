@@ -103,7 +103,7 @@ the tile header rather than behind the settings icon.
 ```bash
 bash depictio/projects/nf-core/mag/5.5.0/download_test_data.sh
 python -m depictio.dev_scripts.multiqc_reprocess --src <DATA_ROOT> --dest <DATA_ROOT>
-depictio-cli run --template nf-core/mag/5.5.0 --data-root <DATA_ROOT>
+depictio-cli ingest --template nf-core/mag/5.5.0 --data-root <DATA_ROOT>
 ```
 
 The megatest fetch pulls only a subset of the Prokka GFFs (see megatest.yaml),

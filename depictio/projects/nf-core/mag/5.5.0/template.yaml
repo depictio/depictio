@@ -1,7 +1,7 @@
 # nf-core/mag Template 5.5.0 - metagenome assembly, binning, bin QC and taxonomy
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/mag/5.5.0 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/mag/5.5.0 --data-root /path/to/your/data
 #
 # Tested against nf-core/mag AWS megatest results:
 #   s3://nf-core-awsmegatests/mag/results-171cf36971499cea4c9bccac4536cccbfc540e14

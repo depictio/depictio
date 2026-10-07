@@ -63,11 +63,11 @@ post_fetch_help: |
   #   python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest}/multiqc/multiqc_data
 
   # 1. Dry run (validates the template against the data, no ingestion)
-  depictio-cli run --template nf-core/rnasplice/1.0.4 --data-root {dest} \
+  depictio-cli ingest --template nf-core/rnasplice/1.0.4 --data-root {dest} \
     --var METADATA_FILE={dest}/input/metadata.tsv --var GENOME=hg19 --dry-run
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
-  depictio-cli run --template nf-core/rnasplice/1.0.4 --data-root {dest} \
+  depictio-cli ingest --template nf-core/rnasplice/1.0.4 --data-root {dest} \
     --var METADATA_FILE={dest}/input/metadata.tsv --var GENOME=hg19
 # Test-run facts that must never appear in a dashboard text (lint rule e,
 # depictio/tests/models/test_template_conventions.py): run ids, cell lines and

@@ -74,6 +74,6 @@ pairs) from a two-condition design with one contrast.
 
 ```bash
 bash download_test_data.sh            # tables only, about 100 MB
-depictio-cli run --template nf-core/riboseq/2.0.0 --data-root <dest> \
+depictio-cli ingest --template nf-core/riboseq/2.0.0 --data-root <dest> \
   --var METADATA_FILE=<dest>/input/metadata.tsv
 ```

@@ -539,10 +539,10 @@ uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k chipse
     8 passed, 2 failed (both catalog-dependent; see CS-D26)
 uv run pytest depictio/tests/models/test_catalog.py -q
     92 passed, 7 failed (none naming macs2 or the new multiqc stubs; see CS-D26)
-uv run python -m depictio.cli run --template nf-core/chipseq/1.2.0 \
+uv run python -m depictio.cli ingest --template nf-core/chipseq/1.2.0 \
   --data-root ~/Data/depictio-nfcore/chipseq/1.2.0/megatest --dry-run
     8/8 steps
-uv run python -m depictio.cli run --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml \
+uv run python -m depictio.cli ingest --server ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml \
   --template nf-core/chipseq/1.2.0 --data-root ~/Data/depictio-nfcore/chipseq/1.2.0/megatest
     8/8 steps, 18 data collections, dashboard 6ab2aa14fbe776a1a573e22f, 5 tabs
 uv run ruff format / check on the two new recipes
@@ -878,7 +878,7 @@ flanks; EZH2 about 6.5 against 1.5. The text tiles say it is not read coverage.
     uv run pytest -q depictio/tests/models/test_catalog.py                              99 passed
     uv run pytest -q depictio/tests/recipes/test_macs2_summit_profile.py                4 passed
     test_no_double_track_binding --runxfail: chipseq no longer listed
-    depictio run --template nf-core/chipseq/1.2.0 ... --dry-run                         8/8 steps
+    depictio ingest --template nf-core/chipseq/1.2.0 ... --dry-run                         8/8 steps
     wipe + re-ingest (project 6ab3cadd4da14702f8f30336): 8/8 steps; macs2_summit_profile 648
     rows, macs2_peaks 258986, homer_annotated_peaks 258986, macs2_consensus_boolean 153891,
     every Delta DC non-empty.

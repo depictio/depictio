@@ -3,7 +3,7 @@
 **Date:** 2026-09-17
 **Worktree / branch:** `depictio-worktrees/feat-nfcore-templates-lot2`
 **Validator:** local recipe execution (agents A/B) + shipped-dashboard/catalog pytest suites +
-`depictio-cli run --dry-run` against the real AWS megatest data (agent C). No local server was
+`depictio-cli ingest --dry-run` against the real AWS megatest data (agent C). No local server was
 started and nothing was ingested (out of scope for this pass, see "Not done" below).
 
 This report supersedes the original single-route (Cell Ranger only) version of this template.
@@ -155,7 +155,7 @@ uv run pytest -q depictio/tests/models/test_catalog.py depictio/tests/models/tes
 uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py
 # 813 passed, full suite, no -k filter
 
-DEPICTIO_CONTEXT=cli uv run python -m depictio.cli run --template nf-core/scrnaseq/4.2.0 \
+DEPICTIO_CONTEXT=cli uv run python -m depictio.cli ingest --template nf-core/scrnaseq/4.2.0 \
   --data-root ~/Data/depictio-nfcore/scrnaseq/4.2.0/megatest --dry-run
 # 8/8 steps passed
 
@@ -217,7 +217,7 @@ pre-commit run --files <every file this pass touched>               # all hooks 
 
 ## Not done (out of scope for this pass)
 
-- No `depictio-cli run` without `--dry-run` (no server started, no ingestion, per the brief).
+- No `depictio-cli ingest` without `--dry-run` (no server started, no ingestion, per the brief).
 - No dashboard screenshots (`docs/dashboards.md` has no image links yet).
 - No git writes, no docker, no `uv sync`/`pnpm`/`npm`/`pip` (per the worktree's hard rules).
 
@@ -309,7 +309,7 @@ uv run pytest depictio/tests/models/test_catalog.py -q
 # and 2 from other agents' catalog dirs (cooltools_insulation, gtdbtk_summary).
 # Every cellranger / simpleaf / cellbender / qcatch / kallisto failure is fixed.
 
-uv run python -m depictio.cli run --template nf-core/scrnaseq/4.2.0 \
+uv run python -m depictio.cli ingest --template nf-core/scrnaseq/4.2.0 \
   --data-root ~/Data/depictio-nfcore/scrnaseq/4.2.0/megatest --dry-run
 # 8/8 steps passed
 ```
@@ -372,7 +372,7 @@ Commands and results:
 ```bash
 uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k scrnaseq   # 10 passed
 uv run pytest -q depictio/tests/models/test_catalog.py                              # 99 passed
-uv run python -m depictio.cli run --template nf-core/scrnaseq/4.2.0 \
+uv run python -m depictio.cli ingest --template nf-core/scrnaseq/4.2.0 \
   --data-root ~/Data/depictio-nfcore/scrnaseq/4.2.0/megatest --dry-run              # 8/8 steps
 uv run python -m depictio.cli dashboard import <base.yaml with project_tag lot2-scrnaseq> \
   --config ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml --api http://localhost:8112 --overwrite
@@ -427,7 +427,7 @@ Verified:
 ```bash
 uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py \
   depictio/tests/models/test_template_conventions.py -q -rxX -k scrnaseq   # 13 passed, 3 xpassed
-uv run python -m depictio.cli run --template nf-core/scrnaseq/4.2.0 \
+uv run python -m depictio.cli ingest --template nf-core/scrnaseq/4.2.0 \
   --data-root ~/Data/depictio-nfcore/scrnaseq/4.2.0/megatest --dry-run      # 8/8 steps
 ```
 The recipe chain (scans, `cell_qc`, `cell_expression`, `cell_expression_long`, `cell_cycle`,

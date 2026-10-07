@@ -72,5 +72,5 @@ Variants.
 
 ```bash
 bash depictio/projects/nf-core/viralrecon/3.0.0/download_test_data.sh <DATA_ROOT>
-depictio-cli run --template nf-core/viralrecon/3.0.0 --data-root <DATA_ROOT>
+depictio-cli ingest --template nf-core/viralrecon/3.0.0 --data-root <DATA_ROOT>
 ```

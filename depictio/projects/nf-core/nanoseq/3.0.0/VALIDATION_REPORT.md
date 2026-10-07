@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-17
 **Worktree / branch:** `depictio-worktrees/feat-nfcore-templates-lot2`
-**Validator:** `uv run pytest` plus `depictio-cli run --template nf-core/nanoseq/3.0.0
+**Validator:** `uv run pytest` plus `depictio-cli ingest --template nf-core/nanoseq/3.0.0
 --data-root ~/Data/depictio-nfcore/nanoseq/3.0.0/megatest --dry-run` (local `depictio/cli/.venv`,
 no docker, no live server needed for `--dry-run`). Full 8/8 steps passed.
 
@@ -166,7 +166,7 @@ uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k nanose
 #    only_multiqc_panels, test_tables_are_full_width, for depictio/projects/nf-core/nanoseq/3.0.0
 #    /dashboards/base.yaml).
 
-depictio/cli/.venv/bin/depictio-cli run --template nf-core/nanoseq/3.0.0 \
+depictio/cli/.venv/bin/depictio-cli ingest --template nf-core/nanoseq/3.0.0 \
   --data-root ~/Data/depictio-nfcore/nanoseq/3.0.0/megatest --dry-run
 # -> 8/8 steps passed (template resolution, server/S3 checks, project-config validation and
 #    sync, data scanning, data-collection processing incl. every recipe, table joins, dashboard
@@ -284,7 +284,7 @@ are placed in collapsed per-tab sections.
   CLI's own venv (`depictio/cli/.venv`): `No module named 'multiqc'`, so
   `extract_multiqc_metadata` cannot read the parquet and the run aborts before steps 7 and 8.
   The repo venv carries MultiQC 1.35, so the live ingest was re-run as
-  `.venv/bin/python -m depictio.cli run ...`. Anyone re-ingesting this template from
+  `.venv/bin/python -m depictio.cli ingest ...`. Anyone re-ingesting this template from
   `depictio/cli/.venv` needs `uv sync --extra multiqc` first.
 - **NS-D13 (fixed during validation)** Three `description:` values in `base.yaml` began a plain
   scalar and then contained `": "`, which YAML reads as a nested mapping; `yaml.safe_load`
@@ -302,7 +302,7 @@ uv run pytest depictio/tests/unit/test_nfcore_megatest.py -q
 # -> 72 passed, 2 failed. Both failures are other pipelines' manifests
 #    (eager-2.4.5, scrnaseq-4.2.0), owned by other agents in the same wave.
 
-depictio/cli/.venv/bin/depictio-cli run --template nf-core/nanoseq/3.0.0 \
+depictio/cli/.venv/bin/depictio-cli ingest --template nf-core/nanoseq/3.0.0 \
   --data-root ~/Data/depictio-nfcore/nanoseq/3.0.0/megatest --dry-run
 # -> 8/8 steps passed.
 
@@ -341,7 +341,7 @@ Mongo (`mongodb://localhost:27112/depictioDB`, project `6ab2aea59c185131670a9f4a
   unrelated uvicorn reload and only a container restart clears it.
 
 **Outstanding, for whoever has the restarted instance:** re-run
-`.venv/bin/python -m depictio.cli run --template nf-core/nanoseq/3.0.0 --data-root
+`.venv/bin/python -m depictio.cli ingest --template nf-core/nanoseq/3.0.0 --data-root
 ~/Data/depictio-nfcore/nanoseq/3.0.0/megatest --project-name lot2-nanoseq --overwrite`, then
 capture the seven tab screenshots. The dev viewer on 5612 additionally predates the
 `@genome-spy/core` install and throws "Failed to fetch dynamically imported module" on every
@@ -399,8 +399,8 @@ caused by this template.
 uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py      # 853 passed, 1 xfailed
 uv run pytest -q depictio/tests/models/test_catalog.py                      # 99 passed
 uv run pytest -q depictio/tests/recipes/test_samtools_nx_ladder.py          # 2 passed
-python -m depictio.cli run --template nf-core/nanoseq/3.0.0 --data-root ... --dry-run   # 8/8
-.venv/bin/python -m depictio.cli run ... --project-name lot2-nanoseq        # 8/8, live
+python -m depictio.cli ingest --template nf-core/nanoseq/3.0.0 --data-root ... --dry-run   # 8/8
+.venv/bin/python -m depictio.cli ingest ... --project-name lot2-nanoseq        # 8/8, live
 ```
 Live rows: samtools_read_length_nx 594, dexseq_usage 84, samtools_stats_sections 3 155,
 deseq2_results 208 722, dexseq_results 419, bambu_counts_transcript_long 415 356; the
@@ -451,7 +451,7 @@ session.
 ```
 uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py \
   depictio/tests/models/test_template_conventions.py -q -k nanoseq -rxX
-python -m depictio.cli run --template nf-core/nanoseq/3.0.0 --data-root ... --dry-run   # 8/8
+python -m depictio.cli ingest --template nf-core/nanoseq/3.0.0 --data-root ... --dry-run   # 8/8
 ```
 
 ## Design from METADATA_FILE (wave 3 genericity follow-up)

@@ -48,7 +48,7 @@ Nx at 50 from idxstats equals QUAST's N50 on the same assembly.
   genomeassembler cases pass.
 - `test_catalog.py` + `test_catalog_source_from_use.py`: pass.
 - `test_genomeassembler_recipes.py`, `test_genomeassembler_catalog.py`: 13 pass.
-- `depictio-cli run --dry-run`, with and without `--var METADATA_FILE`: 8/8 steps.
+- `depictio-cli ingest --dry-run`, with and without `--var METADATA_FILE`: 8/8 steps.
 
 ## Known caveats
 

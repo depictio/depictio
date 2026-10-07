@@ -131,8 +131,8 @@ post_fetch_help: |
   === Quick test commands ===
 
   # 1. Dry run (validates the template against the data, no ingestion)
-  depictio-cli run --template nf-core/methylseq/2.3.0 --data-root {dest} --dry-run \
+  depictio-cli ingest --template nf-core/methylseq/2.3.0 --data-root {dest} --dry-run \
     --var METADATA_FILE={dest}/input/sample_metadata.tsv
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
-  depictio-cli run --template nf-core/methylseq/2.3.0 --data-root {dest}
+  depictio-cli ingest --template nf-core/methylseq/2.3.0 --data-root {dest}

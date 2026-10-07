@@ -46,7 +46,7 @@ of reads on the reference sequence, 89 novel and 646 known miRDeep2 calls per sa
 | `forbidden_terms` lint | passes (a "PC1" filter title collided with a sample id and was renamed) |
 | `depictio/tests/recipes/test_smrnaseq_recipes.py` | 7 passed |
 | `test_catalog.py`, `test_catalog_source_from_use.py`, `test_catalog_compose_matching.py` | 138 passed; 2 failures in other agents' dirs |
-| `depictio-cli run --template nf-core/smrnaseq/2.4.1 --dry-run` | 8/8 steps, with and without `METADATA_FILE` |
+| `depictio-cli ingest --template nf-core/smrnaseq/2.4.1 --dry-run` | 8/8 steps, with and without `METADATA_FILE` |
 | `ruff format` / `ruff check` on the new Python | clean |
 
 ## Not verified

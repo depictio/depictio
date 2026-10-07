@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-17
 **Worktree / branch:** `depictio-worktrees/feat-nfcore-templates-lot2`
-**Validator:** unit tests + `depictio-cli run --dry-run` (no server ingestion; no `docker` commands run).
+**Validator:** unit tests + `depictio-cli ingest --dry-run` (no server ingestion; no `docker` commands run).
 
 ## Goal
 
@@ -109,7 +109,7 @@ template depends on it, so its final shape does not affect this template either 
 ```bash
 uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k methylseq   # 10 passed
 uv run pytest depictio/tests/models/test_catalog.py -q -k "bismark or multiqc or fixture or recipe"  # 20 passed
-depictio/cli/.venv/bin/depictio-cli run --template nf-core/methylseq/2.3.0 \
+depictio/cli/.venv/bin/depictio-cli ingest --template nf-core/methylseq/2.3.0 \
   --data-root ~/Data/depictio-nfcore/methylseq/2.3.0/megatest --dry-run   # 8/8 steps, exit 0
 uv run ruff format <5 recipe .py files>   # 1 reformatted, 4 unchanged
 uv run ruff check <5 recipe .py files>    # all checks passed
@@ -362,7 +362,7 @@ uv run pytest depictio/tests/models/test_catalog.py -q
   -> 93 passed, 6 failed; none in bismark or qualimap (cellbender/kallisto/qcatch/
      simpleaf cards, cooltools and gtdbtk aggregations, and the two *.schema.json
      files, all other agents' in-flight work on this branch)
-python -m depictio.cli run --template nf-core/methylseq/2.3.0 \
+python -m depictio.cli ingest --template nf-core/methylseq/2.3.0 \
   --data-root ~/Data/depictio-nfcore/methylseq/2.3.0/megatest \
   --project-name lot2-methylseq --dry-run
   -> 8/8 steps
@@ -595,7 +595,7 @@ Validation (offline, no ingestion):
   `group_a` MShef11 against `group_b` MShef4, **0 windows** clear padj 0.05 (min padj 0.072):
   the stricter correction over nine times the windows removes the single hit the strided screen
   reported. Without a design the recipe raises "no two-group comparison" as intended.
-- `uv run python -m depictio.cli run --template nf-core/methylseq/2.3.0 --dry-run`, with and
+- `uv run python -m depictio.cli ingest --template nf-core/methylseq/2.3.0 --dry-run`, with and
   without `--var METADATA_FILE=.../input/sample_metadata.tsv`: 8/8 both ways; without it the
   resolved config drops `metadata` and `bismark_window_group_compare`.
 - `test_shipped_dashboard_yamls.py` + `test_template_conventions.py -k methylseq`: 12 passed,

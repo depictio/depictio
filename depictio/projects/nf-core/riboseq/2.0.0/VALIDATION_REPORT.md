@@ -41,7 +41,7 @@ plus strand matches the Ribo-TISH GenomePos end, minus strand matches start + 1.
 - Catalog dirs `ribowaltz`, `anota2seq`, `ribotish`, `ribocode` and the MultiQC yamls
   `sortmerna`, `ribowaltz`, `ribotish`: validated (fixtures match schemas, no missing files).
 - `resolve_template`: 18 DCs and 35 links with `METADATA_FILE`, 17 DCs and 23 links without.
-- `depictio-cli run --template nf-core/riboseq/2.0.0 --data-root <dest>
+- `depictio-cli ingest --template nf-core/riboseq/2.0.0 --data-root <dest>
   --var METADATA_FILE=<dest>/input/metadata.tsv --dry-run`: 8/8 checks pass.
 
 ## Pending (live)

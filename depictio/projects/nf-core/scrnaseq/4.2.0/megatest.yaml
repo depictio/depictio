@@ -139,10 +139,10 @@ post_fetch_help: |
   # SAMPLESHEET_FILE is then auto-detected from input/.
 
   # 1. Dry run (validates the template against the data, no ingestion)
-  depictio-cli run --template nf-core/scrnaseq/4.2.0 --data-root {dest} --dry-run
+  depictio-cli ingest --template nf-core/scrnaseq/4.2.0 --data-root {dest} --dry-run
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
-  depictio-cli run --template nf-core/scrnaseq/4.2.0 --data-root {dest}
+  depictio-cli ingest --template nf-core/scrnaseq/4.2.0 --data-root {dest}
 # Megatest facts no dashboard text may state (checked by
 # depictio/tests/models/test_template_conventions.py): the sample, its tissue,
 # its reference and counts, and the gene names the megatest's clusters and the

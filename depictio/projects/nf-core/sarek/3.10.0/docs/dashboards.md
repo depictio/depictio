@@ -132,8 +132,8 @@ bash depictio/projects/nf-core/sarek/3.10.0/download_test_data.sh \
   ~/Data/depictio-nfcore/sarek/3.10.0/megatest
 
 # 2. Dry run, then ingest
-depictio-cli run --template nf-core/sarek/3.10.0 \
+depictio-cli ingest --template nf-core/sarek/3.10.0 \
   --data-root ~/Data/depictio-nfcore/sarek/3.10.0/megatest --dry-run
-depictio-cli run --template nf-core/sarek/3.10.0 \
+depictio-cli ingest --template nf-core/sarek/3.10.0 \
   --data-root ~/Data/depictio-nfcore/sarek/3.10.0/megatest
 ```

@@ -73,11 +73,11 @@ post_fetch_help: |
   === Quick test commands ===
 
   # 1. Dry run (validates the template against the data, no ingestion)
-  depictio-cli run --template nf-core/nanoseq/3.0.0 --data-root {dest} --dry-run \
+  depictio-cli ingest --template nf-core/nanoseq/3.0.0 --data-root {dest} --dry-run \
     --var METADATA_FILE={dest}/input/sample_metadata.tsv
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
-  depictio-cli run --template nf-core/nanoseq/3.0.0 --data-root {dest} \
+  depictio-cli ingest --template nf-core/nanoseq/3.0.0 --data-root {dest} \
     --var METADATA_FILE={dest}/input/sample_metadata.tsv
 # Megatest-specific names no dashboard text may carry (lint rule e of
 # depictio/tests/models/test_template_conventions.py).

@@ -93,7 +93,7 @@ python -m depictio.dev_scripts.multiqc_reprocess \
   --src ~/Data/depictio-nfcore/eager/2.4.5/megatest \
   --dest ~/Data/depictio-nfcore/eager/2.4.5/megatest
 
-depictio-cli run --template nf-core/eager/2.4.5 \
+depictio-cli ingest --template nf-core/eager/2.4.5 \
   --data-root ~/Data/depictio-nfcore/eager/2.4.5/megatest --dry-run
 ```
 

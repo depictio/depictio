@@ -65,8 +65,8 @@ renames: {}
 post_fetch_help: |
   === Quick test commands ===
 
-  depictio-cli run --template nf-core/genomeassembler/2.0.0 --data-root {dest} --dry-run
-  depictio-cli run --template nf-core/genomeassembler/2.0.0 --data-root {dest}
+  depictio-cli ingest --template nf-core/genomeassembler/2.0.0 --data-root {dest} --dry-run
+  depictio-cli ingest --template nf-core/genomeassembler/2.0.0 --data-root {dest}
 forbidden_terms:
   - Arabidopsis
   - thaliana

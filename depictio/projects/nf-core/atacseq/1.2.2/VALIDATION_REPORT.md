@@ -509,11 +509,11 @@ uv run python <scratch>/atacseq_recipes.py
 read a `dc_ref` source and can only run through the CLI two-step; the ingest below covers them.
 
 ```bash
-uv run python -m depictio.cli run --template nf-core/atacseq/1.2.2 \
+uv run python -m depictio.cli ingest --template nf-core/atacseq/1.2.2 \
   --data-root ~/Data/depictio-nfcore/atacseq/1.2.2/megatest --dry-run     # 8/8 steps passed
-uv run python -m depictio.cli run --template nf-core/atacseq/1.2.2 \
+uv run python -m depictio.cli ingest --template nf-core/atacseq/1.2.2 \
   --data-root ~/Data/depictio-nfcore/atacseq/1.2.2/megatest \
-  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml
+  --server ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml
 ```
 
 No `ATAC-seq Chromatin Accessibility` project existed on the stack, so nothing was deleted
@@ -769,7 +769,7 @@ Commands and results (2026-09-23):
 - `uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k atacseq`: 10 passed.
 - `uv run pytest -q depictio/tests/models/test_catalog.py`: 99 passed.
 - `--runxfail -k double`: atacseq absent from the hit list (chipseq, sarek remain).
-- `depictio.cli run --template nf-core/atacseq/1.2.2 ... --dry-run`: 8/8 steps.
+- `depictio.cli ingest --template nf-core/atacseq/1.2.2 ... --dry-run`: 8/8 steps.
 - Re-ingest (old project deleted): project `6ab3ca22dc9db1d257758b63`, dashboard
   `6ab3ca6de8b8ace33d32c80a`, 20 table DCs with rows (macs2_broad_peaks 224,137,
   homer_annotated_peaks 224,137, macs2_consensus_boolean 104,657, deseq2_results 313,971),

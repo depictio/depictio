@@ -436,7 +436,7 @@ uv run pytest depictio/tests/models/test_catalog.py -q                    # 93 p
 #   the six failures name cellbender / kallisto / qcatch / simpleaf / cooltools / gtdbtk /
 #   funcscan and the two regenerated JSON schemas: other agents' half-written dirs on the
 #   same branch, none of them nonpareil or taxpasta.
-uv run python -m depictio.cli run --template nf-core/taxprofiler/2.0.1 \
+uv run python -m depictio.cli ingest --template nf-core/taxprofiler/2.0.1 \
   --data-root ~/Data/depictio-nfcore/taxprofiler/2.0.1/megatest --dry-run  # 8/8 steps
 uv run ruff format <new .py> && uv run ruff check <new .py>                # clean
 ```
@@ -595,7 +595,7 @@ Commands and results:
 | command | result |
 | --- | --- |
 | `uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k taxprofiler` | 10 passed |
-| `depictio.cli run --template nf-core/taxprofiler/2.0.1 ... --dry-run` | 8/8 steps |
+| `depictio.cli ingest --template nf-core/taxprofiler/2.0.1 ... --dry-run` | 8/8 steps |
 | delete + re-ingest | project `6ab3c9f1ac5a3f0e26e7bf89`, dashboard `6ab3ca0be8b8ace33d32c77e`; 14/14 table DCs have rows (taxpasta_lineage 5,652) |
 | Playwright, 1600x1000 | `/tmp/shots-taxprofiler/` (tabs + `verify-profiles-0.png`, Krona with wedges for kaiju, diamond, motus, ...) |
 

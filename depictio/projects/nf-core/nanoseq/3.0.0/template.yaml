@@ -2,7 +2,7 @@
 # and long-read RNA quantification / differential expression
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/nanoseq/3.0.0 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/nanoseq/3.0.0 --data-root /path/to/your/data
 #
 # Tested against nf-core/nanoseq AWS megatest results:
 #   s3://nf-core-awsmegatests/nanoseq/results-1e60482a2c4621234393a6eef8e9a104309c20ae

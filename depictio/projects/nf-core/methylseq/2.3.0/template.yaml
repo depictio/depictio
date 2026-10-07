@@ -1,7 +1,7 @@
 # nf-core/methylseq Template v2.3.0 - Bisulfite methylation profiling (Bismark route)
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/methylseq/2.3.0 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/methylseq/2.3.0 --data-root /path/to/your/data
 #
 # Tested against nf-core/methylseq AWS megatest results:
 #   s3://nf-core-awsmegatests/methylseq/results-93bc5811603c287c766a0ff7e03b5b41f4483895/bismark/

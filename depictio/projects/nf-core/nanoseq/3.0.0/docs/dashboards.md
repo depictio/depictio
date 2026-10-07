@@ -138,7 +138,7 @@ mkdir -p ~/Data/depictio-nfcore/nanoseq/3.0.0/megatest/input
 cp depictio/projects/nf-core/nanoseq/3.0.0/input/sample_metadata.tsv \
   ~/Data/depictio-nfcore/nanoseq/3.0.0/megatest/input/
 
-depictio-cli run --template nf-core/nanoseq/3.0.0 \
+depictio-cli ingest --template nf-core/nanoseq/3.0.0 \
   --data-root ~/Data/depictio-nfcore/nanoseq/3.0.0/megatest \
   --var METADATA_FILE=~/Data/depictio-nfcore/nanoseq/3.0.0/megatest/input/sample_metadata.tsv \
   --dry-run

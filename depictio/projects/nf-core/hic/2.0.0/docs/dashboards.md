@@ -274,9 +274,9 @@ python -m depictio.dev_scripts.multiqc_reprocess \
   --dest ~/Data/depictio-nfcore/hic/2.0.0/megatest
 
 # 3. Dry run, then ingest
-python -m depictio.cli run --template nf-core/hic/2.0.0 \
+python -m depictio.cli ingest --template nf-core/hic/2.0.0 \
   --data-root ~/Data/depictio-nfcore/hic/2.0.0/megatest --dry-run
-python -m depictio.cli run --template nf-core/hic/2.0.0 \
+python -m depictio.cli ingest --template nf-core/hic/2.0.0 \
   --data-root ~/Data/depictio-nfcore/hic/2.0.0/megatest
 ```
 

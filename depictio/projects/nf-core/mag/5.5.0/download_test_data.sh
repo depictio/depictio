@@ -30,5 +30,5 @@ Next, rebuild the MultiQC report this run never wrote:
 
 then validate the template against the data:
 
-  depictio-cli run --template nf-core/mag/5.5.0 --data-root "${dest}" --dry-run
+  depictio-cli ingest --template nf-core/mag/5.5.0 --data-root "${dest}" --dry-run
 EOF

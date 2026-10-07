@@ -1,7 +1,7 @@
 # nf-core/eager Template 2.4.5 - ancient DNA (paleogenomics) analysis
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/eager/2.4.5 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/eager/2.4.5 --data-root /path/to/your/data
 #
 # Tested against nf-core/eager AWS megatest results (2.4.5 pinned; see
 # megatest.yaml for why every 2.5.x prefix holds pipeline_info/ only):

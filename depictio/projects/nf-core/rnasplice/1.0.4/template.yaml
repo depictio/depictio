@@ -1,7 +1,7 @@
 # nf-core/rnasplice Template v1.0.4 - alternative splicing analysis of RNA-seq
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/rnasplice/1.0.4 --data-root /path/to/results \
+#   depictio ingest --template nf-core/rnasplice/1.0.4 --data-root /path/to/results \
 #     [--var METADATA_FILE=/path/to/design.tsv] [--var QUANT_ROUTE=salmon]
 #
 # Validated against an EMBL cluster run of the pipeline's `test_full` profile

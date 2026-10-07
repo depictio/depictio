@@ -1,7 +1,7 @@
 # nf-core/demultiplex Template v1.8.0 - Sequencing-facility run QC
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/demultiplex/1.8.0 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/demultiplex/1.8.0 --data-root /path/to/your/data
 #
 # Tested against the nf-core/demultiplex AWS megatest results:
 #   s3://nf-core-awsmegatests/demultiplex/results-daade37c4a75a4c1709ccf12434deb3424141319/

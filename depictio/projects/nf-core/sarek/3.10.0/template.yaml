@@ -1,7 +1,7 @@
 # nf-core/sarek Template v3.10.0 - Variant calling, caller by caller
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/sarek/3.10.0 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/sarek/3.10.0 --data-root /path/to/your/data
 #   [--var GENOME=hg19]    # UCSC name of the run's assembly, default hg38
 #
 # Validated against the nf-core/sarek 3.10.0 AWS megatest

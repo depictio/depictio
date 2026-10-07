@@ -180,7 +180,7 @@ What changed in `3.0.0/dashboards/base.yaml`:
   reads the same numbers); `cov-sample-filter` index renamed `cov-genome-depth`.
 
 Verified offline: shipped-YAML, conventions (top_n and warn-side rules now xpass) and catalog
-tests; `depictio-cli run --dry-run` on the committed `run_1` subset; the breadth figure code
+tests; `depictio-cli ingest --dry-run` on the committed `run_1` subset; the breadth figure code
 executed on `summary_metrics.tsv`.
 
 Still open: `.db_seeds` regeneration (main session); there is no `megatest.yaml` for this

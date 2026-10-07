@@ -100,10 +100,10 @@ post_fetch_help: |
   === Quick test commands ===
 
   # 1. Dry run (validates the template against the data, no ingestion)
-  depictio-cli run --template nf-core/sarek/3.10.0 --data-root {dest} --dry-run
+  depictio-cli ingest --template nf-core/sarek/3.10.0 --data-root {dest} --dry-run
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
-  depictio-cli run --template nf-core/sarek/3.10.0 --data-root {dest}
+  depictio-cli ingest --template nf-core/sarek/3.10.0 --data-root {dest}
 # Run-specific values the dashboard texts must not quote (lint rule e,
 # test_template_conventions.py): the megatest sample, its read depths, and the
 # variant and locus the former default record opened on.

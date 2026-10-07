@@ -44,7 +44,7 @@ every tool gives opposite effects for the two mirrors (treatment minus control t
 
 ## Live ingest (lot2 stack)
 
-`depictio-cli run --template nf-core/rnasplice/1.0.4 --project-name w3-rnasplice-1.0.4-test_full
+`depictio-cli ingest --template nf-core/rnasplice/1.0.4 --project-name w3-rnasplice-1.0.4-test_full
 --var METADATA_FILE=... --var GENOME=hg19`: 8/8 steps, every collection written with the row
 counts above, dashboard imported with six tabs (MultiQC 27 components, Sample space 6,
 Splicing overview 10, Exon usage 13, Transcript usage 9, Splicing events 17).

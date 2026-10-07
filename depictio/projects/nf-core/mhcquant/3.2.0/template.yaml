@@ -1,7 +1,7 @@
 # nf-core/mhcquant Template v3.2.0 - Immunopeptidomics
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/mhcquant/3.2.0 --data-root /path/to/results \
+#   depictio ingest --template nf-core/mhcquant/3.2.0 --data-root /path/to/results \
 #     --var METADATA_FILE=/path/to/samplesheet.tsv
 #
 # Tested against nf-core/mhcquant AWS megatest results:

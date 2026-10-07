@@ -78,10 +78,10 @@ post_fetch_help: |
   === Quick test commands ===
 
   # 1. Dry run (validates the template against the data, no ingestion)
-  depictio-cli run --template nf-core/eager/2.4.5 --data-root {dest} --dry-run
+  depictio-cli ingest --template nf-core/eager/2.4.5 --data-root {dest} --dry-run
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
-  depictio-cli run --template nf-core/eager/2.4.5 --data-root {dest}
+  depictio-cli ingest --template nf-core/eager/2.4.5 --data-root {dest}
 # Megatest facts that must never reach a dashboard text (lint rule e in
 # depictio/tests/models/test_template_conventions.py): sample and library ids,
 # ENA runs, the organism and its reference contigs.

@@ -125,7 +125,7 @@ reports).
 uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py   # 873 passed
 uv run pytest depictio/tests/models/test_catalog.py                    # mag entries pass
 uv run python -m depictio.cli dev catalog validate                     # no mag findings
-uv run python -m depictio.cli run --template nf-core/mag/5.5.0 \
+uv run python -m depictio.cli ingest --template nf-core/mag/5.5.0 \
   --data-root ~/Data/depictio-nfcore/mag/5.5.0/megatest --dry-run      # 8/8 steps
 ```
 

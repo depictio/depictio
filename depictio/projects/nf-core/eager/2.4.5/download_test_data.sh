@@ -8,7 +8,7 @@
 #
 # eager's megatest fetch carries no input/ prefix (see megatest.yaml and
 # VALIDATION_REPORT.md): after this runs, copy input/benchmarking_vikingfish.tsv
-# from this directory into TARGET_DIR/input/ by hand before `depictio-cli run`.
+# from this directory into TARGET_DIR/input/ by hand before `depictio-cli ingest`.
 set -euo pipefail
 exec python3 "$(dirname "$0")/../../../../../scripts/nfcore_megatest.py" fetch \
   --pipeline eager --version 2.4.5 \

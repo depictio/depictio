@@ -244,7 +244,7 @@ uv run python -c "...transform(...)"        # 238651 -> 1296 rows, 8 columns, dt
 uv run python <scratchpad>/audit.py .../airrflow/5.1.0/dashboards/base.yaml   # 0 problems
 uv run python <scratchpad>/catcheck.py .../airrflow/5.1.0/dashboards/base.yaml # 11 advanced_viz, 0 invalid
 uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k airrflow
-uv run python -m depictio.cli run --template nf-core/airrflow/5.1.0 \
+uv run python -m depictio.cli ingest --template nf-core/airrflow/5.1.0 \
   --data-root ~/Data/depictio-nfcore/airrflow/5.1.0/megatest --dry-run   # 8/8 steps
 ```
 
@@ -318,7 +318,7 @@ Commands and results:
 | --- | --- |
 | recipes on the real table (`resolve_sources` + `transform` + `validate_schema`) | spectratype 259 x 6, V-J 103 x 10 |
 | `uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k airrflow` | 10 passed |
-| `depictio.cli run --template nf-core/airrflow/5.1.0 ... --dry-run` | 8/8 steps |
+| `depictio.cli ingest --template nf-core/airrflow/5.1.0 ... --dry-run` | 8/8 steps |
 | delete + re-ingest | project `6ab3cc7c81d2d7032d3ff302`, dashboard `6ab3ccdce8b8ace33d32c9f6`; cdr3_spectratype 259 rows, vj_usage_matrix 103 rows |
 | Playwright, 1600x1000 | `/tmp/shots-airrflow/` (tabs + `verify-repertoire-*.png`, `verify-rep2-*`, `verify-clonal-*`) |
 
@@ -359,7 +359,7 @@ Verification (offline):
 | --- | --- |
 | `uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py depictio/tests/models/test_template_conventions.py -q -rxX -k airrflow` | 13 passed, 3 xpassed (all KNOWN_VIOLATIONS entries now pass) |
 | `execute_recipe("enchantr/diversity_orders.py", ...)` on megatest and test runs | 27 x 7 and 9 x 7, three orders each |
-| `depictio.cli run --template nf-core/airrflow/5.1.0 --dry-run` on megatest, test, test_tcr | configuration validation passed |
+| `depictio.cli ingest --template nf-core/airrflow/5.1.0 --dry-run` on megatest, test, test_tcr | configuration validation passed |
 
 Still open:
 

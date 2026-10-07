@@ -53,7 +53,7 @@ on the index reads). `bclconvert/*.py` were run on the MultiQC test-data reports
 | `uv run pytest depictio/tests/models/test_catalog.py test_catalog_source_from_use.py` | 106 passed, 1 failed on another tool's catalog (`bismark_window_pca`), not this template |
 | isolated catalog check of `bcl2fastq`, `bclconvert`, `interop` (`_load_tool_dir`, fixture schema, render roles, dtype grounding, existence) | clean |
 | `resolve_template` with metadata, without, and with `IS_BCLCONVERT` | expected collections kept and dropped, 11 links, scans match the megatest files |
-| `depictio-cli run --template nf-core/demultiplex/1.8.0 --data-root <megatest> --var METADATA_FILE=... --dry-run` | 8/8 steps |
+| `depictio-cli ingest --template nf-core/demultiplex/1.8.0 --data-root <megatest> --var METADATA_FILE=... --dry-run` | 8/8 steps |
 | dashboard columns against recipe schemas (every bound column, `{GROUP_COL}` resolved) | no missing column |
 | `use:` coverage | 48 of 60 tiles |
 

@@ -1,7 +1,7 @@
 # nf-core/hic Template v2.0.0 - Hi-C chromatin architecture (HiC-Pro + cooler + cooltools)
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/hic/2.0.0 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/hic/2.0.0 --data-root /path/to/your/data
 #
 # Tested against nf-core/hic AWS megatest results:
 #   s3://nf-core-awsmegatests/hic/results-b4d89cfacf97a5835fba804887cf0fc7e0449e8d

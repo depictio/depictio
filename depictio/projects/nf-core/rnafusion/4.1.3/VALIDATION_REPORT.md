@@ -442,7 +442,7 @@ sums to 8.
 | `uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k rnafusion` | 8 passed, 2 failed (RF-D8 below) |
 | the two failing checks re-run against an isolated catalog | 13 advanced_viz tiles, 0 problems |
 | fixture grounding and recipe resolution for the 7 tools this template uses, isolated | 0 problems |
-| `uv run python -m depictio.cli run --template nf-core/rnafusion/4.1.3 --data-root ~/Data/... --dry-run` | 8/8 steps, completed successfully |
+| `uv run python -m depictio.cli ingest --template nf-core/rnafusion/4.1.3 --data-root ~/Data/... --dry-run` | 8/8 steps, completed successfully |
 | `uv run ruff format` and `ruff check` on `depictio/catalog/arriba/fusions.py` | unchanged, all checks passed |
 
 ## Discrepancies

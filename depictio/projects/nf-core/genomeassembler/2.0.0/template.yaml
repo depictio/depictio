@@ -1,7 +1,7 @@
 # nf-core/genomeassembler Template v2.0.0 - De novo genome assembly QC
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/genomeassembler/2.0.0 --data-root /path/to/results
+#   depictio ingest --template nf-core/genomeassembler/2.0.0 --data-root /path/to/results
 #
 # Validated against the AWS megatest of the 2.0.0 release:
 #   s3://nf-core-awsmegatests/genomeassembler/results-a72d47d9cdb50f21b97882dfb2abf4af8f4c74ad

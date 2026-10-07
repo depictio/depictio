@@ -209,10 +209,10 @@ python -m depictio.dev_scripts.multiqc_reprocess \
   --dest ~/Data/depictio-nfcore/methylseq/2.3.0/megatest
 
 # 4. Dry run, then ingest
-python -m depictio.cli run --template nf-core/methylseq/2.3.0 \
+python -m depictio.cli ingest --template nf-core/methylseq/2.3.0 \
   --data-root ~/Data/depictio-nfcore/methylseq/2.3.0/megatest --dry-run \
   --var METADATA_FILE=~/Data/depictio-nfcore/methylseq/2.3.0/megatest/input/sample_metadata.tsv
-python -m depictio.cli run --template nf-core/methylseq/2.3.0 \
+python -m depictio.cli ingest --template nf-core/methylseq/2.3.0 \
   --data-root ~/Data/depictio-nfcore/methylseq/2.3.0/megatest \
   --var METADATA_FILE=~/Data/depictio-nfcore/methylseq/2.3.0/megatest/input/sample_metadata.tsv
 ```

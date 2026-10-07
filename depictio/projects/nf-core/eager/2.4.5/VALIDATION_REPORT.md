@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-17
 **Worktree / branch:** `feat-nfcore-templates-lot2` (`feat/nfcore-templates-lot2`)
-**Validator:** `depictio/cli/.venv/bin/depictio-cli run --dry-run` against the local server
+**Validator:** `depictio/cli/.venv/bin/depictio-cli ingest --dry-run` against the local server
 this worktree's config resolves; recipes also exercised directly against the real data with
 `uv run python3` (no ingestion, see "Do NOT ingest" in the brief this was built against).
 
@@ -170,7 +170,7 @@ mkdir -p ~/Data/depictio-nfcore/eager/2.4.5/megatest/input
 cp depictio/projects/nf-core/eager/2.4.5/input/benchmarking_vikingfish.tsv \
    ~/Data/depictio-nfcore/eager/2.4.5/megatest/input/
 
-depictio/cli/.venv/bin/depictio-cli run --template nf-core/eager/2.4.5 \
+depictio/cli/.venv/bin/depictio-cli ingest --template nf-core/eager/2.4.5 \
   --data-root ~/Data/depictio-nfcore/eager/2.4.5/megatest --dry-run
 # ✅ Depictio-CLI run completed successfully! (8/8 steps), server accessibility, S3, project
 # validation, config sync, scan, process, joins and dashboard import all passed. No ingestion.
@@ -344,7 +344,7 @@ uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py -q -k eager
 uv run pytest depictio/tests/models/test_catalog.py -q
 # 95 passed, 4 failed, none in this template's tools; see "Cross-agent" below
 
-uv run python -m depictio.cli run --template nf-core/eager/2.4.5 \
+uv run python -m depictio.cli ingest --template nf-core/eager/2.4.5 \
   --data-root ~/Data/depictio-nfcore/eager/2.4.5/megatest --dry-run
 # ✅ 8/8 steps
 
@@ -364,8 +364,8 @@ advanced-viz role) was checked to exist in the frame its data collection will ho
 
 ```bash
 curl -X DELETE .../projects/delete?project_id=<previous lot2-eager>
-nohup uv run python -m depictio.cli run \
-  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml \
+nohup uv run python -m depictio.cli ingest \
+  --server ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml \
   --template nf-core/eager/2.4.5 \
   --data-root ~/Data/depictio-nfcore/eager/2.4.5/megatest \
   --project-name lot2-eager > /tmp/ingest-eager2.log 2>&1 &
@@ -524,9 +524,9 @@ uv run pytest -q depictio/tests/models/test_shipped_dashboard_yamls.py -k eager 
 uv run pytest -q depictio/tests/models/test_catalog.py                            # 99 passed
 uv run pytest -q depictio/tests/recipes/test_eager_library_qc.py \
   depictio/tests/recipes/test_eager_mapq_across_reference.py                      # 4 passed
-uv run python -m depictio.cli run --template nf-core/eager/2.4.5 \
+uv run python -m depictio.cli ingest --template nf-core/eager/2.4.5 \
   --data-root ~/Data/depictio-nfcore/eager/2.4.5/megatest --dry-run               # 8/8 steps
-nohup uv run python -m depictio.cli run --CLI-config-path \
+nohup uv run python -m depictio.cli ingest --server \
   ~/.depictio/CLI.feat-nfcore-templates-lot2-112.yaml --template nf-core/eager/2.4.5 \
   --data-root ~/Data/depictio-nfcore/eager/2.4.5/megatest --project-name lot2-eager-w2b
 # 8/8 steps; project 6ab3cb1d815942d33e1eb0d9, main dashboard 6ab3cbc1e8b8ace33d32c919
@@ -598,7 +598,7 @@ uv run pytest depictio/tests/models/test_shipped_dashboard_yamls.py \
 # 14 passed, 2 xpassed (top_n_only_under_sum, text_intro_length): eager is clean on
 # every rule, including warn-only no_mean_of_percentages
 uv run pytest depictio/tests/recipes -q -k eager       # 5 passed
-uv run python -m depictio.cli run --template nf-core/eager/2.4.5 \
+uv run python -m depictio.cli ingest --template nf-core/eager/2.4.5 \
   --data-root ~/Data/depictio-nfcore/eager/2.4.5/megatest --dry-run   # 8/8 steps
 ```
 
