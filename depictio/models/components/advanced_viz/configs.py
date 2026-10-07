@@ -877,6 +877,13 @@ class PhylogeneticConfig(_BaseVizConfig):
             "(ASVs), or its mean share of a sample's reads from the abundance table"
         ),
     )
+    show_shares: bool | None = Field(
+        default=None,
+        description=(
+            "Summary mode: print each lineage's share (%) beside it. Unset, shown "
+            "only when sized by reads"
+        ),
+    )
     # Abundance source for size_by="abundance": a long table with one row per
     # (sample, taxon) carrying the collapse_rank column and a relative abundance.
     abundance_wf_id: str | None = Field(

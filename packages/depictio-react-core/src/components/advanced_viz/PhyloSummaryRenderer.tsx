@@ -6,6 +6,7 @@ import {
   SegmentedControl,
   Select,
   Stack,
+  Switch,
   Text,
   Tooltip,
   useMantineColorScheme,
@@ -153,6 +154,14 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   const [topN, setTopN] = usePersistedVizControl<number>(metadata, 'top_n', 10);
   const [sizeBy, setSizeBy] = usePersistedVizControl<SizeBy>(metadata, 'size_by', 'tips');
   const useAbundance = sizeBy === 'abundance' && hasAbundance;
+  // The % beside each lineage. Unset, it follows the sizing: a share of the
+  // reads is worth reading as a number, a share of the tree's tips (which are
+  // the most abundant ASVs, not all of them) mostly is not.
+  const [showSharesPick, setShowShares] = usePersistedVizControl<boolean | null>(
+    metadata,
+    'show_shares',
+    null,
+  );
 
   // ---- Data ----------------------------------------------------------------
   const [newick, setNewick] = useState<string | null>(null);
@@ -344,6 +353,8 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     return { summary: summariseByRank(scopedTree, groupOf, opts), sizedByReads: false };
   }, [scopedTree, tipInfo, topN, config.ladderize, abundance]);
 
+  const showShares = showSharesPick ?? sizedByReads;
+
   // ---- Colours ---------------------------------------------------------------
   const categorySource = useCategoryColorSource();
   const pinnedFor = useCallback(
@@ -390,7 +401,7 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     const headerW = Math.max(0, ...splitValues.map((v) => headerWidth(v) + 4));
     const cellW = strip > 0 ? clamp(Math.min(headerW, width * 0.11), 24, 72) : 0;
     const stripW = strip * cellW;
-    const shareW = 40;
+    const shareW = showShares ? 40 : 0;
     const gap = strip > 0 ? 12 : 4;
     const shareRight = width - pad - stripW - gap;
     const fixed = 2 * rMax + 10 + shareW;
@@ -417,7 +428,7 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       cellW,
       svgH: headerH + rows * rowH + 4,
     };
-  }, [summary, width, height, splitValues]);
+  }, [summary, width, height, splitValues, showShares]);
 
   const [hover, setHover] = useState<number | null>(null);
 
@@ -559,17 +570,19 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
             >
               {label}
             </text>
-            <text
-              x={L.shareRight}
-              y={y}
-              dominantBaseline="central"
-              textAnchor="end"
-              fontSize={L.font - 0.5}
-              fill={dimColour}
-              style={{ fontVariantNumeric: 'tabular-nums' }}
-            >
-              {formatShare(g.share)}
-            </text>
+            {showShares ? (
+              <text
+                x={L.shareRight}
+                y={y}
+                dominantBaseline="central"
+                textAnchor="end"
+                fontSize={L.font - 0.5}
+                fill={dimColour}
+                style={{ fontVariantNumeric: 'tabular-nums' }}
+              >
+                {formatShare(g.share)}
+              </text>
+            ) : null}
             {splitValues.map((s, k) => {
               const cx = L.stripX0 + (k + 0.5) * L.cellW;
               const v = g.splitShares?.[s] ?? 0;
@@ -766,6 +779,13 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
           </Text>
         ) : null}
       </Stack>
+      <Switch
+        size="xs"
+        label="Show %"
+        description={showSharesPick == null ? 'Default: on when sized by reads' : undefined}
+        checked={showShares}
+        onChange={(e) => setShowShares(e.currentTarget.checked)}
+      />
     </Stack>
   );
 

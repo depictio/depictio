@@ -39,6 +39,8 @@ export interface PhylogeneticConfig {
   /** What a lineage is sized and ranked by: its tips, or its reads in the
    *  abundance table. */
   size_by?: 'tips' | 'abundance';
+  /** The % beside each lineage. Unset, shown only when sized by reads. */
+  show_shares?: boolean | null;
   /** Long table of per-sample abundance per lineage (e.g.
    *  `taxonomy_rel_abundance`), with a column named like `collapse_rank`. */
   abundance_wf_id?: string | null;

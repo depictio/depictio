@@ -112,6 +112,12 @@ const AdvancedVizPreview: React.FC<Props> = ({
   // shared loading / empty treatment instead of a second set of conventions.
   // minHeight 520 fits Manhattan / heatmap / phylogenetic which need real
   // vertical room — 320 cropped them.
+  //
+  // The wrapper is a grid, not a block: the panel's height is only a minimum,
+  // so the renderer's `height: 100%` chain resolved to its content, and a
+  // Plotly figure re-rendered in place (a tree recoloured by its colour
+  // binding) shrank to a strip. A grid's one row stretches to the 480 px floor,
+  // which gives the cell a definite height.
   return (
     <PreviewPanel
       minHeight={520}
@@ -120,7 +126,7 @@ const AdvancedVizPreview: React.FC<Props> = ({
       emptyMessage="Pick a viz kind and bind required columns to see a live preview."
     >
       {metadata && (
-        <div style={{ height: '100%', minHeight: 480, position: 'relative' }}>
+        <div style={{ display: 'grid', height: '100%', minHeight: 480, position: 'relative' }}>
           <AdvancedVizConfigDraftProvider value={draftSink}>
             <ComponentRenderer
               dashboardId="__preview__"

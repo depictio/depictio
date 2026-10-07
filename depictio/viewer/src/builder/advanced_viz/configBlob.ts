@@ -91,6 +91,18 @@ export function buildAdvancedVizConfigBlob(
   ) {
     delete merged.size_by;
   }
+  // Likewise a summary whose tip metadata was since cleared: the preview falls
+  // back to the full tree (the summary reads its ranks from that table, and
+  // PhylogeneticConfig refuses the pair), so that is what is saved. The tip
+  // metadata is optional; picking none should never block the save.
+  if (
+    vizKind === 'phylogenetic' &&
+    merged.collapse_rank &&
+    !merged.metadata_dc_id &&
+    !merged.metadata_dc_tag
+  ) {
+    delete merged.collapse_rank;
+  }
   return merged;
 }
 
@@ -195,7 +207,7 @@ function extractRoleDerivedFallbacks(
  *  metadata table has no columns to bind, which `null` says here.
  *
  *  `preset` is the merged preset, overrides included, so the table picked in
- *  the builder's "Tree and tip metadata" section (PhylogeneticSections.tsx) is
+ *  the builder's "Tip metadata" step (PhylogeneticSections.tsx) is
  *  the one bound against the moment it is picked. */
 export function bindingSchemaDcId(
   vizKind: string | null | undefined,

@@ -21,14 +21,31 @@
  * YAML config's keys come back into the mapping when the component is edited
  * (`rolesFromConfigBlob`).
  *
- * The view itself, full tree or summary by rank, and the summary's top N and
- * sizing, are not here: they are the preview's settings, where the author sees
- * what they do. The preview's controls are seeded once and then hold their own
- * state, so a second writer here would leave the preview showing one value and
- * the save holding another.
+ * The sections read as steps, each saying whether it is required: the tree
+ * (required, and all a tree needs to be drawn), then the tip metadata
+ * (optional: colours and labels, with the column bindings that only exist once
+ * a table is picked), then the view (full tree, or the summary by a rank of
+ * that metadata, with its top N, sizing and % labels), then the read shares
+ * (optional, and only once there is tip metadata to group by).
+ *
+ * The view's keys are also the preview's own settings. Both write
+ * `viz_overrides`, and the preview's controls follow the config they are handed
+ * (usePersistedVizControl), so the form and the preview cannot disagree.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, MultiSelect, Select, Stack, Text } from '@mantine/core';
+import {
+  Alert,
+  Anchor,
+  Badge,
+  Group,
+  MultiSelect,
+  NumberInput,
+  SegmentedControl,
+  Select,
+  Stack,
+  Switch,
+  Text,
+} from '@mantine/core';
 
 import {
   abundanceRankCoverage,
@@ -62,9 +79,6 @@ const TEXT = new Set(['String', 'Utf8', 'Categorical']);
 /** The model's defaults for the abundance columns (PhylogeneticConfig). */
 const DEFAULT_VALUE_COL = 'rel_abundance';
 const DEFAULT_SAMPLE_COL = 'sample';
-
-/** A cap on the schemas fetched to find a tip-metadata table by its columns. */
-const MAX_SCHEMA_PROBES = 40;
 
 const str = (v: unknown): string | null => (typeof v === 'string' && v ? v : null);
 
@@ -136,17 +150,37 @@ function treeOf(dcs: PhyloDcRef[], merged: Preset, dcId: string | null): PhyloDc
   return own?.type === 'phylogeny' ? own : (dcs.find((d) => d.type === 'phylogeny') ?? null);
 }
 
+/** A section title that says whether the step is required, so the one thing a
+ *  tree cannot do without is told apart from what only adds to it. */
+const StepTitle: React.FC<{ label: string; required: boolean }> = ({ label, required }) => (
+  <Group gap={6} wrap="nowrap">
+    <span>{label}</span>
+    <Badge size="xs" variant="light" color={required ? 'red' : 'gray'}>
+      {required ? 'Required' : 'Optional'}
+    </Badge>
+  </Group>
+);
+
+/** A field label that says it can be left empty, the way the role bindings
+ *  above it do. */
+const optional = (label: string) => (
+  <Group gap={4} component="span" wrap="nowrap">
+    <span>{label}</span>
+    <Text span size="xs" fw={400} c="dimmed">
+      optional
+    </Text>
+  </Group>
+);
+
 /**
- * Pre-fill what a tree needs and the author has not chosen, once each: the
- * tree (the component's own DC when it is one), the tip-metadata table (the
- * one the tree names, else the component's own table, else the first table with
- * a tip-label column), and the `taxon` binding (the column the tree declares,
- * else one named like a tip label).
+ * Pre-fill what a tree needs and the author has not chosen: the tree (the
+ * component's own DC when it is one), and, once a tip-metadata table is picked,
+ * its `taxon` binding (the column the tree declares, else one named like a tip
+ * label), once per table.
  *
- * The metadata table is pre-filled only while its key is absent: a table the
- * author cleared is an explicit null and stays cleared, and so does the "none"
- * of a saved tree that never had one. Everything resets when the kind does,
- * since picking a kind clears the overrides these write.
+ * The tip metadata itself is never picked for the author. It is optional, and a
+ * table chosen on their behalf read as a requirement; the section suggests one
+ * instead (see `PhyloMetadataSection`).
  */
 export function usePhyloPrefill(args: {
   enabled: boolean;
@@ -161,9 +195,6 @@ export function usePhyloPrefill(args: {
 }): void {
   const { enabled, project, dcId, wfId, merged, setVizOverride, metadataSchema } = args;
   const done = useRef<Set<string>>(new Set());
-  // Read at the end of the schema probe, which outlives the render it began in.
-  const latest = useRef(merged);
-  latest.current = merged;
 
   useEffect(() => {
     if (!enabled) done.current.clear();
@@ -175,35 +206,6 @@ export function usePhyloPrefill(args: {
     if (!enabled || !dcs || str(merged?.tree_dc_id)) return;
     const tree = treeOf(dcs, merged, dcId);
     if (tree) setVizOverride(phyloSourcePatch('tree', tree, wfId));
-  }, [enabled, dcs, merged, dcId, wfId, setVizOverride]);
-
-  useEffect(() => {
-    if (!enabled || !dcs || done.current.has('metadata')) return;
-    if (merged && merged.metadata_dc_id !== undefined) return;
-    done.current.add('metadata');
-    const tables = dcs.filter((d) => d.type === 'table');
-    const tree = treeOf(dcs, merged, dcId);
-    const own = dcs.find((d) => d.dcId === dcId) ?? null;
-    const bind = (id: string | null) => {
-      const table = tables.find((t) => t.dcId === id);
-      if (!table) return;
-      // The author may have picked one while the schemas were on their way.
-      if (latest.current && latest.current.metadata_dc_id !== undefined) return;
-      setVizOverride(phyloSourcePatch('metadata', table, wfId));
-    };
-    const quick = preferredTipMetadata(tables, { tree, bound: own });
-    if (quick) {
-      bind(quick);
-      return;
-    }
-    const probed = tables.slice(0, MAX_SCHEMA_PROBES);
-    void Promise.allSettled(probed.map((t) => fetchPolarsSchema(t.dcId))).then((results) => {
-      const columns: Record<string, string[]> = {};
-      results.forEach((r, i) => {
-        if (r.status === 'fulfilled') columns[probed[i].dcId] = Object.keys(r.value);
-      });
-      bind(preferredTipMetadata(probed, { columns }));
-    });
   }, [enabled, dcs, merged, dcId, wfId, setVizOverride]);
 
   const metadataDcId = str(merged?.metadata_dc_id);
@@ -219,45 +221,21 @@ export function usePhyloPrefill(args: {
   }, [enabled, dcs, metadataSchema, metadataDcId, taxonBound, bindTaxon, merged, dcId]);
 }
 
-/** "Tree and tip metadata": the Newick DC, the table joined to its tips, and
- *  the columns of that table the summary may collapse to. */
-export const PhyloSourcesSection: React.FC<{
+/** Step 1, "Tree": the Newick data collection. All a tree needs to be drawn. */
+export const PhyloTreeSection: React.FC<{
   project: { dcs: PhyloDcRef[]; wfTags: Map<string, string> } | null;
   merged: Preset;
   wfId: string | null;
   setVizOverride: (patch: Patch) => void;
-  metadataSchema: Record<string, string> | null;
-  taxonCol: string | null;
-  /** Shown on the tip-metadata picker: the summary is on and has no table. */
-  metadataError?: string;
-}> = ({ project, merged, wfId, setVizOverride, metadataSchema, taxonCol, metadataError }) => {
-  const dcs = project?.dcs ?? [];
-  const wfTags = project?.wfTags ?? new Map<string, string>();
-  const trees = dcs.filter((d) => d.type === 'phylogeny');
-  const tables = dcs.filter((d) => d.type === 'table');
+}> = ({ project, merged, wfId, setVizOverride }) => {
+  const trees = (project?.dcs ?? []).filter((d) => d.type === 'phylogeny');
   const treeId = str(merged?.tree_dc_id);
-  const metadataId = str(merged?.metadata_dc_id);
-  const ranks = Array.isArray(merged?.extra_color_cols)
-    ? (merged!.extra_color_cols as unknown[]).filter((c): c is string => typeof c === 'string')
-    : [];
-  // A rank is a category of the tips, so a text column; the tip id is not one.
-  // Ranks already chosen stay listed even when the table lacks them, so the
-  // picker can show (and drop) them.
-  const rankOptions = Array.from(
-    new Set([
-      ...Object.entries(metadataSchema ?? {})
-        .filter(([c, t]) => TEXT.has(t) && c !== (taxonCol || 'taxon'))
-        .map(([c]) => c),
-      ...ranks,
-    ]),
-  );
-
   return (
     <BuilderSection
-      value="phylo-sources"
+      value="phylo-tree"
       icon="mdi:family-tree"
-      title="Tree and tip metadata"
-      subtitle="The Newick tree, and the table joined to its tips"
+      title={<StepTitle label="Tree" required />}
+      subtitle="The Newick tree to draw"
     >
       <Stack gap="sm">
         {project == null ? (
@@ -267,9 +245,10 @@ export const PhyloSourcesSection: React.FC<{
         ) : null}
         <Select
           label="Tree"
-          description="A phylogeny data collection (Newick)."
+          withAsterisk
+          description="A phylogeny data collection (Newick). On its own it draws the full tree, uncoloured."
           placeholder="Pick the tree"
-          data={dcOptions(trees, wfTags)}
+          data={dcOptions(trees, project?.wfTags ?? new Map())}
           value={treeId}
           onChange={(v) => {
             const tree = trees.find((t) => t.dcId === v);
@@ -281,34 +260,220 @@ export const PhyloSourcesSection: React.FC<{
           error={project != null && !treeId ? 'A tree needs its Newick data collection' : undefined}
           data-testid="phylo-tree-dc"
         />
+      </Stack>
+    </BuilderSection>
+  );
+};
+
+/**
+ * Step 2, "Tip metadata": the table joined to the tips on their label, and
+ * what it is read for. Optional: without it the tree is drawn uncoloured, and
+ * the summary by rank is not available.
+ *
+ * The column bindings (`bindings`, rendered by the builder from the kind's
+ * roles) live here because they are columns of this table and mean nothing
+ * before it is picked.
+ */
+export const PhyloMetadataSection: React.FC<{
+  project: { dcs: PhyloDcRef[]; wfTags: Map<string, string> } | null;
+  merged: Preset;
+  dcId: string | null;
+  wfId: string | null;
+  setVizOverride: (patch: Patch) => void;
+  /** The role Selects (tip label, colour, label) and their validation. */
+  bindings: React.ReactNode;
+}> = ({
+  project,
+  merged,
+  dcId,
+  wfId,
+  setVizOverride,
+  bindings,
+}) => {
+  const dcs = project?.dcs ?? [];
+  const wfTags = project?.wfTags ?? new Map<string, string>();
+  const tables = dcs.filter((d) => d.type === 'table');
+  const metadataId = str(merged?.metadata_dc_id);
+  const pick = (id: string | null) =>
+    setVizOverride(phyloSourcePatch('metadata', tables.find((t) => t.dcId === id) ?? null, wfId));
+  // The table the tree names as its annotations (or the component's own
+  // table), offered as one click rather than chosen for the author.
+  const suggestedId = metadataId
+    ? null
+    : preferredTipMetadata(tables, {
+        tree: treeOf(dcs, merged, dcId),
+        bound: dcs.find((d) => d.dcId === dcId) ?? null,
+      });
+  const suggested = tables.find((t) => t.dcId === suggestedId) ?? null;
+
+  return (
+    <BuilderSection
+      value="phylo-metadata"
+      icon="mdi:table-account"
+      title={<StepTitle label="Tip metadata" required={false} />}
+      subtitle="Colour, label and summarise the tips from a table joined on their name"
+    >
+      <Stack gap="sm">
         <Select
-          label="Tip metadata"
-          description="The table joined to the tips on their label: what colours, labels and the summary's ranks are read from."
+          label={optional('Tip-metadata table')}
+          description="One row per tip, matched on the tip's name. Needed to colour or label the tips, and for the Summary by rank view."
           placeholder="None: an uncoloured tree"
           data={dcOptions(tables, wfTags)}
           value={metadataId}
-          onChange={(v) =>
-            setVizOverride(
-              phyloSourcePatch('metadata', tables.find((t) => t.dcId === v) ?? null, wfId),
-            )
-          }
+          onChange={pick}
           searchable
           clearable
-          error={metadataError}
           data-testid="phylo-metadata-dc"
         />
-        <MultiSelect
-          label="Rank columns"
-          description="Offered as Colour by on the tree and as Collapse to in its summary. List them root to leaf: Kingdom, Phylum, Class…"
-          placeholder={metadataId ? 'Pick rank columns' : 'Pick the tip metadata first'}
-          data={rankOptions}
-          value={ranks}
-          onChange={(v) => setVizOverride({ extra_color_cols: v.length ? v : null })}
-          disabled={!metadataId}
-          searchable
-          clearable
-          data-testid="phylo-rank-cols"
+        {suggested ? (
+          <Text size="xs" c="dimmed">
+            Suggested: {suggested.tag ?? suggested.dcId}, the table this tree names for its tips.{' '}
+            <Anchor
+              component="button"
+              type="button"
+              size="xs"
+              onClick={() => pick(suggested.dcId)}
+              data-testid="phylo-metadata-suggested"
+            >
+              Use it
+            </Anchor>
+          </Text>
+        ) : null}
+        {metadataId ? bindings : null}
+      </Stack>
+    </BuilderSection>
+  );
+};
+
+/**
+ * Step 3, "View": the full tree, or the summary by rank, and the summary's
+ * settings. The same keys as the switch and controls in the preview's own
+ * settings, which follow what is picked here (and the other way round).
+ */
+export const PhyloViewSection: React.FC<{
+  merged: Preset;
+  setVizOverride: (patch: Patch) => void;
+  metadataSchema: Record<string, string> | null;
+  taxonCol: string | null;
+}> = ({ merged, setVizOverride, metadataSchema, taxonCol }) => {
+  const hasMetadata = Boolean(merged?.metadata_dc_id || merged?.metadata_dc_tag);
+  const hasReads = Boolean(merged?.abundance_dc_id || merged?.abundance_dc_tag);
+  const rank = str(merged?.collapse_rank);
+  const summary = hasMetadata && rank != null;
+  const remembered = useRef<string | null>(rank);
+  if (rank) remembered.current = rank;
+
+  // A rank is a category of the tips, so a text column; the tip id is not one.
+  const textColumns = Object.entries(metadataSchema ?? {})
+    .filter(([c, t]) => TEXT.has(t) && c !== (taxonCol || 'taxon'))
+    .map(([c]) => c);
+  const offered = Array.isArray(merged?.extra_color_cols)
+    ? (merged!.extra_color_cols as unknown[]).filter((c): c is string => typeof c === 'string')
+    : [];
+  const rankOptions = Array.from(new Set([...textColumns, ...(rank ? [rank] : [])]));
+  const firstRank = () =>
+    (remembered.current && rankOptions.includes(remembered.current) && remembered.current) ||
+    rankOptions.find((c) => c.toLowerCase() === 'phylum') ||
+    rankOptions[0] ||
+    null;
+
+  const sizeBy = merged?.size_by === 'abundance' && hasReads ? 'abundance' : 'tips';
+  const showShares =
+    typeof merged?.show_shares === 'boolean' ? merged.show_shares : sizeBy === 'abundance';
+
+  return (
+    <BuilderSection
+      value="phylo-view"
+      icon="mdi:eye-outline"
+      title={<StepTitle label="View" required={false} />}
+      subtitle="The full tree, or one tip per lineage of a rank"
+    >
+      <Stack gap="sm">
+        <SegmentedControl
+          fullWidth
+          value={summary ? 'summary' : 'tree'}
+          onChange={(v) => setVizOverride({ collapse_rank: v === 'summary' ? firstRank() : null })}
+          data={[
+            { value: 'tree', label: 'Full tree' },
+            { value: 'summary', label: 'Summary by rank', disabled: !hasMetadata },
+          ]}
+          data-testid="phylo-view"
         />
+        {!hasMetadata ? (
+          <Text size="xs" c="dimmed">
+            Summary by rank groups the tips by a column of the tip metadata: pick that table
+            first.
+          </Text>
+        ) : null}
+        {summary ? (
+          <>
+            <Select
+              label="Collapse to"
+              withAsterisk
+              description="One tip per value of this column, placed where that lineage sits in the tree."
+              data={rankOptions}
+              value={rank}
+              onChange={(v) => v && setVizOverride({ collapse_rank: v })}
+              allowDeselect={false}
+              searchable
+              data-testid="phylo-collapse-rank"
+            />
+            <NumberInput
+              label={optional('Lineages shown')}
+              description="The largest ones; the rest are counted under “not shown”. Default 10."
+              value={typeof merged?.top_n === 'number' ? merged.top_n : 10}
+              onChange={(v) =>
+                typeof v === 'number' && setVizOverride({ top_n: Math.min(60, Math.max(1, Math.floor(v))) })
+              }
+              min={1}
+              max={60}
+            />
+            <Stack gap={4}>
+              <Text size="sm" fw={500}>
+                Size by
+              </Text>
+              <SegmentedControl
+                fullWidth
+                value={sizeBy}
+                onChange={(v) => setVizOverride({ size_by: v })}
+                data={[
+                  { value: 'tips', label: 'ASVs (tips)' },
+                  { value: 'abundance', label: 'Reads', disabled: !hasReads },
+                ]}
+                data-testid="phylo-size-by"
+              />
+              {!hasReads ? (
+                <Text size="xs" c="dimmed">
+                  Reads need an abundance table: pick it under Read shares.
+                </Text>
+              ) : null}
+            </Stack>
+            <Switch
+              label="Show %"
+              description={
+                typeof merged?.show_shares === 'boolean'
+                  ? undefined
+                  : 'Default: shown when sized by reads'
+              }
+              checked={showShares}
+              onChange={(e) => setVizOverride({ show_shares: e.currentTarget.checked })}
+              data-testid="phylo-show-shares"
+            />
+          </>
+        ) : null}
+        {hasMetadata ? (
+          <MultiSelect
+            label={optional('Columns viewers can switch to')}
+            description="Offered in the tile’s settings on the dashboard: Colour by on the full tree, Collapse to on the summary. Nothing changes here until a viewer picks one."
+            placeholder="Pick columns"
+            data={Array.from(new Set([...textColumns, ...offered]))}
+            value={offered}
+            onChange={(v) => setVizOverride({ extra_color_cols: v.length ? v : null })}
+            searchable
+            clearable
+            data-testid="phylo-rank-cols"
+          />
+        ) : null}
       </Stack>
     </BuilderSection>
   );
@@ -328,6 +493,9 @@ export const PhyloReadsSection: React.FC<{
   const dcs = project?.dcs ?? [];
   const tables = dcs.filter((d) => d.type === 'table');
   const tableId = str(merged?.abundance_dc_id);
+  // The reads only size the summary, which needs the tip metadata's ranks; a
+  // table already bound stays editable so it can be cleared.
+  const hasMetadata = Boolean(merged?.metadata_dc_id || merged?.metadata_dc_tag);
 
   const [schema, setSchema] = useState<Record<string, string> | null>(null);
   const [schemaError, setSchemaError] = useState<string | null>(null);
@@ -401,76 +569,84 @@ export const PhyloReadsSection: React.FC<{
     <BuilderSection
       value="phylo-reads"
       icon="mdi:chart-bubble"
-      title="Read shares"
-      subtitle="Optional: size the summary's lineages by reads rather than tips"
+      title={<StepTitle label="Read shares" required={false} />}
+      subtitle="Size the summary's lineages by reads rather than tips"
     >
-      <Stack gap="sm">
-        <Text size="xs" c="dimmed">
-          For the summary view: in the preview’s settings, View → Summary by rank, then Size by →
-          Reads. A lineage’s share is then its mean share of a sample’s reads.
+      {!hasMetadata && !tableId ? (
+        <Text size="sm" c="dimmed">
+          Pick the tip metadata first: the summary groups the tips by its rank columns, and the
+          reads are joined on those.
         </Text>
-        <Select
-          label="Abundance table"
-          description="A long table, one row per sample and taxon, with a relative abundance."
-          placeholder="None: sized by tips"
-          data={dcOptions(tables, project?.wfTags ?? new Map())}
-          value={tableId}
-          onChange={onTable}
-          searchable
-          clearable
-          data-testid="phylo-abundance-dc"
-        />
-        {schemaError ? (
-          <Alert color="red" title="Failed to load the table's schema">
-            <Text size="xs">{schemaError}</Text>
-          </Alert>
-        ) : null}
-        {tableId && schema ? (
-          <>
-            <Select
-              label="Value column"
-              description="Each row's relative abundance."
-              data={options(NUMERIC)}
-              value={valueCol}
-              onChange={(v) => v && patchRoles({ abundance: v })}
-              allowDeselect={false}
-              searchable
-              nothingFoundMessage="No numeric column"
-            />
-            <Select
-              label="Sample column"
-              description="A share is the mean over samples of each sample's share; without one the value column is summed."
-              data={options(TEXT)}
-              value={sampleCol}
-              onChange={(v) => v && patchRoles({ abundance_sample: v })}
-              allowDeselect={false}
-              searchable
-            />
-            <Select
-              label="Split by"
-              description="Break each share down by this column (a site, say), drawn as a strip of dots beside the tips."
-              placeholder="No strip"
-              data={options(TEXT)}
-              value={splitCol}
-              onChange={(v) => (v ? patchRoles({ abundance_split: v }) : unbindSplit())}
-              searchable
-              clearable
-            />
-            <JoinNote rank={rank} coverage={coverage} />
-            {warnings.length > 0 ? (
-              <Alert color="yellow" variant="light" title="Check the read shares">
-                <ul style={{ margin: 0, paddingLeft: 16 }}>
-                  {warnings.map((w) => (
-                    <li key={w}>
-                      <Text size="xs">{w}</Text>
-                    </li>
-                  ))}
-                </ul>
-              </Alert>
-            ) : null}
-          </>
-        ) : null}
-      </Stack>
+      ) : (
+        <Stack gap="sm">
+          <Text size="xs" c="dimmed">
+            Used by the summary (View → Summary by rank, Size by → Reads): a lineage’s share is
+            then its mean share of a sample’s reads.
+          </Text>
+          <Select
+            label={optional('Abundance table')}
+            description="A long table, one row per sample and taxon, with a relative abundance."
+            placeholder="None: sized by tips"
+            data={dcOptions(tables, project?.wfTags ?? new Map())}
+            value={tableId}
+            onChange={onTable}
+            searchable
+            clearable
+            data-testid="phylo-abundance-dc"
+          />
+          {schemaError ? (
+            <Alert color="red" title="Failed to load the table's schema">
+              <Text size="xs">{schemaError}</Text>
+            </Alert>
+          ) : null}
+          {tableId && schema ? (
+            <>
+              <Select
+                label="Value column"
+                withAsterisk
+                description="Each row's relative abundance."
+                data={options(NUMERIC)}
+                value={valueCol}
+                onChange={(v) => v && patchRoles({ abundance: v })}
+                allowDeselect={false}
+                searchable
+                nothingFoundMessage="No numeric column"
+              />
+              <Select
+                label={optional('Sample column')}
+                description="A share is the mean over samples of each sample's share; without one the value column is summed."
+                data={options(TEXT)}
+                value={sampleCol}
+                onChange={(v) => v && patchRoles({ abundance_sample: v })}
+                allowDeselect={false}
+                searchable
+              />
+              <Select
+                label={optional('Split by')}
+                description="Break each share down by this column (a site, say), drawn as a strip of dots beside the tips."
+                placeholder="No strip"
+                data={options(TEXT)}
+                value={splitCol}
+                onChange={(v) => (v ? patchRoles({ abundance_split: v }) : unbindSplit())}
+                searchable
+                clearable
+              />
+              <JoinNote rank={rank} coverage={coverage} />
+              {warnings.length > 0 ? (
+                <Alert color="yellow" variant="light" title="Check the read shares">
+                  <ul style={{ margin: 0, paddingLeft: 16 }}>
+                    {warnings.map((w) => (
+                      <li key={w}>
+                        <Text size="xs">{w}</Text>
+                      </li>
+                    ))}
+                  </ul>
+                </Alert>
+              ) : null}
+            </>
+          ) : null}
+        </Stack>
+      )}
     </BuilderSection>
   );
 };

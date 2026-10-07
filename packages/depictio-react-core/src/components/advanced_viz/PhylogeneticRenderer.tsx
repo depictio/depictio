@@ -2232,16 +2232,20 @@ const PhylogeneticRenderer: React.FC<Props> = (props) => {
   );
   const view = useMemo<PhyloView>(() => {
     const choices = rankChoices(config, rank ?? remembered);
+    const blocker = summaryBlocker(config, choices);
     return {
-      rank,
+      // A rank the config cannot draw a summary for (the tip metadata was
+      // cleared in the builder, say) shows the full tree, with the switch
+      // saying why, rather than the summary's error in place of the tile.
+      rank: blocker ? null : rank,
       choices,
-      blocker: summaryBlocker(config, choices),
+      blocker,
       summaryRank: nextSummaryRank(choices, remembered),
       setRank,
     };
   }, [config, rank, remembered, setRank]);
 
-  return rank ? (
+  return view.rank ? (
     <PhyloSummaryRenderer
       metadata={props.metadata}
       filters={props.filters}
