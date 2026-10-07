@@ -787,3 +787,50 @@ def test_a_broad_recipe_glob_only_takes_the_files_with_its_input_columns(tmp_pat
     composition = compose_run(tmp_path)
     assert not composition.collections
     assert [p["path"] for p in composition.unrecognised] == ["stats.tsv"]
+
+
+RSEQC_REPORT = """Total Reads                   16914
+Total Tags                    17450
+Total Assigned Tags           14574
+=====================================================================
+Group               Total_bases         Tag_count           Tags/Kb
+CDS_Exons           146030              14565               99.74
+5'UTR_Exons         0                   0                   0.00
+3'UTR_Exons         0                   0                   0.00
+Introns             530                 9                   16.95
+TSS_up_1kb          43552               0                   0.00
+TSS_up_5kb          76907               0                   0.00
+TSS_up_10kb         89031               0                   0.00
+TES_down_1kb        40737               0                   0.00
+TES_down_5kb        81271               0                   0.00
+TES_down_10kb       97060               0                   0.00
+=====================================================================
+"""
+
+
+def test_a_recipe_parsing_text_reports_gets_them_one_line_per_row(tmp_path):
+    """RSeQC's read_distribution recipe reads its reports as `line`s with the
+    file in `source_path` (Picard's as `raw`): the raw collection composed for it
+    reads them so, and the recipe runs on what that reading gives."""
+    import polars as pl
+
+    from depictio.recipes import load_recipe, validate_sources
+
+    reports = tmp_path / "rseqc" / "read_distribution"
+    reports.mkdir(parents=True)
+    for sample in ("S1", "S2"):
+        (reports / f"{sample}.read_distribution.txt").write_text(RSEQC_REPORT)
+
+    composition = compose_run(tmp_path)
+    by_tag = {c.tag: c for c in composition.collections}
+    raw = by_tag["rseqc_read_distribution_raw"]
+    kwargs = raw.config["dc_specific_properties"]["polars_kwargs"]
+    assert kwargs["new_columns"] == ["line"] and kwargs["include_file_paths"] == "source_path"
+    assert "rseqc_read_distribution" in by_tag
+
+    # Ingestion scans lazily, as here: `include_file_paths` is a scan option.
+    frame = pl.concat(pl.scan_csv(tmp_path / f, **kwargs).collect() for f in raw.files)
+    module = load_recipe("rseqc/read_distribution.py")
+    validate_sources(module, {"report": frame}, "rseqc/read_distribution.py")
+    result = module.transform({"report": frame})
+    assert set(result["sample_id"].to_list()) == {"S1", "S2"}
