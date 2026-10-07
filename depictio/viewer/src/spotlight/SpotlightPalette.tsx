@@ -99,6 +99,35 @@ const TabGlyph: React.FC<{ tab: DashboardSummary | undefined; size: number }> = 
   );
 };
 
+/** A component's type as its row's icon. A MultiQC report wears MultiQC's
+ *  logo, as its tile and its tab do, on a neutral tile: the type palette's
+ *  orange chart glyph is meant for a dot or a badge, and here it read as some
+ *  other figure. */
+const ComponentGlyph: React.FC<{ type: string }> = ({ type }) => {
+  const { colorScheme } = useMantineColorScheme();
+  if (type === 'multiqc') {
+    return (
+      <ThemeIcon variant="light" color="gray" size={32} radius="md">
+        <img
+          src={
+            colorScheme === 'dark'
+              ? '/dashboard/logos/multiqc_icon_white.svg'
+              : '/dashboard/logos/multiqc_icon_dark.svg'
+          }
+          alt=""
+          style={{ width: 18, height: 18, objectFit: 'contain' }}
+        />
+      </ThemeIcon>
+    );
+  }
+  const visual = componentTypeVisual(type);
+  return (
+    <ThemeIcon variant="light" color={visual.color} size={32} radius="md">
+      <Icon icon={visual.icon} width={18} />
+    </ThemeIcon>
+  );
+};
+
 /** What the dimmed line names a matched column by. */
 const SNIPPET_PREFIX: Partial<Record<string, string>> = {
   column: 'Column: ',
@@ -114,7 +143,6 @@ const ResultRow: React.FC<{
   onHover: () => void;
 }> = ({ hit, id, active, summary, href, onPick, onHover }) => {
   const { entry, snippet } = hit;
-  const visual = entry.kind === 'component' ? componentTypeVisual(entry.componentType ?? '') : null;
   // Tab, then section, then the words that matched: where it is before what
   // it says.
   const where = [entry.kind === 'component' ? entry.tabLabel : null, entry.section]
@@ -134,10 +162,8 @@ const ResultRow: React.FC<{
       onMouseMove={active ? undefined : onHover}
     >
       <Group gap="sm" wrap="nowrap">
-        {visual ? (
-          <ThemeIcon variant="light" color={visual.color} size={32} radius="md">
-            <Icon icon={visual.icon} width={18} />
-          </ThemeIcon>
+        {entry.kind === 'component' ? (
+          <ComponentGlyph type={entry.componentType ?? ''} />
         ) : (
           <TabGlyph tab={summary} size={32} />
         )}
