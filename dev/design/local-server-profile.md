@@ -211,7 +211,7 @@ filter carries over to the MultiQC tab.
 
 | File | Change |
 |---|---|
-| `depictio/cli/cli/local_stack.py`, `commands/local.py` | `depictio local up/down/status/wipe`: MongoDB, Redis and SeaweedFS through py-rattler (pinned to the Compose series), `DEPICTIO_S3_*` settings, sticky ports, generated secrets (`0600`), PIDs with start times and logs in `~/.depictio/local/`, ingestion through `depictio run`, `--var` passed through |
+| `depictio/cli/cli/local_stack.py`, `commands/local.py` | `depictio local up/down/status/wipe`: MongoDB, Redis and SeaweedFS through py-rattler (pinned to the Compose series), `DEPICTIO_S3_*` settings, sticky ports, generated secrets (`0600`), PIDs with start times and logs in `~/.depictio/local/`. `local up` only runs the server: data goes in with `depictio ingest --server local` |
 | `depictio/cli/cli/local_compose.py` | `depictio local export`: the hand-over described above |
 | `pyproject.toml` | `local = ["py-rattler==0.26.0"]` extra; `package-data` include globs for the slim wheel; `watchdog` moved to a `worker-reload` group; `plotly-upset` and `plotly-complexheatmap` pinned to 0.1.0. **The root wheel used to hold only the `.py` files**: the same bug as the 1.9.2 CLI wheel |
 | `depictio/version.py` | falls back on `importlib.metadata`: `VERSION` is outside the package, **so the API failed at import from a wheel** |

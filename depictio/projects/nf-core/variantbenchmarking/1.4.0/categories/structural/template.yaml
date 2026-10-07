@@ -2,7 +2,7 @@
 # One of three per-variant-type projects. See categories/small/template.yaml.
 # Structural has no published summary CSV in the megatest — the benchmark numbers
 # (truvari precision/recall/F1, classifications) live in the MultiQC report.
-#   depictio run --template nf-core/variantbenchmarking/1.4.0/categories/structural \
+#   depictio ingest --template nf-core/variantbenchmarking/1.4.0/categories/structural \
 #     --data-root <root with multiqc/multiqc_data/multiqc.parquet (structural)>
 
 template:

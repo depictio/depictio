@@ -7,7 +7,7 @@
 
 ## Goal
 
-Drive `depictio-cli run --template nf-core/viralrecon/3.0.0` against **real** nf-core/viralrecon
+Drive `depictio-cli ingest --template nf-core/viralrecon/3.0.0` against **real** nf-core/viralrecon
 pipeline output across scenarios and find every place the template breaks. Companion to the ampliseq
 report (`depictio/projects/nf-core/ampliseq/VALIDATION_REPORT.md`).
 
@@ -22,7 +22,7 @@ so `DATA_ROOT` is the **parent** of the per-run directories.
 | VR-S2 | a parent containing only `run_nanopore` | Divergent protocol alone (out-of-scope for this ivar template) |
 
 ```bash
-depictio-cli run --CLI-config-path ~/.depictio/CLI.<instance>.yaml \
+depictio-cli ingest --server ~/.depictio/CLI.<instance>.yaml \
   --template nf-core/viralrecon/3.0.0 \
   --data-root ~/Data/depictio-nfcore/viralrecon/3.0.0 --overwrite --update-config
 ```

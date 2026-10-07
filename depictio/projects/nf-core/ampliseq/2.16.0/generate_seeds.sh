@@ -31,7 +31,7 @@
 #
 # The template YAML under dashboards/ is the SOURCE OF TRUTH: `use:` catalog
 # bindings and `*_tag` references are resolved into viz_kind + oids during the
-# `depictio run` import, and this script bakes that resolved form into the
+# `depictio ingest` import, and this script bakes that resolved form into the
 # seeds. After exporting, run remap_seeds_to_static_ids.py so the DC ids match
 # the static reference-init ids (otherwise tiles 404 on a fresh deploy).
 set -euo pipefail

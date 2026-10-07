@@ -3,7 +3,7 @@
 
 Maintainer tool (not shipped with ``depictio-cli``). ``depictio.config`` installs a
 ``workflow.onComplete`` handler that turns a finished pipeline into a
-``depictio-cli run`` invocation. Everything it does is decided from
+``depictio-cli ingest`` invocation. Everything it does is decided from
 ``workflow.manifest`` and ``params``, so none of it needs a pipeline to have
 actually run: a ten-line workflow carrying the right manifest exercises the same
 path in seconds.
@@ -24,7 +24,7 @@ Two modes, neither of which writes to a Depictio instance:
 
 ``dry-run``
     A generated wrapper that appends ``--dry-run`` to the real CLI. The handler
-    always puts ``run`` immediately after the executable, so ``--dry-run`` cannot
+    always puts ``ingest`` immediately after the executable, so ``--dry-run`` cannot
     be injected through ``depictio_cli_executable`` alone. This mode reaches
     ``locate_template()`` and therefore proves template *resolution*, including
     that an unknown version fails instead of silently falling back to the latest.

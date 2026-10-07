@@ -8,7 +8,7 @@ the server, and in the harness test via ``DashboardDataLite``.
 Key decisions (mirroring known-good authored projects like ``penguins``):
 
 - **Static ObjectIds** for project / workflow / each DC / each joined DC. Link
-  references use the target DC's real id directly, because ``depictio run`` only
+  references use the target DC's real id directly, because ``depictio ingest`` only
   auto-resolves ``tag:``-prefixed link ids in *template* mode (see run.py).
 - **Recursive ``run_*`` scan** so the sharded CSVs from :mod:`benchmark.datagen`
   are picked up: ``data_location.structure: sequencing-runs`` + ``runs_regex``.
@@ -1358,7 +1358,7 @@ class GeneratedIngestConfig:
     project_path: str
     project_name: str
     project_id: str
-    # For IMAGES only: where the runner should ``depictio images push`` the PNGs
+    # For IMAGES only: where the runner should ``depictio data push-images`` the PNGs
     # (must equal the DC's s3_base_folder so the DC resolves them at render time).
     s3_base_folder: str | None = None
 

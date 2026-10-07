@@ -18,7 +18,7 @@ The four subcommands are the four stages:
 * ``status``  read ``.nextflow.log`` and the execution trace, ``squeue -j`` only as a fallback,
 * ``fetch``   rsync the outputs back, minus the alignment blobs, and build the
   DATA_ROOT the template expects (samplesheet into ``input/``, viralrecon under ``run_1/``),
-* ``ingest``  run ``depictio-cli run`` over the repatriated trees.
+* ``ingest``  run ``depictio-cli ingest`` over the repatriated trees.
 
 The Nextflow head process runs *inside* a small SLURM job, never on the login
 node, and the Depictio trigger is deliberately absent from the cluster: these
@@ -512,7 +512,7 @@ def ssh(command: str, *, check: bool = True, quiet: bool = False) -> subprocess.
 
 
 # --- state -------------------------------------------------------------------
-# depictio-cli run exits 1 both for a real failure and for "the project already
+# depictio-cli ingest exits 1 both for a real failure and for "the project already
 # exists", and a SLURM job id is the only durable handle on a submitted run, so
 # the driver keeps its own record instead of re-deriving one from exit codes.
 STATE_PATH = LOCAL_ROOT / ".validation-state.json"
@@ -862,11 +862,11 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     failed = 0
     for index, spec in enumerate(specs):
         project = args.project_prefix + f"{spec.pipeline}-{spec.version}-{spec.profile}"
-        argv = [args.cli, "run"]
+        argv = [args.cli, "ingest"]
         if args.cli_config:
             # Each worktree stack has its own token and port, so the default
             # ~/.depictio/CLI.yaml is rarely the right one here.
-            argv += ["--CLI-config-path", str(args.cli_config)]
+            argv += ["--server", str(args.cli_config)]
         argv += [
             "--template",
             spec.template_id,
@@ -885,7 +885,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         _log(f"-> {' '.join(shlex.quote(t) for t in argv)}")
         code = subprocess.run(argv, check=False, cwd=_REPO_ROOT).returncode
         if code != 0:
-            _log(f"! {spec.key}: depictio-cli run exited {code}")
+            _log(f"! {spec.key}: depictio-cli ingest exited {code}")
             failed += 1
         update_state(spec.key, ingested=code == 0 and not args.dry_run, project_name=project)
     return 1 if failed else 0
@@ -983,7 +983,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_reprocess.add_argument("--dry-run", action="store_true")
     p_reprocess.set_defaults(func=cmd_reprocess)
 
-    p_ingest = subparsers.add_parser("ingest", help="depictio-cli run over the repatriated trees")
+    p_ingest = subparsers.add_parser(
+        "ingest", help="depictio-cli ingest over the repatriated trees"
+    )
     add_run_option(p_ingest)
     p_ingest.add_argument(
         "--cli",

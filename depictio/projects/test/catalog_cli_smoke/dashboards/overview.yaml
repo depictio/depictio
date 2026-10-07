@@ -3,7 +3,7 @@
 # Import with:
 #   depictio-cli dashboard import \
 #     depictio/projects/test/catalog_cli_smoke/dashboards/overview.yaml \
-#     --config <cli-config> --overwrite
+#     --server <cli-config> --overwrite
 #
 # Every tile below is one of the catalog's own `renders_as` entries for the
 # collection it binds, transcribed rather than invented — so if the picker offers

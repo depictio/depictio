@@ -13,7 +13,7 @@ run (``depictio/cli/cli/utils/scan.py``, the "Treat the provided directory as a
 single run" branch). The underlying ``locations`` field is a list and would give
 one run per entry, named after each directory's basename, but the template binds
 it to a single ``{DATA_ROOT}`` and ``--data-root`` is a scalar. Building a
-project config by hand would reach the list, but ``depictio-cli run`` guards its
+project config by hand would reach the list, but ``depictio-cli ingest`` guards its
 dashboard import with ``if is_template_mode``, so that route silently loses the
 template's dashboards, which is the entire point of the showcase.
 
@@ -234,7 +234,7 @@ def cmd_list(args: argparse.Namespace) -> int:
 
 
 def cmd_ingest(args: argparse.Namespace) -> int:
-    """Create one project per scenario with `depictio-cli run --template`.
+    """Create one project per scenario with `depictio-cli ingest --template`.
 
     Every project gets an explicit --project-name. The automatic name is
     "<template_id> - <basename(data_root)>", which collides across scenarios that
@@ -256,9 +256,9 @@ def cmd_ingest(args: argparse.Namespace) -> int:
             _log(f"= {project}: already in the instance, skipped")
             skipped += 1
             continue
-        argv = [str(args.cli), "run"]
+        argv = [str(args.cli), "ingest"]
         if args.cli_config:
-            argv += ["--CLI-config-path", str(args.cli_config)]
+            argv += ["--server", str(args.cli_config)]
         argv += [
             "--template",
             scenario.template_id,
@@ -275,7 +275,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         _log(f"-> {' '.join(shlex.quote(t) for t in argv)}")
         code = subprocess.run(argv, check=False, cwd=_REPO_ROOT).returncode
         if code != 0:
-            _log(f"! {project}: depictio-cli run exited {code}")
+            _log(f"! {project}: depictio-cli ingest exited {code}")
             failed.append(project)
     _log("")
     _log(f"{len(scenarios) - len(failed) - skipped} ingested, {skipped} skipped, {len(failed)} failed")

@@ -73,7 +73,7 @@ post_fetch_help: |
   # params.json yet: pass them by hand if the run skipped a step.
 
   # 1. Dry run (validates the template against the data, no ingestion)
-  depictio-cli run --template nf-core/airrflow/5.1.0 --data-root {dest} --dry-run
+  depictio-cli ingest --template nf-core/airrflow/5.1.0 --data-root {dest} --dry-run
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
-  depictio-cli run --template nf-core/airrflow/5.1.0 --data-root {dest}
+  depictio-cli ingest --template nf-core/airrflow/5.1.0 --data-root {dest}

@@ -309,8 +309,8 @@ jobs:
 
           echo "📊 Registering Iris demo project..."
           depictio-cli config check \
-            --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
-            --CLI-config-path ../../admin_config.yaml || true
+            --project-config-path ../projects/init/iris/project.yaml \
+            --server ../../admin_config.yaml || true
 
       - name: Cleanup
         if: always()

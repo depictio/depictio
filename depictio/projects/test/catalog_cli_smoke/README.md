@@ -1,7 +1,7 @@
 # Catalog CLI smoke
 
 A small project that reaches the catalog picker the way a real user's does:
-`depictio-cli run` over staged pipeline output, with the recipes executed by the
+`depictio-cli ingest` over staged pipeline output, with the recipes executed by the
 CLI rather than shipped pre-computed.
 
 ## Why it exists next to `catalog_conformance`
@@ -60,14 +60,14 @@ grep FASTAPI_PORT .env.instance
 source depictio/cli/.venv/bin/activate
 CLI_CONFIG=~/.depictio/CLI.yaml   # or ~/.depictio/CLI.<INSTANCE_ID>.yaml in a worktree
 
-depictio-cli run \
-  --CLI-config-path "$CLI_CONFIG" \
+depictio-cli ingest \
+  --server "$CLI_CONFIG" \
   --project-config-path depictio/projects/test/catalog_cli_smoke/project.yaml \
   --overwrite --update-config
 
 depictio-cli dashboard import \
   depictio/projects/test/catalog_cli_smoke/dashboards/overview.yaml \
-  --config "$CLI_CONFIG" --overwrite
+  --server "$CLI_CONFIG" --overwrite
 ```
 
 Re-running is the normal case here (you edit a recipe or a collection and want

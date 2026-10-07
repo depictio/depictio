@@ -11,7 +11,7 @@ config `~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml`).
 Build the rnafusion 4.1.3 template plus the six catalog tools it depends on
 (`fusionreport`, `arriba`, `starfusion`, `fusioncatcher`, `fusioninspector`,
 `ctatsplicing`) and the two shared MultiQC entries it needs (`multiqc/star`,
-`multiqc/picard`), then drive `depictio-cli run` against the real AWS megatest output
+`multiqc/picard`), then drive `depictio-cli ingest` against the real AWS megatest output
 end to end and ground every dashboard tile on the Delta tables the run produced.
 
 ## Data used
@@ -43,8 +43,8 @@ and the template ships a copy at `input/samplesheet.csv` so it is self-describin
 ## Ingestion result: 10 / 11 data collections populated, 1 optional skipped, exit 0
 
 ```bash
-depictio/cli/.venv/bin/python -m depictio.cli run \
-  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml \
+depictio/cli/.venv/bin/python -m depictio.cli ingest \
+  --server ~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml \
   --template nf-core/rnafusion/4.1.3 \
   --data-root ~/Data/depictio-nfcore/rnafusion/4.1.3/megatest
 ```
@@ -224,7 +224,7 @@ Consequences, in order of severity:
    chipseq 3/7. The split is exactly whether the tool folder existed when the API process
    last started.
 3. **The fix is a restart, not a YAML change.** Restarting the API container and re-running
-   `depictio-cli run` for the affected pipelines populates `viz_kind`, `config` defaults and
+   `depictio-cli ingest` for the affected pipelines populates `viz_kind`, `config` defaults and
    `catalog_source`. Adding a redundant `viz_kind:` next to every `use:` would mask the bug
    and would still store a config without the kind's defaults and without the catalog badge,
    so the template YAML was deliberately left alone.

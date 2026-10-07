@@ -1,4 +1,4 @@
-"""Tests for `depictio-cli run --attach-run`: folding a run into an existing project.
+"""Tests for `depictio-cli ingest --attach-run`: folding a run into an existing project.
 
 These exercise :func:`attach_run_to_project`, the pure part of the feature: it takes
 the locally resolved project plus the project document the server already holds, and

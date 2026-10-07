@@ -9,7 +9,7 @@ config `~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml`).
 ## Goal
 
 Build the cutandrun 3.1 template plus the `seacr` catalog tool it needs, reuse the `macs2`
-tool the chipseq workstream built, and drive `depictio-cli run` against the real AWS megatest
+tool the chipseq workstream built, and drive `depictio-cli ingest` against the real AWS megatest
 output end to end. cutandrun is the third and last pipeline in this lot whose MultiQC report
 predates the parquet era, and the only one that runs two peak callers over the same
 fragments, which is what the template's middle tab is about.
@@ -62,8 +62,8 @@ against the 1.35 anchors and were verified against them, not against the publish
 ## Ingestion result: 11 / 11 data collections processed, exit 0
 
 ```bash
-depictio/cli/.venv/bin/python -m depictio.cli run \
-  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml \
+depictio/cli/.venv/bin/python -m depictio.cli ingest \
+  --server ~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml \
   --template nf-core/cutandrun/3.1 \
   --data-root ~/Data/depictio-nfcore/cutandrun/3.1/megatest
 ```

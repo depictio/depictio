@@ -9,7 +9,7 @@ config `~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml`).
 ## Goal
 
 Build the funcscan 4.0.0 template plus the four catalog tools it depends on
-(hAMRonization, AMPcombi, comBGC, run_dbCAN) and drive `depictio-cli run` against the real
+(hAMRonization, AMPcombi, comBGC, run_dbCAN) and drive `depictio-cli ingest` against the real
 AWS megatest output end to end.
 
 ## Data used
@@ -34,14 +34,14 @@ curl -fsSL -o ~/Data/depictio-nfcore/funcscan/4.0.0/megatest/input/samplesheet_f
 ## Ingestion result: 15 / 15 data collections processed, exit 0
 
 ```bash
-depictio-cli run --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml \
+depictio-cli ingest --server ~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml \
   --template nf-core/funcscan/4.0.0 \
   --data-root ~/Data/depictio-nfcore/funcscan/4.0.0/megatest
 ```
 
 The final validated run left `--project-name` off, so the project carries the name the
 template declares. That matters only for a later standalone `depictio dashboard import`,
-which resolves the dashboard's `project_tag` by name; `run` itself accepts any project
+which resolves the dashboard's `project_tag` by name; `ingest` itself accepts any project
 name because step 8 passes the id of the project it just created.
 
 Delta tables read back from MinIO after the run:

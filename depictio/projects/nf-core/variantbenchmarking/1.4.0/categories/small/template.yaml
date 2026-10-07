@@ -7,7 +7,7 @@
 #   indel      : analysis=somatic,  variant_type=indel  (som.py + rtg-tools, SEQC2)      + multiqc_indel
 #   structural : variant_type=structural                (truvari + SURVIVOR, HG002 SVs)  + multiqc_structural
 #
-#   depictio run --template nf-core/variantbenchmarking/1.4.0/categories/small \
+#   depictio ingest --template nf-core/variantbenchmarking/1.4.0/categories/small \
 #     --data-root <root with small/ + multiqc/multiqc_data/multiqc.parquet>
 # ============================================================================
 

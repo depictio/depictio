@@ -73,7 +73,7 @@ BANNER = """\
 # Template variables are already resolved here for the reference dataset, so this
 # file is a concrete dashboard rather than a template. It is imported on top of
 # base.yaml when the reference seeds are rebuilt; it is never listed in
-# `template.dashboards`, so `depictio run --template nf-core/ampliseq/2.16.0`
+# `template.dashboards`, so `depictio ingest --template nf-core/ampliseq/2.16.0`
 # against a real run still only gets base.yaml.
 """
 

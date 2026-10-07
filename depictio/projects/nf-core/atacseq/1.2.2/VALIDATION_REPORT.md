@@ -10,7 +10,7 @@ config `~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml`).
 
 Build the atacseq 1.2.2 template plus the `ataqv` catalog tool and the `multiqc/ataqv`
 catalog entry, reuse the `macs2` and `homer` tools the chipseq workstream built and the
-`deseq2` tool the differentialabundance workstream built, and drive `depictio-cli run`
+`deseq2` tool the differentialabundance workstream built, and drive `depictio-cli ingest`
 against the real AWS megatest output end to end. atacseq is the second pipeline in this lot
 whose MultiQC report predates the parquet era, so the run also exercises the reprocess path
 a second time, on a different report layout.
@@ -91,8 +91,8 @@ against the published report.
 ## Ingestion result: 14 / 14 data collections processed, exit 0
 
 ```bash
-depictio/cli/.venv/bin/python -m depictio.cli run \
-  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml \
+depictio/cli/.venv/bin/python -m depictio.cli ingest \
+  --server ~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml \
   --template nf-core/atacseq/1.2.2 \
   --data-root ~/Data/depictio-nfcore/atacseq/1.2.2/megatest
 ```

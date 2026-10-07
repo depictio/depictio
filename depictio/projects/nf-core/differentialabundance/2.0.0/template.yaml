@@ -1,7 +1,7 @@
 # nf-core/differentialabundance Template v2.0.0 - Differential expression
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/differentialabundance/2.0.0 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/differentialabundance/2.0.0 --data-root /path/to/your/data
 #
 # Tested against nf-core/differentialabundance AWS megatest results:
 #   s3://nf-core-awsmegatests/differentialabundance/results-30ed7741fc392127156c2fb10cfa3d69d216b54b

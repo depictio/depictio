@@ -64,8 +64,8 @@ echo "→ Phase 1: depictio CLI scan inside compose project $PROJECT_NAME (servi
 docker compose -p "$PROJECT_NAME" \
     -f docker-compose.dev.yaml -f docker-compose.override.yaml \
     --env-file .env.instance \
-    exec -T depictio-backend python -m depictio.cli run \
-        --CLI-config-path "/app/${CLI_CONFIG}" \
+    exec -T depictio-backend python -m depictio.cli ingest \
+        --server "/app/${CLI_CONFIG}" \
         --project-config-path /app/depictio/projects/init/nfcore_megatests_showcase/project.yaml \
         --overwrite \
         --update-config \

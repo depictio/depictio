@@ -22,7 +22,7 @@ deployment and commit it here:
 
 ```bash
 # Against a running, freshly seeded deployment (iris/penguins/ampliseq):
-depictio-cli backup create --CLI-config-path admin_config.yaml
+depictio-cli backup create --server admin_config.yaml
 # then copy the produced depictio_backup_<id>.json and rename it:
 #   depictio/tests/fixtures/backups/depictio_backup_v<version>.json
 ```

@@ -359,7 +359,7 @@ async def create_initial_dashboards(
         # The two demo tabs the reference project adds on top of the nf-core
         # template (build_reference_dashboard.py). They bind the coordinates,
         # sampling date and CTD readings only this dataset's metadata carries,
-        # so a real `depictio run --template` never receives them.
+        # so a real `depictio ingest --template` never receives them.
         {
             "name": "ampliseq_sampling_campaign",
             "json_path": os.path.join(

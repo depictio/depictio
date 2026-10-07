@@ -1080,7 +1080,7 @@ jobs:
             echo "— checking $tpl"
             depictio-cli config check \
               --project-config-path "$tpl" \
-              --CLI-config-path admin_config.yaml 2>&1 || true
+              --server admin_config.yaml 2>&1 || true
           done
 
           echo "✅ Template validation passed"
@@ -1203,13 +1203,13 @@ jobs:
           # Validate project config
           depictio-cli --verbose config check \
             --project-config-path ../projects/init/iris/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Sync project config (with --update for idempotency)
           depictio-cli --verbose config sync \
             --update \
             --project-config-path ../projects/init/iris/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           echo "✅ Config commands passed"
 
@@ -1288,7 +1288,7 @@ jobs:
           # captured stderr/stdout — otherwise the actual error is invisible.
           echo "🔄 Importing dashboard to server..."
           set +e
-          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/init/iris/dashboards/overview.yaml --config admin_config.yaml --overwrite 2>&1)
+          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/init/iris/dashboards/overview.yaml --server admin_config.yaml --overwrite 2>&1)
           IMPORT_EXIT=$?
           set -e
           echo "$IMPORT_OUTPUT"
@@ -1373,24 +1373,24 @@ jobs:
           # Validate project config
           depictio-cli --verbose config check \
             --project-config-path ../projects/test/cli-test/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Sync project to server
           depictio-cli --verbose config sync \
             --project-config-path ../projects/test/cli-test/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Scan data files
           depictio-cli --verbose data scan \
             --sync-files \
             --project-config-path ../projects/test/cli-test/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Process data into deltatables
           depictio-cli --verbose data process \
             --overwrite \
             --project-config-path ../projects/test/cli-test/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           echo "✅ CLI workflow with local test project passed"
 
@@ -1408,13 +1408,13 @@ jobs:
           # Validate project config (tests validation logic with Docker path detection)
           depictio-cli --verbose config check \
             --project-config-path ../projects/init/penguins/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Sync project to server (validates against API)
           depictio-cli --verbose config sync \
             --update \
             --project-config-path ../projects/init/penguins/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           # Skip scan/process/run - penguins is already initialized as reference dataset
           # The verification step below confirms the project and data exist in the database
@@ -1433,24 +1433,16 @@ jobs:
           # Validate project config (tests Image DC model validation)
           depictio-cli --verbose config check \
             --project-config-path ../projects/test/image_demo/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
-          # Sync project to server
-          depictio-cli --verbose config sync \
-            --project-config-path ../projects/test/image_demo/project.yaml \
-            --CLI-config-path admin_config.yaml
-
-          # Scan data files (syncs images to S3)
-          depictio-cli --verbose data scan \
+          # Ingest: sync the project to the server, scan the data files, build the
+          # delta table from the CSV, then upload local_images_path to s3_base_folder
+          # and check every image the table references is in S3 (fails if one is missing)
+          depictio-cli --verbose ingest \
             --sync-files \
-            --project-config-path ../projects/test/image_demo/project.yaml \
-            --CLI-config-path admin_config.yaml
-
-          # Process data into deltatables (creates delta table from CSV)
-          depictio-cli --verbose data process \
             --overwrite \
             --project-config-path ../projects/test/image_demo/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
 
           echo "✅ Image Demo CLI operations passed"
 
@@ -1461,7 +1453,7 @@ jobs:
           echo "📋 Testing Image Demo dashboard import..."
 
           # Import Image Demo dashboard
-          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/test/image_demo/dashboards/gallery.yaml --config admin_config.yaml 2>&1)
+          IMPORT_OUTPUT=$(depictio-cli dashboard import ../projects/test/image_demo/dashboards/gallery.yaml --server admin_config.yaml 2>&1)
           echo "$IMPORT_OUTPUT"
 
           # Extract dashboard ID
@@ -1511,7 +1503,7 @@ jobs:
           # Import iris YAML to get a fresh dashboard ID to seed the roundtrip
           IMPORT_OUTPUT=$(depictio-cli dashboard import \
             ../projects/init/iris/dashboards/overview.yaml \
-            --config admin_config.yaml --overwrite 2>&1)
+            --server admin_config.yaml --overwrite 2>&1)
           echo "$IMPORT_OUTPUT"
 
           IRIS_ID=$(echo "$IMPORT_OUTPUT" | grep -oE '[0-9a-f]{24}' | head -1)
@@ -1537,7 +1529,7 @@ jobs:
           echo "📋 Testing backup commands (read-only)..."
 
           # List backups (read-only, won't fail if empty)
-          depictio-cli backup list --CLI-config-path admin_config.yaml || true
+          depictio-cli backup list --server admin_config.yaml || true
 
           echo "✅ Backup commands passed"
 
@@ -1738,7 +1730,7 @@ jobs:
             --data-root "$DATA_DIR" \
             --project-name "Ampliseq CI Template Test" \
             --var SAMPLESHEET_FILE="$DATA_DIR/samplesheet.csv" \
-            --CLI-config-path admin_config.yaml \
+            --server admin_config.yaml \
             --continue-on-error
 
           echo "✅ Full template pipeline execution completed"
@@ -2281,7 +2273,7 @@ jobs:
           # Create backup with strategy-specific prefix
           echo ""
           echo "🚀 Starting backup creation with detailed logging..."
-          echo "Command: depictio-cli -v -vl DEBUG backup create --CLI-config-path admin_config.yaml --include-s3-data --s3-backup-prefix ci_${{ matrix.backup_strategy }}_backup"
+          echo "Command: depictio-cli --log-level DEBUG backup create --server admin_config.yaml --include-s3-data --s3-backup-prefix ci_${{ matrix.backup_strategy }}_backup"
           echo "Strategy: ${{ matrix.backup_strategy }}"
           echo "Expected S3 files: ${{ matrix.expected_s3_files }}"
           echo "Expected local files: ${{ matrix.expected_local_files }}"
@@ -2291,8 +2283,8 @@ jobs:
           START_TIME=$(date +%s)
 
           # Run backup command with full debugging
-          if depictio-cli -v -vl DEBUG backup create \
-            --CLI-config-path admin_config.yaml \
+          if depictio-cli --log-level DEBUG backup create \
+            --server admin_config.yaml \
             --include-s3-data \
             --s3-backup-prefix "ci_${{ matrix.backup_strategy }}_backup"; then
             END_TIME=$(date +%s)
@@ -2431,7 +2423,7 @@ jobs:
           source venv/bin/activate
 
           # List backups and get the latest one
-          BACKUP_LIST=$(depictio-cli backup list --CLI-config-path admin_config.yaml)
+          BACKUP_LIST=$(depictio-cli backup list --server admin_config.yaml)
           echo "Available backups for ${{ matrix.strategy_name }}: $BACKUP_LIST"
 
           # Validate backup integrity
@@ -2439,7 +2431,7 @@ jobs:
           echo "Using backup ID for ${{ matrix.strategy_name }}: $BACKUP_ID"
 
           if [ -n "$BACKUP_ID" ]; then
-            depictio-cli -v -vl DEBUG backup validate "$BACKUP_ID" --CLI-config-path admin_config.yaml
+            depictio-cli --log-level DEBUG backup validate "$BACKUP_ID" --server admin_config.yaml
             echo "✅ Backup validation successful for ${{ matrix.strategy_name }}"
           else
             echo "❌ No backup ID found for ${{ matrix.strategy_name }}"
@@ -2463,13 +2455,13 @@ jobs:
           "
 
           # Get backup ID and restore
-          BACKUP_LIST=$(depictio-cli backup list --CLI-config-path admin_config.yaml)
+          BACKUP_LIST=$(depictio-cli backup list --server admin_config.yaml)
           BACKUP_ID=$(echo "$BACKUP_LIST" | grep -o '"backup_id": "[^"]*"' | head -1 | cut -d'"' -f4)
 
           if [ -n "$BACKUP_ID" ]; then
             echo "🔄 Performing restore test for ${{ matrix.strategy_name }}..."
-            depictio-cli -v -vl DEBUG backup restore "$BACKUP_ID" \
-              --CLI-config-path admin_config.yaml \
+            depictio-cli --log-level DEBUG backup restore "$BACKUP_ID" \
+              --server admin_config.yaml \
               --force
 
             # Verify restoration
@@ -2501,10 +2493,10 @@ jobs:
 
           # Dry-run first — must not change anything
           echo "🏃 Running dry-run migrate..."
-          depictio-cli -v -vl DEBUG migrate \
+          depictio-cli --log-level DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
-            --CLI-config-path admin_config.yaml \
-            --target-config admin_config.yaml \
+            --server admin_config.yaml \
+            --to-server admin_config.yaml \
             --mode metadata \
             --dry-run
           echo "✅ Dry-run migrate completed"
@@ -2518,10 +2510,10 @@ jobs:
           # Real migrate (same instance as source and target — idempotent upsert)
           # --overwrite required because the project already exists on this instance
           echo "🚀 Running real migrate (metadata mode)..."
-          depictio-cli -v -vl DEBUG migrate \
+          depictio-cli --log-level DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
-            --CLI-config-path admin_config.yaml \
-            --target-config admin_config.yaml \
+            --server admin_config.yaml \
+            --to-server admin_config.yaml \
             --mode metadata \
             --overwrite
           echo "✅ Real migrate completed"
@@ -2530,8 +2522,8 @@ jobs:
           echo "🔒 Testing conflict detection (no --overwrite, should fail)..."
           if depictio-cli migrate \
             --project "$IRIS_PROJECT_NAME" \
-            --CLI-config-path admin_config.yaml \
-            --target-config admin_config.yaml \
+            --server admin_config.yaml \
+            --to-server admin_config.yaml \
             --mode metadata 2>&1; then
             echo "❌ Expected conflict exit but command succeeded"
             exit 1
@@ -2572,10 +2564,10 @@ jobs:
 
           # Run migrate and capture output to verify dashboards were actually exported
           MIGRATE_LOG=$(mktemp)
-          depictio-cli -v -vl DEBUG migrate \
+          depictio-cli --log-level DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
-            --CLI-config-path admin_config.yaml \
-            --target-config admin_config.yaml \
+            --server admin_config.yaml \
+            --to-server admin_config.yaml \
             --mode dashboard \
             --overwrite 2>&1 | tee "$MIGRATE_LOG"
 
@@ -2639,10 +2631,10 @@ jobs:
           # Run mode=all (self-migration: same instance as source and target)
           # This exercises the S3 copy code path in addition to MongoDB upserts
           MIGRATE_LOG=$(mktemp)
-          depictio-cli -v -vl DEBUG migrate \
+          depictio-cli --log-level DEBUG migrate \
             --project "$IRIS_PROJECT_NAME" \
-            --CLI-config-path admin_config.yaml \
-            --target-config admin_config.yaml \
+            --server admin_config.yaml \
+            --to-server admin_config.yaml \
             --mode all \
             --overwrite 2>&1 | tee "$MIGRATE_LOG"
 

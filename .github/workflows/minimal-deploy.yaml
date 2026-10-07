@@ -317,9 +317,9 @@ jobs:
           docker cp depictio-backend:/app/depictio/.depictio/admin_config.yaml .
 
           # Run CLI commands - show CLI config
-          depictio-cli config show --CLI-config-path admin_config.yaml
+          depictio-cli config show --server admin_config.yaml
 
           # Run CLI commands - validate project config
           depictio-cli config check \
             --project-config-path ../projects/init/iris/project.yaml \
-            --CLI-config-path admin_config.yaml
+            --server admin_config.yaml
