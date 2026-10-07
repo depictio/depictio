@@ -16,11 +16,15 @@
  * carry says so. The editor's ⋮ menu is the real menu; in the Guide each of
  * its items says what it does instead of doing it.
  *
- * Some icons depend on the tile rather than its kind: the inspector's, the
- * catalog's, the author's note, "load all". The demo draws them on its copy
- * where the tile itself would not (see `demoCopyOf`, `useDemoInspector`, the
- * stand-in "load all"), each saying so when tried, so that no line is left
- * without its icon. Advanced views differ the most, so that kind offers two.
+ * Some icons depend on the tile rather than its kind. The catalog's and the
+ * author's note the demo draws on its copy where the tile itself would not
+ * (see `demoCopyOf`), each opening to say so. The others it leaves to the
+ * dashboard, so that no icon on the tile is one that does nothing here: the
+ * inspector's shows only where the server has the inspector on, and where it
+ * is off the list leaves its line out (`useDemoInspector`); "load all" shows
+ * where the tile has more to load — a table's copy pages by fewer rows, and
+ * its own "load all" loads them — and where it has not, its line says so.
+ * Advanced views differ the most, so that kind offers two.
  *
  * Everything the tile does stays here (see `GuideSandbox`): its selection is
  * the demo's own filter, a group saved from it is the demo's own group.
@@ -54,7 +58,6 @@ import {
   editActionsFor,
   groupFromSelectionFilter,
   isStripSection,
-  LoadAllButton,
   ownControlsFor,
   resolveFigureStyle,
   rowActionsFor,
@@ -75,7 +78,6 @@ import type {
   GuideRowAction,
   GuideTileType,
   InspectorControl,
-  LoadAllState,
   SaveGroupApi,
   SelectionGroup,
   StoredMetadata,
@@ -244,38 +246,36 @@ function demoCopyOf(m: StoredMetadata, fontScale?: number): StoredMetadata {
 }
 
 /**
- * The inspect action, on every demo tile. It exists only where the server has
- * the inspector on, so where it is off the demo still draws it, and says so.
- * In the Guide it says what it does rather than opening the app's inspector.
+ * The inspect action, where the server has the inspector on: on a demo tile
+ * it says what it does rather than opening the app's inspector on a copy.
+ * Where the inspector is off, `null`: the sandbox then draws no inspect icon,
+ * as the dashboard draws none, and the list leaves its line out.
  */
-function useDemoInspector(onNote: (note: ActionNote) => void): InspectorControl {
-  const appInspector = useInspectorControl();
-  return useMemo<InspectorControl>(
-    () => ({
-      selectedId: null,
-      select: () =>
-        onNote({
-          icon: TILE_ACTION_STYLE.inspect.icon,
-          label: TILE_ACTION_STYLE.inspect.label,
-          meaning: appInspector
-            ? 'Opens the component in the inspector beside the page.'
-            : 'Opens the component in the inspector beside the page, where the server has it on. It is off here, so the dashboard does not show this icon.',
-          color: TILE_ACTION_STYLE.inspect.color,
-        }),
-    }),
-    [appInspector, onNote],
+function useDemoInspector(onNote: (note: ActionNote) => void): InspectorControl | null {
+  const on = Boolean(useInspectorControl());
+  return useMemo<InspectorControl | null>(
+    () =>
+      on
+        ? {
+            selectedId: null,
+            select: () =>
+              onNote({
+                icon: TILE_ACTION_STYLE.inspect.icon,
+                label: TILE_ACTION_STYLE.inspect.label,
+                meaning: 'Opens the component in the inspector beside the page.',
+                color: TILE_ACTION_STYLE.inspect.color,
+              }),
+          }
+        : null,
+    [on, onNote],
   );
 }
 
-/** Kinds whose renderer adds "load all" to the row once its data turns out
- *  reduced: a sampled figure or view, a table paging deep. */
-const LOADS_ALL = new Set<GuideTileType>(['figure', 'table', 'advanced_viz']);
-
-/** What the stand-in "load all" adds to the action's meaning, per kind. */
-const LOAD_ALL_STAND_IN: Partial<Record<GuideTileType, string>> = {
-  figure: 'This figure draws all of its points already, so the Guide added the icon to its copy.',
-  table: 'This table fits in a few pages, so the Guide added the icon to its copy.',
-  advanced_viz: 'This view draws all of its points already, so the Guide added the icon to its copy.',
+/** Why a drawn tile of `type` has no "load all": it shows all there is. */
+const LOAD_ALL_ABSENT: Partial<Record<GuideTileType, string>> = {
+  figure: 'this one draws all of its points',
+  table: 'this one fits in a few pages',
+  advanced_viz: 'this one draws all of its data',
 };
 
 // ---------------------------------------------------------------------------
@@ -335,49 +335,6 @@ function useTilePresence(
   return present;
 }
 
-/** Marks what the Guide adds to a tile's row, so it is not taken for the
- *  tile's own. */
-const STAND_IN_ATTR = 'data-guide-stand-in';
-
-/**
- * Whether the tile drew action `key` itself, leaving out the Guide's
- * stand-ins: read off the DOM like the lists, once `active` (the tile has
- * drawn), and kept up as the renderer adds or drops it. `null` until then.
- */
-function useOwnAction(
-  tileRef: React.RefObject<HTMLDivElement | null>,
-  key: string,
-  active: boolean,
-): boolean | null {
-  const [own, setOwn] = useState<boolean | null>(null);
-  useEffect(() => {
-    const tile = tileRef.current;
-    if (!active || !tile) {
-      setOwn(null);
-      return;
-    }
-    let frame = 0;
-    const read = () => {
-      frame = 0;
-      setOwn(
-        [...tile.querySelectorAll(actionSelector(key))].some(
-          (el) => !el.closest(`[${STAND_IN_ATTR}]`),
-        ),
-      );
-    };
-    read();
-    const observer = new MutationObserver(() => {
-      if (!frame) frame = requestAnimationFrame(read);
-    });
-    observer.observe(tile, { subtree: true, childList: true });
-    return () => {
-      observer.disconnect();
-      cancelAnimationFrame(frame);
-    };
-  }, [tileRef, key, active]);
-  return own;
-}
-
 /**
  * Says whether the tile in the same sandbox has drawn, from the load registry
  * its renderer reports to (`GuideSandbox` mounts one per demo). Rendered
@@ -435,14 +392,19 @@ export const ActionsDemo: React.FC<{
   const [view, setView] = useState<0 | 1>(0);
   const source = views ? views[view] : first;
   const sourceKey = source ? `${source.dashboardId}/${source.metadata.index}` : String(source);
+  // Whether the live tile has drawn: until then, an action its data decides
+  // ("load all") cannot be said to be missing.
+  const [drawn, setDrawn] = useState(false);
 
   // A new tile starts clean.
   useEffect(() => {
     setNote(null);
+    setDrawn(false);
   }, [sourceKey]);
 
   const selectable = Boolean(source && supportsSelectionGrouping(source.metadata, true));
-  const row = rowActionsFor(type);
+  const inspector = Boolean(useInspectorControl());
+  const row = rowActionsFor(type, { inspector });
   // A select control counts only where selection is on.
   const own = useMemo(
     () => ownControlsFor(type).filter((c) => !c.selection || selectable),
@@ -481,6 +443,7 @@ export const ActionsDemo: React.FC<{
     if (key === 'description' && type === 'advanced_viz' && !minimal) {
       return 'in its style, a view prints it under its title';
     }
+    if (key === 'loadAll' && drawn && LOAD_ALL_ABSENT[type]) return LOAD_ALL_ABSENT[type];
     return 'not on this one';
   };
 
@@ -571,6 +534,7 @@ export const ActionsDemo: React.FC<{
             analysis={analysis && selectable}
             editor={editor}
             onNote={setNote}
+            onDrawn={setDrawn}
           />
         )}
       </Box>
@@ -651,7 +615,8 @@ const LiveTile: React.FC<{
   analysis: boolean;
   editor: boolean;
   onNote: (note: ActionNote) => void;
-}> = ({ type, source, family, analysis, editor, onNote }) => {
+  onDrawn: (drawn: boolean) => void;
+}> = ({ type, source, family, analysis, editor, onNote, onDrawn }) => {
   const [fontScale, setFontScale] = useState<number | undefined>(undefined);
   const metadata = useMemo<StoredMetadata>(
     () => demoCopyOf(source.metadata, fontScale),
@@ -697,34 +662,11 @@ const LiveTile: React.FC<{
 
   const inspector = useDemoInspector(onNote);
 
-  // "Load all" comes from the renderer, once the server says it sampled the
-  // figure or view, or the table pages deep: nothing the copy's metadata can
-  // ask for. Where the drawn tile has none, the demo adds the same button,
-  // which toggles as the real one does and says it only shows the icon.
-  const tileRef = useRef<HTMLDivElement | null>(null);
-  const [drawn, setDrawn] = useState(false);
-  const ownLoadAll = useOwnAction(tileRef, 'loadAll', drawn && LOADS_ALL.has(type));
-  const [standInFull, setStandInFull] = useState(false);
-  const standInState = useMemo<LoadAllState>(
-    () => ({
-      reduced: !standInFull,
-      full: standInFull,
-      loading: false,
-      noun: type === 'table' ? 'rows' : 'points',
-      toggle: () => {
-        setStandInFull((full) => !full);
-        const meaning = rowActionsFor(type).find((a) => a.key === 'loadAll')?.meaning ?? '';
-        onNote({
-          icon: TILE_ACTION_STYLE.loadAll.icon,
-          label: TILE_ACTION_STYLE.loadAll.label,
-          meaning: `${meaning} ${LOAD_ALL_STAND_IN[type] ?? ''}`.trim(),
-          color: TILE_ACTION_STYLE.loadAll.color,
-        });
-      },
-    }),
-    [standInFull, type, onNote],
-  );
-
+  // The row's only addition is the editor's ⋮ menu. "Load all" is the
+  // renderer's own, once its data turns out reduced: a sampled figure or
+  // view, a table paging deep (the copy pages by `DEMO_PAGE_SIZE`). Where the
+  // tile has none, the list says why rather than the Guide drawing one that
+  // could only pretend to load.
   const menu = editor ? (
     <EditMenu
       source={source}
@@ -733,29 +675,13 @@ const LiveTile: React.FC<{
       onNote={onNote}
       onFontScale={setFontScale}
     />
-  ) : null;
-  // Before the ⋮ menu, which ends the row; after the renderer's own actions,
-  // where its "load all" sits.
-  const standIn =
-    ownLoadAll === false ? (
-      <span key="guide-load-all" {...{ [STAND_IN_ATTR]: '' }} style={{ display: 'inline-flex' }}>
-        <LoadAllButton state={standInState} />
-      </span>
-    ) : null;
-  const extras =
-    standIn || menu ? (
-      <>
-        {standIn}
-        {menu}
-      </>
-    ) : undefined;
+  ) : undefined;
 
   const height = TILE_HEIGHT[type];
   return (
     <GuideSandbox metadata={sandboxMetadata} saveGroup={saveGroup} inspector={inspector}>
-      <DrawnProbe metadata={sandboxMetadata} onDrawn={setDrawn} />
+      <DrawnProbe metadata={sandboxMetadata} onDrawn={onDrawn} />
       <Box
-        ref={tileRef}
         className="depictio-guide-demo-tile"
         data-tile-type={type}
         h={height ?? undefined}
@@ -771,7 +697,7 @@ const LiveTile: React.FC<{
             cardValue={cards.values[metadata.index]}
             cardSecondaryValues={cards.secondary[metadata.index]}
             cardLoading={cards.loading}
-            extraActions={extras}
+            extraActions={menu}
             showDragHandle={editor}
           />
         </div>
@@ -848,13 +774,25 @@ const StandIn: React.FC<{
   const sandboxMetadata = useMemo(() => [tile], [tile]);
   const inspector = useDemoInspector(onNote);
   const groupingColorVar = useGroupingColorVar();
-  const row = rowActionsFor(type);
+  const row = rowActionsFor(type, { inspector: inspector !== null });
   const extras: React.ReactNode[] = [];
+  // What a renderer adds to the row, drawn as its icons: with no tile of the
+  // kind to act on, each says what it does when tried.
   for (const a of row) {
     if (a.key === 'settings' || a.key === 'data' || a.key === 'loadAll') {
       extras.push(
         <span key={a.key} data-tile-action={a.key} style={{ display: 'inline-flex' }}>
-          <Glyph style={a} />
+          <Glyph
+            style={a}
+            onClick={() =>
+              onNote({
+                icon: a.icon,
+                label: a.label,
+                meaning: `${a.meaning} This dashboard has no ${NOUN[type]} to show it on.`,
+                color: a.color,
+              })
+            }
+          />
         </span>,
       );
     }
@@ -978,12 +916,14 @@ const Glyph: React.FC<{
   variant?: 'subtle' | 'filled';
   /** In a legend row the label is beside it: no tooltip, out of the tab order. */
   legend?: boolean;
-}> = ({ style, color, variant = 'subtle', legend }) => {
+  onClick?: () => void;
+}> = ({ style, color, variant = 'subtle', legend, onClick }) => {
   const icon = (
     <ActionIcon
       variant={variant}
       color={color ?? style.color}
       size="sm"
+      onClick={onClick}
       aria-label={legend ? undefined : style.label}
       aria-hidden={legend || undefined}
       tabIndex={legend ? -1 : undefined}
