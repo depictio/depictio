@@ -18,6 +18,32 @@ def _write_params(directory, name, payload):
     (directory / name).write_text(json.dumps(payload))
 
 
+class TestStringBooleans:
+    """Nextflow stores a flag given as `--ancombc true` as the string "true"."""
+
+    def test_string_true_ancombc_keeps_the_differential_abundance(self, tmp_path):
+        _write_params(tmp_path / "pipeline_info", "params_2026-08-25_13-30-37.json", {"ancombc": "true"})
+
+        variables: dict[str, str] = {}
+        _introspect_pipeline_params(str(tmp_path), variables)
+
+        assert "SKIP_ANCOM" not in variables
+
+    def test_string_skip_flags_are_read(self, tmp_path):
+        _write_params(
+            tmp_path / "pipeline_info",
+            "params_2026-08-25_13-30-37.json",
+            {"ancombc": "false", "skip_taxonomy": "True", "skip_qiime": "false"},
+        )
+
+        variables: dict[str, str] = {}
+        _introspect_pipeline_params(str(tmp_path), variables)
+
+        assert variables["SKIP_ANCOM"] == "true"
+        assert variables["SKIP_TAXONOMY"] == "true"
+        assert "SKIP_QIIME" not in variables
+
+
 class TestNewestParamsWins:
     def test_later_attempt_overrides_the_first(self, tmp_path):
         """The run was resumed with skip_taxonomy off, so the flag must not be set."""
