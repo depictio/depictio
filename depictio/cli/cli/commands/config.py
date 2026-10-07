@@ -12,6 +12,7 @@ from depictio.cli.cli.utils.api_calls import (
 from depictio.cli.cli.utils.common import (
     describe_api_target,
     load_depictio_config,
+    report_login_failure,
     report_unreachable,
     say_local_server_running,
 )
@@ -341,14 +342,10 @@ def check(
 
     # Project-config validation mode (folds the former validate-project-config).
     if project_config_path:
+        # A configuration it cannot validate ends the command there, said why.
         _, response = validate_project_config_and_check_S3_storage(
             CLI_config_path=config_path, project_config_path=project_config_path
         )
-        if not response["success"]:
-            rich_print_checked_statement(
-                "Pipeline configuration invalid, use --verbose for more details.", "error"
-            )
-            raise typer.Exit(code=1)
         rich_print_checked_statement("Depictio Project configuration validated", "success")
         project_config = convert_model_to_dict(response["project_config"])
         rich_print_json("Validated Depictio Project Configuration: ", project_config)
@@ -389,10 +386,7 @@ def check(
             suffix = f" - {', '.join(user_info)}" if user_info else ""
             rich_print_checked_statement(f"Server accessible{suffix}", "success")
         else:
-            rich_print_checked_statement(
-                "Server check failed - Invalid credentials or token expired", "error"
-            )
-            rich_print_checked_statement(f"Tried {describe_api_target(config_path)}", "info")
+            report_login_failure(config_path, login_result, "Server check failed")
             failed = True
 
     try:
@@ -435,15 +429,11 @@ def sync(
     config_path = resolve_server(server, CLI_config_path)
     if not project_config_path:
         ctx.fail("config sync needs --project-config-path: the project configuration to sync.")
+    # A configuration it cannot validate ends the command there, said why.
     CLI_config, validation_response = validate_project_config_and_check_S3_storage(
         CLI_config_path=config_path,
         project_config_path=project_config_path,
     )
-    if not validation_response["success"]:
-        rich_print_checked_statement(
-            "Pipeline configuration invalid, use --verbose for more details.", "error"
-        )
-        raise typer.Exit(code=1)
     rich_print_checked_statement("Pipeline configuration validated", "success")
     project_config = convert_model_to_dict(validation_response["project_config"])
     try:

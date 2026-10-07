@@ -192,3 +192,54 @@ def test_an_unreadable_multiqc_report_is_one_x_line_naming_it(capsys, monkeypatc
     assert out.count("✗") == 1
     assert "Could not read MultiQC report run1/multiqc.parquet: corrupt [report]" in out
     assert err == ""
+
+
+class TestApiLoginStatus:
+    """api_login says which HTTP status the server answered: the token is not always why."""
+
+    URL = "https://api.depictio.dev/depictio/api/v1/cli/validate_cli_config"
+
+    @pytest.fixture
+    def login(self, cli_config):
+        from depictio.cli.cli.utils import api_calls
+
+        def _login(response: httpx.Response) -> tuple[dict, list[str]]:
+            client = MagicMock()
+            client.post.return_value = response
+            with (
+                patch.object(api_calls, "load_depictio_config", return_value=cli_config),
+                patch.object(api_calls, "get_http_client", return_value=client),
+                patch.object(api_calls, "rich_print_checked_statement") as printer,
+            ):
+                result = api_calls.api_login("cli.yaml")
+            return result, [str(call.args[0]) for call in printer.call_args_list]
+
+        return _login
+
+    def test_a_valid_token(self, login):
+        result, _ = login(httpx.Response(200, json={"success": True, "is_admin": True}))
+
+        assert result["success"] is True
+        assert result["status_code"] == 200
+        assert result["is_admin"] is True
+
+    def test_a_token_the_server_does_not_know(self, login):
+        result, _ = login(httpx.Response(200, json={"success": False, "message": "expired"}))
+
+        assert result == {"success": False, "status_code": 200}
+
+    @pytest.mark.parametrize("status", [401, 403])
+    def test_a_refused_token(self, login, status):
+        result, printed = login(httpx.Response(status, json={"detail": "Invalid token"}))
+
+        assert result == {"success": False, "status_code": status}
+        assert printed[-1].startswith("Depictio CLI configuration is invalid: ")
+
+    @pytest.mark.parametrize("status", [404, 502])
+    def test_another_answer_names_its_status_not_the_configuration(self, login, status):
+        page = "<html><body>nginx error page</body></html>"
+        result, printed = login(httpx.Response(status, text=page))
+
+        assert result == {"success": False, "status_code": status}
+        assert printed[-1] == f"The server answered HTTP {status} to {self.URL}"
+        assert not any("nginx error page" in line for line in printed)

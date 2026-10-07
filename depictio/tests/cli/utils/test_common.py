@@ -692,6 +692,30 @@ class TestLoopbackProxy:
 
         assert "no_proxy" not in os.environ
 
+    def test_both_spellings_keep_every_entry_of_either(self, config, monkeypatch):
+        """A client reads one or the other: neither may lose what the other held."""
+        monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example.org:3128")
+        monkeypatch.setenv("no_proxy", ".example.org")
+        monkeypatch.setenv("NO_PROXY", "intranet.local,.example.org")
+
+        with patch("depictio.cli.cli.utils.common.rich_print_checked_statement"):
+            load_depictio_config(config)
+
+        merged = ".example.org,intranet.local,127.0.0.1,localhost"
+        assert os.environ["no_proxy"] == merged
+        assert os.environ["NO_PROXY"] == merged
+
+    def test_an_ipv6_loopback_server_adds_its_address(self, tmp_path, config, monkeypatch):
+        ipv6 = tmp_path / "ipv6.yaml"
+        ipv6.write_text(yaml.safe_dump(_valid_config("http://[::1]:8058")))
+        monkeypatch.setenv("HTTPS_PROXY", "http://proxy.example.org:3128")
+
+        with patch("depictio.cli.cli.utils.common.rich_print_checked_statement"):
+            load_depictio_config(str(ipv6))
+
+        assert os.environ["no_proxy"].split(",") == ["127.0.0.1", "localhost", "::1"]
+        assert os.environ["NO_PROXY"] == os.environ["no_proxy"]
+
 
 class TestDescribeApiTarget:
     """describe_api_target is called while reporting another error: it prints nothing."""
@@ -750,3 +774,71 @@ class TestDescribeApiTarget:
         config.write_text(yaml.safe_dump(_valid_config("http://127.0.0.1:8058")))
 
         assert "depictio local up" not in describe_api_target(str(config))
+
+    def test_a_url_from_the_variable_names_the_variable(self, tmp_path, monkeypatch):
+        """The file's URL was not the one tried: naming the file would mislead."""
+        config = tmp_path / "home" / "CLI.yaml"
+        config.parent.mkdir(parents=True)
+        config.write_text(yaml.safe_dump(_valid_config("http://in-the-file.test")))
+        monkeypatch.setenv("DEPICTIO_CLI_API_BASE_URL", "https://from-env.example.org")
+
+        described = describe_api_target(str(config))
+
+        assert described == "https://from-env.example.org, from DEPICTIO_CLI_API_BASE_URL"
+
+    def test_a_directory_is_a_directory_not_missing(self, tmp_path):
+        folder = tmp_path / "home" / "configs"
+        folder.mkdir(parents=True)
+
+        with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
+            described = describe_api_target(str(folder))
+
+        assert described == "a directory at ~/configs, not a configuration file"
+        printer.assert_not_called()
+
+
+class TestReportLoginFailure:
+    """The token is to blame only when the server refused it."""
+
+    @pytest.fixture
+    def config(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        for var in ("DEPICTIO_CLI_CONFIG_PATH", "DEPICTIO_CLI_API_BASE_URL", "DEPICTIO_CLI_TOKEN"):
+            monkeypatch.delenv(var, raising=False)
+        path = tmp_path / "CLI.yaml"
+        path.write_text(yaml.safe_dump(_valid_config("https://viewer.example.org")))
+        return str(path)
+
+    def _report(self, config, login, **kwargs):
+        from depictio.cli.cli.utils.common import report_login_failure
+
+        with patch("depictio.cli.cli.utils.common.rich_print_checked_statement") as printer:
+            report_login_failure(config, login, **kwargs)
+        return [(call.args[1], str(call.args[0])) for call in printer.call_args_list]
+
+    @pytest.mark.parametrize("status", [200, 401, 403])
+    def test_a_refusal_blames_the_token(self, config, status):
+        lines = self._report(config, {"success": False, "status_code": status})
+
+        assert lines[0] == (
+            "error",
+            "Authentication failed: the server rejected this configuration's token, "
+            "which is invalid or expired",
+        )
+        assert lines[1] == ("info", f"Tried https://viewer.example.org, read from {config}")
+
+    @pytest.mark.parametrize("status", [404, 500, 502])
+    def test_another_answer_names_the_status_and_the_server(self, config, status):
+        lines = self._report(config, {"success": False, "status_code": status})
+
+        assert lines == [
+            ("error", f"Authentication failed: the server answered HTTP {status}"),
+            ("info", f"Tried https://viewer.example.org, read from {config}"),
+        ]
+
+    def test_the_lead_is_the_callers(self, config):
+        lines = self._report(
+            config, {"success": False, "status_code": 404}, failed="Source: authentication failed"
+        )
+
+        assert lines[0][1] == "Source: authentication failed: the server answered HTTP 404"

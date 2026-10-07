@@ -137,15 +137,20 @@ def describe_api_target(yaml_config_path: str) -> str:
     # for the default.
     config_file = cli_config_file(yaml_config_path)
     shown = display_path(config_file)
+    if os.path.isdir(config_file):
+        return f"a directory at {shown}, not a configuration file"
     if not os.path.isfile(config_file):
         return f"a missing configuration at {shown}"
     try:
-        config, _ = _read_cli_config(yaml_config_path)
+        config, source = _read_cli_config(yaml_config_path)
     except Exception as exc:
         logger.debug(f"Could not resolve the API base URL to report it: {exc}")
         return f"an unreadable configuration at {shown}"
+    # The variable wins over the file: naming the file would send people to fix the
+    # wrong one.
+    origin = _URL_FROM_ENV if source.startswith(_URL_FROM_ENV) else f"read from {shown}"
     hint = local_server_hint(config_file)
-    return f"{config.api_base_url}, read from {shown}" + (f" ({hint})" if hint else "")
+    return f"{config.api_base_url}, {origin}" + (f" ({hint})" if hint else "")
 
 
 def report_unreachable(yaml_config_path: str, exc: Exception) -> None:
@@ -154,6 +159,24 @@ def report_unreachable(yaml_config_path: str, exc: Exception) -> None:
     rich_print_checked_statement(f"Cannot reach the Depictio server: {exc}", "error")
     rich_print_checked_statement(f"Tried {describe_api_target(yaml_config_path)}", "info")
     say_local_server_running(yaml_config_path)
+
+
+def report_login_failure(
+    yaml_config_path: str, login: dict, failed: str = "Authentication failed"
+) -> None:
+    """Say why api_login returned success False, after ``failed``, then the server tried.
+
+    The token is blamed only when the server refused it: a 401 or a 403, or a 200 whose
+    verdict is no. Any other answer, a viewer host's 404 or a proxy's 502, is not the
+    token's fault, and a new token would not fix it.
+    """
+    status = login.get("status_code", 200)
+    if status in (200, 401, 403):
+        reason = "the server rejected this configuration's token, which is invalid or expired"
+    else:
+        reason = f"the server answered HTTP {status}"
+    rich_print_checked_statement(f"{failed}: {reason}", "error")
+    rich_print_checked_statement(f"Tried {describe_api_target(yaml_config_path)}", "info")
 
 
 def local_server_hint(yaml_config_path: str) -> str | None:
@@ -223,6 +246,9 @@ _announced: set[str] = set()
 
 # Off for migrate's target, see env_overrides_ignored.
 _env_overrides_enabled = True
+
+# Where _read_cli_config says a URL came from when DEPICTIO_CLI_API_BASE_URL set it.
+_URL_FROM_ENV = "from DEPICTIO_CLI_API_BASE_URL"
 
 
 @contextlib.contextmanager
@@ -381,7 +407,7 @@ def _read_cli_config(yaml_config_path: str, option: str = "--server") -> tuple[C
         ) from exc
     source = f"configuration {shown}"
     if url_from_env:
-        source = f"from DEPICTIO_CLI_API_BASE_URL, {source}"
+        source = f"{_URL_FROM_ENV}, {source}"
     elif chosen.local_fallback:
         # Said, so that a command meant for a remote server shows why it is not there.
         source = f"local server, as no {yaml_config_path} exists; {source}"
@@ -413,15 +439,23 @@ def _bypass_proxy_for_loopback(api_base_url: str) -> None:
     machine's loopback, so every call would fail. Set before the first request,
     since an HTTP client reads these variables when it is created.
     """
-    if urlparse(api_base_url).hostname not in _LOOPBACK_NAMES:
+    host = urlparse(api_base_url).hostname
+    if host not in _LOOPBACK_NAMES:
         return
     if not any(os.environ.get(var) for var in _PROXY_VARS):
         return
-    current = os.environ.get("no_proxy") or os.environ.get("NO_PROXY") or ""
-    entries = [entry.strip() for entry in current.split(",") if entry.strip()]
-    missing = [host for host in _LOOPBACK_HOSTS if host not in entries]
-    if missing:
-        os.environ["no_proxy"] = os.environ["NO_PROXY"] = ",".join(entries + missing)
+    # Both spellings, merged: a client reads one or the other, so neither may lose an
+    # entry the other holds.
+    loopback = (*_LOOPBACK_HOSTS, "::1") if host == "::1" else _LOOPBACK_HOSTS
+    entries = [
+        entry.strip()
+        for var in ("no_proxy", "NO_PROXY")
+        for entry in os.environ.get(var, "").split(",")
+        if entry.strip()
+    ]
+    merged = ",".join(dict.fromkeys([*entries, *loopback]))
+    if os.environ.get("no_proxy") != merged or os.environ.get("NO_PROXY") != merged:
+        os.environ["no_proxy"] = os.environ["NO_PROXY"] = merged
 
 
 def _same_loopback_server(url: str, other: str) -> bool:
@@ -455,6 +489,7 @@ def load_depictio_config(
     quiet: bool = False,
     option: str = "--server",
     label: str | None = None,
+    local_hint: bool = True,
 ) -> CLIConfig:
     """
     Load the Depictio configuration file.
@@ -468,7 +503,8 @@ def load_depictio_config(
     is blamed on the one the user typed. ``label`` replaces "Server" in the
     announcement, for a command that talks to two servers, and always prints.
     When no server was named and the local server runs besides the default one,
-    a warning after the announcement says how to use it.
+    a warning after the announcement says how to use it, unless ``local_hint`` is
+    False: for migrate, when its other server is the local one.
 
     A configuration it cannot use is reported as such, naming the file, and ends
     the command with exit code 1.
@@ -486,6 +522,6 @@ def load_depictio_config(
         _announced.add(target)
         rich_print_checked_statement(f"{label or 'Server'}: {target}", "info")
         # An unexpanded default spelling: no server was named, see _config_file.
-        if yaml_config_path in _DEFAULT_CLI_CONFIG_PATHS:
+        if local_hint and yaml_config_path in _DEFAULT_CLI_CONFIG_PATHS:
             _warn_local_server_running(yaml_config_path, str(config.api_base_url), option)
     return config

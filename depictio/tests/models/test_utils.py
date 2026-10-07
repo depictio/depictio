@@ -99,3 +99,54 @@
 #     config = ["not", "a", "dict"]
 #     with pytest.raises(ValueError):
 #         validate_model_config(config, HelloModel)
+
+
+import logging  # noqa: E402
+
+import pytest  # noqa: E402
+
+from depictio.models.utils import substitute_env_vars  # noqa: E402
+
+
+class TestSubstituteEnvVarsLogsNoValue:
+    """`depictio -v` logs depictio-models at INFO, and those logs get archived."""
+
+    @pytest.fixture
+    def logged(self, caplog, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_TEST_SECRET", "secret-value-in-config")
+        # Not referenced by the config: it leaked through a dump of the environment.
+        monkeypatch.setenv("DEPICTIO_CLI_TOKEN", "secret-token-elsewhere")
+        monkeypatch.delenv("GITHUB_WORKSPACE", raising=False)
+        caplog.set_level(logging.DEBUG, logger="depictio-models")
+        result = substitute_env_vars(
+            {
+                "a": "$DEPICTIO_TEST_SECRET/x",
+                "b": ["${DEPICTIO_TEST_SECRET}"],
+                "c": "$GITHUB_WORKSPACE/y",
+            }
+        )
+        # Read here: caplog keeps the records of each test phase apart.
+        return result, list(caplog.records)
+
+    def test_values_are_substituted(self, logged):
+        result, _ = logged
+
+        assert result == {
+            "a": "secret-value-in-config/x",
+            "b": ["secret-value-in-config"],
+            "c": "$GITHUB_WORKSPACE/y",
+        }
+
+    def test_no_value_reaches_the_logs(self, logged):
+        _, records = logged
+        text = "\n".join(record.getMessage() for record in records)
+
+        assert "secret-value-in-config" not in text
+        assert "secret-token-elsewhere" not in text
+
+    def test_the_names_are_logged_at_debug_only(self, logged):
+        _, records = logged
+
+        named = [r for r in records if "DEPICTIO_TEST_SECRET" in r.getMessage()]
+        assert named
+        assert {r.levelno for r in named} == {logging.DEBUG}

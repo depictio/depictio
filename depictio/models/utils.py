@@ -62,31 +62,28 @@ def substitute_env_vars(config: Any) -> Any:
     elif isinstance(config, str):
         # Check if string contains environment variables
         if re.search(r"\$|{\$", config):
-            logger.info(f"Processing string with env vars: '{config}'")
-
             # Handle variables with curly braces: {$VAR} -> $VAR
             processed = re.sub(r"\{\$([A-Za-z_][A-Za-z0-9_]*)\}", r"$\1", config)
-            logger.info(f"After brace removal: '{processed}'")
+            # The names only, at DEBUG: the values, and the strings that hold them, can
+            # be tokens and passwords, and `depictio -v` logs this module at INFO.
+            names = sorted(set(re.findall(r"\$\{?([A-Za-z_][A-Za-z0-9_]*)", processed)))
+            logger.debug(f"Environment variables in a configuration value: {', '.join(names)}")
 
             # Now substitute environment variables
             result = os.path.expandvars(processed)
-            logger.info(f"After expandvars: '{result}'")
 
             # Special handling for $PWD if it wasn't expanded
             if "$PWD" in result:
                 current_dir = os.getcwd()
                 result = result.replace("$PWD", current_dir)
-                logger.info(f"After PWD replacement: '{result}'")
 
             # Special handling for $GITHUB_WORKSPACE
             if "$GITHUB_WORKSPACE" in result:
                 if "GITHUB_WORKSPACE" in os.environ:
                     workspace = os.environ["GITHUB_WORKSPACE"]
                     result = result.replace("$GITHUB_WORKSPACE", workspace)
-                    logger.info(f"After GITHUB_WORKSPACE replacement: '{result}'")
                 else:
                     logger.warning("GITHUB_WORKSPACE not found in environment")
-                    logger.info(f"Current environment variables: {os.environ}")
 
             return result
         else:

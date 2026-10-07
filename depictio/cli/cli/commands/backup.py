@@ -5,7 +5,11 @@ import typer
 from rich.markup import escape
 
 from depictio.cli.cli.utils.api_calls import api_login
-from depictio.cli.cli.utils.common import load_depictio_config, report_unreachable
+from depictio.cli.cli.utils.common import (
+    load_depictio_config,
+    report_login_failure,
+    report_unreachable,
+)
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
     rich_print_command_usage,
@@ -28,7 +32,7 @@ dev_app = typer.Typer()
 def _login_as_admin(config_path: str, action: str) -> None:
     """Log in with ``config_path``; exit 1 unless the server takes it for an administrator.
 
-    api_login reports a rejected token by returning success False, with no is_admin:
+    api_login reports a failed login by returning success False, with no is_admin:
     checked first, so an expired token is not reported as missing admin rights.
     """
     rich_print_checked_statement("Authenticating user...", "info")
@@ -38,11 +42,7 @@ def _login_as_admin(config_path: str, action: str) -> None:
         report_unreachable(config_path, exc)
         raise typer.Exit(1) from exc
     if not auth_response.get("success"):
-        rich_print_checked_statement(
-            "Authentication failed: the server rejected this configuration's token, "
-            "which is invalid or expired",
-            "error",
-        )
+        report_login_failure(config_path, auth_response)
         raise typer.Exit(1)
     if not auth_response.get("is_admin", False):
         rich_print_checked_statement(f"Access denied: Only administrators can {action}", "error")

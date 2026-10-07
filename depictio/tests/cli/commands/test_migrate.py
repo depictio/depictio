@@ -532,10 +532,10 @@ class TestMigrateCLIErrorHandling:
     @patch("depictio.cli.cli.commands.migrate.api_export_project")
     @patch("depictio.cli.cli.commands.migrate.load_depictio_config")
     @patch("depictio.cli.cli.commands.migrate.api_login")
-    def test_s3_errors_shown_as_warnings(
+    def test_s3_errors_fail_a_files_migration(
         self, mock_login, mock_load, mock_export, runner, config_file
     ):
-        """S3 copy errors surfaced in the bundle are shown as warnings (not hard exit)."""
+        """Files the copy left out of the target: shown, and the command fails."""
         mock_load.return_value = Mock()
         mock_load.return_value.s3_storage.endpoint_url = "http://localhost:9000"
         mock_load.return_value.s3_storage.aws_access_key_id = "minio"
@@ -573,8 +573,14 @@ class TestMigrateCLIErrorHandling:
             ],
         )
 
-        # Should still exit 0 (files mode, S3 warning not fatal at CLI level)
-        assert "S3 error" in result.stdout or "error" in result.stdout.lower()
+        assert result.exit_code == 1
+        out = " ".join(result.output.split())
+        assert "S3 error: Failed to copy dc1/some_file.parquet: S3 timeout" in out
+        assert (
+            "Files-only mode: 1 S3 error above left files out of the target. "
+            "Fix the cause, then run this command again with --mode files" in out
+        )
+        assert "S3 sync complete" not in out
 
 
 # ---------------------------------------------------------------------------
@@ -738,6 +744,23 @@ class TestMigrateMessages:
         assert "Source: cannot reach the server: refused" in out
         assert "Tried http://src.test" in out
 
+    def test_another_answer_is_not_blamed_on_the_token(self, runner, servers):
+        """A viewer host's 404: a new token would not fix it."""
+        with patch(
+            "depictio.cli.cli.commands.migrate.api_login",
+            side_effect=[
+                {"success": True, "is_admin": True},
+                {"success": False, "status_code": 404},
+            ],
+        ):
+            result = self._run(runner, servers)
+
+        assert result.exit_code == 1
+        out = self._flat(result.output)
+        assert "Target: authentication failed: the server answered HTTP 404" in out
+        assert "Tried http://dst.test, read from " in out
+        assert "invalid or expired" not in out
+
     def test_a_rejected_token_is_not_called_missing_admin_rights(self, runner, servers):
         with patch(
             "depictio.cli.cli.commands.migrate.api_login",
@@ -791,6 +814,64 @@ class TestMigrateMessages:
             "Use --overwrite to replace it." in out
         )
         assert "overwrite=true" not in out
+
+    @staticmethod
+    def _with_s3_errors(bundle: dict, *errors: str) -> dict:
+        return {
+            **bundle,
+            "s3_migrate_metadata": {
+                "total_files": 3,
+                "total_bytes": 300,
+                "paths": ["dc1/"],
+                "errors": list(errors),
+            },
+        }
+
+    def test_s3_errors_fail_a_full_migration_after_the_import(self, runner, servers):
+        """The documents are imported, but the files the copy left out fail the command."""
+        bundle = self._with_s3_errors(
+            self._bundle("all"), "Failed to copy dc1/a.parquet", "Error listing dc2"
+        )
+        with (
+            patch(
+                "depictio.cli.cli.commands.migrate.api_login",
+                return_value={"success": True, "is_admin": True},
+            ),
+            patch("depictio.cli.cli.commands.migrate.api_export_project", return_value=bundle),
+            patch(
+                "depictio.cli.cli.commands.migrate.api_import_project",
+                return_value={"success": True, "upserted": {"projects": 1}},
+            ) as import_project,
+        ):
+            result = self._run(runner, servers)
+
+        assert result.exit_code == 1
+        import_project.assert_called_once()
+        out = self._flat(result.output)
+        assert (
+            "Migration incomplete for project 'my-project': 2 S3 errors above left files "
+            "out of the target." in out
+        )
+        assert "Migration complete" not in out
+
+    @pytest.mark.parametrize("mode", ["all", "files"])
+    def test_s3_errors_of_a_dry_run_only_warn(self, runner, servers, mode):
+        bundle = self._with_s3_errors(self._bundle(mode), "Error listing dc2")
+        with (
+            patch(
+                "depictio.cli.cli.commands.migrate.api_login",
+                return_value={"success": True, "is_admin": True},
+            ),
+            patch("depictio.cli.cli.commands.migrate.api_export_project", return_value=bundle),
+            patch(
+                "depictio.cli.cli.commands.migrate.api_import_project",
+                return_value={"success": True, "upserted": {"projects": 1}},
+            ),
+        ):
+            result = self._run(runner, servers, "--mode", mode, "--dry-run")
+
+        assert result.exit_code == 0, result.output
+        assert "S3 error: Error listing dc2" in self._flat(result.output)
 
     def test_a_files_dry_run_says_nothing_was_copied(self, runner, servers):
         with (
