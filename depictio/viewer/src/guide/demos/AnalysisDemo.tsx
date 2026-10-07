@@ -28,6 +28,7 @@ import {
   Stack,
   Text,
   ThemeIcon,
+  Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import {
@@ -161,7 +162,9 @@ const LiveAnalysis: React.FC<{ source: AnalysisDemoSource }> = ({ source }) => {
     setDisplay('color');
     reset();
   };
-  const step = groups.length > 0 ? 3 : selected > 0 ? 2 : 1;
+  // A selection made with groups already saved is the next group on its way:
+  // step 2 again, not step 3.
+  const step = selected > 0 ? 2 : groups.length > 0 ? 3 : 1;
   // A figure can be split into a panel per group; an ordination only colours,
   // its one shared space being the point of it.
   const canSplit = figure?.metadata.component_type === 'figure';
@@ -180,9 +183,17 @@ const LiveAnalysis: React.FC<{ source: AnalysisDemoSource }> = ({ source }) => {
     <GuideSandbox metadata={members} saveGroup={saveGroup}>
       <Stack gap="sm" data-testid="guide-analysis-demo">
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="xs">
-          <Step n={1} active={step === 1} done={step > 1} color={groupingColor} title="Select">
+          <Step
+            n={1}
+            active={step === 1}
+            done={groups.length === 0 && step > 1}
+            repeat={groups.length > 0}
+            color={groupingColor}
+            title={groups.length > 0 ? 'Select again' : 'Select'}
+          >
             <Text size="xs" c="dimmed" lh={1.4}>
-              {selectHow.charAt(0).toUpperCase() + selectHow.slice(1)}.
+              {selectHow.charAt(0).toUpperCase() + selectHow.slice(1)}
+              {groups.length > 0 ? `: other ones make group ${groups.length + 1}.` : '.'}
             </Text>
             {selected > 0 && (
               <Text size="xs" fw={600} mt={4} data-testid="guide-analysis-selected">
@@ -195,7 +206,13 @@ const LiveAnalysis: React.FC<{ source: AnalysisDemoSource }> = ({ source }) => {
             active={step === 2}
             done={step > 2}
             color={groupingColor}
-            title="Save as group"
+            // Numbered only while the next group is on its way: ticked, the
+            // step says what was done, and the next number was not saved yet.
+            title={
+              step === 2 && groups.length > 0
+                ? `Save as group ${groups.length + 1}`
+                : 'Save as group'
+            }
           >
             <Button
               size="compact-xs"
@@ -206,7 +223,7 @@ const LiveAnalysis: React.FC<{ source: AnalysisDemoSource }> = ({ source }) => {
               onClick={saveSelection}
               data-testid="guide-analysis-save"
             >
-              Save as group
+              {groups.length > 0 ? `Save as group ${groups.length + 1}` : 'Save as group'}
             </Button>
             <Text size="xs" c="dimmed" lh={1.4} mt={4}>
               Or the{' '}
@@ -223,24 +240,29 @@ const LiveAnalysis: React.FC<{ source: AnalysisDemoSource }> = ({ source }) => {
           </Step>
           <Step n={3} active={step === 3} done={false} color={groupingColor} title="Compare">
             <Text size="xs" c="dimmed" lh={1.4}>
-              {figure ? 'The figure is coloured by group' : 'Groups are saved'}
+              {figure
+                ? 'The figure draws each group in its colour, overlaid or split'
+                : 'Groups are saved'}
               {card ? '; the card reads each group.' : '.'}
             </Text>
-            {groups.length > 0 && canSplit && (
-              <SegmentedControl
-                size="xs"
-                mt={6}
-                value={display}
-                onChange={(v) => setDisplay(v as GroupingDisplay)}
-                data={[
-                  { value: 'color', label: 'Colour' },
-                  { value: 'facet', label: 'Split' },
-                ]}
-                aria-label="Show the groups"
-              />
-            )}
           </Step>
         </SimpleGrid>
+
+        {/* After the first group, say the steps go round again: a comparison
+            needs a second group, and nothing on screen said it could be made. */}
+        {groups.length === 1 && selected === 0 && (
+          <Group gap={6} wrap="nowrap" data-testid="guide-analysis-again">
+            <Icon
+              icon="mdi:repeat"
+              width={14}
+              style={{ color: `var(--mantine-color-${groupingColor}-filled)`, flexShrink: 0 }}
+            />
+            <Text size="xs" c="dimmed">
+              Do it again for a second group: select other points, then Save as group 2. Each
+              group gets its own colour.
+            </Text>
+          </Group>
+        )}
 
         {groups.length > 0 && (
           <Group gap="xs" wrap="wrap" data-testid="guide-analysis-groups">
@@ -284,6 +306,32 @@ const LiveAnalysis: React.FC<{ source: AnalysisDemoSource }> = ({ source }) => {
         <Grid gutter="xs">
           {figure && (
             <Grid.Col span={{ base: 12, sm: card ? 8 : 12 }}>
+              <Group justify="flex-end" mb={6}>
+                <Tooltip
+                  label={
+                    groups.length === 0
+                      ? 'Save a group first'
+                      : canSplit
+                        ? 'Overlay draws the groups in one panel; Split gives each group its own'
+                        : 'An ordination stays one panel: its shared space is what it compares'
+                  }
+                  withArrow
+                  openDelay={300}
+                >
+                  <SegmentedControl
+                    size="xs"
+                    value={canSplit ? display : 'color'}
+                    onChange={(v) => setDisplay(v as GroupingDisplay)}
+                    disabled={groups.length === 0 || !canSplit}
+                    data={[
+                      { value: 'color', label: 'Overlay' },
+                      { value: 'facet', label: 'Split' },
+                    ]}
+                    aria-label="Show the groups overlaid or split"
+                    data-testid="guide-analysis-display"
+                  />
+                </Tooltip>
+              </Group>
               <Box className="depictio-guide-demo-tile is-analysis" h={{ base: 300, sm: 340 }}>
                 <div className="depictio-guide-demo-cell" data-testid="guide-analysis-figure">
                   <ComponentRenderer
@@ -343,9 +391,12 @@ const Step: React.FC<{
   title: string;
   active: boolean;
   done: boolean;
+  /** A step to take again (selecting, once there is a group): a repeat mark
+   *  in place of its number. */
+  repeat?: boolean;
   color: string;
   children: React.ReactNode;
-}> = ({ n, title, active, done, color, children }) => (
+}> = ({ n, title, active, done, repeat, color, children }) => (
   <Paper
     withBorder
     radius="md"
@@ -368,7 +419,15 @@ const Step: React.FC<{
         color={done ? 'teal' : color}
         variant={active ? 'filled' : 'light'}
       >
-        {done ? <Icon icon="mdi:check" width={13} /> : <Text size="xs" fw={700}>{n}</Text>}
+        {done ? (
+          <Icon icon="mdi:check" width={13} />
+        ) : repeat ? (
+          <Icon icon="mdi:repeat" width={13} />
+        ) : (
+          <Text size="xs" fw={700}>
+            {n}
+          </Text>
+        )}
       </ThemeIcon>
       <Text size="sm" fw={600}>
         {title}
