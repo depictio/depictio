@@ -60,6 +60,35 @@ const AutofitScopeContext = createContext('');
 
 export const AutofitScope = AutofitScopeContext.Provider;
 
+/** Record `height` for `key` and tell the grid, if it changed. 0 withdraws a
+ *  measurement: the grid then falls back to the tile's stored height. */
+function publishHeight(key: string, height: number): void {
+  if ((measuredHeights.get(key) ?? 0) === height) return;
+  if (height > 0) measuredHeights.set(key, height);
+  else measuredHeights.delete(key);
+  window.dispatchEvent(new CustomEvent<AutofitDetail>(AUTOFIT_EVENT, { detail: { index: key, height } }));
+}
+
+/**
+ * Publish a height a renderer computed rather than measured, or null for none.
+ *
+ * For a tile whose content fills whatever box it is given (a figure laid out
+ * to its tile), so that no element of it has a natural height to observe, yet
+ * which knows the height it reads best at: the phylogeny summary, so many
+ * rows of a comfortable pitch. Withdrawn on null and on unmount, so a tile
+ * that leaves that mode (the summary switched back to the full tree) returns
+ * to the height its author gave it.
+ */
+export function useAutofitValue(index: string, height: number | null): void {
+  const scope = useContext(AutofitScopeContext);
+  const key = scope + index;
+  useEffect(() => {
+    if (!index) return;
+    publishHeight(key, height && height > 0 ? Math.ceil(height) : 0);
+  }, [index, key, height]);
+  useEffect(() => () => publishHeight(key, 0), [key]);
+}
+
 /**
  * Observe `nodeRef` and publish the height its content needs under `index`.
  *
@@ -91,15 +120,9 @@ export function useAutofitHeight(
     const publish = () => {
       const content = node.scrollHeight;
       const height = toTileHeightRef.current ? toTileHeightRef.current(content) : content;
-      // Only on change: the grid re-renders on receipt, which re-runs the
-      // observer, and an unconditional dispatch would loop.
-      if (measuredHeights.get(key) === height) return;
-      measuredHeights.set(key, height);
-      window.dispatchEvent(
-        new CustomEvent<AutofitDetail>(AUTOFIT_EVENT, {
-          detail: { index: key, height },
-        }),
-      );
+      // Only on change (see `publishHeight`): the grid re-renders on receipt,
+      // which re-runs the observer, and an unconditional dispatch would loop.
+      publishHeight(key, height);
     };
     // Measure once here rather than leaving it to the observer's own first
     // callback. This runs inside the child's effect, so the height is in
@@ -174,10 +197,17 @@ export function fitLayoutHeights<T extends SizedItem>(
   /** The grid's row height: `SPLIT_ROW_PX` for a layout in read-only rows. */
   rowPx: number = GRID_ROW_PX,
 ): T[] {
+  // An advanced viz is fitted only while it publishes a height, which only
+  // one that knows its own (`useAutofitValue`) does; the others keep theirs.
   const fittedIds = new Set(
     enabled
       ? members
-          .filter((m) => m.component_type === 'text' || m.component_type === 'card')
+          .filter(
+            (m) =>
+              m.component_type === 'text' ||
+              m.component_type === 'card' ||
+              m.component_type === 'advanced_viz',
+          )
           .map((m) => m.index)
       : [],
   );

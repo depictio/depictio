@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Group,
   lighten,
@@ -16,6 +16,7 @@ import {
 import {
   fetchAdvancedVizData,
   fetchPhylogenyNewick,
+  fetchSpecs,
   fetchUniqueValues,
   type InteractiveFilter,
   type StoredMetadata,
@@ -24,6 +25,7 @@ import { resolveCategoricalPalette, stableColorMap } from '../../colors';
 import { sortCategoryValues } from '../../categoryColors';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import { filtersExcludingOwn } from '../../selection';
+import { useAutofitValue } from '../autofit';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import PhyloViewSwitch from './PhyloViewSwitch';
 import { usePersistedVizControl } from './usePersistedVizControl';
@@ -37,6 +39,7 @@ import {
   cladogram,
   formatShare,
   rankValue,
+  splitCandidates,
   summariseByRank,
   type AbundanceSummary,
   type RankGroup,
@@ -128,6 +131,9 @@ function useBoxSize(): [(node: HTMLDivElement | null) => void, { width: number; 
   return [ref, size];
 }
 
+/** Row pitch the summary asks its tile for: room for a dot and a name. */
+const NATURAL_ROW_PX = 26;
+
 const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, view }) => {
   const config = (metadata.config || {}) as PhylogeneticConfig;
   const theme = useMantineTheme();
@@ -144,7 +150,6 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   const hasAbundance = Boolean(abundanceWf && abundanceDc);
   const valueCol = config.abundance_col || 'rel_abundance';
   const sampleCol = config.abundance_sample_col || 'sample';
-  const splitColConfigured = config.abundance_split_col ?? null;
 
   // ---- Tier-2 controls ------------------------------------------------------
   // The rank belongs to the router, which mounts this renderer only while one
@@ -154,14 +159,13 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   const [topN, setTopN] = usePersistedVizControl<number>(metadata, 'top_n', 10);
   const [sizeBy, setSizeBy] = usePersistedVizControl<SizeBy>(metadata, 'size_by', 'tips');
   const useAbundance = sizeBy === 'abundance' && hasAbundance;
-  // The strip of per-site dots, which the viewer can take away to read the
-  // lineages alone.
-  const [showSplitPick, setShowSplit] = usePersistedVizControl<boolean | null>(
+  // The column each lineage's share is broken down by, as a strip of dots
+  // (a site, a season): the author's, until the viewer picks another or none.
+  const [splitCol, setSplitCol] = usePersistedVizControl<string | null>(
     metadata,
-    'show_split',
+    'abundance_split_col',
     null,
   );
-  const splitCol = showSplitPick === false ? null : splitColConfigured;
   // The % beside each lineage. Unset, it follows the sizing: a share of the
   // reads is worth reading as a number, a share of the tree's tips (which are
   // the most abundant ASVs, not all of them) mostly is not.
@@ -293,6 +297,27 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       cancelled = true;
     };
   }, [useAbundance, abundanceDc, splitCol]);
+
+  // What the shares can be broken down by: the abundance table's columns with
+  // a handful of values, from its precomputed specs.
+  const [splitChoices, setSplitChoices] = useState<string[]>([]);
+  useEffect(() => {
+    if (!useAbundance || !abundanceDc) {
+      setSplitChoices([]);
+      return;
+    }
+    let cancelled = false;
+    fetchSpecs(abundanceDc)
+      .then((specs) => {
+        if (!cancelled) setSplitChoices(splitCandidates(specs, [sampleCol, valueCol, taxonCol, rank]));
+      })
+      .catch(() => {
+        /* best-effort: the author's split column stays the only choice */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [useAbundance, abundanceDc, sampleCol, valueCol, taxonCol, rank]);
 
   // ---- Summary ---------------------------------------------------------------
   const tree = useMemo<PhyloTree | null>(() => {
@@ -816,13 +841,16 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
           ) : null}
         </Stack>
       ) : null}
-      {splitColConfigured && useAbundance && !abundanceMissing ? (
-        <Switch
+      {useAbundance && !abundanceMissing && (splitChoices.length > 0 || splitCol) ? (
+        <Select
           size="xs"
-          label={`Columns by ${splitColConfigured}`}
-          description={`Each lineage's share in each ${splitColConfigured}, as a dot`}
-          checked={showSplitPick !== false}
-          onChange={(e) => setShowSplit(e.currentTarget.checked)}
+          label="Columns by"
+          description="Each lineage's share in each value, as a dot"
+          placeholder="None"
+          data={splitCol && !splitChoices.includes(splitCol) ? [splitCol, ...splitChoices] : splitChoices}
+          value={splitCol}
+          onChange={(v) => setSplitCol(v ?? null)}
+          clearable
         />
       ) : null}
       <Switch
@@ -834,6 +862,30 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       />
     </Stack>
   );
+
+  // ---- Fit -------------------------------------------------------------------
+  // The summary draws to whatever box it gets, so nothing in it has a natural
+  // height to observe; it asks for its rows at a comfortable pitch instead, plus
+  // its legend and the frame around them. A tile sized for the full tree (a
+  // thousand-tip drawing) then shrinks to the ten lineages it shows, and goes
+  // back to its own height when switched back.
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const legendRef = useRef<HTMLDivElement | null>(null);
+  const [fitHeight, setFitHeight] = useState<number | null>(null);
+  const rowsShown = summary?.shown.length ?? 0;
+  const stripShown = splitValues.length > 0;
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    const tile = body?.closest('.react-grid-item') as HTMLElement | null;
+    if (!body || !tile || rowsShown === 0) {
+      setFitHeight(null);
+      return;
+    }
+    const chrome = tile.clientHeight - body.clientHeight;
+    const svg = (stripShown ? 20 : 2) + 4 + rowsShown * NATURAL_ROW_PX;
+    setFitHeight(chrome + svg + (legendRef.current?.offsetHeight ?? 0));
+  }, [rowsShown, stripShown, width, hideLegend, legendColours.length, summary?.other.groups]);
+  useAutofitValue(String(metadata.index ?? ''), fitHeight);
 
   // ---- Show data ---------------------------------------------------------------
   const dataTable = useMemo(() => {
@@ -863,7 +915,7 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       dataRows={dataTable?.rows}
       dataColumns={dataTable?.cols}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+      <div ref={bodyRef} style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
         {/* A flex column, so the svg can sit in the middle of a tile taller
             than its rows (`margin: auto`), and still scroll from its top when
             it is the taller one. */}
@@ -880,7 +932,11 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
         >
           <div style={{ margin: 'auto 0' }}>{svg}</div>
         </div>
-        {legend ? <div style={{ flexShrink: 0 }}>{legend}</div> : null}
+        {legend ? (
+          <div ref={legendRef} style={{ flexShrink: 0 }}>
+            {legend}
+          </div>
+        ) : null}
       </div>
     </AdvancedVizFrame>
   );

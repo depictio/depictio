@@ -43,6 +43,11 @@ const TAXONOMIC_RANKS = [
   'species',
 ];
 
+/** Whether a column is named after a taxonomic rank (Kingdom, Phylum…). */
+export function isTaxonomicRank(column: string): boolean {
+  return TAXONOMIC_RANKS.includes(column.toLowerCase());
+}
+
 /**
  * Columns in taxonomic order: the ones named after a rank root to leaf
  * (Kingdom before Phylum, whatever order they came in), then the others

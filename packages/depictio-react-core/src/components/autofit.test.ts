@@ -26,6 +26,20 @@ describe('fitLayoutHeights', () => {
   });
 });
 
+describe('fitLayoutHeights with an advanced viz', () => {
+  const members = [{ index: 'tree', component_type: 'advanced_viz' }];
+  const layouts = [{ i: 'tree', y: 0, h: 12 }];
+
+  it('fits one that publishes a height, both ways', () => {
+    expect(fitLayoutHeights(members, layouts, { tree: 380 })[0].h).toBe(rowsForHeight(380));
+  });
+
+  it('keeps the stored height of one that publishes none', () => {
+    expect(fitLayoutHeights(members, layouts, {})[0].h).toBe(12);
+    expect(fitLayoutHeights(members, layouts, { tree: 0 })[0].h).toBe(12);
+  });
+});
+
 describe('fitLayoutHeights with compact cards', () => {
   const layouts = [
     { i: 'a', y: 0, h: 8 },

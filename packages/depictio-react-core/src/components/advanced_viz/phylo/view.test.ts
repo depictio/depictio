@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { nextSummaryRank, orderTaxonomicRanks, rankChoices, summaryBlocker } from './view';
+import { nextSummaryRank, orderTaxonomicRanks, rankChoices, summaryBlocker, isTaxonomicRank } from './view';
 
 const META = { metadata_wf_id: 'wf', metadata_dc_id: 'dc' };
 
@@ -84,5 +84,12 @@ describe('nextSummaryRank', () => {
 
   it('has nothing to go to without a rank', () => {
     expect(nextSummaryRank([], 'Phylum')).toBeNull();
+  });
+});
+
+describe('isTaxonomicRank', () => {
+  it('knows the ranks whatever their case, and nothing else', () => {
+    expect(['Kingdom', 'phylum', 'Subdivision'].map(isTaxonomicRank)).toEqual([true, true, true]);
+    expect(['locality', 'label'].map(isTaxonomicRank)).toEqual([false, false]);
   });
 });

@@ -25,6 +25,7 @@
  */
 
 import { ladderise, type PhyloNode, type PhyloTree } from './newick';
+import { isTaxonomicRank } from './view';
 
 /** One lineage of the summary. */
 export interface RankGroup {
@@ -398,6 +399,43 @@ export function aggregateAbundance(
 
 /** A node of the cladogram, in layout units: `x` in levels from the root,
  *  `y` in rows (leaf i at y = i). */
+/** Most values a split column may have: past it the strip of dots is a table. */
+export const MAX_SPLIT_VALUES = 8;
+
+const TEXT_TYPES = new Set(['object', 'string', 'str', 'utf8', 'category', 'categorical', 'bool', 'boolean']);
+
+/**
+ * The columns of an abundance table a lineage's share can be broken down by,
+ * read from its precomputed specs (`/deltatables/specs`, one entry per column
+ * with its `nunique`): text columns of 2 to `MAX_SPLIT_VALUES` values, such as
+ * a site, a season or a size class, in the table's order. `exclude` takes out
+ * the columns the summary already reads (sample, value, taxon); ranks and
+ * Depictio's own bookkeeping columns are never offered.
+ */
+export function splitCandidates(
+  specs: unknown,
+  exclude: readonly string[],
+  maxValues: number = MAX_SPLIT_VALUES,
+): string[] {
+  const entries: unknown[] = Array.isArray(specs) ? specs : [];
+  const skip = new Set(exclude);
+  const out: string[] = [];
+  for (const entry of entries) {
+    if (!entry || typeof entry !== 'object') continue;
+    const { name, type, specs: stats } = entry as {
+      name?: unknown;
+      type?: unknown;
+      specs?: { nunique?: unknown };
+    };
+    if (typeof name !== 'string' || skip.has(name) || isTaxonomicRank(name)) continue;
+    if (name.startsWith('depictio_') || name === 'aggregation_time') continue;
+    if (typeof type !== 'string' || !TEXT_TYPES.has(type.toLowerCase())) continue;
+    const n = Number(stats?.nunique);
+    if (Number.isFinite(n) && n >= 2 && n <= maxValues) out.push(name);
+  }
+  return out;
+}
+
 export interface CladogramPoint {
   x: number;
   y: number;

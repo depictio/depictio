@@ -4,6 +4,7 @@ import { parseNewick, type PhyloTree } from './newick';
 import {
   aggregateAbundance,
   cladogram,
+  splitCandidates,
   coreClades,
   formatShare,
   inducedOverClades,
@@ -216,5 +217,30 @@ describe('formatShare', () => {
     expect(formatShare(0.0004)).toBe('<0.1%');
     expect(formatShare(0)).toBe('0%');
     expect(formatShare(Number.NaN)).toBe('0%');
+  });
+});
+
+describe('splitCandidates', () => {
+  const col = (name: string, type: string, nunique: number) => ({ name, type, specs: { nunique } });
+  const specs = [
+    col('sample', 'object', 85),
+    col('rel_abundance', 'float64', 5000),
+    col('Kingdom', 'object', 7),
+    col('locality', 'object', 3),
+    col('season', 'object', 2),
+    col('platform', 'object', 1),
+    col('station_name', 'object', 40),
+    col('depth_min_m', 'int64', 4),
+    col('depictio_run_id', 'object', 2),
+  ];
+
+  it('offers text columns of a few values, in table order', () => {
+    expect(splitCandidates(specs, ['sample', 'rel_abundance'])).toEqual(['locality', 'season']);
+  });
+
+  it('leaves out excluded columns, ranks and anything not a list of specs', () => {
+    expect(splitCandidates(specs, ['locality'])).toEqual(['season']);
+    expect(splitCandidates({}, [])).toEqual([]);
+    expect(splitCandidates(null, [])).toEqual([]);
   });
 });
