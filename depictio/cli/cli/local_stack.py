@@ -21,6 +21,7 @@ import shlex
 import shutil
 import signal
 import socket
+import stat
 import subprocess
 import sys
 import threading
@@ -95,7 +96,8 @@ DATA_DIRS = (
 # Written by `up` into the folder it makes a local home: `wipe` deletes nothing,
 # and `up` changes the mode of nothing, in a folder without it.
 HOME_MARKER = ".depictio-local-home"
-# Held by `up` while it starts the server, so a second `up` on the home fails fast.
+# Held by `up` while it starts the server, and by `wipe` and `export` while they stop
+# it, so a second command on the home fails fast. Named before those two took it.
 UP_LOCK = ".up.lock"
 
 
@@ -638,13 +640,21 @@ def server_env(
 
 
 def bypass_proxy_for_loopback(env: dict[str, str]) -> dict[str, str]:
-    """``env`` with 127.0.0.1 and localhost added to no_proxy.
+    """``env`` with 127.0.0.1 and localhost added to no_proxy and NO_PROXY.
 
     boto3 and httpx send through a proxy set in the environment, and a usual
     no_proxy=localhost does not cover 127.0.0.1, where every local service listens.
+    Both variables get the entries of either: a tool reading only one of them must
+    not lose what the other held.
     """
-    current = env.get("no_proxy") or env.get("NO_PROXY")
-    env["no_proxy"] = env["NO_PROXY"] = ",".join(filter(None, [current, "127.0.0.1,localhost"]))
+    entries = [
+        entry.strip()
+        for value in (env.get("no_proxy"), env.get("NO_PROXY"))
+        for entry in (value or "").split(",")
+        if entry.strip()
+    ]
+    merged = ",".join(dict.fromkeys([*entries, "127.0.0.1", "localhost"]))
+    env["no_proxy"] = env["NO_PROXY"] = merged
     return env
 
 
@@ -861,8 +871,9 @@ def start_services(
         _start_services(paths, ports, secret_values, env, procs, record)
     except BaseException as exc:
         logger.debug("Startup failed (%s): stopping %s", type(exc).__name__, ", ".join(procs))
-        for proc in reversed(list(procs.values())):
-            _stop_child(proc)
+        with _signals_ignored():
+            for proc in reversed(list(procs.values())):
+                _stop_child(proc)
         raise
     return procs
 
@@ -1129,6 +1140,13 @@ def _api_call(
         return json.load(resp)
 
 
+def _api_object(answer: dict | list, what: str) -> dict:
+    """``answer`` when it is a JSON object, as ``what`` should answer; ValueError otherwise."""
+    if not isinstance(answer, dict):
+        raise ValueError(f"{what} did not answer a JSON object")
+    return answer
+
+
 # The name rebuild_cli_config gives its token. The first run's token is the API's
 # default_token, and the CLI agents page lets the user pick any name.
 REBUILT_TOKEN_NAME = re.compile(r"depictio-local-\d{14}")
@@ -1145,14 +1163,16 @@ def rebuild_cli_config(paths: Paths, api_port: int, secret_values: dict, warn=pr
     auth = f"http://127.0.0.1:{api_port}/depictio/api/v1/auth"
     name = f"depictio-local-{time.strftime('%Y%m%d%H%M%S')}"
     try:
-        session = _api_call(
-            f"{auth}/login",
-            form={"username": ADMIN_EMAIL, "password": secret_values["admin_password"]},
+        session = _api_object(
+            _api_call(
+                f"{auth}/login",
+                form={"username": ADMIN_EMAIL, "password": secret_values["admin_password"]},
+            ),
+            "/auth/login",
         )
-        token = _api_call(
-            f"{auth}/me/tokens",
-            token=session["access_token"],
-            body={"name": name},
+        token = _api_object(
+            _api_call(f"{auth}/me/tokens", token=session["access_token"], body={"name": name}),
+            "/auth/me/tokens",
         )
         fields_sent = (
             "user_id",
@@ -1164,10 +1184,13 @@ def rebuild_cli_config(paths: Paths, api_port: int, secret_values: dict, warn=pr
             "refresh_expire_datetime",
             "name",
         )
-        config = _api_call(
-            f"{auth}/generate_agent_config",
-            token=session["access_token"],
-            body={key: token.get(key) for key in fields_sent},
+        config = _api_object(
+            _api_call(
+                f"{auth}/generate_agent_config",
+                token=session["access_token"],
+                body={key: token.get(key) for key in fields_sent},
+            ),
+            "/auth/generate_agent_config",
         )
     except (OSError, ValueError, KeyError) as exc:
         raise LocalStackError(
@@ -1517,16 +1540,28 @@ def viewer_built() -> bool:
     return built
 
 
-# What `pnpm run build` in depictio/viewer compiles: the viewer, and the two workspace
-# packages its vite.config.ts aliases to their sources. Paths are workspace-relative.
-VIEWER_SOURCES = (
-    "pnpm-lock.yaml",
-    "depictio/viewer",
-    "packages/depictio-components/src",
-    "packages/depictio-react-core/src",
+# The files a viewer build reads: modules, styles, the HTML entries, and the fonts and
+# images they and public/ bring in.
+_BUNDLED = frozenset(
+    ".ts .tsx .mts .cts .js .jsx .mjs .cjs .css .json .html .svg .png .jpg .jpeg .gif "
+    ".webp .avif .ico .ttf .otf .woff .woff2".split()
 )
-# Not sources: dependencies, build output, and src/generated, which the build writes.
-_NOT_VIEWER_SOURCES = {"node_modules", "dist", "generated"}
+# What `pnpm run build` in depictio/viewer reads, workspace-relative, with the file
+# extensions read there (None: that one file). The viewer and the two workspace
+# packages its vite.config.ts aliases to their sources; then what its first step,
+# scripts/generate-icon-subset.mjs, scans for icon names (SCAN_FILES and
+# SCAN_DATA_DIRS there): the advanced-viz kind registry and the shipped dashboards.
+VIEWER_SOURCES: dict[str, frozenset[str] | None] = {
+    "pnpm-lock.yaml": None,
+    "depictio/viewer": _BUNDLED,
+    "packages/depictio-components/src": _BUNDLED,
+    "packages/depictio-react-core/src": _BUNDLED,
+    "depictio/models/components/advanced_viz/schemas.py": None,
+    "depictio/projects": frozenset({".yaml", ".yml", ".json"}),
+}
+# Not sources: dependencies, build output (dist-* too, for the catalog preview and
+# table harness builds), src/generated, which the build writes, and Python caches.
+_NOT_VIEWER_SOURCES = {"node_modules", "dist", "generated", "__pycache__"}
 VIEWER_BUILD_TIMEOUT = 20 * 60
 
 
@@ -1543,35 +1578,60 @@ def viewer_workspace() -> Path | None:
     return workspace if (workspace / "pnpm-workspace.yaml").is_file() else None
 
 
-def _viewer_source_files(workspace: Path) -> Iterator[Path]:
-    for name in VIEWER_SOURCES:
-        top = workspace / name
-        if top.is_file():
+def _is_source_folder(name: str) -> bool:
+    # Dot folders hold caches and editor state, except the dashboards' .db_seeds.
+    return (
+        name not in _NOT_VIEWER_SOURCES
+        and not name.startswith("dist-")
+        and (not name.startswith(".") or name == ".db_seeds")
+    )
+
+
+def _viewer_sources(workspace: Path) -> Iterator[str]:
+    """The files the viewer build reads, then the folder holding them: a deleted
+    source shows only in its folder's mtime.
+
+    Not depictio/viewer itself: vite writes, then deletes, a copy of its config
+    there at each run (`pnpm dev` too).
+    """
+    viewer = os.path.join(workspace, "depictio", "viewer")
+    for name, extensions in VIEWER_SOURCES.items():
+        top = os.path.join(workspace, name)
+        if extensions is None:
             yield top
+            continue
         for folder, dirs, files in os.walk(top):
-            dirs[:] = [d for d in dirs if d not in _NOT_VIEWER_SOURCES and not d.startswith(".")]
-            # Dot files (.DS_Store, editor state) and logs change without the sources.
-            yield from (
-                Path(folder, f) for f in files if not f.startswith(".") and not f.endswith(".log")
-            )
+            dirs[:] = [d for d in dirs if _is_source_folder(d)]
+            # Dot files (.DS_Store, editor state) change without the sources.
+            for f in files:
+                if not f.startswith(".") and os.path.splitext(f)[1] in extensions:
+                    yield os.path.join(folder, f)
+            if folder != viewer:
+                yield folder
 
 
 def viewer_outdated(workspace: Path) -> str | None:
     """Why the viewer bundle of ``workspace`` needs building, None when it is up to date:
-    it was never built, or a source changed since (an edit, a pull, a branch switch)."""
+    it was never built, or a source changed since (an edit, a deletion, a pull, a
+    branch switch)."""
     index = workspace / "depictio" / "viewer" / "dist" / "index.html"
     try:
         built_at = index.stat().st_mtime
     except OSError:
         return "not built yet"
-    for source in _viewer_source_files(workspace):
+    # Run by every `up`, over about a thousand paths: plain strings and os.stat rather
+    # than Path objects.
+    for source in _viewer_sources(workspace):
         try:
-            changed = source.stat().st_mtime > built_at
+            info = os.stat(source)
         except OSError:
             continue
-        if changed:
+        if info.st_mtime > built_at:
             logger.debug("Viewer bundle %s is older than %s", index, source)
-            return f"{source.relative_to(workspace)} changed since the last build"
+            name = os.path.relpath(source, workspace)
+            if stat.S_ISDIR(info.st_mode):
+                return f"a file in {name} was added or deleted since the last build"
+            return f"{name} changed since the last build"
     logger.debug("Viewer bundle %s is up to date", index)
     return None
 
@@ -1581,6 +1641,8 @@ def build_viewer(workspace: Path, log_path: Path) -> None:
     `pnpm run build` in depictio/viewer. Their output goes to ``log_path``.
 
     Raises LocalStackError when pnpm is missing, or a step fails or takes too long.
+    On Ctrl-C, SIGTERM or SIGHUP, pnpm and what it runs are stopped before
+    KeyboardInterrupt (Interrupted for the two signals) propagates.
     """
     pnpm = shutil.which("pnpm")
     if pnpm is None:
@@ -1601,7 +1663,9 @@ def build_viewer(workspace: Path, log_path: Path) -> None:
         ([pnpm, "run", "build"], workspace / "depictio" / "viewer"),
     ]
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_path, "w", encoding="utf-8") as log:
+    # The signals of a closed terminal or a `kill` would otherwise end this process
+    # and leave pnpm's session running.
+    with _signals_interrupt(), open(log_path, "w", encoding="utf-8") as log:
         for cmd, cwd in steps:
             step = shlex.join(["pnpm", *cmd[1:]])
             logger.debug("Building the viewer: %s in %s, output in %s", step, cwd, log_path)
@@ -1622,9 +1686,10 @@ def build_viewer(workspace: Path, log_path: Path) -> None:
                 code = proc.wait(timeout=VIEWER_BUILD_TIMEOUT)
             except BaseException as exc:
                 # Ctrl-C does not reach another session: stop it here, whatever the cause.
-                terminate_group(proc.pid, timeout=5, alive=lambda p=proc: p.poll() is None)
-                with contextlib.suppress(subprocess.TimeoutExpired):
-                    proc.wait(timeout=5)
+                with _signals_ignored():
+                    terminate_group(proc.pid, timeout=5, alive=lambda p=proc: p.poll() is None)
+                    with contextlib.suppress(subprocess.TimeoutExpired):
+                        proc.wait(timeout=5)
                 if isinstance(exc, subprocess.TimeoutExpired):
                     raise LocalStackError(
                         f"{step} did not finish in {VIEWER_BUILD_TIMEOUT // 60} minutes "
@@ -1687,24 +1752,67 @@ def reset(paths: Paths) -> None:
     logger.debug("Kept the native binaries in %s and %s", paths.env, paths.marker)
 
 
-def lock_for_startup(paths: Paths) -> TextIO:
-    """The lock `up` holds while it starts the server, so a second `up` on the home
-    fails fast instead of starting a second MongoDB on the same data. Closing the
-    returned file releases it."""
-    import fcntl  # POSIX only, as is the process handling above
+# The commands that take the lock below.
+_LOCKING_COMMANDS = ("up", "wipe", "export")
 
-    handle = open(paths.home / UP_LOCK, "a")
+
+def lock_for_startup(paths: Paths, command: str = "up") -> TextIO:
+    """The lock on the home that `up` holds while it starts the server, and `wipe` and
+    `export` while they stop it and delete or copy its data. A second command on the
+    home fails fast rather than wait: it would start a second MongoDB on the same
+    data, or delete the folders a starting server writes to. Closing the returned
+    file releases it."""
+    try:
+        import fcntl  # POSIX only, as is the process handling above
+    except ImportError as exc:
+        raise LocalStackError(
+            "depictio local needs POSIX file locks, which this platform does not have: "
+            "use WSL2, or the Docker compose stack"
+        ) from exc
+    cannot_lock = f"Cannot lock the local home {paths.home}"
+    try:
+        handle = open(paths.home / UP_LOCK, "a")
+    except OSError as exc:
+        raise LocalStackError(f"{cannot_lock} ({exc.strerror or exc})") from exc
     try:
         fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError as exc:
         handle.close()
-        raise LocalStackError(
-            f"Another `depictio local up` is already starting this home ({paths.home})"
-        ) from exc
+        raise LocalStackError(_lock_busy(paths, command)) from exc
+    except OSError as exc:
+        handle.close()
+        raise LocalStackError(f"{cannot_lock} ({exc.strerror or exc})") from exc
     except BaseException:
         handle.close()
         raise
+    # Who holds it, for the message of a command that cannot have it.
+    with contextlib.suppress(OSError):
+        handle.truncate(0)
+        handle.write(command)
+        handle.flush()
     return handle
+
+
+def _lock_busy(paths: Paths, command: str) -> str:
+    """Why ``command`` cannot have the home's lock: the command holding it, as it
+    wrote it in the lock file. Before `wipe` and `export` took the lock, only `up`
+    did, and wrote nothing."""
+    holder = ""
+    with contextlib.suppress(OSError, UnicodeDecodeError):
+        holder = (paths.home / UP_LOCK).read_text().strip()
+    if holder not in _LOCKING_COMMANDS:
+        holder = "up"
+    if holder == "up" and command == "up":
+        return f"Another `depictio local up` is already starting this home ({paths.home})"
+    if holder == "up":
+        return (
+            f"A `depictio local up` is starting this home ({paths.home}): wait for it, "
+            "or stop it, then try again"
+        )
+    return (
+        f"`depictio local {holder}` is using this home ({paths.home}): wait for it to "
+        "finish, then try again"
+    )
 
 
 class Interrupted(KeyboardInterrupt):
@@ -1741,6 +1849,25 @@ def _signals_interrupt() -> Iterator[None]:
             signal.signal(signum, old)
 
 
+@contextlib.contextmanager
+def _signals_ignored() -> Iterator[None]:
+    """Ignore Ctrl-C, SIGTERM and SIGHUP while a failed or interrupted startup stops
+    what it started: a second Ctrl-C would cut that short and leave services running.
+    The previous handlers are restored on exit."""
+    if threading.current_thread() is not threading.main_thread():
+        yield
+        return
+    names = ("SIGINT", "SIGTERM", "SIGHUP")
+    previous = {}
+    try:
+        for signum in [getattr(signal, name) for name in names if hasattr(signal, name)]:
+            previous[signum] = signal.signal(signum, signal.SIG_IGN)
+        yield
+    finally:
+        for signum, old in previous.items():
+            signal.signal(signum, old)
+
+
 def _quiet_on_error(log):
     """``log``, minus the errors of a terminal that has gone (after SIGHUP), which
     would otherwise stop the cleanup halfway."""
@@ -1769,7 +1896,8 @@ def start_stack(
 
     Leftovers of an earlier run are stopped first. On any error, Ctrl-C, SIGTERM
     and SIGHUP included, what this call started is stopped again before the error
-    propagates. Each PID is saved as soon as its process starts.
+    propagates, with those signals ignored meanwhile. Each PID is saved as soon as
+    its process starts.
     """
     warn = warn or log
     with _signals_interrupt():
@@ -1777,7 +1905,8 @@ def start_stack(
             return _start_stack(paths, port, seed, screenshots, log, warn)
         except BaseException as exc:
             logger.debug("Startup failed (%s): stopping what this run started", type(exc).__name__)
-            stop_all(paths, log=_quiet_on_error(log))
+            with _signals_ignored():
+                stop_all(paths, log=_quiet_on_error(log))
             raise
 
 

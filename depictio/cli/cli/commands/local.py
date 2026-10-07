@@ -318,7 +318,6 @@ def _start_or_reuse(paths: Paths, port: int | None, seed: str, screenshots: bool
     """
     starting = False
     try:
-        check_platform_supported()
         check_server_installed()
         try:
             state = State.load(paths)
@@ -351,14 +350,28 @@ def _start_or_reuse(paths: Paths, port: int | None, seed: str, screenshots: bool
     except LocalStackError as exc:
         _fail(str(exc))
     except KeyboardInterrupt as exc:
+        message = "Interrupted"
+        if starting:
+            # Said only once true: start_stack stops them before the interrupt reaches
+            # here, unless it came before that cleanup could start.
+            message += (
+                ": services started by this run are stopped"
+                if _nothing_running(paths)
+                else ": services started by this run may still be running "
+                "(depictio local down stops them)"
+            )
         # After SIGHUP the terminal may be gone: the exit code still tells.
         with contextlib.suppress(OSError):
-            _warn(
-                "Interrupted: services started by this run are stopped"
-                if starting
-                else "Interrupted"
-            )
+            _warn(message)
         raise typer.Exit(code=128 + exc.signum if isinstance(exc, Interrupted) else 130)
+
+
+def _nothing_running(paths: Paths) -> bool:
+    """Whether no process recorded in state.json still runs."""
+    try:
+        return not any(running_status(paths).values())
+    except LocalStackError:
+        return False
 
 
 def _wait_for_examples(paths: Paths, state: State, asked: list[str]) -> list[str]:
@@ -493,14 +506,17 @@ def up(
         flags = _up_flags(examples, template, port, screenshots, open_browser)
         _moved_to_ingest(template, data_root, project_name, variables, flags)
     seed = parse_examples(examples)
+    # Before the home is created and locked: the lock needs POSIX too.
+    try:
+        check_platform_supported()
+    except LocalStackError as exc:
+        _fail(str(exc))
     paths = _paths()
     _prepare_home(paths)
     try:
         lock = lock_for_startup(paths)
     except LocalStackError as exc:
         _fail(str(exc))
-    except OSError as exc:
-        _fail(f"Cannot lock the local home {paths.home} ({exc.strerror or exc})")
     with lock:
         state = _start_or_reuse(paths, port, seed, screenshots)
     present = _wait_for_examples(paths, state, seed.split(",") if examples else [])
@@ -595,11 +611,13 @@ def wipe(
         # Piped answers are not echoed: end the prompt's line.
         typer.echo("Cancelled.")
         return
+    # Locked after the prompt, so an `up` is not refused while it waits for an answer.
     try:
-        stop_all(paths, log=_info)
+        with lock_for_startup(paths, "wipe"):
+            stop_all(paths, log=_info)
+            reset(paths)
     except LocalStackError as exc:
         _fail(str(exc))
-    reset(paths)
     rich_print_checked_statement("Local data deleted", "success")
 
 
