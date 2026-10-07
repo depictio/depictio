@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import mongomock
+import pytest
 from bson import ObjectId
 
 from depictio.models.models.dashboards import DashboardDataLite
@@ -44,6 +45,8 @@ def test_empty_group_is_not_exported():
 
 
 def test_multi_tab_import_stores_the_group_and_export_gives_it_back():
+    # The CLI package's job runs this suite without the API's dependencies.
+    pytest.importorskip("fastapi")
     from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
         _import_multi_tab_dashboard,
     )
