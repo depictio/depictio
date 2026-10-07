@@ -287,6 +287,16 @@ export type {
   VizConfigDraftSink,
   VizConfigPatch,
 } from './components/advanced_viz/AdvancedVizConfigDraft';
+// The phylogenetic viz's sources and ranks, for the builder. Pure modules, so
+// the same light-import reasoning applies.
+export {
+  abundanceRankCoverage,
+  phyloSourcePatch,
+  preferredTipMetadata,
+  tipLabelColumn,
+} from './components/advanced_viz/phylo/sources';
+export type { PhyloDcRef, PhyloSource } from './components/advanced_viz/phylo/sources';
+export { rankChoices as phyloRankChoices } from './components/advanced_viz/phylo/view';
 // The shared show-data grid, so the inspector can dock the same table the
 // renderers' popovers show.
 export { default as DataGridBody } from './components/data/DataGridBody';

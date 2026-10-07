@@ -23,8 +23,10 @@ import { resolveCategoricalPalette, stableColorMap } from '../../colors';
 import { sortCategoryValues } from '../../categoryColors';
 import { filtersExcludingOwn } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import PhyloViewSwitch from './PhyloViewSwitch';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import type { PhylogeneticConfig } from './phylo/config';
+import type { PhyloView } from './phylo/view';
 import { parseNewick, type PhyloTree } from './phylo/newick';
 import { PHYLO_PALETTE } from './phylo/palette';
 import { pruneToTips } from './phylo/prune';
@@ -63,12 +65,18 @@ import {
  * Drawn as plain SVG rather than Plotly: it is a dozen rows whose geometry has
  * to line up to the pixel (branch, dot, name, share, strip), which is layout,
  * not plotting, and it has no use for zoom or pan.
+ *
+ * It is one of two views of the same component. The rank, and so whether this
+ * view is drawn at all, is the router's (PhylogeneticRenderer, via
+ * phylo/view.ts); its settings carry the switch back to the full tree.
  */
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: PhylogeneticConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** The view switch, owned by the router; `view.rank` is the rank drawn. */
+  view: PhyloView;
 }
 
 type SizeBy = 'tips' | 'abundance';
@@ -117,7 +125,7 @@ function useBoxSize(): [(node: HTMLDivElement | null) => void, { width: number; 
   return [ref, size];
 }
 
-const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, view }) => {
   const config = (metadata.config || {}) as PhylogeneticConfig;
   const theme = useMantineTheme();
   const { colorScheme } = useMantineColorScheme();
@@ -136,7 +144,10 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
   const splitCol = config.abundance_split_col ?? null;
 
   // ---- Tier-2 controls ------------------------------------------------------
-  const [rank, setRank] = usePersistedVizControl<string>(metadata, 'collapse_rank', config.collapse_rank || 'Phylum');
+  // The rank belongs to the router, which mounts this renderer only while one
+  // is set (see PhylogeneticRenderer): changing it here can also mean leaving
+  // for the full tree, which no renderer can do on its own behalf.
+  const rank = view.rank ?? '';
   const [topN, setTopN] = usePersistedVizControl<number>(metadata, 'top_n', 10);
   const [sizeBy, setSizeBy] = usePersistedVizControl<SizeBy>(metadata, 'size_by', 'tips');
   const useAbundance = sizeBy === 'abundance' && hasAbundance;
@@ -709,49 +720,49 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
     ) : null;
 
   // ---- Controls (Settings popover) --------------------------------------------
-  const rankOptions = useMemo(() => {
-    const opts = [config.collapse_rank, ...(config.extra_color_cols ?? []), colorCol]
-      .filter((c): c is string => Boolean(c) && c !== taxonCol);
-    return Array.from(new Set(opts));
-  }, [config.collapse_rank, config.extra_color_cols, colorCol, taxonCol]);
-
+  // Every control is shown whether or not it can act, the way the switch above
+  // them is: "Reads" with no abundance table bound is disabled and says what it
+  // needs, rather than missing, which is how a user finds out the view exists.
   const controls = (
     <Stack gap="xs">
-      {rankOptions.length > 1 ? (
-        <Select
-          size="xs"
-          label="One tip per"
-          value={rank}
-          onChange={(v) => v && setRank(v)}
-          data={rankOptions}
-          allowDeselect={false}
-        />
-      ) : null}
+      <PhyloViewSwitch view={view} />
+      <Select
+        size="xs"
+        label="Collapse to"
+        value={rank}
+        onChange={(v) => v && view.setRank(v)}
+        data={view.choices}
+        allowDeselect={false}
+      />
       <NumberInput
         size="xs"
-        label="Lineages shown"
+        label="Top N"
+        description="Lineages drawn; the rest are counted under “not shown”"
         value={topN}
         onChange={(v) => typeof v === 'number' && setTopN(clamp(Math.floor(v), 1, 60))}
         min={1}
         max={60}
       />
-      {hasAbundance ? (
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Size by
+      <Stack gap={4}>
+        <Text size="xs" fw={500}>
+          Size by
+        </Text>
+        <SegmentedControl
+          size="xs"
+          fullWidth
+          value={hasAbundance ? sizeBy : 'tips'}
+          onChange={(v) => setSizeBy(v as SizeBy)}
+          data={[
+            { value: 'abundance', label: 'Reads', disabled: !hasAbundance },
+            { value: 'tips', label: 'ASVs' },
+          ]}
+        />
+        {!hasAbundance ? (
+          <Text size="xs" c="dimmed">
+            Reads need an abundance table with a {rank} column (abundance_dc_tag).
           </Text>
-          <SegmentedControl
-            size="xs"
-            fullWidth
-            value={sizeBy}
-            onChange={(v) => setSizeBy(v as SizeBy)}
-            data={[
-              { value: 'abundance', label: 'Reads' },
-              { value: 'tips', label: 'ASVs' },
-            ]}
-          />
-        </Stack>
-      ) : null}
+        ) : null}
+      </Stack>
     </Stack>
   );
 

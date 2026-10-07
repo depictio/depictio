@@ -41,6 +41,8 @@ import { cladeExtent, collapseNodes } from './phylo/collapse';
 import { PHYLO_PALETTE } from './phylo/palette';
 import type { PhylogeneticConfig } from './phylo/config';
 import PhyloSummaryRenderer from './PhyloSummaryRenderer';
+import PhyloViewSwitch from './PhyloViewSwitch';
+import { nextSummaryRank, rankChoices, summaryBlocker, type PhyloView } from './phylo/view';
 import {
   buildTreeSelectionFilter,
   collectSubtreeTaxa,
@@ -118,7 +120,13 @@ const LAYOUTS: Array<{ value: Layout; label: string }> = [
   { value: 'hierarchical', label: 'Hier' },
 ];
 
-const PhyloTreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
+const PhyloTreeRenderer: React.FC<Props & { view: PhyloView }> = ({
+  metadata,
+  filters,
+  refreshTick,
+  onFilterChange,
+  view,
+}) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const palette = resolveCategoricalPalette(theme, PALETTE);
@@ -298,7 +306,19 @@ const PhyloTreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     return () => {
       cancelled = true;
     };
-  }, [config.tree_dc_id, config.metadata_wf_id, config.metadata_dc_id, JSON.stringify(fetchFilters), refreshTick]);
+    // The columns fetched are part of the request: the builder can add a rank
+    // column or rebind the colour while this preview stays mounted.
+  }, [
+    config.tree_dc_id,
+    config.metadata_wf_id,
+    config.metadata_dc_id,
+    config.taxon_col,
+    config.color_col,
+    config.label_col,
+    JSON.stringify(config.extra_color_cols ?? []),
+    JSON.stringify(fetchFilters),
+    refreshTick,
+  ]);
 
   // ---- Tree object (memo) -------------------------------------------------
   const tree = useMemo<PhyloTree | null>(() => {
@@ -1441,6 +1461,7 @@ const PhyloTreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
 
   const controls = (
     <Stack gap="xs" id={controlsId}>
+      <PhyloViewSwitch view={view} />
       <Stack gap={4}>
         <Text size="xs" fw={500}>
           Mode
@@ -2174,16 +2195,51 @@ const PhyloTreeRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
  * tile; unset, it is the full interactive tree, unchanged. Two components
  * rather than a branch inside one, because they share no state: the summary
  * has none of the tree's selection, collapse, focus or zoom.
+ *
+ * Which one is drawn is a Tier-2 control like any other, switched from either
+ * renderer's settings, and so it is held here rather than in either of them: a
+ * renderer cannot unmount itself in favour of the other, and the config prop
+ * only changes once the switch has been saved. Seeded from `collapse_rank` and
+ * persisted through the same hook as every other control, so in the builder
+ * preview the switch is saved with the component and on a dashboard it stays a
+ * way of looking at the tile.
+ *
+ * The rank last collapsed to is remembered across a visit to the full tree, so
+ * Summary, Full tree, Summary comes back to the same lineages.
  */
-const PhylogeneticRenderer: React.FC<Props> = (props) =>
-  (props.metadata.config as PhylogeneticConfig | undefined)?.collapse_rank ? (
+const PhylogeneticRenderer: React.FC<Props> = (props) => {
+  const { metadata } = props;
+  const config = (metadata.config || {}) as PhylogeneticConfig;
+  const [rank, persistRank] = usePersistedVizControl<string | null>(metadata, 'collapse_rank', null);
+  const [remembered, setRemembered] = useState<string | null>(config.collapse_rank || null);
+  const setRank = React.useCallback(
+    (next: string | null) => {
+      if (next) setRemembered(next);
+      persistRank(next);
+    },
+    [persistRank],
+  );
+  const view = useMemo<PhyloView>(() => {
+    const choices = rankChoices(config, rank ?? remembered);
+    return {
+      rank,
+      choices,
+      blocker: summaryBlocker(config, choices),
+      summaryRank: nextSummaryRank(choices, remembered),
+      setRank,
+    };
+  }, [config, rank, remembered, setRank]);
+
+  return rank ? (
     <PhyloSummaryRenderer
       metadata={props.metadata}
       filters={props.filters}
       refreshTick={props.refreshTick}
+      view={view}
     />
   ) : (
-    <PhyloTreeRenderer {...props} />
+    <PhyloTreeRenderer {...props} view={view} />
   );
+};
 
 export default PhylogeneticRenderer;

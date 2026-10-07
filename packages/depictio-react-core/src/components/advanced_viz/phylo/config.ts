@@ -7,8 +7,12 @@ import type { Layout } from './layout';
 export interface PhylogeneticConfig {
   tree_wf_id: string;
   tree_dc_id: string;
+  /** Each source's portable name, resolved to its ids at import (see
+   *  phylo/sources.ts for when the builder writes one). */
+  tree_dc_tag?: string | null;
   metadata_wf_id?: string | null;
   metadata_dc_id?: string | null;
+  metadata_dc_tag?: string | null;
   taxon_col?: string;
   color_col?: string | null;
   label_col?: string | null;
@@ -39,6 +43,7 @@ export interface PhylogeneticConfig {
    *  `taxonomy_rel_abundance`), with a column named like `collapse_rank`. */
   abundance_wf_id?: string | null;
   abundance_dc_id?: string | null;
+  abundance_dc_tag?: string | null;
   abundance_col?: string;
   /** Sample column: a share is the mean over samples; a table without it is
    *  summed instead. */
