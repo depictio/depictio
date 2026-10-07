@@ -3,6 +3,7 @@ name: Metagenomic alignment
 origin_tool: MALT
 mode: malt
 description: Metagenomic read alignment against a reference database, from MALT, via MultiQC. How many queries aligned at all, and how many of those got a taxonomic assignment.
+stage: taxonomy
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

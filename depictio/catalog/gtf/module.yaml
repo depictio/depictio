@@ -13,3 +13,4 @@ description: >-
 homepage: https://www.ensembl.org/info/website/upload/gff.html
 biotools_url: null  # no bio.tools entry for this tool
 source_url: https://github.com/The-Sequence-Ontology/Specifications/blob/master/gff3.md
+stage: annotation

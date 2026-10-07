@@ -88,6 +88,32 @@
           "title": "Description",
           "type": "string"
         },
+        "stage": {
+          "anyOf": [
+            {
+              "enum": [
+                "qc",
+                "alignment",
+                "quantification",
+                "peaks",
+                "variants",
+                "fusions",
+                "taxonomy",
+                "annotation",
+                "immune",
+                "differential",
+                "benchmarking",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stage"
+        },
         "find": {
           "$ref": "#/$defs/CatalogFind"
         },
@@ -213,6 +239,19 @@
             }
           ],
           "title": "Component"
+        },
+        "priority": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Priority"
         },
         "kind": {
           "anyOf": [
@@ -532,6 +571,11 @@
           "default": null,
           "title": "Filter Expr"
         },
+        "headline": {
+          "default": false,
+          "title": "Headline",
+          "type": "boolean"
+        },
         "interactive_type": {
           "anyOf": [
             {
@@ -725,6 +769,32 @@
       },
       "title": "Edam Topics",
       "type": "array"
+    },
+    "stage": {
+      "anyOf": [
+        {
+          "enum": [
+            "qc",
+            "alignment",
+            "quantification",
+            "peaks",
+            "variants",
+            "fusions",
+            "taxonomy",
+            "annotation",
+            "immune",
+            "differential",
+            "benchmarking",
+            "other"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Stage"
     },
     "schema_version": {
       "default": 1,

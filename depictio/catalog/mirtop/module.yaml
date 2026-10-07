@@ -12,3 +12,4 @@ description: >-
   Annotates small RNA-seq reads against miRNA references in the mirGFF3
   format.
 biotools_url: https://bio.tools/miRTop
+stage: annotation

@@ -5,3 +5,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/svan
 biotools_url: https://bio.tools/svanalyzer
 description: Tools for the analysis of structural variation in genomes.
 homepage: https://svanalyzer.readthedocs.io/en/latest/index.html
+stage: benchmarking

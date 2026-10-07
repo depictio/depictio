@@ -16,3 +16,4 @@ description: >-
   Calculation of optimal P-site offsets, diagnostic analysis and visual
   inspection of ribosome profiling data.
 biotools_url: https://bio.tools/ribowaltz
+stage: qc

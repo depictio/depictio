@@ -9,3 +9,4 @@ description: >-
   Derives allele-specific copy number profiles of tumour cells, accounting for
   normal cell admixture and tumour aneuploidy.
 homepage: https://github.com/VanLoo-lab/ascat
+stage: variants

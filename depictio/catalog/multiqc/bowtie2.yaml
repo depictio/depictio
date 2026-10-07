@@ -3,6 +3,7 @@ name: Alignment summary
 origin_tool: Bowtie 2
 mode: bowtie2
 description: Read-alignment summary against the reference (paired-end alignment rates) — Bowtie2, via MultiQC.
+stage: alignment
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

@@ -69,6 +69,32 @@
       },
       "title": "Edam Topics",
       "type": "array"
+    },
+    "stage": {
+      "anyOf": [
+        {
+          "enum": [
+            "qc",
+            "alignment",
+            "quantification",
+            "peaks",
+            "variants",
+            "fusions",
+            "taxonomy",
+            "annotation",
+            "immune",
+            "differential",
+            "benchmarking",
+            "other"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Stage"
     }
   },
   "required": [

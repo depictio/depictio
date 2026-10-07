@@ -8,3 +8,4 @@ description: >-
   Computes the percentage of endogenous DNA and library clonality from
   samtools flagstat output.
 biotools_url: null  # no bio.tools entry for this tool
+stage: qc

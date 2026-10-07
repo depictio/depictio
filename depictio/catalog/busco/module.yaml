@@ -9,3 +9,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/busc
 homepage: https://busco.ezlab.org
 description: Gene-content completeness of assemblies against a BUSCO lineage dataset.
 biotools_url: https://bio.tools/busco
+stage: qc

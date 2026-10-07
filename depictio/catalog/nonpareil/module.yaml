@@ -4,3 +4,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/nonp
 homepage: https://nonpareil.readthedocs.io
 description: Estimate average coverage and create curves for metagenomic datasets.
 biotools_url: https://bio.tools/nonpareil
+stage: qc

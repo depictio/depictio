@@ -9,3 +9,4 @@ description: >-
   Copy number and genotype annotation from whole genome and whole exome
   sequencing data.
 homepage: http://boevalab.inf.ethz.ch/FREEC
+stage: variants

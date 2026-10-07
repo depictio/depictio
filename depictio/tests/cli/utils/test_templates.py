@@ -40,6 +40,19 @@ class TestLocateTemplate:
         with pytest.raises(FileNotFoundError, match="not found"):
             locate_template("nonexistent/pipeline/9.9.9")
 
+    def test_locate_a_template_given_as_a_file(self, tmp_path: Path) -> None:
+        template = tmp_path / "my_template.yaml"
+        template.write_text("template: {}\n")
+        assert locate_template(str(template)) == template.resolve()
+
+    def test_locate_a_template_given_as_its_directory(self, tmp_path: Path) -> None:
+        (tmp_path / "template.yaml").write_text("template: {}\n")
+        assert locate_template(str(tmp_path)) == (tmp_path / "template.yaml").resolve()
+
+    def test_a_directory_without_template_yaml_is_not_a_template(self, tmp_path: Path) -> None:
+        with pytest.raises(FileNotFoundError, match="not a path to a template.yaml"):
+            locate_template(str(tmp_path))
+
 
 class TestLatestTemplateVersion:
     @staticmethod

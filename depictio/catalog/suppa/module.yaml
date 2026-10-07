@@ -11,3 +11,4 @@ description: >-
 homepage: https://github.com/comprna/SUPPA
 biotools_url: https://bio.tools/suppa
 source_url: https://github.com/nf-core/rnasplice/blob/1.0.4/modules/local/suppa_diffsplice.nf
+stage: differential

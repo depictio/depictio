@@ -16,3 +16,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ataq
 homepage: https://github.com/ParkerLab/ataqv
 description: Ataqv is a toolkit for measuring and comparing ATAC-seq results.
 biotools_url: https://bio.tools/ataqv
+stage: qc

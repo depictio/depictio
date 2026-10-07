@@ -17,3 +17,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/quas
 homepage: https://quast.sourceforge.net
 description: Reference-free assembly quality statistics for whole assemblies and for individual bins.
 biotools_url: https://bio.tools/quast
+stage: qc

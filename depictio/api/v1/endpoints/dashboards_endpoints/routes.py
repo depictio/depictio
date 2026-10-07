@@ -5579,6 +5579,25 @@ def _tab_meets_minimum(
     return has_filter and _tab_has_visualization_components(dashboard_dict, dc_meta)
 
 
+def _drop_stale_tabs(collection, main_dashboard_id, project_id, keep: set) -> int:
+    """Delete the child tabs of a re-imported family that the import did not keep.
+
+    A multi-tab import with ``overwrite`` matches existing tabs by title; a tab
+    whose title changed (or that the YAML dropped) is no longer matched, and
+    would stay next to its successor. Returns how many tabs were deleted.
+    """
+    stale = {
+        "parent_dashboard_id": main_dashboard_id,
+        "project_id": ObjectId(project_id),
+        "is_main_tab": {"$ne": True},
+        "_id": {"$nin": list(keep)},
+    }
+    deleted = collection.delete_many(stale).deleted_count
+    if deleted:
+        logger.info(f"Removed {deleted} tab(s) the re-imported dashboard no longer has")
+    return deleted
+
+
 def _existing_import_target(
     project_id: PyObjectId,
     title: str,
@@ -5802,6 +5821,9 @@ def _import_multi_tab_dashboard(
 
     # Import child tabs
     imported_tabs = []
+    # Existing tabs the YAML still names, even when this import fails to update
+    # them: only tabs it no longer names are stale.
+    addressed_tabs: set[ObjectId] = set()
     dc_meta = _build_dc_meta(project_id)
     family_filter = _family_fans_out_a_filter(
         [main_dashboard_data, *(tabs_data or [])],
@@ -5826,6 +5848,9 @@ def _import_multi_tab_dashboard(
                 overwrite,
                 parent_dashboard_id=main_dashboard_id,
             )
+
+        if existing_tab is not None:
+            addressed_tabs.add(existing_tab["_id"])
 
         tab_dashboard_dict = tab_lite.to_full()
         tab_dashboard_dict["title"] = _import_title(tab_lite.title, existing_tab, keep_titles)
@@ -5915,6 +5940,16 @@ def _import_multi_tab_dashboard(
                 continue
 
         imported_tabs.append({"title": tab_dashboard.title, "dashboard_id": str(tab_dashboard_id)})
+
+    if is_update:
+        # The import is the whole family: a tab the YAML no longer has (renamed
+        # or gone) would otherwise stay next to its successor on every re-import.
+        _drop_stale_tabs(
+            dashboards_collection,
+            main_dashboard_id,
+            project_id,
+            keep={ObjectId(t["dashboard_id"]) for t in imported_tabs} | addressed_tabs,
+        )
 
     action = "Updated" if is_update else "Imported"
     logger.info(

@@ -17,6 +17,7 @@ renders_as:
       roles: { sample_id: sample_id, taxon: taxon, rank: rank, abundance: abundance },
     }
   - {
+      headline: true,
       component: card,
       column: taxon,
       aggregation: nunique,

@@ -13,3 +13,4 @@ description: >-
 homepage: https://bioconductor.org/packages/edgeR
 biotools_url: https://bio.tools/edger
 source_url: https://github.com/nf-core/rnasplice/blob/1.0.4/modules/local/edger_exon.nf
+stage: differential

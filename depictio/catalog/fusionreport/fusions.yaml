@@ -19,7 +19,7 @@ renders_as:
   - { id: fii_lollipop, component: advanced_viz, kind: lollipop, roles: {feature_id: fusion, position: rank, category: tool_support} }
   - { component: figure, visu_type: bar, dict_kwargs: {x: fusion, y: fii, color: tool_support} }
   - { component: card, column: fii, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
-  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: tool_support, top_n_count: 3 }
+  - { component: card, column: fusion, aggregation: nunique, secondary_layout: top_n, breakdown_col: tool_support, top_n_count: 3, headline: true }
   - { component: card, column: n_tools, aggregation: average, secondary_layout: donut, breakdown_col: tool_support }
   - { component: card, column: n_databases, aggregation: average, secondary_layout: histogram }
   - { component: table, row_selection_enabled: true, row_selection_column: fusion }

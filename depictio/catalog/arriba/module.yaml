@@ -5,3 +5,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/arri
 description: Fast and accurate gene fusion detection from RNA-Seq data.
 homepage: https://github.com/suhrig/arriba
 biotools_url: https://bio.tools/Arriba
+stage: fusions

@@ -28,3 +28,4 @@ source_url: https://github.com/nf-core/cutandrun
 edam_topics:
   - http://edamontology.org/topic_3179 # ChIP-seq
   - http://edamontology.org/topic_3169 # Sequencing
+stage: peaks

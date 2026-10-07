@@ -178,6 +178,12 @@ const CONTENT_SELECTOR: Record<string, string> = {
   interactive: CHROME_SELECTOR,
 };
 
+/** MultiQC's General Statistics is a table, not a figure: the tile shows the
+ * per-sample table by default and a Plotly violin only when the user switches
+ * to it. The catalog names it `general` (the first token of its anchor). */
+const GENERAL_STATS_SECTIONS = new Set(["general", "general_stats"]);
+const GENERAL_STATS_SELECTOR = "table, .js-plotly-plot";
+
 /** Kinds that draw with something other than Plotly, keyed by render kind.
  *
  * Checked before CONTENT_SELECTOR, which expects a Plotly plot for every
@@ -197,6 +203,21 @@ const KIND_CONTENT_SELECTOR: Record<string, string> = {
   genome_chord: 'svg[role="img"]',
   record_card: '.mantine-Card-root, [data-testid="advanced-viz-empty"]',
   group_compare: '.js-plotly-plot, [data-testid="group-compare-empty"]',
+};
+
+/** What shows that a render drew its content: its kind's own selector, the
+ * General Statistics table, else its component's. */
+const contentSelectorFor = (offer: RenderOffer): string | undefined => {
+  if (offer.render.kind && KIND_CONTENT_SELECTOR[offer.render.kind]) {
+    return KIND_CONTENT_SELECTOR[offer.render.kind];
+  }
+  if (
+    offer.render.component === "multiqc" &&
+    GENERAL_STATS_SECTIONS.has((offer.render.section ?? "").toLowerCase())
+  ) {
+    return GENERAL_STATS_SELECTOR;
+  }
+  return CONTENT_SELECTOR[offer.render.component];
 };
 
 /** How long to wait for CONTENT_SELECTOR, per component type.
@@ -299,9 +320,7 @@ async function checkComponent(
         })
       : undefined;
 
-  const selector =
-    (offer.render.kind && KIND_CONTENT_SELECTOR[offer.render.kind]) ??
-    CONTENT_SELECTOR[offer.render.component];
+  const selector = contentSelectorFor(offer);
   if (selector) {
     const budget =
       CONTENT_TIMEOUT_MS[offer.render.component] ?? DEFAULT_CONTENT_TIMEOUT_MS;

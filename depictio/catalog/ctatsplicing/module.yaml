@@ -6,3 +6,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ctat
 description: Detection and annotation of cancer splicing aberrations.
 homepage: https://github.com/TrinityCTAT/CTAT-SPLICING
 biotools_url: null  # no bio.tools entry for this tool
+stage: fusions

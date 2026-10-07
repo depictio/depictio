@@ -14,3 +14,4 @@ description: >-
   A package for detecting the actively translated ORFs using ribosome-
   profiling data.
 biotools_url: null  # no bio.tools entry for this tool
+stage: annotation

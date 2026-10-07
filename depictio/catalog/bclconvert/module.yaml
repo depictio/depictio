@@ -11,3 +11,4 @@ description: >-
   Illumina's successor to bcl2fastq: converts BCL base calls to demultiplexed
   FASTQ files.
 biotools_url: null  # no bio.tools entry for this tool
+stage: qc

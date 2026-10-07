@@ -48,6 +48,112 @@ from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
 
 
+def _resolve_viewer_url(CLI_config_path: str) -> str | None:
+    """The viewer's public URL as the server reports it, or None.
+
+    Best effort by design: a missing link must never fail a run that otherwise
+    worked, and an older server simply does not report it.
+    """
+    try:
+        import httpx
+
+        base = load_depictio_config(yaml_config_path=CLI_config_path, quiet=True).api_base_url
+        status = httpx.get(f"{base}/depictio/api/v1/utils/status", timeout=5)
+        if status.status_code == 200:
+            return (status.json().get("viewer_url") or "").rstrip("/") or None
+    except Exception as e:
+        logger.debug(f"Could not resolve the viewer URL: {e}")
+    return None
+
+
+def _existing_project(CLI_config, project_name: str) -> dict:
+    """Id, run directories and main dashboards (title, id) of the project ``project_name``.
+
+    The directories say whether a second run of the same data hit it, or another
+    run that happens to get the same project name (a template's own name). Best
+    effort, for reporting only: whatever could not be read is left empty.
+    """
+    found: dict = {"id": None, "locations": [], "dashboards": []}
+    try:
+        import httpx
+
+        remote = api_get_project_from_name(project_name, CLI_config)
+        if remote.status_code != 200:
+            return found
+        doc = remote.json()
+        found["id"] = str(doc.get("_id") or doc.get("id") or "") or None
+        found["locations"] = [
+            str(location)
+            for workflow in doc.get("workflows") or []
+            for location in (workflow.get("data_location") or {}).get("locations") or []
+        ]
+        if found["id"] is None:
+            return found
+        response = httpx.get(
+            f"{CLI_config.api_base_url}/depictio/api/v1/dashboards/list",
+            headers=generate_api_headers(CLI_config),
+            timeout=10,
+        )
+        if response.status_code == 200:
+            found["dashboards"] = [
+                (str(d.get("title") or "dashboard"), str(d["dashboard_id"]))
+                for d in response.json()
+                if d.get("dashboard_id") and str(d.get("project_id")) == found["id"]
+            ]
+    except Exception as e:
+        logger.debug(f"Could not look up the existing project {project_name!r}: {e}")
+    return found
+
+
+def _write_result_json(
+    path: str | None,
+    status: str,
+    project_name: str | None,
+    project_id: str | None,
+    dashboards: list[tuple[str, ...]],
+    viewer_url: str | None,
+    template_id: str | None,
+    locations: list[str] | None = None,
+    composed: dict | None = None,
+) -> None:
+    """Write how the run ended for ``--result-json``; never fails the run.
+
+    Ids are always there; links only when the server reported its viewer URL.
+    ``dashboards`` keeps import order, so the first one is the template's main
+    dashboard: (title, id), with what the import did to it when known. ``locations``, the run directories the project already had, is only
+    known for a project that already existed.
+    """
+    if not path:
+        return
+    import json
+
+    result = {
+        "status": status,
+        "project": {
+            "name": project_name,
+            "id": project_id,
+            "url": f"{viewer_url}/projects/{project_id}" if viewer_url and project_id else None,
+            **({"locations": locations} if locations is not None else {}),
+        },
+        "dashboards": [
+            {
+                "title": title,
+                "id": dashboard_id,
+                "url": f"{viewer_url}/dashboard/{dashboard_id}" if viewer_url else None,
+                **({"status": rest[0]} if rest else {}),
+            }
+            for title, dashboard_id, *rest in dashboards
+        ],
+        "template_id": template_id,
+    }
+    if composed is not None:
+        result["composed"] = composed
+    try:
+        Path(path).expanduser().write_text(json.dumps(result, indent=2))
+    except OSError as e:
+        rich_print_checked_statement(f"Could not write --result-json {path}: {e}", "warning")
+
+
 def _cli_version() -> str | None:
     """Installed CLI version, or ``None`` if it can't be determined.
 
@@ -627,8 +733,9 @@ def register_run_command(app: typer.Typer):
             typer.Option(
                 "--template",
                 help="Template to build the project from, e.g. nf-core/ampliseq/2.16.0, or "
-                "nf-core/ampliseq/latest for the newest shipped version. Default: detected "
-                "from DATA_DIR. Not with --project-config-path.",
+                "nf-core/ampliseq/latest for the newest shipped version, or the path to a "
+                "template.yaml (or the directory holding it). Default: detected from "
+                "DATA_DIR, else composed from the catalog. Not with --project-config-path.",
             ),
         ] = None,
         project_config_path: Annotated[
@@ -849,6 +956,45 @@ def register_run_command(app: typer.Typer):
                 rich_help_panel=DEBUG_PANEL,
             ),
         ] = False,
+        compose: Annotated[
+            bool,
+            typer.Option(
+                "--compose",
+                help="Compose the template from what the catalog recognises in DATA_DIR, "
+                "even when a bundled template fits. Without it, composing is the fallback "
+                "when none does.",
+                rich_help_panel=PROJECT_PANEL,
+            ),
+        ] = False,
+        include_unknown: Annotated[
+            bool,
+            typer.Option(
+                "--include-unknown",
+                help="When composing: also ingest the tabular files the catalog does not "
+                "recognise, in an 'Other data' tab.",
+                rich_help_panel=PROJECT_PANEL,
+            ),
+        ] = False,
+        include: Annotated[
+            list[str] | None,
+            typer.Option(
+                "--include",
+                metavar="GLOB",
+                help="When composing: ingest the unrecognised files matching this glob, "
+                "relative to DATA_DIR (e.g. 'stats/*.tsv'). Repeatable.",
+                rich_help_panel=PROJECT_PANEL,
+            ),
+        ] = None,
+        result_json: Annotated[
+            str | None,
+            typer.Option(
+                "--result-json",
+                metavar="FILE",
+                help="Write how the ingestion ended (status, project and dashboard ids and "
+                "links) to this file as JSON, for scripts.",
+                rich_help_panel=AUTOMATION_PANEL,
+            ),
+        ] = None,
         # Out of the help, for the scripts, CI jobs and Nextflow hooks that call them.
         # The former names of DATA_DIR and --project.
         data_root: Annotated[str | None, typer.Option("--data-root", hidden=True)] = None,
@@ -999,7 +1145,7 @@ def register_run_command(app: typer.Typer):
         # template too. This is the fallback for a pipeline whose manifest the
         # trigger could not forward (an older Nextflow, a hand-run CLI, a
         # non-Nextflow engine).
-        if detected_info is not None and not template and not project_config_path:
+        if detected_info is not None and not template and not project_config_path and not compose:
             from depictio.cli.cli.utils.templates import select_template_for_run
 
             detected_template = select_template_for_run(detected_info)
@@ -1008,6 +1154,71 @@ def register_run_command(app: typer.Typer):
                 rich_print_checked_statement(
                     f"Auto-selected template: {escape(template)}", "success"
                 )
+
+        if compose and (template or project_config_path):
+            rich_print_checked_statement(
+                "--compose builds the template itself: drop --template / --project-config-path.",
+                "error",
+            )
+            raise typer.Exit(code=1)
+
+        # No template fits (or --compose): compose one from the files the catalog
+        # recognises, the way MultiQC builds a report from what it finds. The
+        # result is an ordinary template directory, so everything below is the
+        # template path every bundled pipeline takes.
+        composed = None
+        if data_root and not template and not project_config_path:
+            from depictio.cli.cli.utils.compose import (
+                ComposedTemplate,
+                compose_template,
+                print_report,
+            )
+
+            if compose:
+                reason = "--compose"
+            elif detected_info is None or not detected_info.pipeline_name:
+                reason = (
+                    f"Could not tell which pipeline produced {escape(data_root)} "
+                    "(no Nextflow pipeline_info/ or Snakemake metadata naming one)"
+                )
+            else:
+                reason = f"No bundled template ships for {escape(detected_info.pipeline_name)}"
+            rich_print_section_separator("Step 0-: Composing a template from the catalog")
+            rich_print_checked_statement(
+                f"{reason}: composing the dashboard from the files the catalog recognises",
+                "info",
+            )
+            result = compose_template(
+                data_root,
+                include_unknown=include_unknown,
+                include=include or (),
+                project_name=project_name,
+                pipeline_name=detected_info.pipeline_name if detected_info else None,
+                pipeline_version=detected_info.pipeline_version if detected_info else None,
+                engine=detected_info.engine if detected_info else None,
+            )
+            print_report(result)
+            if not isinstance(result, ComposedTemplate):
+                found = result.unrecognised_total
+                hint = (
+                    f" It holds {found} tabular file(s): --include-unknown ingests them."
+                    if found
+                    else ""
+                )
+                rich_print_checked_statement(
+                    f"Nothing in {escape(data_root)} is recognised by the catalog.{hint} Or pass "
+                    "--template (a template id or the path to a template.yaml), or "
+                    "--project-config-path with a depictio project YAML.",
+                    "error",
+                )
+                raise typer.Exit(code=1)
+            composed = result
+            template = str(result.template_dir)
+            rich_print_checked_statement(
+                f"Composed template: {escape(str(result.template_dir))} "
+                f"(tabs: {escape(', '.join(result.tabs))})",
+                "success",
+            )
 
         # Validate template/project-config-path mutual exclusivity
         if template and project_config_path:
@@ -1079,6 +1290,8 @@ def register_run_command(app: typer.Typer):
 
         # Track whether we're in template mode
         is_template_mode = template is not None
+        # The template actually loaded ("latest" resolved), once Step 0 succeeds.
+        resolved_template_id: str | None = None
         template_resolved_config: dict | None = None
         # Only the template branch fills these; a --dashboard import outside it
         # substitutes nothing, since a hand-written dashboard names its data
@@ -1193,6 +1406,7 @@ def register_run_command(app: typer.Typer):
                     provenance_files=provenance_file,
                 )
 
+                resolved_template_id = template_metadata.template_id
                 rich_print_checked_statement(
                     f"Template '{template_metadata.template_id}' loaded successfully",
                     "success",
@@ -1546,6 +1760,19 @@ def register_run_command(app: typer.Typer):
                             "error",
                         )
                         _rec("sync_project", "failed", "project exists, no --update-config")
+                        if result_json:
+                            # Which project it is, so a caller can show it instead.
+                            existing = _existing_project(CLI_config, str(project_config.name))
+                            _write_result_json(
+                                result_json,
+                                status="exists",
+                                project_name=str(project_config.name),
+                                project_id=existing["id"],
+                                dashboards=existing["dashboards"],
+                                viewer_url=_resolve_viewer_url(CLI_config_path),
+                                template_id=resolved_template_id,
+                                locations=existing["locations"],
+                            )
                         raise typer.Exit(code=2)
                     rich_print_checked_statement("Project configuration sync completed", "success")
 
@@ -2008,23 +2235,10 @@ def register_run_command(app: typer.Typer):
         # a wall of green ticks that never says where the result landed, which
         # matters most for the pipeline trigger: nobody is watching that
         # terminal, they read it afterwards and need a link to click.
-        viewer_url = None
-        try:
-            if dry_run:
-                raise RuntimeError("a dry run does not contact the server")
-            import httpx as _httpx
-
-            # Re-read rather than reuse: CLI_config is only bound inside the
-            # step that loaded it, and the summary runs even when that step was
-            # skipped or failed.
-            _base = load_depictio_config(yaml_config_path=CLI_config_path, quiet=True).api_base_url
-            _status = _httpx.get(f"{_base}/depictio/api/v1/utils/status", timeout=5)
-            if _status.status_code == 200:
-                viewer_url = (_status.json().get("viewer_url") or "").rstrip("/") or None
-        except Exception as e:
-            # Best effort by design: a missing link must never fail a run that
-            # otherwise worked, and an older server simply does not report it.
-            logger.debug(f"Could not resolve the viewer URL: {e}")
+        # Re-read the config rather than reuse it: CLI_config is only bound inside
+        # the step that loaded it, and the summary runs even when that step was
+        # skipped or failed. A dry run does not contact the server.
+        viewer_url = None if dry_run else _resolve_viewer_url(CLI_config_path)
         if viewer_url and ingestion.project_id:
             rich_print_checked_statement(
                 f"Project: {viewer_url}/projects/{ingestion.project_id}", "info"
@@ -2041,6 +2255,24 @@ def register_run_command(app: typer.Typer):
             rich_print_checked_statement(
                 f"Template used: {escape(str(template_metadata.template_id))}", "info"
             )
+        _write_result_json(
+            result_json,
+            status="success" if success_count == total_steps else "partial",
+            project_name=str(project_config.name) if "project_config" in locals() else None,
+            project_id=ingestion.project_id or None,
+            dashboards=imported_dashboards,
+            viewer_url=viewer_url,
+            template_id=resolved_template_id,
+            composed={
+                "template_dir": str(composed.template_dir),
+                "tabs": composed.tabs,
+                "unrecognised": len(
+                    [p for p in composed.composition.unrecognised if not p.get("_include")]
+                ),
+            }
+            if composed is not None
+            else None,
+        )
         if dry_run:
             rich_print_checked_statement(
                 f"Dry run complete ({success_count}/{total_steps} steps): the configuration "

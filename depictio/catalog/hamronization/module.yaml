@@ -8,3 +8,4 @@ description: >-
   hAMRonization specification.
 homepage: https://github.com/pha4ge/hAMRonization/
 biotools_url: https://bio.tools/hamronization
+stage: annotation

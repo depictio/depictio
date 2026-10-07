@@ -7,3 +7,4 @@ description: >-
   Functions for viral amplicon sequencing: primer trimming, variant calling
   and consensus building.
 homepage: https://github.com/andersen-lab/ivar
+stage: variants

@@ -3,6 +3,7 @@ name: Splice-aware alignment summary
 origin_tool: STAR
 mode: star
 description: Splice-aware read alignment summary (uniquely mapped, multi-mapped and unmapped fractions, plus the per-gene count assignment) from STAR, via MultiQC.
+stage: alignment
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

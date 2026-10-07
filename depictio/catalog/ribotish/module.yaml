@@ -14,3 +14,4 @@ description: >-
   Ribo TIS Hunter (Ribo-TISH) identifies translation activities using ribosome
   profiling data.
 biotools_url: null  # no bio.tools entry for this tool
+stage: annotation

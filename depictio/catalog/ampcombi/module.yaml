@@ -8,3 +8,4 @@ description: >-
   several AMP tools into one summary per sample.
 homepage: https://github.com/paleobiotechnology/AMPcombi
 biotools_url: null  # no bio.tools entry for this tool
+stage: annotation

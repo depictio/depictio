@@ -15,7 +15,7 @@ renders_as:
   # axes an ATAC library is placed on.
   - { component: figure, visu_type: scatter, dict_kwargs: {x: tss_enrichment, y: hqaa_overlapping_peaks_percent, color: sample, size: total_peaks, title: TSS enrichment against reads in peaks} }
   # Signal, then yield, then the two ways an ATAC library wastes reads.
-  - { component: card, column: tss_enrichment, aggregation: average, secondary_layout: gauge, coverage_max: 10.0 }
+  - { component: card, column: tss_enrichment, aggregation: average, secondary_layout: gauge, coverage_max: 10.0, headline: true }
   - { component: card, column: total_peaks, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
   - { component: card, column: mitochondrial_fraction, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: hqaa_overlapping_peaks_percent, aggregation: average, secondary_layout: threshold, threshold_value: 20.0, threshold_direction: min, threshold_warn: 10.0 }

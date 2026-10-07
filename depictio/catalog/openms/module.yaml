@@ -13,3 +13,4 @@ description: >-
 biotools_url: https://bio.tools/openms
 edam_topics:
   - http://edamontology.org/topic_0121 # Proteomics
+stage: quantification

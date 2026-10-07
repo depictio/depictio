@@ -3,6 +3,7 @@ name: Primer trimming
 origin_tool: iVar
 mode: ivar
 description: Amplicon primer-trimming and variant section metrics — iVar, surfaced via MultiQC.
+stage: variants
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

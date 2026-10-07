@@ -6,3 +6,4 @@ description: >-
   RNA-seq quantification by pseudoalignment, wrapped with bustools in kb for
   single-cell data.
 biotools_url: https://bio.tools/kallisto
+stage: quantification

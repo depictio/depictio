@@ -79,6 +79,7 @@ import {
   METADATA_COLOR,
 } from '../dcMetatype';
 import { usePageTitle } from '../../branding';
+import { UnrecognisedFilesPanel } from './UnrecognisedFilesPanel';
 
 interface DataCollectionShape {
   _id?: string;
@@ -533,6 +534,9 @@ const ProjectDetailApp: React.FC = () => {
                     onDelete={setDeleteTarget}
                     onManage={setManageTarget}
                     onCreate={() => setCreateDcOpened(true)}
+                  />
+                  <UnrecognisedFilesPanel
+                    templateOrigin={(project as Record<string, unknown>).template_origin}
                   />
                   {projectId && (
                     <LinksSection

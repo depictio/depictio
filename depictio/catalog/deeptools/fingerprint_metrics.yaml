@@ -18,7 +18,7 @@ renders_as:
   # per-sample numbers are only readable here.
   - { id: fingerprint_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: auc, y: synthetic_js_distance, label: sample} }
   - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: auc_ratio, title: Coverage concentration relative to a uniform library} }
-  - { component: card, column: auc_ratio, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: auc_ratio, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot, headline: true }
   - { component: card, column: auc_ratio, aggregation: max, secondary_layout: threshold, threshold_value: 0.85, threshold_direction: max, threshold_warn: 0.95 }
   - { component: card, column: synthetic_js_distance, aggregation: average, aggregations: [box_plot_stats], secondary_layout: histogram }
   - { component: card, column: x_intercept, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }

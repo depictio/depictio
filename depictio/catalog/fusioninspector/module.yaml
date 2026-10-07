@@ -9,3 +9,4 @@ description: >-
   to fusion contigs.
 homepage: https://github.com/FusionInspector/FusionInspector
 biotools_url: null  # no bio.tools entry for this tool
+stage: fusions

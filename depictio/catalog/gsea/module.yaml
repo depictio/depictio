@@ -15,3 +15,4 @@ biotools_url: https://bio.tools/gsea
 edam_topics:
   - http://edamontology.org/topic_3308 # Transcriptomics
   - http://edamontology.org/topic_2269 # Statistics and probability
+stage: differential

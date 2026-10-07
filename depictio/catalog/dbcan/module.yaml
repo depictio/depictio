@@ -8,3 +8,4 @@ description: >-
   Standalone version of dbCAN annotation tool for automated CAZyme annotation.
 homepage: https://bcb.unl.edu/dbCAN2/
 biotools_url: https://bio.tools/dbcan
+stage: annotation

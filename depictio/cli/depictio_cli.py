@@ -33,6 +33,7 @@ from depictio.cli.cli.commands.local import app as local
 from depictio.cli.cli.commands.migrate import migrate
 from depictio.cli.cli.commands.run import register_run_command
 from depictio.cli.cli.commands.standalone import register_standalone_commands
+from depictio.cli.cli.commands.template import app as template
 from depictio.cli.cli.utils import logo_art
 from depictio.cli.cli.utils.renamed import note_renamed
 from depictio.cli.cli.utils.rich_utils import add_rich_display_to_polars
@@ -46,7 +47,7 @@ TAGLINE = "Interactive dashboards for bioinformatics data"
 # The panels of `depictio --help`, in display order, with their commands.
 HELP_PANELS = {
     "Get started": ("local", "ingest"),
-    "Projects and data": ("config", "data", "dashboard"),
+    "Projects and data": ("config", "data", "dashboard", "template"),
     "Administration": ("migrate", "backup"),
     "Reference": ("catalog", "commands", "version"),
 }
@@ -238,6 +239,11 @@ app.add_typer(
     catalog,
     name="catalog",
     help="Browse the supported tools and the dashboard components their outputs become.",
+)
+app.add_typer(
+    template,
+    name="template",
+    help="Compose a project template from what the catalog recognises in a results directory.",
 )
 # Maintainer / CI tooling (catalog authoring, recipe test harness, backup
 # coverage). Hidden from the user-facing help; still callable as `depictio dev …`.

@@ -13,3 +13,4 @@ description: >-
 homepage: https://bioconductor.org/packages/release/bioc/html/DEXSeq.html
 biotools_url: https://bio.tools/dexseq
 source_url: https://github.com/nf-core/nanoseq/blob/3.0.0/modules/local/dexseq.nf
+stage: differential

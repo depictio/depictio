@@ -6,3 +6,4 @@ description: >-
   10x Genomics pipelines that align Chromium single-cell reads, count UMIs per
   barcode and cluster cells.
 biotools_url: null  # no bio.tools entry for this tool
+stage: quantification
