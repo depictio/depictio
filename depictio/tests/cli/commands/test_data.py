@@ -214,3 +214,26 @@ def test_process_exits_1_when_a_data_collection_failed(outcome, exit_code, valid
         result = runner.invoke(app, ["process"])
 
     assert result.exit_code == exit_code, result.output
+
+
+def test_a_scan_error_is_reported_not_raised():
+    """An unknown data collection tag ends the scan with its message, exit 1."""
+    project = MagicMock(hash="h")
+    remote = MagicMock(status_code=200)
+    remote.json.return_value = {"hash": "h"}
+    with (
+        patch(
+            "depictio.cli.cli.commands.data.validate_project_config_and_check_S3_storage",
+            return_value=(MagicMock(), {"success": True, "project_config": project}),
+        ),
+        patch("depictio.cli.cli.commands.data.api_get_project_from_name", return_value=remote),
+        patch(
+            "depictio.cli.cli.commands.data.process_project_helper",
+            side_effect=Exception("Data collection 'nope' not found in project. Known: [a]"),
+        ),
+    ):
+        result = runner.invoke(app, ["scan", "--data-collection-tag", "nope"])
+
+    assert result.exit_code == 1
+    assert "Data collection 'nope' not found in project. Known: [a]" in result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)

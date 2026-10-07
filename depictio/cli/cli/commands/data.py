@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.markup import escape
 
 from depictio.cli.cli.utils.api_calls import api_get_project_from_id, api_get_project_from_name
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
@@ -107,15 +108,22 @@ def scan(
                     "rich_tables": rich_tables,
                 }
 
-                # Process project
-                process_project_helper(
-                    CLI_config=CLI_config,
-                    project_config=project_config,
-                    workflow_name=workflow_name,
-                    data_collection_tag=data_collection_tag,
-                    command_parameters=command_parameters,
-                    mode="scan",
-                )
+                # Process project. The scan raises a plain Exception for an unknown
+                # workflow or data collection tag, a message for the user.
+                try:
+                    process_project_helper(
+                        CLI_config=CLI_config,
+                        project_config=project_config,
+                        workflow_name=workflow_name,
+                        data_collection_tag=data_collection_tag,
+                        command_parameters=command_parameters,
+                        mode="scan",
+                    )
+                except typer.Exit:
+                    raise
+                except Exception as exc:
+                    rich_print_checked_statement(f"Scan failed: {escape(str(exc))}", "error")
+                    raise typer.Exit(code=1) from exc
 
             else:
                 rich_print_checked_statement(
