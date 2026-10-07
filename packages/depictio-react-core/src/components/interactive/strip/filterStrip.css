@@ -325,15 +325,6 @@
 
 /* ------------------------------------------------------------------- chips */
 
-/* The cell a categorical control measures its room in (see useChipsFit): the
-   chips when they fit it, the select when they do not. */
-.depictio-strip-fit {
-  display: flex;
-  align-items: center;
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
 .depictio-strip-track {
   display: flex;
   align-items: stretch;
@@ -345,14 +336,12 @@
   padding: 4px;
   border-radius: var(--mantine-radius-md);
   background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
-  /* Narrower than its chips, the track scrolls rather than wrapping: a second
-     line of chips would double the bar's height for one filter. */
-  overflow-x: auto;
-  scrollbar-width: none;
 }
 
-.depictio-strip-track::-webkit-scrollbar {
-  display: none;
+/* Narrower than its chips, the track wraps onto a second line: a track that
+   scrolled hid the values past its edge with nothing to say they were there. */
+.depictio-strip-track--chips {
+  flex-wrap: wrap;
 }
 
 .depictio-strip-chip {
@@ -406,8 +395,8 @@
   opacity: 0.45;
 }
 
-/* Only on a column the dashboard gives colours to (`category_colors`): there
-   the dot is the colour the figures draw the value in. */
+/* The value's colour (`chipCategoryDots`): the dashboard's for the column, or
+   the colorway's for a column short enough to give every value its own. */
 .depictio-strip-chip__dot {
   flex: none;
   width: 8px;
@@ -420,15 +409,15 @@
    the only full-strength colour in the row once something is picked. */
 .depictio-strip-track[data-has-selection='true']
   .depictio-strip-chip[aria-pressed='false']
+  .depictio-strip-chip__dot,
+.depictio-strip-picker__list[data-has-selection='true']
+  .depictio-strip-chip[aria-pressed='false']
   .depictio-strip-chip__dot {
   opacity: 0.45;
 }
 
-/* A select standing in for a long list of chips, drawn as the same grey
-   track so the bar keeps one look. */
-/* The picker: the bar's chips in a popover, for a column with too many
-   values for a track, or a track too wide for its cell. Closed, it is the
-   track itself, holding "All N" or the picked values. */
+/* The picker, for a column with too many values for a track of chips.
+   Closed, it is the track itself, holding "All N" or the picked values. */
 .depictio-strip-picker {
   all: unset;
   box-sizing: border-box;
@@ -495,16 +484,44 @@
   transform: rotate(180deg);
 }
 
-/* Open: every value as a chip, wrapped onto lines. */
+/* Open: the values one per line, each a full-width chip of the bar in the
+   same grey track, a tick on the picked ones. */
 .depictio-strip-picker__dropdown {
   min-width: 260px;
 }
 
-.depictio-strip-picker__chips {
-  width: auto;
-  flex-wrap: wrap;
-  max-height: 260px;
+.depictio-strip-picker__list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 300px;
   overflow-y: auto;
+  padding: 4px;
+  border-radius: var(--mantine-radius-md);
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+}
+
+.depictio-strip-picker__list .depictio-strip-chip {
+  justify-content: flex-start;
+  min-width: 0;
+  padding-block: 6px;
+}
+
+.depictio-strip-chip__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.depictio-strip-chip__tick {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--mantine-primary-color-filled);
+  visibility: hidden;
+}
+
+.depictio-strip-chip[aria-pressed='true'] .depictio-strip-chip__tick {
+  visibility: visible;
 }
 
 .depictio-strip-picker__foot {

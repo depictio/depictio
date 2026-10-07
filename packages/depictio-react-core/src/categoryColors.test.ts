@@ -4,6 +4,7 @@ import {
   NEUTRAL_CATEGORY_COLOR,
   categoryColor,
   categoryColorMap,
+  chipCategoryDots,
   dashboardColorway,
   hasPinnedColors,
   pinnedCategoryColor,
@@ -157,5 +158,41 @@ describe('pinnedCategoryDots (filter chips)', () => {
 
   it('treats an empty entry as no colours', () => {
     expect(hasPinnedColors({ category_colors: { season: {} } }, 'season')).toBe(false);
+  });
+});
+
+describe('chipCategoryDots (filter bar chips)', () => {
+  const trec: CategoryColorSource = {
+    category_colors: {
+      locality: { Athens: '#1a4f8f', Barcelona: '#f5a11b', Naples: '#00a550' },
+    },
+  };
+  const colorway = ['#aa0000', '#00aa00', '#0000aa', '#aaaa00'];
+
+  it('takes the dashboard’s colours where it gives the column some', () => {
+    const dots = chipCategoryDots(trec, 'locality', ['Naples', 'Athens'], colorway, 9);
+    expect(dots?.get('Athens')).toBe('#1a4f8f');
+    expect(dots?.get('Naples')).toBe('#00a550');
+  });
+
+  it('colours a short column without any from the colorway, by sorted position', () => {
+    const dots = chipCategoryDots(trec, 'size_class', ['Small', 'Large', 'Medium'], colorway, 9);
+    expect(dots && [...dots.entries()]).toEqual([
+      ['Large', '#aa0000'],
+      ['Medium', '#00aa00'],
+      ['Small', '#0000aa'],
+    ]);
+  });
+
+  it('gives no dots where two values would share a hue, or past the limit', () => {
+    const five = ['a', 'b', 'c', 'd', 'e'];
+    expect(chipCategoryDots(trec, 'site', five, colorway, 9)).toBeNull();
+    expect(chipCategoryDots(trec, 'site', ['a', 'b', 'c'], colorway, 2)).toBeNull();
+  });
+
+  it('gives none without a colorway, a column, or with the fallback turned off', () => {
+    expect(chipCategoryDots(trec, 'season', ['Spring', 'Summer'], null, 9)).toBeNull();
+    expect(chipCategoryDots(trec, undefined, ['Spring'], colorway, 9)).toBeNull();
+    expect(chipCategoryDots(trec, 'season', ['Spring', 'Summer'], colorway, 0)).toBeNull();
   });
 });

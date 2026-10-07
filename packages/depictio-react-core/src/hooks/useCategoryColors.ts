@@ -4,8 +4,8 @@ import { useMantineTheme } from '@mantine/core';
 import { brandColorway } from '../colors';
 import {
   categoryColorMap,
+  chipCategoryDots,
   dashboardColorway,
-  pinnedCategoryDots,
   type CategoryColorSource,
 } from '../categoryColors';
 
@@ -46,14 +46,20 @@ export function useCategoryColorMap(
 }
 
 /**
- * `pinnedCategoryDots` for one column, bound to the provider: the colour dots
- * a filter's chips draw, or `null` when the dashboard gives the column none.
- * No palette fallback, on purpose (see `categoryColors.ts`).
+ * The colour dots a filter's chips draw, or `null` for none, bound to the
+ * provider and the theme: the column's own colours, or for a column without
+ * any and at most `maxUnpinned` values, the colorway's (`chipCategoryDots`).
+ * Leave `maxUnpinned` out for pinned colours only.
  */
 export function useCategoryDotColors(
   column: string | null | undefined,
   universe: readonly unknown[],
+  maxUnpinned = 0,
 ): Map<string, string> | null {
   const source = useCategoryColorSource();
-  return useMemo(() => pinnedCategoryDots(source, column, universe), [source, column, universe]);
+  const palette = useCategoryPalette();
+  return useMemo(
+    () => chipCategoryDots(source, column, universe, palette, maxUnpinned),
+    [source, column, universe, palette, maxUnpinned],
+  );
 }

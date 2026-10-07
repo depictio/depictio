@@ -14,10 +14,9 @@
  *   4. a neutral grey.
  *
  * Steps 3 and 4 are for surfaces that must colour every value, a figure's
- * traces. A filter's chips are not one of them: a dot there says "this is the
- * colour Athens has on this dashboard", which is only true of a column the
- * author gave colours to. So the chips take `pinnedCategoryDots` — steps 1 and
- * 2, and no dot at all for a column with no entry.
+ * traces. A filter's chips take `chipCategoryDots`: steps 1 and 2 for a column
+ * the author gave colours to, step 3 for a short column with none (a colorway
+ * covers it without handing one hue to two values), no dot past that.
  *
  * Pure on purpose: the figure code calls the same functions with the same
  * inputs and gets the same answer. `useCategoryColorMap` and
@@ -155,4 +154,30 @@ export function pinnedCategoryDots(
     map.set(value, pinnedCategoryColor(source, column, value) ?? NEUTRAL_CATEGORY_COLOR);
   }
   return map;
+}
+
+/**
+ * The dots a filter's chips draw, or `null` for none.
+ *
+ * A column with colours of its own takes them (`pinnedCategoryDots`). One
+ * without still gets dots while it is short, at most `maxValues` values and no
+ * more than the colorway has hues: each value then takes the colorway's hue
+ * for its place in the sorted universe (step 3), the colour a figure following
+ * the rule above draws it in, and no two values share one. A longer column
+ * gets none: the colorway would come round again, and two values in one
+ * colour on adjacent chips would read as a pair.
+ */
+export function chipCategoryDots(
+  source: CategoryColorSource | null | undefined,
+  column: string | null | undefined,
+  universe: readonly unknown[],
+  palette: readonly string[] | null | undefined,
+  maxValues: number,
+): Map<string, string> | null {
+  const pinned = pinnedCategoryDots(source, column, universe);
+  if (pinned) return pinned;
+  if (!column || !palette || palette.length === 0) return null;
+  const values = sortCategoryValues(universe);
+  if (values.length === 0 || values.length > Math.min(maxValues, palette.length)) return null;
+  return categoryColorMap(source, column, values, palette);
 }

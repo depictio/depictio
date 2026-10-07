@@ -6,7 +6,7 @@
  * order and the event shape in `categoricalOptions`, the slider bounds in
  * `numericScale`. Only the drawing differs.
  */
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Popover,
   RangeSlider,
@@ -22,6 +22,7 @@ import { useAvailableSet } from '../../../availableValues';
 import { useBrandScopeAttributes } from '../../branding/BrandScope';
 import { useCategoryDotColors } from '../../../hooks/useCategoryColors';
 import {
+  MAX_STRIP_CHIPS,
   categoricalDisplay,
   chipFilterValue,
   chipSelectionMode,
@@ -68,15 +69,12 @@ const ControlMessage: React.FC<{ error?: boolean; children: React.ReactNode }> =
 // ------------------------------------------------------------- categorical
 
 /**
- * MultiSelect, Select and SegmentedControl as a grey track of toggle chips.
- * A chip carries a colour dot only when the dashboard gives its column colours
- * (`category_colors`): there the dot is the colour the figures draw the value
- * in. Past `MAX_STRIP_CHIPS` values the chips no longer fit, and a compact
- * select drawn as the same track takes over. It also takes over whenever the
- * chips are wider than the room the bar gives them (see `useChipsFit`): the
- * track scrolls rather than wraps, and a hidden scrollbar meant the values past
- * the edge were cut off with nothing to say they were there. The select is
- * the same chips in a popover (`StripSelect`), not a second design.
+ * MultiSelect, Select and SegmentedControl as a grey track of toggle chips,
+ * each with its value's colour dot (`chipCategoryDots`: the dashboard's
+ * colours for the column, else the colorway's for a column this short).
+ * Wider than its cell, the track wraps onto a second line rather than hiding
+ * values past the edge. Past `MAX_STRIP_CHIPS` values a picker drawn as the
+ * same track takes over (`StripSelect`), with the values one per line.
  */
 export const StripCategorical: React.FC<StripControlProps> = ({
   metadata,
@@ -96,65 +94,18 @@ export const StripCategorical: React.FC<StripControlProps> = ({
     [options, availableSet],
   );
   // Keyed on the full universe, not on `ordered`: a value keeps its colour
-  // while the funnel greys other values out. Null: the column has no colours.
-  const dots = useCategoryDotColors(metadata.column_name, options);
+  // while the funnel greys other values out. Null: no dots for this column.
+  const dots = useCategoryDotColors(metadata.column_name, options, MAX_STRIP_CHIPS);
   const selected = selectedValues(filterValueOf(filters, metadata.index));
   const mode = chipSelectionMode(type);
   const emit = (next: string[]) =>
     onFilterChange?.(filterEvent(metadata, chipFilterValue(next, type)));
-  const fit = useChipsFit(`${options.join('\u0000')}\u0001${selected.join('\u0000')}`);
 
   if (loading) return <ControlSkeleton />;
   if (error) return <ControlMessage error>Could not load values</ControlMessage>;
   if (options.length === 0) return <ControlMessage>No values</ControlMessage>;
 
   if (categoricalDisplay(options.length) === 'select') {
-    return renderSelect();
-  }
-
-  return (
-    <div ref={fit.cellRef} className="depictio-strip-fit">
-      {fit.fits ? (
-        <div
-          ref={fit.trackRef}
-          className="depictio-strip-track"
-          role="group"
-          aria-label={label}
-          data-has-selection={selected.length > 0}
-          data-dots={dots ? 'true' : 'false'}
-        >
-          {ordered.map((value) => {
-            const on = selected.includes(value);
-            // A selected value stays clickable even once the funnel has exhausted
-            // it, or it could never be deselected.
-            const disabled = Boolean(availableSet) && !availableSet!.has(value) && !on;
-            return (
-              <button
-                key={value}
-                type="button"
-                className="depictio-strip-chip"
-                aria-pressed={on}
-                disabled={disabled}
-                title={disabled ? `${value}: no data left under the other filters` : value}
-                onClick={() => emit(toggleChip(selected, value, mode))}
-                style={dots ? ({ '--chip-color': dots.get(value) } as React.CSSProperties) : undefined}
-              >
-                {dots && <span className="depictio-strip-chip__dot" aria-hidden />}
-                <span>{value}</span>
-              </button>
-            );
-          })}
-        </div>
-      ) : (
-        renderSelect()
-      )}
-    </div>
-  );
-
-  // A plain function, not a component: a component declared in here would be a
-  // new type on every render, and React would remount the select (closing its
-  // dropdown) each time the bar re-rendered.
-  function renderSelect() {
     return (
       <StripSelect
         options={ordered}
@@ -167,45 +118,39 @@ export const StripCategorical: React.FC<StripControlProps> = ({
       />
     );
   }
+
+  return (
+    <div
+      className="depictio-strip-track depictio-strip-track--chips"
+      role="group"
+      aria-label={label}
+      data-has-selection={selected.length > 0}
+      data-dots={dots ? 'true' : 'false'}
+    >
+      {ordered.map((value) => {
+        const on = selected.includes(value);
+        // A selected value stays clickable even once the funnel has exhausted
+        // it, or it could never be deselected.
+        const disabled = Boolean(availableSet) && !availableSet!.has(value) && !on;
+        return (
+          <button
+            key={value}
+            type="button"
+            className="depictio-strip-chip"
+            aria-pressed={on}
+            disabled={disabled}
+            title={disabled ? `${value}: no data left under the other filters` : value}
+            onClick={() => emit(toggleChip(selected, value, mode))}
+            style={dots ? ({ '--chip-color': dots.get(value) } as React.CSSProperties) : undefined}
+          >
+            {dots && <span className="depictio-strip-chip__dot" aria-hidden />}
+            <span>{value}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
 };
-
-/**
- * Whether a track of chips fits the room its cell has, so a bar can fall back
- * to its select rather than cut values off.
- *
- * The chips' natural width is measured once per set of values and selection
- * (a selected chip is set in a heavier weight, so it is a few pixels wider),
- * then compared to the cell's width as the bar resizes. Measuring needs the
- * chips on screen, so a change of key draws them again for one layout pass:
- * the measure and the switch both happen in layout effects, before paint, so
- * the select never flickers into chips. The cell stays mounted either way,
- * which keeps the observer watching across the switch.
- */
-function useChipsFit(key: string) {
-  // A callback ref, so the observer starts when the cell mounts: the control
-  // renders a skeleton first, while its values load.
-  const [cell, cellRef] = useState<HTMLDivElement | null>(null);
-  const trackRef = useRef<HTMLDivElement>(null);
-  const [needed, setNeeded] = useState<{ key: string; width: number } | null>(null);
-  const [room, setRoom] = useState<number | null>(null);
-
-  useLayoutEffect(() => {
-    const track = trackRef.current;
-    if (track && needed?.key !== key) setNeeded({ key, width: track.scrollWidth });
-  });
-
-  useEffect(() => {
-    if (!cell || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(([entry]) => setRoom(entry.contentRect.width));
-    observer.observe(cell);
-    return () => observer.disconnect();
-  }, [cell]);
-
-  const measured = needed?.key === key ? needed.width : null;
-  // A pixel of slack for sub-pixel rounding between the two measurements.
-  const fits = measured == null || room == null || measured <= room + 1;
-  return { cellRef, trackRef, fits };
-}
 
 /** Past this many values the picker offers a search field. */
 const PICKER_SEARCH_MIN = 10;
@@ -213,14 +158,14 @@ const PICKER_SEARCH_MIN = 10;
 const PICKER_SHOWN = 2;
 
 /**
- * The bar's picker for a column with too many values for a track of chips, or
- * a track too wide for its cell: the same chips, in a popover.
+ * The bar's picker for a column with too many values for a track of chips.
  *
  * Closed, it is the grey track itself, holding "All N" or the picked values as
- * pressed chips (their colour dot included). Open, it shows every value as a
- * chip of the bar, wrapped onto lines, with a search field once the list is
- * long and a Clear. A one-of-N filter closes on pick; a multi one stays open.
- * A Mantine Select would have been a second design for the same control.
+ * pressed chips (their colour dot included). Open, it lists every value in one
+ * column, each a full-width chip of the bar with a tick when picked, under a
+ * search field once the list is long, and over a count and a Clear. A one-of-N
+ * filter closes on pick; a multi one stays open. A Mantine Select would have
+ * been a second design for the same control.
  */
 const StripSelect: React.FC<{
   options: string[];
@@ -330,7 +275,12 @@ const StripSelect: React.FC<{
             aria-label={`Search ${label}`}
           />
         )}
-        <div className="depictio-strip-track depictio-strip-picker__chips" role="group" aria-label={label}>
+        <div
+          className="depictio-strip-picker__list"
+          role="group"
+          aria-label={label}
+          data-has-selection={selected.length > 0}
+        >
           {shown.map((value) => {
             const on = selected.includes(value);
             const disabled = Boolean(available) && !available!.has(value) && !on;
@@ -346,7 +296,16 @@ const StripSelect: React.FC<{
                 style={dotStyle(value)}
               >
                 {dots && <span className="depictio-strip-chip__dot" aria-hidden />}
-                <span>{value}</span>
+                <span className="depictio-strip-chip__label">{value}</span>
+                <svg
+                  className="depictio-strip-chip__tick"
+                  viewBox="0 0 24 24"
+                  width="16"
+                  height="16"
+                  aria-hidden
+                >
+                  <path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" strokeWidth="2.2" />
+                </svg>
               </button>
             );
           })}

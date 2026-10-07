@@ -7,9 +7,9 @@
  */
 import type { InteractiveFilter, StoredMetadata } from '../../api';
 
-/** Above this many values a filter bar draws a compact select instead of a
- *  row of chips: nine chips no longer fit beside a second filter at 1440px. */
-export const MAX_STRIP_CHIPS = 8;
+/** Up to this many values a filter bar draws chips, each in its colour (on a
+ *  second line when its column is narrow); from ten, a picker listing them. */
+export const MAX_STRIP_CHIPS = 9;
 
 const COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
@@ -34,7 +34,7 @@ export function orderCategoricalOptions(
 
 export type CategoricalDisplay = 'chips' | 'select';
 
-/** Chips while they fit, a compact select beyond `max`. */
+/** Chips up to `max` values, a picker beyond. */
 export function categoricalDisplay(optionCount: number, max = MAX_STRIP_CHIPS): CategoricalDisplay {
   return optionCount > max ? 'select' : 'chips';
 }
