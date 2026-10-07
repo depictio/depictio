@@ -156,8 +156,22 @@ export function ringElements(
   active = cleanup;
 }
 
-/** Find `target` in `demo` and ring it. False when the demo has nothing to show. */
+/**
+ * Sent to a demo marked `data-guide-play` instead of a ring: a demo whose
+ * controls are all in plain sight (Your view) has nothing to point at, so its
+ * "Show me" plays it — each control rings in turn while it runs through its
+ * values.
+ */
+export const PLAY_EVENT = 'depictio-guide-play';
+
+/** Find `target` in `demo` and ring it, or play the demo when it can be
+ *  played. False when the demo has nothing to show. */
 export function showDemoTarget(target: GuideTarget, demo: ParentNode): boolean {
+  const player = demo.querySelector<HTMLElement>('[data-guide-play]');
+  if (player) {
+    player.dispatchEvent(new CustomEvent(PLAY_EVENT));
+    return true;
+  }
   const els = findDemoTargets(target, demo);
   if (els.length === 0) return false;
   // A tile's actions only show on hover: keep them on screen while ringed.

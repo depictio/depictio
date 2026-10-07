@@ -3,7 +3,7 @@
  * same pieces as the real controls. They act on themselves only. The demos
  * made of the dashboard's own components are in `demos/`.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActionIcon,
   Box,
@@ -11,12 +11,13 @@ import {
   Group,
   SegmentedControl,
   Stack,
+  Switch,
   Tabs,
   Text,
   useComputedColorScheme,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { UI_SCALE_STEPS, useBranding } from 'depictio-react-core';
+import { UI_SCALE_STEPS, useBrandAccent, useBranding } from 'depictio-react-core';
 import type { GuideModel } from 'depictio-react-core';
 
 type GuideTab = GuideModel['tabs']['groups'][number]['tabs'][number];
@@ -24,6 +25,7 @@ type GuideTab = GuideModel['tabs']['groups'][number]['tabs'][number];
 import { resolveTabColor, resolveTabIcon, tabImageSrc } from '../chrome/Sidebar';
 import { dashboardHref, dashboardLinkClickHandler } from '../dashboards/lib/dashboardLinks';
 import { CONTENT_WIDTHS, type ContentWidth } from '../hooks/useContentWidthPref';
+import { PLAY_EVENT, ringElements } from './showMe';
 
 /** The inset a demo sits in, labelled so it reads as something to try. */
 export const DemoFrame: React.FC<{ label?: string; children: React.ReactNode }> = ({
@@ -187,53 +189,128 @@ export const TabPillsDemo: React.FC<{
 // Your view
 // ---------------------------------------------------------------------------
 
-/** What the two "Your view" settings do, on a page in miniature. */
+/**
+ * What the reader's own view settings do, on a page in miniature: the page
+ * width and the text size from Settings → Your view, and light or dark from
+ * the switch at the foot of the sidebar (the same switch, drawn here).
+ *
+ * The part's "Show me" plays it (`PLAY_EVENT`): each setting in turn is ringed
+ * while it goes through its values, so the reader sees what each one changes
+ * without touching anything, then the demo is back where it started.
+ */
 export const YourViewDemo: React.FC = () => {
   const [width, setWidth] = useState<ContentWidth>('full');
-  const [step, setStep] = useState(UI_SCALE_STEPS.indexOf(1));
+  const base = UI_SCALE_STEPS.indexOf(1);
+  const [step, setStep] = useState(base);
+  const [dark, setDark] = useState(false);
   const scale = UI_SCALE_STEPS[step];
   const share: Record<ContentWidth, number> = { full: 100, wide: 86, comfortable: 70, compact: 60 };
+  const accent = useBrandAccent('tertiary', 'orange');
+
+  const rootRef = useRef<HTMLDivElement>(null);
+  const widthRef = useRef<HTMLDivElement>(null);
+  const sizeRef = useRef<HTMLDivElement>(null);
+  const themeRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    let timers: number[] = [];
+    const stop = () => {
+      timers.forEach((t) => window.clearTimeout(t));
+      timers = [];
+    };
+    const play = () => {
+      stop();
+      let t = 0;
+      const after = (ms: number, fn: () => void) => {
+        t += ms;
+        timers.push(window.setTimeout(fn, t));
+      };
+      const ring = (el: HTMLElement | null) => el && ringElements([el], { scroll: false });
+      const clampStep = (i: number) => Math.max(0, Math.min(UI_SCALE_STEPS.length - 1, i));
+      setWidth('full');
+      setStep(base);
+      setDark(false);
+      after(0, () => ring(widthRef.current));
+      for (const w of ['wide', 'comfortable', 'compact', 'full'] as ContentWidth[]) {
+        after(550, () => setWidth(w));
+      }
+      after(500, () => ring(sizeRef.current));
+      for (const i of [base + 1, base + 2, base - 1, base]) after(550, () => setStep(clampStep(i)));
+      after(500, () => ring(themeRef.current));
+      after(450, () => setDark(true));
+      after(1200, () => setDark(false));
+    };
+    root.addEventListener(PLAY_EVENT, play);
+    return () => {
+      root.removeEventListener(PLAY_EVENT, play);
+      stop();
+    };
+  }, [base]);
+
   return (
-    <Stack gap="sm">
+    <Stack gap="sm" ref={rootRef} data-guide-play>
       <Group gap="sm" justify="space-between" wrap="wrap">
         <SegmentedControl
+          ref={widthRef}
           size="xs"
           value={width}
           onChange={(v) => setWidth(v as ContentWidth)}
           data={CONTENT_WIDTHS.map((w) => ({ value: w.value, label: w.label }))}
           data-guide-show
         />
-        <ActionIcon.Group data-guide-show>
-          <ActionIcon
-            variant="default"
-            size="input-xs"
-            aria-label="Decrease font size"
-            disabled={step === 0}
-            onClick={() => setStep((s) => Math.max(0, s - 1))}
-          >
-            <Icon icon="mdi:format-font-size-decrease" width={14} />
-          </ActionIcon>
-          <Button
-            variant="default"
-            size="compact-xs"
-            h="var(--input-height-xs)"
-            style={{ pointerEvents: 'none' }}
-            tabIndex={-1}
-          >
-            {Math.round(scale * 100)}%
-          </Button>
-          <ActionIcon
-            variant="default"
-            size="input-xs"
-            aria-label="Increase font size"
-            disabled={step === UI_SCALE_STEPS.length - 1}
-            onClick={() => setStep((s) => Math.min(UI_SCALE_STEPS.length - 1, s + 1))}
-          >
-            <Icon icon="mdi:format-font-size-increase" width={14} />
-          </ActionIcon>
-        </ActionIcon.Group>
+        <Group gap="sm" wrap="nowrap">
+          <ActionIcon.Group ref={sizeRef} data-guide-show>
+            <ActionIcon
+              variant="default"
+              size="input-xs"
+              aria-label="Decrease font size"
+              disabled={step === 0}
+              onClick={() => setStep((s) => Math.max(0, s - 1))}
+            >
+              <Icon icon="mdi:format-font-size-decrease" width={14} />
+            </ActionIcon>
+            <Button
+              variant="default"
+              size="compact-xs"
+              h="var(--input-height-xs)"
+              style={{ pointerEvents: 'none' }}
+              tabIndex={-1}
+            >
+              {Math.round(scale * 100)}%
+            </Button>
+            <ActionIcon
+              variant="default"
+              size="input-xs"
+              aria-label="Increase font size"
+              disabled={step === UI_SCALE_STEPS.length - 1}
+              onClick={() => setStep((s) => Math.min(UI_SCALE_STEPS.length - 1, s + 1))}
+            >
+              <Icon icon="mdi:format-font-size-increase" width={14} />
+            </ActionIcon>
+          </ActionIcon.Group>
+          <div ref={themeRef} data-guide-show style={{ display: 'inline-flex', borderRadius: 999 }}>
+            <Switch
+              size="lg"
+              color={accent}
+              checked={dark}
+              onChange={(e) => setDark(e.currentTarget.checked)}
+              onLabel={<Icon icon="ph:moon-fill" width={16} />}
+              offLabel={<Icon icon="ph:sun-fill" width={16} />}
+              aria-label="Light or dark, in this example"
+            />
+          </div>
+        </Group>
       </Group>
-      <Box className="depictio-guide-tile" h={96} p={8}>
+      <Box
+        className="depictio-guide-tile"
+        h={96}
+        p={8}
+        style={{
+          transition: 'background-color 200ms ease',
+          background: dark ? 'var(--mantine-color-dark-7)' : undefined,
+        }}
+      >
         <Box
           mx="auto"
           h="100%"
@@ -245,10 +322,23 @@ export const YourViewDemo: React.FC = () => {
             overflow: 'hidden',
           }}
         >
-          <Text fw={700} style={{ fontSize: 13 * scale, lineHeight: 1.3 }}>
+          <Text
+            fw={700}
+            style={{
+              fontSize: 13 * scale,
+              lineHeight: 1.3,
+              color: dark ? 'var(--mantine-color-dark-0)' : undefined,
+            }}
+          >
             A tab
           </Text>
-          <Text c="dimmed" style={{ fontSize: 11 * scale, lineHeight: 1.4 }}>
+          <Text
+            style={{
+              fontSize: 11 * scale,
+              lineHeight: 1.4,
+              color: dark ? 'var(--mantine-color-dark-2)' : 'var(--mantine-color-dimmed)',
+            }}
+          >
             Its figures, tables and cards, at the width and size you pick.
           </Text>
         </Box>

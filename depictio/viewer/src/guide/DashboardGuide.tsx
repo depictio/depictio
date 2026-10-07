@@ -620,9 +620,9 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
       <>The sun / moon at the foot of the sidebar switches between light and dark.</>,
       <>Settings also says what the dashboard is: its project, its run and who owns it.</>,
     ],
-    demoLabel: 'Width and text size',
+    demoLabel: 'Width, text size, light or dark',
     demo: <YourViewDemo />,
-    showMe: { target: 'settings', label: 'Show me the two settings' },
+    showMe: { target: 'settings', label: 'Show me what they do' },
     footer: (
       <Button
         variant="default"
