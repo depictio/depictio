@@ -751,6 +751,37 @@ class PhylogeneticConfig(_BaseVizConfig):
     DCPhylogenyConfig). Tip annotations (group / habitat / clade label /
     clinical metadata) live in a regular Table DC and are joined to tip
     labels at render time via the `taxon_col` column.
+
+    `collapse_rank` draws the same component as a summary instead: one tip per
+    value of that tip-metadata column, the top `top_n` by share, optionally
+    sized by reads from an abundance table that has a column named like the
+    rank. The component builder writes the same keys (its "Tree and tip
+    metadata" and "Read shares" sections, and the preview's View switch), so
+    a summary built there and this one are the same config. Example YAML::
+
+        - component_type: advanced_viz
+          workflow_tag: ampliseq
+          data_collection_tag: phylogenetic_tree_canonical
+          viz_kind: phylogenetic
+          config:
+            viz_kind: phylogenetic
+            tree_wf_id: 646b0f3c1e4a2d7f8e5b8ca3  # placeholders, rewritten from
+            tree_dc_id: 646b0f3c1e4a2d7f8e5b8cdb  # tree_dc_tag at import
+            tree_dc_tag: phylogenetic_tree_canonical
+            metadata_dc_tag: phylogenetic_tree_metadata_canonical
+            color_col: Kingdom
+            extra_color_cols: [Phylum, Class, Order]  # what Collapse to offers
+            collapse_rank: Phylum                     # unset: the full tree
+            top_n: 10
+            size_by: abundance                        # default: tips
+            abundance_dc_tag: taxonomy_rel_abundance  # has a Phylum column
+            abundance_split_col: locality             # one column of dots per site
+
+    The `*_dc_tag` keys name DCs of the component's own workflow and are
+    resolved to the `*_wf_id` / `*_dc_id` pair at import, overwriting whatever
+    ids the YAML carries; a DC of another workflow is bound by its ids alone.
+    `tree_wf_id` / `tree_dc_id` are required even beside `tree_dc_tag`, which
+    is why a template ships placeholder ids for the import to replace.
     """
 
     viz_kind: Literal["phylogenetic"] = "phylogenetic"
@@ -879,19 +910,11 @@ class PhylogeneticConfig(_BaseVizConfig):
 
     @model_validator(mode="after")
     def _summary_is_coherent(self) -> PhylogeneticConfig:
-        summary_only = [
-            name
-            for name, unset in (
-                ("size_by", self.size_by == "tips"),
-                ("abundance_split_col", self.abundance_split_col is None),
-            )
-            if not unset
-        ]
-        if summary_only and not self.collapse_rank:
-            raise ValueError(
-                f"{', '.join(summary_only)} only apply to the summary: set collapse_rank "
-                "(e.g. 'Phylum') or drop them"
-            )
+        # The summary's own settings (`size_by`, `top_n`, `abundance_split_col`)
+        # are allowed without `collapse_rank`: the full tree ignores them, and a
+        # tree switched from its summary to the full tree keeps them, so that
+        # switching back (the View control in the viz's settings) returns the
+        # summary as it was. What is refused is a summary that cannot be drawn.
         if self.collapse_rank and not (self.metadata_dc_id or self.metadata_dc_tag):
             raise ValueError(
                 "collapse_rank reads the rank from the tip metadata: bind it with "
