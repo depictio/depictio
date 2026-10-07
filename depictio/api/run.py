@@ -1,10 +1,4 @@
-try:
-    import uvicorn
-except ImportError as exc:
-    # `pip install depictio` alone is the CLI: the server comes with the extra.
-    raise SystemExit(
-        "depictio-api needs the server dependencies: pip install 'depictio[server]'"
-    ) from exc
+import uvicorn
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger

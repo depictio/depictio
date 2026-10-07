@@ -68,6 +68,9 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
+# What users install: depictio (the CLI), depictio[multiqc] and depictio[local].
+# [server] is the API and worker that the Docker images, [local] and [dev] build on;
+# it is not a deployment of its own, so the docs do not offer it.
 multiqc = ["multiqc==1.35"]
 server = [
   "depictio[multiqc]",
@@ -143,7 +146,6 @@ depictio = "depictio.cli.depictio_cli:main"
 # The name the depictio-cli package has always installed, which the Nextflow hook and
 # existing scripts call.
 depictio-cli = "depictio.cli.depictio_cli:main"
-depictio-api = "depictio.api.run:main"
 
 
 [tool.uv.sources]
