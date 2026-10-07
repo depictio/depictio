@@ -278,14 +278,14 @@ async def get_ingestion_health(project_id: PyObjectId, current_user=Depends(get_
 
 
 async def _project_exists(lookup: Awaitable[object]) -> bool:
-    """Whether a project lookup found one. Its 404 means the value is free."""
+    """Whether a project lookup found one. A 404, or nothing returned, means the value
+    is free."""
     try:
-        await lookup
+        return await lookup is not None
     except HTTPException as e:
         if e.status_code == 404:
             return False
         raise
-    return True
 
 
 @projects_endpoint_router.post("/create")
