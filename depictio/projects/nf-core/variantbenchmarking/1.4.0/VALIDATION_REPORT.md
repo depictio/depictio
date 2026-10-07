@@ -126,8 +126,8 @@ depictio recipe run happy/summary.py            -d ./vb-testdata
 depictio recipe run sompy/summary.py            -d ./vb-testdata
 depictio recipe run sompy/regions.py            -d ./vb-testdata
 # 3. Validate the template, then ingest (needs the running stack)
-depictio run --template nf-core/variantbenchmarking/1.4.0 --data-root ./vb-testdata --dry-run --deep
-depictio run --template nf-core/variantbenchmarking/1.4.0 --data-root ./vb-testdata
+depictio ingest --template nf-core/variantbenchmarking/1.4.0 --data-root ./vb-testdata --dry-run
+depictio ingest --template nf-core/variantbenchmarking/1.4.0 --data-root ./vb-testdata
 # 4. Snapshot the dashboards into .db_seeds/
 bash $DIR/generate_seeds.sh ./vb-testdata
 ```

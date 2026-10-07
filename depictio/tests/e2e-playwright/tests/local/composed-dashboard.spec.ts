@@ -1,12 +1,12 @@
 /**
- * A dashboard composed from the catalog (`depictio run --data-root` with no
+ * A dashboard composed from the catalog (`depictio ingest <dir>` with no
  * template that fits, or `--compose`), opened tab by tab in a browser.
  *
- * Runs against `depictio local up --data-root <dir>`, which writes what the
- * ingestion produced to `<local home>/last_ingestion.json`. Point
- * COMPOSED_RESULT_JSON at that file to run it, e.g.
+ * Runs against a server holding `depictio ingest <dir> --result-json <file>`'s
+ * project (`depictio local up`, then the ingestion). Point COMPOSED_RESULT_JSON
+ * at that file to run it, e.g.
  *
- *   COMPOSED_RESULT_JSON=~/.depictio/local/last_ingestion.json \
+ *   COMPOSED_RESULT_JSON=~/ingested.json \
  *   PLAYWRIGHT_BASE_URL=http://127.0.0.1:8058 PLAYWRIGHT_API_URL=http://127.0.0.1:8058 \
  *   npx playwright test --project=chromium tests/local/composed-dashboard.spec.ts
  *
@@ -59,8 +59,8 @@ async function expandAll(page: Page): Promise<void> {
     .catch(() => {});
 }
 
-test.describe("Composed dashboard (depictio local up --data-root)", () => {
-  test.skip(!resultFile, "Set COMPOSED_RESULT_JSON to a `depictio run --result-json` file.");
+test.describe("Composed dashboard (depictio ingest <dir>)", () => {
+  test.skip(!resultFile, "Set COMPOSED_RESULT_JSON to a `depictio ingest --result-json` file.");
 
   let serverErrors: string[] = [];
   test.beforeEach(async ({ page }) => {

@@ -150,11 +150,11 @@ results table carries row selection on `gene_id`.
 ```bash
 bash depictio/projects/nf-core/differentialabundance/2.0.0/download_test_data.sh
 # then follow post_fetch_help in megatest.yaml for the samplesheet and contrasts curls
-depictio-cli run --template nf-core/differentialabundance/2.0.0 \
+depictio-cli ingest --template nf-core/differentialabundance/2.0.0 \
   --data-root ~/Data/depictio-nfcore/differentialabundance/2.0.0/megatest
 ```
 
-`--project-name` is safe for `run` itself, but leave it off anyway. The dashboard carries
+`--project-name` is safe for `ingest` itself, but leave it off anyway. The dashboard carries
 `project_tag: Differential Abundance Analysis`, and the standalone `depictio dashboard
 import` resolves that tag by name, so a renamed project cannot take a re-imported
 dashboard later.

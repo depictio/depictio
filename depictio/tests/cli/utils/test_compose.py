@@ -335,7 +335,7 @@ def test_template_compose_command_writes_and_reports(run_with_unknown, tmp_path)
     assert (out / "template.yaml").is_file()
     text = " ".join(result.output.split())
     assert "Not recognised" in text and "stats/per_sample.tsv" in text
-    assert f"depictio run --template {out}" in text
+    assert f"--template {out}" in text and "depictio ingest " in text
 
 
 def test_template_compose_command_on_nothing(tmp_path):

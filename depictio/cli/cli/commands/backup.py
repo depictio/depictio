@@ -1,13 +1,20 @@
 from typing import Annotated
 
+import httpx
 import typer
+from rich.markup import escape
 
 from depictio.cli.cli.utils.api_calls import api_login
-from depictio.cli.cli.utils.common import load_depictio_config
+from depictio.cli.cli.utils.common import load_depictio_config, report_unreachable
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
     rich_print_command_usage,
     rich_print_json,
+)
+from depictio.cli.cli.utils.server_target import (
+    LegacyConfigPathOption,
+    ServerOption,
+    resolve_server,
 )
 
 app = typer.Typer()
@@ -18,11 +25,34 @@ app = typer.Typer()
 dev_app = typer.Typer()
 
 
+def _login_as_admin(config_path: str, action: str) -> None:
+    """Log in with ``config_path``; exit 1 unless the server takes it for an administrator.
+
+    api_login reports a rejected token by returning success False, with no is_admin:
+    checked first, so an expired token is not reported as missing admin rights.
+    """
+    rich_print_checked_statement("Authenticating user...", "info")
+    try:
+        auth_response = api_login(config_path)
+    except httpx.HTTPError as exc:
+        report_unreachable(config_path, exc)
+        raise typer.Exit(1) from exc
+    if not auth_response.get("success"):
+        rich_print_checked_statement(
+            "Authentication failed: the server rejected this configuration's token, "
+            "which is invalid or expired",
+            "error",
+        )
+        raise typer.Exit(1)
+    if not auth_response.get("is_admin", False):
+        rich_print_checked_statement(f"Access denied: Only administrators can {action}", "error")
+        raise typer.Exit(1)
+
+
 @app.command()
 def create(
-    CLI_config_path: Annotated[
-        str, typer.Option("--CLI-config-path", help="Path to the configuration file")
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
     dry_run: Annotated[
         bool, typer.Option("--dry-run", help="Perform validation without creating backup")
     ] = False,
@@ -43,35 +73,33 @@ def create(
     Optionally includes S3 deltatable data for complete backups.
 
     Only administrators can perform backup operations.
-
+    \f
     Args:
-        CLI_config_path: Path to the CLI configuration file
+        server: 'local' or a CLI configuration file
         dry_run: If True, validate backup process without creating actual backup
         include_s3_data: If True, also backup S3 deltatable files
         s3_backup_prefix: Prefix for S3 backup folder structure
     """
     rich_print_command_usage("backup create")
+    config_path = resolve_server(server, CLI_config_path)
 
     try:
         # Load CLI configuration
-        CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
+        CLI_config = load_depictio_config(yaml_config_path=config_path)
 
         # Authenticate and verify admin status
-        rich_print_checked_statement("Authenticating user...", "info")
-        auth_response = api_login(CLI_config_path)
-
-        if not auth_response.get("is_admin", False):
-            rich_print_checked_statement(
-                "Access denied: Only administrators can create backups", "error"
-            )
-            raise typer.Exit(1)
+        _login_as_admin(config_path, "create backups")
 
         rich_print_checked_statement("Admin authentication successful", "success")
 
         if dry_run:
-            rich_print_checked_statement("DRY RUN: Validating backup process...", "info")
-            # TODO: Implement dry run validation logic
-            rich_print_checked_statement("DRY RUN: Backup validation completed", "success")
+            # The login and the admin check above are all a dry run does: it says
+            # so rather than claim a validation of the backup itself.
+            rich_print_checked_statement(
+                "DRY RUN: no backup created. Only the server and the admin rights were "
+                "checked, not what a backup would contain.",
+                "info",
+            )
         else:
             if include_s3_data:
                 rich_print_checked_statement("Creating enhanced backup with S3 data...", "info")
@@ -119,7 +147,8 @@ def create(
                 rich_print_json("Backup details:", backup_details)
             else:
                 rich_print_checked_statement(
-                    f"Backup failed: {backup_result.get('message', 'Unknown error')}", "error"
+                    f"Backup failed: {escape(str(backup_result.get('message', 'Unknown error')))}",
+                    "error",
                 )
                 raise typer.Exit(1)
 
@@ -132,28 +161,21 @@ def create(
 
 @app.command()
 def list(
-    CLI_config_path: Annotated[
-        str, typer.Option("--CLI-config-path", help="Path to the configuration file")
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
 ):
     """
     List available backup files on the server.
     """
     rich_print_command_usage("backup list")
+    config_path = resolve_server(server, CLI_config_path)
 
     try:
         # Load CLI configuration
-        CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
+        CLI_config = load_depictio_config(yaml_config_path=config_path)
 
         # Authenticate and verify admin status
-        rich_print_checked_statement("Authenticating user...", "info")
-        auth_response = api_login(CLI_config_path)
-
-        if not auth_response.get("is_admin", False):
-            rich_print_checked_statement(
-                "Access denied: Only administrators can list backups", "error"
-            )
-            raise typer.Exit(1)
+        _login_as_admin(config_path, "list backups")
 
         # Call API endpoint to list backups
         from depictio.cli.cli.utils.api_calls import api_list_backups
@@ -169,7 +191,9 @@ def list(
                 rich_print_checked_statement("No backup files found", "info")
         else:
             rich_print_checked_statement(
-                f"Failed to list backups: {list_result.get('message', 'Unknown error')}", "error"
+                "Failed to list backups: "
+                f"{escape(str(list_result.get('message', 'Unknown error')))}",
+                "error",
             )
             raise typer.Exit(1)
 
@@ -185,32 +209,26 @@ def validate(
     backup_id: Annotated[
         str, typer.Argument(help="ID of the backup to validate (format: YYYYMMDD_HHMMSS)")
     ],
-    CLI_config_path: Annotated[
-        str, typer.Option("--CLI-config-path", help="Path to the configuration file")
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
 ):
     """
     Validate a backup file on the server against Pydantic models.
 
+    \f
     Args:
         backup_id: ID of the backup to validate
-        CLI_config_path: Path to the CLI configuration file
+        server: 'local' or a CLI configuration file
     """
     rich_print_command_usage("backup validate")
+    config_path = resolve_server(server, CLI_config_path)
 
     try:
         # Load CLI configuration
-        CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
+        CLI_config = load_depictio_config(yaml_config_path=config_path)
 
         # Authenticate and verify admin status
-        rich_print_checked_statement("Authenticating user...", "info")
-        auth_response = api_login(CLI_config_path)
-
-        if not auth_response.get("is_admin", False):
-            rich_print_checked_statement(
-                "Access denied: Only administrators can validate backups", "error"
-            )
-            raise typer.Exit(1)
+        _login_as_admin(config_path, "validate backups")
 
         rich_print_checked_statement(f"Validating backup: {backup_id}", "info")
 
@@ -244,7 +262,9 @@ def validate(
                 raise typer.Exit(1)
         else:
             rich_print_checked_statement(
-                f"Validation failed: {validation_result.get('message', 'Unknown error')}", "error"
+                "Validation failed: "
+                f"{escape(str(validation_result.get('message', 'Unknown error')))}",
+                "error",
             )
             raise typer.Exit(1)
 
@@ -257,9 +277,8 @@ def validate(
 
 @dev_app.command("check-coverage")
 def check_coverage(
-    CLI_config_path: Annotated[
-        str, typer.Option("--CLI-config-path", help="Path to the configuration file")
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
 ):
     """
     Check validation coverage for all MongoDB collections.
@@ -270,20 +289,14 @@ def check_coverage(
     Only administrators can check backup coverage.
     """
     rich_print_command_usage("backup check-coverage")
+    config_path = resolve_server(server, CLI_config_path)
 
     try:
         # Load CLI configuration
-        load_depictio_config(yaml_config_path=CLI_config_path)
+        load_depictio_config(yaml_config_path=config_path)
 
         # Authenticate and verify admin status
-        rich_print_checked_statement("Authenticating user...", "info")
-        auth_response = api_login(CLI_config_path)
-
-        if not auth_response.get("is_admin", False):
-            rich_print_checked_statement(
-                "Access denied: Only administrators can check backup coverage", "error"
-            )
-            raise typer.Exit(1)
+        _login_as_admin(config_path, "check backup coverage")
 
         from depictio.cli.cli.utils.backup_validation import (
             check_backup_collections_coverage,
@@ -302,11 +315,9 @@ def check_coverage(
 
         # Check if coverage is valid
         if coverage_report["valid"]:
-            rich_print_checked_statement(
-                "✅ All expected collections have backup coverage", "success"
-            )
+            rich_print_checked_statement("All expected collections have backup coverage", "success")
         else:
-            rich_print_checked_statement("❌ Missing backup coverage detected", "error")
+            rich_print_checked_statement("Missing backup coverage detected", "error")
 
             if coverage_report["missing_from_expected"]:
                 rich_print_checked_statement(
@@ -342,9 +353,8 @@ def restore(
     backup_id: Annotated[
         str, typer.Argument(help="ID of the backup to restore (format: YYYYMMDD_HHMMSS)")
     ],
-    CLI_config_path: Annotated[
-        str, typer.Option("--CLI-config-path", help="Path to the configuration file")
-    ] = "~/.depictio/CLI.yaml",
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
     dry_run: Annotated[
         bool, typer.Option("--dry-run/--no-dry-run", help="Simulate restore without making changes")
     ] = False,
@@ -382,10 +392,10 @@ def restore(
     Before restoring, the server validates the backup against the current
     Pydantic models and refuses to restore invalid backups unless
     --skip-validation is passed.
-
+    \f
     Args:
         backup_id: ID of the backup to restore from
-        CLI_config_path: Path to the CLI configuration file
+        server: 'local' or a CLI configuration file
         dry_run: If True, only simulate the restore
         collections: Comma-separated list of collections to restore (if not specified, restore all)
         force: Skip confirmation prompt
@@ -393,20 +403,14 @@ def restore(
         skip_validation: Skip the server-side validation gate before restore
     """
     rich_print_command_usage("backup restore")
+    config_path = resolve_server(server, CLI_config_path)
 
     try:
         # Load CLI configuration
-        CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
+        CLI_config = load_depictio_config(yaml_config_path=config_path)
 
         # Authenticate and verify admin status
-        rich_print_checked_statement("Authenticating user...", "info")
-        auth_response = api_login(CLI_config_path)
-
-        if not auth_response.get("is_admin", False):
-            rich_print_checked_statement(
-                "Access denied: Only administrators can restore backups", "error"
-            )
-            raise typer.Exit(1)
+        _login_as_admin(config_path, "restore backups")
 
         # Parse collections list
         collections_list = None
@@ -416,9 +420,7 @@ def restore(
 
         if not dry_run and not force:
             # Confirm destructive operation
-            rich_print_checked_statement(
-                "⚠️  WARNING: This will DELETE and REPLACE existing data!", "warning"
-            )
+            rich_print_checked_statement("This will DELETE and REPLACE existing data!", "warning")
             if collections_list:
                 rich_print_checked_statement(
                     f"Collections to restore: {', '.join(collections_list)}", "warning"
@@ -451,10 +453,12 @@ def restore(
         )
 
         if restore_result.get("success", False):
-            if dry_run:
-                rich_print_checked_statement("DRY RUN completed successfully", "success")
+            errors = restore_result.get("errors", [])
+            label = "DRY RUN" if dry_run else "Restore"
+            if errors:
+                rich_print_checked_statement(f"{label} completed with errors", "warning")
             else:
-                rich_print_checked_statement("Restore completed successfully", "success")
+                rich_print_checked_statement(f"{label} completed successfully", "success")
 
             # Show results
             restored_collections = restore_result.get("restored_collections", {})
@@ -465,14 +469,17 @@ def restore(
             if restored_collections:
                 rich_print_json("Collections restored:", restored_collections)
 
-            errors = restore_result.get("errors", [])
             if errors:
-                rich_print_checked_statement("⚠️  Some errors occurred:", "warning")
+                # A collection that does not exist, say: the exit code must tell a
+                # script that the restore did not do all it was asked to.
+                rich_print_checked_statement("Some errors occurred:", "error")
                 for error in errors:
                     rich_print_checked_statement(f"  • {error}", "error")
+                raise typer.Exit(1)
         else:
             rich_print_checked_statement(
-                f"Restore failed: {restore_result.get('message', 'Unknown error')}", "error"
+                f"Restore failed: {escape(str(restore_result.get('message', 'Unknown error')))}",
+                "error",
             )
             errors = restore_result.get("errors", [])
             if errors:
@@ -480,9 +487,10 @@ def restore(
                     rich_print_checked_statement(f"  • {error}", "error")
             raise typer.Exit(1)
 
-    except typer.Exit:
+    except (typer.Exit, typer.Abort):
         # Deliberate exits (declined confirmation, handled failures) must keep
-        # their exit code instead of being reported as unexpected errors.
+        # their exit code instead of being reported as unexpected errors. An
+        # unanswered confirmation (stdin closed) aborts, and Click says "Aborted!".
         raise
     except Exception as e:
         rich_print_checked_statement(f"Restore operation failed: {e}", "error")

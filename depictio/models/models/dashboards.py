@@ -1650,6 +1650,12 @@ class DashboardData(MongoModel):
     project_realtime: Optional[dict] = (
         None  # Populated at runtime from the parent project's realtime config
     )
+    # Stable origin of an imported dashboard (e.g. "nf-core/rnaseq:dashboards/base.yaml"),
+    # set by the YAML import so a refresh finds the dashboard it made even after a
+    # rename. Server-owned: DashboardDataLite does not have it, so YAML files and
+    # exports never carry it, and a save from the viewer cannot change it. None for
+    # dashboards built in the viewer and for those imported before it existed.
+    source_key: Optional[str] = None
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,

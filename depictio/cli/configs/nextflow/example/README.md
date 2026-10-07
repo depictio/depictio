@@ -24,7 +24,7 @@ nextflow run main.nf --outdir results
 ```
 
 The pipeline's own `nextflow.config` includes the trigger, so there is no `-c`.
-On success the `onComplete` handler runs `depictio-cli run` against `results/`,
+On success the `onComplete` handler runs `depictio-cli ingest` against `results/`,
 and the run summary at the end of the log links the project and the dashboard:
 
 ```

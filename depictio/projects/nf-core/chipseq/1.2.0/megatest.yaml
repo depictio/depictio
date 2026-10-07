@@ -94,7 +94,7 @@ post_fetch_help: |
   === Quick test commands ===
 
   # 1. Dry run (validates the template against the data, no ingestion)
-  depictio-cli run --template nf-core/chipseq/1.2.0 --data-root {dest} --dry-run
+  depictio-cli ingest --template nf-core/chipseq/1.2.0 --data-root {dest} --dry-run
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
-  depictio-cli run --template nf-core/chipseq/1.2.0 --data-root {dest}
+  depictio-cli ingest --template nf-core/chipseq/1.2.0 --data-root {dest}

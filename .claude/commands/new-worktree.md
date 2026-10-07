@@ -41,7 +41,7 @@ $ARGUMENTS
    - **Source, don't execute** (`source` / `.`), so the exported `COMPOSE_PROJECT_NAME`, `*_PORT`, etc. land in the parent shell — though for a one-shot Bash invocation they're only useful insofar as the script wrote `.env.instance` and `docker-compose.override.yaml`.
 
 4. **Set up the depictio-cli venv** at `depictio/cli/.venv`:
-   - `(cd depictio/cli && uv sync)` — creates an isolated CLI environment scoped to this worktree, so `depictio-cli run` / `dashboard import` can target the worktree's API/Mongo ports without colliding with sibling worktrees.
+   - `UV_PROJECT_ENVIRONMENT=depictio/cli/.venv uv sync --frozen --extra multiqc` (from the worktree root) — creates an isolated CLI environment scoped to this worktree, so `depictio-cli ingest` / `dashboard import` can target the worktree's API/Mongo ports without colliding with sibling worktrees.
    - Verify `depictio/cli/.venv/bin/depictio-cli` exists after the sync. If `uv sync` fails, **stop and ask** — don't `pip install` as a fallback (the lockfile is the source of truth).
    - This duplicates the `/cli-venv` skill; running it again later is safe and idempotent.
 
@@ -56,4 +56,4 @@ $ARGUMENTS
 - Target worktree directory already exists
 - `git worktree add` fails (e.g. branch already checked out elsewhere)
 - `allocate-ports.sh` exits non-zero or `.env.instance` doesn't end up with `DEPICTIO_AUTH_SINGLE_USER_MODE=true`
-- `uv sync` in `depictio/cli/` fails (missing `uv`, lockfile mismatch, network error)
+- the CLI venv `uv sync` fails (missing `uv`, lockfile mismatch, network error)

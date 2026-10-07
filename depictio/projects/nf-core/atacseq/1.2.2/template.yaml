@@ -1,7 +1,7 @@
 # nf-core/atacseq Template v1.2.2 - Chromatin accessibility (ATAC-seq)
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/atacseq/1.2.2 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/atacseq/1.2.2 --data-root /path/to/your/data
 #
 # Tested against nf-core/atacseq AWS megatest results:
 #   s3://nf-core-awsmegatests/atacseq/results-f327c86324427c64716be09c98634ae0bc8165f6

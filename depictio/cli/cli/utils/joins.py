@@ -12,6 +12,7 @@ This module provides functionality for:
 from datetime import datetime
 
 import polars as pl
+from rich.markup import escape
 
 from depictio.cli.cli.utils.deltatables import (
     calculate_dataframe_size_bytes,
@@ -940,8 +941,9 @@ def process_project_joins(
                     )
 
             except Exception as e:
-                console.print(f"  [red]Join failed: {e}[/red]")
-                logger.exception(f"Join {join_def.name} failed")
+                console.print(f"  [red]Join failed: {escape(str(e))}[/red]")
+                # Said in the line above; the traceback is for -vv.
+                logger.debug(f"Join {join_def.name} failed", exc_info=True)
                 results["errors"].append(
                     {
                         "join": join_def.name,

@@ -1,4 +1,4 @@
-"""Fixtures shared by the `depictio-cli run` tests.
+"""Fixtures shared by the `depictio-cli ingest` tests.
 
 The CLI package's CI job installs only `depictio.cli` and `depictio.models`, so
 one test module cannot import a helper from another through `depictio.tests`.

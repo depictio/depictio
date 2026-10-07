@@ -26,7 +26,7 @@ Streams the Delta write (`LazyFrame.sink_delta`) instead of materialising the
 whole frame in memory first, so a large collection is written in chunks.
 
 Off by default because `sink_delta` is marked unstable in polars 1.41.x. Also
-settable per-run with `depictio run --streaming`.
+settable per-run with `depictio ingest --streaming`.
 
 ## `DEPICTIO_INGEST_DC_WORKERS`
 

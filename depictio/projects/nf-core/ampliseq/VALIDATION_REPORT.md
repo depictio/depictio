@@ -7,7 +7,7 @@
 
 ## Goal
 
-Drive `depictio-cli run --template nf-core/ampliseq/2.16.0` against **real** nf-core/ampliseq
+Drive `depictio-cli ingest --template nf-core/ampliseq/2.16.0` against **real** nf-core/ampliseq
 pipeline output (not the curated AWS-megatest seed bundle) across several scenarios, and find every
 place the template's path / format / variable assumptions break against real output.
 
@@ -22,7 +22,7 @@ place the template's path / format / variable assumptions break against real out
 
 Invocation that got furthest (S1):
 ```bash
-depictio-cli run --CLI-config-path ~/.depictio/CLI.<instance>.yaml \
+depictio-cli ingest --server ~/.depictio/CLI.<instance>.yaml \
   --template nf-core/ampliseq/2.16.0 --data-root <run_16s_pe> \
   --var SAMPLESHEET_FILE=<run>/input/Samplesheet.tsv \
   --var METADATA_FILE=<run>/input/Metadata.tsv \
@@ -107,7 +107,7 @@ sunburst_canonical, sankey_canonical, phylogenetic_tree_metadata_canonical — s
   **standalone script** (`generate_canonical_seeds.py`) that reads raw qiime2 files directly and calls
   each recipe's `transform()` with a hand-built source dict — bypassing the DC/`dc_ref` machinery
   entirely. So in production these DCs are populated **only** from committed `.db_seeds/*.json`, never
-  by `depictio-cli run`.
+  by `depictio-cli ingest`.
 - **Effect:** 6 DCs fail on every real ingestion with *"dc_ref '…' not found in workflow"*.
 - **Recommended fix:** add the ~13 intermediate raw-file DCs to the template (taxonomy.tsv,
   `rel_abundance_tables/rel-table-{2..6}.tsv`, `alpha-rarefaction/*.csv`,
@@ -183,7 +183,7 @@ sunburst_canonical, sankey_canonical, phylogenetic_tree_metadata_canonical — s
 
 ## To actually ingest the 6 canonical viz DCs at runtime (future work)
 They were authored as seed-only (built by `generate_canonical_seeds.py`, loaded from `.db_seeds`).
-Ingesting them via `depictio-cli run` would require adding ~10 intermediate raw-file DCs **before**
+Ingesting them via `depictio-cli ingest` would require adding ~10 intermediate raw-file DCs **before**
 the canonical DCs (each `dc_ref` reads the upstream DC's processed Delta table):
 `qiime2_taxonomy` (`taxonomy/taxonomy.tsv`), `rel_abundance_{phylum,class,order,family,genus}`
 (`rel_abundance_tables/rel-table-{2..6}.tsv`, `skip_rows=1`),

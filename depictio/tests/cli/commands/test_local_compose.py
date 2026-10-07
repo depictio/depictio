@@ -1,4 +1,4 @@
-"""`depictio local export-compose`, with the compose file download faked."""
+"""`depictio local export`, with the compose file download faked."""
 
 import importlib.metadata
 import urllib.error
@@ -192,3 +192,32 @@ def test_export_compose_refuses_a_non_empty_directory(paths, tmp_path, source):
     (out / "keep").write_text("x")
     with pytest.raises(LocalStackError, match="not empty"):
         _export(paths, out)
+
+
+def test_an_out_that_is_a_file_is_refused_before_stopping_the_server(
+    paths, tmp_path, monkeypatch, source
+):
+    monkeypatch.setattr(local_compose, "running_status", lambda _: {"mongo": True})
+    _fake_local_server(paths)
+    out = tmp_path / "export"
+    out.write_text("x")
+
+    with pytest.raises(LocalStackError, match="is a file"):
+        _export(paths, out)
+    source.stop_all.assert_not_called()
+
+
+def test_an_unwritable_out_is_refused_before_stopping_the_server(
+    paths, tmp_path, monkeypatch, source
+):
+    monkeypatch.setattr(local_compose, "running_status", lambda _: {"mongo": True})
+    _fake_local_server(paths)
+    parent = tmp_path / "ro"
+    parent.mkdir()
+    parent.chmod(0o555)
+    try:
+        with pytest.raises(LocalStackError, match="Cannot write to .*choose another --out"):
+            _export(paths, parent / "sub")
+    finally:
+        parent.chmod(0o755)
+    source.stop_all.assert_not_called()

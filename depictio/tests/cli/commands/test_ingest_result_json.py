@@ -1,8 +1,8 @@
-"""`depictio-cli run --result-json`, and the error when nothing names the project.
+"""`depictio ingest --result-json`, and composition when no template fits.
 
-The result file is what `depictio local up` reads to open the dashboard a run
-made, or the project a second run of the same directory found. Every server call
-is mocked, so this runs offline.
+The result file says, for scripts, what an ingestion made: the project and its
+dashboards, or the project a second ingestion of the same directory found. Every
+server call is mocked, so this runs offline.
 """
 
 from __future__ import annotations
@@ -45,12 +45,12 @@ def _invoke(app, harness, data_root, *flags):
         return CliRunner().invoke(
             app,
             [
+                "ingest",
+                str(data_root),
                 "--template",
                 "nf-core/ampliseq/2.16.0",
-                "--data-root",
-                str(data_root),
-                "--skip-server-check",
-                "--skip-s3-check",
+                "--skip",
+                "server-check,s3-check",
                 *flags,
             ],
         )
@@ -72,7 +72,13 @@ def test_a_successful_run_names_its_project_and_dashboards(app, data_root, tmp_p
         )
     )
     harness.import_dashboards.return_value = [
-        {"path": "dashboard.yaml", "success": True, "dashboard_id": "d1", "title": "Ampliseq"}
+        {
+            "path": "dashboard.yaml",
+            "success": True,
+            "dashboard_id": "d1",
+            "title": "Ampliseq",
+            "status": "created",
+        }
     ]
     result_file = tmp_path / "result.json"
 
@@ -82,7 +88,14 @@ def test_a_successful_run_names_its_project_and_dashboards(app, data_root, tmp_p
     assert json.loads(result_file.read_text()) == {
         "status": "success",
         "project": {"name": harness.project.name, "id": "p1", "url": "http://viewer/projects/p1"},
-        "dashboards": [{"title": "Ampliseq", "id": "d1", "url": "http://viewer/dashboard/d1"}],
+        "dashboards": [
+            {
+                "title": "Ampliseq",
+                "id": "d1",
+                "url": "http://viewer/dashboard/d1",
+                "status": "created",
+            }
+        ],
         "template_id": "nf-core/ampliseq/2.16.0",
     }
 
@@ -125,7 +138,7 @@ def test_a_directory_nothing_recognises_says_what_would_work(app, data_root):
     """No pipeline identity and nothing the catalog knows: composing has nothing to build."""
     (data_root / "notes.md").write_text("not a table\n")
 
-    result = CliRunner().invoke(app, ["--data-root", str(data_root)])
+    result = CliRunner().invoke(app, ["ingest", str(data_root)])
 
     assert result.exit_code == 1
     output = " ".join(result.output.split())
@@ -138,7 +151,7 @@ def test_a_directory_nothing_recognises_says_what_would_work(app, data_root):
 def test_a_directory_with_only_unknown_tables_points_at_include_unknown(app, data_root):
     (data_root / "stats.tsv").write_text("sample\treads\nA\t10\nB\t20\n")
 
-    result = CliRunner().invoke(app, ["--data-root", str(data_root)])
+    result = CliRunner().invoke(app, ["ingest", str(data_root)])
 
     assert result.exit_code == 1
     assert "--include-unknown ingests them" in " ".join(result.output.split())
@@ -146,7 +159,7 @@ def test_a_directory_with_only_unknown_tables_points_at_include_unknown(app, dat
 
 def test_compose_and_template_do_not_go_together(app, data_root):
     result = CliRunner().invoke(
-        app, ["--data-root", str(data_root), "--template", "nf-core/rnaseq/latest", "--compose"]
+        app, ["ingest", str(data_root), "--template", "nf-core/rnaseq/latest", "--compose"]
     )
 
     assert result.exit_code == 1

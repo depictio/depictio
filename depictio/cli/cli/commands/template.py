@@ -1,4 +1,4 @@
-"""`depictio template ...`: templates you can read, edit and run with `depictio run --template`."""
+"""`depictio template ...`: templates you can read, edit and ingest with `depictio ingest --template`."""
 
 from pathlib import Path
 from typing import Annotated
@@ -26,8 +26,8 @@ def compose(
         typer.Option(
             "--output",
             "-o",
-            help="Write the template here, to edit it and run it with `depictio run "
-            "--template <dir>`. Default: where `depictio run` keeps composed templates",
+            help="Write the template here, to edit it and ingest with it: `depictio ingest "
+            "<dir> --template <out>`. Default: where `depictio ingest` keeps composed templates",
         ),
     ] = None,
     include_unknown: Annotated[
@@ -56,8 +56,8 @@ def compose(
 
     Offline: nothing is ingested. Prints what was recognised, the tabs and key
     metrics of the dashboard, what was left out and why, and the tabular files
-    nothing recognised with what each could show. This is what `depictio run
-    --data-root` does by itself when no bundled template fits the run.
+    nothing recognised with what each could show. This is what `depictio ingest
+    <dir>` does by itself when no bundled template fits the run.
     """
     from depictio.cli.cli.utils.compose import ComposedTemplate, compose_template, print_report
     from depictio.models.models.run_info import read_run_info
@@ -85,7 +85,6 @@ def compose(
         raise typer.Exit(code=1)
     rich_print_checked_statement(f"Template written to {result.template_dir}", "success")
     rich_print_checked_statement(
-        f"Ingest it: depictio run --template {result.template_dir} --data-root {data_root} "
-        f"(or depictio local up --data-root {data_root})",
+        f"Ingest it: depictio ingest {data_root} --template {result.template_dir}",
         "info",
     )

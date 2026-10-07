@@ -21,16 +21,17 @@ Overview tab, then one tab per pipeline stage.
 | `module_order`, sample-name cleaning | — | missing: a `Render` has no order or priority |
 | report assembly | `compose_run_dir()`: "a preview only" | missing |
 | custom content, user config | catalog and templates read from the package only | missing |
-| pipeline detection | `select_template_for_run()` from `pipeline_info/` | exists in `run`, and in `local up` since phase 1 |
+| pipeline detection | `select_template_for_run()` from `pipeline_info/` | exists in `depictio ingest` |
 
 ## Where composition lives
 
-Every entry point already ends in `depictio run`: `depictio local up --data-root`
-(a person, locally), the Nextflow completion hook (`cli/configs/nextflow/depictio.config`,
-the closest thing to MultiQC as a pipeline's last step), `depictio run --data-root`
-against a shared server, and later `POST /projects/from_run` (#1047). A separate
-`report` command would serve only the first. So composition is one more level of
-template resolution inside `run`:
+Every entry point already ends in `depictio ingest <dir>` (formerly `run`): a person
+against the local server (`depictio local up`, then `depictio ingest results/`), the
+Nextflow completion hook (`cli/configs/nextflow/depictio.config`, the closest thing
+to MultiQC as a pipeline's last step), an ingestion against a shared server
+(`--server`), and later `POST /projects/from_run` (#1047). A separate `report`
+command would serve only the first. So composition is one more level of template
+resolution inside `ingest`:
 
 ```
 --template  >  --pipeline-id  >  bundled template detected from the run  >  template COMPOSED from the catalog
@@ -42,17 +43,18 @@ plus `dashboards/*.yaml`), so everything downstream is reused as is:
 dashboard import, `--update-config`. The one new command is `depictio template
 compose <dir> [-o out/]`: offline, no server. It prints the proposal (collections,
 tabs, KPIs, unrecognised files with what they could become) and writes an editable
-template, run back with `run --template ./out/`. Composition must be deterministic
+template, ingested with `ingest <dir> --template ./out/`. Composition must be deterministic
 (sorted, stable tags), and the composed template is kept with the project so a
 re-run does not reshuffle the dashboard.
 
 ## Phases
 
-1. **Plumbing** (done): `local up --data-root` without `--template`, a second `up`
-   on the same directory opens the existing project instead of failing, `--refresh`
-   to ingest again, the ingested dashboard opened rather than the list,
-   `run --template <path>`, `run --result-json`, and `run` using a running local
-   server's CLI config when there is no `~/.depictio/CLI.yaml`.
+1. **Plumbing** (done): `ingest --template <path>` and `ingest --result-json`.
+   The rest of what this phase first did on `local up` (ingesting from it, a
+   second ingestion of the same directory, the local server as the default) is
+   main's CLI rework now: `local up` only runs the server, `depictio ingest <dir>`
+   detects the template, `--update-config` / `--reset-dashboards` refresh, and the
+   local server is the default when no other is configured.
 2. **Composer** (done, `depictio/cli/cli/utils/compose.py`):
    - catalog matches → collections: raw → table; recipe → `transform` with
      `source_overrides` re-rooted from the matched file; `multiqc.parquet` →
@@ -63,7 +65,7 @@ re-run does not reshuffle the dashboard.
      tiles dropped by the import instead of failing the run;
    - a multi-tab dashboard (`{main_dashboard, tabs}`) with explicit layouts
      (`compose_layout.py`), validated with the lite models before it is written;
-   - `depictio template compose <dir> [-o out/]`; the fallback in `run`, forced
+   - `depictio template compose <dir> [-o out/]`; the fallback in `ingest`, forced
      with `--compose`.
 3. **Catalog** (done): `stage` on a tool and as an output override, `headline` on a
    card, `priority` on any render; thresholds reuse the card's `threshold_*`
@@ -73,7 +75,7 @@ re-run does not reshuffle the dashboard.
 4. **Unrecognised files** (done): a deterministic proposal from the Polars schema
    (sample column, numeric columns → cards, categoricals of at most 50 values →
    filters, a scatter or box figure, the table), printed by `template compose` and
-   `run`, stored on `TemplateOrigin.unrecognised_files` and listed on the project
+   `ingest`, stored on `TemplateOrigin.unrecognised_files` and listed on the project
    page with the command that adds each file; `--include-unknown` /
    `--include <glob>` adds them to an "Other data" tab. Files of one shape
    (same depth, extension and columns) that differ by one value are one
@@ -120,7 +122,8 @@ Known limits:
   `match_run_dir`, determinism, the composed YAML against the lite models, full
   card rows, every MultiQC plot, recipe re-rooting, `dc_ref` providers, proposals,
   the `template compose` command).
-- End to end: `depictio local up --data-root` on the catalog conformance run,
+- End to end: `depictio ingest <dir>` against `depictio local up` on the catalog
+  conformance run,
   nf-core/ampliseq 2.14.0 (with and without `--include-unknown`) and
   nf-core/viralrecon (`--compose`), then
   `depictio/tests/e2e-playwright/tests/local/composed-dashboard.spec.ts`, which

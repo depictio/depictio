@@ -77,11 +77,11 @@ post_fetch_help: |
   # ANCOM-BC slices were computed on, so pass it for meaningful grouping.
 
   # 1. Dry run (validates the template against the data, no ingestion)
-  depictio-cli run --template nf-core/ampliseq/2.18.0 --data-root {dest} \
+  depictio-cli ingest --template nf-core/ampliseq/2.18.0 --data-root {dest} \
     --var GROUP_COL=habitat --dry-run
 
   # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
-  depictio-cli run --template nf-core/ampliseq/2.18.0 --data-root {dest} \
+  depictio-cli ingest --template nf-core/ampliseq/2.18.0 --data-root {dest} \
     --var GROUP_COL=habitat
 
   # 3. Regenerate this template's committed seed TSVs from the download

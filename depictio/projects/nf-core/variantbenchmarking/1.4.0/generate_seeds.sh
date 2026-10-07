@@ -37,7 +37,7 @@ mkdir -p "$SEEDS_DIR"
 # 1. Run the depictio CLI ingest against the template (must be invoked via
 #    `python -m depictio.cli` so the rich-display / polars monkey-patch is applied).
 cd "$REPO_ROOT"
-python -m depictio.cli run \
+python -m depictio.cli ingest \
     --template "nf-core/variantbenchmarking/1.4.0" \
     --data-root "$DATA_ROOT"
 

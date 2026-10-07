@@ -212,7 +212,7 @@ bash depictio/projects/nf-core/taxprofiler/2.0.1/download_test_data.sh
 # fetches the megatest subset from S3 and curls the samplesheet and database sheet
 # into <TARGET_DIR>/input/, which the template's two input collections read
 
-depictio-cli run --template nf-core/taxprofiler/2.0.1 \
+depictio-cli ingest --template nf-core/taxprofiler/2.0.1 \
   --data-root ~/Data/depictio-nfcore/taxprofiler/2.0.1/megatest
 ```
 

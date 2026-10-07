@@ -1,7 +1,7 @@
 # nf-core/chipseq Template v1.2.0 - Transcription-factor / histone ChIP-seq
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/chipseq/1.2.0 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/chipseq/1.2.0 --data-root /path/to/your/data
 #
 # Tested against nf-core/chipseq AWS megatest results:
 #   s3://nf-core-awsmegatests/chipseq/results-048fd6854fcc85b355c61dfc2e21da0bcc6399ea

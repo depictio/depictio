@@ -7,6 +7,7 @@ from typing import Annotated
 
 import polars as pl
 import typer
+from rich.markup import escape
 
 from depictio.cli.cli_logging import logger
 
@@ -126,8 +127,9 @@ def recipe_run(
         # own click, so typer.Exit is no longer a click.exceptions.Exit.
         raise
     except Exception as e:
-        logger.exception("Recipe execution failed")
-        console.print(f"  [red]:x: ERROR: {e}[/red]")
+        # Said in the line below; the traceback is for -vv.
+        logger.debug("Recipe execution failed", exc_info=True)
+        console.print(f"  [red]:x: ERROR: {escape(str(e))}[/red]")
         raise typer.Exit(code=1)
 
 

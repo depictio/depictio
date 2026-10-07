@@ -188,9 +188,9 @@ python -m depictio.dev_scripts.multiqc_reprocess \
   --dest ~/Data/depictio-nfcore/cutandrun/3.1/megatest
 
 # 3. Dry run, then ingest
-python -m depictio.cli run --template nf-core/cutandrun/3.1 \
+python -m depictio.cli ingest --template nf-core/cutandrun/3.1 \
   --data-root ~/Data/depictio-nfcore/cutandrun/3.1/megatest --dry-run
-python -m depictio.cli run --template nf-core/cutandrun/3.1 \
+python -m depictio.cli ingest --template nf-core/cutandrun/3.1 \
   --data-root ~/Data/depictio-nfcore/cutandrun/3.1/megatest
 ```
 

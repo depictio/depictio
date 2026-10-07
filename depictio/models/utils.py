@@ -37,8 +37,8 @@ def get_config(filename: str) -> dict:
     """
     Get the config file.
     """
-    if not filename.endswith(".yaml"):
-        raise ValueError("Invalid config file. Must be a YAML file.")
+    if not filename.endswith((".yaml", ".yml")):
+        raise ValueError(f"Invalid config file '{filename}': it must be a .yaml or .yml file.")
     if not os.path.exists(filename):
         raise ValueError(f"The file '{filename}' does not exist.")
     if not os.path.isfile(filename):
@@ -119,16 +119,13 @@ def validate_model_config(config: dict, pydantic_model: type[BaseModel]) -> Base
     if not isinstance(config, dict):
         raise ValueError("Invalid config. Must be a dictionary.")
     try:
-        # List environment variables
-        logger.info(f"Env args: {os.environ}")
-
-        # Substitute environment variables within the config
+        # Substitute environment variables within the config. Neither the environment
+        # nor the substituted config is logged: both can hold tokens and passwords.
         substituted_config = substitute_env_vars(config)
-        logger.info(f"Substituted Config: {substituted_config}")
 
         # Load the config into a Pydantic model
         data = pydantic_model(**substituted_config)
-        logger.info(f"Resulting object model: {data}")
+        logger.debug(f"Validated {pydantic_model.__name__} configuration")
     except ValidationError as e:
         raise ValueError(f"Invalid config: {e}")
     return data

@@ -9,7 +9,7 @@ config `~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml`).
 ## Goal
 
 Build the chipseq 1.2.0 template plus the `macs2` and `homer` catalog tools it needs, reuse
-the `deseq2` tool the differentialabundance workstream built, and drive `depictio-cli run`
+the `deseq2` tool the differentialabundance workstream built, and drive `depictio-cli ingest`
 against the real AWS megatest output end to end. chipseq is the one pipeline in this lot whose
 MultiQC report predates the parquet era, so the run also had to prove the reprocess path.
 
@@ -110,8 +110,8 @@ Consequences:
 ## Ingestion result: 10 / 10 data collections processed, exit 0
 
 ```bash
-depictio/cli/.venv/bin/python -m depictio.cli run \
-  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml \
+depictio/cli/.venv/bin/python -m depictio.cli ingest \
+  --server ~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml \
   --template nf-core/chipseq/1.2.0 \
   --data-root ~/Data/depictio-nfcore/chipseq/1.2.0/megatest
 ```

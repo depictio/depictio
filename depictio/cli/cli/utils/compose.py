@@ -1,6 +1,6 @@
 """Compose a Depictio template from a results directory, the way MultiQC builds its report.
 
-When no bundled template fits a run, ``depictio run --data-root`` (and
+When no bundled template fits a run, ``depictio ingest <dir>`` (and
 ``depictio template compose``) asks the catalog which files it recognises and
 writes an ordinary template for them: a ``template.yaml`` (one workflow, one
 data collection per recognised output) and ``dashboards/composed.yaml`` (an
@@ -2712,7 +2712,7 @@ def write_template(
     }
     (out / "template.yaml").write_text(
         "# Composed by `depictio template compose` from the catalog: edit freely, then\n"
-        f"#   depictio run --template {out} --data-root {root}\n" + _dump(template)
+        f"#   depictio ingest {root} --template {out}\n" + _dump(template)
     )
     return ComposedTemplate(
         template_dir=out,
@@ -2787,7 +2787,7 @@ def _dump(data: Any) -> str:
 
 
 def default_compose_dir(data_root: str | Path) -> Path:
-    """Where `depictio run` keeps the template it composes for ``data_root``."""
+    """Where `depictio ingest` keeps the template it composes for ``data_root``."""
     import os
 
     root = Path(data_root).resolve()

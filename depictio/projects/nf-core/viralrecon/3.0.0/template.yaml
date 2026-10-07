@@ -1,7 +1,7 @@
 # nf-core/viralrecon Template v3.0.0 - Viral Genome Analysis
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/viralrecon/3.0.0 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/viralrecon/3.0.0 --data-root /path/to/your/data
 #
 # Tested against nf-core/viralrecon AWS megatest results:
 #   s3://nf-core-awsmegatests/viralrecon/results-395079f1d24dce731ac22e03d7a5e71f110103fc

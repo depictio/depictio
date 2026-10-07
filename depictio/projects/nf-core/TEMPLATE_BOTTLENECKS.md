@@ -120,7 +120,7 @@ dashboard's `project_tag` through `/projects/get/from_name/{name}`, and `--proje
 does **not** override that lookup. So a project created under any other name cannot take
 a re-imported dashboard, and the error is a bare `HTTP 404` naming the tag.
 
-`depictio-cli run` step 8 does not have this problem: it passes the id of the project it
+`depictio-cli ingest` step 8 does not have this problem: it passes the id of the project it
 just created. The two paths disagree, which is what makes the failure confusing.
 
 A smaller wart in the same command: the import summary prints the component count of the
