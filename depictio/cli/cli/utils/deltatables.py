@@ -482,6 +482,30 @@ class SchemaConflictError(Exception):
     """
 
 
+def add_wildcard_columns(lazy_frames: list, files: list, scan: dict | None) -> list:
+    """Give each file's rows the values its scan wildcards captured in its path.
+
+    Files of one shape, one per sample (``abricate/{sample}/{sample}.txt``),
+    carry the sample in their path, not in their rows: concatenated as they
+    are, nothing tells one sample's rows from another's. A recursive scan that
+    names wildcards gets a column per wildcard; a column the file already has
+    is left alone. Scans without wildcards are unchanged.
+    """
+    regex_config = ((scan or {}).get("scan_parameters") or {}).get("regex_config") or {}
+    wildcards = regex_config.get("wildcards")
+    if not wildcards:
+        return lazy_frames
+    from depictio.cli.cli.utils.scan_utils import wildcard_values
+
+    tagged = []
+    for lf, file_info in zip(lazy_frames, files):
+        values = wildcard_values(regex_config["pattern"], wildcards, file_info.file_location)
+        existing = set(lf.collect_schema().names())
+        columns = [pl.lit(v).alias(k) for k, v in values.items() if k not in existing]
+        tagged.append(lf.with_columns(columns) if columns else lf)
+    return tagged
+
+
 def align_lazy_schemas(lazy_frames: list, target_schema: dict | None = None) -> list:
     """
     Align column types across all LazyFrames for aggregation.
@@ -1155,6 +1179,7 @@ def client_aggregate_data(
             # stays on the instance config: read and write are two different
             # credentials by design.
             frames = read_files_lazy(collected, file_format, polars_kwargs, CLI_config=CLI_config)
+            frames = add_wildcard_columns(frames, collected, data_collection_config.get("scan"))
         record("n_files", len(collected) if collected else 0)
         return collected, frames
 

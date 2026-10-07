@@ -104,12 +104,16 @@ def layout_filters(components: Iterable[dict]) -> None:
 
 def layout_dashboard(dashboard: dict) -> None:
     """Lay out every section of one dashboard (or tab) document in place."""
-    by_section: dict[str | None, list[dict]] = {}
-    for component in dashboard.get("components") or []:
-        by_section.setdefault(component.get("section"), []).append(component)
+    # A filter section and a grid section may share a name (the import keys them
+    # by kind and name): a filter is an interactive component of a filter section.
     filter_names = {s["name"] for s in dashboard.get("filter_sections") or []}
-    for section, members in by_section.items():
-        if section in filter_names:
+    by_section: dict[tuple[bool, str | None], list[dict]] = {}
+    for component in dashboard.get("components") or []:
+        section = component.get("section")
+        is_filter = component.get("component_type") == "interactive" and section in filter_names
+        by_section.setdefault((is_filter, section), []).append(component)
+    for (is_filter, _), members in by_section.items():
+        if is_filter:
             layout_filters(members)
         else:
             layout_section(members)

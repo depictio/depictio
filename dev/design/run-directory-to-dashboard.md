@@ -75,7 +75,14 @@ re-run does not reshuffle the dashboard.
    filters, a scatter or box figure, the table), printed by `template compose` and
    `run`, stored on `TemplateOrigin.unrecognised_files` and listed on the project
    page with the command that adds each file; `--include-unknown` /
-   `--include <glob>` adds them to an "Other data" tab.
+   `--include <glob>` adds them to an "Other data" tab. Files of one shape
+   (same depth, extension and columns) that differ by one value are one
+   collection (`abricate/{sample}/{sample}.txt`): a recursive scan whose
+   wildcard becomes a column at ingestion. The column is `sample` when the
+   values turn up elsewhere in the run under another kind of name, `file`
+   otherwise (variants of one output, `salmon.merged.gene_*.tsv`). Nothing
+   in this knows a tool; sections and filters are named after the group's
+   last literal directory and kind (`abricate`, `bracken-db · report`).
 5. **Not done here**: the optional AI layer (it needs the #964 → #1045 stack on
    main: hand it the composed plan through the `plan` hook of #1032), a standalone
    HTML report, a Python API, and catalog enrichment (most outputs still render
