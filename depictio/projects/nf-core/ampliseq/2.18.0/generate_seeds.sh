@@ -31,7 +31,7 @@
 #
 # The template YAML under dashboards/ is the SOURCE OF TRUTH: `use:` catalog
 # bindings and `*_tag` references are resolved into viz_kind + oids during the
-# `depictio run` import, and this script bakes that resolved form into the
+# `depictio ingest` import, and this script bakes that resolved form into the
 # seeds. After exporting, run remap_seeds_to_static_ids.py so the DC ids match
 # the static reference-init ids (otherwise tiles 404 on a fresh deploy).
 set -euo pipefail
@@ -48,7 +48,6 @@ REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "
 # config to target a worktree stack — both steps below read it, or step 1 would
 # silently ingest into whatever stack ~/.depictio/CLI.yaml happens to name.
 CLI_CONFIG="${DEPICTIO_CLI_CONFIG:-${HOME}/.depictio/CLI.yaml}"
-API_URL="${DEPICTIO_API_URL:-http://localhost:8058}"
 
 if [ ! -d "$DATA_ROOT" ]; then
     echo "ERROR: ampliseq test-data not found at $DATA_ROOT" >&2
@@ -66,8 +65,8 @@ mkdir -p "$SEEDS_DIR"
 cd "$REPO_ROOT"
 # `--overwrite` is required on any re-run: without it the dashboard import hits
 # `_import_multi_tab_dashboard`'s existing-family guard and returns 409.
-python -m depictio.cli run \
-    --CLI-config-path "$CLI_CONFIG" \
+python -m depictio.cli ingest \
+    --server "$CLI_CONFIG" \
     --template "nf-core/ampliseq/2.18.0" \
     --data-root "$DATA_ROOT" \
     --var SAMPLESHEET_FILE="$DATA_ROOT/input/samplesheet.csv" \
@@ -80,16 +79,17 @@ python -m depictio.cli run \
 #     build_reference_dashboard.py; it adds the sampling map, the date range,
 #     the CTD filters and the two demo tabs, all of which bind columns only this
 #     dataset's metadata carries. It is imported here rather than listed in
-#     `template.dashboards`, so `depictio run --template nf-core/ampliseq/2.18.0`
+#     `template.dashboards`, so `depictio ingest --template nf-core/ampliseq/2.18.0`
 #     against a real run still only ever gets base.yaml.
 #
 #     Regenerating it first is what keeps it from drifting away from base.yaml;
 #     test_ampliseq_reference_dashboard.py fails when this step is skipped.
 python "$SCRIPT_DIR/build_reference_dashboard.py"
+# The API URL is the one in $CLI_CONFIG; set DEPICTIO_API_URL only to override it.
 python -m depictio.cli dashboard import \
     "$SCRIPT_DIR/dashboards/reference_extended.yaml" \
-    --config "$CLI_CONFIG" \
-    --api "$API_URL" \
+    --server "$CLI_CONFIG" \
+    ${DEPICTIO_API_URL:+--api "$DEPICTIO_API_URL"} \
     --project "646b0f3c1e4a2d7f8e5b8ca2" \
     --overwrite
 

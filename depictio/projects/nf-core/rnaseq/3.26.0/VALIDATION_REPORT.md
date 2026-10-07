@@ -9,7 +9,7 @@ config `~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml`).
 ## Goal
 
 Build the rnaseq 3.26.0 template plus the `salmon` catalog tool it depends on, and drive
-`depictio-cli run` against the real AWS megatest output end to end.
+`depictio-cli ingest` against the real AWS megatest output end to end.
 
 ## Data used
 
@@ -37,8 +37,8 @@ not part of the published run; `pipeline_info/params.json` names it as a GitHub 
 ## Ingestion result: 6 / 6 data collections processed, exit 0
 
 ```bash
-depictio/cli/.venv/bin/python -m depictio.cli run \
-  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml \
+depictio/cli/.venv/bin/python -m depictio.cli ingest \
+  --server ~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml \
   --template nf-core/rnaseq/3.26.0 \
   --data-root ~/Data/depictio-nfcore/rnaseq/3.26.0/megatest
 ```

@@ -1,7 +1,7 @@
 # nf-core/airrflow Template v5.1.0 - B and T cell repertoire (AIRR) analysis
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/airrflow/5.1.0 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/airrflow/5.1.0 --data-root /path/to/your/data
 #
 # Tested against the nf-core/airrflow AWS megatest run:
 #   s3://nf-core-awsmegatests/airrflow/results-e69d49e3f23f11a3391755b5fb7aa4283c0a2471

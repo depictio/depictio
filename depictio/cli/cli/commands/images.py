@@ -1,8 +1,7 @@
-"""
-Image management CLI commands.
+"""The `depictio images` group, out of the help and kept for scripts.
 
-Provides commands to scan, process, and push images to S3/MinIO storage
-for use with the image component in depictio dashboards.
+`images push` is `depictio data push-images` under its former name (the benchmark
+runner calls it), and `images list-bucket` lists the images under an S3 path.
 """
 
 from __future__ import annotations
@@ -12,307 +11,32 @@ from typing import Annotated
 
 import typer
 
+from depictio.cli.cli.commands.data import push_images
+from depictio.cli.cli.utils.image_upload import is_image_file, s3_client
 from depictio.cli.cli.utils.rich_utils import (
     console,
     rich_print_checked_statement,
     rich_print_command_usage,
     rich_print_section_separator,
 )
-from depictio.cli.cli_logging import logger
+from depictio.cli.cli.utils.server_target import (
+    LegacyConfigPathOption,
+    ServerOption,
+    resolve_server,
+)
 
 app = typer.Typer()
 
-# Supported image extensions
-SUPPORTED_IMAGE_EXTENSIONS = {
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".webp",
-    ".svg",
-    ".bmp",
-    ".tiff",
-    ".tif",
-}
-
-
-def _is_image_file(path: Path) -> bool:
-    """Check if a file is a supported image format."""
-    return path.suffix.lower() in SUPPORTED_IMAGE_EXTENSIONS
-
-
-def _scan_directory_for_images(
-    directory: Path,
-    recursive: bool = True,
-    extensions: set[str] | None = None,
-) -> list[Path]:
-    """
-    Scan a directory for image files.
-
-    Args:
-        directory: Directory path to scan
-        recursive: Whether to scan subdirectories
-        extensions: Set of extensions to look for (defaults to all supported)
-
-    Returns:
-        List of image file paths found
-    """
-    if extensions is None:
-        extensions = SUPPORTED_IMAGE_EXTENSIONS
-
-    images: list[Path] = []
-
-    if recursive:
-        for ext in extensions:
-            images.extend(directory.rglob(f"*{ext}"))
-            # Also check uppercase extensions
-            images.extend(directory.rglob(f"*{ext.upper()}"))
-    else:
-        for ext in extensions:
-            images.extend(directory.glob(f"*{ext}"))
-            images.extend(directory.glob(f"*{ext.upper()}"))
-
-    # Remove duplicates and sort
-    return sorted(set(images))
-
-
-@app.command()
-def push(
-    source_directory: Annotated[
-        str,
-        typer.Argument(help="Source directory containing images"),
-    ],
-    s3_destination: Annotated[
-        str,
-        typer.Argument(help="S3 destination path (e.g., s3://bucket/path/to/images/)"),
-    ],
-    recursive: bool = typer.Option(
-        True, "--recursive/--no-recursive", "-r/-R", help="Include subdirectories"
+# Its own help, not push_images's docstring: that is data push-images's help, which
+# says "Formerly `images push`".
+app.command(
+    "push",
+    help=(
+        "The former name of `depictio data push-images`, kept for compatibility: it "
+        "takes the same arguments and options and does the same. "
+        "See `depictio data push-images --help`."
     ),
-    extensions: Annotated[
-        str | None,
-        typer.Option(
-            "--extensions",
-            "-e",
-            help="Comma-separated list of extensions to upload (e.g., '.png,.jpg')",
-        ),
-    ] = None,
-    dry_run: bool = typer.Option(
-        False, "--dry-run", "-n", help="Show what would be uploaded without actually uploading"
-    ),
-    overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing files in S3"),
-    concurrency: int = typer.Option(
-        8, "--concurrency", "-c", min=1, help="Number of parallel uploads"
-    ),
-    CLI_config_path: Annotated[
-        str,
-        typer.Option("--CLI-config-path", help="Path to the CLI configuration file"),
-    ] = "~/.depictio/CLI.yaml",
-):
-    """
-    Push images from a local directory to S3/MinIO storage.
-
-    This command uploads image files to S3-compatible storage, preserving
-    the directory structure relative to the source directory.
-
-    Examples:
-        # Push all images to S3
-        depictio images push ./data/images s3://my-bucket/project/images/
-
-        # Dry run to see what would be uploaded
-        depictio images push ./data/images s3://my-bucket/images/ --dry-run
-
-        # Push only specific extensions
-        depictio images push ./data/images s3://my-bucket/images/ --extensions ".png,.jpg"
-    """
-    rich_print_command_usage("images push")
-
-    # Resolve source directory
-    source_path = Path(source_directory).expanduser().resolve()
-
-    if not source_path.exists():
-        rich_print_checked_statement(f"Source directory does not exist: {source_path}", "error")
-        raise typer.Exit(code=1)
-
-    if not source_path.is_dir():
-        rich_print_checked_statement(f"Source path is not a directory: {source_path}", "error")
-        raise typer.Exit(code=1)
-
-    # Parse S3 destination
-    if not s3_destination.startswith("s3://"):
-        rich_print_checked_statement(
-            "S3 destination must start with 's3://' (e.g., s3://bucket/path/)",
-            "error",
-        )
-        raise typer.Exit(code=1)
-
-    # Parse bucket and prefix from s3://bucket/prefix/
-    s3_parts = s3_destination[5:].split("/", 1)
-    bucket = s3_parts[0]
-    prefix = s3_parts[1].rstrip("/") + "/" if len(s3_parts) > 1 else ""
-
-    # Parse extensions if provided
-    ext_set: set[str] | None = None
-    if extensions:
-        ext_set = {ext.strip().lower() for ext in extensions.split(",")}
-        ext_set = {ext if ext.startswith(".") else f".{ext}" for ext in ext_set}
-
-    rich_print_section_separator("Uploading images to S3")
-
-    # Scan for images
-    images = _scan_directory_for_images(source_path, recursive=recursive, extensions=ext_set)
-
-    if not images:
-        rich_print_checked_statement("No images found to upload", "warning")
-        raise typer.Exit(code=0)
-
-    console.print(f"[bold]Source:[/bold] {source_path}")
-    console.print(f"[bold]Destination:[/bold] s3://{bucket}/{prefix}")
-    console.print(f"[bold]Images found:[/bold] {len(images)}")
-
-    if dry_run:
-        console.print("\n[yellow][DRY RUN] Would upload:[/yellow]")
-        for img in images[:20]:
-            rel_path = img.relative_to(source_path)
-            s3_key = f"{prefix}{rel_path}".replace("\\", "/")
-            console.print(f"  {rel_path} → s3://{bucket}/{s3_key}")
-        if len(images) > 20:
-            console.print(f"  ... and {len(images) - 20} more")
-        rich_print_checked_statement(
-            f"Dry run complete: {len(images)} images would be uploaded", "success"
-        )
-        raise typer.Exit(code=0)
-
-    # Load S3 configuration
-    from depictio.cli.cli.utils.common import load_depictio_config
-
-    CLI_config = load_depictio_config(CLI_config_path)
-
-    # Initialize S3 client
-    import boto3
-
-    try:
-        s3_client = boto3.client(
-            "s3",
-            aws_access_key_id=CLI_config.s3_storage.aws_access_key_id,
-            aws_secret_access_key=CLI_config.s3_storage.aws_secret_access_key,
-            endpoint_url=CLI_config.s3_storage.url,
-        )
-    except Exception as e:
-        rich_print_checked_statement(f"Failed to initialize S3 client: {e}", "error")
-        raise typer.Exit(code=1)
-
-    # Upload images concurrently (uploads are independent and network-bound).
-    # boto3 low-level clients are thread-safe, so one client is shared.
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
-
-    from depictio.cli.cli.utils.ingest_timing import ingest_run, record, timed
-
-    # Resolve "which keys already exist?" with ONE paginated LIST instead of a
-    # HEAD per image: at 10k images that is 10k round-trips replaced by ~10, and
-    # the answer is identical because the keys all share this prefix.
-    existing_keys: set[str] = set()
-    if not overwrite:
-        with timed("list_existing"):
-            existing_keys = _list_existing_keys(s3_client, bucket, prefix)
-        logger.debug(f"Found {len(existing_keys)} existing object(s) under {prefix}")
-
-    def _upload_one(img: Path) -> str:
-        rel_path = img.relative_to(source_path)
-        s3_key = f"{prefix}{rel_path}".replace("\\", "/")
-        try:
-            if not overwrite and s3_key in existing_keys:
-                return "skipped"
-
-            s3_client.upload_file(
-                str(img),
-                bucket,
-                s3_key,
-                ExtraArgs={"ContentType": _get_content_type(img)},
-            )
-            logger.debug(f"Uploaded: {rel_path} → s3://{bucket}/{s3_key}")
-            return "uploaded"
-        except Exception as e:
-            logger.error(f"Failed to upload {rel_path}: {e}")
-            return "error"
-
-    counts = {"uploaded": 0, "skipped": 0, "error": 0}
-
-    with (
-        ingest_run(s3_destination, "image"),
-        Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            console=console,
-        ) as progress,
-    ):
-        record("n_images", len(images))
-        task = progress.add_task("Uploading images...", total=len(images))
-        # Uploads run across worker threads, so time the whole concurrent batch
-        # from the main thread — the per-phase contextvar does not cross threads.
-        with ThreadPoolExecutor(max_workers=concurrency) as executor, timed("upload"):
-            futures = [executor.submit(_upload_one, img) for img in images]
-            for future in as_completed(futures):
-                counts[future.result()] += 1
-                progress.update(task, advance=1)
-
-    uploaded = counts["uploaded"]
-    skipped = counts["skipped"]
-    errors = counts["error"]
-
-    # Print summary
-    console.print()
-    rich_print_section_separator("Upload Summary")
-
-    from rich.table import Table
-
-    table = Table(show_header=True, header_style="bold cyan")
-    table.add_column("Status", style="dim")
-    table.add_column("Count", justify="right")
-
-    table.add_row("[green]Uploaded[/green]", str(uploaded))
-    table.add_row("[yellow]Skipped (existing)[/yellow]", str(skipped))
-    table.add_row("[red]Errors[/red]", str(errors))
-    table.add_row("[bold]Total[/bold]", str(len(images)))
-
-    console.print(table)
-
-    if errors > 0:
-        rich_print_checked_statement(f"Upload completed with {errors} errors", "warning")
-    else:
-        rich_print_checked_statement(f"Successfully uploaded {uploaded} images", "success")
-
-
-def _get_content_type(path: Path) -> str:
-    """Get MIME content type for an image file."""
-    import mimetypes
-
-    mime_type, _ = mimetypes.guess_type(str(path))
-    return mime_type or "application/octet-stream"
-
-
-def _list_existing_keys(s3_client, bucket: str, prefix: str) -> set[str]:
-    """Every object key already under ``prefix``, via one paginated LIST.
-
-    Replaces a per-image ``head_object`` when skipping existing uploads: LIST
-    returns 1000 keys per call, so 10k images cost ~10 requests instead of
-    10k. Returns an empty set on failure — the caller then re-uploads rather
-    than wrongly skipping, which is the safe direction to be wrong in.
-    """
-    keys: set[str] = set()
-    try:
-        paginator = s3_client.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-            for obj in page.get("Contents", []):
-                keys.add(obj["Key"])
-    except Exception as e:
-        logger.warning(f"Could not list existing objects under {prefix}: {e}")
-        return set()
-    return keys
+)(push_images)
 
 
 @app.command()
@@ -321,11 +45,9 @@ def list_bucket(
         str,
         typer.Argument(help="S3 path to list (e.g., s3://bucket/prefix/)"),
     ],
-    CLI_config_path: Annotated[
-        str,
-        typer.Option("--CLI-config-path", help="Path to the CLI configuration file"),
-    ] = "~/.depictio/CLI.yaml",
     max_items: int = typer.Option(100, "--max", "-m", help="Maximum number of items to list"),
+    server: ServerOption = None,
+    CLI_config_path: LegacyConfigPathOption = None,
 ):
     """
     List images in an S3 bucket/prefix.
@@ -354,18 +76,10 @@ def list_bucket(
     # Load S3 configuration
     from depictio.cli.cli.utils.common import load_depictio_config
 
-    CLI_config = load_depictio_config(CLI_config_path)
-
-    # Initialize S3 client
-    import boto3
+    CLI_config = load_depictio_config(resolve_server(server, CLI_config_path))
 
     try:
-        s3_client = boto3.client(
-            "s3",
-            aws_access_key_id=CLI_config.s3_storage.aws_access_key_id,
-            aws_secret_access_key=CLI_config.s3_storage.aws_secret_access_key,
-            endpoint_url=CLI_config.s3_storage.url,
-        )
+        client = s3_client(CLI_config)
     except Exception as e:
         rich_print_checked_statement(f"Failed to initialize S3 client: {e}", "error")
         raise typer.Exit(code=1)
@@ -373,7 +87,7 @@ def list_bucket(
     rich_print_section_separator(f"Listing: s3://{bucket}/{prefix}")
 
     try:
-        paginator = s3_client.get_paginator("list_objects_v2")
+        paginator = client.get_paginator("list_objects_v2")
         pages = paginator.paginate(Bucket=bucket, Prefix=prefix)
 
         from rich.table import Table
@@ -396,7 +110,7 @@ def list_bucket(
                 modified = obj["LastModified"].strftime("%Y-%m-%d %H:%M")
 
                 # Only show image files
-                if _is_image_file(Path(key)):
+                if is_image_file(Path(key)):
                     table.add_row(key, _format_size(size), modified)
                     count += 1
                     total_size += size

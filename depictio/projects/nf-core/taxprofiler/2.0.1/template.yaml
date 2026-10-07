@@ -1,7 +1,7 @@
 # nf-core/taxprofiler Template v2.0.1 - Metagenomic Taxonomic Profiling
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/taxprofiler/2.0.1 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/taxprofiler/2.0.1 --data-root /path/to/your/data
 #
 # Tested against nf-core/taxprofiler AWS megatest results:
 #   s3://nf-core-awsmegatests/taxprofiler/results-70ecc15e49b4f1fcf79d876643b5d14b65c66178

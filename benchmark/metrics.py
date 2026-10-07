@@ -110,7 +110,7 @@ class RenderResult:
 
 @dataclass
 class IngestResult:
-    """Timing + throughput for one cell's ingestion (CLI ``run``) + import."""
+    """Timing + throughput for one cell's ingestion (CLI ``ingest``) + import."""
 
     cell_slug: str
     ingest_wall_ms: float

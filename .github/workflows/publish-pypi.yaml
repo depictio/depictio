@@ -1,9 +1,11 @@
 name: Publish to PyPI
 
-# Publishes depictio, plotly-upset and plotly-complexheatmap on a release tag, through
-# PyPI trusted publishing: each project trusts this workflow file in its own GitHub
-# environment, so no token is stored. Pull requests touching the packaging, and
-# manual runs, build and check the distributions without publishing them.
+# Publishes depictio, its depictio-cli alias, plotly-upset and plotly-complexheatmap on a
+# release tag. The first three use PyPI trusted publishing: each project trusts this
+# workflow file in its own GitHub environment, so no token is stored. depictio-cli still
+# uploads with the PYPI_API_TOKEN secret until it gets a trusted publisher too. Pull
+# requests touching the packaging, and manual runs, build and check the distributions
+# without publishing them.
 
 on:
   push:
@@ -14,6 +16,8 @@ on:
     branches: [main]
     paths:
       - "pyproject.toml"
+      - "depictio/cli/pyproject.toml"
+      - "depictio/cli/README.md"
       - "packages/plotly-*/pyproject.toml"
       - "scripts/check_depictio_wheel.py"
       - ".github/workflows/publish-pypi.yaml"
@@ -60,17 +64,19 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       # depictio ships a wheel only: an sdist would need the viewer bundle, which is
-      # not built by Python, to install.
+      # not built by Python, to install. So does depictio-cli, whose wheel copies files
+      # from the same tree (its sdist cannot be built outside the repository).
       - name: Build the distributions
         run: |
           uv build --wheel --out-dir dist/depictio .
+          uv build --wheel --out-dir dist/depictio-cli depictio/cli
           uv build --out-dir dist/plotly-upset packages/plotly-upset
           uv build --out-dir dist/plotly-complexheatmap packages/plotly-complexheatmap
           ls -la dist/*
 
       - name: Check the distributions
         run: |
-          python3 scripts/check_depictio_wheel.py dist/depictio/depictio-*.whl
+          python3 scripts/check_depictio_wheel.py dist/depictio/depictio-*.whl dist/depictio-cli/depictio_cli-*.whl
           uvx twine check --strict dist/*/*
 
       - uses: actions/upload-artifact@v7
@@ -78,6 +84,58 @@ jobs:
           name: dist
           path: dist/
           if-no-files-found: error
+
+  # The upgrade depictio-cli users run. pip installs the new depictio first, then removes
+  # the old depictio-cli along with every file it listed, files depictio now owns too:
+  # the alias has to put them back. Both wheels are built as 9999.0.0, above anything on
+  # PyPI, so this is an upgrade before the release bump as well.
+  upgrade-from-published:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Before the templates were bundled, the latest stable, the latest beta.
+        from: ["1.9.2", "1.11.2", "1.12.0b1"]
+        installer: [pip, uv]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Build depictio and depictio-cli as 9999.0.0
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          sed -i "s/${version//./\\.}/9999.0.0/g" pyproject.toml depictio/cli/pyproject.toml
+          uv build --wheel --out-dir "$RUNNER_TEMP/wheels" .
+          uv build --wheel --out-dir "$RUNNER_TEMP/wheels" depictio/cli
+
+      - name: Install depictio-cli ${{ matrix.from }}, then upgrade it with ${{ matrix.installer }}
+        working-directory: ${{ runner.temp }}
+        run: |
+          python3 -m venv venv
+          if [ "${{ matrix.installer }}" = pip ]; then
+            venv/bin/pip install -q "depictio-cli==${{ matrix.from }}"
+            venv/bin/pip install -q --find-links wheels -U depictio-cli==9999.0.0
+          else
+            uv pip install -q --python venv/bin/python "depictio-cli==${{ matrix.from }}"
+            uv pip install -q --python venv/bin/python --find-links wheels -U depictio-cli==9999.0.0
+          fi
+
+      # Run outside the checkout, whose depictio/ directory would shadow the install.
+      - name: Check no depictio file went missing
+        working-directory: ${{ runner.temp }}
+        run: |
+          venv/bin/python - <<'PY'
+          from importlib.metadata import files
+
+          missing = [str(f) for f in files("depictio") if not f.locate().exists()]
+          if missing:
+              raise SystemExit(f"{len(missing)} depictio files missing: {missing[:10]}")
+          PY
+          venv/bin/depictio-cli --help > /dev/null
+          venv/bin/depictio --version
 
   # One job per project, since PyPI ties each one to its own GitHub environment.
   # The plotly packages go first, so a depictio release never shows up before the
@@ -123,7 +181,7 @@ jobs:
           skip-existing: true
 
   publish-depictio:
-    needs: [publish-plotly-upset, publish-plotly-complexheatmap]
+    needs: [upgrade-from-published, publish-plotly-upset, publish-plotly-complexheatmap]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-24.04
     environment:
@@ -139,3 +197,21 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/depictio/
+
+  # After depictio, which it pins: an alias that resolves to nothing is worse than none.
+  publish-depictio-cli:
+    needs: publish-depictio
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-24.04
+    environment:
+      name: pypi-depictio-cli
+      url: https://pypi.org/project/depictio-cli/
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/depictio-cli/
+          password: ${{ secrets.PYPI_API_TOKEN }}

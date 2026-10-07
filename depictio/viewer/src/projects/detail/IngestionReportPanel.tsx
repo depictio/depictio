@@ -614,8 +614,8 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
           <Alert mt="xs" color="yellow" variant="light" icon={<Icon icon="mdi:information" />}>
             This project was created before ingestion-report tracking was added, so the collections
             the template skipped or gated out weren't recorded — only the collections actually
-            present are listed below. Re-import it from its template (depictio run --template …) to
-            get the full expected-vs-found breakdown.
+            present are listed below. Refresh it from its template (depictio ingest --template …
+            --update-config) to get the full expected-vs-found breakdown.
           </Alert>
         )}
         {isLive && !template && (

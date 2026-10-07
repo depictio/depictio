@@ -107,7 +107,7 @@ pipeline's own `*.deseq2.results_filtered.tsv` on disk (520 data rows and 0 data
 so the recipe's `significant` call reproduces the pipeline's thresholds.
 
 This run kept the name the template declares (`Differential Abundance Analysis`), which is
-what a later standalone import needs. `depictio-cli run` itself is not bound to that name:
+what a later standalone import needs. `depictio-cli ingest` itself is not bound to that name:
 step 8 resolves the project it has just created by its own name and hands the id to
 `import_dashboards_from_template`, so `--project-name` is safe there. The standalone
 `depictio dashboard import` is the bound path: `validate_schema_online` in

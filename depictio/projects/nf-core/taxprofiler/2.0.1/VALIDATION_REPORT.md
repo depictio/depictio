@@ -9,7 +9,7 @@ config `~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml`).
 ## Goal
 
 Build the taxprofiler 2.0.1 template plus the three catalog tools it needs (`taxpasta`,
-`sylph`, `melon`) and the six new `multiqc/<module>` entries, then drive `depictio-cli run`
+`sylph`, `melon`) and the six new `multiqc/<module>` entries, then drive `depictio-cli ingest`
 against the real AWS megatest output end to end.
 
 ## Data used
@@ -90,8 +90,8 @@ run with a smaller profiler set ingests cleanly and simply shows fewer tiles.
 ## Ingestion result: 12 / 12 data collections processed
 
 ```bash
-depictio/cli/.venv/bin/python -m depictio.cli run \
-  --CLI-config-path ~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml \
+depictio/cli/.venv/bin/python -m depictio.cli ingest \
+  --server ~/.depictio/CLI.feat-nfcore-templates-lot1-101.yaml \
   --template nf-core/taxprofiler/2.0.1 \
   --data-root ~/Data/depictio-nfcore/taxprofiler/2.0.1/megatest
 ```

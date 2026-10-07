@@ -1,58 +1,46 @@
 [project]
 name = "depictio-cli"
 version = "1.12.0-b1"
-description = "Depictio CLI to interact with the Depictio API"
+description = "Alias of the depictio package: installs the depictio CLI under its former name"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
-dependencies = [
-  # Held at 1.36.21: the CLI has no s3fs/aiobotocore chain, so the root's
-  # boto3==1.43.0 cap doesn't apply here — kept pinned to the current version.
-  "boto3==1.36.21",
-  "colorlog==6.10.1",
-  "httpx==0.28.1",
-  "devtools==0.12.2",
-  # polars-lts-cpu is legacy; the modern LTS/older-CPU build is polars[rtcompat]
-  # (-> polars-runtime-compat). rtcompat also matches multiqc 1.35's requirement.
-  "polars[rtcompat,numpy,pandas,pyarrow,excel,deltalake]==1.41.2",
-  "deltalake==1.6.0",
-  "python-jose==3.5.0",
-  "pyyaml>=6.0.2",
-  "typer==0.26.7",
-  # "typeguard",
-  "tomli==2.2.1",
-  "rich==15.0.0",
-  "pydantic[email]==2.13.4",
-  "pydantic-settings==2.14.1",
-  # Held at 2.0.0: beanie 2.1.0 calls list_collection_names(authorizedCollections=
-  # True) during init, which the latest mongomock (4.3.0) test double doesn't
-  # accept, breaking the unit suite. Bump once mongomock supports the kwarg.
-  "beanie==2.0.0",
-  "python-dotenv==1.2.2",
-  "bleach==6.4.0",
-  # Required by catalog recipes that build colour scales / hierarchical figures
-  # during processing (e.g. qiime2/taxonomy_heatmap.py imports plotly.colors).
-  "plotly==6.8.0",
-]
+# Everything lives in `depictio` (the root pyproject.toml), dependencies included. This
+# package pins the same version, so `pip install depictio-cli` keeps installing the CLI,
+# and keeps the `depictio-cli` command that the Nextflow hook and existing scripts call.
+dependencies = ["depictio==1.12.0-b1"]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
-urls = { Homepage = "http://github.com/depictio/depictio" }
+urls = { Homepage = "https://github.com/depictio/depictio" }
 classifiers = [
   "Programming Language :: Python :: 3",
   "Operating System :: OS Independent",
 ]
 
 [project.optional-dependencies]
-multiqc = ["multiqc==1.35"]
+multiqc = ["depictio[multiqc]==1.12.0-b1"]
 
+# Declared here as well as in depictio: `uv tool install depictio-cli` and pipx only
+# expose the commands of the package they were asked for.
 [project.scripts]
+depictio = "depictio.cli.depictio_cli:main"
 depictio-cli = "depictio.cli.depictio_cli:main"
+
+# Should this directory get installed in development, uv takes depictio from the
+# checkout rather than PyPI. To work on the CLI, install the root instead
+# (`pip install -e ".[multiqc]"`): installing this alias makes `depictio` a namespace
+# package. Published wheels keep the plain version pin above.
+[tool.uv.sources]
+depictio = { path = "../..", editable = true }
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-# Fix the package directory mapping
+# The files come from the repository root, the tree the depictio wheel is built from.
+# They are the ones earlier depictio-cli releases installed: `pip install -U
+# depictio-cli` over one of those installs depictio, then removes the old release's
+# files, so this wheel puts the same paths back.
 package-dir = {"" = "../.."}
 packages = [
   "depictio.cli",
@@ -66,27 +54,18 @@ packages = [
   "depictio.api.v1",
   "depictio.api.v1.configs",
   "depictio.recipes",
-  # Shared anonymous telemetry. The server-only half lives in
-  # depictio.api.v1.telemetry, which is deliberately NOT shipped here.
   "depictio.telemetry",
-  # Bundled templates and the recipes they run. `locate_template` reads these
-  # from disk, so without them a pip-installed CLI resolves no --template and
-  # no --pipeline-id at all: the nf-core flow is unusable. The published 1.9.2
-  # wheel shipped zero of the nine templates. Only the container worked, and
-  # only because its Dockerfile copies the source tree and bypasses packaging.
   "depictio.catalog",
   "depictio.projects",
 ]
 
-# Data files are NOT picked up by `packages` alone: every non-.py file the CLI
-# reads at runtime has to be matched by a pattern here, relative to its package
-# directory. Deliberately narrow: `depictio/projects` also holds 54 MB of
-# reference datasets for server-side seeding, which the CLI never opens.
+# Data files are NOT picked up by `packages` alone: every non-.py file has to be
+# matched by a pattern here, relative to its package directory. These patterns select
+# the files earlier depictio-cli releases installed that depictio still ships, and
+# nothing else: scripts/check_depictio_wheel.py fails if this wheel holds a file depictio
+# does not, or a copy that differs from depictio's.
 [tool.setuptools.package-data]
 "depictio.cli" = [
-  "*.yaml",
-  "*.yml",
-  "*.json",
   # The Nextflow onComplete snippet users pass to `nextflow run -c`, and the
   # worked example beside it.
   "configs/nextflow/*.config",
@@ -95,12 +74,9 @@ packages = [
 "depictio.recipes" = ["**/*.py"]
 "depictio.catalog" = ["**/*.py", "**/*.yaml", "**/*.json"]
 "depictio.projects" = [
-  "**/template.yaml",
-  "**/dashboards/*.yaml",
-  "**/recipes/*.py",
+  "nf-core/**/template.yaml",
+  "nf-core/**/dashboards/*.yaml",
+  "nf-core/**/recipes/*.py",
+  "init/iris/dashboards/*.yaml",
+  "init/penguins/dashboards/*.yaml",
 ]
-
-# A dashboard export used as a test fixture sits next to the CLI package and
-# would otherwise ride along on the "*.yaml" pattern above.
-[tool.setuptools.exclude-package-data]
-"depictio.cli" = ["6824cb3b89d2b72169309737.yaml"]

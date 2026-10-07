@@ -226,9 +226,9 @@ python -m depictio.dev_scripts.multiqc_reprocess \
   --dest ~/Data/depictio-nfcore/atacseq/1.2.2/megatest
 
 # 3. Dry run, then ingest
-python -m depictio.cli run --template nf-core/atacseq/1.2.2 \
+python -m depictio.cli ingest --template nf-core/atacseq/1.2.2 \
   --data-root ~/Data/depictio-nfcore/atacseq/1.2.2/megatest --dry-run
-python -m depictio.cli run --template nf-core/atacseq/1.2.2 \
+python -m depictio.cli ingest --template nf-core/atacseq/1.2.2 \
   --data-root ~/Data/depictio-nfcore/atacseq/1.2.2/megatest
 ```
 

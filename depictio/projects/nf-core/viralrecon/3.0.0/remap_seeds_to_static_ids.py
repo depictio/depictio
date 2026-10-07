@@ -1,6 +1,6 @@
 """Remap auto-generated DC IDs in viralrecon seed dashboards to static IDs.
 
-When `generate_seeds.sh` exports the dashboards via `python -m depictio.cli run`,
+When `generate_seeds.sh` exports the dashboards via `python -m depictio.cli ingest`,
 the CLI ingest path creates DCs with fresh auto-generated ObjectIds — not the
 static IDs from `db_init_reference_datasets.STATIC_IDS`. The reference-init
 flow on a fresh deploy uses static IDs, so dashboards baked with auto-IDs

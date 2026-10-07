@@ -6,7 +6,7 @@ answers the same question in ~1 request per 1000 keys. These tests pin the
 pagination, the key set, and the deliberate fail-open behaviour.
 """
 
-from depictio.cli.cli.commands.images import _list_existing_keys
+from depictio.cli.cli.utils.image_upload import list_existing_keys
 
 
 class FakePaginator:
@@ -46,14 +46,14 @@ def test_collects_keys_across_pages():
             {"Contents": [{"Key": "img/c.png"}]},
         ]
     )
-    assert _list_existing_keys(s3, "bucket", "img/") == {"img/a.png", "img/b.png", "img/c.png"}
+    assert list_existing_keys(s3, "bucket", "img/") == {"img/a.png", "img/b.png", "img/c.png"}
 
 
 def test_one_paginate_call_regardless_of_key_count():
     """The whole point: request count is driven by pages, not by image count."""
     pages = [{"Contents": [{"Key": f"img/{i}.png"} for i in range(1000)]} for _ in range(3)]
     s3 = FakeS3(pages=pages)
-    keys = _list_existing_keys(s3, "bucket", "img/")
+    keys = list_existing_keys(s3, "bucket", "img/")
     assert len(keys) == 1000  # de-duplicated across pages by construction
     assert len(s3.paginate_calls) == 1
     assert s3.head_calls == 0
@@ -61,14 +61,14 @@ def test_one_paginate_call_regardless_of_key_count():
 
 def test_passes_bucket_and_prefix():
     s3 = FakeS3(pages=[{"Contents": []}])
-    _list_existing_keys(s3, "mybucket", "some/prefix/")
+    list_existing_keys(s3, "mybucket", "some/prefix/")
     assert s3.paginate_calls == [{"Bucket": "mybucket", "Prefix": "some/prefix/"}]
 
 
 def test_empty_bucket_yields_empty_set():
-    assert _list_existing_keys(FakeS3(pages=[{}]), "bucket", "img/") == set()
+    assert list_existing_keys(FakeS3(pages=[{}]), "bucket", "img/") == set()
 
 
 def test_list_failure_fails_open_to_empty_set():
     """On failure we re-upload rather than wrongly skip — the safe direction."""
-    assert _list_existing_keys(FakeS3(raises=True), "bucket", "img/") == set()
+    assert list_existing_keys(FakeS3(raises=True), "bucket", "img/") == set()

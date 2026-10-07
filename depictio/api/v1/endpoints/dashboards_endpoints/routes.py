@@ -6,7 +6,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import yaml
@@ -650,6 +650,11 @@ async def save_dashboard(
     # listing would re-cache stale PNG bytes under an unversioned URL.
     if existing_dashboard and not save_payload.get("screenshot_ts"):
         save_payload.pop("screenshot_ts", None)
+
+    # `source_key` belongs to the YAML import. A client that never loaded it would
+    # save None over it, and a duplicate round-trips its source's key, which would
+    # make the next refresh of that source pick either copy.
+    save_payload.pop("source_key", None)
 
     if existing_dashboard:
         project_id = existing_dashboard.get("project_id")
@@ -5133,18 +5138,40 @@ def _resolve_workflow_tags(component: dict, project_id: PyObjectId | None = None
             return
 
 
-def _regenerate_component_fields(component: dict) -> None:
+def _project_dc_properties(dc_id: Any, project_id: PyObjectId | None) -> dict:
+    """The `dc_specific_properties` a project stores for one of its data collections.
+
+    They live under the DC's `config`, which `_resolve_workflow_tags` does not copy
+    into the component's `dc_config`.
+    """
+    if not dc_id or not project_id:
+        return {}
+    project = projects_collection.find_one({"_id": ObjectId(project_id)})
+    for wf in (project or {}).get("workflows", []):
+        for dc in wf.get("data_collections", []):
+            if str(dc.get("_id")) == str(dc_id):
+                return (dc.get("config") or {}).get("dc_specific_properties") or {}
+    return {}
+
+
+def _regenerate_component_fields(component: dict, project_id: PyObjectId | None = None) -> None:
     """Regenerate component fields from dc_config after tag resolution.
 
-    For Image components: Regenerate s3_base_folder from dc_config.
+    For Image components: Regenerate s3_base_folder from dc_config, else from the
+    data collection in the project. An export leaves it out, so without this an
+    exported image dashboard came back without a folder to load its images from.
     For MultiQC components: Additional regeneration handled in MultiQC models.
     """
     comp_type = component.get("component_type", "")
 
     # Image component: Regenerate s3_base_folder from DC config if not present
     if comp_type == "image" and not component.get("s3_base_folder"):
-        dc_config = component.get("dc_config", {})
-        dc_specific_props = dc_config.get("dc_specific_properties", {})
+        # Either key can be present and None: `_resolve_workflow_tags` copies a
+        # top-level `dc_specific_properties` that a project's DCs do not have.
+        dc_config = component.get("dc_config") or {}
+        dc_specific_props = dc_config.get("dc_specific_properties") or _project_dc_properties(
+            component.get("dc_id"), project_id
+        )
         s3_base_folder = dc_specific_props.get("s3_base_folder")
         if s3_base_folder:
             component["s3_base_folder"] = s3_base_folder
@@ -5588,11 +5615,120 @@ def _tab_meets_minimum(
     return has_filter and _tab_has_visualization_components(dashboard_dict, dc_meta)
 
 
+def _existing_import_target(
+    project_id: PyObjectId,
+    title: str,
+    source_key: str | None,
+    overwrite: bool,
+    parent_dashboard_id: Any = None,
+) -> dict | None:
+    """The dashboard an import replaces, or None when it inserts a new one.
+
+    With overwrite, the dashboard imported from the same source (`source_key`)
+    comes first, so a dashboard renamed since (in the viewer, or by
+    `--dashboard-name`) is refreshed instead of joined by a second copy. The title
+    is the fallback, which is also how a dashboard imported before keys existed
+    gets one. Without overwrite, either match is a 409.
+    """
+    in_project: dict[str, Any] = {"project_id": ObjectId(project_id)}
+    by_key = (
+        dashboards_collection.find_one({**in_project, "source_key": source_key})
+        if source_key
+        else None
+    )
+    title_query = {**in_project, "title": title}
+    if parent_dashboard_id is not None:
+        title_query["parent_dashboard_id"] = parent_dashboard_id
+    by_title = dashboards_collection.find_one(title_query)
+
+    if overwrite:
+        return by_key or by_title
+    if by_title:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Dashboard '{title}' already exists in this project. "
+            "Use --overwrite to update it.",
+        )
+    if by_key:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Dashboard '{by_key.get('title')}' in this project was already imported "
+            f"from {source_key}. Use --overwrite to update it.",
+        )
+    return None
+
+
+def _import_title(
+    yaml_title: str,
+    existing: dict | None,
+    keep_titles: bool,
+    title: str | None = None,
+) -> str:
+    """The title an imported dashboard gets.
+
+    `title` when given (`main_title`, for the main dashboard), else under
+    `keep_titles` the current title of the dashboard it replaces, which may have
+    been renamed in the viewer since, else the YAML's.
+    """
+    if title:
+        return title
+    if keep_titles and existing and existing.get("title"):
+        return existing["title"]
+    return yaml_title
+
+
+def _keep_existing_dashboard(
+    existing: dict,
+    project_id: PyObjectId,
+    source_key: str | None,
+    title: str | None,
+    with_tabs: bool = False,
+) -> dict[str, Any]:
+    """The response of an import that leaves a dashboard the project has as it is.
+
+    Its layout and components stay as edited in the viewer. Only `title`
+    (`main_title`) renames it, and a dashboard imported before keys existed takes
+    `source_key`, so that later imports still find it once renamed.
+    """
+    changes: dict[str, Any] = {}
+    if title and title != existing.get("title"):
+        changes["title"] = title
+    if source_key and not existing.get("source_key"):
+        changes["source_key"] = source_key
+    if changes:
+        dashboards_collection.update_one({"_id": existing["_id"]}, {"$set": changes})
+    kept = {**existing, **changes}
+    response: dict[str, Any] = {
+        "success": True,
+        "updated": False,
+        "status": "kept",
+        "message": "Dashboard kept as it is" + (", renamed" if "title" in changes else ""),
+        "dashboard_id": str(kept["dashboard_id"]),
+        "title": kept.get("title"),
+        "project_id": str(project_id),
+        "dash_url": settings.viewer.external_url,
+    }
+    if with_tabs:
+        # The tabs it has now. One the YAML has and the family lacks is not added:
+        # it may be a tab removed in the viewer.
+        tabs = dashboards_collection.find(
+            {"parent_dashboard_id": kept["dashboard_id"]}, {"title": 1, "dashboard_id": 1}
+        ).sort("tab_order", 1)
+        response["tabs"] = [
+            {"title": tab.get("title"), "dashboard_id": str(tab["dashboard_id"])} for tab in tabs
+        ]
+    return response
+
+
 def _import_multi_tab_dashboard(
     yaml_data: dict,
     project_id: PyObjectId,
     overwrite: bool,
     current_user: User,
+    source_key: str | None = None,
+    keep_titles: bool = False,
+    main_title: str | None = None,
+    keep_existing: bool = False,
 ) -> dict[str, Any]:
     """
     Import a multi-tab dashboard from YAML data with main_dashboard and tabs structure.
@@ -5600,8 +5736,18 @@ def _import_multi_tab_dashboard(
     Args:
         yaml_data: Parsed YAML dictionary with main_dashboard and tabs keys
         project_id: Target project ID
-        overwrite: Whether to update existing dashboards with same titles
+        overwrite: Whether to update the dashboards this one replaces (same
+            source_key, else same title)
         current_user: Current authenticated user
+        source_key: Stable origin of the main dashboard. Each tab gets
+            "<source_key>#<tab title as written in the YAML>".
+        keep_titles: The main dashboard and the tabs an overwrite replaces keep
+            their current titles instead of taking the YAML's
+        main_title: Title of the main dashboard, over the YAML's and over
+            keep_titles; the tabs are not affected
+        keep_existing: A main dashboard the project has (same source_key, else
+            same title) is left as it is, tabs included; main_title still
+            renames it
 
     Returns:
         Import result with main dashboard ID and child tab IDs
@@ -5616,18 +5762,19 @@ def _import_multi_tab_dashboard(
     main_yaml = yaml.dump(main_dashboard_data, default_flow_style=False, allow_unicode=True)
     main_lite = DashboardDataLite.from_yaml(main_yaml)
 
-    # Check for existing main dashboard
-    existing_main = dashboards_collection.find_one(
-        {"title": main_lite.title, "project_id": ObjectId(project_id)}
+    existing_main = _existing_import_target(
+        project_id, main_lite.title, source_key, overwrite or keep_existing
     )
-    if existing_main and not overwrite:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Dashboard '{main_lite.title}' already exists in this project. "
-            "Use --overwrite to update it.",
+    if keep_existing and existing_main is not None:
+        return _keep_existing_dashboard(
+            existing_main, project_id, source_key, main_title, with_tabs=True
         )
 
     main_dashboard_dict = main_lite.to_full()
+    main_dashboard_dict["title"] = _import_title(
+        main_lite.title, existing_main, keep_titles, main_title
+    )
+    main_dashboard_dict["source_key"] = source_key or (existing_main or {}).get("source_key")
     main_dashboard_dict["is_main_tab"] = True  # Ensure it's marked as main tab
     # Visibility is project-driven; `to_full()` defaults to private, which
     # would also reset an existing public dashboard on --overwrite.
@@ -5664,7 +5811,7 @@ def _import_multi_tab_dashboard(
     # Resolve tags and regenerate fields for main dashboard components
     for component in main_dashboard_dict.get("stored_metadata", []):
         _resolve_workflow_tags(component, project_id=project_id)
-        _regenerate_component_fields(component)
+        _regenerate_component_fields(component, project_id=project_id)
     # Hide components whose DC is absent/unpopulated (self-adapting dashboard)
     _filter_unresolved_components(main_dashboard_dict, project_id=project_id)
     _regenerate_component_indices(main_dashboard_dict)
@@ -5697,18 +5844,24 @@ def _import_multi_tab_dashboard(
         tab_yaml = yaml.dump(tab_data, default_flow_style=False, allow_unicode=True)
         tab_lite = DashboardDataLite.from_yaml(tab_yaml)
 
+        # The tab's key comes from its title in the YAML, not in the database, so
+        # a tab renamed in the viewer is still the one this tab refreshes.
+        tab_source_key = f"{source_key}#{tab_lite.title}" if source_key else None
+
         # Check for existing tab if overwrite is requested
         existing_tab = None
         if overwrite:
-            existing_tab = dashboards_collection.find_one(
-                {
-                    "title": tab_lite.title,
-                    "parent_dashboard_id": main_dashboard_id,
-                    "project_id": ObjectId(project_id),
-                }
+            existing_tab = _existing_import_target(
+                project_id,
+                tab_lite.title,
+                tab_source_key,
+                overwrite,
+                parent_dashboard_id=main_dashboard_id,
             )
 
         tab_dashboard_dict = tab_lite.to_full()
+        tab_dashboard_dict["title"] = _import_title(tab_lite.title, existing_tab, keep_titles)
+        tab_dashboard_dict["source_key"] = tab_source_key or (existing_tab or {}).get("source_key")
         tab_dashboard_dict["is_public"] = project_is_public
         tab_dashboard_dict["is_main_tab"] = False
         tab_dashboard_dict["parent_dashboard_id"] = main_dashboard_id
@@ -5742,7 +5895,7 @@ def _import_multi_tab_dashboard(
         # Resolve tags and regenerate fields for tab components
         for component in tab_dashboard_dict.get("stored_metadata", []):
             _resolve_workflow_tags(component, project_id=project_id)
-            _regenerate_component_fields(component)
+            _regenerate_component_fields(component, project_id=project_id)
         before_filtering = len(tab_dashboard_dict.get("stored_metadata") or [])
         _filter_unresolved_components(tab_dashboard_dict, project_id=project_id)
         was_pruned = len(tab_dashboard_dict.get("stored_metadata") or []) < before_filtering
@@ -5792,7 +5945,7 @@ def _import_multi_tab_dashboard(
                 logger.error(f"Failed to import tab '{tab_lite.title}'")
                 continue
 
-        imported_tabs.append({"title": tab_lite.title, "dashboard_id": str(tab_dashboard_id)})
+        imported_tabs.append({"title": tab_dashboard.title, "dashboard_id": str(tab_dashboard_id)})
 
     action = "Updated" if is_update else "Imported"
     logger.info(
@@ -5803,6 +5956,7 @@ def _import_multi_tab_dashboard(
     return {
         "success": True,
         "updated": is_update,
+        "status": "replaced" if is_update else "created",
         "message": f"Multi-tab dashboard {'updated' if is_update else 'imported'} successfully",
         "dashboard_id": str(main_dashboard_id),
         "title": main_dashboard.title,
@@ -5817,6 +5971,11 @@ async def import_dashboard_from_yaml(
     yaml_content: str = Body(..., media_type="text/plain"),
     project_id: PyObjectId | None = None,
     overwrite: bool = False,
+    source_key: str | None = None,
+    keep_titles: bool = False,
+    main_title: str | None = None,
+    parent_source_key: str | None = None,
+    existing: Literal["keep", "replace"] | None = None,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -5828,18 +5987,52 @@ async def import_dashboard_from_yaml(
 
     A new dashboard_id will be generated, and the current user will be set as owner.
 
-    If `overwrite=True` and a dashboard with the same title exists in the project,
-    the existing dashboard will be updated instead of creating a new one.
+    If `overwrite=True`, the dashboard imported earlier from the same `source_key`
+    is updated instead of creating a new one, whatever its title is now; without
+    one, a dashboard with the same title in the project is. Either kind of match
+    is a 409 without `overwrite`.
+
+    `existing` says what becomes of a dashboard so matched, over `overwrite`:
+    - `replace`: as `overwrite=True`;
+    - `keep`: it is left as it is, its layout and components as edited in the
+      viewer, and the response says `"status": "kept"` with its id. `main_title`
+      still renames a kept main dashboard, which changes nothing else. A kept
+      multi-tab main keeps its tabs as they are: a tab the YAML adds is not
+      imported. A dashboard with no match is created as usual.
+    Every response says what happened in `status`: `created`, `replaced` or `kept`.
+
+    Titles: a dashboard takes the title in the YAML, unless
+    - `keep_titles=True` and the import replaces an existing dashboard: that
+      dashboard keeps its current title, so a refresh does not undo a rename made
+      in the viewer. Applies to the main dashboard and to every tab;
+    - `main_title` is given: the main dashboard (the multi-tab `main_dashboard`,
+      or a single dashboard that is not a child tab) is titled that, over the YAML
+      and over `keep_titles`. The tabs are not affected. A 400 on a child tab.
+
+    A single-format child tab names its parent by title (`parent_dashboard_tag`).
+    `parent_source_key`, the `source_key` the parent was imported under, finds
+    the parent first, so a parent renamed in the viewer keeps its tabs. Without a
+    match by key or by title, a refreshed child tab stays under its current parent.
 
     Project identification:
-    - If `project_id` is provided, uses that project directly
+    - If `project_id` is provided, uses that project directly (404 if it does not exist)
     - If `project_id` is not provided, extracts `project_tag` from YAML and
       looks up the project by name
 
     Args:
         yaml_content: The YAML content defining the dashboard(s)
         project_id: Optional project ID (if not provided, uses project_tag from YAML)
-        overwrite: If True, update existing dashboard with same title (default: False)
+        overwrite: If True, update the dashboard this one replaces (default: False)
+        source_key: Optional stable origin of the YAML (e.g.
+            "nf-core/rnaseq:dashboards/base.yaml"), stored on the dashboard so a
+            later import of the same source finds it after a rename
+        keep_titles: If True, a dashboard this import replaces keeps its current
+            title (default: False, the YAML's title)
+        main_title: Optional title for the main dashboard, over the YAML's and
+            over keep_titles
+        parent_source_key: Optional source_key of a child tab's parent dashboard
+        existing: Optional "keep" or "replace", for a dashboard the project
+            already has; without it, `overwrite` decides
         current_user: The authenticated user (will be set as owner)
 
     Returns:
@@ -5861,6 +6054,18 @@ async def import_dashboard_from_yaml(
                 status_code=403,
                 detail="Anonymous users cannot import dashboards. Please login to continue.",
             )
+
+    # The permission check below answers True for an admin without looking the
+    # project up, so an unknown id used to import an orphan dashboard.
+    if project_id is not None and not projects_collection.find_one(
+        {"_id": ObjectId(project_id)}, {"_id": 1}
+    ):
+        raise HTTPException(status_code=404, detail=f"Project {project_id} not found.")
+
+    # `existing` wins over `overwrite`, which clients from before it still send.
+    if existing is not None:
+        overwrite = existing == "replace"
+    keep_existing = existing == "keep"
 
     # Parse YAML to detect format
     try:
@@ -5896,13 +6101,27 @@ async def import_dashboard_from_yaml(
                 detail="You don't have permission to create dashboards in this project.",
             )
 
-        return _import_multi_tab_dashboard(yaml_data, project_id, overwrite, current_user)
+        return _import_multi_tab_dashboard(
+            yaml_data,
+            project_id,
+            overwrite,
+            current_user,
+            source_key=source_key,
+            keep_titles=keep_titles,
+            main_title=main_title,
+            keep_existing=keep_existing,
+        )
 
     # Single dashboard format
     try:
         lite = DashboardDataLite.from_yaml(yaml_content)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid YAML: {e}") from e
+    if main_title and not lite.is_main_tab:
+        raise HTTPException(
+            status_code=400,
+            detail=f"main_title titles a main dashboard; '{lite.title}' is a child tab.",
+        )
 
     # Resolve project_id from YAML project_tag if not provided
     if project_id is None:
@@ -5926,37 +6145,42 @@ async def import_dashboard_from_yaml(
             detail="You don't have permission to create dashboards in this project.",
         )
 
-    # Check for existing dashboard with same title
-    existing_dashboard = dashboards_collection.find_one(
-        {"title": lite.title, "project_id": ObjectId(project_id)}
+    existing_dashboard = _existing_import_target(
+        project_id, lite.title, source_key, overwrite or keep_existing
     )
-    if existing_dashboard and not overwrite:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Dashboard '{lite.title}' already exists in this project. "
-            "Use --overwrite to update it.",
-        )
+    if keep_existing and existing_dashboard is not None:
+        return _keep_existing_dashboard(existing_dashboard, project_id, source_key, main_title)
     if existing_dashboard:
         logger.info(
-            f"Found existing dashboard '{lite.title}' "
+            f"Found existing dashboard '{existing_dashboard.get('title')}' "
             f"(ID: {existing_dashboard['dashboard_id']}) - will update"
         )
 
     dashboard_dict = lite.to_full()
+    dashboard_dict["title"] = _import_title(lite.title, existing_dashboard, keep_titles, main_title)
+    dashboard_dict["source_key"] = source_key or (existing_dashboard or {}).get("source_key")
     # Visibility is project-driven; `to_full()` defaults to private, which
     # would also reset an existing public dashboard on --overwrite.
     dashboard_dict["is_public"] = get_project_visibility(project_id)
 
     # Handle tab relationships for child tabs
     if not lite.is_main_tab and lite.parent_dashboard_tag:
-        # Find parent dashboard by title in the same project
-        parent_dashboard = dashboards_collection.find_one(
-            {
-                "title": lite.parent_dashboard_tag,
-                "project_id": ObjectId(project_id),
-                "is_main_tab": {"$ne": False},
-            }
-        )
+        # The parent by its key first: renamed in the viewer, it kept its key but
+        # not the title the YAML names it by. Last, the current parent of the tab
+        # this import replaces, for a client that sends no parent key.
+        current_parent = (existing_dashboard or {}).get("parent_dashboard_id")
+        lookups = [
+            {"source_key": parent_source_key} if parent_source_key else None,
+            {"title": lite.parent_dashboard_tag},
+            {"dashboard_id": current_parent} if current_parent else None,
+        ]
+        parent_dashboard = None
+        for lookup in filter(None, lookups):
+            parent_dashboard = dashboards_collection.find_one(
+                {"project_id": ObjectId(project_id), "is_main_tab": {"$ne": False}, **lookup}
+            )
+            if parent_dashboard:
+                break
         if not parent_dashboard:
             raise HTTPException(
                 status_code=400,
@@ -5993,9 +6217,8 @@ async def import_dashboard_from_yaml(
     # Resolve tags to MongoDB IDs, regenerate fields from DC config, and regenerate component indices
     for component in dashboard_dict.get("stored_metadata", []):
         _resolve_workflow_tags(component, project_id=project_id)
-        _regenerate_component_fields(
-            component
-        )  # Regenerate s3_base_folder, etc. after dc_config is populated
+        # Regenerate s3_base_folder, etc. after dc_config is populated
+        _regenerate_component_fields(component, project_id=project_id)
     _filter_unresolved_components(dashboard_dict, project_id=project_id)
     _regenerate_component_indices(dashboard_dict)
 
@@ -6027,6 +6250,7 @@ async def import_dashboard_from_yaml(
     return {
         "success": True,
         "updated": is_update,
+        "status": "replaced" if is_update else "created",
         "message": f"Dashboard {'updated' if is_update else 'imported'} successfully",
         "dashboard_id": str(new_dashboard_id),
         "title": dashboard.title,
@@ -6592,10 +6816,15 @@ async def import_dashboard_from_json(
             detail="project_id is required. Either provide it as a parameter or ensure project_tag in JSON matches an existing project.",
         )
 
-    # Validate project exists and user has editor access
-    project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
+    # Validate project exists and user has editor access. `project_id` is a plain
+    # string here, so a malformed one is "not found" too, not a 500 from ObjectId().
+    project_doc = (
+        projects_collection.find_one({"_id": ObjectId(project_id)})
+        if ObjectId.is_valid(project_id)
+        else None
+    )
     if not project_doc:
-        raise HTTPException(status_code=404, detail="Project not found")
+        raise HTTPException(status_code=404, detail=f"Project {project_id} not found.")
 
     if not check_project_permission(project_id, current_user, "editor"):
         raise HTTPException(

@@ -1,6 +1,8 @@
 import http.server
 import json
 import os
+import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -18,7 +20,6 @@ from depictio.cli.cli.local_stack import (
     LocalStackError,
     Paths,
     State,
-    _absolutize_path_var,
     parse_examples,
     pick_ports,
     port_is_free,
@@ -90,7 +91,7 @@ def test_server_env_keeps_the_telemetry_opt_out(paths, monkeypatch):
     assert env["DEPICTIO_TELEMETRY_DEPLOYMENT_KIND"] == "local"
 
 
-def test_the_server_and_ingestion_reach_127_0_0_1_without_the_proxy(paths, monkeypatch):
+def test_the_server_reaches_127_0_0_1_without_the_proxy(paths, monkeypatch):
     monkeypatch.setenv("http_proxy", "http://proxy:3128")
     monkeypatch.setenv("no_proxy", "localhost,.example.org")
     monkeypatch.delenv("NO_PROXY", raising=False)
@@ -98,27 +99,25 @@ def test_the_server_and_ingestion_reach_127_0_0_1_without_the_proxy(paths, monke
     env = server_env(paths, ports, SECRETS, "none", False)
 
     assert env["no_proxy"] == env["NO_PROXY"] == "localhost,.example.org,127.0.0.1,localhost"
-    assert local_stack._ingestion_env()["NO_PROXY"].endswith("127.0.0.1,localhost")
 
 
 @pytest.mark.parametrize(
-    ("value", "template", "expected"),
+    ("value", "expected"),
     [
-        (None, None, "iris,penguins"),
-        (None, "nf-core/rnaseq/latest", "none"),
-        ("penguins", None, "penguins"),
-        ("Iris, penguins,iris", None, "iris,penguins"),
-        ("none", "nf-core/rnaseq/latest", "none"),
+        (None, "iris,penguins"),
+        ("penguins", "penguins"),
+        ("Iris, penguins,iris", "iris,penguins"),
+        ("none", "none"),
     ],
 )
-def test_parse_examples(value, template, expected):
-    assert parse_examples(value, template) == expected
+def test_parse_examples(value, expected):
+    assert parse_examples(value) == expected
 
 
 @pytest.mark.parametrize("value", ["all", "ampliseq", "iris,none", ""])
 def test_parse_examples_rejects_anything_but_the_shipped_examples(value):
     with pytest.raises(LocalStackError, match="iris, penguins, iris,penguins or none"):
-        parse_examples(value, None)
+        parse_examples(value)
 
 
 def test_pick_ports_reuses_the_previous_run_ports():
@@ -191,17 +190,6 @@ def test_pick_ports_rejects_a_busy_explicit_api_port():
             pick_ports(busy.getsockname()[1])
 
 
-def test_absolutize_path_var_resolves_existing_relative_files(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    (tmp_path / "samplesheet.csv").write_text("sample\n")
-
-    assert _absolutize_path_var("SAMPLESHEET_FILE=samplesheet.csv") == (
-        f"SAMPLESHEET_FILE={tmp_path / 'samplesheet.csv'}"
-    )
-    assert _absolutize_path_var("SKIP_MULTIQC=true") == "SKIP_MULTIQC=true"
-    assert _absolutize_path_var("F=/abs/path.csv") == "F=/abs/path.csv"
-
-
 def test_load_secrets_is_stable_and_private(paths):
     first = local_stack.load_secrets(paths)
     assert local_stack.load_secrets(paths) == first
@@ -257,6 +245,7 @@ def test_state_reads_an_older_file_and_writes_the_same_keys(paths):
         "home",
         "examples",
         "first_run",
+        "screenshots",
         "start_times",
     }
 
@@ -264,6 +253,13 @@ def test_state_reads_an_older_file_and_writes_the_same_keys(paths):
 def test_state_is_none_until_up_records_one(paths):
     assert State.load(paths) is None
     assert local_stack.live_pids(None) == {}
+
+
+def test_running_status_does_not_read_a_state_it_is_given(paths, monkeypatch):
+    monkeypatch.setattr(State, "load", MagicMock(side_effect=AssertionError))
+    # This test's own PID, without a start time: alive, so running.
+    status = local_stack.running_status(paths, State(pids={"api": os.getpid()}))
+    assert status == {name: name == "api" for name in local_stack.PROCESS_ORDER}
 
 
 # --- Recorded PIDs ----------------------------------------------------------
@@ -502,8 +498,9 @@ def test_table_status_tells_a_missing_collection_from_one_loading():
         server.server_close()
 
     assert statuses == {"ok": "ready", "loading": "loading", "absent": "absent"}
-    # An API that does not answer yet: keep waiting.
-    assert local_stack.table_status(f"http://127.0.0.1:{_free_ports(1)[0]}", "t", "x") == "loading"
+    # An API that does not answer: not an example still loading.
+    port = _free_ports(1)[0]
+    assert local_stack.table_status(f"http://127.0.0.1:{port}", "t", "x") == "unreachable"
 
 
 def test_wait_for_examples_returns_once_every_table_exists(paths, monkeypatch):
@@ -562,3 +559,439 @@ def test_no_examples_means_nothing_to_wait_for(paths, monkeypatch):
     assert local_stack.examples_status(paths, State(examples="none")) == {}
     # A state.json from before `examples` was recorded.
     assert local_stack.examples_status(paths, State()) == {}
+
+
+def test_wait_for_examples_waits_out_an_api_busy_for_a_moment(paths, monkeypatch):
+    answers = iter(["unreachable", "unreachable", "ready"])
+    monkeypatch.setattr(local_stack, "table_status", lambda url, token, dc_id: next(answers))
+    state = _state_with_token(paths, "iris")
+    assert local_stack.wait_for_examples(paths, state, timeout=5, interval=0) == {"iris": "ready"}
+
+
+def test_only_the_requested_examples_are_still_to_come_on_a_first_run(paths, monkeypatch):
+    monkeypatch.setattr(local_stack, "table_status", lambda url, token, dc_id: "absent")
+    state = _state_with_token(paths, "iris", first_run=True)
+    status = local_stack.examples_status(paths, state, list(local_stack.EXAMPLES))
+    assert status == {"iris": "loading", "penguins": "absent"}
+
+
+def test_loaded_examples_clear_first_run_unless_the_server_changed(paths):
+    state = State(ports={"api": 1}, examples="iris", first_run=True, pids={"api": 10})
+    state.save(paths)
+    local_stack.mark_examples_loaded(paths, state)
+    assert State.load(paths).first_run is False
+
+    # Restarted meanwhile by another `up`: its own first_run stays.
+    State(ports={"api": 1}, first_run=True, pids={"api": 11}).save(paths)
+    local_stack.mark_examples_loaded(paths, State(first_run=True, pids={"api": 10}))
+    assert State.load(paths).first_run is True
+
+
+# --- The environment of the services ---------------------------------------------
+
+
+def test_no_aws_setting_of_the_shell_reaches_the_services(paths, monkeypatch, caplog):
+    for var in ("AWS_SESSION_TOKEN", "AWS_PROFILE", "AWS_ENDPOINT_URL_S3", "AWS_ACCESS_KEY_ID"):
+        monkeypatch.setenv(var, "from-the-shell")
+    monkeypatch.setenv("GITHUB_TOKEN", "kept")
+    caplog.set_level("DEBUG", logger=local_stack.logger.name)
+    local_stack._last_debug.clear()
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+
+    env = server_env(paths, ports, SECRETS, "none", False)
+
+    assert not [k for k in env if k.startswith("AWS_")]
+    assert env["GITHUB_TOKEN"] == "kept"
+    assert not [k for k in local_stack.inherited_env() if k.startswith("AWS_")]
+    # Named, never shown.
+    assert "AWS_SESSION_TOKEN" in caplog.text and "from-the-shell" not in caplog.text
+
+
+def test_every_service_starts_without_the_shell_aws_settings(paths, monkeypatch):
+    monkeypatch.setenv("AWS_SESSION_TOKEN", "from-the-shell")
+    monkeypatch.setenv("AWS_PROFILE", "nonexistent")
+    spawned, recorded = {}, []
+
+    def spawn(paths, name, cmd, env=None):
+        spawned[name] = env
+        return MagicMock(pid=1000 + len(spawned))
+
+    monkeypatch.setattr(local_stack, "spawn", spawn)
+    monkeypatch.setattr(local_stack, "wait_until", lambda *a, **k: None)
+    monkeypatch.setattr(local_stack, "seaweedfs_port_flags", lambda taken: [])
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+    env = server_env(paths, ports, SECRETS, "none", False)
+
+    local_stack._start_services(
+        paths, ports, SECRETS, env, {}, record=lambda name, proc: recorded.append(name)
+    )
+
+    assert recorded == local_stack.PROCESS_ORDER
+    for name, service_env in spawned.items():
+        assert "AWS_SESSION_TOKEN" not in service_env, name
+        assert "AWS_PROFILE" not in service_env, name
+    # SeaweedFS takes its own credentials from these two.
+    assert spawned["s3"]["AWS_ACCESS_KEY_ID"] == local_stack.S3_USER
+    assert spawned["s3"]["AWS_SECRET_ACCESS_KEY"] == SECRETS["s3_password"]
+
+
+def test_backups_land_in_the_local_home(paths):
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+    env = server_env(paths, ports, SECRETS, "none", False)
+    # BackupConfig writes to <base_dir>/backups, which `wipe` deletes.
+    assert env["DEPICTIO_BACKUP_BASE_DIR"] == str(paths.home)
+    assert "backups" in DATA_DIRS
+
+
+# --- Files `up` writes, and what it makes of broken ones ---------------------------
+
+
+def test_state_ports_and_secrets_are_replaced_whole_and_keep_their_mode(paths):
+    local_stack.load_secrets(paths)
+    assert paths.secrets.stat().st_mode & 0o777 == 0o600
+    local_stack.save_ports(paths, {"api": 1})
+    paths.ports.chmod(0o640)
+    local_stack.save_ports(paths, {"api": 2})
+    assert paths.ports.stat().st_mode & 0o777 == 0o640
+    State(ports={"api": 3}).save(paths)
+    State(ports={"api": 4}).save(paths)
+    assert State.load(paths).ports == {"api": 4}
+    # No temporary file left behind.
+    assert not list(paths.home.glob(".*.tmp"))
+
+
+@pytest.mark.parametrize(
+    "content", ["{garbage", "", "[1, 2]", '{"pids": [1]}', '{"pids": {"api": "x"}}']
+)
+def test_an_unreadable_state_names_the_file_and_the_way_out(paths, content):
+    paths.state.write_text(content)
+    with pytest.raises(local_stack.StateUnreadable, match="state.json is unreadable") as err:
+        State.load(paths)
+    assert "depictio local down stops the server without it" in str(err.value)
+
+
+@pytest.mark.parametrize("content", ["{garbage", "[1, 2]"])
+def test_unreadable_ports_name_the_file(paths, content):
+    paths.ports.write_text(content)
+    with pytest.raises(LocalStackError, match="ports.json is unreadable.*Delete it"):
+        local_stack.load_ports(paths)
+
+
+@pytest.mark.parametrize("content", ["{garbage", '{"s3_password": "x"}', "[]"])
+def test_unreadable_secrets_name_the_file_and_never_their_content(paths, content):
+    paths.secrets.write_text(content)
+    with pytest.raises(LocalStackError, match="secrets.json is unreadable") as err:
+        local_stack.load_secrets(paths)
+    assert '"x"' not in str(err.value)
+
+
+def test_export_does_not_make_up_new_passwords(paths):
+    with pytest.raises(LocalStackError, match="secrets.json is missing"):
+        local_stack.load_secrets(paths, create=False)
+    assert not paths.secrets.exists()
+
+
+def test_an_unparsable_cli_config_names_the_file_without_quoting_it(paths):
+    paths.cli_config.write_text("api_base_url: [unclosed\naccess_token: s3cr3t\n")
+    with pytest.raises(LocalStackError, match="admin_config.yaml is unreadable") as err:
+        local_stack.read_cli_config(paths)
+    assert "s3cr3t" not in str(err.value)
+
+
+# --- The local home ------------------------------------------------------------
+
+
+def test_a_new_or_empty_folder_becomes_a_local_home(tmp_path):
+    for home in (tmp_path / "new", tmp_path / "empty"):
+        if home.name == "empty":
+            home.mkdir()
+        local_stack.claim_home(Paths(home))
+        assert local_stack.is_local_home(home)
+
+
+def test_a_folder_with_other_content_is_not_claimed(tmp_path):
+    (tmp_path / "src").mkdir()
+    (tmp_path / "state.json").write_text("{}")
+    with pytest.raises(LocalStackError, match="not a Depictio local home"):
+        local_stack.claim_home(Paths(tmp_path))
+    assert not (tmp_path / local_stack.HOME_MARKER).exists()
+
+
+def test_a_home_made_before_the_marker_is_still_one(tmp_path):
+    # Stopped (ports.json and the data directories), or wiped (the binaries only).
+    stopped, wiped = tmp_path / "stopped", tmp_path / "wiped"
+    for sub in ("keys", "cli", "mongo", "logs"):
+        (stopped / sub).mkdir(parents=True)
+    (stopped / "ports.json").write_text("{}")
+    (wiped / "env").mkdir(parents=True)
+    (wiped / "env" / ".depictio-specs.json").write_text('{"specs": [], "platform": "x"}')
+    assert local_stack.is_local_home(stopped)
+    assert local_stack.is_local_home(wiped)
+    # A few of its data directories alone do not make one.
+    (stopped / "ports.json").unlink()
+    assert not local_stack.is_local_home(stopped)
+    # All of them do: a first run that failed before writing anything else.
+    for sub in DATA_DIRS:
+        if sub != "backups":
+            (stopped / sub).mkdir(exist_ok=True)
+    assert local_stack.is_local_home(stopped)
+
+
+# --- Startup: PIDs on disk at once, signals, the CLI configuration -------------------
+
+
+@pytest.fixture
+def fake_start(paths, monkeypatch):
+    """start_stack with every slow or external step stubbed; services are fakes."""
+    fake = MagicMock()
+    fake.process_start_time.return_value = 1.0
+    for name in ("ensure_binaries", "seed_screenshots", "wait_for_api", "check_alive"):
+        monkeypatch.setattr(local_stack, name, getattr(fake, name))
+    monkeypatch.setattr(local_stack, "process_start_time", fake.process_start_time)
+    monkeypatch.setattr(local_stack, "pick_ports", lambda port, saved: dict(DEFAULT_PORTS_TEST))
+    return fake
+
+
+DEFAULT_PORTS_TEST = {"api": 63998, "mongo": 63997, "redis": 63996, "s3": 63995}
+
+
+def test_each_pid_is_on_disk_as_soon_as_its_process_starts(paths, fake_start, monkeypatch):
+    seen = []
+
+    def start_services(paths, ports, secret_values, env, record=None):
+        procs = {}
+        for i, name in enumerate(local_stack.PROCESS_ORDER):
+            procs[name] = MagicMock(pid=5000 + i)
+            record(name, procs[name])
+            seen.append(dict(State.load(paths).pids))
+        return procs
+
+    monkeypatch.setattr(local_stack, "start_services", start_services)
+    local_stack.start_stack(paths, None, "none", False, log=lambda _: None)
+
+    assert seen[0] == {"mongo": 5000}
+    assert seen[-1] == {name: 5000 + i for i, name in enumerate(local_stack.PROCESS_ORDER)}
+
+
+@pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGHUP], ids=["SIGTERM", "SIGHUP"])
+def test_a_signal_during_startup_stops_what_was_started(paths, fake_start, monkeypatch, signum):
+    stopped = []
+    before = signal.getsignal(signum)
+
+    def start_services(paths, ports, secret_values, env, record=None):
+        record("mongo", MagicMock(pid=4321))
+        os.kill(os.getpid(), signum)
+        time.sleep(5)  # interrupted by the handler
+        raise AssertionError("the signal did not interrupt the startup")
+
+    monkeypatch.setattr(local_stack, "start_services", start_services)
+    monkeypatch.setattr(local_stack, "live_pids", lambda state: dict(state.pids) if state else {})
+    monkeypatch.setattr(local_stack, "terminate_group", lambda pid, *a, **k: stopped.append(pid))
+
+    with pytest.raises(local_stack.Interrupted) as err:
+        local_stack.start_stack(paths, None, "none", False, log=lambda _: None)
+
+    assert err.value.signum == signum
+    assert stopped == [4321]
+    assert not paths.state.exists()
+    assert signal.getsignal(signum) == before
+
+
+def test_a_cli_config_deleted_after_the_first_run_is_written_again(paths, fake_start, monkeypatch):
+    (paths.home / "mongo" / "WiredTiger").write_text("data")
+    monkeypatch.setattr(
+        local_stack,
+        "start_services",
+        lambda *a, **k: {name: MagicMock(pid=1) for name in local_stack.PROCESS_ORDER},
+    )
+    logged = []
+
+    state = local_stack.start_stack(paths, None, "none", False, log=logged.append)
+
+    assert not state.first_run
+    assert fake_start.wait_for_api.call_args.kwargs["rebuild_from"] == local_stack.load_secrets(
+        paths
+    )
+    # warn defaults to log: a token that could not be revoked is printed, not raised.
+    assert fake_start.wait_for_api.call_args.kwargs["warn"] == logged.append
+    assert any("admin_config.yaml is missing" in line for line in logged)
+
+
+def test_an_unparsable_cli_config_fails_before_anything_starts(paths, fake_start, monkeypatch):
+    (paths.home / "mongo" / "WiredTiger").write_text("data")
+    paths.cli_config.write_text("{unclosed")
+    start_services = MagicMock()
+    monkeypatch.setattr(local_stack, "start_services", start_services)
+
+    with pytest.raises(LocalStackError, match="admin_config.yaml is unreadable"):
+        local_stack.start_stack(paths, None, "none", False, log=lambda _: None)
+    start_services.assert_not_called()
+
+
+class _Auth(http.server.BaseHTTPRequestHandler):
+    """/auth/login, /auth/me/tokens, /auth/generate_agent_config, /auth/list_tokens and
+    DELETE /auth/me/tokens/{id}, as the API answers them.
+
+    ``tokens``: the admin's other long-lived tokens; the one POST /me/tokens creates
+    (id "new") is listed with them. ``failing``: ids whose DELETE answers 500.
+    """
+
+    AUTH = "/depictio/api/v1/auth"
+    calls: list = []
+    tokens: list = []
+    failing: set = set()
+    created: dict = {}
+
+    def _answer(self, status: int, payload) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(json.dumps(payload).encode())
+
+    def do_POST(self):  # noqa: N802 - http.server API
+        body = self.rfile.read(int(self.headers["Content-Length"])).decode()
+        type(self).calls.append(("POST", self.path, self.headers.get("Authorization"), body))
+        if self.path == f"{self.AUTH}/me/tokens":
+            name = json.loads(body)["name"]
+            type(self).created = {"_id": "new", "name": name, "token_lifetime": "long-lived"}
+        answers = {
+            f"{self.AUTH}/login": {"access_token": "session"},
+            f"{self.AUTH}/me/tokens": {**self.created, "access_token": "long", "user_id": "u1"},
+            f"{self.AUTH}/generate_agent_config": {
+                "api_base_url": "http://127.0.0.1:1",
+                "user": {"email": local_stack.ADMIN_EMAIL, "token": {"access_token": "long"}},
+                "s3_storage": {"service_port": 2, "external_port": 2},
+            },
+        }
+        self._answer(200 if self.path in answers else 404, answers.get(self.path, {}))
+
+    def do_GET(self):  # noqa: N802 - http.server API
+        type(self).calls.append(("GET", self.path, self.headers.get("Authorization"), ""))
+        if self.path == f"{self.AUTH}/list_tokens?token_lifetime=long-lived":
+            self._answer(200, [*self.tokens, self.created])
+        else:
+            self._answer(404, {})
+
+    def do_DELETE(self):  # noqa: N802 - http.server API
+        type(self).calls.append(("DELETE", self.path, self.headers.get("Authorization"), ""))
+        token_id = self.path.rsplit("/", 1)[-1]
+        if token_id in self.failing:
+            self._answer(500, {"detail": "boom"})
+        else:
+            self._answer(200, {"success": True, "message": "Token deleted successfully"})
+
+    def log_message(self, *_args):
+        pass
+
+
+def _rebuild_against_fake_api(paths, tokens=(), failing=()):
+    """rebuild_cli_config against _Auth; the warnings it printed."""
+    _Auth.calls, _Auth.tokens, _Auth.failing, _Auth.created = [], list(tokens), set(failing), {}
+    server = http.server.HTTPServer(("127.0.0.1", 0), _Auth)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    warnings = []
+    try:
+        local_stack.rebuild_cli_config(
+            paths, server.server_address[1], SECRETS, warn=warnings.append
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+    return warnings
+
+
+def _deleted() -> list[str]:
+    return [path.rsplit("/", 1)[-1] for method, path, *_ in _Auth.calls if method == "DELETE"]
+
+
+def test_rebuild_cli_config_writes_it_owner_only_through_the_api(paths):
+    warnings = _rebuild_against_fake_api(paths)
+
+    config = yaml.safe_load(paths.cli_config.read_text())
+    assert config["user"]["token"]["access_token"] == "long"
+    assert paths.cli_config.stat().st_mode & 0o777 == 0o600
+    login, token, generate, listing = _Auth.calls
+    assert "username=admin%40example.com" in login[3]
+    assert token[2] == generate[2] == listing[2] == "Bearer session"
+    assert json.loads(generate[3])["access_token"] == "long"
+    assert _deleted() == [] and warnings == []
+
+
+def test_rebuild_cli_config_revokes_only_the_tokens_of_earlier_rebuilds(paths):
+    tokens = [
+        {"_id": "first-run", "name": "default_token"},
+        {"_id": "old1", "name": "depictio-local-20260101120000"},
+        {"_id": "old2", "name": "depictio-local-20260102120000"},
+        # Made by hand on the CLI agents page.
+        {"_id": "laptop", "name": "laptop"},
+        {"_id": "lookalike", "name": "depictio-local-laptop"},
+    ]
+
+    warnings = _rebuild_against_fake_api(paths, tokens)
+
+    assert _deleted() == ["old1", "old2"]
+    assert local_stack.REBUILT_TOKEN_NAME.fullmatch(_Auth.created["name"])
+    assert warnings == []
+
+
+def test_a_token_that_cannot_be_revoked_is_a_warning(paths):
+    tokens = [
+        {"_id": "old1", "name": "depictio-local-20260101120000"},
+        {"_id": "old2", "name": "depictio-local-20260102120000"},
+    ]
+
+    warnings = _rebuild_against_fake_api(paths, tokens, failing={"old1"})
+
+    assert paths.cli_config.exists()
+    assert _deleted() == ["old1", "old2"]
+    assert len(warnings) == 1
+    assert warnings[0].startswith("1 earlier depictio-local token could not be revoked")
+    assert "/cli-agents" in warnings[0]
+
+
+def test_a_token_list_that_fails_is_a_warning(paths, monkeypatch):
+    monkeypatch.setattr(_Auth, "do_GET", lambda self: self._answer(500, {"detail": "boom"}))
+
+    warnings = _rebuild_against_fake_api(paths)
+
+    assert paths.cli_config.exists()
+    assert _deleted() == []
+    assert len(warnings) == 1 and warnings[0].startswith("Could not list the earlier")
+
+
+def test_rebuild_cli_config_failing_names_the_file(paths):
+    with pytest.raises(LocalStackError, match="admin_config.yaml is missing and the API could not"):
+        local_stack.rebuild_cli_config(paths, _free_ports(1)[0], SECRETS)
+
+
+def test_a_service_that_exits_is_named_at_the_start_of_the_sentence(paths):
+    proc = MagicMock()
+    proc.poll.return_value = 1
+    proc.returncode = 1
+    with pytest.raises(LocalStackError, match=r"^The Depictio API exited during startup"):
+        local_stack.wait_until(lambda: False, "the Depictio API", 5, proc, paths.logs / "api.log")
+
+
+# --- Finding the services without state.json ---------------------------------------
+
+
+def test_find_server_processes_finds_our_services_only(paths):
+    pytest.importorskip("psutil")
+    (paths.env / "bin").mkdir(parents=True)
+    fake_mongod = paths.env / "bin" / "mongod"
+    fake_mongod.symlink_to(shutil.which("sleep"))
+    ours = subprocess.Popen([str(fake_mongod), "60"], cwd=paths.home, start_new_session=True)
+    # Same folder, but not one of the services; and a service outside the home.
+    other = subprocess.Popen(["sleep", "60"], cwd=paths.home, start_new_session=True)
+    elsewhere = subprocess.Popen([str(fake_mongod), "60"], cwd="/", start_new_session=True)
+    try:
+        deadline = time.monotonic() + 10
+        found = {}
+        while "mongo" not in found and time.monotonic() < deadline:
+            found = local_stack.find_server_processes(paths)
+            time.sleep(0.1)
+        assert found == {"mongo": ours.pid}
+    finally:
+        for proc in (ours, other, elsewhere):
+            proc.kill()
+            proc.wait()

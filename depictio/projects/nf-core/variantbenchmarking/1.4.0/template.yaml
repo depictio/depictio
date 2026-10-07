@@ -1,7 +1,7 @@
 # nf-core/variantbenchmarking Template v1.4.0 - Variant Calling Benchmarking
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/variantbenchmarking/1.4.0 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/variantbenchmarking/1.4.0 --data-root /path/to/your/data
 #
 # Tested against nf-core/variantbenchmarking AWS megatest results:
 #   s3://nf-core-awsmegatests/variantbenchmarking/results-8b21c01749c4447b285d242a198127736f3ffe51

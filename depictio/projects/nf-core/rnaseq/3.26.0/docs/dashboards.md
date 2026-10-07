@@ -155,7 +155,7 @@ is what lets a MultiQC tile carry `use: multiqc/<module>` and the catalog badge.
 ```bash
 bash depictio/projects/nf-core/rnaseq/3.26.0/download_test_data.sh
 # then follow post_fetch_help in megatest.yaml for the samplesheet curl into input/
-depictio-cli run --template nf-core/rnaseq/3.26.0 \
+depictio-cli ingest --template nf-core/rnaseq/3.26.0 \
   --data-root ~/Data/depictio-nfcore/rnaseq/3.26.0/megatest
 ```
 
@@ -170,7 +170,7 @@ This run's MultiQC (1.33) also wrote its data directory as
 `multiqc/star_salmon/multiqc_report_data/` rather than `multiqc/multiqc_data/`, and the
 template's MultiQC scan regex pins that literal path for the same reason.
 
-`--project-name` is safe for `run` itself, but leave it off anyway. The dashboard carries
+`--project-name` is safe for `ingest` itself, but leave it off anyway. The dashboard carries
 `project_tag: RNA-seq Expression Analysis`, and the standalone `depictio dashboard import`
 resolves that tag by name, so a renamed project cannot take a re-imported dashboard later.
 

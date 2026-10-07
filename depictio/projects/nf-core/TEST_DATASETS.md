@@ -358,7 +358,7 @@ renaming the output file from `BETA-multiqc.parquet` to `multiqc.parquet`").
   one-line experiment rather than a documented path.
 - **1.28 and older** - no parquet at all. Only
   `python -m depictio.dev_scripts.multiqc_reprocess` produces one, and it is a maintainer
-  script the `run` command never invokes.
+  script the `ingest` command never invokes.
 
 `cli/utils/multiqc_processor.py` reads the parquet and nothing else, so a pipeline
 release pinning an older MultiQC cannot be ingested by the trigger on any profile, only
@@ -450,7 +450,7 @@ python -m depictio.dev_scripts.multiqc_reprocess \
   --dest ~/Data/depictio-nfcore/chipseq/1.2.0/test
 
 # 3. ingest by hand
-depictio-cli run --template nf-core/chipseq/1.2.0 \
+depictio-cli ingest --template nf-core/chipseq/1.2.0 \
   --data-root ~/Data/depictio-nfcore/chipseq/1.2.0/test
 ```
 
@@ -477,8 +477,8 @@ nothing about the blocker.
 What would change the picture is a new upstream release pinning MultiQC 1.29 or later.
 Until then all three stay on the manual route, which already works:
 `python scripts/nfcore_megatest.py fetch` → `python -m depictio.dev_scripts.multiqc_reprocess`
-→ `depictio-cli run --template …`. The cheap follow-up is not a re-pin but making that
-reprocess reachable from `depictio-cli run` itself, which would unblock these three and
+→ `depictio-cli ingest --template …`. The cheap follow-up is not a re-pin but making that
+reprocess reachable from `depictio-cli ingest` itself, which would unblock these three and
 every other pre-1.29 run a user brings.
 
 ---
@@ -519,7 +519,7 @@ carries a SLURM config, a shared Singularity cache and a DSL1-capable Nextflow.
 Separately, `scripts/nfcore_trigger_stub.py` answers the other half of the question.
 Whether a pipeline produces the files a template wants is a data question, answered by
 running it. Whether the 1.10.0 handler turns a completed run into the right
-`depictio-cli run` is not, and needs no pipeline at all: a ten-line workflow wearing the
+`depictio-cli ingest` is not, and needs no pipeline at all: a ten-line workflow wearing the
 right `manifest {}` exercises the whole path in seconds. Both modes pass on all fourteen
 template directories, and the must-fail cases below fail for the right reason.
 

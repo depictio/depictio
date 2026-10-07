@@ -212,7 +212,7 @@ bind.
 
 `depictio/projects/test/catalog_cli_smoke/` closes that gap for a handful of
 outputs: six collections staged as raw tool output and ingested with
-`depictio-cli run`, covering every way a collection reaches the matcher (recipe
+`depictio-cli ingest`, covering every way a collection reaches the matcher (recipe
 with a file source, with a glob source, with a `dc_ref` source, and no recipe at
 all). `depictio/tests/catalog/test_cli_smoke_project.py` executes every recipe
 against those staged files offline, so a recipe whose input moved or whose output

@@ -1,7 +1,7 @@
 # nf-core/rnaseq Template v3.26.0 - Bulk RNA-seq quantification
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/rnaseq/3.26.0 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/rnaseq/3.26.0 --data-root /path/to/your/data
 #
 # Tested against the nf-core/rnaseq AWS megatest results:
 #   s3://nf-core-awsmegatests/rnaseq/results-e7ca46272c8f9d5ceee3f71759f4ba551d3217a4/aligner_star_salmon/

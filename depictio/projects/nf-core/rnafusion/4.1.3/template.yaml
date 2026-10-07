@@ -1,7 +1,7 @@
 # nf-core/rnafusion Template v4.1.3 - RNA fusion detection
 # ============================================================================
 # This is a TEMPLATE project configuration. Use with:
-#   depictio run --template nf-core/rnafusion/4.1.3 --data-root /path/to/your/data
+#   depictio ingest --template nf-core/rnafusion/4.1.3 --data-root /path/to/your/data
 #
 # Tested against the nf-core/rnafusion AWS megatest run:
 #   s3://nf-core-awsmegatests/rnafusion/results-76ad76e7c39b2ba9edc35aa3602e3dc454d842ec
