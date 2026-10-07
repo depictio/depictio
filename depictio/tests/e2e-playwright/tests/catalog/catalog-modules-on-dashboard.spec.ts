@@ -131,6 +131,18 @@ const CONTENT_SELECTOR: Record<string, string> = {
   interactive: CHROME_SELECTOR,
 };
 
+/** MultiQC's General Statistics is a table, not a figure: the tile shows the
+ * per-sample table by default and a Plotly violin only when the user switches
+ * to it. The catalog names it `general` (the first token of its anchor). */
+const GENERAL_STATS_SECTIONS = new Set(["general", "general_stats"]);
+const GENERAL_STATS_SELECTOR = "table, .js-plotly-plot";
+
+const contentSelectorFor = (offer: RenderOffer): string | undefined =>
+  offer.render.component === "multiqc" &&
+  GENERAL_STATS_SECTIONS.has((offer.render.section ?? "").toLowerCase())
+    ? GENERAL_STATS_SELECTOR
+    : CONTENT_SELECTOR[offer.render.component];
+
 /** How long to wait for CONTENT_SELECTOR, per component type.
  *
  * A MultiQC tile does not own its figure: the backend builds every figure of a
@@ -231,7 +243,7 @@ async function checkComponent(
         })
       : undefined;
 
-  const selector = CONTENT_SELECTOR[offer.render.component];
+  const selector = contentSelectorFor(offer);
   if (selector) {
     const budget =
       CONTENT_TIMEOUT_MS[offer.render.component] ?? DEFAULT_CONTENT_TIMEOUT_MS;
