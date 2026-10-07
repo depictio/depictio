@@ -1,0 +1,34 @@
+id: hicpro_pair_flow
+name: Read-pair fates
+mode: stats
+description: >-
+  The same HiC-Pro statistics as one weighted row per read-pair fate, mapping
+  to restriction-fragment filter to contact class, so the funnel can be drawn
+  as a flow and the cis/trans split as a composition.
+find:
+  path_glob: "**/*_allValidPairs.mergestat"
+  path_glob_alt:
+    - "**/*.mpairstat"
+    - "**/*.mRSstat"
+recipe: hicpro/pair_flow.py
+fixture: pair_flow.tsv
+renders_as:
+  - id: pair_flow_sankey
+    component: advanced_viz
+    kind: sankey
+    roles:
+      steps: [mapping, filtering, contacts]
+  # Composition of what survives: the cis/trans split plus the duplicates
+  # de-duplication removed. `filter_expr` keeps the lost paths out of the ring.
+  - component: card
+    column: pairs
+    aggregation: sum
+    secondary_layout: donut
+    breakdown_col: contacts
+    filter_expr: "col('filtering') == 'Valid pairs'"
+  - component: card
+    column: pairs
+    aggregation: sum
+    secondary_layout: donut
+    breakdown_col: mapping
+  - { component: table }

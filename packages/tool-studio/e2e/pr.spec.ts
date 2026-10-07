@@ -80,6 +80,8 @@ test('signs in and opens a pull request for a new tool', async ({ page, baseURL 
 
   await page.getByLabel('Tool id').fill('e2etool');
   await page.getByLabel('Tool name').fill('E2E Tool');
+  await page.getByLabel('Tool description').fill('A test tool.');
+  await page.getByLabel('Homepage').fill('https://example.org');
   await page.getByLabel('Output slug').fill('results');
   await page.getByLabel('Path glob').fill('**/e2etool/*.csv');
   await page.getByRole('button', { name: 'Next', exact: true }).click();

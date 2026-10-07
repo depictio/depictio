@@ -1,6 +1,9 @@
-# Melon. Lightweight: identity is derived from the nf-core meta.yml that
-# `nf_core_url` points at (not duplicated). Override a field here only on drift.
 id: melon
 name: Melon
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/melon
+description: >-
+  Taxonomic identification and quantification of long-read metagenomes using
+  marker genes.
+homepage: https://github.com/xinehc/melon
+biotools_url: null  # no bio.tools entry for this tool
 stage: taxonomy

@@ -1,15 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  alpha,
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { alpha, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
+import {
+  VizControlGroup,
+  VizNumberInput,
+  VizSelect,
+  VizSwitch,
+} from './controls/VizControls';
 
 import {
   type AdvancedVizKind,
@@ -19,6 +16,10 @@ import {
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap } from '../../colors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import type { PlotGraphHandlers } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
+import type { PlotEventHandlers } from '../../annotations/plotDecorate';
 import {
   applyDataTheme,
   applyLayoutTheme,
@@ -131,33 +132,23 @@ function isMember(value: unknown): boolean {
 }
 
 /**
- * Pure presentation wrapper. Memoised on (figure, isDark, theme) so a parent
- * re-render driven by filter or refresh state doesn't hand Plotly fresh data +
- * layout objects and rebuild the figure mid-interaction.
+ * Pure presentation wrapper. Memoised on the (already themed and annotated)
+ * figure and on each handler so a parent re-render driven by filter or
+ * refresh state doesn't hand Plotly fresh data + layout objects and rebuild
+ * the figure mid-interaction.
  */
-const GseaPlot = React.memo<{
-  figure: { data: unknown[]; layout: Record<string, unknown> };
-  isDark: boolean;
-  theme: ReturnType<typeof useMantineTheme>;
-}>(({ figure, isDark, theme }) => {
-  const themedData = useMemo(
-    () => applyDataTheme(figure.data, isDark, theme),
-    [figure.data, isDark, theme],
-  );
-  const themedLayout = useMemo(
-    () => applyLayoutTheme(figure.layout, isDark, theme),
-    [figure.layout, isDark, theme],
-  );
-  return (
-    <Plot
-      data={themedData as any}
-      layout={themedLayout as any}
-      useResizeHandler
-      style={PLOT_STYLE}
-      config={PLOT_CONFIG as any}
-    />
-  );
-});
+const GseaPlot = React.memo<
+  { data: unknown[]; layout: Record<string, unknown> } & PlotEventHandlers & PlotGraphHandlers
+>(({ data, layout, ...handlers }) => (
+  <Plot
+    data={data as any}
+    layout={layout as any}
+    useResizeHandler
+    style={PLOT_STYLE}
+    config={PLOT_CONFIG as any}
+    {...handlers}
+  />
+));
 GseaPlot.displayName = 'GseaPlot';
 
 const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
@@ -528,7 +519,7 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
       showgrid: true,
     };
 
-    return { data: data as unknown[], layout };
+    return { data: data as unknown[], layout, singlePanel: panels.length === 1 };
   }, [
     shown,
     colourMap,
@@ -548,21 +539,20 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
     return { 'gene sets': shown.length, ranks };
   }, [allSeries.length, shown]);
 
-  const controls = (
-    <Stack gap="xs">
-      <NumberInput
-        size="xs"
+  // Encoding tier: which gene sets are walked and whether they share an axis.
+  // The leading-edge shading, the hit rug and the metric panel annotate those
+  // same curves.
+  const primaryControls = (
+    <>
+      <VizNumberInput
         label="Top-N gene sets"
-        description="Ranked by the size of their peak running score"
         value={topNSets}
         onChange={(v) => setTopNSets(Math.max(1, Math.min(20, Number(v) || 5)))}
         min={1}
         max={20}
       />
-      <Select
-        size="xs"
+      <VizSelect
         label="Layout"
-        description="One panel per set, or every curve on one axis"
         value={layoutMode}
         onChange={(v) => v && setLayoutMode(v as LayoutMode)}
         data={[
@@ -571,36 +561,53 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
         ]}
         allowDeselect={false}
       />
-      <Stack gap={4}>
-        <Text size="xs" fw={500}>
-          Panels
-        </Text>
-        <Switch
-          size="xs"
-          checked={showLeadingEdge}
-          onChange={(e) => setShowLeadingEdge(e.currentTarget.checked)}
-          label="Shade the leading edge"
-        />
-        {config.member_col ? (
-          <Switch
-            size="xs"
-            checked={showHits}
-            onChange={(e) => setShowHits(e.currentTarget.checked)}
-            label="Hit rug"
-            disabled={!hasHits}
-          />
-        ) : null}
-        {config.metric_col ? (
-          <Switch
-            size="xs"
-            checked={showMetric}
-            onChange={(e) => setShowMetric(e.currentTarget.checked)}
-            label="Ranked metric"
-          />
-        ) : null}
-      </Stack>
-    </Stack>
+    </>
   );
+
+  const controls = (
+    <VizControlGroup title="Annotations">
+      <VizSwitch
+        checked={showLeadingEdge}
+        onChange={(e) => setShowLeadingEdge(e.currentTarget.checked)}
+        label="Shade the leading edge"
+      />
+      {config.member_col ? (
+        <VizSwitch
+          checked={showHits}
+          onChange={(e) => setShowHits(e.currentTarget.checked)}
+          label="Hit rug"
+          disabled={!hasHits}
+        />
+      ) : null}
+      {config.metric_col ? (
+        <VizSwitch
+          checked={showMetric}
+          onChange={(e) => setShowMetric(e.currentTarget.checked)}
+          label="Ranked metric"
+        />
+      ) : null}
+    </VizControlGroup>
+  );
+
+  // Themed once per figure so the annotation layer can memoise on them.
+  const plotData = useMemo(
+    () => (figure ? applyDataTheme(figure.data, isDark, theme) : null),
+    [figure, isDark, theme],
+  );
+  const plotLayout = useMemo(
+    () => (figure ? applyLayoutTheme(figure.layout, isDark, theme) : null),
+    [figure, isDark, theme],
+  );
+  // Chart annotations, on the curve-alone view only: the hit rug, the ranked
+  // metric and the faceted layout each stack another y axis on the rank axis.
+  // Curve points are ranks, not rows, so marked points are stored as
+  // coordinates.
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata) && !!figure?.singlePanel,
+    data: plotData,
+    layout: plotLayout,
+  });
 
   return (
     <AdvancedVizFrame
@@ -608,14 +615,21 @@ const GseaRunningScoreRenderer: React.FC<Props> = ({ metadata, filters, refreshT
       title={metadata.title || 'GSEA running enrichment score'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       counts={counts}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}
       emptyMessage={rows && !figure ? 'No gene set to walk' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
+      badges={annotations.badges}
     >
-      {figure ? <GseaPlot figure={figure} isDark={isDark} theme={theme} /> : null}
+      {figure ? (
+        <>
+          <GseaPlot data={annotations.data} layout={annotations.layout} {...annotations.plotProps()} />
+          {annotations.toolbar}
+        </>
+      ) : null}
     </AdvancedVizFrame>
   );
 };

@@ -22,10 +22,8 @@ uploaded by hand instead, into an instance that already has the fixtures.
 | --- | --- |
 | `project.yaml` | project / workflow / data-collection ids and column descriptions — the single source of truth for every ObjectId here |
 | `dashboards/*.yaml` | one lite YAML per tab; the authoring surface |
-| `.db_seeds/dashboard_*.json` | generated, committed, uploaded by `scripts/upload.sh` |
 | `scripts/preprocess_fixtures.py` | turns raw pipeline outputs into the TSVs the DCs scan |
-| `scripts/generate_seeds.py` | thin wrapper over `depictio.dev_scripts.generate_dashboard_seeds` |
-| `scripts/upload.sh` | CLI scan inside the API container, then `mongoimport` of the seeds |
+| `scripts/upload.sh` | CLI scan inside the API container, then generates the dashboard seeds from `dashboards/*.yaml` into a temporary directory and `mongoimport`s them |
 
 ## Workflow
 
@@ -33,15 +31,13 @@ uploaded by hand instead, into an instance that already has the fixtures.
 # 1. fetch + reshape the fixtures (needs AWS CLI; writes data/, gitignored)
 python depictio/projects/init/nfcore_megatests_showcase/scripts/preprocess_fixtures.py
 
-# 2. regenerate the seeds after editing any dashboards/*.yaml
-venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds nfcore_megatests_showcase
-
-# 3. register the project and upsert the dashboards into a running instance
+# 2. register the project and upsert the dashboards into a running instance
 bash depictio/projects/init/nfcore_megatests_showcase/scripts/upload.sh
 ```
 
-Never edit `.db_seeds/*.json` by hand: step 2 overwrites them, and the YAML is
-what gets reviewed.
+No seed JSON is committed: nothing loads this project at boot, so the
+dashboards exist only as `dashboards/*.yaml`, and `upload.sh` builds the JSON
+from them on every run.
 
 ## Tab family
 

@@ -105,6 +105,7 @@ def test_one_walk_finds_what_match_run_dir_finds(run):
 def test_tabs_follow_the_pipeline_stages(conformance):
     assert conformance.tabs == [
         "Overview",
+        "Quality control",
         "Alignment & coverage",
         "Quantification",
         "Taxonomy & diversity",
@@ -125,7 +126,7 @@ def test_every_collection_is_optional_and_scans_what_was_found(conformance):
     salmon = collections["salmon_merged_gene_counts"]["config"]["scan"]
     assert salmon == {
         "mode": "single",
-        "scan_parameters": {"filename": "{DATA_ROOT}/salmon.merged.gene_counts.tsv"},
+        "scan_parameters": {"filename": "{DATA_ROOT}/salmon/salmon.merged.gene_counts.tsv"},
     }
 
 
@@ -230,13 +231,15 @@ ALPHA_FILES = [
 
 
 def test_a_recipe_whose_files_sit_where_it_expects_needs_no_override():
-    overrides, used, needs = _resolve_recipe_sources(ALPHA, [], ALPHA_FILES[:1], set(ALPHA_FILES))
+    overrides, used, needs, _ = _resolve_recipe_sources(
+        ALPHA, [], ALPHA_FILES[:1], set(ALPHA_FILES)
+    )
     assert overrides == {} and used == set(ALPHA_FILES) and needs == []
 
 
 def test_sibling_sources_are_rerooted_under_the_matched_file():
     moved = {f"results/{f}" for f in ALPHA_FILES}
-    overrides, used, _ = _resolve_recipe_sources(ALPHA, [], sorted(moved)[:1], moved)
+    overrides, used, _, _ = _resolve_recipe_sources(ALPHA, [], sorted(moved)[:1], moved)
     assert {o["path"] for o in overrides.values()} == moved
     assert used == moved
 
@@ -249,7 +252,7 @@ def test_a_missing_required_source_is_reported():
 
 def test_a_single_source_follows_its_file_wherever_it_is():
     found = {"star_salmon/salmon.merged.gene_tpm.tsv"}
-    overrides, _, _ = _resolve_recipe_sources("salmon/sample_pca.py", [], sorted(found), found)
+    overrides, _, _, _ = _resolve_recipe_sources("salmon/sample_pca.py", [], sorted(found), found)
     assert overrides == {"matrix": {"path": "star_salmon/salmon.merged.gene_tpm.tsv"}}
 
 
@@ -775,3 +778,12 @@ def test_a_section_shows_one_row_of_cards_the_samples_once():
     row = _glance_row([cards("a", 3), cards("b", 3)])
     assert len(row) == 4
     assert [c["column_name"] for c in row] == ["sample", "b0", "a0", "b1"]
+
+
+def test_a_broad_recipe_glob_only_takes_the_files_with_its_input_columns(tmp_path):
+    """A recipe whose find reaches any top-level table (`*.tsv`) leaves another
+    tool's table alone: it lacks the columns the recipe declares it reads."""
+    (tmp_path / "stats.tsv").write_text("sample\treads\nA\t10\nB\t20\n")
+    composition = compose_run(tmp_path)
+    assert not composition.collections
+    assert [p["path"] for p in composition.unrecognised] == ["stats.tsv"]

@@ -28,6 +28,27 @@ class File(MongoModel):
     filesize: int
     permissions: Permission
 
+    # --- indexed_file DCs ---------------------------------------------------
+    # Set by the CLI when it mirrors an `indexed_file` DC to S3. Absent on every
+    # other DC type and on every file registered before this existed, which is
+    # what keeps the field additive: the presigned route simply finds nothing.
+    sample: str | None = Field(
+        default=None,
+        description="Sample the file belongs to (indexed_file DCs only)",
+    )
+    s3_key: str | None = Field(
+        default=None,
+        description="Bucket-relative key of the mirrored object (indexed_file DCs only)",
+    )
+    index_s3_key: str | None = Field(
+        default=None,
+        description="Bucket-relative key of the index sidecar, when the format has one",
+    )
+    index_filesize: int | None = Field(
+        default=None,
+        description="Size in bytes of the index sidecar, when the format has one",
+    )
+
     # id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
     # id: Optional[PyObjectId] = None
     # TODO: Add S3 support

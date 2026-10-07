@@ -1,0 +1,625 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7a"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7a"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "gv-text",
+      "component_type": "text",
+      "title": "Genome browser tracks",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tracks on a locus",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Both tiles open on the IGF2 and KCNQ1 imprinted domain: the navigator shows the CTCF peaks there, the track below the ChIP-seq depth per track over the hg38 genes. Type a locus or a gene symbol in the navigator header, or brush its axis, and both tiles move together; scroll to zoom and drag to pan inside either. Both tiles read table collections here; with source file the same tile range-reads the VCF, BAM, bigWig or GFF3 a pipeline such as sarek, chipseq or rnaseq publishes.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-regions",
+      "component_type": "advanced_viz",
+      "title": "Locus navigator",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "locus_peaks_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dc1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "CTCF peaks over the three contact-map loci: every TAD boundary, every loop anchor and a few internal sites",
+        "data_collection_tag": "locus_peaks_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dc1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "CTCF peaks on the current region, coloured by where they sit. The locus field in the header and a brush on this axis move this tile and publish the region the track below follows.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tracks on a locus",
+      "viz_kind": "genome_view",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "genome_view",
+        "source": "table",
+        "chr_col": "chrom",
+        "pos_col": "start",
+        "score_col": "score",
+        "feature_col": "peak_id",
+        "end_col": "end",
+        "sample_col": null,
+        "category_col": "peak_class",
+        "mark": "bar",
+        "facet_by_sample": false,
+        "max_facets": 8,
+        "annotation": "none",
+        "assembly": "hg38",
+        "score_title": "CTCF -log10(q)",
+        "score_threshold": null,
+        "point_size": 5,
+        "opacity": 0.85,
+        "region_filter_enabled": true,
+        "follow_region_filter": false,
+        "default_region": "chr11:1,950,000-2,950,000",
+        "selection_enabled": false,
+        "selection_column": null,
+        "file_info_fields": null,
+        "file_category_field": null,
+        "file_categories": null,
+        "file_add_chr_prefix": false,
+        "file_window_size": null,
+        "file_max_lanes": 8,
+        "file_tabix_columns": null,
+        "file_bam_view": "coverage"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-depth",
+      "component_type": "advanced_viz",
+      "title": "ChIP-seq depth over the genes",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "locus_coverage_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dc2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "CTCF and H3K27ac ChIP-seq depth in 2 kb bins over the three contact-map loci",
+        "data_collection_tag": "locus_coverage_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dc2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "CTCF and H3K27ac depth in 2 kb bins, one lane per track, over the bundled hg38 gene lane. Another collection than the navigator: it follows the region through the project region link.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Tracks on a locus",
+      "viz_kind": "genome_view",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "genome_view",
+        "source": "table",
+        "chr_col": "chrom",
+        "pos_col": "start",
+        "score_col": "coverage",
+        "feature_col": null,
+        "end_col": "end",
+        "sample_col": "sample",
+        "category_col": null,
+        "mark": "bar",
+        "facet_by_sample": true,
+        "max_facets": 4,
+        "annotation": "hg38",
+        "assembly": "hg38",
+        "score_title": "depth",
+        "score_threshold": null,
+        "point_size": 5,
+        "opacity": 0.85,
+        "region_filter_enabled": false,
+        "follow_region_filter": true,
+        "default_region": null,
+        "selection_enabled": false,
+        "selection_column": null,
+        "file_info_fields": null,
+        "file_category_field": null,
+        "file_categories": null,
+        "file_add_chr_prefix": false,
+        "file_window_size": null,
+        "file_max_lanes": 8,
+        "file_tabix_columns": null,
+        "file_bam_view": "coverage"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-text-markers",
+      "component_type": "text",
+      "title": "Markers on a locus axis",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Markers on a locus axis",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "The collection the Manhattan tab reads, on the same grammar: chromosomes are concatenated by the locus scale rather than laid out by hand, and the dashed rule is the significance threshold. Click a marker to filter the rest of the dashboard by feature. Compare it with the Manhattan tab for the same rows drawn in Plotly.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-markers",
+      "component_type": "advanced_viz",
+      "title": "Markers by position and score",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "manhattan_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
+        "data_collection_tag": "manhattan_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "chr / pos / score on a chromosome-aware locus scale. Type a locus in the header, zoom with the wheel, pan by dragging.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Markers on a locus axis",
+      "viz_kind": "genome_view",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "genome_view",
+        "source": "table",
+        "chr_col": "chr",
+        "pos_col": "pos",
+        "score_col": "score",
+        "feature_col": "feature",
+        "end_col": null,
+        "sample_col": null,
+        "category_col": null,
+        "mark": "point",
+        "facet_by_sample": false,
+        "max_facets": 8,
+        "annotation": "none",
+        "assembly": null,
+        "score_title": "-log10(padj)",
+        "score_threshold": 5.0,
+        "point_size": 5,
+        "opacity": 0.85,
+        "region_filter_enabled": false,
+        "follow_region_filter": false,
+        "default_region": null,
+        "selection_enabled": true,
+        "selection_column": "feature",
+        "file_info_fields": null,
+        "file_category_field": null,
+        "file_categories": null,
+        "file_add_chr_prefix": false,
+        "file_window_size": null,
+        "file_max_lanes": 8,
+        "file_tabix_columns": null,
+        "file_bam_view": "coverage"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-f-sample",
+      "component_type": "interactive",
+      "title": "ChIP track",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "locus_coverage_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dc2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "CTCF and H3K27ac ChIP-seq depth in 2 kb bins over the three contact-map loci",
+        "data_collection_tag": "locus_coverage_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dc2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Track filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "icon_name": "mdi:flask",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-f-region",
+      "component_type": "interactive",
+      "title": "CTCF peak class",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "locus_peaks_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dc1"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "CTCF peaks over the three contact-map loci: every TAD boundary, every loop anchor and a few internal sites",
+        "data_collection_tag": "locus_peaks_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dc1"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "peak_class",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Track filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "icon_name": "mdi:map-marker-path",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-f-depth",
+      "component_type": "interactive",
+      "title": "Depth",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "locus_coverage_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8dc2"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "CTCF and H3K27ac ChIP-seq depth in 2 kb bins over the three contact-map loci",
+        "data_collection_tag": "locus_coverage_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8dc2"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "coverage",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Track filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "icon_name": "mdi:chart-line",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "gv-f-score",
+      "component_type": "interactive",
+      "title": "Score",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "manhattan_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic Manhattan: 23 chromosomes x ~40 noise points + 6 designed hits",
+        "data_collection_tag": "manhattan_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d04"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Track scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "score",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Marker filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "icon_name": "mdi:chart-bell-curve",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-gv-f-sample",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-gv-f-region",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-gv-f-depth",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-gv-f-score",
+      "x": 0,
+      "y": 9,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-gv-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-gv-regions",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-gv-depth",
+      "x": 0,
+      "y": 5,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-gv-text-markers",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-gv-markers",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 7,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Genome browser tracks",
+  "subtitle": "GenomeSpy tracks on a chromosome-aware axis: a CTCF peak navigator, ChIP-seq depth per track over the hg38 genes following its region, and a genome-wide marker scan.",
+  "icon": "tabler:dna-2",
+  "icon_color": "teal",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 40,
+  "main_tab_name": null,
+  "tab_icon": "tabler:dna-2",
+  "tab_icon_color": "teal",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Track scope",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Restricts the tracks to a ChIP track, a peak class, a depth or a score range",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Tracks on a locus",
+      "icon": "mdi:dna",
+      "color": "teal",
+      "description": "A CTCF peak navigator and the ChIP depth that follows its region",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Markers on a locus axis",
+      "icon": "mdi:chart-scatter-plot",
+      "color": "teal",
+      "description": "The Manhattan collection drawn by GenomeSpy, for the side-by-side comparison",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

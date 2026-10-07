@@ -14,11 +14,24 @@ fixture: peaks.tsv
 renders_as:
   # Significance along the genome, then how wide the calls are.
   - { id: peak_significance, component: advanced_viz, kind: manhattan, roles: {chr: chr, pos: summit, score: neg_log10_qvalue} }
+  # The same rows on a chromosome-aware locus axis, drawn by GenomeSpy. A peak is
+  # an interval and not a point, so `end` is bound and a dashboard draws it with
+  # `mark: rect`; the Manhattan above keeps the summit-as-a-point reading.
+  # `sample` is bound so a tile can stack one lane per library without rebinding.
+  - { id: peak_genome_view, component: advanced_viz, kind: genome_view, roles: {chr: chr, pos: start, score: neg_log10_qvalue, feature: peak_id, end: end, sample: sample} }
+  # The same intervals in plain Plotly, so a section that leads with the GenomeSpy
+  # track still says something if that renderer is unavailable. Enrichment rather
+  # than significance on the y axis: it is the quantity a coverage-shaped reading
+  # of a peak set is about.
+  - { id: peak_coverage_track, component: advanced_viz, kind: coverage_track, roles: {chromosome: chr, position: start, value: fold_enrichment, end: end, sample: sample} }
+  # Enrichment against significance. MACS2 reports significance already as
+  # -log10, so a tile binding this sets `significance_is_neg_log10: true`.
+  - { id: peak_volcano, component: advanced_viz, kind: volcano, roles: {feature_id: peak_id, effect_size: fold_enrichment, significance: neg_log10_qvalue, label: peak_id, category: sample} }
   - { component: figure, visu_type: histogram, dict_kwargs: {x: width, color: sample, title: Peak width distribution} }
   # How many peaks and where they concentrate, then the spread of width,
   # enrichment and significance behind that count.
   - { component: card, column: peak_id, aggregation: count, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
   - { component: card, column: width, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: fold_enrichment, aggregation: average, secondary_layout: histogram }
-  - { component: card, column: neg_log10_qvalue, aggregation: max, secondary_layout: threshold, threshold_value: 10.0 }
+  - { component: card, column: neg_log10_qvalue, aggregation: max, secondary_layout: threshold, threshold_value: 1.3, threshold_direction: min, threshold_warn: 1.0 }
   - { component: table, row_selection_enabled: true, row_selection_column: peak_id }

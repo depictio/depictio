@@ -294,11 +294,21 @@ export default function ToolForm({ catalog }: { catalog: CatalogManifest }) {
       </SimpleGrid>
 
       <Textarea
-        label="Tool description (optional)"
+        label="Tool description"
+        description="one or two sentences, shown on the tool's catalog card"
+        required
         autosize
         minRows={2}
         value={tool.description ?? ''}
         onChange={(e) => setTool({ description: e.currentTarget.value })}
+      />
+      <TextInput
+        label="Homepage"
+        description="the tool's site or source repository, linked from its catalog card"
+        placeholder="https://github.com/brentp/mosdepth"
+        required
+        value={tool.homepage ?? ''}
+        onChange={(e) => setTool({ homepage: e.currentTarget.value || undefined })}
       />
       </Stack>
     </Paper>

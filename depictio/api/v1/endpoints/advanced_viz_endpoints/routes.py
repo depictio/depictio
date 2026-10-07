@@ -418,6 +418,31 @@ def _tail_sample(
     return frame
 
 
+def _log_rank_sample(scan: Any, roles: dict[str, str], available: set[str], cap: int) -> Any | None:
+    """Keep the log-spaced ranks of a rank-ordered curve (the ``log_rank`` policy).
+
+    Rows are kept by rank value, not position, so every sample's curve keeps the
+    same ranks and the budget is split across samples. Returns None when the rank
+    column is unbound or absent, which drops the caller back to a uniform sample.
+    """
+    import polars as pl
+
+    from depictio.models.components.advanced_viz.sampling import log_spaced_rank_thin
+
+    rank_col = roles.get("rank")
+    if not rank_col or rank_col not in available:
+        return None
+    sample_col = roles.get("sample")
+    n_curves = 1
+    if sample_col and sample_col in available:
+        n_curves = max(1, int(scan.select(pl.col(sample_col).n_unique()).collect().item()))
+    max_rank = scan.select(pl.col(rank_col).max()).collect().item()
+    if max_rank is None:
+        return None
+    keep = [pos + 1 for pos in log_spaced_rank_thin(int(max_rank), max(2, cap // n_curves))]
+    return scan.filter(pl.col(rank_col).is_in(keep)).collect()
+
+
 def _load_reduced(
     wf_oid,
     dc_oid,
@@ -498,6 +523,19 @@ def _load_reduced(
             frame = _tail_sample(scan, projection, total, cap, spec) if spec else None
             if frame is not None:
                 return _reduced(frame, total, "tail")
+
+        if policy == "log_rank":
+            frame = _log_rank_sample(scan, roles or {}, set(projection), cap)
+            if frame is not None:
+                return _reduced(frame, total, "log_rank")
+
+        if policy == "head":
+            # The kind asked for a prefix rather than a sample: its renderer
+            # draws one mark per row and stops being legible well before the
+            # cap, so "the first N rows" is as faithful as a uniform subset and
+            # is a sentence a reader can act on. Not `degraded`: nothing the
+            # renderer reports is an estimate, there are simply fewer lines.
+            return _reduced(scan.head(cap).collect(), total, "head")
 
         frame = _hash_sample(scan, projection, total, cap)
         if frame is None:
@@ -837,6 +875,39 @@ def fetch_advanced_viz_data(
 
 _CACHE_KEY_VERSION = "v3"
 
+# A failed computation is retried once its entry is older than this. The short
+# backoff stops a tile that re-dispatches on every render from hot-looping on a
+# persistent error, while a fixed cause (data re-ingested, code fixed) no longer
+# replays the stale error forever.
+_FAILED_RETRY_AFTER_S = 60
+
+
+def _find_reusable_cache_entry(cache, cache_key: str) -> dict | None:
+    """Return the cached compute doc for ``cache_key``, or None on a miss.
+
+    ``done`` and ``pending`` entries are reused as-is. A ``failed`` entry is
+    never treated as a permanent answer: once it is older than
+    ``_FAILED_RETRY_AFTER_S`` it is deleted and the caller re-enqueues the
+    computation. A younger failed entry is still returned so rapid re-renders
+    see the error instead of spawning a task per render.
+    """
+    from datetime import datetime, timezone
+
+    existing = cache.find_one({"_id": cache_key})
+    if not existing or existing.get("status") != "failed":
+        return existing
+    stamp = existing.get("completed_at") or existing.get("created_at")
+    if isinstance(stamp, datetime):
+        if stamp.tzinfo is None:  # pymongo returns naive UTC by default
+            stamp = stamp.replace(tzinfo=timezone.utc)
+        age_s = (datetime.now(timezone.utc) - stamp).total_seconds()
+        if age_s < _FAILED_RETRY_AFTER_S:
+            return existing
+    # Only drop it if it is still the failed doc we read (a concurrent retry may
+    # already have replaced it with a fresh pending entry).
+    cache.delete_one({"_id": cache_key, "status": "failed"})
+    return None
+
 
 def _compute_cache_key(payload: dict, user_id) -> str:
     """Stable key for the compute_results cache.
@@ -909,7 +980,7 @@ def dispatch_compute_embedding(
 
     cache = db["compute_results"]
     cache_key = _compute_cache_key(payload, current_user.id)
-    existing = cache.find_one({"_id": cache_key})
+    existing = _find_reusable_cache_entry(cache, cache_key)
 
     # Cache hit (done or pending).
     if existing:
@@ -1069,7 +1140,7 @@ def dispatch_compute_complex_heatmap(
     payload_for_key = dict(payload)
     payload_for_key.setdefault("method", "complex_heatmap")
     cache_key = _compute_cache_key(payload_for_key, current_user.id)
-    existing = cache.find_one({"_id": cache_key})
+    existing = _find_reusable_cache_entry(cache, cache_key)
     if existing:
         return {
             "job_id": cache_key,
@@ -1204,7 +1275,7 @@ def dispatch_compute_upset(
     payload_for_key = dict(payload)
     payload_for_key.setdefault("method", "upset_plot")
     cache_key = _compute_cache_key(payload_for_key, current_user.id)
-    existing = cache.find_one({"_id": cache_key})
+    existing = _find_reusable_cache_entry(cache, cache_key)
     if existing:
         return {
             "job_id": cache_key,
@@ -1347,7 +1418,7 @@ def _dispatch_compute(
             "from_cache": True,
         }
 
-    existing = cache.find_one({"_id": cache_key})
+    existing = _find_reusable_cache_entry(cache, cache_key)
     if existing:
         return _from_cache(existing)
 
@@ -1458,6 +1529,35 @@ def poll_compute_coverage_track(
     return _poll_compute(job_id, current_user)
 
 
+@advanced_viz_endpoint_router.post("/compute_contact_map")
+def dispatch_compute_contact_map(
+    payload: dict = Body(...),
+    current_user=Depends(get_user_or_anonymous),
+    access_token: str | None = Depends(oauth2_scheme_optional),
+) -> dict[str, Any]:
+    """Dispatch one region of a contact matrix, at one resolution.
+
+    Region and resolution are part of the payload, so they are part of the
+    cache key: zooming in dispatches a new job and zooming back out lands on
+    the one already computed. `resolution: null` lets the server pick the level
+    whose bins-per-pixel is closest to the target for the span the client says
+    it is showing.
+    """
+    from depictio.api.v1.celery_tasks import compute_contact_map as compute_task
+
+    _apply_link_filters_to_payload(payload, access_token, "contact_map")
+    return _dispatch_compute(payload, "contact_map", compute_task, current_user)
+
+
+@advanced_viz_endpoint_router.get("/compute_contact_map/{job_id}")
+def poll_compute_contact_map(
+    job_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Poll a previously-dispatched contact-map window."""
+    return _poll_compute(job_id, current_user)
+
+
 @advanced_viz_endpoint_router.post("/compute_sankey")
 def dispatch_compute_sankey(
     payload: dict = Body(...),
@@ -1477,6 +1577,60 @@ def poll_compute_sankey(
     current_user=Depends(get_user_or_anonymous),
 ) -> dict[str, Any]:
     """Poll a previously-dispatched Sankey compute."""
+    return _poll_compute(job_id, current_user)
+
+
+def _group_selector(raw: Any, side: str) -> dict[str, Any]:
+    """Validate one arm of a group comparison, or raise 400.
+
+    A selector is a column plus the values it captured, which is exactly what
+    a saved selection group is (``GroupRenderDef``) and what a single value of
+    the config's ``group_col`` collapses to. Normalising both into one shape
+    here is what lets the worker treat "two lassos" and "two labels" the same.
+    """
+    if not isinstance(raw, dict):
+        raise HTTPException(status_code=400, detail=f"group_{side} must be an object")
+    column = str(raw.get("column") or "").strip()
+    values = [str(v) for v in (raw.get("values") or []) if v is not None]
+    if not column or not values:
+        raise HTTPException(
+            status_code=400,
+            detail=f"group_{side} needs a column and at least one value",
+        )
+    return {
+        "label": str(raw.get("label") or f"Group {side.upper()}"),
+        "column": column,
+        "values": values,
+    }
+
+
+@advanced_viz_endpoint_router.post("/compute_group_compare")
+def dispatch_compute_group_compare(
+    payload: dict = Body(...),
+    current_user=Depends(get_user_or_anonymous),
+    access_token: str | None = Depends(oauth2_scheme_optional),
+) -> dict[str, Any]:
+    """Dispatch a two-group differential test as a Celery task.
+
+    Same dispatch + poll + cache contract as ``compute_upset``: the cache key
+    hashes the whole payload, so the two group definitions and every statistic
+    tunable pick their own cache entry, and re-running the identical
+    comparison is free.
+    """
+    from depictio.api.v1.celery_tasks import compute_group_compare as compute_task
+
+    payload["group_a"] = _group_selector(payload.get("group_a"), "a")
+    payload["group_b"] = _group_selector(payload.get("group_b"), "b")
+    _apply_link_filters_to_payload(payload, access_token, "group_compare")
+    return _dispatch_compute(payload, "group_compare", compute_task, current_user)
+
+
+@advanced_viz_endpoint_router.get("/compute_group_compare/{job_id}")
+def poll_compute_group_compare(
+    job_id: str,
+    current_user=Depends(get_user_or_anonymous),
+) -> dict[str, Any]:
+    """Poll a previously-dispatched group comparison."""
     return _poll_compute(job_id, current_user)
 
 

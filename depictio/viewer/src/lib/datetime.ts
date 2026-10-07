@@ -96,3 +96,27 @@ export function timestampSortKey(raw: unknown): number {
   const d = parseServerTimestamp(raw);
   return d ? d.getTime() : Number.NEGATIVE_INFINITY;
 }
+
+const RELATIVE_STEPS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
+  ['second', 60],
+  ['minute', 60],
+  ['hour', 24],
+  ['day', 7],
+  ['week', 4.34524],
+  ['month', 12],
+  ['year', Number.POSITIVE_INFINITY],
+];
+
+/** "3 minutes ago", "yesterday", … in English; `fallback` for unusable input. */
+export function formatRelativeTime(raw: unknown, fallback = '—', now: number = Date.now()): string {
+  const d = parseServerTimestamp(raw);
+  if (!d) return fallback;
+  let delta = (d.getTime() - now) / 1000;
+  if (Math.abs(delta) < 45) return 'just now';
+  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+  for (const [unit, size] of RELATIVE_STEPS) {
+    if (Math.abs(delta) < size) return rtf.format(Math.round(delta), unit);
+    delta /= size;
+  }
+  return formatDateTime(raw, fallback);
+}

@@ -4,4 +4,9 @@
 id: fusioninspector
 name: FusionInspector
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/fusioninspector
+description: >-
+  Validates and characterises fusion transcript predictions by aligning reads
+  to fusion contigs.
+homepage: https://github.com/FusionInspector/FusionInspector
+biotools_url: null  # no bio.tools entry for this tool
 stage: fusions

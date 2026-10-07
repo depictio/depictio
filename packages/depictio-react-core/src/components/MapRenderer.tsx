@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Box,
   Button,
+  Group,
   NumberInput,
   Paper,
   Select,
@@ -23,6 +24,7 @@ import {
   mapSelectionValues,
 } from '../selection';
 import RefetchOverlay from './RefetchOverlay';
+import { usePlotAnnotationLayer } from './annotations/usePlotAnnotationLayer';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
 import { collapseMapAttribution } from './map/collapseMapAttribution';
@@ -661,6 +663,51 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [figure, selectionEnabled, selectionColumnIndex, selectedKey, applyDisplay]);
 
+  // ── Annotation layer: marked points (or choropleth regions) and notes, in
+  // longitude / latitude. Offered on a single map subplot drawing points or
+  // regions; a density layer has no mark to point at. Ids come from the
+  // selection column's customdata slot on a scatter map (only there when
+  // selection is on), from the locations column on a choropleth; without
+  // one, points are stored as coordinates.
+  const isChoropleth = metadata.map_type === 'choropleth_map';
+  const mapAnnotatable = useMemo(() => {
+    const traces = ((figure?.data as any[]) || []).filter((t) => {
+      const type = String(t?.type || '');
+      return type.startsWith('scattermap') || type.startsWith('choroplethmap');
+    });
+    // One subplot: the layout may declare both `map` and a legacy `mapbox`,
+    // so count the subplots the traces draw on.
+    const subplots = new Set(
+      traces.map((t) => t?.subplot || (String(t.type).endsWith('mapbox') ? 'mapbox' : 'map')),
+    );
+    return traces.length > 0 && subplots.size === 1;
+  }, [figure]);
+  const annotationIdColumn = isChoropleth
+    ? typeof metadata.locations_column === 'string'
+      ? (metadata.locations_column as string)
+      : undefined
+    : selectionEnabled
+      ? selectionColumn
+      : undefined;
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: mapAnnotatable,
+    data,
+    layout,
+    surface: 'map',
+    pointIdIndex: selectionColumnIndex,
+    pointIdColumn: annotationIdColumn,
+    pointIdFrom: isChoropleth ? 'location' : 'customdata',
+  });
+  // react-plotly reports the graph div only once `Plotly.react` resolves,
+  // which on a map can wait on the basemap forever (see the attribution
+  // effect above): hand it over from the DOM as well.
+  const trackAnnotationGraph = annotations.trackGraph;
+  useEffect(() => {
+    const gd = plotRef.current?.querySelector('.js-plotly-plot');
+    if (gd) trackAnnotationGraph(gd);
+  }, [figure, data, trackAnnotationGraph]);
+
   const Shell = bare ? Box : Paper;
   // `Box` takes no Paper props; keep the bordered card for the grid path only.
   const shellProps = bare ? {} : { p: 'sm' as const, withBorder: true, radius: 'md' as const };
@@ -677,9 +724,12 @@ const MapRenderer: React.FC<MapRendererProps> = ({
       }}
     >
       {metadata.title && !bare && (
-        <Text fw={600} size="sm" mb="xs">
-          {metadata.title}
-        </Text>
+        <Group gap="xs" mb="xs" wrap="nowrap">
+          <Text fw={600} size="sm">
+            {metadata.title}
+          </Text>
+          {annotations.badges}
+        </Group>
       )}
       {showInitialLoader && <ComponentSkeleton variant="block" />}
       {error && isInitialLoad && (
@@ -690,8 +740,8 @@ const MapRenderer: React.FC<MapRendererProps> = ({
       {figure && (
         <div ref={plotRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           <Plot
-            data={data}
-            layout={layout}
+            data={annotations.data as any[]}
+            layout={annotations.layout}
             revision={refreshTick ?? 0}
             config={{
               displaylogo: false,
@@ -704,11 +754,19 @@ const MapRenderer: React.FC<MapRendererProps> = ({
             }}
             style={{ width: '100%', height: '100%' }}
             useResizeHandler
-            onRelayout={handleRelayout}
-            onSelected={selectionEnabled ? handlePointSelection : undefined}
-            onClick={selectionEnabled ? handlePointSelection : undefined}
-            onDeselect={selectionEnabled ? handleDeselect : undefined}
+            {...annotations.plotProps({
+              onRelayout: handleRelayout,
+              onSelected: selectionEnabled ? handlePointSelection : undefined,
+              onClick: selectionEnabled ? handlePointSelection : undefined,
+              onDeselect: selectionEnabled ? handleDeselect : undefined,
+            })}
           />
+          {annotations.toolbar}
+          {(bare || !metadata.title) && annotations.badges.length > 0 && (
+            <Group gap={4} style={{ position: 'absolute', bottom: 4, left: 4, zIndex: 1 }}>
+              {annotations.badges}
+            </Group>
+          )}
           <RefetchOverlay visible={showRefetchOverlay} />
         </div>
       )}

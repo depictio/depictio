@@ -3,4 +3,6 @@ id: happy
 name: hap.py
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/happy/happy
 biotools_url: https://bio.tools/hap.py
+description: Haplotype-aware comparison of a VCF against a truth set (hap.py).
+homepage: https://github.com/Illumina/hap.py
 stage: benchmarking

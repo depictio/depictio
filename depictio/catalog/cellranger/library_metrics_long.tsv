@@ -1,0 +1,6 @@
+sample	metric	value	unit	threshold	status
+pbmc8k	confidently_mapped_transcriptome	0.7609999999999999	fraction	0.3	pass
+pbmc8k	fraction_reads_in_cells	0.941	fraction	0.7	pass
+pbmc8k	q30_rna	0.789	fraction	0.65	pass
+pbmc8k	sequencing_saturation	0.9079999999999999	fraction	0.6	pass
+pbmc8k	valid_barcodes	0.985	fraction	0.75	pass

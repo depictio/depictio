@@ -81,6 +81,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:thermometer",
       "icon_color": "#F68B33",
       "title_color": "#F68B33",
@@ -133,6 +134,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:flash",
       "icon_color": "#00BCD4",
       "title_color": "#00BCD4",
@@ -185,6 +187,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:water-percent",
       "icon_color": "#1976D2",
       "title_color": "#1976D2",
@@ -237,6 +240,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:molecule",
       "icon_color": "#8E44AD",
       "title_color": "#8E44AD",
@@ -268,7 +272,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "993b6af9-ed23-4dfa-b485-e7e11f2ccc29",
+      "index": "eaaf9a31-f183-4d14-b47b-8a73d63a66ea",
       "component_type": "figure",
       "title": "Temperature \u00d7 conductivity",
       "workflow_tag": "ampliseq",
@@ -352,7 +356,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "8d99bc28-1737-4c42-8272-6aa1a4d4f915",
+      "index": "c84d501f-59c8-4045-87df-df6a839e86eb",
       "component_type": "figure",
       "title": "Nitrate \u00d7 dissolved carbon",
       "workflow_tag": "ampliseq",
@@ -525,7 +529,7 @@
       ]
     },
     {
-      "i": "box-993b6af9-ed23-4dfa-b485-e7e11f2ccc29",
+      "i": "box-eaaf9a31-f183-4d14-b47b-8a73d63a66ea",
       "x": 0,
       "y": 2,
       "w": 4,
@@ -555,7 +559,7 @@
       ]
     },
     {
-      "i": "box-8d99bc28-1737-4c42-8272-6aa1a4d4f915",
+      "i": "box-c84d501f-59c8-4045-87df-df6a839e86eb",
       "x": 0,
       "y": 8,
       "w": 8,
@@ -631,6 +635,8 @@
     }
   ],
   "funnel_filtering": true,
+  "advanced_viz_controls": "popover",
+  "autofit": true,
   "brand_theme": null,
   "buttons_data": {
     "unified_edit_mode": true,

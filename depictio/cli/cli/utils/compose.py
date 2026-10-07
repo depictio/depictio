@@ -340,6 +340,8 @@ class Collection:
     columns: dict[str, str] = field(default_factory=dict)
     aliases: set[str] = field(default_factory=set)
     needs: list[str] = field(default_factory=list)
+    # The columns the recipe reads off each ``needs`` collection.
+    need_columns: dict[str, list[str]] = field(default_factory=dict)
     renamed: bool = False
     plots: list[MultiQCPlot] = field(default_factory=list)
     general_stats: bool = False
@@ -483,20 +485,56 @@ def _find_patterns(output: CatalogOutput) -> list[str]:
     return []
 
 
+def _carries_input_columns(path: Path, source: Any) -> bool:
+    """Whether a file a recipe's glob reaches has the columns the recipe reads.
+
+    A broad glob (``*.tsv``) reaches any table of the run; the input columns the
+    recipe declares tell its own files from another tool's, which the recipe
+    would reject at ingestion anyway. A file that cannot be read here keeps the
+    benefit of the doubt: the recipe reads it its own way.
+    """
+    import polars as pl
+
+    wanted = [c for c in (source.input_schema or {}) if c != source.source_path]
+    if not wanted:
+        return True
+    try:
+        if source.format == "parquet":
+            columns = pl.read_parquet_schema(path).keys()
+        else:
+            kwargs = {**(source.read_kwargs or {}), "n_rows": 1}
+            if source.format == "tsv":
+                kwargs.setdefault("separator", "\t")
+            columns = pl.read_csv(path, **kwargs).columns
+    except Exception:
+        return True
+    return all(c in columns for c in wanted)
+
+
+def _has_columns(root: Path | None, path: str, columns: list[str] | None) -> bool:
+    """Whether the table at ``path`` has ``columns`` (true when unknown or unreadable)."""
+    if root is None or not columns:
+        return True
+    frame = read_sample(root / path, rows=1)
+    return frame is None or all(c in frame.columns for c in columns)
+
+
 def _resolve_recipe_sources(
     recipe: str,
     outputs: list[CatalogOutput],
     matched: list[str],
     file_set: set[str],
-) -> tuple[dict[str, dict[str, str]], set[str], list[str]]:
+    root: Path | None = None,
+) -> tuple[dict[str, dict[str, str]], set[str], list[str], set[str]]:
     """Point a recipe's sources at the files present.
 
-    Returns ``(source_overrides, files_read, required_dc_refs)``; raises
-    ``ValueError`` naming the source that cannot be satisfied. A source whose
-    default path or glob is there needs nothing. Otherwise the matched file says
-    where the tool's outputs live: its path minus a source's default path is a
-    prefix every sibling path source is re-rooted under, and a glob source falls
-    back to the catalog's own ``find`` pattern.
+    Returns ``(source_overrides, files_read, required_dc_refs, rejected)``;
+    raises ``ValueError`` naming the source that cannot be satisfied. A source
+    whose default path or glob is there needs nothing. Otherwise the matched file
+    says where the tool's outputs live: its path minus a source's default path is
+    a prefix every sibling path source is re-rooted under, and a glob source falls
+    back to the catalog's own ``find`` pattern. With ``root``, a glob source only
+    takes the files that carry its input columns; the others are ``rejected``.
     """
     from depictio.recipes import load_recipe
 
@@ -504,18 +542,26 @@ def _resolve_recipe_sources(
     sources = list(module.SOURCES)
     overrides: dict[str, dict[str, str]] = {}
     used: set[str] = set()
+    rejected: set[str] = set()
+
+    def fitting(source: Any, hits: list[str]) -> list[str]:
+        if root is None:
+            return hits
+        kept = [f for f in hits if _carries_input_columns(root / f, source)]
+        rejected.update(set(hits) - set(kept))
+        return kept
 
     for source in sources:
         if not source.glob_pattern:
             continue
         regex = re.compile(glob_regex(source.glob_pattern))
-        hits = [f for f in sorted(file_set) if regex.match(f)]
+        hits = fitting(source, [f for f in sorted(file_set) if regex.match(f)])
         if hits:
             used.update(hits)
             continue
         for pattern in (p for o in outputs for p in _find_patterns(o)):
             alt = re.compile(glob_regex(pattern))
-            hits = [f for f in sorted(file_set) if alt.match(f)]
+            hits = fitting(source, [f for f in sorted(file_set) if alt.match(f)])
             if hits:
                 overrides[source.ref] = {"glob_pattern": pattern}
                 used.update(hits)
@@ -560,7 +606,7 @@ def _resolve_recipe_sources(
                 used.add(str(source.path))
 
     needs = [s.dc_ref for s in sources if s.dc_ref and not s.optional]
-    return overrides, used, needs
+    return overrides, used - rejected, needs, rejected - used
 
 
 def _recipe_columns(recipe: str) -> dict[str, str]:
@@ -577,15 +623,29 @@ def _recipe_collection(
     recipe: str,
     members: list[tuple[CatalogEntry, CatalogOutput, list[str]]],
     file_set: set[str],
+    root: Path | None = None,
 ) -> tuple[Collection | Skipped, set[str]]:
     entry, first, _ = members[0]
     outputs = [o for _, o, _ in members]
     matched = sorted({f for _, _, files in members for f in files})
     try:
-        overrides, used, needs = _resolve_recipe_sources(recipe, outputs, matched, file_set)
+        overrides, used, needs, rejected = _resolve_recipe_sources(
+            recipe, outputs, matched, file_set, root
+        )
         columns = _recipe_columns(recipe)
     except Exception as exc:
         return Skipped(first.id, f"recipe {recipe}: {exc}"), set()
+    # A file the find reached but whose columns are another tool's is not this one.
+    matched = [f for f in matched if f not in rejected]
+    from depictio.recipes import load_recipe
+
+    need_columns = {
+        s.dc_ref: list(s.input_schema)
+        for s in load_recipe(recipe).SOURCES
+        if s.dc_ref and not s.optional and s.input_schema
+    }
+    if not matched:
+        return Skipped(first.id, f"recipe {recipe}: no matched file has its input columns"), set()
     transform: dict[str, Any] = {"recipe": recipe}
     if overrides:
         transform["source_overrides"] = overrides
@@ -609,6 +669,7 @@ def _recipe_collection(
         columns=columns,
         aliases=aliases,
         needs=needs,
+        need_columns=need_columns,
         recipe=recipe,
         overrides=overrides,
     )
@@ -616,14 +677,15 @@ def _recipe_collection(
 
 
 def _resolve_dependencies(
-    collections: list[Collection], skipped: list[Skipped]
+    collections: list[Collection], skipped: list[Skipped], root: Path | None = None
 ) -> list[Collection]:
     """Tag each recipe's required ``dc_ref`` provider as it expects, then order providers first.
 
     A provider is another composed collection known under that name (its recipe
     stem or output id); failing that, the recipe's own matched files scanned as
-    is (the ``<output>_raw`` pattern). A recipe whose dependency cannot be met is
-    dropped, and so is anything that depended on it.
+    is (the ``<output>_raw`` pattern), those that carry the columns the recipe
+    reads off it. A recipe whose dependency cannot be met is dropped, and so is
+    anything that depended on it.
     """
     pool = list(collections)
     changed = True
@@ -644,7 +706,12 @@ def _resolve_dependencies(
                     if provider is not None:
                         provider.tag = ref
                         provider.renamed = True
-                if provider is None and collection.files and table_format(collection.files[0]):
+                raw = [
+                    f
+                    for f in collection.files
+                    if table_format(f) and _has_columns(root, f, collection.need_columns.get(ref))
+                ]
+                if provider is None and raw:
                     if collection.tag == ref:
                         # The recipe reads a collection named like its own output
                         # (mosdepth's): the raw scan takes the name, the recipe moves.
@@ -653,10 +720,10 @@ def _resolve_dependencies(
                         tag=ref,
                         kind="provider",
                         description=f"Raw input of {collection.tag}",
-                        config=_table_config(collection.files),
+                        config=_table_config(raw),
                         stage=collection.stage,
                         tool=collection.tool,
-                        files=collection.files,
+                        files=raw,
                         aliases={ref},
                         renamed=True,
                     )
@@ -739,16 +806,20 @@ def compose_run(
             collections.append(built)
             used.update(built.files)
 
+    reads: list[tuple[Collection, set[str]]] = []
     for recipe, members in sorted(recipes.items()):
-        built, read = _recipe_collection(recipe, members, file_set)
+        built, read = _recipe_collection(recipe, members, file_set, root)
         if isinstance(built, Skipped):
             skipped.append(built)
             continue
         collections.append(built)
-        used.update(read)
-        used.update(built.files)
+        reads.append((built, read))
 
-    collections = _resolve_dependencies(collections, skipped)
+    collections = _resolve_dependencies(collections, skipped, root)
+    # What a recipe dropped for want of its dependency read is left for the proposals.
+    kept = {id(c) for c in collections}
+    used.update(f for c in collections for f in c.files)
+    used.update(f for c, read in reads if id(c) in kept for f in read)
     _unique_tags(collections)
 
     candidates = [

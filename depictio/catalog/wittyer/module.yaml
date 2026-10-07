@@ -3,4 +3,6 @@ id: wittyer
 name: Wittyer
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/wittyer
 biotools_url: https://bio.tools/wittyer
+description: Illumina tool for large variant benchmarking.
+homepage: https://github.com/Illumina/witty.er
 stage: benchmarking

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { fetchSpecs, fetchUniqueValues, type StoredMetadata } from '../api';
+import { fetchUniqueValues, type StoredMetadata } from '../api';
 import { stableColorMap } from '../colors';
+import { fetchSpecsCached, multiqcDcIds } from '../dcSpecs';
 import type { ColorByState } from '../selectionGroups';
 
 /**
@@ -26,38 +27,18 @@ export interface ColorByColumn {
   dcIds: string[];
 }
 
-interface SpecsEntry {
-  name?: string;
-  type?: string;
-  specs?: { nunique?: number };
-}
-
-// Specs never change within a session (they're ingest-time aggregates), so a
-// module-level cache keeps one request per DC across rerenders and both roots.
-const specsCache = new Map<string, Promise<SpecsEntry[]>>();
-
-function fetchSpecsCached(dcId: string): Promise<SpecsEntry[]> {
-  let pending = specsCache.get(dcId);
-  if (!pending) {
-    pending = fetchSpecs(dcId)
-      .then((specs) => (Array.isArray(specs) ? (specs as SpecsEntry[]) : []))
-      .catch(() => {
-        specsCache.delete(dcId);
-        return [] as SpecsEntry[];
-      });
-    specsCache.set(dcId, pending);
-  }
-  return pending;
-}
-
-const DATA_COMPONENT_TYPES = new Set(['figure', 'table', 'multiqc', 'map', 'image', 'card']);
+const DATA_COMPONENT_TYPES = new Set(['figure', 'table', 'map', 'image', 'card']);
 
 /** Distinct data-bearing dc_ids on the dashboard (same walk as the
- *  available-values provider). */
+ *  available-values provider). MultiQC DCs are left out: they have no Delta
+ *  table, so their specs request can only 404. */
 function collectDcIds(metadataList: StoredMetadata[] | undefined): string[] {
+  const multiqc = multiqcDcIds(metadataList);
   const seen = new Set<string>();
   for (const m of metadataList ?? []) {
-    if (m.dc_id && DATA_COMPONENT_TYPES.has(m.component_type ?? '')) seen.add(m.dc_id);
+    if (m.dc_id && !multiqc.has(m.dc_id) && DATA_COMPONENT_TYPES.has(m.component_type ?? '')) {
+      seen.add(m.dc_id);
+    }
   }
   return Array.from(seen);
 }
@@ -75,7 +56,9 @@ export function useCategoricalColumns(
       setColumns([]);
       return;
     }
-    Promise.all(dcIds.map((dcId) => fetchSpecsCached(dcId).then((s) => [dcId, s] as const))).then(
+    Promise.all(
+      dcIds.map((dcId) => fetchSpecsCached(dcId).then((s) => [dcId, s ?? []] as const)),
+    ).then(
       (perDc) => {
         if (cancelled) return;
         const byName = new Map<string, ColorByColumn>();

@@ -359,6 +359,7 @@ def catalog_validate(
         CATALOG_DIR,
         CatalogEntry,
         check_existence,
+        check_identity,
         ground_render_dtypes,
         load_entries_from_dir,
         read_fixture_schema,
@@ -382,6 +383,8 @@ def catalog_validate(
 
     # nf-core module + EDAM term existence (against the vendored indices).
     problems: list[str] = check_existence(entries)
+    # The catalog card shows description + homepage straight from module.yaml.
+    problems.extend(check_identity(entries))
     # A fixture is what every binding is grounded against, so a placeholder one
     # makes the whole entry meaningless while still passing every other check.
     problems.extend(_check_fixture_sanity(entries))

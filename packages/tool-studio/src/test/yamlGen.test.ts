@@ -45,13 +45,13 @@ describe('renderToFlow', () => {
 });
 
 describe('genModuleYaml', () => {
-  it('emits the schema header + identity, omitting empty fields', () => {
+  it('emits the schema header + identity, with an explicit null biotools_url', () => {
     const yaml = genModuleYaml(tool);
     expect(yaml).toContain('# yaml-language-server: $schema=../module.schema.json');
     expect(yaml).toContain('id: mytool');
     expect(yaml).toContain('name: "My Tool"');
     expect(yaml).toContain('nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mytool');
-    expect(yaml).not.toContain('biotools_url');
+    expect(yaml).toContain('biotools_url: null');
   });
   it('emits source_url for a non-nf-core source', () => {
     const yaml = genModuleYaml({

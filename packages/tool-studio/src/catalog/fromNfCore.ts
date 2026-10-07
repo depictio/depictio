@@ -39,7 +39,18 @@ interface MetaYml {
   name?: string;
   description?: string;
   homepage?: string;
-  tools?: Array<Record<string, { description?: string; homepage?: string; identifier?: string }>>;
+  tools?: Array<
+    Record<
+      string,
+      {
+        description?: string;
+        homepage?: string;
+        tool_dev_url?: string;
+        documentation?: string;
+        identifier?: string;
+      }
+    >
+  >;
   /** Either a map { channel: … } (modern) or a list of single-key maps (older). */
   output?: unknown;
 }
@@ -122,7 +133,9 @@ export async function fetchNfCoreMeta(moduleUrl: string): Promise<ExtractedMeta>
     const [, info] = Object.entries(first)[0] ?? [];
     if (info) {
       description = description || info.description || '';
-      homepage = homepage || info.homepage || '';
+      // Many meta.yml leave `homepage` empty; the catalog card still needs a
+      // link, so fall back to the source repository, then the docs.
+      homepage = homepage || info.homepage || info.tool_dev_url || info.documentation || '';
       const id = info.identifier || '';
       if (id.startsWith('biotools:')) biotools = `https://bio.tools/${id.slice('biotools:'.length)}`;
     }

@@ -1,6 +1,8 @@
-# Arriba — fast detection of gene fusions from RNA-seq STAR alignments.
-# Identity beyond these three fields is derived from the nf-core meta.yml.
+# Arriba: fast detection of gene fusions from RNA-seq STAR alignments.
 id: arriba
 name: Arriba
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/arriba/arriba
+description: Fast and accurate gene fusion detection from RNA-Seq data.
+homepage: https://github.com/suhrig/arriba
+biotools_url: https://bio.tools/Arriba
 stage: fusions

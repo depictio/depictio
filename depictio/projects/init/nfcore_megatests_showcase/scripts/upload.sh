@@ -4,8 +4,9 @@
 #   1. depictio CLI scan inside the API container — registers the
 #      project doc, the workflow, and all DCs; materialises a Delta
 #      table per fixture file.
-#   2. mongoimport the dashboard seed JSONs — runs from the host
-#      against the bind-mounted MongoDB port 27100.
+#   2. generate the dashboard seed JSONs from dashboards/*.yaml into a
+#      temporary directory (none are committed), then mongoimport them from
+#      the host against the bind-mounted MongoDB port.
 #
 # Idempotent: --overwrite tells the CLI to drop + re-register the project
 # on each run; mongoimport --mode upsert avoids duplicate dashboards.
@@ -72,8 +73,14 @@ docker compose -p "$PROJECT_NAME" \
         --rescan-folders
 
 echo ""
-echo "→ Phase 2: mongoimport dashboard seeds → localhost:${MONGO_PORT}"
-for f in depictio/projects/init/nfcore_megatests_showcase/.db_seeds/dashboard_*.json; do
+SEEDS_DIR=$(mktemp -d)
+trap 'rm -rf "$SEEDS_DIR"' EXIT
+echo "→ Phase 2: generate the dashboard seeds into $SEEDS_DIR"
+"$PY" -m depictio.dev_scripts.generate_dashboard_seeds --out "$SEEDS_DIR" nfcore_megatests_showcase
+
+echo ""
+echo "→ Phase 3: mongoimport dashboard seeds → localhost:${MONGO_PORT}"
+for f in "$SEEDS_DIR"/dashboard_*.json; do
     name=$(basename "$f")
     echo "    upserting $name"
     mongoimport \
@@ -87,7 +94,7 @@ done
 
 echo ""
 echo "✓ Done. Open the dashboards:"
-for f in depictio/projects/init/nfcore_megatests_showcase/.db_seeds/dashboard_*.json; do
+for f in "$SEEDS_DIR"/dashboard_*.json; do
     id=$(python3 -c "import json,sys; print(json.load(open('$f'))['dashboard_id']['\$oid'])")
     viz=$(basename "$f" .json | sed 's/^dashboard_//')
     echo "    $viz → http://localhost:8100/dashboard/$id"

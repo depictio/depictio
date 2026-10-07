@@ -1,14 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Group,
-  NumberInput,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import AdvancedVizPlot from './AdvancedVizPlot';
+import {
+  VizControlGroup,
+  VizFullRow,
+  VizNumberInput,
+  VizSwitch,
+} from './controls/VizControls';
 
 import {
   AdvancedVizKind,
@@ -555,21 +553,34 @@ const FusionStructureRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     showBreakpoint,
   ]);
 
+  // How many fusions are drawn is the only choice that changes what is on
+  // screen; the bar height, the breakpoint mark, the domain names and the
+  // coordinate axis all describe the same set.
+  const primaryControls = useMemo(
+    () => (
+      <>
+        <VizNumberInput
+          label="Fusions"
+          value={topN}
+          onChange={(v) => setTopN(Math.max(1, Math.min(20, Number(v) || 1)))}
+          min={1}
+          max={20}
+        />
+        {facets.length ? (
+          <VizFullRow>
+            <Text size="xs" c="dimmed">{`of ${facets.length}`}</Text>
+          </VizFullRow>
+        ) : null}
+      </>
+    ),
+    [facets.length, topN],
+  );
+
   const controls = useMemo(
     () => (
-      <Stack gap="xs">
-        <Group gap="xs" grow>
-          <NumberInput
-            size="xs"
-            label="Fusions"
-            description={facets.length ? `of ${facets.length}` : undefined}
-            value={topN}
-            onChange={(v) => setTopN(Math.max(1, Math.min(20, Number(v) || 1)))}
-            min={1}
-            max={20}
-          />
-          <NumberInput
-            size="xs"
+      <>
+        <VizControlGroup title="Layout">
+          <VizNumberInput
             label="Bar height"
             value={barHeight}
             onChange={(v) => setBarHeight(Math.max(0.1, Math.min(0.9, Number(v) || 0.45)))}
@@ -578,51 +589,35 @@ const FusionStructureRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
             step={0.05}
             decimalScale={2}
           />
-        </Group>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Breakpoint
-          </Text>
-          <Switch
-            size="xs"
+          {hasRetained ? (
+            <VizFullRow>
+              <Text size="xs" c="dimmed">
+                The filled part of each bar is the fraction of the domain the fusion keeps.
+              </Text>
+            </VizFullRow>
+          ) : null}
+        </VizControlGroup>
+        <VizControlGroup title="Annotations">
+          <VizSwitch
             checked={showBreakpoint}
             onChange={(e) => setShowBreakpoint(e.currentTarget.checked)}
             disabled={!config.breakpoint_col}
             label={config.breakpoint_col ? 'Mark the breakpoint' : 'No breakpoint column bound'}
           />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Labels
-          </Text>
-          <Switch
-            size="xs"
+          <VizSwitch
             checked={showLabels}
             onChange={(e) => setShowLabels(e.currentTarget.checked)}
             label="Name each domain"
           />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Position axis
-          </Text>
-          <Switch
-            size="xs"
+          <VizSwitch
             checked={showAxis}
             onChange={(e) => setShowAxis(e.currentTarget.checked)}
-            label="Show coordinates"
+            label="Position axis"
           />
-        </Stack>
-        {hasRetained ? (
-          <Text size="xs" c="dimmed">
-            The filled part of each bar is the fraction of the domain the fusion keeps.
-          </Text>
-        ) : null}
-      </Stack>
+        </VizControlGroup>
+      </>
     ),
     [
-      facets.length,
-      topN,
       barHeight,
       showBreakpoint,
       showLabels,
@@ -636,6 +631,7 @@ const FusionStructureRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     <AdvancedVizFrame
       title={metadata.title || 'Fusion structure'}
       subtitle={(metadata as { description?: string; subtitle?: string }).description}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

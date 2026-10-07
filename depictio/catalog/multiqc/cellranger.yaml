@@ -1,0 +1,15 @@
+id: multiqc_cellranger
+name: Cell Ranger count summary
+origin_tool: Cell Ranger
+mode: cellranger
+description: Cell Ranger count's per-sample summary stats table, barcode-rank plot, median-genes-per-cell and sequencing-saturation curves, from Cell Ranger via MultiQC.
+find:
+  path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
+  path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/
+    - "**/multiqc/*_data/multiqc.parquet"
+    - "**/multiqc/*/*_data/multiqc.parquet"
+# reuse the bundled nf-core pipeline MultiQC parquet (not a per-module copy);
+# `section` selects this module's plot anchors out of the shared report.
+fixture: ../../projects/init/catalog_conformance/run_1/multiqc/multiqc_data/multiqc.parquet
+renders_as:
+  - { component: multiqc, section: cellranger }

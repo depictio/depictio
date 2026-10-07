@@ -1,0 +1,22 @@
+id: interop_summary
+name: SAV run summary per lane and read
+description: >-
+  Cluster density, clusters passing filter, phasing and prephasing, Q30 share,
+  yield and PhiX error rate for every lane and read, from the InterOp summary
+  table (interop_summary --csv=1), the numbers Sequencing Analysis Viewer shows.
+find:
+  path_glob: "**/*interop_summary*.csv"
+  path_glob_alt:
+    - "**/interop/*summary*.csv"
+recipe: interop/summary.py
+fixture: summary.tsv
+renders_as:
+  - { id: lane_read_error, component: advanced_viz, kind: dot_plot,
+      roles: {cluster: lane_label, gene: read_label, mean_expression: error_rate, frac_expressing: frac_q30} }
+  - { id: phasing_scatter, component: advanced_viz, kind: scatter_xy,
+      roles: {x: phasing, y: prephasing, label: lane_label, color: read_label} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: lane_label, y: error_rate, color: read_label, barmode: group, title: PhiX error rate per lane and read} }
+  - { component: card, column: error_rate, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: pct_cluster_pf, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: yield_gb, aggregation: sum, secondary_layout: top_n, breakdown_col: lane_label, top_n_count: 4 }
+  - { component: table }

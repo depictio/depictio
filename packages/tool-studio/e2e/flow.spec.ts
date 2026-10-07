@@ -14,6 +14,8 @@ test('author a tool end-to-end and export a zip', async ({ page }) => {
   // ── Step 0: Tool ──────────────────────────────────────────────────────────
   await page.getByLabel('Tool id').fill('mytool');
   await page.getByLabel('Tool name').fill('My Tool');
+  await page.getByLabel('Tool description').fill('A test tool.');
+  await page.getByLabel('Homepage').fill('https://example.org');
   await page.getByLabel('Output slug').fill('results');
   await page.getByLabel('Path glob').fill('**/mytool/*.csv');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
