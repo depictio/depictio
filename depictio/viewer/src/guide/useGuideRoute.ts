@@ -82,7 +82,6 @@ export interface GuideRoute {
   open: boolean;
   openGuide: () => void;
   closeGuide: () => void;
-  toggleGuide: () => void;
   /** Where the Guide lives, for an `<a href>` (middle-click opens it apart). */
   href: string;
 }
@@ -128,16 +127,10 @@ export function useGuideRoute(enabled: boolean): GuideRoute {
     }
   }, []);
 
-  const toggleGuide = useCallback(() => {
-    if (readOpen() && !backPending) closeGuide();
-    else openGuide();
-  }, [openGuide, closeGuide]);
-
   return {
     open: enabled && open,
     openGuide,
     closeGuide,
-    toggleGuide,
     href: guideHref(),
   };
 }

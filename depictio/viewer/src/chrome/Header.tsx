@@ -89,13 +89,6 @@ interface HeaderProps {
   /** Active filter count, badged on the filters button so a filtered dashboard
    *  never looks unfiltered on a phone. */
   filterCount?: number;
-  /** The dashboard Guide's "?" — omitted when the author turned it off. */
-  guide?: {
-    open: boolean;
-    /** The Guide's URL, so the icon is a real link (middle-click, bookmark). */
-    href: string;
-    onToggle: () => void;
-  };
 }
 
 /**
@@ -125,7 +118,6 @@ const Header: React.FC<HeaderProps> = ({
   titleExtras,
   onOpenFilters,
   filterCount = 0,
-  guide,
 }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
@@ -412,27 +404,7 @@ const Header: React.FC<HeaderProps> = ({
             reason an icon can stand alone here. The same link is repeated as a
             labelled row in the Settings drawer for anyone who goes looking
             rather than reacting. */}
-        {(guide || feedback) && <Divider orientation="vertical" my={6} />}
-        {/* The Guide shares the feedback icon's corner and treatment: it is
-            about the dashboard, not something done to it. The sidebar has the
-            labelled entry; this one is for the reader looking up, not down. */}
-        {guide && (
-          <Tooltip label={guide.open ? 'Close the Guide' : 'Guide to this dashboard'} withArrow>
-            <ActionIcon
-              component="a"
-              href={guide.href}
-              onClick={dashboardLinkClickHandler(guide.onToggle)}
-              aria-label={guide.open ? 'Close the Guide' : 'Guide to this dashboard'}
-              aria-pressed={guide.open}
-              color={guide.open ? undefined : 'gray'}
-              variant={guide.open ? 'light' : 'subtle'}
-              size="md"
-              data-testid="dashboard-guide-button"
-            >
-              <Icon icon="mdi:help-circle-outline" width={22} />
-            </ActionIcon>
-          </Tooltip>
-        )}
+        {feedback && <Divider orientation="vertical" my={6} />}
         {feedback && (
           <>
             <Tooltip label={feedback.label} withArrow>

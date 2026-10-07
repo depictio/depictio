@@ -1146,11 +1146,6 @@ const App: React.FC = () => {
           filterCount={activeFilterCount}
           cardsLoading={cardsLoading}
           isOwner={isOwner}
-          guide={
-            guideSettings.enabled && dashboard
-              ? { open: guide.open, href: guide.href, onToggle: guide.toggleGuide }
-              : undefined
-          }
           titleExtras={
             dashboard && !loading && !error ? (
               <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />

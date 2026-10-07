@@ -2128,11 +2128,6 @@ const EditorApp: React.FC = () => {
           onOpenSettings={() => openSettingsAt()}
           onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
           filterCount={countActiveFilters(filters) + groupSummaryRows.length}
-          guide={
-            guideSettings.enabled && dashboard
-              ? { open: guide.open, href: guide.href, onToggle: guide.toggleGuide }
-              : undefined
-          }
           cardsLoading={cardsLoading}
           mode="edit"
           onAddComponent={handleAddComponent}
