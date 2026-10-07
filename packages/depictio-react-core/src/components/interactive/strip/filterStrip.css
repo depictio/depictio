@@ -338,10 +338,36 @@
   background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
 }
 
-/* Narrower than its chips, the track wraps onto a second line: a track that
-   scrolled hid the values past its edge with nothing to say they were there. */
-.depictio-strip-track--chips {
-  flex-wrap: wrap;
+/* Up to three values: a segmented control. Equal segments, as wide as the
+   dropdowns beside it, a hairline between two unpressed ones as in Mantine's.
+   A segment is never narrower than its value: in a narrow cell the segments
+   give up being equal before a name is cut. */
+.depictio-strip-segments {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(max-content, 1fr);
+  width: 100%;
+  max-width: 360px;
+}
+
+.depictio-strip-segments .depictio-strip-chip {
+  position: relative;
+  padding-inline: 10px;
+}
+
+.depictio-strip-segments .depictio-strip-chip + .depictio-strip-chip::before {
+  content: '';
+  position: absolute;
+  inset-block: 7px;
+  inset-inline-start: -1.5px;
+  width: 1px;
+  background: light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  transition: opacity 120ms ease;
+}
+
+.depictio-strip-segments .depictio-strip-chip[aria-pressed='true']::before,
+.depictio-strip-segments .depictio-strip-chip[aria-pressed='true'] + .depictio-strip-chip::before {
+  opacity: 0;
 }
 
 .depictio-strip-chip {
@@ -484,8 +510,7 @@
   transform: rotate(180deg);
 }
 
-/* Open: the values one per line, each a full-width chip of the bar in the
-   same grey track, a tick on the picked ones. */
+/* Open: the values one per line, a tick on the picked ones. */
 .depictio-strip-picker__dropdown {
   min-width: 260px;
 }
@@ -493,18 +518,57 @@
 .depictio-strip-picker__list {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   max-height: 300px;
   overflow-y: auto;
-  padding: 4px;
-  border-radius: var(--mantine-radius-md);
-  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
 }
 
 .depictio-strip-picker__list .depictio-strip-chip {
   justify-content: flex-start;
   min-width: 0;
-  padding-block: 6px;
+  color: var(--mantine-color-text);
+  box-shadow: none;
+}
+
+/* A short column: each value a pill in its colour, filled with a tint of it
+   once picked. */
+.depictio-strip-picker__list[data-variant='chips'] .depictio-strip-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: 999px;
+}
+
+.depictio-strip-picker__list[data-variant='chips'] .depictio-strip-chip:hover {
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+}
+
+.depictio-strip-picker__list[data-variant='chips'] .depictio-strip-chip[aria-pressed='true'] {
+  border-color: var(--chip-color, var(--mantine-primary-color-filled));
+  background: color-mix(
+    in srgb,
+    var(--chip-color, var(--mantine-primary-color-filled)) 14%,
+    var(--mantine-color-body)
+  );
+}
+
+/* A long column: plain rows, as in a select's dropdown. */
+.depictio-strip-picker__list[data-variant='list'] {
+  gap: 1px;
+}
+
+.depictio-strip-picker__list[data-variant='list'] .depictio-strip-chip {
+  padding: 7px 10px;
+  border-radius: var(--mantine-radius-sm);
+  font-weight: 400;
+}
+
+.depictio-strip-picker__list[data-variant='list'] .depictio-strip-chip:hover {
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+}
+
+.depictio-strip-picker__list[data-variant='list'] .depictio-strip-chip[aria-pressed='true'] {
+  font-weight: 600;
+  background: var(--mantine-primary-color-light);
 }
 
 .depictio-strip-chip__label {

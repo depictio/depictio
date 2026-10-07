@@ -228,6 +228,7 @@ export {
 export type { FilterScopes, ScopedRequest } from './filterScope';
 export {
   MAX_STRIP_CHIPS,
+  MAX_STRIP_SEGMENTS,
   categoricalDisplay,
   chipSelectionMode,
   filterEvent,

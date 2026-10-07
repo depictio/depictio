@@ -7,9 +7,12 @@
  */
 import type { InteractiveFilter, StoredMetadata } from '../../api';
 
-/** Up to this many values a filter bar draws chips, each in its colour (on a
- *  second line when its column is narrow); from ten, a picker listing them. */
-export const MAX_STRIP_CHIPS = 9;
+/** Up to this many values a filter bar draws a segmented control, several
+ *  segments pickable at once for a multi-select filter. */
+export const MAX_STRIP_SEGMENTS = 3;
+/** Up to this many, a dropdown listing the values as coloured chips; past it,
+ *  a dropdown with a plain list and a search field. One column either way. */
+export const MAX_STRIP_CHIPS = 10;
 
 const COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
@@ -32,11 +35,17 @@ export function orderCategoricalOptions(
   });
 }
 
-export type CategoricalDisplay = 'chips' | 'select';
+export type CategoricalDisplay = 'segments' | 'chips' | 'list';
 
-/** Chips up to `max` values, a picker beyond. */
-export function categoricalDisplay(optionCount: number, max = MAX_STRIP_CHIPS): CategoricalDisplay {
-  return optionCount > max ? 'select' : 'chips';
+/** Segments up to `segments` values, a dropdown of chips up to `chips`, a
+ *  dropdown list beyond. */
+export function categoricalDisplay(
+  optionCount: number,
+  segments = MAX_STRIP_SEGMENTS,
+  chips = MAX_STRIP_CHIPS,
+): CategoricalDisplay {
+  if (optionCount <= segments) return 'segments';
+  return optionCount <= chips ? 'chips' : 'list';
 }
 
 /** `multi` toggles membership; `single` picks one value (or none). */

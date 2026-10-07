@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MAX_STRIP_CHIPS,
+  MAX_STRIP_SEGMENTS,
   categoricalDisplay,
   chipFilterValue,
   chipSelectionMode,
@@ -30,12 +31,13 @@ describe('orderCategoricalOptions', () => {
 });
 
 describe('categoricalDisplay', () => {
-  it('draws chips up to the limit and a select beyond it', () => {
-    expect(categoricalDisplay(0)).toBe('chips');
-    expect(categoricalDisplay(4)).toBe('chips');
+  it('draws segments, then a dropdown of chips, then a dropdown list', () => {
+    expect(categoricalDisplay(0)).toBe('segments');
+    expect(categoricalDisplay(MAX_STRIP_SEGMENTS)).toBe('segments');
+    expect(categoricalDisplay(MAX_STRIP_SEGMENTS + 1)).toBe('chips');
     expect(categoricalDisplay(MAX_STRIP_CHIPS)).toBe('chips');
-    expect(categoricalDisplay(MAX_STRIP_CHIPS + 1)).toBe('select');
-    expect(categoricalDisplay(5, 4)).toBe('select');
+    expect(categoricalDisplay(MAX_STRIP_CHIPS + 1)).toBe('list');
+    expect(categoricalDisplay(5, 2, 4)).toBe('list');
   });
 });
 

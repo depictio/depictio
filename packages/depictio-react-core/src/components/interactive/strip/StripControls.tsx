@@ -69,12 +69,17 @@ const ControlMessage: React.FC<{ error?: boolean; children: React.ReactNode }> =
 // ------------------------------------------------------------- categorical
 
 /**
- * MultiSelect, Select and SegmentedControl as a grey track of toggle chips,
- * each with its value's colour dot (`chipCategoryDots`: the dashboard's
- * colours for the column, else the colorway's for a column this short).
- * Wider than its cell, the track wraps onto a second line rather than hiding
- * values past the edge. Past `MAX_STRIP_CHIPS` values a picker drawn as the
- * same track takes over (`StripSelect`), with the values one per line.
+ * MultiSelect, Select and SegmentedControl, drawn by how many values the
+ * column has (`categoricalDisplay`):
+ *
+ *   - up to three, a segmented control: equal segments in a grey track, as
+ *     many pressed at once as the filter allows (several cities, say);
+ *   - up to ten, a dropdown listing the values as coloured chips;
+ *   - past that, a dropdown with a plain list and a search field.
+ *
+ * Every list is one column. A value carries its colour dot wherever the
+ * column has colours (`chipCategoryDots`: the dashboard's, else the
+ * colorway's for a column of ten values or fewer).
  */
 export const StripCategorical: React.FC<StripControlProps> = ({
   metadata,
@@ -105,9 +110,11 @@ export const StripCategorical: React.FC<StripControlProps> = ({
   if (error) return <ControlMessage error>Could not load values</ControlMessage>;
   if (options.length === 0) return <ControlMessage>No values</ControlMessage>;
 
-  if (categoricalDisplay(options.length) === 'select') {
+  const display = categoricalDisplay(options.length);
+  if (display !== 'segments') {
     return (
       <StripSelect
+        variant={display}
         options={ordered}
         available={availableSet}
         dots={dots}
@@ -121,7 +128,7 @@ export const StripCategorical: React.FC<StripControlProps> = ({
 
   return (
     <div
-      className="depictio-strip-track depictio-strip-track--chips"
+      className="depictio-strip-track depictio-strip-segments"
       role="group"
       aria-label={label}
       data-has-selection={selected.length > 0}
@@ -152,22 +159,22 @@ export const StripCategorical: React.FC<StripControlProps> = ({
   );
 };
 
-/** Past this many values the picker offers a search field. */
-const PICKER_SEARCH_MIN = 10;
 /** Selected values the closed picker spells out before "+n". */
 const PICKER_SHOWN = 2;
 
 /**
- * The bar's picker for a column with too many values for a track of chips.
+ * The bar's dropdown, for a column with more values than a segmented control
+ * holds.
  *
  * Closed, it is the grey track itself, holding "All N" or the picked values as
  * pressed chips (their colour dot included). Open, it lists every value in one
- * column, each a full-width chip of the bar with a tick when picked, under a
- * search field once the list is long, and over a count and a Clear. A one-of-N
- * filter closes on pick; a multi one stays open. A Mantine Select would have
- * been a second design for the same control.
+ * column, over a count and a Clear: as coloured chips for a short column
+ * (`chips`), as plain rows under a search field for a long one (`list`), a
+ * tick on the picked values either way. A one-of-N filter closes on pick; a
+ * multi one stays open.
  */
 const StripSelect: React.FC<{
+  variant: 'chips' | 'list';
   options: string[];
   available: Set<string> | null;
   dots: Map<string, string> | null;
@@ -175,7 +182,7 @@ const StripSelect: React.FC<{
   multiple: boolean;
   label: string;
   onChange: (next: string[]) => void;
-}> = ({ options, available, dots, selected, multiple, label, onChange }) => {
+}> = ({ variant, options, available, dots, selected, multiple, label, onChange }) => {
   const scope = useBrandScopeAttributes();
   const [opened, setOpened] = useState(false);
   const [query, setQuery] = useState('');
@@ -263,7 +270,7 @@ const StripSelect: React.FC<{
         </button>
       </Popover.Target>
       <Popover.Dropdown className="depictio-strip-picker__dropdown" p={8}>
-        {options.length >= PICKER_SEARCH_MIN && (
+        {variant === 'list' && (
           <TextInput
             size="xs"
             radius="md"
@@ -279,6 +286,7 @@ const StripSelect: React.FC<{
           className="depictio-strip-picker__list"
           role="group"
           aria-label={label}
+          data-variant={variant}
           data-has-selection={selected.length > 0}
         >
           {shown.map((value) => {
