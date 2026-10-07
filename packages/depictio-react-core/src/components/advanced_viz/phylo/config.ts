@@ -53,4 +53,11 @@ export interface PhylogeneticConfig {
   /** Column of the abundance table to split each lineage's share by (a site),
    *  drawn as a strip of dots beside the tips. */
   abundance_split_col?: string | null;
+  /** Draw that strip; off keeps the column for when it is switched back on. */
+  show_split?: boolean;
+  /** The strip's dot area: on the one scale every dot shares, or relative to
+   *  each lineage's own largest value (where a lineage is concentrated). */
+  split_scale?: 'shared' | 'row';
+  /** The dot at each tip, sized by the lineage's share. */
+  show_tip_dots?: boolean;
 }

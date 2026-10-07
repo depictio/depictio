@@ -776,6 +776,7 @@ class PhylogeneticConfig(_BaseVizConfig):
             size_by: abundance                        # default: tips
             abundance_dc_tag: taxonomy_rel_abundance  # has a Phylum column
             abundance_split_col: locality             # one column of dots per site
+            split_scale: shared                       # or row: each lineage's own spread
 
     The `*_dc_tag` keys name DCs of the component's own workflow and are
     resolved to the `*_wf_id` / `*_dc_id` pair at import, overwriting whatever
@@ -913,6 +914,24 @@ class PhylogeneticConfig(_BaseVizConfig):
             "Abundance-table column (e.g. a site) to break each share down by, drawn as "
             "a strip of dots beside the tips"
         ),
+    )
+    show_split: bool = Field(
+        default=True,
+        description=(
+            "Summary mode: draw the abundance_split_col strip. Off keeps the column for "
+            "when the viewer switches it back on"
+        ),
+    )
+    split_scale: Literal["shared", "row"] = Field(
+        default="shared",
+        description=(
+            "Summary mode: the strip's dot area on the one scale every dot shares, or "
+            "relative to each lineage's largest value, to show where it is concentrated"
+        ),
+    )
+    show_tip_dots: bool = Field(
+        default=True,
+        description="Summary mode: draw a dot sized by the lineage's share at each tip",
     )
 
     @model_validator(mode="after")

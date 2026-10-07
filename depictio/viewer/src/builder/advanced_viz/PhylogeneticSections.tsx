@@ -465,6 +465,13 @@ export const PhyloViewSection: React.FC<{
               onChange={(e) => setVizOverride({ show_shares: e.currentTarget.checked })}
               data-testid="phylo-show-shares"
             />
+            <Switch
+              label="Tip dots"
+              description="A dot at each tip, its area the lineage's share."
+              checked={merged?.show_tip_dots !== false}
+              onChange={(e) => setVizOverride({ show_tip_dots: e.currentTarget.checked })}
+              data-testid="phylo-tip-dots"
+            />
           </>
         ) : null}
         {hasMetadata ? (
@@ -637,6 +644,27 @@ export const PhyloReadsSection: React.FC<{
                 searchable
                 clearable
               />
+              {splitCol ? (
+                <Stack gap={4}>
+                  <Text size="sm" fw={500}>
+                    Strip dot scale
+                  </Text>
+                  <SegmentedControl
+                    fullWidth
+                    value={merged?.split_scale === 'row' ? 'row' : 'shared'}
+                    onChange={(v) => setVizOverride({ split_scale: v })}
+                    data={[
+                      { value: 'shared', label: 'One scale for all' },
+                      { value: 'row', label: 'Per lineage' },
+                    ]}
+                    data-testid="phylo-split-scale"
+                  />
+                  <Text size="xs" c="dimmed">
+                    Per lineage, each row's largest value gets the full dot: where a lineage is
+                    concentrated, rare ones included.
+                  </Text>
+                </Stack>
+              ) : null}
               <JoinNote rank={rank} coverage={coverage} />
               {warnings.length > 0 ? (
                 <Alert color="yellow" variant="light" title="Check the read shares">

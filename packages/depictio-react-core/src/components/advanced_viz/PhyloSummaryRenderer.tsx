@@ -161,10 +161,27 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   const useAbundance = sizeBy === 'abundance' && hasAbundance;
   // The column each lineage's share is broken down by, as a strip of dots
   // (a site, a season): the author's, until the viewer picks another or none.
-  const [splitCol, setSplitCol] = usePersistedVizControl<string | null>(
+  const [splitPick, setSplitPick] = usePersistedVizControl<string | null>(
     metadata,
     'abundance_split_col',
     null,
+  );
+  // The strip can be hidden without losing its column, so switching it back
+  // on returns the same strip.
+  const [showSplit, setShowSplit] = usePersistedVizControl<boolean>(metadata, 'show_split', true);
+  const splitCol = showSplit ? splitPick : null;
+  // One scale for every dot reads magnitude across the whole figure; per
+  // lineage, a rare lineage's dots are as legible as a common one's and read
+  // where it is concentrated.
+  const [splitScale, setSplitScale] = usePersistedVizControl<'shared' | 'row'>(
+    metadata,
+    'split_scale',
+    'shared',
+  );
+  const [showTipDots, setShowTipDots] = usePersistedVizControl<boolean>(
+    metadata,
+    'show_tip_dots',
+    true,
   );
   // The % beside each lineage. Unset, it follows the sizing: a share of the
   // reads is worth reading as a number, a share of the tree's tips (which are
@@ -430,50 +447,38 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     const font = rowH >= 22 ? 12.5 : 11;
     const rMax = clamp(rowH * 0.42, 4, 11);
     const pad = 4;
+    // The tip's dot, which its branch runs on to; without dots, a short gap
+    // before the name.
+    const tipW = showTipDots ? 2 * rMax + 8 : 6;
     // Wide enough for the longest site name when the tile allows it.
     const headerW = Math.max(0, ...splitValues.map((v) => headerWidth(v) + 4));
     const cellW = strip > 0 ? clamp(Math.min(headerW, width * 0.11), 24, 72) : 0;
     const stripW = strip * cellW;
     const shareW = showShares ? 40 : 0;
-    const gap = strip > 0 ? 12 : 4;
-    const shareRight = width - pad - stripW - gap;
-    const fixed = 2 * rMax + 10 + shareW;
+    const shareGap = shareW ? 10 : 0;
+    const stripGap = strip > 0 ? 10 : 0;
     const widest = Math.max(...summary.shown.map((g) => textWidth(g.group, font)));
-    // The tree gets what the names leave it, within reason: wide enough to
-    // read the branching, never so wide the names are cut first.
-    const room = shareRight - pad - fixed;
-    const depth = cladogram(summary.tree).depth;
-    if (strip > 0) {
-      const treeW = clamp(Math.min(width * 0.32, room - widest), 36, 260);
-      return {
-        rows,
-        headerH,
-        rowH,
-        font,
-        rMax,
-        treeX0: pad + 2,
-        treeW,
-        depth,
-        leafX: pad + 2 + treeW,
-        labelX: pad + 2 + treeW + 2 * rMax + 8,
-        labelMax: Math.max(24, shareRight - shareW - (pad + 2 + treeW + 2 * rMax + 8)),
-        shareRight,
-        stripX0: width - pad - stripW,
-        cellW,
-        svgH: headerH + rows * rowH + 4,
-      };
-    }
-    // No per-site columns to fill the right of the tile: the tree takes more
-    // of the width, and tree, names and shares sit as one block in the middle
-    // rather than against the left edge with the rest of the tile empty.
-    // `textWidth` is an estimate: the names get a tenth more, so the block's
-    // own right edge never cuts the longest one.
+    // `textWidth` is an estimate: the names get a tenth more, so what follows
+    // them never cuts the longest one.
     const namesW = widest * 1.1 + 8;
-    const treeW = clamp(Math.min(width * 0.42, room - namesW), 36, 420);
-    const blockW = 2 + treeW + 2 * rMax + 8 + namesW + (shareW ? 12 + shareW : 0);
-    const x0 = Math.max(pad, (width - blockW) / 2);
-    const labelX = x0 + 2 + treeW + 2 * rMax + 8;
-    const right = Math.min(width - pad, x0 + blockW);
+    const fixed = 2 + tipW + shareGap + shareW + stripGap + stripW;
+    const room = width - 2 * pad - fixed;
+    const depth = cladogram(summary.tree).depth;
+    // Tree, names, shares and strip are one block, each against the next, set
+    // in the middle of the tile: spread to its edges, a name sat a tile's
+    // width away from its own share and dots. The tree gets what the rest
+    // leaves it, within reason; names are cut only when even the narrowest
+    // tree leaves them too little.
+    const treeW = clamp(
+      Math.min(width * (strip > 0 ? 0.34 : 0.42), room - namesW),
+      36,
+      strip > 0 ? 320 : 420,
+    );
+    const labelsW = Math.max(24, Math.min(namesW, room - treeW));
+    const x0 = Math.max(pad, (width - (treeW + labelsW + fixed)) / 2);
+    const leafX = x0 + 2 + treeW;
+    const labelX = leafX + tipW;
+    const shareRight = labelX + labelsW + shareGap + shareW;
     return {
       rows,
       headerH,
@@ -483,29 +488,33 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       treeX0: x0 + 2,
       treeW,
       depth,
-      leafX: x0 + 2 + treeW,
+      leafX,
+      tipX: leafX + rMax + 3,
+      branchEnd: showTipDots ? leafX + rMax + 3 : leafX,
       labelX,
-      labelMax: Math.max(24, right - (shareW ? 12 + shareW : 0) - labelX),
-      shareRight: right,
-      stripX0: width - pad,
+      labelMax: Math.max(24, labelsW - 8),
+      shareRight,
+      stripX0: shareRight + stripGap,
       cellW,
       svgH: headerH + rows * rowH + 4,
     };
-  }, [summary, width, height, splitValues, showShares]);
+  }, [summary, width, height, splitValues, showShares, showTipDots]);
 
   const [hover, setHover] = useState<number | null>(null);
 
   // One scale for every dot, tip and strip alike, so a dot reads the same
   // wherever it is: area proportional to share.
+  // Per lineage, the strip has its own scale per row and the tips keep theirs.
   const maxShare = useMemo(() => {
     if (!summary) return 1;
     let m = 0;
     for (const g of summary.shown) {
       m = Math.max(m, g.share);
-      if (g.splitShares) for (const v of Object.values(g.splitShares)) m = Math.max(m, v);
+      if (g.splitShares && splitScale === 'shared')
+        for (const v of Object.values(g.splitShares)) m = Math.max(m, v);
     }
     return m > 0 ? m : 1;
-  }, [summary]);
+  }, [summary, splitScale]);
 
   const measure = sizedByReads ? 'reads' : 'ASVs';
   const neutralEdge = isDark ? theme.colors.dark[2] : theme.colors.gray[5];
@@ -520,8 +529,8 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     const xOf = (level: number) =>
       L.depth > 0 ? L.treeX0 + (level / L.depth) * L.treeW : L.leafX;
     const yOf = (row: number) => L.headerH + (row + 0.5) * L.rowH;
-    const radius = (share: number) =>
-      share > 0 ? Math.max(2.2, L.rMax * Math.sqrt(share / maxShare)) : 0;
+    const radius = (share: number, max = maxShare) =>
+      share > 0 && max > 0 ? Math.max(2.2, L.rMax * Math.sqrt(share / max)) : 0;
 
     // A clade whose tips all share a colour value is drawn in that colour, so
     // the kingdoms read as blocks; a mixed clade stays neutral.
@@ -548,7 +557,7 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       const c = points.get(n.id)!;
       const leafIdx = n.children.length === 0 ? summary.tree.leaves.indexOf(n) : -1;
       // A tip's branch runs on to its dot, so a small dot still sits on it.
-      const xEnd = leafIdx >= 0 ? L.leafX + L.rMax + 3 : xOf(c.x);
+      const xEnd = leafIdx >= 0 ? L.branchEnd : xOf(c.x);
       edges.push(
         <path
           key={`e${n.id}`}
@@ -615,14 +624,16 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
               rx={4}
               fill="transparent"
             />
-            <circle
-              cx={L.leafX + L.rMax + 3}
-              cy={y}
-              r={radius(g.share)}
-              fill={colour}
-              stroke={isDark ? theme.colors.dark[7] : theme.white}
-              strokeWidth={1}
-            />
+            {showTipDots ? (
+              <circle
+                cx={L.tipX}
+                cy={y}
+                r={radius(g.share)}
+                fill={colour}
+                stroke={isDark ? theme.colors.dark[7] : theme.white}
+                strokeWidth={1}
+              />
+            ) : null}
             <text
               x={L.labelX}
               y={y}
@@ -649,6 +660,10 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
             {splitValues.map((s, k) => {
               const cx = L.stripX0 + (k + 0.5) * L.cellW;
               const v = g.splitShares?.[s] ?? 0;
+              const rowMax =
+                splitScale === 'row'
+                  ? Math.max(0, ...splitValues.map((t) => g.splitShares?.[t] ?? 0))
+                  : maxShare;
               return (
                 <g key={s}>
                   <rect
@@ -664,7 +679,7 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
                     <circle
                       cx={cx}
                       cy={y}
-                      r={Math.min(radius(v), L.cellW / 2 - 3)}
+                      r={Math.min(radius(v, rowMax), L.cellW / 2 - 3)}
                       fill={splitColour(s, colour)}
                     />
                   ) : (
@@ -762,7 +777,16 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   const hideLegend = Boolean(metadata.hide_legend);
   const legend =
     summary && !hideLegend ? (
-      <Group gap={12} wrap="wrap" px={4} pt={6} style={{ rowGap: 2 }} data-testid="phylo-summary-legend">
+      // Centred under the figure, which is set in the middle of the tile.
+      <Group
+        gap={12}
+        wrap="wrap"
+        justify="center"
+        px={4}
+        pt={6}
+        style={{ rowGap: 2 }}
+        data-testid="phylo-summary-legend"
+      >
         {legendColours.map((c) => (
           <Group gap={5} wrap="nowrap" key={c.value}>
             <span
@@ -771,19 +795,26 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
             <Text size="xs">{c.value}</Text>
           </Group>
         ))}
-        <Tooltip
-          label={`Each tip is one ${rank}, placed where its largest clean clade sits in the ASV tree. Branch lengths are not to scale. Dot area is the ${
-            sizedByReads ? 'mean share of a sample’s reads' : 'share of the ASVs in view'
-          }.`}
-          multiline
-          w={280}
-          withArrow
-          openDelay={200}
-        >
-          <Text size="xs" c="dimmed" style={{ textDecoration: 'underline dotted', textUnderlineOffset: 3 }}>
-            dot area: share of {measure}
-          </Text>
-        </Tooltip>
+        {showTipDots || splitValues.length > 0 ? (
+          <Tooltip
+            label={`Each tip is one ${rank}, placed where its largest clean clade sits in the ASV tree. Branch lengths are not to scale. Dot area is the ${
+              sizedByReads ? 'mean share of a sample’s reads' : 'share of the ASVs in view'
+            }${
+              splitValues.length > 0 && splitScale === 'row'
+                ? '; in the columns, relative to the lineage’s largest value'
+                : ''
+            }.`}
+            multiline
+            w={280}
+            withArrow
+            openDelay={200}
+          >
+            <Text size="xs" c="dimmed" style={{ textDecoration: 'underline dotted', textUnderlineOffset: 3 }}>
+              dot area: share of {measure}
+              {splitValues.length > 0 && splitScale === 'row' ? ', columns per lineage' : ''}
+            </Text>
+          </Tooltip>
+        ) : null}
         {summary.other.groups > 0 ? (
           <Text size="xs" c="dimmed">
             not shown: {summary.other.groups.toLocaleString()} more, {formatShare(summary.other.share)} of{' '}
@@ -841,18 +872,13 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
           ) : null}
         </Stack>
       ) : null}
-      {useAbundance && !abundanceMissing && (splitChoices.length > 0 || splitCol) ? (
-        <Select
-          size="xs"
-          label="Columns by"
-          description="Each lineage's share in each value, as a dot"
-          placeholder="None"
-          data={splitCol && !splitChoices.includes(splitCol) ? [splitCol, ...splitChoices] : splitChoices}
-          value={splitCol}
-          onChange={(v) => setSplitCol(v ?? null)}
-          clearable
-        />
-      ) : null}
+      <Switch
+        size="xs"
+        label="Tip dots"
+        description="A dot at each tip, its area the lineage's share"
+        checked={showTipDots}
+        onChange={(e) => setShowTipDots(e.currentTarget.checked)}
+      />
       <Switch
         size="xs"
         label="Show %"
@@ -860,6 +886,46 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
         checked={showShares}
         onChange={(e) => setShowShares(e.currentTarget.checked)}
       />
+      {useAbundance && !abundanceMissing && (splitChoices.length > 0 || splitPick) ? (
+        <Stack gap={6}>
+          <Switch
+            size="xs"
+            label="Dots by column"
+            description="Each lineage's share in each value of a column (a site), as a strip of dots"
+            checked={showSplit}
+            onChange={(e) => setShowSplit(e.currentTarget.checked)}
+          />
+          {showSplit ? (
+            <>
+              <Select
+                size="xs"
+                aria-label="Columns by"
+                placeholder="Pick a column"
+                data={
+                  splitPick && !splitChoices.includes(splitPick)
+                    ? [splitPick, ...splitChoices]
+                    : splitChoices
+                }
+                value={splitPick}
+                onChange={(v) => setSplitPick(v ?? null)}
+                clearable
+              />
+              {splitPick ? (
+                <SegmentedControl
+                  size="xs"
+                  fullWidth
+                  value={splitScale}
+                  onChange={(v) => setSplitScale(v as 'shared' | 'row')}
+                  data={[
+                    { value: 'shared', label: 'One scale' },
+                    { value: 'row', label: 'Per lineage' },
+                  ]}
+                />
+              ) : null}
+            </>
+          ) : null}
+        </Stack>
+      ) : null}
     </Stack>
   );
 
