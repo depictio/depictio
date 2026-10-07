@@ -409,22 +409,52 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     // The tree gets what the names leave it, within reason: wide enough to
     // read the branching, never so wide the names are cut first.
     const room = shareRight - pad - fixed;
-    const treeW = clamp(Math.min(width * 0.32, room - widest), 36, 260);
     const depth = cladogram(summary.tree).depth;
+    if (strip > 0) {
+      const treeW = clamp(Math.min(width * 0.32, room - widest), 36, 260);
+      return {
+        rows,
+        headerH,
+        rowH,
+        font,
+        rMax,
+        treeX0: pad + 2,
+        treeW,
+        depth,
+        leafX: pad + 2 + treeW,
+        labelX: pad + 2 + treeW + 2 * rMax + 8,
+        labelMax: Math.max(24, shareRight - shareW - (pad + 2 + treeW + 2 * rMax + 8)),
+        shareRight,
+        stripX0: width - pad - stripW,
+        cellW,
+        svgH: headerH + rows * rowH + 4,
+      };
+    }
+    // No per-site columns to fill the right of the tile: the tree takes more
+    // of the width, and tree, names and shares sit as one block in the middle
+    // rather than against the left edge with the rest of the tile empty.
+    // `textWidth` is an estimate: the names get a tenth more, so the block's
+    // own right edge never cuts the longest one.
+    const namesW = widest * 1.1 + 8;
+    const treeW = clamp(Math.min(width * 0.42, room - namesW), 36, 420);
+    const blockW = 2 + treeW + 2 * rMax + 8 + namesW + (shareW ? 12 + shareW : 0);
+    const x0 = Math.max(pad, (width - blockW) / 2);
+    const labelX = x0 + 2 + treeW + 2 * rMax + 8;
+    const right = Math.min(width - pad, x0 + blockW);
     return {
       rows,
       headerH,
       rowH,
       font,
       rMax,
-      treeX0: pad + 2,
+      treeX0: x0 + 2,
       treeW,
       depth,
-      leafX: pad + 2 + treeW,
-      labelX: pad + 2 + treeW + 2 * rMax + 8,
-      labelMax: Math.max(24, shareRight - shareW - (pad + 2 + treeW + 2 * rMax + 8)),
-      shareRight,
-      stripX0: width - pad - stripW,
+      leafX: x0 + 2 + treeW,
+      labelX,
+      labelMax: Math.max(24, right - (shareW ? 12 + shareW : 0) - labelX),
+      shareRight: right,
+      stripX0: width - pad,
       cellW,
       svgH: headerH + rows * rowH + 4,
     };
@@ -818,8 +848,21 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       dataColumns={dataTable?.cols}
     >
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
-        <div ref={boxRef} style={{ flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
-          {svg}
+        {/* A flex column, so the svg can sit in the middle of a tile taller
+            than its rows (`margin: auto`), and still scroll from its top when
+            it is the taller one. */}
+        <div
+          ref={boxRef}
+          style={{
+            flex: '1 1 auto',
+            minHeight: 0,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            display: 'flex',
+            flexDirection: 'column',
+          }}
+        >
+          <div style={{ margin: 'auto 0' }}>{svg}</div>
         </div>
         {legend ? <div style={{ flexShrink: 0 }}>{legend}</div> : null}
       </div>
