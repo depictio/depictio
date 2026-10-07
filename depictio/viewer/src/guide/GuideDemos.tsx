@@ -19,6 +19,8 @@ import { Icon } from '@iconify/react';
 import { UI_SCALE_STEPS, useBranding } from 'depictio-react-core';
 import type { GuideModel } from 'depictio-react-core';
 
+type GuideTab = GuideModel['tabs']['groups'][number]['tabs'][number];
+
 import { resolveTabColor, resolveTabIcon, tabImageSrc } from '../chrome/Sidebar';
 import { dashboardHref, dashboardLinkClickHandler } from '../dashboards/lib/dashboardLinks';
 import { CONTENT_WIDTHS, type ContentWidth } from '../hooks/useContentWidthPref';
@@ -40,11 +42,49 @@ export const DemoFrame: React.FC<{ label?: string; children: React.ReactNode }> 
 // Tabs
 // ---------------------------------------------------------------------------
 
+/** A tab's icon, as the sidebar draws it: its image, else its icon in its colour. */
+const TabIcon: React.FC<{ tab: GuideTab; color: string; isDark: boolean }> = ({
+  tab,
+  color,
+  isDark,
+}) => {
+  const image = tabImageSrc(tab.tab, tab.isMain, isDark, tab.isCurrent);
+  return image ? (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 18,
+        height: 18,
+        flexShrink: 0,
+      }}
+    >
+      <img src={image} alt="" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+    </span>
+  ) : (
+    <Icon
+      icon={resolveTabIcon(tab.tab, tab.isMain)}
+      width={18}
+      height={18}
+      style={{
+        flexShrink: 0,
+        color: tab.isCurrent ? 'var(--mantine-color-white)' : `var(--mantine-color-${color}-6)`,
+      }}
+    />
+  );
+};
+
 /**
- * The dashboard's tabs as the sidebar draws them — same icon, colour and
- * active fill — with each tab's subtitle under its name. Each pill is the tab's
- * real link: a click opens it, a middle-click opens it in a new browser tab.
- * The current tab's pill closes the Guide instead of reloading the page.
+ * The sidebar's tab list, drawn as the sidebar draws it: a column the
+ * sidebar's width, its "Tabs" heading, its group headings, and the same pills
+ * (Sidebar.tsx `renderTab`) with the tab you are on filled in. Beside it, what
+ * the tab under the pointer holds: its subtitle, which the sidebar has no room
+ * for.
+ *
+ * Each pill is the tab's real link: a click opens it, a middle-click opens it
+ * in a new browser tab. The current tab's pill closes the Guide instead of
+ * reloading the page.
  */
 export const TabPillsDemo: React.FC<{
   model: GuideModel;
@@ -53,80 +93,93 @@ export const TabPillsDemo: React.FC<{
 }> = ({ model, mode, onCurrent }) => {
   const brand = useBranding();
   const isDark = useComputedColorScheme('light') === 'dark';
-  const currentId = model.tabs.current?.id ?? null;
+  const current = model.tabs.current;
+  const [pointedId, setPointedId] = useState<string | null>(null);
+  const all = model.tabs.groups.flatMap((g) => g.tabs);
+  const pointed = all.find((t) => t.id === pointedId) ?? all.find((t) => t.isCurrent) ?? all[0];
+  const pointedColor = pointed ? resolveTabColor(pointed.tab, pointed.isMain, brand) : 'gray';
   return (
-    <Tabs
-      value={currentId}
-      variant="pills"
-      orientation="vertical"
-      className="depictio-chrome-tabs depictio-guide-tabs"
-      styles={{ root: { display: 'block' }, list: { border: 'none', width: '100%' } }}
-    >
-      <Tabs.List aria-label="This dashboard's tabs">
-        {model.tabs.groups.map((g) => (
-          <React.Fragment key={g.group ?? '__ungrouped'}>
-            {g.group && (
-              <Text
-                className="depictio-guide-tabs-heading"
-                c="dimmed"
-                size="xs"
-                tt="uppercase"
-                fw={700}
-                pl="xs"
-              >
-                {g.group}
-              </Text>
-            )}
-            {g.tabs.map((t) => {
-              const color = resolveTabColor(t.tab, t.isMain, brand);
-              const image = tabImageSrc(t.tab, t.isMain, isDark, t.isCurrent);
-              return (
-                <Tabs.Tab
-                  key={t.id}
-                  value={t.id}
-                  color={color}
-                  pl="xs"
-                  leftSection={
-                    image ? (
-                      <img
-                        src={image}
-                        alt=""
-                        width={18}
-                        height={18}
-                        style={{ objectFit: 'contain', display: 'block' }}
-                      />
-                    ) : (
-                      <Icon
-                        icon={resolveTabIcon(t.tab, t.isMain)}
-                        width={18}
-                        height={18}
-                        style={{
-                          flexShrink: 0,
-                          color: t.isCurrent
-                            ? 'var(--mantine-color-white)'
-                            : `var(--mantine-color-${color}-6)`,
-                        }}
-                      />
-                    )
-                  }
-                  renderRoot={(props) => (
-                    <a
-                      {...props}
-                      href={dashboardHref(t.id, mode)}
-                      onClick={t.isCurrent ? dashboardLinkClickHandler(onCurrent) : undefined}
-                    />
+    <Group gap="md" align="flex-start" wrap="wrap">
+      <Box className="depictio-guide-sidebar" p="md" data-testid="guide-tabs-sidebar">
+        <Stack gap={4}>
+          <Text c="dimmed" size="xs" tt="uppercase" fw={700} mb={4}>
+            Tabs
+          </Text>
+          <Tabs
+            className="depictio-chrome-tabs"
+            orientation="vertical"
+            variant="pills"
+            placement="left"
+            value={current?.id ?? null}
+            styles={{
+              list: { gap: 4, border: 'none', width: '100%' },
+              tab: { justifyContent: 'flex-start', width: '100%' },
+              tabLabel: { flex: 1, minWidth: 0 },
+            }}
+          >
+            <Tabs.List aria-label="This dashboard's tabs">
+              {model.tabs.groups.map((g) => (
+                <React.Fragment key={g.group ?? '__ungrouped'}>
+                  {g.group && (
+                    <Text c="dimmed" size="xs" tt="uppercase" fw={700} pl="xs" mt={6} truncate="end">
+                      {g.group}
+                    </Text>
                   )}
-                  aria-current={t.isCurrent ? 'page' : undefined}
-                >
-                  <span className="depictio-chrome-tab-label">{t.label}</span>
-                  {t.subtitle && <span className="depictio-guide-tab-subtitle">{t.subtitle}</span>}
-                </Tabs.Tab>
-              );
-            })}
-          </React.Fragment>
-        ))}
-      </Tabs.List>
-    </Tabs>
+                  {g.tabs.map((t) => {
+                    const color = resolveTabColor(t.tab, t.isMain, brand);
+                    return (
+                      <Tabs.Tab
+                        key={t.id}
+                        value={t.id}
+                        color={color}
+                        pl="xs"
+                        leftSection={<TabIcon tab={t} color={color} isDark={isDark} />}
+                        onMouseEnter={() => setPointedId(t.id)}
+                        onFocus={() => setPointedId(t.id)}
+                        renderRoot={(props) => (
+                          <a
+                            {...props}
+                            href={dashboardHref(t.id, mode)}
+                            onClick={t.isCurrent ? dashboardLinkClickHandler(onCurrent) : undefined}
+                          />
+                        )}
+                        aria-current={t.isCurrent ? 'page' : undefined}
+                      >
+                        <span className="depictio-chrome-tab-label">{t.label}</span>
+                      </Tabs.Tab>
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </Tabs.List>
+          </Tabs>
+        </Stack>
+      </Box>
+      {pointed && (
+        <Stack gap={6} style={{ flex: '1 1 220px', minWidth: 0 }} data-testid="guide-tabs-pointed">
+          <Text size="xs" c="dimmed">
+            {pointedId ? 'The tab under the pointer' : 'Point at a tab to see what it holds'}
+          </Text>
+          <Group gap={8} wrap="nowrap">
+            <Icon
+              icon={resolveTabIcon(pointed.tab, pointed.isMain)}
+              width={18}
+              height={18}
+              style={{ flexShrink: 0, color: `var(--mantine-color-${pointedColor}-6)` }}
+            />
+            <Text size="sm" fw={600}>
+              {pointed.label}
+              {pointed.isCurrent ? ' · you are here' : ''}
+            </Text>
+          </Group>
+          {pointed.subtitle && (
+            <Text size="sm" c="dimmed" lh={1.45}>
+              {pointed.subtitle}
+            </Text>
+          )}
+        </Stack>
+      )}
+    </Group>
   );
 };
 

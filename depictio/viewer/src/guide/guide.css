@@ -30,44 +30,14 @@
   border: 1px solid var(--mantine-color-default-border);
 }
 
-/* The Tabs part: the family as sidebar pills, in a grid rather than a column,
- * with each group's heading across the full row. */
-.depictio-guide-tabs .mantine-Tabs-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 4px 8px;
-}
-.depictio-guide-tabs .mantine-Tabs-tab {
-  justify-content: flex-start;
-  align-items: flex-start;
-  height: auto;
-  padding-block: 8px;
-}
-.depictio-guide-tabs .mantine-Tabs-tabSection {
-  margin-top: 1px;
-}
-.depictio-guide-tabs .mantine-Tabs-tabLabel {
-  min-width: 0;
-  flex: 1;
-}
-.depictio-guide-tab-subtitle {
-  font-size: var(--mantine-font-size-xs);
-  line-height: 1.35;
-  color: var(--mantine-color-dimmed);
-  white-space: normal;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-}
-.depictio-guide-tabs .mantine-Tabs-tab[data-active] .depictio-guide-tab-subtitle {
-  color: inherit;
-  opacity: 0.85;
-}
-.depictio-guide-tabs-heading {
-  grid-column: 1 / -1;
-  margin-top: 6px;
+/* The tabs demo's sidebar: the navbar's width, surface and edge. */
+.depictio-guide-sidebar {
+  width: 250px;
+  max-width: 100%;
+  flex-shrink: 0;
+  background: var(--mantine-color-body);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
 }
 
 /* A demo tile, drawn like a dashboard tile at a smaller size. */
