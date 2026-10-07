@@ -500,7 +500,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 tabLabel: { flex: 1, minWidth: 0 },
               }}
             >
-              <Tabs.List data-guide-target="tabs">
+              <Tabs.List>
                 {sections.map((section) => (
                   <React.Fragment
                     key={section.group === null ? 'ungrouped' : `group:${section.group}`}

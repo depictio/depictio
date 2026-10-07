@@ -148,8 +148,9 @@ export const YourViewDemo: React.FC = () => {
           value={width}
           onChange={(v) => setWidth(v as ContentWidth)}
           data={CONTENT_WIDTHS.map((w) => ({ value: w.value, label: w.label }))}
+          data-guide-show
         />
-        <ActionIcon.Group>
+        <ActionIcon.Group data-guide-show>
           <ActionIcon
             variant="default"
             size="input-xs"

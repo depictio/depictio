@@ -5,9 +5,9 @@
 
 /* The Guide replaces the tab's canvas, header and sidebar staying put. It is
  * laid over the canvas rather than swapped for it, so the tab stays mounted
- * (and its figures loaded) underneath: closing the Guide is instant, and "Show
- * me" points at real elements. The app hides the canvas while the Guide is up,
- * so nothing in it can paint through. The offsets are AppShell's own, which
+ * (and its figures loaded) underneath: closing the Guide is instant. The app
+ * hides the canvas while the Guide is up, so nothing in it can paint through.
+ * The offsets are AppShell's own, which
  * follow the sidebar, the header and an inspector aside. Below the AppShell's
  * header and navbar (z 100+), so on a phone the sidebar still slides over it. */
 .depictio-guide-layer {
@@ -217,7 +217,7 @@
   gap: 8px;
 }
 
-/* "Show me": a ring around the real element, pulsing twice, then gone. */
+/* "Show me": a ring around an element of a demo, pulsing twice, then gone. */
 .depictio-guide-ring {
   position: fixed;
   z-index: 1050;
@@ -246,9 +246,9 @@
   }
 }
 
-/* While its row is ringed, a tile shows its hover-only actions as if hovered
- * (the rules this mirrors are in react-core's chrome/chrome.css), and its
- * plot its hover-only toolbar. */
+/* While its row is ringed, a demo tile shows its hover-only actions as if
+ * hovered (the rules this mirrors are in react-core's chrome/chrome.css), and
+ * its plot its hover-only toolbar. */
 .depictio-component-chrome.depictio-guide-reveal .depictio-component-actions > * {
   opacity: 1;
   pointer-events: auto;

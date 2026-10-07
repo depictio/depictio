@@ -4,15 +4,15 @@
  *
  * Not a tour. There are no steps and nothing to dismiss: the page is a column
  * of parts, each a short explanation, a small working demo, and a "Show me"
- * that rings the real control. The explanations are generic; what fills them —
- * the tabs, the sections, the filters, the actions — is read from the tab the
- * Guide was opened on (`buildGuideModel`), and the demos are built from the
- * dashboard's own components (`useGuideSources`), so the Guide never describes
- * a control the dashboard does not have.
+ * that rings, in that demo, the control the part is about. The reader never
+ * steers the Guide nor leaves it to find something. The explanations are
+ * generic; what fills them — the tabs, the sections, the filters, the actions
+ * — is read from the tab the Guide was opened on (`buildGuideModel`), and the
+ * demos are built from the dashboard's own components (`useGuideSources`), so
+ * the Guide never describes a control the dashboard does not have.
  *
- * The page covers the tab's canvas only. The sidebar, the header and the
- * filter panel stay beside it, so "Show me" on one of those rings it with the
- * Guide still open; only what is in the canvas closes the Guide first.
+ * The page covers the tab's canvas only: the sidebar, the header and the
+ * filter panel stay beside it.
  */
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -44,7 +44,7 @@ import { ActionsDemo } from './demos/ActionsDemo';
 import { AnalysisDemo } from './demos/AnalysisDemo';
 import { LiveFilterDemo, LiveFilterDemoSkeleton } from './demos/LiveFilterDemo';
 import { SectionsDemo } from './demos/SectionsDemo';
-import { CANVAS_SELECTOR, findGuideTarget, type GuideTarget } from './showMe';
+import { findDemoTargets, showDemoTarget, type GuideTarget } from './showMe';
 import { useGuideSources } from './useGuideSources';
 
 export interface DashboardGuideProps {
@@ -66,11 +66,8 @@ export interface DashboardGuideProps {
   intro: string;
   mode: 'view' | 'edit';
   onClose: () => void;
-  onShowMe: (target: GuideTarget) => void;
   /** Opens the dashboard settings on "Your view". */
   onOpenYourView: () => void;
-  /** Components a selection can be made on, for the selection "Show me". */
-  selectionIds: readonly string[];
 }
 
 // ---------------------------------------------------------------------------
@@ -89,54 +86,13 @@ function listNames(names: readonly string[], max = 4): string {
 }
 
 // ---------------------------------------------------------------------------
-// "Show me" availability
-// ---------------------------------------------------------------------------
-
-const TARGETS: GuideTarget[] = [
-  'tabs',
-  'sections',
-  'filters',
-  'selection',
-  'pinned',
-  'actions',
-  'analysis',
-  'settings',
-  'guide',
-];
-
-/**
- * Which "Show me" targets the page has right now. Polled while the Guide is
- * up: tiles and the filter panel mount as their data arrives, and a "Show me"
- * offered for an element that is not there would ring nothing.
- */
-function useTargetAvailability(selectionIds: readonly string[]): Record<GuideTarget, boolean> {
-  const ids = useRef(selectionIds);
-  ids.current = selectionIds;
-  const read = () =>
-    Object.fromEntries(
-      TARGETS.map((t) => [t, findGuideTarget(t, { selectionIds: ids.current }) !== null]),
-    ) as Record<GuideTarget, boolean>;
-  const [available, setAvailable] = useState(read);
-  useEffect(() => {
-    const tick = () =>
-      setAvailable((prev) => {
-        const next = read();
-        return TARGETS.every((t) => prev[t] === next[t]) ? prev : next;
-      });
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-    // `read` only reads refs and the DOM.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  return available;
-}
-
-// ---------------------------------------------------------------------------
 // The layer's place: over the canvas, and only the canvas
 // ---------------------------------------------------------------------------
 
 type LayerBox = { top: number; left: number; width: number; height: number };
+
+/** The tab's canvas: the scroll container every tile lives in. */
+const CANVAS_SELECTOR = '[data-testid="dashboard-content"]';
 
 /**
  * The canvas's box on screen, followed as the sidebar slides, the filter panel
@@ -183,44 +139,30 @@ function useCanvasBox(): LayerBox | null {
 interface ShowMeSpec {
   target: GuideTarget;
   label: string;
-  /** Said in the footer when the page has nothing to point at; nothing when absent. */
-  absent?: string;
 }
 
-/** The part's main action: rings the real thing the part is about. */
-const ShowMeButton: React.FC<{
-  spec: ShowMeSpec;
-  onShowMe: (target: GuideTarget) => void;
-  size?: 'sm' | 'xs';
-}> = ({ spec, onShowMe, size = 'sm' }) => (
-  <Button
-    variant="light"
-    size={size}
-    radius="md"
-    leftSection={<Icon icon="mdi:crosshairs-gps" width={size === 'sm' ? 18 : 15} />}
-    onClick={() => onShowMe(spec.target)}
-    data-testid={`guide-show-${spec.target}`}
-    style={{ flexShrink: 0 }}
-  >
-    {spec.label}
-  </Button>
-);
-
-const Absent: React.FC<{ target: GuideTarget; children: React.ReactNode }> = ({
-  target,
-  children,
-}) => (
-  <Group gap={6} wrap="nowrap" data-testid={`guide-absent-${target}`}>
-    <Icon
-      icon="mdi:eye-off-outline"
-      width={14}
-      style={{ color: 'var(--mantine-color-dimmed)', flexShrink: 0 }}
-    />
-    <Text size="xs" c="dimmed">
-      {children}
-    </Text>
-  </Group>
-);
+/**
+ * Whether the demo in `part` has what `target` points at. Polled: the demos
+ * mount their tiles as the data arrives, and a "Show me" offered before then
+ * would ring nothing.
+ */
+function useDemoHas(
+  part: React.RefObject<HTMLElement | null>,
+  target: GuideTarget | undefined,
+): boolean {
+  const [has, setHas] = useState(false);
+  useEffect(() => {
+    if (!target) return;
+    const tick = () => {
+      const demo = part.current?.querySelector('.depictio-guide-demo');
+      setHas(Boolean(demo && findDemoTargets(target, demo).length > 0));
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [part, target]);
+  return has;
+}
 
 interface PartProps {
   id: string;
@@ -232,24 +174,31 @@ interface PartProps {
   demoLabel?: string;
   /** A small aside under the demo. */
   note?: React.ReactNode;
-  /** The part's "Show me", in its header. */
+  /** The part's "Show me", in its header: rings that thing in the demo. */
   showMe?: ShowMeSpec;
   /** Secondary actions, under the demo. */
   footer?: React.ReactNode;
 }
 
 /** One part of the Guide: what it is about, a few lines, a demo, Show me. */
-const GuidePart: React.FC<
-  PartProps & {
-    available: Record<GuideTarget, boolean>;
-    onShowMe: (target: GuideTarget) => void;
-  }
-> = ({ id, icon, title, subtitle, points, demo, demoLabel, note, showMe, footer, available, onShowMe }) => {
-  const showMeHere = showMe && available[showMe.target];
-  const absent = showMe && !showMeHere && showMe.absent;
+const GuidePart: React.FC<PartProps> = ({
+  id,
+  icon,
+  title,
+  subtitle,
+  points,
+  demo,
+  demoLabel,
+  note,
+  showMe,
+  footer,
+}) => {
+  const ref = useRef<HTMLElement | null>(null);
+  const showMeHere = useDemoHas(ref, demo ? showMe?.target : undefined);
   const shownPoints = points.filter(Boolean);
   return (
     <Paper
+      ref={ref}
       component="section"
       id={`guide-${id}`}
       aria-labelledby={`guide-${id}-title`}
@@ -274,7 +223,22 @@ const GuidePart: React.FC<
               </Text>
             </Box>
           </Group>
-          {showMeHere && <ShowMeButton spec={showMe} onShowMe={onShowMe} />}
+          {showMe && showMeHere && (
+            <Button
+              variant="light"
+              size="sm"
+              radius="md"
+              leftSection={<Icon icon="mdi:crosshairs-gps" width={18} />}
+              onClick={() => {
+                const frame = ref.current?.querySelector('.depictio-guide-demo');
+                if (frame) showDemoTarget(showMe.target, frame);
+              }}
+              data-testid={`guide-show-${showMe.target}`}
+              style={{ flexShrink: 0 }}
+            >
+              {showMe.label}
+            </Button>
+          )}
         </Group>
         {shownPoints.length > 0 && (
           <List
@@ -296,10 +260,9 @@ const GuidePart: React.FC<
         )}
         {demo && <DemoFrame label={demoLabel}>{demo}</DemoFrame>}
         {note}
-        {(footer || absent) && (
+        {footer && (
           <Group gap="sm" wrap="wrap">
             {footer}
-            {absent && showMe && <Absent target={showMe.target}>{absent}</Absent>}
           </Group>
         )}
       </Stack>
@@ -359,11 +322,8 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
   intro,
   mode,
   onClose,
-  onShowMe,
   onOpenYourView,
-  selectionIds,
 }) => {
-  const available = useTargetAvailability(selectionIds);
   const sources = useGuideSources({
     dashboardId,
     dashboard,
@@ -441,7 +401,7 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
     ],
     demoLabel: tabs.count > 1 ? 'The tabs · click one to open it' : 'The tab',
     demo: <TabPillsDemo model={model} mode={mode} onCurrent={onClose} />,
-    showMe: { target: 'tabs', label: 'Show me the tabs', absent: 'The sidebar is not on this page.' },
+    showMe: { target: 'tabs', label: 'Show me the tab you are on' },
   });
 
   // 2. Reading a tab
@@ -495,7 +455,7 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
         On {tabName}, sections are headings only: they name the parts of the tab and do not fold.
       </Note>
     ),
-    showMe: { target: 'sections', label: headingsOnly ? 'Show me the headings' : 'Show me a section' },
+    showMe: { target: 'sections', label: 'Show me where to fold' },
     footer: (
       <Button
         variant="default"
@@ -587,25 +547,7 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
       ) : filterSource ? (
         <LiveFilterDemo source={filterSource} />
       ) : undefined,
-    showMe: { target: 'filters', label: 'Show me the filters', absent: 'This tab has no filter panel.' },
-    footer: (available.selection && selectionPlaces.length > 0) || available.pinned ? (
-      <>
-        {selectionPlaces.length > 0 && available.selection && (
-          <ShowMeButton
-            spec={{ target: 'selection', label: 'Where to select' }}
-            onShowMe={onShowMe}
-            size="xs"
-          />
-        )}
-        {available.pinned && (
-          <ShowMeButton
-            spec={{ target: 'pinned', label: 'A pinned section' }}
-            onShowMe={onShowMe}
-            size="xs"
-          />
-        )}
-      </>
-    ) : undefined,
+    showMe: { target: 'filters', label: 'Show me the filter' },
   });
 
   // 4. Component actions
@@ -636,11 +578,7 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
     ],
     demoLabel: isEdit ? 'Live · try its icons and the ⋮ menu' : 'Live · try its icons',
     demo: <ActionsDemo model={model} family={sources.family} mode={mode} />,
-    showMe: {
-      target: 'actions',
-      label: 'Show me on a component',
-      absent: actions.length > 0 ? undefined : 'No component on this tab has actions.',
-    },
+    showMe: { target: 'actions', label: 'Show me the actions' },
   });
 
   // 5. Analysis — only where the header offers it.
@@ -663,11 +601,7 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
       ],
       demoLabel: 'Live · three steps',
       demo: <AnalysisDemo source={sources.analysis} />,
-      showMe: {
-        target: 'analysis',
-        label: 'Show me Analysis',
-        absent: 'The Analysis button is off screen at this width.',
-      },
+      showMe: { target: 'analysis', label: 'Show me the next step' },
     });
   }
 
@@ -688,11 +622,7 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
     ],
     demoLabel: 'Width and text size',
     demo: <YourViewDemo />,
-    showMe: {
-      target: 'settings',
-      label: 'Show me Settings',
-      absent: 'Settings is off screen at this width.',
-    },
+    showMe: { target: 'settings', label: 'Show me the two settings' },
     footer: (
       <Button
         variant="default"
@@ -811,7 +741,7 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
           </Group>
 
           {parts.map(({ navLabel: _navLabel, ...p }) => (
-            <GuidePart key={p.id} {...p} available={available} onShowMe={onShowMe} />
+            <GuidePart key={p.id} {...p} />
           ))}
 
           <Group justify="center" py="md">
@@ -834,13 +764,6 @@ const DashboardGuide: React.FC<DashboardGuideProps> = ({
               <Icon icon="mdi:help-circle-outline" width={13} style={{ verticalAlign: '-2px' }} />{' '}
               in the header.
             </Text>
-            {available.guide && (
-              <ShowMeButton
-                spec={{ target: 'guide', label: 'Show me' }}
-                onShowMe={onShowMe}
-                size="xs"
-              />
-            )}
           </Group>
         </Stack>
       </Container>

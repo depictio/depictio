@@ -1,37 +1,21 @@
 /**
- * "Show me": point at the real element a Guide part is about.
+ * "Show me": point at the part of a Guide demo that its explanation is about.
  *
- * Deliberately not the walkthrough: no overlay, no step sequence, nothing to
- * dismiss. The element gets a pulsing ring for about two seconds, then the
- * ring goes away on its own.
- *
- * Where the element is decides whether the Guide stays open. The Guide covers
- * the tab's canvas only, so the sidebar, the header and the filter panel are on
- * screen beside it: those are ringed in place and the reader keeps reading.
- * What lives in the canvas (a section, a tile's actions, a figure to select
- * on) is under the Guide, so for those the Guide closes first — onto the same
- * tab, which never left — and the ring follows.
+ * Inside the Guide only. The ring lands on the demo under the button — the
+ * tab you are on, the header that folds a section, the filter to pick from,
+ * a tile's hover-only actions, the step to take next — so the reader never
+ * leaves the page to look for it, and nothing on the dashboard behind is
+ * touched. No overlay, no step sequence, nothing to dismiss: the element gets
+ * a pulsing ring for about two seconds, then the ring goes away on its own.
  *
  * The ring is a separate fixed element on <body> rather than a style on the
- * target: most targets sit inside a scroll container or an `overflow: hidden`
- * tile that would clip an outline, and a ring we own cannot disturb the
- * target's own styles. It follows the target for its lifetime, so a smooth
- * scroll into view or a sidebar sliding open carries the ring with it.
+ * target: most targets sit inside a tile with `overflow: hidden` that would
+ * clip an outline, and a ring we own cannot disturb the target's own styles.
+ * It follows the target for its lifetime, so a smooth scroll into view
+ * carries the ring with it.
  */
 
-export type GuideTarget =
-  | 'tabs'
-  | 'sections'
-  | 'filters'
-  | 'selection'
-  | 'pinned'
-  | 'actions'
-  | 'analysis'
-  | 'settings'
-  | 'guide';
-
-/** The tab's canvas: the scroll container every tile lives in. */
-export const CANVAS_SELECTOR = '[data-testid="dashboard-content"]';
+export type GuideTarget = 'tabs' | 'sections' | 'filters' | 'actions' | 'analysis' | 'settings';
 
 const RING_MS = 2200;
 const RING_PAD = 4;
@@ -41,118 +25,55 @@ function hasBox(el: Element): boolean {
   return r.width > 0 && r.height > 0;
 }
 
-/** On screen horizontally: the header's right end is cut off on a phone. */
-function inViewportX(el: Element): boolean {
-  const r = el.getBoundingClientRect();
-  return hasBox(el) && r.left >= 0 && r.right <= window.innerWidth + 1;
-}
-
-function first(selector: string, accept: (el: Element) => boolean = hasBox): HTMLElement | null {
-  for (const el of document.querySelectorAll<HTMLElement>(selector)) {
-    if (accept(el)) return el;
+function first(root: ParentNode, selector: string): HTMLElement | null {
+  for (const el of root.querySelectorAll<HTMLElement>(selector)) {
+    if (hasBox(el)) return el;
   }
   return null;
 }
 
-/** A section's header row: the part that folds it, and that says "Filtered".
- *  The whole item can be taller than the screen, which no ring reads well on. */
+/** A section's header row: the part that folds it. The whole item can be
+ *  taller than the screen, which no ring reads well on. */
 function sectionHeader(item: HTMLElement | null): HTMLElement | null {
   return item ? (item.querySelector<HTMLElement>(':scope > *') ?? item) : null;
 }
 
-/**
- * The tile whose action row is worth pointing at: the first one in view with
- * more than one action (a card carries only its metadata icon), else the first
- * tile with any.
- */
-function pickActionRow(): { row: HTMLElement; chrome: HTMLElement } | null {
-  const content = document.querySelector(CANVAS_SELECTOR);
-  if (!content) return null;
-  const view = content.getBoundingClientRect();
-  let fallback: { row: HTMLElement; chrome: HTMLElement } | null = null;
-  for (const chrome of content.querySelectorAll<HTMLElement>('.depictio-component-chrome')) {
+/** The demo tile's action row: the first one with any action. */
+function actionRow(root: ParentNode): { row: HTMLElement; chrome: HTMLElement } | null {
+  for (const chrome of root.querySelectorAll<HTMLElement>('.depictio-component-chrome')) {
     const row = chrome.querySelector<HTMLElement>(':scope > .depictio-component-actions');
-    if (!row || row.children.length === 0 || !hasBox(chrome)) continue;
-    fallback ??= { row, chrome };
-    const r = chrome.getBoundingClientRect();
-    const inView = r.top >= view.top && r.top < view.bottom - 80;
-    if (inView && row.children.length > 1) return { row, chrome };
+    if (row && row.children.length > 0 && hasBox(chrome)) return { row, chrome };
   }
-  return fallback;
+  return null;
 }
 
-export interface ShowMeOptions {
-  /** Component ids a selection can be made on, most relevant first. */
-  selectionIds?: readonly string[];
-}
-
-/** The elements `target` points at on the page now; empty when it has none. */
-export function findGuideTargets(target: GuideTarget, opts: ShowMeOptions = {}): HTMLElement[] {
+/**
+ * The elements `target` points at in `demo`, the demo of the Guide part that
+ * offers it; empty while the demo has none (it may still be loading).
+ */
+export function findDemoTargets(target: GuideTarget, demo: ParentNode): HTMLElement[] {
   const one = (el: HTMLElement | null) => (el ? [el] : []);
   switch (target) {
     case 'tabs':
-      // No size check: a collapsed sidebar still holds the list, and showing
-      // it opens the sidebar first (see `useGuideShowMe`).
-      return one(document.querySelector<HTMLElement>('[data-guide-target="tabs"]'));
+      return one(first(demo, '[aria-current="page"]'));
     case 'sections':
-      // A tab whose sections are all headings still has them: the ring then
-      // shows where the tab's parts begin, which is what the note beside the
-      // button says.
+      // A folding section first: a heading-only one has nothing to click.
       return one(
         sectionHeader(
-          first(`${CANVAS_SELECTOR} .depictio-section-item:not(.is-plain)`) ??
-            first(`${CANVAS_SELECTOR} .depictio-section-item`),
+          first(demo, '.depictio-section-item:not(.is-plain)') ??
+            first(demo, '.depictio-section-item'),
         ),
       );
     case 'filters':
-      // The panel on a wide screen (open or folded to its rail); on a phone it
-      // lives in a drawer, opened from the header's Filters button.
-      return one(
-        first('[data-tour-id="filter-panel"]') ?? first('[data-guide-target="filters-button"]'),
-      );
-    case 'selection': {
-      for (const id of opts.selectionIds ?? []) {
-        const el = first(`${CANVAS_SELECTOR} [data-component-id="${CSS.escape(id)}"]`);
-        if (el) return [el];
-      }
-      // Then the map panel: floating, docked in the filter panel, or folded
-      // away behind its control.
-      return one(
-        first('[data-testid="map-panel-surface"]') ??
-          first('[data-testid="map-panel-dock"]') ??
-          first('[data-testid="map-panel-control"]', inViewportX),
-      );
-    }
-    case 'pinned':
-      return one(sectionHeader(first('[data-guide-target="pinned-sections"] .depictio-section-item')));
+      return one(first(demo, '[data-testid="guide-filter-demo-control"]'));
     case 'actions':
-      return one(pickActionRow()?.row ?? null);
+      return one(actionRow(demo)?.row ?? null);
     case 'analysis':
-      return one(first('[data-guide-target="analysis"]', inViewportX));
+      // The step to take now, which the demo lights.
+      return one(first(demo, '[data-testid^="guide-analysis-step-"][data-active]'));
     case 'settings':
-      return one(first('[data-guide-target="settings"]', inViewportX));
-    case 'guide':
-      // Both ways back in: the header's "?" and the sidebar's Guide entry.
-      return [
-        ...one(first('[data-testid="dashboard-guide-button"]', inViewportX)),
-        ...one(first('[data-testid="sidebar-guide"]')),
-      ];
+      return [...demo.querySelectorAll<HTMLElement>('[data-guide-show]')].filter(hasBox);
   }
-}
-
-/** The first element `target` points at, or null. */
-export function findGuideTarget(target: GuideTarget, opts: ShowMeOptions = {}): HTMLElement | null {
-  return findGuideTargets(target, opts)[0] ?? null;
-}
-
-/**
- * Whether `el` is under the Guide while it is open: in the tab's canvas, or in
- * the page furniture hidden with it (the floating map panel). Those need the
- * Guide closed to be seen; everything else is ringed in place. `visibility`
- * is inherited, so a hidden ancestor shows on the element itself.
- */
-export function isUnderGuide(el: HTMLElement): boolean {
-  return Boolean(el.closest(CANVAS_SELECTOR)) || getComputedStyle(el).visibility === 'hidden';
 }
 
 let active: (() => void) | null = null;
@@ -235,16 +156,12 @@ export function ringElements(
   active = cleanup;
 }
 
-/** Find `target` and ring it. False when the page has nothing to show. */
-export function showGuideTarget(target: GuideTarget, opts: ShowMeOptions = {}): boolean {
-  if (target === 'actions') {
-    const picked = pickActionRow();
-    if (!picked) return false;
-    ringElements([picked.row], { reveal: picked.chrome, scroll: 'center' });
-    return true;
-  }
-  const els = findGuideTargets(target, opts);
+/** Find `target` in `demo` and ring it. False when the demo has nothing to show. */
+export function showDemoTarget(target: GuideTarget, demo: ParentNode): boolean {
+  const els = findDemoTargets(target, demo);
   if (els.length === 0) return false;
-  ringElements(els, { scroll: els[0].closest(CANVAS_SELECTOR) ? 'center' : 'nearest' });
+  // A tile's actions only show on hover: keep them on screen while ringed.
+  const reveal = target === 'actions' ? els[0].closest<HTMLElement>('.depictio-component-chrome') : null;
+  ringElements(els, { reveal, scroll: 'nearest' });
   return true;
 }

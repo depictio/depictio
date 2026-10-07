@@ -154,7 +154,6 @@ const GroupingHeaderControl: React.FC<{
             ) : undefined
           }
           onClick={onToggle}
-          data-guide-target="analysis"
         >
           {modeLabel ? `Analysis: ${modeLabel}` : 'Analysis'}
         </Button>

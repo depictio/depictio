@@ -237,7 +237,6 @@ const Header: React.FC<HeaderProps> = ({
             size="compact-sm"
             hiddenFrom="sm"
             onClick={onOpenFilters}
-            data-guide-target="filters-button"
             leftSection={<Icon icon="mdi:filter-variant" width={14} />}
             rightSection={
               filterCount > 0 ? (
@@ -400,7 +399,6 @@ const Header: React.FC<HeaderProps> = ({
           variant="filled"
           size="xs"
           onClick={onOpenSettings}
-          data-guide-target="settings"
         >
           Settings
         </Button>

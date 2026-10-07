@@ -114,7 +114,7 @@ import NotesFooter from './components/NotesFooter';
 import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
 import { usePageTitle } from './branding';
-import { DashboardGuide, useGuideRoute, useGuideShowMe } from './guide';
+import { DashboardGuide, useGuideRoute } from './guide';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 
 /**
@@ -906,7 +906,7 @@ const App: React.FC = () => {
   // Declared here, below `groupRender` and `handleFilterChange`: it reads both.
   const topSectionsHost =
     topGridSections.length > 0 ? (
-      <div data-guide-target="pinned-sections">
+      <div>
         <PersistentSectionsHost
           sections={topGridSections}
           familyId={crossTab.familyId}
@@ -1084,19 +1084,6 @@ const App: React.FC = () => {
       inspectorControl,
     ],
   );
-  const guideSelectionIds = useMemo(
-    () => guideModel?.selection.filter((s) => !s.floating).map((s) => s.index) ?? [],
-    [guideModel],
-  );
-  const showGuideTarget = useGuideShowMe({
-    closeGuide: guide.closeGuide,
-    isNarrow: Boolean(isNarrow),
-    desktopOpened,
-    mobileOpened,
-    toggleDesktop,
-    toggleMobile,
-    selectionIds: guideSelectionIds,
-  });
   // On a phone the sidebar is an overlay: leave it open over the Guide and the
   // Guide is behind it.
   const openGuideFromSidebar = useCallback(() => {
@@ -1527,7 +1514,7 @@ const App: React.FC = () => {
                 )}
               </Box>
               {bottomGridSections.length > 0 && (
-                <div data-guide-target="pinned-sections" style={{ flexShrink: 0 }}>
+                <div style={{ flexShrink: 0 }}>
                   <PersistentSectionsHost
                     sections={bottomGridSections}
                     familyId={crossTab.familyId}
@@ -1648,9 +1635,7 @@ const App: React.FC = () => {
             intro={guideSettings.intro}
             mode="view"
             onClose={guide.closeGuide}
-            onShowMe={showGuideTarget}
             onOpenYourView={() => openSettingsAt('view')}
-            selectionIds={guideSelectionIds}
           />
         )}
       </AppShell.Main>
