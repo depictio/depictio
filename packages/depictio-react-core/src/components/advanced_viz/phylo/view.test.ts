@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { nextSummaryRank, orderTaxonomicRanks, rankChoices, summaryBlocker, isTaxonomicRank } from './view';
+import {
+  nextSummaryRank,
+  orderTaxonomicRanks,
+  rankChoices,
+  summaryBlocker,
+  isTaxonomicRank,
+  withRanksInOrder,
+} from './view';
 
 const META = { metadata_wf_id: 'wf', metadata_dc_id: 'dc' };
 
@@ -91,5 +98,18 @@ describe('isTaxonomicRank', () => {
   it('knows the ranks whatever their case, and nothing else', () => {
     expect(['Kingdom', 'phylum', 'Subdivision'].map(isTaxonomicRank)).toEqual([true, true, true]);
     expect(['locality', 'label'].map(isTaxonomicRank)).toEqual([false, false]);
+  });
+});
+
+describe('withRanksInOrder', () => {
+  it('orders the ranks in the slots they hold and leaves the other columns in place', () => {
+    expect(withRanksInOrder(['locality', 'Phylum', 'depth', 'Class', 'Kingdom'])).toEqual([
+      'locality',
+      'Kingdom',
+      'depth',
+      'Phylum',
+      'Class',
+    ]);
+    expect(withRanksInOrder(['a', 'b'])).toEqual(['a', 'b']);
   });
 });

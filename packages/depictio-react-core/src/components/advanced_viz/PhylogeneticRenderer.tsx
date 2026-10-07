@@ -43,7 +43,13 @@ import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import type { PhylogeneticConfig } from './phylo/config';
 import PhyloSummaryRenderer from './PhyloSummaryRenderer';
 import PhyloViewSwitch from './PhyloViewSwitch';
-import { nextSummaryRank, rankChoices, summaryBlocker, type PhyloView } from './phylo/view';
+import {
+  nextSummaryRank,
+  rankChoices,
+  summaryBlocker,
+  withRanksInOrder,
+  type PhyloView,
+} from './phylo/view';
 import {
   buildTreeSelectionFilter,
   collectSubtreeTaxa,
@@ -1453,7 +1459,10 @@ const PhyloTreeRenderer: React.FC<Props & { view: PhyloView }> = ({
   const colorOptions: { value: string; label: string }[] = useMemo(() => {
     if (!metaCols || metaCols.length === 0) return [];
     const taxonCol = config.taxon_col || 'taxon';
-    return metaCols.filter((c) => c !== taxonCol).map((c) => ({ value: c, label: c }));
+    return withRanksInOrder(metaCols.filter((c) => c !== taxonCol)).map((c) => ({
+      value: c,
+      label: c,
+    }));
   }, [metaCols, config.taxon_col]);
 
   const exportSelectedNewick = () => {
@@ -1470,9 +1479,27 @@ const PhyloTreeRenderer: React.FC<Props & { view: PhyloView }> = ({
     URL.revokeObjectURL(url);
   };
 
+  // Most used first: a docked panel shows the first few (DockedControls).
   const controls = (
     <Stack gap="xs" id={controlsId}>
       <PhyloViewSwitch view={view} />
+      {colorOptions.length > 0 ? (
+        <Select
+          size="xs"
+          label="Colour by"
+          value={colorCol}
+          onChange={setColorCol}
+          data={colorOptions}
+          clearable
+        />
+      ) : null}
+      <TextInput
+        size="xs"
+        label="Search tip"
+        placeholder="taxon name"
+        value={search}
+        onChange={(e) => setSearch(e.currentTarget.value)}
+      />
       <Stack gap={4}>
         <Text size="xs" fw={500}>
           Mode
@@ -1485,23 +1512,6 @@ const PhyloTreeRenderer: React.FC<Props & { view: PhyloView }> = ({
         fullWidth
       />
       </Stack>
-      <TextInput
-        size="xs"
-        label="Search tip"
-        placeholder="taxon name"
-        value={search}
-        onChange={(e) => setSearch(e.currentTarget.value)}
-      />
-      {colorOptions.length > 0 ? (
-        <Select
-          size="xs"
-          label="Colour by"
-          value={colorCol}
-          onChange={setColorCol}
-          data={colorOptions}
-          clearable
-        />
-      ) : null}
       <Stack gap={4}>
         <Text size="xs" fw={500}>
           Ladderise

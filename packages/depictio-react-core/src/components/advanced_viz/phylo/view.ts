@@ -60,6 +60,19 @@ export function orderTaxonomicRanks(columns: readonly string[]): string[] {
 }
 
 /**
+ * Columns with the rank ones put in taxonomic order where they stand: the
+ * other columns keep their places, and the slots the ranks occupy are refilled
+ * root to leaf. A picker listing a table's columns in schema order otherwise
+ * offered "Phylum, Class, Kingdom" because that is how the table was written.
+ */
+export function withRanksInOrder(columns: readonly string[]): string[] {
+  const depth = (c: string) => TAXONOMIC_RANKS.indexOf(c.toLowerCase());
+  const ranks = columns.filter((c) => depth(c) >= 0).sort((a, b) => depth(a) - depth(b));
+  let k = 0;
+  return columns.map((c) => (depth(c) >= 0 ? ranks[k++] : c));
+}
+
+/**
  * The tip-metadata columns the summary can collapse to, in taxonomic order
  * (`orderTaxonomicRanks`).
  *

@@ -47,6 +47,7 @@ import {
   upsetIntersectionMembers,
 } from './upsetSelection';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { withRanksInOrder } from './phylo/view';
 
 interface UpsetPlotConfig {
   /** Deprecated/unused: data comes from the component's resolved dc_id
@@ -147,7 +148,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilt
   const annotationOptions = useMemo(() => {
     if (!dcSchema) return [] as string[];
     const setCols = new Set(setColumns);
-    return Object.keys(dcSchema).filter((c) => !setCols.has(c));
+    return withRanksInOrder(Object.keys(dcSchema).filter((c) => !setCols.has(c)));
   }, [dcSchema, setColumns]);
 
   const effectiveAnnotationCols = showAnnotations ? annotationCols : [];
