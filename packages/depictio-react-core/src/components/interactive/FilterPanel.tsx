@@ -24,6 +24,7 @@ import { countActiveFilters } from '../../activeFilters';
 import { useGroupingColor } from '../../selectionGroups';
 import { PANEL_RESIZE_END_EVENT, isPanelResizing } from '../../utils/panelToggle';
 import { useCollapseState } from '../../hooks/useCollapseState';
+import { useRevealComponent } from '../../reveal';
 import type { InteractiveSection } from '../../utils/groupInteractive';
 import {
   collapsedSectionKeys,
@@ -249,6 +250,35 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
     return keys;
   }, [sections]);
   const anyOpen = collapsibleKeys.some((key) => collapse.isOpen(key));
+
+  // The dashboard search, asking for one of this panel's filters: expand the
+  // panel from its rail, drop a search that hides the filter, and open the
+  // section and group it sits in. Sections are bucketed from every component
+  // rather than read off `sections`, which a search may have emptied.
+  //
+  // The panel's open state is a toggle, and the request is repeated until the
+  // filter shows: `expandingRef` makes sure a second request landing before the
+  // re-render does not fold the panel straight back.
+  const expandingRef = useRef(false);
+  useEffect(() => {
+    if (!collapsed) expandingRef.current = false;
+  }, [collapsed]);
+  useRevealComponent((index) => {
+    if (!components.some((m) => m.index === index)) return;
+    if (collapsed && onToggleCollapsed && !expandingRef.current) {
+      expandingRef.current = true;
+      onToggleCollapsed();
+    }
+    if (search && !visibleComponents.some((m) => m.index === index)) setSearch('');
+    const keys: string[] = [];
+    for (const s of sectionInteractiveComponents(components, filterSections, false)) {
+      const group = s.groups.find((g) => g.members.some((m) => m.index === index));
+      if (!group) continue;
+      if (s.sectionName) keys.push(s.key);
+      if (group.groupName) keys.push(group.key);
+    }
+    collapse.setAll(keys, false);
+  });
 
   // A search narrows `groups` to the matches, so the grid only knows about
   // those rows. Persisting that layout would drop every filtered-out

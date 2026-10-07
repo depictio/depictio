@@ -305,6 +305,10 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   return (
     <div
       ref={fullscreenRef as React.RefObject<HTMLDivElement>}
+      // Finds the component on the page by its index, wherever it is drawn —
+      // a grid tile, the filter panel, a filter bar, a section pinned from
+      // another tab. The dashboard search scrolls to and rings what this marks.
+      data-component-index={metadata.index}
       className={
         'depictio-component-chrome' +
         (isFullscreenActive ? ' fullscreen-active' : '') +

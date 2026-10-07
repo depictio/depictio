@@ -816,6 +816,33 @@ export type { TelemetryConfig } from './telemetry';
 
 export { COMPONENT_TYPE_VISUALS, componentTypeVisual } from './componentTypeMeta';
 export type { ComponentTypeVisual } from './componentTypeMeta';
+
+// Dashboard search: the index and ranking behind the apps' Cmd/Ctrl+K palette,
+// and the request a surface answers by unfolding what hides a component.
+export {
+  boundColumns,
+  buildSpotlightIndex,
+  componentKindLabel,
+  componentTitle,
+  groupSpotlightHits,
+  searchSpotlight,
+  stripMarkdown,
+  SPOTLIGHT_PER_TAB,
+} from './spotlight';
+export type {
+  SpotlightEntry,
+  SpotlightGroup,
+  SpotlightHit,
+  SpotlightSnippet,
+  SpotlightTab,
+  TextRange,
+} from './spotlight';
+export {
+  REVEAL_COMPONENT_EVENT,
+  requestRevealComponent,
+  useRevealComponent,
+} from './reveal';
+export type { RevealComponentDetail } from './reveal';
 export { brandColors } from './brandColors';
 export { catalogToolUrl } from './catalogLinks';
 

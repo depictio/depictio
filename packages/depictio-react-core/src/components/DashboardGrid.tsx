@@ -29,6 +29,7 @@ import { collapsedSectionKeys, sectionComponents } from '../utils/groupInteracti
 import type { ComponentSection } from '../utils/groupInteractive';
 import { extractLayoutItems, stripBoxPrefix } from '../utils/leftPanelLayout';
 import { useCollapseState } from '../hooks/useCollapseState';
+import { useRevealComponent } from '../reveal';
 import { sectionColorVar } from './SectionIcon';
 import {
   applyAccordionValue,
@@ -464,6 +465,17 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openSectionKeys.join(' ')]);
+
+  // The dashboard search, asking for a component in a folded section: open it,
+  // as a click on its header would, and the effect above mounts its grid. A
+  // plain section never folds and a filter bar has no fold, so neither has
+  // anything to open.
+  useRevealComponent((index) => {
+    const section = sections.find((s) => s.members.some((m) => m.index === index));
+    if (!section?.sectionName) return;
+    if (section.spec?.appearance === 'plain' || isStripSection(section.spec)) return;
+    if (!sectionCollapse.isOpen(section.key)) sectionCollapse.setAll([section.key], false);
+  });
 
   // The inset probe is a section's grid, so the first measurement can only
   // happen once one has rendered — and again whenever the set of them changes,

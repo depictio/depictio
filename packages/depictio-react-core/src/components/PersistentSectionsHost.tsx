@@ -14,6 +14,7 @@ import type { GroupRenderState } from '../selectionGroups';
 import { bulkComputeCards } from '../api';
 import { countActiveFilters } from '../activeFilters';
 import { useCollapseState } from '../hooks/useCollapseState';
+import { useRevealComponent } from '../reveal';
 import {
   applyAccordionValue,
   SectionAccordion,
@@ -136,6 +137,15 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
     `grid-section-collapsed:${familyId ?? 'family'}:persistent:${slot}`,
     collapsedByDefault,
   );
+
+  // The dashboard search, asking for a component a sibling tab pins here: open
+  // its section, as DashboardGrid does for the tab's own.
+  useRevealComponent((index) => {
+    const hit = renderable.find((s) => s.members.some((c) => c.metadata.index === index));
+    if (!hit) return;
+    const key = hostSectionKey(hit.section);
+    if (!collapse.isOpen(key)) collapse.setAll([key], false);
+  });
 
   // Same lazy-mount rule as DashboardGrid: a section that has never been opened
   // renders no grid at all, so a folded-by-default metadata table doesn't fetch
