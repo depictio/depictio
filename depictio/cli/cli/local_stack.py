@@ -339,9 +339,7 @@ class State:
             logger.debug("No %s: nothing recorded", paths.state)
             return None
         try:
-            saved = json.loads(paths.state.read_text())
-            if not isinstance(saved, dict):
-                raise ValueError("not a JSON object")
+            saved = _read_json_object(paths.state)
             known = {f.name for f in fields(cls)}
             state = cls(**{k: v for k, v in saved.items() if k in known})
             for name in ("ports", "pids"):
@@ -380,6 +378,14 @@ def _file_error(exc: BaseException) -> str:
     return str(exc) or type(exc).__name__
 
 
+def _read_json_object(path: Path) -> dict:
+    """The JSON object in ``path``; OSError or ValueError (for _file_error) otherwise."""
+    value = json.loads(path.read_text())
+    if not isinstance(value, dict):
+        raise ValueError("not a JSON object")
+    return value
+
+
 def write_private_file(path: Path, text: str) -> None:
     """Write ``text`` to ``path``. A new file is created owner-only rather than
     chmod-ed afterwards, so it is never readable by others."""
@@ -416,9 +422,7 @@ def load_secrets(paths: Paths, create: bool = True) -> dict:
     if paths.secrets.exists():
         logger.debug("Reading the passwords from %s", paths.secrets)
         try:
-            values = json.loads(paths.secrets.read_text())
-            if not isinstance(values, dict):
-                raise ValueError("not a JSON object")
+            values = _read_json_object(paths.secrets)
             missing = [k for k in ("s3_password", "admin_password") if not values.get(k)]
             if missing:
                 raise ValueError(f"no {' or '.join(missing)}")
@@ -515,9 +519,7 @@ def load_ports(paths: Paths) -> dict[str, int]:
         logger.debug("No %s: preferring the default ports %s", paths.ports, DEFAULT_PORTS)
         return {}
     try:
-        saved = json.loads(paths.ports.read_text())
-        if not isinstance(saved, dict):
-            raise ValueError("not a JSON object")
+        saved = _read_json_object(paths.ports)
     except (OSError, ValueError) as exc:
         raise LocalStackError(
             f"{paths.ports} is unreadable ({_file_error(exc)}). Delete it: depictio local up "
@@ -1069,14 +1071,24 @@ def read_cli_config(paths: Paths) -> dict:
     return config
 
 
+def _write_cli_config(paths: Paths, config: dict) -> None:
+    """Write the CLI configuration owner-only, replaced in one step, so a CLI reading
+    it meanwhile never sees half a file."""
+    import yaml
+
+    write_file_atomic(
+        paths.cli_config,
+        yaml.safe_dump(config, default_flow_style=False, sort_keys=False),
+        mode=0o600,
+    )
+
+
 def sync_cli_config(paths: Paths, ports: dict[str, int]) -> bool:
     """Point the CLI configuration at this run's API and S3 ports; keep it owner-only.
 
     The API writes it only when it creates the admin token, on the first run, so
     after a port change it still names the old ports. Returns whether it changed.
     """
-    import yaml
-
     config = read_cli_config(paths)
     s3 = config.setdefault("s3_storage", {})
     url = f"http://127.0.0.1:{ports['api']}"
@@ -1094,12 +1106,7 @@ def sync_cli_config(paths: Paths, ports: dict[str, int]) -> bool:
     if changed:
         config["api_base_url"] = url
         s3["service_port"] = s3["external_port"] = ports["s3"]
-        # Replaced in one step, so a CLI reading it meanwhile never sees half a file.
-        write_file_atomic(
-            paths.cli_config,
-            yaml.safe_dump(config, default_flow_style=False, sort_keys=False),
-            mode=0o600,
-        )
+        _write_cli_config(paths, config)
     paths.cli_config.chmod(0o600)
     return changed
 
@@ -1134,8 +1141,6 @@ def rebuild_cli_config(paths: Paths, api_port: int, secret_values: dict, warn=pr
     have the API generate the configuration for it. Then the tokens earlier rebuilds
     created are revoked; ``warn`` names those that could not be.
     """
-    import yaml
-
     logger.info("No %s: writing it again through the API", paths.cli_config)
     auth = f"http://127.0.0.1:{api_port}/depictio/api/v1/auth"
     name = f"depictio-local-{time.strftime('%Y%m%d%H%M%S')}"
@@ -1169,21 +1174,18 @@ def rebuild_cli_config(paths: Paths, api_port: int, secret_values: dict, warn=pr
             f"{paths.cli_config} is missing and the API could not write it again "
             f"({_probe_error(exc)}). See {paths.logs / 'api.log'}"
         ) from exc
-    write_file_atomic(
-        paths.cli_config,
-        yaml.safe_dump(config, default_flow_style=False, sort_keys=False),
-        mode=0o600,
-    )
+    _write_cli_config(paths, config)
     logger.info("Wrote %s again", paths.cli_config)
     left = _revoke_rebuilt_tokens(auth, session["access_token"], name, _token_id(token))
-    if left != 0:
-        page = f"http://127.0.0.1:{api_port}/cli-agents"
+    page = f"http://127.0.0.1:{api_port}/cli-agents"
+    if left is None:
+        warn(f"Could not list the earlier depictio-local tokens, which stay valid: see {page}")
+    elif left:
+        plural = left > 1
         warn(
-            f"Could not list the earlier depictio-local tokens, which stay valid: see {page}"
-            if left is None
-            else f"{left} earlier depictio-local token{'s' if left > 1 else ''} could not be "
-            f"revoked and stay{'' if left > 1 else 's'} valid: delete "
-            f"{'them' if left > 1 else 'it'} on {page}"
+            f"{left} earlier depictio-local token{'s' if plural else ''} could not be "
+            f"revoked and stay{'' if plural else 's'} valid: delete "
+            f"{'them' if plural else 'it'} on {page}"
         )
 
 
@@ -1218,19 +1220,18 @@ def _revoke_rebuilt_tokens(auth: str, session: str, kept_name: str, kept_id: str
     ]
     left = 0
     for t in earlier:
+        token_id = _token_id(t)
         try:
-            if not _token_id(t):
+            if not token_id:
                 raise ValueError("no id in the token list")
             _api_call(
-                f"{auth}/me/tokens/{urllib.parse.quote(_token_id(t))}",
-                token=session,
-                method="DELETE",
+                f"{auth}/me/tokens/{urllib.parse.quote(token_id)}", token=session, method="DELETE"
             )
-            logger.debug("Revoked the earlier token %s (%s)", t["name"], _token_id(t))
+            logger.debug("Revoked the earlier token %s (%s)", t["name"], token_id)
         except (OSError, ValueError) as exc:
             left += 1
             logger.debug(
-                "Revoking the token %s (%s) failed: %s", t["name"], _token_id(t), _probe_error(exc)
+                "Revoking the token %s (%s) failed: %s", t["name"], token_id, _probe_error(exc)
             )
     logger.info("Revoked %d of %d earlier depictio-local tokens", len(earlier) - left, len(earlier))
     return left

@@ -745,15 +745,11 @@ def scan_files_for_workflow(
     # the loop made a multi-location workflow delete the runs of the locations not
     # yet scanned (they were then re-created with fresh ids, losing scan_results).
     if rescan_folders:
-        missing_runs_tag = (set(existing_runs_reformated) | set(gone_run_ids)) - {
-            run.run_tag for run in all_workflow_runs if run
-        }
-        missing_runs = [
-            gone_run_ids[run_tag]
-            if run_tag in gone_run_ids
-            else str(existing_runs_reformated[run_tag].id)
-            for run_tag in missing_runs_tag
-        ]
+        run_ids = {
+            run_tag: str(run.id) for run_tag, run in existing_runs_reformated.items()
+        } | gone_run_ids
+        missing_runs_tag = set(run_ids) - {run.run_tag for run in all_workflow_runs if run}
+        missing_runs = [run_ids[run_tag] for run_tag in missing_runs_tag]
 
         if missing_runs:
             logger.info(f"Runs to remove: {missing_runs}")

@@ -400,6 +400,8 @@ def read_depictio_config(yaml_config_path: str = "~/.depictio/CLI.yaml") -> CLIC
 
 # Where the local server and the services `depictio local up` starts listen.
 _LOOPBACK_HOSTS = ("127.0.0.1", "localhost")
+# Every name a URL may give this machine: the above, and IPv6's.
+_LOOPBACK_NAMES = (*_LOOPBACK_HOSTS, "::1")
 _PROXY_VARS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy")
 
 
@@ -411,7 +413,7 @@ def _bypass_proxy_for_loopback(api_base_url: str) -> None:
     machine's loopback, so every call would fail. Set before the first request,
     since an HTTP client reads these variables when it is created.
     """
-    if urlparse(api_base_url).hostname not in (*_LOOPBACK_HOSTS, "::1"):
+    if urlparse(api_base_url).hostname not in _LOOPBACK_NAMES:
         return
     if not any(os.environ.get(var) for var in _PROXY_VARS):
         return
@@ -425,8 +427,11 @@ def _bypass_proxy_for_loopback(api_base_url: str) -> None:
 def _same_loopback_server(url: str, other: str) -> bool:
     """Whether two URLs reach the same port of this machine, however they name it."""
     first, second = urlparse(url), urlparse(other)
-    loopback = (*_LOOPBACK_HOSTS, "::1")
-    return first.hostname in loopback and second.hostname in loopback and first.port == second.port
+    return (
+        first.hostname in _LOOPBACK_NAMES
+        and second.hostname in _LOOPBACK_NAMES
+        and first.port == second.port
+    )
 
 
 def _warn_local_server_running(yaml_config_path: str, api_base_url: str, option: str) -> None:
@@ -436,8 +441,10 @@ def _warn_local_server_running(yaml_config_path: str, api_base_url: str, option:
     Once per command, like that line.
     """
     local_url = local_server_running_instead(yaml_config_path, api_base_url)
+    if not local_url:
+        return
     warning = f"A local server is running too ({local_url}): add {option} local to use it"
-    if local_url and warning not in _announced:
+    if warning not in _announced:
         _announced.add(warning)
         rich_print_checked_statement(warning, "warning")
 

@@ -1945,30 +1945,24 @@ def register_run_command(app: typer.Typer):
                     if failed:
                         raise Exception(f"{len(failed)} dashboard(s) failed to import")
 
+                if reset_dashboards:
+                    existing = " over those the project has"
+                elif update_config:
+                    existing = ", keeping those the project already has"
+                else:
+                    existing = ""
                 _step_done(
                     "Dashboard import completed",
-                    f"Would import {len(template_dashboard_paths)} dashboard(s)"
-                    + (
-                        " over those the project has"
-                        if reset_dashboards
-                        else ", keeping those the project already has"
-                        if update_config
-                        else ""
-                    ),
+                    f"Would import {len(template_dashboard_paths)} dashboard(s){existing}",
                 )
                 success_count += 1
-                # `imported`/`failed` are only bound in the non-dry-run branch above.
+                # `imported` is only bound in the non-dry-run branch above, and a
+                # failed import raised there, so none failed here.
                 _imp = locals().get("imported") or []
-                _fld = locals().get("failed") or []
-                _done = [sum(r.get("status") == s for r in _imp) for s in DASHBOARD_STATUSES]
-                _rec(
-                    "dashboard_import",
-                    "success",
-                    " / ".join(
-                        f"{n} {status}" for n, status in zip(_done, DASHBOARD_STATUSES, strict=True)
-                    )
-                    + f" / {len(_fld)} failed",
-                )
+                _counts = [
+                    f"{sum(r.get('status') == s for r in _imp)} {s}" for s in DASHBOARD_STATUSES
+                ]
+                _rec("dashboard_import", "success", " / ".join(_counts) + " / 0 failed")
             except Exception as e:
                 rich_print_checked_statement(f"Dashboard import failed: {escape(str(e))}", "error")
                 _rec("dashboard_import", "failed", str(e))

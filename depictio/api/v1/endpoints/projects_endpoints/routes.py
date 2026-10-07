@@ -321,10 +321,8 @@ async def create_project(project: Project, current_user=Depends(get_user_or_anon
             "status_code": 403,
         }
 
-    # Two lookups, each answering 404 when its value is free. They used to share
-    # one try, so a free name raised before the id was ever checked; and the id
-    # lookup took `current_user` positionally, as `skip_enrichment`, so a taken
-    # name failed with a 500 instead of this 409.
+    # One `_project_exists` per lookup, so a free name (its 404) does not skip the id
+    # check. By keyword: get_project_from_id's second parameter is `skip_enrichment`.
     try:
         name_taken = await _project_exists(
             get_project_from_name(project_name=project.name, current_user=current_user)

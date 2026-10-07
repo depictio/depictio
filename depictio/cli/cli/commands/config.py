@@ -364,17 +364,18 @@ def check(
         # load_depictio_config said what is wrong with the configuration, and the S3
         # check reads the same file: nothing else to report.
         raise
-    except Exception as e:
+    except httpx.HTTPError as e:
         # This is the command the docs tell you to run before trusting a long
         # pipeline to the trigger, so a bare "Connection refused" is the one
         # answer it must not give: it says nothing about which instance was
         # tried, which is the thing that is usually wrong.
-        if isinstance(e, httpx.HTTPError):
-            report_unreachable(config_path, e)
-        else:
-            rich_print_checked_statement(f"Unable to access server - {e}", "error")
-            rich_print_checked_statement(f"Tried {describe_api_target(config_path)}", "info")
-            say_local_server_running(config_path)
+        report_unreachable(config_path, e)
+        failed = True
+    except Exception as e:
+        # Any other failure names the instance tried too.
+        rich_print_checked_statement(f"Unable to access server - {e}", "error")
+        rich_print_checked_statement(f"Tried {describe_api_target(config_path)}", "info")
+        say_local_server_running(config_path)
         failed = True
     else:
         # The verdict only: the result embeds the configuration, access token included.
