@@ -1516,6 +1516,124 @@ def viewer_built() -> bool:
     return built
 
 
+# What `pnpm run build` in depictio/viewer compiles: the viewer, and the two workspace
+# packages its vite.config.ts aliases to their sources. Paths are workspace-relative.
+VIEWER_SOURCES = (
+    "pnpm-lock.yaml",
+    "depictio/viewer",
+    "packages/depictio-components/src",
+    "packages/depictio-react-core/src",
+)
+# Not sources: dependencies, build output, and src/generated, which the build writes.
+_NOT_VIEWER_SOURCES = {"node_modules", "dist", "generated"}
+VIEWER_BUILD_TIMEOUT = 20 * 60
+
+
+def viewer_workspace() -> Path | None:
+    """The pnpm workspace depictio runs from, or None when it is installed from a wheel.
+
+    A wheel carries the viewer bundle built. A source checkout (an editable install)
+    has to build it: depictio/viewer/dist is not committed.
+    """
+    root = package_root()
+    if root is None or not (root / "viewer" / "src").is_dir():
+        return None
+    workspace = root.parent
+    return workspace if (workspace / "pnpm-workspace.yaml").is_file() else None
+
+
+def _viewer_source_files(workspace: Path) -> Iterator[Path]:
+    for name in VIEWER_SOURCES:
+        top = workspace / name
+        if top.is_file():
+            yield top
+        for folder, dirs, files in os.walk(top):
+            dirs[:] = [d for d in dirs if d not in _NOT_VIEWER_SOURCES and not d.startswith(".")]
+            # Dot files (.DS_Store, editor state) and logs change without the sources.
+            yield from (
+                Path(folder, f) for f in files if not f.startswith(".") and not f.endswith(".log")
+            )
+
+
+def viewer_outdated(workspace: Path) -> str | None:
+    """Why the viewer bundle of ``workspace`` needs building, None when it is up to date:
+    it was never built, or a source changed since (an edit, a pull, a branch switch)."""
+    index = workspace / "depictio" / "viewer" / "dist" / "index.html"
+    try:
+        built_at = index.stat().st_mtime
+    except OSError:
+        return "not built yet"
+    for source in _viewer_source_files(workspace):
+        try:
+            changed = source.stat().st_mtime > built_at
+        except OSError:
+            continue
+        if changed:
+            logger.debug("Viewer bundle %s is older than %s", index, source)
+            return f"{source.relative_to(workspace)} changed since the last build"
+    logger.debug("Viewer bundle %s is up to date", index)
+    return None
+
+
+def build_viewer(workspace: Path, log_path: Path) -> None:
+    """Build the viewer bundle of ``workspace`` as a release does: `pnpm install`, then
+    `pnpm run build` in depictio/viewer. Their output goes to ``log_path``.
+
+    Raises LocalStackError when pnpm is missing, or a step fails or takes too long.
+    """
+    pnpm = shutil.which("pnpm")
+    if pnpm is None:
+        raise LocalStackError(
+            "pnpm is not installed, so the viewer cannot be built. Install Node.js 20 or "
+            "later, run corepack enable pnpm, then depictio local up again"
+        )
+    # As in publish-pypi.yaml: no sourcemaps, and room for the plotly chunk.
+    env = {
+        **os.environ,
+        "VITE_NO_SOURCEMAP": "true",
+        "NODE_OPTIONS": " ".join(
+            filter(None, (os.environ.get("NODE_OPTIONS"), "--max-old-space-size=4096"))
+        ),
+    }
+    steps = [
+        ([pnpm, "install", "--frozen-lockfile"], workspace),
+        ([pnpm, "run", "build"], workspace / "depictio" / "viewer"),
+    ]
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "w", encoding="utf-8") as log:
+        for cmd, cwd in steps:
+            step = shlex.join(["pnpm", *cmd[1:]])
+            logger.debug("Building the viewer: %s in %s, output in %s", step, cwd, log_path)
+            log.write(f"$ {step}  (in {cwd})\n")
+            log.flush()
+            # Its own session, as the services: stopping it stops what pnpm runs (node,
+            # vite) too.
+            proc = subprocess.Popen(
+                cmd,
+                cwd=cwd,
+                env=env,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                stdin=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            try:
+                code = proc.wait(timeout=VIEWER_BUILD_TIMEOUT)
+            except BaseException as exc:
+                # Ctrl-C does not reach another session: stop it here, whatever the cause.
+                terminate_group(proc.pid, timeout=5, alive=lambda p=proc: p.poll() is None)
+                with contextlib.suppress(subprocess.TimeoutExpired):
+                    proc.wait(timeout=5)
+                if isinstance(exc, subprocess.TimeoutExpired):
+                    raise LocalStackError(
+                        f"{step} did not finish in {VIEWER_BUILD_TIMEOUT // 60} minutes "
+                        f"(see {log_path})"
+                    ) from exc
+                raise
+            if code != 0:
+                raise LocalStackError(f"{step} failed (exit {code}, see {log_path})")
+
+
 def seed_screenshots(paths: Paths) -> None:
     """Copy the thumbnails shipped for the reference dashboards, once."""
     root = package_root()

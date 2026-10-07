@@ -42,6 +42,9 @@ def stack(tmp_path, monkeypatch):
     }
     fake.process_start_time.return_value = 123.0
     fake.viewer_built.return_value = True
+    # An installed wheel, so `up` never builds the viewer of the checkout running the tests.
+    fake.viewer_workspace.return_value = None
+    fake.viewer_outdated.return_value = None
     fake.api_responds.return_value = True
     fake.api_healthy.return_value = True
     # What the home holds: None for the examples this run seeds, all of them ready.
@@ -60,6 +63,9 @@ def stack(tmp_path, monkeypatch):
         "check_platform_supported",
         "check_server_installed",
         "viewer_built",
+        "viewer_workspace",
+        "viewer_outdated",
+        "build_viewer",
         "running_status",
         "stop_all",
         "webbrowser",
@@ -717,3 +723,83 @@ def test_up_with_an_unreadable_state_starts_again(stack):
 
     assert result.exit_code == 0, out
     stack.start_services.assert_called_once()
+
+
+# The viewer bundle: built by `up` from a source checkout, carried by a wheel.
+
+
+@pytest.fixture
+def checkout(stack, tmp_path):
+    """`up` run from a source checkout whose viewer bundle is out of date."""
+    stack.viewer_workspace.return_value = tmp_path / "repo"
+    stack.viewer_outdated.return_value = "depictio/viewer/src/main.tsx changed since the last build"
+    return stack
+
+
+def test_up_builds_an_outdated_viewer_before_starting(checkout):
+    order = []
+    checkout.build_viewer.side_effect = lambda *a: order.append("build")
+    checkout.start_services.side_effect = lambda *a, **k: (
+        order.append("start") or {name: _Proc(100_000 + i) for i, name in enumerate(PROCESS_ORDER)}
+    )
+
+    result, out = _invoke("up", "--no-open")
+
+    assert result.exit_code == 0, out
+    checkout.build_viewer.assert_called_once_with(
+        checkout.viewer_workspace.return_value, checkout.paths.logs / "viewer-build.log"
+    )
+    # The API reads the bundle when it starts: built first.
+    assert order == ["build", "start"]
+    assert "Building the viewer bundle (depictio/viewer/src/main.tsx changed" in out
+    assert "Built the viewer bundle" in out
+
+
+def test_up_leaves_an_up_to_date_viewer_alone(checkout):
+    checkout.viewer_outdated.return_value = None
+
+    result, out = _invoke("up", "--no-open")
+
+    assert result.exit_code == 0, out
+    checkout.build_viewer.assert_not_called()
+    assert "viewer" not in out.lower()
+
+
+@pytest.mark.parametrize(
+    ("built", "left"),
+    [(True, "with the previous bundle"), (False, "without a viewer, so dashboards will not")],
+)
+def test_a_failed_viewer_build_does_not_stop_the_start(checkout, built, left):
+    checkout.build_viewer.side_effect = LocalStackError("pnpm run build failed (exit 2, see x)")
+    checkout.viewer_built.return_value = built
+
+    result, out = _invoke("up", "--no-open")
+
+    assert result.exit_code == 0, out
+    assert f"pnpm run build failed (exit 2, see x). The server starts {left}" in out
+    assert "Depictio is ready" in out
+
+
+def test_up_does_not_rebuild_the_viewer_under_a_running_server(checkout):
+    _invoke("up", "--no-open")
+    checkout.build_viewer.reset_mock()
+    checkout.running_status.return_value = dict.fromkeys(PROCESS_ORDER, True)
+
+    result, out = _invoke("up", "--no-open")
+
+    assert result.exit_code == 0, out
+    checkout.build_viewer.assert_not_called()
+    assert (
+        "The viewer bundle is out of date (depictio/viewer/src/main.tsx changed since the last "
+        "build): depictio local down, then depictio local up, rebuilds it"
+    ) in out
+
+
+def test_a_wheel_without_the_viewer_bundle_says_so(stack):
+    stack.viewer_built.return_value = False
+
+    result, out = _invoke("up", "--no-open")
+
+    assert result.exit_code == 0, out
+    stack.build_viewer.assert_not_called()
+    assert "This installation has no viewer bundle, so dashboards will not render" in out

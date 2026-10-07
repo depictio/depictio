@@ -24,6 +24,7 @@ from depictio.cli.cli.local_stack import (
     StateUnreadable,
     api_healthy,
     api_responds,
+    build_viewer,
     check_platform_supported,
     check_server_installed,
     claim_home,
@@ -42,6 +43,8 @@ from depictio.cli.cli.local_stack import (
     stop_all,
     sync_cli_config,
     viewer_built,
+    viewer_outdated,
+    viewer_workspace,
     wait_for_examples,
 )
 from depictio.cli.cli.utils.renamed import note_if_called_as
@@ -261,6 +264,48 @@ def _restore_cli_config(paths: Paths, state: State) -> None:
     _info(f"Wrote {paths.cli_config} again")
 
 
+def _prepare_viewer(paths: Paths, running: bool) -> None:
+    """Build the viewer bundle when a source checkout's is missing or older than its
+    sources; a wheel carries it built.
+
+    The API loads the bundle when it starts, so for a server already ``running`` this
+    only says how to pick up a newer one. A failed build does not stop the start.
+    """
+    workspace = viewer_workspace()
+    if workspace is None:
+        if not viewer_built():
+            _warn(
+                "This installation has no viewer bundle, so dashboards will not render: "
+                "install depictio[local] from PyPI, whose wheel carries it"
+            )
+        return
+    reason = viewer_outdated(workspace)
+    if reason is None:
+        return
+    if running:
+        _warn(
+            f"The viewer bundle is out of date ({reason}): depictio local down, then "
+            "depictio local up, rebuilds it"
+        )
+        return
+    log_path = paths.logs / "viewer-build.log"
+    try:
+        with _spinner(f"Building the viewer bundle ({reason})", announce=True):
+            build_viewer(workspace, log_path)
+    except LocalStackError as exc:
+        left = (
+            "with the previous bundle"
+            if viewer_built()
+            else "without a viewer, so dashboards will not render"
+        )
+        _warn(
+            f"{exc}. The server starts {left}; once that is fixed, depictio local down, "
+            "then depictio local up, builds it"
+        )
+        return
+    _info(f"Built the viewer bundle (output in {log_path})")
+
+
 def _start_or_reuse(paths: Paths, port: int | None, seed: str, screenshots: bool | None) -> State:
     """The server already running, else a new one; exits 1 on failure, and 130 on
     Ctrl-C (128 + the signal for SIGTERM and SIGHUP).
@@ -273,11 +318,6 @@ def _start_or_reuse(paths: Paths, port: int | None, seed: str, screenshots: bool
     try:
         check_platform_supported()
         check_server_installed()
-        if not viewer_built():
-            _warn(
-                "The viewer bundle (depictio/viewer/dist) is not built: the API will run but "
-                "dashboards will not render. Build it with: cd depictio/viewer && pnpm run build"
-            )
         try:
             state = State.load(paths)
         except StateUnreadable:
@@ -293,12 +333,14 @@ def _start_or_reuse(paths: Paths, port: int | None, seed: str, screenshots: bool
                 )
             _info(f"Depictio is already running at {state.url}")
             _warn_ignored_flags(state, port, screenshots)
+            _prepare_viewer(paths, running=True)
             _restore_cli_config(paths, state)
             return state
         stopped = [name for name, alive in running.items() if not alive]
         if any(running.values()):
             verb = "is" if len(stopped) == 1 else "are"
             _info(f"{_join(stopped)} {verb} not running: restarting the server")
+        _prepare_viewer(paths, running=False)
         starting = True
         # No spinner with --screenshots: the Chromium installer draws its own progress.
         spinner = contextlib.nullcontext() if screenshots else _spinner("Starting the local server")
@@ -437,6 +479,9 @@ def up(
     variables: Annotated[list[str] | None, typer.Option("--var", hidden=True)] = None,
 ):
     """Start MongoDB, Redis, SeaweedFS, the API and the worker on this machine.
+
+    Run from a source checkout, it first builds the viewer when its sources changed
+    since the last build (this needs pnpm).
 
     Then add data with: depictio ingest --server local --template <template> --data-root <dir>
     """
