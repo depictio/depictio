@@ -38,7 +38,8 @@ import { computeLayout, descendants, type Layout } from './phylo/layout';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { pruneToTips } from './phylo/prune';
 import { cladeExtent, collapseNodes } from './phylo/collapse';
-import { PHYLO_PALETTE } from './phylo/palette';
+import { PHYLO_PALETTE, pinnedPalette } from './phylo/palette';
+import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import type { PhylogeneticConfig } from './phylo/config';
 import PhyloSummaryRenderer from './PhyloSummaryRenderer';
 import PhyloViewSwitch from './PhyloViewSwitch';
@@ -184,6 +185,15 @@ const PhyloTreeRenderer: React.FC<Props & { view: PhyloView }> = ({
   // by this popover: routed through the Tier-2 channel it would be classified
   // role-derived and silently dropped on the way to the saved config.
   const [colorCol, setColorCol] = useState<string | null>(config.color_col ?? null);
+  // The builder can bind (or rebind) the colour role while this preview stays
+  // mounted, and the state above only read it on mount: the tree stayed one
+  // colour after "color → Kingdom". Follow the binding when it changes, during
+  // render rather than in an effect so no frame is drawn with the stale one.
+  const [boundColorCol, setBoundColorCol] = useState<string | null>(config.color_col ?? null);
+  if ((config.color_col ?? null) !== boundColorCol) {
+    setBoundColorCol(config.color_col ?? null);
+    setColorCol(config.color_col ?? null);
+  }
   const [highlightedRootId, setHighlightedRootId] = useState<number | null>(null);
   // Zoom/pan is off by default: Plotly's drag-to-zoom-box steals every drag
   // and there was no way back except double-click. Toggled on, drag pans and
@@ -369,6 +379,7 @@ const PhyloTreeRenderer: React.FC<Props & { view: PhyloView }> = ({
     [tipMeta],
   );
 
+  const categorySource = useCategoryColorSource();
   const scaleForColumn = useMemo(() => {
     const cache = new Map<string, StableColorMap>();
     return (col: string): StableColorMap => {
@@ -383,12 +394,12 @@ const PhyloTreeRenderer: React.FC<Props & { view: PhyloView }> = ({
       const built = stableColorMap(
         col === colorCol && colorUniverse ? colorUniverse : universe,
         palette,
-        (config.category_palettes || {})[col] || null,
+        pinnedPalette(categorySource, config.category_palettes, col),
       );
       cache.set(col, built);
       return built;
     };
-  }, [tree, valueAt, colorCol, colorUniverse, palette, config.category_palettes]);
+  }, [tree, valueAt, colorCol, colorUniverse, palette, categorySource, config.category_palettes]);
 
   const tipColors = useMemo<{ colorByTip: Map<string, string> }>(() => {
     const colorByTip = new Map<string, string>();

@@ -21,6 +21,7 @@ import {
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap } from '../../colors';
 import { sortCategoryValues } from '../../categoryColors';
+import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import { filtersExcludingOwn } from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import PhyloViewSwitch from './PhyloViewSwitch';
@@ -28,7 +29,7 @@ import { usePersistedVizControl } from './usePersistedVizControl';
 import type { PhylogeneticConfig } from './phylo/config';
 import type { PhyloView } from './phylo/view';
 import { parseNewick, type PhyloTree } from './phylo/newick';
-import { PHYLO_PALETTE } from './phylo/palette';
+import { PHYLO_PALETTE, pinnedPalette } from './phylo/palette';
 import { pruneToTips } from './phylo/prune';
 import {
   aggregateAbundance,
@@ -52,7 +53,8 @@ import {
  * abundance table is bound, a strip of dots giving the same share within each
  * value of `abundance_split_col` (a site). The strip's dots keep the row's
  * colour (colour says which lineage, size says how much) unless the split
- * column has a palette in `category_palettes`: then each column wears its
+ * column has a palette, in `category_palettes` or in the dashboard's
+ * `category_colors`: then each column wears its
  * site's colour, the colour that site has on every other tile, and the
  * lineage's colour stays on its branch, its own dot and its name.
  *
@@ -343,14 +345,15 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   }, [scopedTree, tipInfo, topN, config.ladderize, abundance]);
 
   // ---- Colours ---------------------------------------------------------------
+  const categorySource = useCategoryColorSource();
+  const pinnedFor = useCallback(
+    (col: string | null) => pinnedPalette(categorySource, config.category_palettes, col),
+    [categorySource, config.category_palettes],
+  );
   const colourScale = useMemo(() => {
     const seen = colourUniverse ?? Array.from(new Set(tipInfo.colour.values())).filter(Boolean);
-    return stableColorMap(
-      seen as string[],
-      palette,
-      colorCol ? (config.category_palettes || {})[colorCol] || null : null,
-    );
-  }, [colourUniverse, tipInfo, palette, colorCol, config.category_palettes]);
+    return stableColorMap(seen as string[], palette, pinnedFor(colorCol));
+  }, [colourUniverse, tipInfo, palette, colorCol, pinnedFor]);
   // The palette's darker hues (a navy, say) vanish as small dots on a dark
   // card; lift them a little there, legend included, so the tile stays legible.
   const tint = (c: string) => (isDark ? lighten(c, 0.22) : c);
@@ -358,7 +361,7 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     tint(colorCol && g.colourValue ? colourScale.get(g.colourValue) : palette[0]);
 
   // A palette for the split column (the cities, say) colours its columns.
-  const splitPalette = splitCol ? (config.category_palettes || {})[splitCol] || null : null;
+  const splitPalette = pinnedFor(splitCol);
   const splitColour = (s: string, rowColour: string): string =>
     splitPalette?.[s] ? tint(splitPalette[s]) : rowColour;
 
