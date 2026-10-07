@@ -56,3 +56,21 @@ export interface ControlsDockState {
 }
 
 export const ControlsDockContext = createContext<ControlsDockState | null>(null);
+
+/** How many controls a docked panel shows before "More options". */
+export const DOCK_ESSENTIALS = 3;
+
+/**
+ * Which of a panel's controls show before "More options": the first `max`
+ * that do something now, in the order the renderer lists them (most important
+ * first). A control that is disabled or a toggle that is off is not one of
+ * them, nor is a line of text; they wait under "More options" with the rest.
+ */
+export function pickEssentials(live: readonly boolean[], max = DOCK_ESSENTIALS): boolean[] {
+  let shown = 0;
+  return live.map((ok) => {
+    if (!ok || shown >= max) return false;
+    shown++;
+    return true;
+  });
+}

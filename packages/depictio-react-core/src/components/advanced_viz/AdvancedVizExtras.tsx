@@ -135,7 +135,7 @@ export const AdvancedVizSettingsPopover: React.FC<SettingsPopoverProps> = ({ con
         <Stack gap="xs" style={{ maxHeight: 'min(70vh, 560px)' }}>
           <Group justify="space-between" wrap="nowrap" gap="xs">
             <Text size="xs" fw={600} c="dimmed">
-              Viz controls
+              Controls
             </Text>
             <ActionIcon
               variant="subtle"

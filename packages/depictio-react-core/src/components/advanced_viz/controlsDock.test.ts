@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveDock } from './controlsDock';
+import { pickEssentials, resolveDock } from './controlsDock';
 
 const full = { rowShare: 1, width: 1100, showcase: false };
 const half = { rowShare: 0.5, width: 540, showcase: false };
@@ -26,5 +26,13 @@ describe('resolveDock', () => {
     expect(resolveDock('right', half)).toBe('right');
     expect(resolveDock('top', full)).toBe('top');
     expect(resolveDock('top', { rowShare: null, width: 0, showcase: true })).toBe('top');
+  });
+});
+
+describe('pickEssentials', () => {
+  it('keeps the first live controls, skipping what is off or disabled', () => {
+    expect(pickEssentials([true, false, true, true, true])).toEqual([true, false, true, true, false]);
+    expect(pickEssentials([false, false], 3)).toEqual([false, false]);
+    expect(pickEssentials([true, true], 3)).toEqual([true, true]);
   });
 });

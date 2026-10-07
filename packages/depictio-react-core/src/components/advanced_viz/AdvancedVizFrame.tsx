@@ -22,6 +22,7 @@ import { useAdvancedVizShowcase } from './advancedVizShowcase';
 import { CARD_FRAME } from '../cardFrame';
 import FigureHeader from '../FigureHeader';
 import { ControlsDockContext, resolveDock } from './controlsDock';
+import DockedControls from './DockedControls';
 import './controlsDock.css';
 
 /**
@@ -399,11 +400,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
             gap: dockSide === 'right' ? 10 : 0,
           }}
         >
-        {dockOpen && dockSide === 'top' ? (
-          <div className="dpx-viz-dock dpx-viz-dock--top" data-testid="viz-controls-dock">
-            {controls}
-          </div>
-        ) : null}
+        {dockOpen && dockSide === 'top' ? <DockedControls controls={controls} side="top" /> : null}
         <div style={{ flex: '1 1 auto', minHeight: 0, minWidth: 0, position: 'relative' }}>
           {loading ? (
             <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
@@ -431,9 +428,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           )}
         </div>
         {dockOpen && dockSide === 'right' ? (
-          <div className="dpx-viz-dock dpx-viz-dock--right" data-testid="viz-controls-dock">
-            {controls}
-          </div>
+          <DockedControls controls={controls} side="right" />
         ) : null}
         </div>
       </Paper>

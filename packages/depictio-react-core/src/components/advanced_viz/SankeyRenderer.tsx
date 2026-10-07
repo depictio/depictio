@@ -446,6 +446,7 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
 
   const controls = useMemo(
     () => (
+      // Most used first: a docked panel shows the first few (DockedControls).
       <Stack gap="xs">
         {/* Depth picker — SegmentedControl chosen over Slider because (a) the
             value set is tiny (2..available_step_cols.length, typically 2–6)
@@ -475,22 +476,6 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
         ) : null}
         <Stack gap={4}>
           <Text size="xs" fw={500}>
-            Sort nodes
-          </Text>
-          <SegmentedControl
-            size="xs"
-            fullWidth
-            value={sortMode}
-            onChange={(v) => setSortMode(v as typeof sortMode)}
-            data={[
-              { value: 'total_flow', label: 'By flow' },
-              { value: 'alphabetical', label: 'A–Z' },
-              { value: 'input', label: 'Input' },
-            ]}
-          />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
             Colour links by
           </Text>
           <SegmentedControl
@@ -502,6 +487,30 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
               { value: 'source', label: 'Lineage' },
               { value: 'target', label: 'Target' },
               { value: 'step', label: 'Step' },
+            ]}
+          />
+        </Stack>
+        <NumberInput
+          size="xs"
+          label="Min link value"
+          value={minLinkValue}
+          onChange={(v) => setMinLinkValue(Math.max(0, Number(v) || 0))}
+          min={0}
+          step={1}
+        />
+        <Stack gap={4}>
+          <Text size="xs" fw={500}>
+            Sort nodes
+          </Text>
+          <SegmentedControl
+            size="xs"
+            fullWidth
+            value={sortMode}
+            onChange={(v) => setSortMode(v as typeof sortMode)}
+            data={[
+              { value: 'total_flow', label: 'By flow' },
+              { value: 'alphabetical', label: 'A–Z' },
+              { value: 'input', label: 'Input' },
             ]}
           />
         </Stack>
@@ -519,14 +528,6 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
             label={(v) => v.toFixed(2)}
           />
         </Stack>
-        <NumberInput
-          size="xs"
-          label="Min link value"
-          value={minLinkValue}
-          onChange={(v) => setMinLinkValue(Math.max(0, Number(v) || 0))}
-          min={0}
-          step={1}
-        />
         <Stack gap={4}>
           <Text size="xs" fw={500}>
             Labels

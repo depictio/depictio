@@ -335,6 +335,7 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       const visibleEnd = Math.min(ranks.length, startRankIdx + maxDepth);
       const colourOptions = ranks.filter((_, i) => i >= startRankIdx && i < visibleEnd);
       const maxDepthAllowed = Math.max(1, ranks.length - startRankIdx);
+      // Most used first: a docked panel shows the first few (DockedControls).
       return (
       <Stack gap="xs">
         <Select
@@ -346,14 +347,6 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
           data={ranks}
           allowDeselect={false}
         />
-        <Select
-          size="xs"
-          label="Colour by rank"
-          value={ranks[colourByIdx] ?? null}
-          onChange={(v) => v != null && setColourByRank(v)}
-          data={colourOptions}
-          allowDeselect={false}
-        />
         <NumberInput
           size="xs"
           label="Max depth"
@@ -362,6 +355,14 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
           onChange={(v) => setMaxDepth(Math.max(1, Math.min(maxDepthAllowed, Number(v) || 1)))}
           min={1}
           max={maxDepthAllowed}
+        />
+        <Select
+          size="xs"
+          label="Colour by rank"
+          value={ranks[colourByIdx] ?? null}
+          onChange={(v) => v != null && setColourByRank(v)}
+          data={colourOptions}
+          allowDeselect={false}
         />
         <Select
           size="xs"
@@ -378,7 +379,7 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
         <NumberInput
           size="xs"
           label="Min arc (% of root)"
-          description="Hide slices below this share"
+          description="Fold slices below this share into Other"
           value={minPercent}
           onChange={(v) => setMinPercent(Math.max(0, Math.min(50, Number(v) || 0)))}
           min={0}
