@@ -920,13 +920,17 @@ async def create_project_from_run(
 ):
     """Create a project (and its dashboards) from a template + an ``s3://`` run folder.
 
-    The browser twin of ``depictio run --template ... --data-root s3://...``:
+    The browser twin of ``depictio ingest <run folder> --template <id>``:
     resolve the template against the run prefix, report per data collection
     what it would find there, create the project, import its dashboards, and
-    hand the ingestion itself to Celery workers — a real run folder is minutes
-    of work, far past a request. The response carries a ``run_id`` to poll via
-    ``GET /projects/refresh_manifest/{run_id}``. ``dry_run=true`` returns the
-    same per-collection plan and creates nothing.
+    hand the ingestion itself to Celery workers, since a real run folder is
+    minutes of work, far past a request. The response carries a ``run_id`` to
+    poll via ``GET /projects/refresh_manifest/{run_id}``. ``dry_run=true``
+    returns the same per-collection plan and creates nothing.
+
+    A taken project name is a 409, as on ``POST /projects/create``. A run
+    folder the server may not read, or whose read fails, answers
+    ``{detail, code}`` (``S3AccessError``).
     """
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")

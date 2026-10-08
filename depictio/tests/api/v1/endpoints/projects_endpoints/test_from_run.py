@@ -2,9 +2,11 @@
 
 Orchestration-contract tests: the data root has to be an ``s3://`` prefix this
 server is allowed to read (decided from configuration, before any request goes
-out), a resolved template may not point outside that prefix, a dry run creates
-nothing, and a real run creates the project, imports its dashboards and hands
-one Celery task per ingestable data collection to the refresh machinery.
+out, and from the inputs the workers decide from), a resolved template may not
+point outside that prefix, a dry run creates nothing, and a real run creates
+the project under a free name, imports its dashboards keyed as the CLI keys
+them and hands one Celery task per ingestable data collection to the refresh
+machinery.
 
 No network. The S3 listing is the shared CLI stub (``depictio/tests/cli/
 s3_stubs.py``): the key list handed to it *is* the bucket, so the real
@@ -13,6 +15,7 @@ AWS megatest prefix. The heavy legs (scan → Delta, dashboard tag binding) are
 covered by their own suites and patched at their seams here.
 """
 
+from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import mongomock
@@ -20,27 +23,32 @@ import pytest
 from bson import ObjectId
 from fastapi import HTTPException
 
+from depictio.api.v1 import remote_fetch
+from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.datacollections_endpoints import utils as dc_utils
-from depictio.api.v1.endpoints.projects_endpoints import from_run, manifest_ingest
-from depictio.cli.cli.utils import data_root as data_root_module
+from depictio.api.v1.endpoints.projects_endpoints import (
+    from_run,
+    manifest_ingest,
+    routes,
+    storage_config,
+)
 from depictio.models.models.users import UserBase
-from depictio.tests.cli.s3_stubs import MEGATEST_TREE, S3_BUCKET, S3_ROOT, install_s3_listing
+from depictio.models.s3_access import S3AccessFailed, S3AccessRefused, S3Target
+from depictio.tests.cli.s3_stubs import (
+    MEGATEST_TREE,
+    S3_BUCKET,
+    S3_KEY_PREFIX,
+    S3_ROOT,
+    FailingS3Client,
+    install_s3_client,
+    install_s3_listing,
+)
 
 TEMPLATE_ID = "nf-core/ampliseq/2.16.0"
 
 # Where a template that escaped its run folder could reach: the container path
 # the JWT signing key is mounted under.
 ESCAPING_LOCATION = "/app/depictio/keys/private_key.pem"
-
-# Credential env vars boto3's own chain would pick up. ``S3DataRoot`` counts
-# them as "credentials are configured for this", which is exactly what the
-# allowlist test must not have.
-_AMBIENT_AWS_ENV = (
-    "AWS_ACCESS_KEY_ID",
-    "AWS_PROFILE",
-    "AWS_ROLE_ARN",
-    "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
-)
 
 
 def _user(is_admin: bool = False) -> UserBase:
@@ -65,17 +73,31 @@ def _call(
     )
 
 
-@pytest.fixture()
-def no_ambient_credentials(monkeypatch):
-    """A server with no S3 credentials of its own, so the allowlist decides."""
-    for name in _AMBIENT_AWS_ENV:
-        monkeypatch.delenv(name, raising=False)
+@pytest.fixture(autouse=True)
+def server_context(monkeypatch):
+    """Server context, the suite's default. Importing the CLI app sets
+    ``DEPICTIO_CONTEXT=CLI`` for the whole process, and how a location is read
+    depends on it."""
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
 
 
 @pytest.fixture()
-def allowlisted_bucket(monkeypatch, no_ambient_credentials):
+def no_bucket_lists(monkeypatch):
+    """No bucket an administrator listed, public or credentialed."""
+    monkeypatch.delenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", raising=False)
+    monkeypatch.delenv("DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS", raising=False)
+
+
+@pytest.fixture()
+def allowlisted_bucket(monkeypatch, no_bucket_lists):
     """The megatest bucket marked public, the way an administrator would."""
     monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", S3_BUCKET)
+
+
+@pytest.fixture()
+def no_client(monkeypatch):
+    """Fail the test if any S3 client is built: a refusal needs none."""
+    monkeypatch.setattr(S3Target, "client", lambda _target: pytest.fail("an S3 client was built"))
 
 
 @pytest.fixture()
@@ -84,9 +106,12 @@ def mock_db(monkeypatch):
     database = client["depictio_test"]
     with (
         patch.object(from_run, "projects_collection", database["projects"]),
+        # The duplicate-name check is POST /projects/create's, which reads here.
+        patch.object(routes, "projects_collection", database["projects"]),
         patch.object(manifest_ingest, "projects_collection", database["projects"]),
         patch.object(dc_utils, "projects_collection", database["projects"]),
         patch.object(dc_utils, "tokens_collection", database["tokens"]),
+        patch.object(storage_config, "project_storage_collection", database["project_storage"]),
     ):
         yield database
 
@@ -94,7 +119,6 @@ def mock_db(monkeypatch):
 @pytest.fixture()
 def megatest_s3(monkeypatch, allowlisted_bucket):
     """Serve the megatest fixture tree; returns an installer for a variant tree."""
-    from depictio.tests.cli.s3_stubs import S3_KEY_PREFIX
 
     def _install(tree: dict[str, bytes] | None = None):
         return install_s3_listing(
@@ -122,34 +146,56 @@ def _dispatched_payloads(task) -> list[dict]:
     "data_root",
     ["/mnt/runs/run1", "https://example.org/run1", "file:///runs/run1", "gs://bucket/run1"],
 )
-def test_non_s3_data_root_422(data_root, no_ambient_credentials):
+def test_non_s3_data_root_422(data_root, no_bucket_lists):
     with pytest.raises(HTTPException) as exc:
         _call(data_root=data_root, dry_run=True)
     assert exc.value.status_code == 422
     assert "s3://" in exc.value.detail
 
 
-def test_unreadable_bucket_422_without_ever_building_a_client(monkeypatch, no_ambient_credentials):
-    """Neither allowlisted nor credentialed: refused from configuration alone.
+def test_an_unlisted_bucket_is_refused_without_ever_building_a_client(monkeypatch, no_client):
+    """Neither public nor credentialed: refused from configuration alone.
 
-    Nothing may go out over the wire — the error S3 returns for a bucket that
+    Nothing may go out over the wire: the error S3 returns for a bucket that
     exists but is not ours would otherwise turn any bucket name into an
-    existence-and-region oracle.
+    existence-and-region oracle. The refusal is coded, so the API answers
+    ``{detail, code}``.
     """
     monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "some-other-bucket")
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIA")  # the server's own keys do not count
 
-    def _never(*_args, **_kwargs):
-        raise AssertionError("an S3 client was built for a bucket that was refused")
-
-    monkeypatch.setattr(data_root_module, "s3_read_client", _never)
-
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(S3AccessRefused) as exc:
         _call(data_root="s3://private-bucket/run1", dry_run=True)
-    assert exc.value.status_code == 422
-    assert "DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS" in exc.value.detail
+    assert (exc.value.status_code, exc.value.code) == (422, "s3_refused")
+    assert "s3://private-bucket/run1" in exc.value.detail
 
 
-def test_malformed_s3_prefix_422(no_ambient_credentials):
+def test_the_instance_bucket_is_refused_as_a_run_folder(monkeypatch, no_client):
+    """It holds every project's data: refused in server context, public or not.
+
+    The instance bucket is the one the server is configured with, which is
+    what the workers refuse too, not a default read from the environment.
+    """
+    monkeypatch.setattr(settings.s3, "bucket", "instance-data")
+    monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "instance-data")
+
+    with pytest.raises(S3AccessRefused, match="instance's own data") as exc:
+        _call(data_root="s3://instance-data/projects/run42", dry_run=True)
+    assert exc.value.code == "s3_refused"
+
+
+def test_a_failed_listing_answers_with_its_code(monkeypatch, allowlisted_bucket):
+    """A store's refusal is coded and sanitized, never a raw botocore text or a 500."""
+    install_s3_client(monkeypatch, FailingS3Client("AccessDenied", 403))
+
+    with pytest.raises(S3AccessFailed) as exc:
+        _call(dry_run=True)
+    assert (exc.value.status_code, exc.value.code) == (422, "s3_access_denied")
+    assert S3_ROOT in exc.value.detail
+    assert "RequestId" not in exc.value.detail
+
+
+def test_malformed_s3_prefix_422(no_bucket_lists):
     with pytest.raises(HTTPException) as exc:
         _call(data_root="s3://", dry_run=True)
     assert exc.value.status_code == 422
@@ -166,7 +212,7 @@ def test_unknown_template_404(megatest_s3):
     assert "not found" in exc.value.detail
 
 
-def test_path_like_template_id_422_before_any_lookup(mock_db, no_ambient_credentials):
+def test_path_like_template_id_422_before_any_lookup(mock_db, no_bucket_lists):
     with pytest.raises(HTTPException) as exc:
         _call(template_id="../../etc/passwd", dry_run=True)
     assert exc.value.status_code == 422
@@ -433,13 +479,83 @@ def test_a_pruned_collection_is_absent_from_the_project_and_the_run(mock_db, meg
     assert "phylogenetic_tree_canonical" not in dispatched
 
 
-def test_duplicate_project_name_409(mock_db, megatest_s3):
+def test_dashboards_are_keyed_as_the_cli_keys_them(mock_db, megatest_s3):
+    """A later ``depictio ingest`` of this project with the template finds them.
+
+    ``nf-core/ampliseq:dashboards/base.yaml`` is the source key the CLI sends
+    for the same file, so a re-import keeps or replaces the dashboard instead of
+    adding a copy.
+    """
     megatest_s3()
-    mock_db["projects"].insert_one({"_id": ObjectId(), "name": "run42"})
+    report, _user_, importer, _task = _run_from_folder(mock_db)
+
+    (call,) = importer.call_args_list
+    assert call.args == ()
+    assert call.kwargs["source_key"] == "nf-core/ampliseq:dashboards/base.yaml"
+    assert call.kwargs["project_id"] == ObjectId(report.project_id)
+    assert call.kwargs["keep_titles"] is True
+    assert call.kwargs["existing"] == "keep"
+
+
+def test_a_taken_project_name_is_refused_as_create_refuses_it(mock_db, megatest_s3):
+    """The same check and error as POST /projects/create, before anything is written."""
+    megatest_s3()
+    first, user, _importer, _task = _run_from_folder(mock_db)
+
     with pytest.raises(HTTPException) as exc:
-        _call(project_name="run42")
+        _run_from_folder(mock_db, user=user)
     assert exc.value.status_code == 409
+    assert exc.value.detail == routes._project_taken("name")["message"]
     assert mock_db["projects"].count_documents({}) == 1
+    assert mock_db["ingestion_runs"].count_documents({}) == 1
+    assert first.project_id is not None
+
+
+def _token_doc(user: UserBase) -> dict:
+    """A stored CLI token, what ``_build_cli_config_for_user`` needs to build a config."""
+    later = datetime.now() + timedelta(days=1)
+    return {
+        "user_id": user.id,
+        "access_token": "a.b.c",
+        "refresh_token": "d.e.f",
+        "expire_datetime": later,
+        "refresh_expire_datetime": later,
+    }
+
+
+@pytest.mark.parametrize("bucket_list", ["PUBLIC", "CREDENTIALED"])
+def test_the_preview_reads_the_run_folder_as_the_workers_will(
+    mock_db, megatest_s3, monkeypatch, bucket_list
+):
+    """Same inputs, same target: the preview never accepts what ingestion refuses.
+
+    A worker reads with ``_build_cli_config_for_user`` and the project's storage
+    settings (``project_storage_for``), which a project made from a run folder
+    does not have.
+    """
+    monkeypatch.delenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS")
+    monkeypatch.setenv(f"DEPICTIO_REMOTE_{bucket_list}_S3_BUCKETS", S3_BUCKET)
+    megatest_s3()
+    decided: list[tuple[str, S3Target]] = []
+    real = remote_fetch.s3_read_target
+
+    def _spy(url, CLI_config=None):
+        decided.append((url, real(url, CLI_config)))
+        return decided[-1][1]
+
+    monkeypatch.setattr(remote_fetch, "s3_read_target", _spy)
+    report, user, _importer, _task = _run_from_folder(mock_db)
+
+    # One decision, for the one listing that answered the whole request.
+    ((url, previewed),) = decided
+    assert url == f"s3://{S3_BUCKET}/{S3_KEY_PREFIX}"
+    mock_db["tokens"].insert_one(_token_doc(user))
+    worker_config = dc_utils._build_cli_config_for_user(
+        user, remote_storage_options=storage_config.project_storage_for(report.project_id)
+    )
+    assert worker_config.remote_storage_options is None
+    assert real(url, worker_config) == previewed
+    assert previewed.kind == ("public" if bucket_list == "PUBLIC" else "ambient")
 
 
 def test_poll_route_serves_a_from_run_ingestion(mock_db, megatest_s3):
