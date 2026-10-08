@@ -32,14 +32,16 @@ The landing page, at compact width with the filter panel collapsed:
 - **Hero**: what the run is, and a link to the run parameters. No sarek wordmark ships with
   the viewer, so the hero has no logo.
 - **About this dashboard** and **The run**: two cards side by side. The second lists the
-  samples, the callsets and callers, the genome and the tools, from the sample hub, the
-  bcftools summary and the run parameters.
+  samples, the callsets and callers, the genome and the aligner, from the sample hub, the
+  bcftools summary and the run parameters. The `tools` parameter is not printed: a
+  comma-joined list has no space to wrap at.
 - **Pipeline**: six steps (map, cover, call, check, compare, annotate), each opening the
   parameters that drive it and the tab that shows its output.
-- **Key figures**: the callsets (split by caller), the median depth over the intervals (with
-  its spread), the median records per callset (with its spread) and the median Ts/Tv of the
-  callsets with SNPs against a 1.8 floor. All four read collections every run writes. A caller
-  and a sample filter above them narrow these four only.
+- **Key figures**: the variant calls summed over the callsets (split by caller), the median
+  depth over the intervals (with its spread), the median PASS share of a callset (with its
+  spread) and the median Ts/Tv of the callsets with SNPs against a 1.8 floor. All four read
+  collections every run writes. A caller and a sample filter above them narrow these four
+  only.
 - **Findings**: result rows computed under the filters, each linking its tab: the median depth
   over the intervals, the median Ts/Tv, the caller that keeps most PASS calls and its share,
   and the HIGH-impact calls with the genes they hit. Below them, four figures in two rows: the
@@ -73,23 +75,28 @@ Collapsed: the per-contig and sex-check tables. Filter: a mean-depth range, not 
 scope picker, which would empty the first card (it reads mosdepth's `total` row of the
 intervals).
 
-**Variant yield.** Strip: the records per callset (box plot), SNPs (split by caller), indels
-(the callers that call most) and multiallelic sites (distribution). Then SNPs and indels per
-caller, one bar per sample, and the substitution and indel spectra as shares of each callset.
+**Variant yield.** Strip: the median records per callset (the callers that call most: a
+structural-variant caller writes orders of magnitude fewer, which a box plot would flatten),
+SNPs (split by caller), indels (a ring by caller) and multiallelic sites (distribution). Then
+SNPs and indels per caller, one bar per sample, and the substitution and indel spectra, one bar
+per caller with its callsets' shares averaged, so the legend lists callers, not callsets.
 Collapsed: the bcftools distribution blocks (picked in the left panel, opening on depth) and
 the per-caller count table. The bcftools QUAL histogram is not ingested: it outweighed every
 other block and repeats the quality sweep. Filters: caller and bcftools block.
 
 **Call quality.** Strip: the Ts/Tv against a 1.8 floor, the PASS share (out of 100), the het to
 hom ratio (box plot) and the allele fraction of heterozygous calls (distribution). Then the
-callset QC profile (eight numbers per callset on parallel axes), the calls per FILTER value
-per caller, and the Ts/Tv above a rising quality floor. Collapsed: the FILTER breakdown and the
+callset QC profile (six numbers per callset on parallel axes; the record count stays on
+Variant yield), the calls per FILTER value per caller, and the Ts/Tv above a rising quality
+floor on a log axis (callers write QUAL on scales a thousand-fold apart), its legend under the
+plot. Collapsed: the FILTER breakdown and the
 Ts/Tv per callset. Filters: caller, FILTER value and a Ts/Tv range.
 
 **Caller concordance.** Strip: the calls (the callers that call most), the calls by variant
 type (a ring), the allele fraction (box plot) and the depth at the call (distribution). Then
 the UpSet of PASS calls shared between callsets (fixed: the pickers do not narrow it), the
-allele fraction against depth as a density beside its histogram per caller, and the rainfall
+allele fraction against depth as a density beside its histogram per caller (log count axis:
+homozygous calls pile at 1), and the rainfall
 of the calls along the genome. Collapsed: the call table. Filters: caller, variant type,
 contig and a depth range.
 
@@ -102,18 +109,19 @@ depth scatter with the variant record beside it. The impact class and consequenc
 in the bar of that section, because three cards pin an impact class. Collapsed: the SnpEff
 summary and annotated call tables. Filters: caller and SnpEff section.
 
-**Genes.** Strip: the genes with a call (the callers that hit most), the HIGH-impact variants
-(split by caller), the coding variants per gene (distribution) and the protein changes (a ring
-by impact class). Then the gene by callset burden heatmap, the UpSet of genes the callers
-share (fixed), and the coding variants along the protein. Collapsed: the per-gene burden and
-protein position tables. Filters: biotype, caller and impact class.
+**Genes.** Strip: the genes with a call (the commonest biotypes), the HIGH-impact variants
+(split by caller), the top gene burden (the most coding variants on one gene, the callers'
+maxima) and the protein changes (a ring by impact class). Then the gene by callset burden
+heatmap (log1p colour, so one long gene does not wash out the rest), the UpSet of genes the
+callers share (fixed), and the coding variants along the protein. Collapsed: the per-gene
+burden and protein position tables. Filters: biotype, caller and impact class.
 
 **Locus.** A depth navigator in 1 Mb windows drives three tracks on one axis through the
 region links: the depth per interval, the calls over the gene lane and the annotated VCFs read
 from their files. It opens on a default region in the second megabase of chromosome 1, small
 enough for the file track to fetch. The four cards (calls by caller, depth per interval,
-allele fraction, depth at the call) follow the region and recount it on every brush or locus
-entry. Filters: caller and variant type.
+allele fraction, depth at the call) take `follow_region_filter: true`, so they follow the
+region and recount it on every brush or locus entry. Filters: caller and variant type.
 
 ## Routes and pruning
 

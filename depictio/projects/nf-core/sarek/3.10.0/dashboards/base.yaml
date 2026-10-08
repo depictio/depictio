@@ -169,7 +169,7 @@ main_dashboard:
       - ![](icon:mdi:test-tube) **Samples** {{samples}}
       - ![](icon:mdi:layers-triple-outline) **Callsets** {{callsets}} from {{callers}} callers
       - ![](icon:mdi:map-marker-outline) **Genome** {{param:genome}}
-      - ![](icon:mdi:tools) **Tools** {{param:tools}}
+      - ![](icon:mdi:content-cut) **Aligner** {{param:aligner}}
     tag: sk-ov-run
     index: ov-run
     layout: {x: 5, y: 1, w: 3, h: 3}
@@ -197,21 +197,22 @@ main_dashboard:
     workflow_tag: sarek
     data_collection_tag: bcftools_stats_summary
     use: bcftools/stats_summary
-    aggregation: count
-    column_name: sample
-    column_type: object
+    aggregation: sum
+    column_name: n_records
+    column_type: int64
     secondary_layout: composition
     breakdown_col: caller
     display:
       icon_name: mdi:layers-triple-outline
       icon_color: teal
-      caption: one per caller and sample, by caller
+      caption: records over all callsets, by caller
       link: tab:Caller concordance
+      decimals: 0
     section: Key figures
-    tag: sk-ov-kf-callsets
-    index: ov-kf-callsets
-    title: Callsets
-    description: Callsets in the run, one per caller and sample. The bar splits them by caller.
+    tag: sk-ov-kf-calls
+    index: ov-kf-calls
+    title: Variant calls
+    description: Records the callers wrote, summed over the callsets. The bar splits them by caller.
     layout: {x: 0, y: 0, w: 2, h: 2}
   # The `total` row of the region scope is mosdepth's own roll-up over the
   # intervals: one value per sample.
@@ -237,26 +238,27 @@ main_dashboard:
     title: Depth on target
     description: Median depth over the intervals, one value per sample. The box shows how it spreads.
     layout: {x: 2, y: 0, w: 2, h: 2}
+  # Callsets with no record (a caller that found nothing) have no share to give.
   - component_type: card
     workflow_tag: sarek
-    data_collection_tag: bcftools_stats_summary
-    use: bcftools/stats_summary
+    data_collection_tag: callset_qc
     aggregation: median
-    column_name: n_records
-    column_type: int64
+    column_name: pass_pct
+    column_type: float64
+    filter_expr: "col('n_records') > 0"
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
     display:
-      icon_name: mdi:chart-bar
-      icon_color: violet
+      icon_name: mdi:check-decagram
+      icon_color: cyan
       caption: median per callset, with its spread
-      link: tab:Variant yield
-      decimals: 0
+      link: tab:Call quality
+      decimals: 1
     section: Key figures
-    tag: sk-ov-kf-records
-    index: ov-kf-records
-    title: Calls per callset
-    description: Median number of records a caller wrote for a sample. The box shows how it spreads.
+    tag: sk-ov-kf-pass
+    index: ov-kf-pass
+    title: PASS share (%)
+    description: Median share of a callset's calls the caller kept (FILTER PASS or unset). The box shows how it spreads.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: sarek
@@ -272,9 +274,9 @@ main_dashboard:
     threshold_warn: 1.5
     display:
       icon_name: mdi:scale-balance
-      icon_color: cyan
+      icon_color: violet
       caption: median of the SNP callsets, floor 1.8
-      link: tab:Call quality
+      link: tab:Variant yield
       decimals: 2
     section: Key figures
     tag: sk-ov-kf-tstv
@@ -346,7 +348,7 @@ main_dashboard:
     source_tab: Variant yield
     source_component: vy-spectrum-sbs
     hide_legend: true
-    caption: Each callset's SNVs over the six substitution classes, one bar per callset. C>T and T>C are the transitions.
+    caption: One bar per caller, its SNVs over the six substitution classes averaged over the samples; C>T and T>C are the transitions.
     tag: sk-ov-hl-spectrum
     index: ov-hl-spectrum
     layout: {x: 0, y: 2, w: 5, h: 5}
@@ -999,18 +1001,19 @@ tabs:
     aggregation: median
     column_name: n_records
     column_type: int64
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
     display:
       icon_name: mdi:chart-bar
       icon_color: violet
-      caption: median per callset, with its spread
+      caption: median per callset, the callers that call most
       decimals: 0
     section: Yield at a glance
     tag: sk-vy-card-records
     index: vy-card-records
     title: Records per callset
-    description: Median number of records a caller wrote for a sample.
+    description: Median number of records a caller wrote for a sample, ranked by caller; an SV caller writes orders of magnitude fewer.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: sarek
@@ -1039,19 +1042,18 @@ tabs:
     aggregation: sum
     column_name: n_indels
     column_type: int64
-    secondary_layout: top_n
+    secondary_layout: donut
     breakdown_col: caller
-    top_n_count: 3
     display:
       icon_name: mdi:arrow-expand-horizontal
       icon_color: grape
-      caption: indels, the callers that call most
+      caption: indels over all callsets, by caller
       decimals: 0
     section: Yield at a glance
     tag: sk-vy-card-indels
     index: vy-card-indels
     title: Indels
-    description: Indel records summed over the callsets in view, ranked by caller.
+    description: Indel records summed over the callsets in view, split by caller.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: sarek
@@ -1106,38 +1108,39 @@ tabs:
     title: Indels per caller
     description: One bar per sample. MNPs are counted apart from indels.
     layout: {x: 4, y: 0, w: 4, h: 4}
+  # One bar per caller, its callsets' shares averaged: the legend lists the
+  # callers, not every sample and caller pair.
   - component_type: figure
     workflow_tag: sarek
     data_collection_tag: bcftools_substitution_spectrum
     visu_type: bar
-    dict_kwargs:
-      x: substitution_class
-      y: fraction
-      color: callset
-      barmode: group
-      labels: {substitution_class: Substitution (pyrimidine reference), fraction: Share of the callset's SNVs,
-        callset: Callset}
+    mode: code
+    code_content: |-
+      # Mean share of each caller's SNVs per substitution class, over the samples in view.
+      d = df.group_by(['caller', 'substitution_class']).agg(pl.col('fraction').mean()).sort(['substitution_class', 'caller'])
+      fig = px.bar(d.to_pandas(), x='substitution_class', y='fraction', color='caller', barmode='group', color_discrete_map=depictio_category_colors.get('caller') or {}, labels={'substitution_class': 'Substitution (pyrimidine reference)', 'fraction': "Share of the caller's SNVs", 'caller': 'Caller'})
+      fig.update_layout(margin=dict(t=10))
     section: Mutation spectra
     tag: sk-vy-fig-sbs
     index: vy-spectrum-sbs
     title: Substitution spectrum
-    description: Six strand-folded classes; C>T and T>C are transitions, the other four transversions.
+    description: Six strand-folded classes, one bar per caller averaged over the samples in view; C>T and T>C are transitions.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: figure
     workflow_tag: sarek
     data_collection_tag: bcftools_indel_spectrum
     visu_type: bar
-    dict_kwargs:
-      x: length
-      y: fraction
-      color: callset
-      barmode: group
-      labels: {length: Indel length (bp; deletions negative), fraction: Share of the callset's indels, callset: Callset}
+    mode: code
+    code_content: |-
+      # Mean share of each caller's indels per length, over the samples in view.
+      d = df.group_by(['caller', 'length']).agg(pl.col('fraction').mean()).sort(['length', 'caller'])
+      fig = px.bar(d.to_pandas(), x='length', y='fraction', color='caller', barmode='group', color_discrete_map=depictio_category_colors.get('caller') or {}, labels={'length': 'Indel length (bp; deletions negative)', 'fraction': "Share of the caller's indels", 'caller': 'Caller'})
+      fig.update_layout(margin=dict(t=10))
     section: Mutation spectra
     tag: sk-vy-fig-indel-length
     index: vy-spectrum-indel
     title: Indel length spectrum
-    description: Indels within 20 bp, deletions left of zero, insertions right of it.
+    description: Indels within 20 bp, one bar per caller averaged over the samples in view; deletions left of zero.
     layout: {x: 0, y: 4, w: 8, h: 4}
   - component_type: figure
     workflow_tag: sarek
@@ -1204,7 +1207,7 @@ tabs:
   - name: Callset QC profile
     icon: mdi:chart-timeline-variant
     color: cyan
-    description: Eight QC numbers per callset on one plot, one line per callset
+    description: Six QC numbers per callset on one plot, one line per callset
   - name: FILTER partitions
     icon: mdi:filter-variant
     color: cyan
@@ -1347,7 +1350,7 @@ tabs:
       icon_name: mdi:chart-bell-curve
       icon_color: orange
       caption: median per callset, with its distribution
-      decimals: 2
+      decimals: 3
     section: Quality at a glance
     tag: sk-cq-card-hetvaf
     index: cq-card-hetvaf
@@ -1363,7 +1366,8 @@ tabs:
       sample_col: callset
       group_col: caller
       scale: minmax
-      metric_cols: [n_records, snp_fraction, ts_tv, multiallelic_pct, pass_pct, het_hom_ratio, median_dp, median_het_vaf]
+      # Six axes every SNP callset fills; the record count lives on Variant yield.
+      metric_cols: [ts_tv, snp_fraction, pass_pct, het_hom_ratio, median_dp, median_het_vaf]
     section: Callset QC profile
     tag: sk-cq-av-profile
     index: cq-qc-profile
@@ -1391,9 +1395,13 @@ tabs:
     workflow_tag: sarek
     data_collection_tag: vcftools_tstv_qual
     use: vcftools/tstv_quality_sweep
+    # Callers write QUAL on scales a thousand-fold apart: a log axis keeps
+    # every curve in view. One curve per callset: the legend goes under it.
     config:
-      x_title: quality floor
+      x_title: quality floor (log scale)
       y_title: Ts/Tv above the floor
+      log_x: true
+      legend_pos: bottom
     section: Quality calibration
     tag: sk-cq-av-qual
     index: cq-quality-sweep
@@ -1648,15 +1656,18 @@ tabs:
     data_collection_tag: vcf_variants
     use: vcf/variants
     visu_type: histogram
+    # Homozygous calls pile at 1: a log count axis keeps the heterozygous hump readable.
     dict_kwargs:
       x: vaf
       color: caller
-      labels: {vaf: Variant allele fraction, caller: Caller}
+      nbins: 50
+      log_y: true
+      labels: {vaf: Variant allele fraction, caller: Caller, count: Calls}
     section: Depth sensitivity
     tag: sk-cc-fig-vaf
     index: cc-vaf-histogram
     title: Allele fraction per caller
-    description: A heavy left tail is a caller keeping low-fraction calls the others filtered.
+    description: Log count axis; homozygous calls pile at 1, and a heavy left tail is a caller keeping low-fraction calls.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: sarek
@@ -2086,18 +2097,18 @@ tabs:
     column_type: object
     filter_expr: "col('gene_name') != ''"
     secondary_layout: top_n
-    breakdown_col: caller
+    breakdown_col: biotype
     top_n_count: 3
     display:
       icon_name: mdi:dna
       icon_color: pink
-      caption: genes, the callers that hit most
+      caption: genes, the commonest biotypes
       decimals: 0
     section: Genes at a glance
     tag: sk-gn-card-genes
     index: gn-card-genes
     title: Genes with a call
-    description: Distinct genes carrying at least one call, ranked by caller.
+    description: Distinct genes carrying at least one call, ranked by biotype.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: sarek
@@ -2123,21 +2134,22 @@ tabs:
     workflow_tag: sarek
     data_collection_tag: snpeff_genes
     use: snpeff/genes
-    aggregation: median
+    aggregation: max
     column_name: n_coding
     column_type: int64
-    filter_expr: "col('n_coding') > 0"
-    secondary_layout: histogram
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
     display:
       icon_name: mdi:chart-histogram
       icon_color: violet
-      caption: median per gene, with its distribution
+      caption: coding variants on one gene, the callers' maxima
       decimals: 0
     section: Genes at a glance
     tag: sk-gn-card-coding
     index: gn-card-coding
-    title: Coding variants per gene
-    description: Median number of HIGH or MODERATE variants on a gene that carries any.
+    title: Top gene burden
+    description: The most HIGH or MODERATE variants one gene carries in a callset, by caller. A long, repetitive gene tops it before a biological one does.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: sarek
@@ -2163,11 +2175,15 @@ tabs:
     workflow_tag: sarek
     data_collection_tag: snpeff_gene_heatmap
     use: snpeff/burden_matrix
+    # One gene's count can be ten times the next: log1p keeps the rest readable.
+    config:
+      normalize: log1p
+      colorscale: Blues
     section: Burden across callsets
     tag: sk-gn-av-heat
     index: gn-burden-heatmap
     title: Variant burden, gene against callset
-    description: Callsets clustering by caller, not sample, mean the caller shapes the gene list.
+    description: Colour is log(1 + variants); callsets clustering by caller, not sample, mean the caller shapes the gene list.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: sarek
@@ -2427,7 +2443,7 @@ tabs:
       mark: point
       assembly: '{GENOME}'
       annotation: "{GENOME}"
-      score_title: variant allele fraction
+      score_title: VAF
       point_size: 5
       facet_by_sample: true
       max_facets: 5
@@ -2437,8 +2453,8 @@ tabs:
     tag: sk-loc-av-calls
     index: loc-call-track
     title: Calls over the genes, one lane per caller
-    description: Every call in the region at its allele fraction, over the gene lane.
-    layout: {x: 0, y: 7, w: 8, h: 4}
+    description: Every call in the region at its variant allele fraction (VAF), over the gene lane.
+    layout: {x: 0, y: 7, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: sarek
     data_collection_tag: snpeff_vcf_files
@@ -2458,4 +2474,4 @@ tabs:
     index: loc-vcf-files
     title: The annotated VCFs, read from the files
     description: Each callset's annotated VCF, range-read through its index below 1 Mb, one lane per callset.
-    layout: {x: 0, y: 11, w: 8, h: 4}
+    layout: {x: 0, y: 12, w: 8, h: 5}

@@ -171,7 +171,7 @@ main_dashboard:
       ### About this dashboard
       nf-core/variantbenchmarking compares the calls of one or more callers with a truth set and scores each callset on precision, recall and F1. A run benchmarks one variant type (germline small variants, somatic SNVs or indels, or structural variants), so only the tab of that type appears.
 
-      Each tab keeps its own filters in the left panel. A bar above a section narrows that section only.
+      A route can run several tools, so a result can be cross-checked: rtg-tools vcfeval beside hap.py or som.py, SVanalyzer and Wittyer beside Truvari. Each tab keeps its own filters in the left panel; a bar above a section narrows that section only.
     tag: vb-ov-about
     index: ov-about
     layout: {x: 0, y: 1, w: 5, h: 3}
@@ -198,15 +198,23 @@ main_dashboard:
   - component_type: text
     surface: card
     accent: indigo
+    # Each route step cites a count from its route's collection, so the import
+    # drops the steps of the routes the run did not take: four steps remain.
+    values:
+      n_germ: {dc: germline_vcfeval_summary, column: label, aggregation: nunique, format: integer}
+      n_som: {dc: somatic_sompy_summary, column: label, aggregation: nunique, format: integer}
+      n_wit: {dc: cnv_wittyer_summary, column: label, aggregation: nunique, format: integer}
     body: |
       ### One run, one variant type
-      The calls are prepared once, then scored on the route of the run's variant type; each route opens its tab.
+      The calls are prepared once, scored against the truth set on the route of the run's variant type, then summarised per tool.
 
       ::: steps
-      1. ![](icon:mdi:tune) **Prepare** Normalise and deduplicate the calls · [Settings](params:preprocess) · [Truth set](params:truth)
-      2. ![](icon:mdi:dna) **Germline** hap.py and rtg-tools vcfeval · [Settings](params:method) · [Germline](tab:Germline)
-      3. ![](icon:mdi:target) **Somatic** som.py and rtg-tools vcfeval · [Settings](params:method) · [Somatic](tab:Somatic)
-      4. ![](icon:mdi:chart-scatter-plot) **Structural** Truvari, SVanalyzer, Wittyer · [Settings](params:method) · [Structural](tab:Structural & CNV)
+      1. ![](icon:mdi:tune) **Prepare** Normalise and deduplicate the calls · [Settings](params:preprocess)
+      2. ![](icon:mdi:check-all) **Truth** Scored against {{param:truth_id}} · [Settings](params:truth)
+      3. ![](icon:mdi:dna) **Germline** {{n_germ}} callsets scored by hap.py and rtg-tools vcfeval · [Settings](params:method) · [Germline](tab:Germline)
+      4. ![](icon:mdi:target) **Somatic** {{n_som}} callsets scored by som.py and rtg-tools vcfeval · [Settings](params:method) · [Somatic](tab:Somatic)
+      5. ![](icon:mdi:chart-scatter-plot) **Structural** {{n_wit}} callsets scored by Truvari, SVanalyzer and Wittyer · [Settings](params:method) · [Structural](tab:Structural & CNV)
+      6. ![](icon:mdi:table-multiple) **Summarise** One table and plot per tool, the callers side by side
       :::
     tag: vb-ov-steps
     index: ov-steps
@@ -217,21 +225,22 @@ main_dashboard:
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
     use: rtgtools/vcfeval_summary
-    aggregation: count
-    column_name: label
-    column_type: object
+    aggregation: sum
+    column_name: tp_comp
+    column_type: int64
     secondary_layout: composition
     breakdown_col: caller
     display:
-      icon_name: mdi:flask
+      icon_name: mdi:check-decagram
       icon_color: blue
-      caption: germline callsets, by caller
+      caption: calls the truth set confirms, by caller
       link: tab:Germline
+      decimals: 0
     section: Key figures
-    tag: vb-ov-kf-germline-callsets
-    index: ov-kf-germline-callsets
-    title: Callsets
-    description: Germline callsets scored against the truth set. The bar splits them by caller.
+    tag: vb-ov-kf-germline-tp
+    index: ov-kf-germline-tp
+    title: True positives
+    description: Calls the truth set confirms (rtg-tools vcfeval), summed over the callsets and split by caller.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: variantbenchmarking
@@ -303,21 +312,22 @@ main_dashboard:
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
     use: sompy/summary
-    aggregation: count
-    column_name: label
-    column_type: object
+    aggregation: sum
+    column_name: tp
+    column_type: int64
     secondary_layout: composition
     breakdown_col: caller
     display:
-      icon_name: mdi:flask
+      icon_name: mdi:check-decagram
       icon_color: blue
-      caption: somatic callsets, by caller
+      caption: calls the truth set confirms, by caller
       link: tab:Somatic
+      decimals: 0
     section: Key figures
-    tag: vb-ov-kf-somatic-callsets
-    index: ov-kf-somatic-callsets
-    title: Callsets
-    description: Somatic callsets scored against the truth set. The bar splits them by caller.
+    tag: vb-ov-kf-somatic-tp
+    index: ov-kf-somatic-tp
+    title: True positives
+    description: Calls the truth set confirms (som.py), summed over the callsets and split by caller.
     layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
     workflow_tag: variantbenchmarking
@@ -389,21 +399,22 @@ main_dashboard:
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary
     use: truvari/summary
-    aggregation: count
-    column_name: label
-    column_type: object
+    aggregation: sum
+    column_name: tp_comp
+    column_type: int64
     secondary_layout: composition
     breakdown_col: caller
     display:
-      icon_name: mdi:flask
+      icon_name: mdi:check-decagram
       icon_color: blue
-      caption: structural callsets, by caller
+      caption: calls the truth set confirms, by caller
       link: tab:Structural & CNV
+      decimals: 0
     section: Key figures
-    tag: vb-ov-kf-sv-callsets
-    index: ov-kf-sv-callsets
-    title: Callsets
-    description: Structural-variant callsets scored by Truvari. The bar splits them by caller.
+    tag: vb-ov-kf-sv-tp
+    index: ov-kf-sv-tp
+    title: True positives
+    description: Calls the truth set confirms (Truvari), summed over the callsets and split by caller.
     layout: {x: 0, y: 4, w: 2, h: 2}
   - component_type: card
     workflow_tag: variantbenchmarking
@@ -568,14 +579,22 @@ main_dashboard:
     values:
       g_best: {dc: germline_vcfeval_summary, column: f1, aggregation: max, format: 'decimals:3'}
       g_top: {dc: germline_vcfeval_summary, column: caller, aggregation: top, weight: f1}
+      g_fp_share: {dc: germline_vcfeval_summary, column: caller, aggregation: top_share, weight: fp, format: percent}
+      g_fp_top: {dc: germline_vcfeval_summary, column: caller, aggregation: top, weight: fp}
       h_snp: {dc: germline_happy_summary, column: f1, aggregation: max, filter_expr: "(col('variant_type') == 'SNP') & (col('filter') == 'PASS')",
         format: 'decimals:3'}
       h_indel: {dc: germline_happy_summary, column: f1, aggregation: max, filter_expr: "(col('variant_type') == 'INDEL') & (col('filter') == 'PASS')",
         format: 'decimals:3'}
       s_best: {dc: somatic_sompy_summary, column: f1, aggregation: max, format: 'decimals:3'}
       s_top: {dc: somatic_sompy_summary, column: caller, aggregation: top, weight: f1}
+      s_fp_share: {dc: somatic_sompy_summary, column: caller, aggregation: top_share, weight: fp, format: percent}
+      s_fp_top: {dc: somatic_sompy_summary, column: caller, aggregation: top, weight: fp}
+      r_best: {dc: somatic_vcfeval_summary, column: f1, aggregation: max, format: 'decimals:3'}
+      r_top: {dc: somatic_vcfeval_summary, column: caller, aggregation: top, weight: f1}
       t_best: {dc: sv_truvari_summary, column: f1, aggregation: max, format: 'decimals:3'}
       t_top: {dc: sv_truvari_summary, column: caller, aggregation: top, weight: f1}
+      v_best: {dc: sv_svbenchmark_summary, column: f1, aggregation: max, format: 'decimals:3'}
+      v_top: {dc: sv_svbenchmark_summary, column: caller, aggregation: top, weight: f1}
       w_event: {dc: cnv_wittyer_summary, column: f1, aggregation: median, filter_expr: "col('stats_type') == 'Event'",
         format: 'decimals:3'}
       w_base: {dc: cnv_wittyer_summary, column: f1, aggregation: median, filter_expr: "col('stats_type') == 'Base'",
@@ -583,8 +602,12 @@ main_dashboard:
     body: |
       - **{{g_best}}** best germline F1, from {{g_top}} – rtg-tools vcfeval, one value per callset [Germline](tab:Germline)
       - **{{h_snp}}** SNP F1 of the PASS calls, {{h_indel}} for indels – hap.py, pooled over samples [Germline](tab:Germline)
+      - **{{g_fp_share}}** of the false positives come from {{g_fp_top}} – rtg-tools vcfeval, summed per caller [Germline](tab:Germline)
       - **{{s_best}}** best somatic F1, from {{s_top}} – som.py, one value per callset [Somatic](tab:Somatic)
+      - **{{s_fp_share}}** of the false positives come from {{s_fp_top}} – som.py, summed per caller [Somatic](tab:Somatic)
+      - **{{r_best}}** best F1 on haplotypes, from {{r_top}} – rtg-tools vcfeval, the cross-check [Somatic](tab:Somatic)
       - **{{t_best}}** best structural F1, from {{t_top}} – Truvari, one value per callset [Structural](tab:Structural & CNV)
+      - **{{v_best}}** best SVanalyzer F1, from {{v_top}} – the cross-check of Truvari [Structural](tab:Structural & CNV)
       - **{{w_event}}** median F1 per event, {{w_base}} per base – Wittyer, over the callsets [Structural](tab:Structural & CNV)
     section: Findings
     tag: vb-ov-findings
@@ -653,10 +676,10 @@ main_dashboard:
   - component_type: highlight
     section: Findings
     source_tab: Somatic
-    source_component: so-af-recall
-    caption: Recall per allele-fraction bin, one bar per caller; low fractions are the hardest.
-    tag: vb-ov-hl-somatic-af
-    index: ov-hl-somatic-af
+    source_component: so-precision-ci
+    caption: Precision per caller with its binomial 95% interval; a wide whisker rests on few calls.
+    tag: vb-ov-hl-somatic-precision
+    index: ov-hl-somatic-precision
     layout: {x: 3, y: 17, w: 5, h: 5}
   # ----------------------------------------------------------- structural
   - component_type: highlight
@@ -885,7 +908,7 @@ tabs:
     display:
       icon_name: mdi:check-decagram
       icon_color: teal
-      caption: calls confirmed by the truth set, by caller
+      caption: calls the truth set confirms, by caller
       decimals: 0
     section: Germline at a glance
     tag: vb-gl-card-tp
@@ -1131,20 +1154,20 @@ tabs:
     data_collection_tag: somatic_sompy_summary
     use: sompy/summary
     aggregation: sum
-    column_name: fn
+    column_name: tp
     column_type: int64
     secondary_layout: composition
     breakdown_col: caller
     display:
-      icon_name: mdi:magnet
+      icon_name: mdi:check-decagram
       icon_color: orange
-      caption: truth variants missed, by caller
+      caption: calls the truth set confirms, by caller
       decimals: 0
     section: Somatic at a glance
-    tag: vb-so-card-fn
-    index: so-card-fn
-    title: Missed variants
-    description: Truth variants a caller did not call, summed over the callers in view and split by caller.
+    tag: vb-so-card-tp
+    index: so-card-tp
+    title: True positives
+    description: Calls the truth set confirms, summed over the callers in view and split by caller.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: variantbenchmarking
@@ -1299,7 +1322,7 @@ tabs:
   - name: Structural at a glance
     icon: mdi:counter
     color: orange
-    description: Callsets, F1, recall and precision over the Truvari callsets in view
+    description: True positives, F1, recall and precision over the Truvari callsets in view
   - name: Precision and recall
     icon: mdi:chart-scatter-plot
     color: orange
@@ -1371,21 +1394,21 @@ tabs:
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary
     use: truvari/summary
-    aggregation: count
-    column_name: label
-    column_type: object
-    secondary_layout: donut
+    aggregation: sum
+    column_name: tp_comp
+    column_type: int64
+    secondary_layout: composition
     breakdown_col: caller
     display:
-      icon_name: mdi:flask
+      icon_name: mdi:check-decagram
       icon_color: blue
-      caption: callsets, by caller
+      caption: calls the truth set confirms, by caller
       decimals: 0
     section: Structural at a glance
-    tag: vb-sv-card-callsets
-    index: sv-card-callsets
-    title: Callsets
-    description: Structural-variant callsets Truvari scored, split by caller.
+    tag: vb-sv-card-tp
+    index: sv-card-tp
+    title: True positives
+    description: Calls the truth set confirms (Truvari), summed over the callsets in view and split by caller.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: variantbenchmarking
