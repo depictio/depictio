@@ -1012,6 +1012,9 @@ server = [
     { name = "uvicorn" },
     { name = "websockets" },
 ]
+watch = [
+    { name = "watchdog" },
+]
 
 [package.dev-dependencies]
 worker-reload = [
@@ -1077,9 +1080,10 @@ requires-dist = [
     { name = "types-requests", marker = "extra == 'dev'", specifier = "==2.33.0.20260712" },
     { name = "umap-learn", marker = "extra == 'server'", specifier = "==0.5.12" },
     { name = "uvicorn", marker = "extra == 'server'", specifier = "==0.52.1" },
+    { name = "watchdog", marker = "extra == 'watch'", specifier = "==6.0.0" },
     { name = "websockets", marker = "extra == 'server'", specifier = "==17.0.1" },
 ]
-provides-extras = ["multiqc", "server", "local", "dev"]
+provides-extras = ["multiqc", "watch", "server", "local", "dev"]
 
 [package.metadata.requires-dev]
 worker-reload = [{ name = "watchdog", specifier = "==6.0.0" }]

@@ -1016,6 +1016,8 @@ class TestHelpSurface:
         "--overwrite",
         "--rescan-folders",
         "--sync-files",
+        # A deprecated escape hatch, kept out of the help until it is removed.
+        "--legacy-scan-depth",
     }
     ESSENTIALS = [
         "--server",
@@ -1272,3 +1274,88 @@ class TestDashboardsOnARefresh:
         assert "Would import 1 dashboard(s), keeping those the project already has" in normalize(
             result.output
         )
+
+
+class TestIncrementalIngestion:
+    """The options of the incremental path reach the scan and the processing, and
+    the steps reach the server while the run is still going."""
+
+    def test_sync_changed_rescans_and_reaches_the_scan(self, app, runner, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
+
+        result = _invoke(app, runner, harness, _template(data_root, "--sync-changed"))
+
+        assert result.exit_code == 0, result.output
+        params = harness.scan.call_args.kwargs["command_parameters"]
+        assert params["sync_changed"] is True
+        assert params["rescan_folders"] is True
+        # The scan's own dry run is the watcher's: `ingest` never scans in one.
+        assert params["dry_run"] is False
+
+    def test_the_write_options_and_the_scan_signal_reach_the_processing(
+        self, app, runner, data_root, make_harness
+    ):
+        harness = make_harness(data_root, remote_locations=[])
+        signal = {"result": "success", "changed_dcs": {"dc1": ["run_a"]}, "complete": True}
+        harness.scan = MagicMock(return_value=signal)
+        start = MagicMock(return_value="run-1")
+
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            _template(
+                data_root,
+                "--write-mode",
+                "replace-runs",
+                "--incremental-write",
+                "--skip-unchanged",
+                "--async-upsert",
+            ),
+            [patch.object(run_module, "api_monitoring_ingestion_start", start)],
+        )
+
+        assert result.exit_code == 0, result.output
+        params = harness.process.call_args.kwargs["command_parameters"]
+        assert params["write_mode"] == "replace-runs"
+        assert params["incremental_write"] is True
+        assert params["skip_unchanged"] is True
+        assert params["async_upsert"] is True
+        assert params["scan_signal"] is signal
+        # Ties the Delta commit to the monitoring record of the same run.
+        assert params["ingestion_run_id"] == "run-1"
+        assert params["trigger"] == "manual"
+        assert start.call_args.kwargs["trigger"] == "manual"
+
+    def test_an_unknown_write_mode_is_a_usage_error(self, app, runner, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
+
+        result = _invoke(app, runner, harness, _template(data_root, "--write-mode", "append"))
+
+        assert result.exit_code == 2
+        assert "--write-mode" in usage_error(result.output)
+        harness.scan.assert_not_called()
+
+    def test_steps_are_sent_as_they_start(self, app, runner, data_root, make_harness):
+        harness = make_harness(data_root, remote_locations=[])
+        step = MagicMock(return_value=True)
+
+        result = _invoke(
+            app,
+            runner,
+            harness,
+            _template(data_root),
+            [
+                patch.object(
+                    run_module, "api_monitoring_ingestion_start", MagicMock(return_value="run-1")
+                ),
+                patch.object(run_module, "api_monitoring_ingestion_step", step),
+            ],
+        )
+
+        assert result.exit_code == 0, result.output
+        sent = [(c.args[2]["name"], c.args[2]["status"]) for c in step.call_args_list]
+        assert ("scan", "running") in sent
+        assert ("scan", "success") in sent
+        # The steps before the record opened are replayed, not lost.
+        assert ("validate_config", "success") in sent

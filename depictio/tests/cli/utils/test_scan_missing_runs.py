@@ -130,8 +130,8 @@ def test_rescan_over_two_locations_deletes_nothing(workflow, two_run_dirs):
             side_effect=fake_scan,
         ),
         patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch") as upsert,
-        patch("depictio.cli.cli.utils.scan.api_delete_run") as delete_run,
-        patch("depictio.cli.cli.utils.scan.api_delete_file") as delete_file,
+        patch("depictio.cli.cli.utils.scan.api_delete_runs") as delete_run,
+        patch("depictio.cli.cli.utils.scan.api_delete_files") as delete_file,
     ):
         from depictio.cli.cli.utils.scan import scan_files_for_workflow
 
@@ -175,8 +175,8 @@ def test_run_that_vanished_from_disk_is_still_deleted(workflow, two_run_dirs):
             side_effect=fake_scan,
         ),
         patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch"),
-        patch("depictio.cli.cli.utils.scan.api_delete_run") as delete_run,
-        patch("depictio.cli.cli.utils.scan.api_delete_file"),
+        patch("depictio.cli.cli.utils.scan.api_delete_runs") as delete_run,
+        patch("depictio.cli.cli.utils.scan.api_delete_files"),
     ):
         from depictio.cli.cli.utils.scan import scan_files_for_workflow
 
@@ -188,7 +188,7 @@ def test_run_that_vanished_from_disk_is_still_deleted(workflow, two_run_dirs):
         )
 
     assert delete_run.call_count == 1
-    assert delete_run.call_args.kwargs["run_id"] == str(gone["_id"])
+    assert delete_run.call_args.args[0] == [str(gone["_id"])]
 
 
 def test_without_rescan_nothing_is_reconciled(workflow, two_run_dirs):
@@ -211,8 +211,8 @@ def test_without_rescan_nothing_is_reconciled(workflow, two_run_dirs):
             side_effect=fake_scan,
         ),
         patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch") as upsert,
-        patch("depictio.cli.cli.utils.scan.api_delete_run") as delete_run,
-        patch("depictio.cli.cli.utils.scan.api_delete_file"),
+        patch("depictio.cli.cli.utils.scan.api_delete_runs") as delete_run,
+        patch("depictio.cli.cli.utils.scan.api_delete_files"),
     ):
         from depictio.cli.cli.utils.scan import scan_files_for_workflow
 
@@ -260,8 +260,8 @@ def test_a_gone_run_the_cli_cannot_load_is_deleted_too(workflow, two_run_dirs, m
             side_effect=fake_scan,
         ),
         patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch"),
-        patch("depictio.cli.cli.utils.scan.api_delete_run") as delete_run,
-        patch("depictio.cli.cli.utils.scan.api_delete_file"),
+        patch("depictio.cli.cli.utils.scan.api_delete_runs") as delete_run,
+        patch("depictio.cli.cli.utils.scan.api_delete_files"),
     ):
         from depictio.cli.cli.utils.scan import scan_files_for_workflow
 
@@ -274,7 +274,7 @@ def test_a_gone_run_the_cli_cannot_load_is_deleted_too(workflow, two_run_dirs, m
 
     assert result["result"] == "success"
     assert delete_run.call_count == 1
-    assert delete_run.call_args.kwargs["run_id"] == str(gone["_id"])
+    assert delete_run.call_args.args[0] == [str(gone["_id"])]
 
 
 class TestFlatRunsOfTheSameName:
@@ -358,8 +358,8 @@ def test_a_run_of_the_same_name_from_another_directory_is_replaced(workflow, tmp
         patch("depictio.cli.cli.utils.scan.api_get_runs_by_wf_id", return_value=runs_resp),
         patch("depictio.cli.cli.utils.scan.scan_run_for_multiple_data_collections", scan_run),
         patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch") as upsert,
-        patch("depictio.cli.cli.utils.scan.api_delete_run") as delete_run,
-        patch("depictio.cli.cli.utils.scan.api_delete_file") as delete_file,
+        patch("depictio.cli.cli.utils.scan.api_delete_runs") as delete_run,
+        patch("depictio.cli.cli.utils.scan.api_delete_files") as delete_file,
     ):
         scan_files_for_workflow(
             workflow=workflow,
@@ -369,8 +369,8 @@ def test_a_run_of_the_same_name_from_another_directory_is_replaced(workflow, tmp
         )
 
     assert scan_run.call_args.kwargs["existing_run"] is None
-    assert delete_run.call_args.kwargs["run_id"] == str(registered["_id"])
-    assert delete_file.call_args.kwargs["file_id"] == old_file["_id"]
+    assert delete_run.call_args.args[0] == [str(registered["_id"])]
+    assert delete_file.call_args.args[0] == [old_file["_id"]]
     (run,) = upsert.call_args.args[0]
     assert run.run_tag == "results"
     assert run.run_location == str(new)
@@ -397,8 +397,8 @@ def test_the_same_directory_keeps_its_run(workflow, two_run_dirs):
         patch("depictio.cli.cli.utils.scan.api_get_runs_by_wf_id", return_value=runs_resp),
         patch("depictio.cli.cli.utils.scan.scan_run_for_multiple_data_collections", scan_run),
         patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch"),
-        patch("depictio.cli.cli.utils.scan.api_delete_run") as delete_run,
-        patch("depictio.cli.cli.utils.scan.api_delete_file"),
+        patch("depictio.cli.cli.utils.scan.api_delete_runs") as delete_run,
+        patch("depictio.cli.cli.utils.scan.api_delete_files"),
     ):
         scan_files_for_workflow(
             workflow=workflow,

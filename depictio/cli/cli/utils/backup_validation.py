@@ -322,7 +322,16 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
         # _create_mongodb_backup's collections_config yet either — excluded here to
         # match current reality, not a judgment that it shouldn't ever be backed up;
         # adding real backup coverage for it is a separate, deliberate change.
-        ledger_collections = ["task_events", "app_logs", "telemetry", "ingestion_runs"]
+        # 'jobs' (background job status) and 'cli_agents' (watcher heartbeats) are
+        # TTL-indexed on expires_at: a restore would bring back only expired rows.
+        ledger_collections = [
+            "task_events",
+            "app_logs",
+            "telemetry",
+            "ingestion_runs",
+            "jobs",
+            "cli_agents",
+        ]
         core_collections = {
             col
             for col in collections_in_settings

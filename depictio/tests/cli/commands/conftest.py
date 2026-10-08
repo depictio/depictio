@@ -107,6 +107,10 @@ class _Harness:
             patch("depictio.cli.cli.commands.run.process_project_helper", self.process),
             patch("depictio.cli.cli.commands.run.api_monitoring_ingestion_start", MagicMock()),
             patch("depictio.cli.cli.commands.run.api_monitoring_ingestion_finish", MagicMock()),
+            patch(
+                "depictio.cli.cli.commands.run.api_monitoring_ingestion_step",
+                MagicMock(return_value=True),
+            ),
             patch("depictio.cli.cli.commands.run.generate_api_headers", MagicMock(return_value={})),
             patch(
                 "depictio.cli.cli.utils.templates.import_dashboards_from_template",

@@ -33,6 +33,7 @@ from depictio.cli.cli.commands.local import app as local
 from depictio.cli.cli.commands.migrate import migrate
 from depictio.cli.cli.commands.run import register_run_command
 from depictio.cli.cli.commands.standalone import register_standalone_commands
+from depictio.cli.cli.commands.watch import register_watch_command
 from depictio.cli.cli.utils import logo_art
 from depictio.cli.cli.utils.renamed import note_renamed
 from depictio.cli.cli.utils.rich_utils import add_rich_display_to_polars
@@ -45,7 +46,7 @@ TAGLINE = "Interactive dashboards for bioinformatics data"
 
 # The panels of `depictio --help`, in display order, with their commands.
 HELP_PANELS = {
-    "Get started": ("local", "ingest"),
+    "Get started": ("local", "ingest", "watch"),
     "Projects and data": ("config", "data", "dashboard"),
     "Administration": ("migrate", "backup"),
     "Reference": ("catalog", "commands", "version"),
@@ -124,6 +125,8 @@ app = typer.Typer(
 
 register_standalone_commands(app)
 register_run_command(app)
+# `watch` is `ingest` on a loop, so it sits next to it rather than under `data`.
+register_watch_command(app)
 
 
 def _version_callback(value: bool) -> None:

@@ -150,11 +150,14 @@ class TestInterruptions:
         closed = _closed_with(finish)
         assert closed["status"] == "interrupted"
         assert "process" in closed["error"]
-        assert closed["steps"][-1] == {
+        # The step was recorded as running when it started: it is finished as
+        # interrupted, keeping its timing, rather than left running.
+        assert {
             "name": "process",
             "status": "interrupted",
             "detail": "Interrupted",
-        }
+        }.items() <= closed["steps"][-1].items()
+        assert "finished_at" in closed["steps"][-1]
 
     def test_sigterm_closes_the_run_and_exits_143(self, data_root, make_harness):
         harness = make_harness(data_root, remote_locations=[])
