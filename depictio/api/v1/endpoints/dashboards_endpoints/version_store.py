@@ -141,6 +141,32 @@ def delete_family(family_id: str) -> int:
     return removed
 
 
+def delete_project_versions(project_id: Any) -> int:
+    """Drop every ledger of a project, used when the project itself is deleted.
+
+    A project delete removes its dashboards wholesale, without going through
+    the dashboard delete route, so without this each family's history and
+    sequence counter would outlive it with nothing able to reach them again.
+    Versions carry their project id; counters carry only a family id, so the
+    families are read off the versions first.
+
+    Best-effort, like the comment-thread cascade: it never raises, so a ledger
+    that cannot be cleared never fails the delete that triggered it.
+    """
+    pid = str(project_id)
+    try:
+        family_ids = dashboard_versions_collection.distinct("family_id", {"project_id": pid})
+        removed = dashboard_versions_collection.delete_many({"project_id": pid}).deleted_count
+        if family_ids:
+            dashboard_version_counters_collection.delete_many({"family_id": {"$in": family_ids}})
+        if removed:
+            logger.info(f"dashboard_versions: removed {removed} version(s) of project {pid}")
+        return removed
+    except Exception as exc:  # noqa: BLE001 (cleanup is best-effort)
+        logger.warning(f"dashboard_versions: could not clear the ledgers of project {pid}: {exc}")
+        return 0
+
+
 def _prunable(record: dict[str, Any]) -> bool:
     """Only unpinned autosaves are ever eligible for pruning.
 

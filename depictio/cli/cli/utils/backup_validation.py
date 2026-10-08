@@ -54,6 +54,30 @@ class CommentThreadBackupDoc(BaseModel):
     status: ThreadStatus = "open"
 
 
+class DashboardVersionBackupDoc(BaseModel):
+    """A stored dashboard version (``_id`` plus the ``DashboardVersion`` fields).
+
+    Loose on purpose, like the comment threads: the backup carries Mongo's
+    ``_id`` and datetimes as strings, which ``DashboardVersion`` forbids or
+    would coerce. What is checked is what the ledger is queried and ordered by.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    version_id: str
+    family_id: str
+    seq: int
+
+
+class DashboardVersionCounterBackupDoc(BaseModel):
+    """A dashboard family's version-number counter."""
+
+    model_config = ConfigDict(extra="allow")
+
+    family_id: str
+    seq: int
+
+
 def validate_backup_file(backup_path: str) -> Dict[str, Any]:
     """
     Validate a backup file against Pydantic models.
@@ -109,6 +133,8 @@ def validate_backup_file(backup_path: str) -> Dict[str, Any]:
             "instance_settings": InstanceSettingsBackupDoc,
             "branding_assets": BrandingAssetBackupDoc,
             "comment_threads": CommentThreadBackupDoc,
+            "dashboard_versions": DashboardVersionBackupDoc,
+            "dashboard_version_counters": DashboardVersionCounterBackupDoc,
         }
 
         # Validate each collection
@@ -228,6 +254,8 @@ EXPECTED_BACKUP_COLLECTIONS = [
     "instance_settings",
     "branding_assets",
     "comment_threads",
+    "dashboard_versions",
+    "dashboard_version_counters",
 ]
 
 
@@ -267,6 +295,8 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
             "instance_settings": InstanceSettingsBackupDoc,
             "branding_assets": BrandingAssetBackupDoc,
             "comment_threads": CommentThreadBackupDoc,
+            "dashboard_versions": DashboardVersionBackupDoc,
+            "dashboard_version_counters": DashboardVersionCounterBackupDoc,
         }
 
         # Check against expected collections

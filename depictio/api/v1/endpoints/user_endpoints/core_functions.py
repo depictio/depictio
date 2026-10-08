@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from typing import Any
 
 import bcrypt
 import jwt
@@ -172,6 +173,20 @@ async def _create_temporary_user_session(temp_user: UserBeanie) -> dict:
     }
 
 
+def _drop_version_ledger(main_dashboard_id: Any) -> None:
+    """Delete a deleted dashboard family's versions and counter, never raising.
+
+    Best-effort like the comment-thread cascade beside it: a ledger left behind
+    is unreachable litter, a cleanup that fails the user delete is worse.
+    """
+    try:
+        from depictio.api.v1.endpoints.dashboards_endpoints.version_store import delete_family
+
+        delete_family(str(main_dashboard_id))
+    except Exception as exc:
+        logger.warning(f"Could not clear the version ledger of {main_dashboard_id}: {exc}")
+
+
 async def _cleanup_expired_temporary_users() -> dict:
     """Clean up expired temporary users and their associated data.
 
@@ -231,6 +246,13 @@ async def _cleanup_expired_temporary_users() -> dict:
                 try:
                     await project.delete()
                     projects_deleted += 1
+                    # The dashboard version ledgers of the project, which no
+                    # other delete reaches. Never raises.
+                    from depictio.api.v1.endpoints.dashboards_endpoints.version_store import (
+                        delete_project_versions,
+                    )
+
+                    delete_project_versions(project.id)
                 except Exception as e:
                     logger.warning(f"Failed to delete project {project.name}: {e}")
 
@@ -268,6 +290,11 @@ async def _cleanup_expired_temporary_users() -> dict:
                         )
 
                         delete_threads_for_dashboards([dashboard.get("dashboard_id")])
+                        # A main tab takes its family's version ledger with it,
+                        # as the dashboard delete route does; a child tab's
+                        # versions belong to a family that may outlive it.
+                        if dashboard.get("is_main_tab", True) and dashboard.get("dashboard_id"):
+                            _drop_version_ledger(dashboard["dashboard_id"])
                     except Exception as e:
                         logger.warning(f"Failed to delete dashboard {dashboard.get('_id')}: {e}")
 

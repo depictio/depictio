@@ -20,7 +20,7 @@ WF_ID = ObjectId()
 DC_ID = ObjectId()
 
 
-def _run_cascade():
+def _run_cascade(delete_project_versions: MagicMock | None = None):
     """Run the cascade against mocked collections; return the runs mock."""
     from depictio.api.v1.endpoints.projects_endpoints.routes import _cascade_delete_project
 
@@ -38,9 +38,21 @@ def _run_cascade():
         patch(f"{MODULE}.data_collections_collection", MagicMock()),
         patch(f"{MODULE}.dashboards_collection", MagicMock()),
         patch(f"{MODULE}._collect_s3_locations_for_project", return_value=[]),
+        # Both reach their own collections; unpatched, each waits out the real
+        # Mongo's server-selection timeout.
+        patch(f"{MODULE}.delete_threads_for_project", MagicMock()),
+        patch(f"{MODULE}.delete_project_versions", delete_project_versions or MagicMock()),
     ):
         _cascade_delete_project(PROJECT_ID, "demo")
     return runs
+
+
+def test_dashboard_version_ledgers_follow_the_project():
+    """The dashboards go by project, past the dashboard delete route that drops a
+    family's ledger, so the cascade has to drop the project's ledgers itself."""
+    cleanup = MagicMock()
+    _run_cascade(delete_project_versions=cleanup)
+    cleanup.assert_called_once_with(PROJECT_ID)
 
 
 def test_runs_are_deleted_by_workflow():

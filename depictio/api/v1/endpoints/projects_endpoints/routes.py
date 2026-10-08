@@ -23,6 +23,9 @@ from depictio.api.v1.endpoints.comments_endpoints.cascade import delete_threads_
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     cascade_project_visibility,
 )
+from depictio.api.v1.endpoints.dashboards_endpoints.version_store import (
+    delete_project_versions,
+)
 from depictio.api.v1.endpoints.migrate_endpoints.routes import _collect_s3_locations_for_project
 from depictio.api.v1.endpoints.projects_endpoints.ingestion_report import (
     IngestionReport,
@@ -134,6 +137,9 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
 
     dashboards_collection.delete_many({"project_id": ObjectId(project_id)})
     delete_threads_for_project(project_id)
+    # The dashboards went without the dashboard delete route, so their version
+    # ledgers and sequence counters have to follow here or outlive them.
+    delete_project_versions(project_id)
     projects_collection.delete_one({"_id": ObjectId(project_id)})
     logger.info(f"Project '{project_name}' ({project_id}) deleted with cascade.")
 

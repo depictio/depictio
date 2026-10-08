@@ -42,13 +42,14 @@ def _add(
     pinned: bool = False,
     label: str | None = None,
     family: str = "fam",
+    project: str = "proj",
 ) -> str:
     version_id = f"v{seq}"
     versions.insert_one(
         {
             "version_id": version_id,
             "family_id": family,
-            "project_id": "proj",
+            "project_id": project,
             "seq": seq,
             "kind": kind,
             "pinned": pinned,
@@ -234,3 +235,45 @@ def test_prune_never_raises_on_bad_records(versions) -> None:
     _prune()
 
     assert "legacy" in _surviving(versions), "an unparseable record is skipped, not deleted"
+
+
+# ── Project delete ──────────────────────────────────────────────────────────
+
+
+def test_project_delete_drops_its_ledgers_and_counters(versions) -> None:
+    """A project delete removes dashboards wholesale, past the dashboard route.
+
+    Without this every family's history and sequence counter outlived the
+    project, unreachable: nothing lists versions of a dashboard that is gone.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+
+    counters = version_store.dashboard_version_counters_collection
+    _add(versions, seq=1, created=BASE, family="fam-a")
+    _add(versions, seq=2, created=BASE, family="fam-a")
+    _add(versions, seq=1, created=BASE, family="fam-b")
+    _add(versions, seq=1, created=BASE, family="kept", project="other")
+    counters.insert_many(
+        [{"family_id": f, "seq": 2} for f in ("fam-a", "fam-b", "kept")],
+    )
+
+    removed = version_store.delete_project_versions("proj")
+
+    assert removed == 3
+    assert {d["family_id"] for d in versions.find({})} == {"kept"}
+    assert {d["family_id"] for d in counters.find({})} == {"kept"}, (
+        "a counter left behind would hand a recreated family's first version a stale seq"
+    )
+
+
+def test_project_delete_never_raises(versions, monkeypatch) -> None:
+    """Cleanup is best-effort: it must not fail the project delete."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+
+    class Down:
+        def distinct(self, *_a, **_k):
+            raise RuntimeError("mongo is down")
+
+    monkeypatch.setattr(version_store, "dashboard_versions_collection", Down())
+
+    assert version_store.delete_project_versions("proj") == 0

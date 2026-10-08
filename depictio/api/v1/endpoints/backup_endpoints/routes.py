@@ -5,7 +5,7 @@ import os
 import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 from bson import DBRef, ObjectId
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -18,6 +18,8 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import (
     branding_assets_collection,
     comment_threads_collection,
+    dashboard_version_counters_collection,
+    dashboard_versions_collection,
     dashboards_collection,
     data_collections_collection,
     deltatables_collection,
@@ -522,6 +524,16 @@ class BackupResponse(BaseModel):
     s3_backup_metadata: dict | None = None
 
 
+# Collections that hang off a dashboard by its id as a string, and the field
+# holding it: what a temporary user's dashboard leaves behind in each. A
+# version family is named after its main tab, which is one of those ids.
+_TEMP_DASHBOARD_REF_FIELDS = {
+    "comment_threads": "anchor.dashboard_id",
+    "dashboard_versions": "family_id",
+    "dashboard_version_counters": "family_id",
+}
+
+
 async def _create_mongodb_backup(created_by: str, *, automatic: bool = False) -> dict:
     """
     Create a MongoDB backup with standard exclusions.
@@ -558,6 +570,14 @@ async def _create_mongodb_backup(created_by: str, *, automatic: bool = False) ->
         # Comment threads and annotations live apart from `dashboards`, so a
         # dashboard restore alone would bring the tiles back without them.
         "comment_threads": {"collection": comment_threads_collection, "exclude_filter": {}},
+        # Dashboard version history and its per-family sequence counters. The
+        # counters go with the versions: restored without them, the next
+        # capture would allocate a `seq` the restored ledger already holds.
+        "dashboard_versions": {"collection": dashboard_versions_collection, "exclude_filter": {}},
+        "dashboard_version_counters": {
+            "collection": dashboard_version_counters_collection,
+            "exclude_filter": {},
+        },
     }
 
     # First, get list of temporary user IDs to exclude their resources
@@ -567,7 +587,7 @@ async def _create_mongodb_backup(created_by: str, *, automatic: bool = False) ->
     logger.info(f"Found {len(temp_user_ids)} temporary users to exclude")
 
     # Their dashboards are left out below, so the comment threads anchored on
-    # them go too (threads store tab ids as strings).
+    # them and their version history go too (both store tab ids as strings).
     temp_dashboard_ids = (
         [
             str(d["dashboard_id"])
@@ -591,10 +611,11 @@ async def _create_mongodb_backup(created_by: str, *, automatic: bool = False) ->
             base_filter["permissions.owners._id"] = {"$nin": temp_user_ids}
 
         # Get all documents (applying exclusions)
-        if collection_name == "comment_threads" and temp_dashboard_ids:
-            thread_filter = {"anchor.dashboard_id": {"$in": temp_dashboard_ids}}
-            excluded_documents += collection.count_documents(thread_filter)
-            documents = list(collection.find({"$nor": [thread_filter]}))
+        ref_field = _TEMP_DASHBOARD_REF_FIELDS.get(collection_name)
+        if ref_field and temp_dashboard_ids:
+            ref_filter = {ref_field: {"$in": temp_dashboard_ids}}
+            excluded_documents += collection.count_documents(ref_filter)
+            documents = list(collection.find({"$nor": [ref_filter]}))
         elif base_filter:
             # Count excluded documents
             excluded_count = collection.count_documents(
@@ -1285,12 +1306,6 @@ def _restore_complex_objects(obj):
     return obj
 
 
-# Collections that store their cross-references (project, dashboard, user ids)
-# as plain strings: only their own ``_id`` is an ObjectId, and re-hydrating
-# every 24-hex string would break the string matches their queries rely on.
-_STRING_ID_COLLECTIONS = frozenset({"comment_threads"})
-
-
 def _parse_backup_datetime(value: Any) -> Any:
     """A datetime the backup wrote with ``default=str``, back as a UTC datetime."""
     if not isinstance(value, str):
@@ -1332,6 +1347,54 @@ def _restore_comment_thread(doc: dict) -> dict:
             for c in restored["comments"]
         ]
     return restored
+
+
+def _restore_own_id(doc: dict) -> dict:
+    """Re-hydrate a document's own ``_id`` and nothing else."""
+    restored = dict(doc)
+    for key in ("_id", "id"):
+        value = restored.get(key)
+        if isinstance(value, str) and ObjectId.is_valid(value):
+            restored[key] = ObjectId(value)
+    return restored
+
+
+def _restore_dashboard_version(doc: dict) -> dict:
+    """Re-hydrate a dashboard version: its own ``_id`` and its datetimes.
+
+    A snapshot stringifies every ObjectId on purpose: ``family_id`` is the
+    string the ledger is queried by, and the content hash is computed over the
+    stringified tabs. Re-hydrated, a family's whole history would stop matching
+    its dashboard. The datetimes must come back as dates, or the coalescing
+    window and the retention prune (which skips a string) stop working.
+    """
+    restored = _with_parsed_datetimes(
+        _restore_own_id(doc), ("created_at", "updated_at", "coalesce_until")
+    )
+    if isinstance(restored.get("data_collections"), list):
+        restored["data_collections"] = [
+            _with_parsed_datetimes(stamp, ("delta_commit_timestamp", "as_of"))
+            if isinstance(stamp, dict)
+            else stamp
+            for stamp in restored["data_collections"]
+        ]
+    return restored
+
+
+def _with_parsed_datetimes(doc: dict, keys: tuple[str, ...]) -> dict:
+    """``doc`` with each of ``keys`` it holds parsed back into a datetime."""
+    return {**doc, **{key: _parse_backup_datetime(doc[key]) for key in keys if key in doc}}
+
+
+# Collections that store their cross-references (project, dashboard, user ids)
+# as plain strings: only their own ``_id`` is an ObjectId, and re-hydrating
+# every 24-hex string would break the string matches their queries rely on.
+# Each maps to the restorer that knows which of its values are dates.
+_STRING_ID_RESTORERS: dict[str, Callable[[dict], dict]] = {
+    "comment_threads": _restore_comment_thread,
+    "dashboard_versions": _restore_dashboard_version,
+    "dashboard_version_counters": _restore_own_id,
+}
 
 
 @backup_endpoint_router.post("/restore", response_model=BackupRestoreResponse)
@@ -1404,6 +1467,8 @@ async def restore_backup(
             "instance_settings": instance_settings_collection,
             "branding_assets": branding_assets_collection,
             "comment_threads": comment_threads_collection,
+            "dashboard_versions": dashboard_versions_collection,
+            "dashboard_version_counters": dashboard_version_counters_collection,
         }
 
         collections_to_restore = request.collections or list(data_section.keys())
@@ -1475,12 +1540,8 @@ async def restore_backup(
 
             try:
                 collection = collection_map[collection_name]
-                documents = [
-                    _restore_comment_thread(doc)
-                    if collection_name in _STRING_ID_COLLECTIONS
-                    else _restore_complex_objects(doc)
-                    for doc in data_section[collection_name]
-                ]
+                restore_doc = _STRING_ID_RESTORERS.get(collection_name, _restore_complex_objects)
+                documents = [restore_doc(doc) for doc in data_section[collection_name]]
 
                 for doc in documents:
                     # Backups written from Mongo carry ``_id``; documents dumped
