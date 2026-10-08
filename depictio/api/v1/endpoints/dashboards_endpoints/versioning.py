@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import uuid
 from datetime import datetime, timedelta
 from typing import Any, Optional
@@ -42,11 +43,14 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, deltatables_collection
 from depictio.api.v1.endpoints.dashboards_endpoints import version_store
 from depictio.models.models.dashboard_versions import (
+    RECORD_SCHEMA_VERSION,
+    TAB_SCHEMA_1_FIELDS,
     DashboardVersion,
     DataCollectionStamp,
     TabSnapshot,
     VersionKind,
 )
+from depictio.models.models.dashboards import DashboardData
 
 #: Fields never carried into a snapshot.
 #:
@@ -71,6 +75,52 @@ SNAPSHOT_DEAD_FIELDS: frozenset[str] = frozenset(
 SNAPSHOT_FORBIDDEN_FIELDS: frozenset[str] = frozenset(
     {"permissions", "is_public", "project_id", "_id"}
 )
+
+#: Fields that move without the dashboard changing. Hashing them would turn a
+#: screenshot, a re-save or an import counter bump into a version.
+SNAPSHOT_VOLATILE_FIELDS: frozenset[str] = frozenset(
+    {"creation_time", "last_saved_ts", "screenshot_ts", "version"}
+)
+
+#: Recomputed rather than recorded. The ``inherited_*`` pair, the parent title
+#: and the realtime config are filled in by each GET and never stored;
+#: ``parent_dashboard_id`` is implied by the version's family, and restore sets
+#: it from there.
+SNAPSHOT_DERIVED_FIELDS: frozenset[str] = frozenset(
+    {
+        "inherited_brand_theme",
+        "inherited_category_colors",
+        "parent_dashboard_title",
+        "project_realtime",
+        "parent_dashboard_id",
+    }
+)
+
+#: ``MongoModel`` bookkeeping every model inherits (``id`` is ``_id``). No
+#: dashboard route writes the other three.
+SNAPSHOT_BASE_MODEL_FIELDS: frozenset[str] = frozenset(
+    {"id", "description", "flexible_metadata", "hash"}
+)
+
+#: Every dashboard field a snapshot leaves out on purpose. A ``DashboardData``
+#: field in neither this set nor ``TabSnapshot`` is one somebody forgot, and the
+#: field-coverage test fails on it rather than letting restore drop it silently.
+SNAPSHOT_EXCLUDED_FIELDS: frozenset[str] = (
+    SNAPSHOT_DEAD_FIELDS
+    | SNAPSHOT_FORBIDDEN_FIELDS
+    | SNAPSHOT_VOLATILE_FIELDS
+    | SNAPSHOT_DERIVED_FIELDS
+    | SNAPSHOT_BASE_MODEL_FIELDS
+)
+
+#: The brand-theme keys that point at logo bytes. The bytes live in
+#: ``branding_assets`` and are not versioned, so these always come from the
+#: live document on restore and preview.
+_LOGO_URL_KEYS: tuple[str, ...] = ("logo_url", "logo_url_dark")
+
+#: The cache-buster ``logo_asset_url`` appends, and that boot-time
+#: ``_migrate_dashboard_logos`` rewrites. It names an upload, not a look.
+_LOGO_CACHE_BUSTER = re.compile(r"\?v=\d+$")
 
 #: Data collection types whose storage supports each versioning mechanism.
 #: ``image`` is Delta-backed for its *manifest* of image paths; the image
@@ -120,13 +170,24 @@ def load_family_docs(family_id: ObjectId) -> list[dict[str, Any]]:
 
 
 def build_tab_snapshots(family_docs: list[dict[str, Any]]) -> list[TabSnapshot]:
-    """Project each tab document down to its renderable content."""
+    """Project each tab document down to its renderable content.
+
+    Explicit keyword arguments rather than ``DashboardData.from_mongo``: the raw
+    document carries fields the model forbids, and a capture must not fail on
+    them. A boolean setting reads ``is not False`` so a document written before
+    the setting existed (no key, or an explicit null) records its default.
+    """
     snapshots: list[TabSnapshot] = []
-    for doc in family_docs:
+    for raw in family_docs:
+        # The same fold `DashboardData` applies on load: a document still
+        # carrying the pre-brand-theme `logo_url` / `plot_theme` keys renders
+        # with them, so its snapshot must hold them too.
+        doc = DashboardData._fold_legacy_appearance(raw)
+        is_main_tab = bool(doc.get("is_main_tab", True))
         snapshots.append(
             TabSnapshot(
                 dashboard_id=str(doc.get("dashboard_id") or doc.get("_id")),
-                is_main_tab=bool(doc.get("is_main_tab", True)),
+                is_main_tab=is_main_tab,
                 tab_order=int(doc.get("tab_order", 0) or 0),
                 title=str(doc.get("title", "") or ""),
                 subtitle=str(doc.get("subtitle", "") or ""),
@@ -141,9 +202,46 @@ def build_tab_snapshots(family_docs: list[dict[str, Any]]) -> list[TabSnapshot]:
                 stored_metadata=_jsonify(doc.get("stored_metadata") or []),
                 left_panel_layout_data=_jsonify(doc.get("left_panel_layout_data") or []),
                 right_panel_layout_data=_jsonify(doc.get("right_panel_layout_data") or []),
+                tab_group=doc.get("tab_group"),
+                filter_sections=_jsonify(doc.get("filter_sections") or []),
+                grid_sections=_jsonify(doc.get("grid_sections") or []),
+                category_colors=_jsonify(doc.get("category_colors")) or None,
+                funnel_filtering=doc.get("funnel_filtering") is not False,
+                filter_panel_default=doc.get("filter_panel_default") or "open",
+                content_width_default=doc.get("content_width_default") or "full",
+                show_tab_header=doc.get("show_tab_header") is not False,
+                # The viewer reads the Guide from the main tab for the whole
+                # family. A child's copy is never shown, so recording it would
+                # only let an invisible field move the hash.
+                show_guide=(doc.get("show_guide") is not False) if is_main_tab else True,
+                guide_intro=str(doc.get("guide_intro") or "") if is_main_tab else "",
+                advanced_viz_controls=doc.get("advanced_viz_controls") or "popover",
+                autofit=doc.get("autofit") is not False,
+                brand_theme=_jsonify(doc.get("brand_theme")) or None,
+                source_key=doc.get("source_key"),
             )
         )
     return snapshots
+
+
+def restorable_brand_theme(
+    snapshot_theme: Optional[dict[str, Any]], live_theme: Optional[dict[str, Any]]
+) -> Optional[dict[str, Any]]:
+    """A snapshot's brand theme as restore writes it (and preview shows it).
+
+    The logo URLs are the live ones. The bytes behind them are not versioned,
+    so an old URL could only serve today's image, under a cache-buster a browser
+    may still hold an older image for. None means the tab had no brand override
+    at that version, which restore turns into an ``$unset``.
+    """
+    if not snapshot_theme:
+        return None
+    live = live_theme or {}
+    theme = {k: v for k, v in snapshot_theme.items() if k not in _LOGO_URL_KEYS}
+    for key in _LOGO_URL_KEYS:
+        if live.get(key):
+            theme[key] = live[key]
+    return theme or None
 
 
 def _jsonify(value: Any) -> Any:
@@ -302,15 +400,51 @@ def generate_schema_hash(columns: list[dict[str, str]]) -> str:
     return f"sha256:{hashlib.sha256(payload.encode()).hexdigest()[:16]}"
 
 
+def _schema_2_defaults() -> dict[str, Any]:
+    """JSON defaults of every ``TabSnapshot`` field added after record schema 1."""
+    return {
+        name: TabSnapshot.model_fields[name].get_default(call_default_factory=True)
+        for name in TabSnapshot.model_fields
+        if name not in TAB_SCHEMA_1_FIELDS
+    }
+
+
+_LATER_FIELD_DEFAULTS: dict[str, Any] = _schema_2_defaults()
+
+
+def _canonical_tab(tab: TabSnapshot) -> dict[str, Any]:
+    """The part of a tab the content hash covers.
+
+    ``source_key`` is identity, not content. A field added after schema 1 is
+    left out while it holds its default (see ``TAB_SCHEMA_1_FIELDS``); leaving
+    a default out is lossless, since the default is known, so two different
+    states still never share a hash.
+    """
+    dumped = tab.model_dump(mode="json", exclude={"source_key"})
+    for name, default in _LATER_FIELD_DEFAULTS.items():
+        if name in dumped and dumped[name] == default:
+            del dumped[name]
+
+    theme = dumped.get("brand_theme")
+    if isinstance(theme, dict):
+        theme = dict(theme)
+        for key in _LOGO_URL_KEYS:
+            if isinstance(theme.get(key), str):
+                theme[key] = _LOGO_CACHE_BUSTER.sub("", theme[key])
+        dumped["brand_theme"] = theme
+    return dumped
+
+
 def compute_content_hash(tabs: list[TabSnapshot]) -> str:
     """Digest of the family's renderable content.
 
     Ordered by ``tab_order`` then id so tab reordering is a real change while
-    Mongo's return order is not.
+    Mongo's return order is not. A logo URL is hashed without its ``?v=``
+    cache-buster: the boot-time logo migration rewrites it, and a rewrite that
+    shows the same image is not an edit.
     """
     canonical = [
-        tab.model_dump(mode="json")
-        for tab in sorted(tabs, key=lambda t: (t.tab_order, t.dashboard_id))
+        _canonical_tab(tab) for tab in sorted(tabs, key=lambda t: (t.tab_order, t.dashboard_id))
     ]
     payload = json.dumps(canonical, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(payload.encode()).hexdigest()
@@ -345,12 +479,18 @@ def capture_dashboard_version(
     label: str | None = None,
     parent_version_id: str | None = None,
     now: datetime | None = None,
+    only_if_changed: bool = False,
 ) -> Optional[DashboardVersion]:
     """Snapshot a dashboard family. Returns None when nothing was recorded.
 
     None means: versioning disabled, the dashboard is gone, the family is
     empty, the snapshot is oversized, or — the common case — the content is
     byte-identical to the newest version.
+
+    ``only_if_changed`` writes nothing when the content matches the newest
+    version, whatever ``kind`` is. For recording "the state before" ahead of a
+    restore or an import: that state is usually the newest version already,
+    and an explicit capture would otherwise write a duplicate of it every time.
     """
     cfg = settings.dashboard_versions
     if not cfg.enabled:
@@ -391,10 +531,14 @@ def capture_dashboard_version(
     latest = version_store.latest_version(family_key)
 
     # Nothing changed. An explicit save still deserves a marker, so it falls
-    # through to the normal path; an autosave leaves no trace at all.
-    if latest and latest.get("content_hash") == content_hash and kind == "auto":
-        version_store.touch_version(latest["version_id"], now)
-        return None
+    # through to the normal path; an autosave leaves no trace at all, and
+    # neither does a "state before" capture.
+    if latest and latest.get("content_hash") == content_hash:
+        if only_if_changed:
+            return None
+        if kind == "auto":
+            version_store.touch_version(latest["version_id"], now)
+            return None
 
     stamps = build_dc_stamps(tabs)
 
@@ -442,6 +586,9 @@ def capture_dashboard_version(
                 # the denormalised counts have to move with it.
                 "tab_count": record.tab_count,
                 "component_count": record.component_count,
+                # The tabs now have this capture's shape, whatever the
+                # version they fold into was first written as.
+                "record_schema_version": RECORD_SCHEMA_VERSION,
             },
         )
         record.version_id = latest["version_id"]

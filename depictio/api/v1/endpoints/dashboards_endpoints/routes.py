@@ -4,6 +4,7 @@ import sys
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Any, Literal
@@ -73,6 +74,11 @@ from depictio.models.components.lite import (
 )
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.branding import BrandTheme
+from depictio.models.models.dashboard_versions import (
+    TAB_IDENTITY_FIELDS,
+    TAB_STRUCTURE_FIELDS,
+    TabSnapshot,
+)
 from depictio.models.models.dashboards import (
     AUTO_CATEGORY_KEY,
     DashboardData,
@@ -306,25 +312,17 @@ def get_project_visibility(project_id: PyObjectId) -> bool:
 
 #: Snapshot fields overlaid when a past version is requested.
 #:
-#: Narrower than the restore path's field list on purpose: that one also writes
-#: ``tab_order`` and ``is_main_tab``, which are family *structure*. Structure is
-#: meaningful when writing tabs back, but misleading on a read — the sidebar
-#: builds the tab strip from the live family, so a stale order here would
-#: disagree with the tabs actually on screen.
-_PREVIEW_OVERLAY_FIELDS: tuple[str, ...] = (
-    "title",
-    "subtitle",
-    "main_tab_name",
-    "tab_icon",
-    "tab_icon_color",
-    "icon",
-    "icon_color",
-    "icon_variant",
-    "workflow_system",
-    "notes_content",
-    "stored_metadata",
-    "left_panel_layout_data",
-    "right_panel_layout_data",
+#: Derived from the snapshot model like the restore path's list, so a field
+#: added to TabSnapshot shows in a preview without anyone remembering to list
+#: it here. Narrower than that list on purpose: restore also writes
+#: ``tab_order``, ``is_main_tab`` and ``tab_group``, which are family
+#: *structure*. Structure is meaningful when writing tabs back, but misleading
+#: on a read: the sidebar builds the tab strip from the live family, so a stale
+#: order here would disagree with the tabs actually on screen.
+_PREVIEW_OVERLAY_FIELDS: tuple[str, ...] = tuple(
+    name
+    for name in TabSnapshot.model_fields
+    if name not in TAB_IDENTITY_FIELDS and name not in TAB_STRUCTURE_FIELDS
 )
 
 
@@ -332,6 +330,7 @@ def _capture_version_quietly(
     dashboard_id: PyObjectId | ObjectId | str,
     current_user: Any,
     kind: str = "auto",
+    only_if_changed: bool = False,
 ) -> None:
     """Record a version after a write that does not go through ``/save``.
 
@@ -341,9 +340,48 @@ def _capture_version_quietly(
     try:
         from depictio.api.v1.endpoints.dashboards_endpoints.versioning import capture_quietly
 
-        capture_quietly(dashboard_id, kind=kind, author=current_user)  # type: ignore[arg-type]
+        capture_quietly(
+            dashboard_id,
+            kind=kind,  # type: ignore[arg-type]
+            author=current_user,
+            only_if_changed=only_if_changed,
+        )
     except Exception as exc:  # noqa: BLE001 — versioning must never break a write
         logger.warning(f"Version capture failed for {dashboard_id}: {exc}")
+
+
+def _capture_before_import(family_id: Any, current_user: Any) -> Callable[[], None]:
+    """A callable that records a family's present state, once, before an import.
+
+    An import overwrites a family wholesale, so the state it replaces must be
+    restorable afterwards. That state is usually the newest version already,
+    and then nothing is written (`only_if_changed`). When it is not (a
+    dashboard imported before versioning existed, or changed by a write that
+    does not capture), the import would otherwise destroy the one state nobody
+    recorded.
+
+    Returned rather than run, so a path that learns only mid-way whether it
+    writes at all (a kept family gaining the tabs it lacks) runs it at its
+    first write, and an import that changes nothing records nothing.
+    """
+    done = False
+
+    def capture() -> None:
+        nonlocal done
+        if not done:
+            done = True
+            _capture_version_quietly(family_id, current_user, kind="explicit", only_if_changed=True)
+
+    return capture
+
+
+def _capture_import(family_id: Any, current_user: Any) -> None:
+    """Record the state an import produced, as an ``import`` version.
+
+    Anchored on the family's main tab and taken once per import, after every
+    tab is written, so a multi-tab import is one entry rather than one per tab.
+    """
+    _capture_version_quietly(family_id, current_user, kind="import")
 
 
 def _overlay_version(
@@ -351,8 +389,12 @@ def _overlay_version(
     live_doc: dict,
     dashboard_id: PyObjectId,
     version_id: str,
-) -> dict:
+) -> tuple[dict, dict | None]:
     """Return ``dashboard_dict`` with a version's content laid over it.
+
+    Also returns the version's main tab, for the settings a child tab inherits
+    from it (None when it holds none, as in a record from before they were
+    snapshotted).
 
     Raises 404 when the version is unknown, belongs to another dashboard
     family, or predates this tab — a caller must not be able to read another
@@ -385,6 +427,14 @@ def _overlay_version(
     for field in _PREVIEW_OVERLAY_FIELDS:
         if field in tab:
             merged[field] = tab[field]
+    # Shown as a restore would write it: with today's logo URLs, since the
+    # logo bytes are not versioned.
+    if "brand_theme" in tab:
+        merged["brand_theme"] = versioning.restorable_brand_theme(
+            tab["brand_theme"], live_doc.get("brand_theme")
+        )
+
+    main_tab = next((t for t in (record.get("tabs") or []) if t.get("is_main_tab")), None)
 
     # Everything the banner needs, so the client does not need a second call.
     merged["preview"] = {
@@ -396,7 +446,7 @@ def _overlay_version(
         "created_at": record.get("created_at"),
         "author_email": record.get("author_email"),
     }
-    return merged
+    return merged, main_tab
 
 
 @dashboards_endpoint_router.get("/get/{dashboard_id}")
@@ -437,8 +487,11 @@ async def get_dashboard(
     # everything downstream — the MultiQC prewarm check, the ObjectId
     # normalisation — sees the state that will actually be rendered.
     previewing = False
+    preview_main: dict | None = None
     if version_id:
-        dashboard_dict = _overlay_version(dashboard_dict, dashboard_data, dashboard_id, version_id)
+        dashboard_dict, preview_main = _overlay_version(
+            dashboard_dict, dashboard_data, dashboard_id, version_id
+        )
         previewing = True
 
     # For child tabs, fetch parent dashboard title for header display
@@ -454,6 +507,24 @@ async def get_dashboard(
     # Same rule for category colours: the main tab's, sent apart from the tab's
     # own so a save never freezes a copy of them here.
     dashboard_dict["inherited_category_colors"] = family_category_colors(dashboard_dict)
+
+    # A child tab previewed at a past version inherits from its main tab as it
+    # was then, or the preview mixes that version's tiles with today's brand.
+    # Only where the version recorded the setting; an older record says nothing
+    # about it, so the live inheritance stands.
+    if preview_main is not None and dashboard_dict.get("parent_dashboard_id"):
+        if "brand_theme" in preview_main and not dashboard_dict.get("brand_theme"):
+            from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
+                restorable_brand_theme,
+            )
+
+            # `inherited_brand_theme` was just read from the live main tab,
+            # which holds the logo URLs to keep.
+            dashboard_dict["inherited_brand_theme"] = restorable_brand_theme(
+                preview_main["brand_theme"], dashboard_dict.get("inherited_brand_theme")
+            )
+        if "category_colors" in preview_main:
+            dashboard_dict["inherited_category_colors"] = preview_main["category_colors"] or None
 
     # Surface the project's realtime config so the React viewer can decide
     # whether to mount the RealtimeIndicator. A project without
@@ -867,43 +938,45 @@ async def save_dashboard(
             author=current_user,
         )
 
-        # Auto-queue screenshot regeneration so /dashboards and any
-        # other listing surface picks up the latest dashboard state.
-        # The `_should_enqueue_screenshot` debounce throttles implicit
-        # auto-saves (drag/resize/rename produce a save burst each); an
-        # explicit Save click passes `force_screenshot=true` to bypass
-        # the 1h window and always regenerate.
-        try:
-            if settings.performance.screenshots_enabled and (
-                force_screenshot or _should_enqueue_screenshot(dashboard_id_str)
-            ):
-                # Lazy import keeps API startup independent of the worker
-                # module; broad except so a Celery/broker outage never
-                # breaks the save response itself.
-                from depictio.api.celery_app import generate_dashboard_screenshot_dual
-
-                user_id = str(getattr(current_user, "id", "") or "")
-                # `force=True` on explicit Save also bypasses the celery
-                # task's own active-task dedup, so a Save mid-Playwright
-                # doesn't silently drop the new state.
-                generate_dashboard_screenshot_dual.delay(
-                    dashboard_id_str, user_id, force=force_screenshot
-                )
-                logger.debug(
-                    "Queued screenshot regeneration for dashboard %s (force=%s)",
-                    dashboard_id_str,
-                    force_screenshot,
-                )
-            else:
-                logger.debug(
-                    f"Skipping screenshot enqueue for {dashboard_id_str} — recent PNG exists"
-                )
-        except Exception as exc:  # noqa: BLE001 — non-fatal best-effort dispatch
-            logger.warning(f"Could not queue screenshot for {dashboard_id_str}: {exc}")
+        _queue_screenshot(dashboard_id_str, current_user, force=force_screenshot)
 
         return {"message": message, "dashboard_id": dashboard_id_str}
     else:
         raise HTTPException(status_code=404, detail="Failed to insert or update dashboard data.")
+
+
+def _queue_screenshot(dashboard_id_str: str, current_user: Any, *, force: bool) -> None:
+    """Auto-queue screenshot regeneration after a write, never raising.
+
+    Keeps /dashboards and any other listing surface on the latest dashboard
+    state. The `_should_enqueue_screenshot` debounce throttles implicit
+    auto-saves (drag/resize/rename produce a save burst each); an explicit
+    Save click, and a version restore, pass `force` to bypass the 1h window
+    and always regenerate.
+    """
+    try:
+        if settings.performance.screenshots_enabled and (
+            force or _should_enqueue_screenshot(dashboard_id_str)
+        ):
+            # Lazy import keeps API startup independent of the worker
+            # module; broad except so a Celery/broker outage never
+            # breaks the save response itself.
+            from depictio.api.celery_app import generate_dashboard_screenshot_dual
+
+            user_id = str(getattr(current_user, "id", "") or "")
+            # `force=True` on explicit Save also bypasses the celery
+            # task's own active-task dedup, so a Save mid-Playwright
+            # doesn't silently drop the new state.
+            generate_dashboard_screenshot_dual.delay(dashboard_id_str, user_id, force=force)
+            logger.debug(
+                "Queued screenshot regeneration for dashboard %s (force=%s)",
+                dashboard_id_str,
+                force,
+            )
+        else:
+            logger.debug(f"Skipping screenshot enqueue for {dashboard_id_str}: recent PNG exists")
+    except Exception as exc:  # noqa: BLE001 (non-fatal best-effort dispatch)
+        logger.warning(f"Could not queue screenshot for {dashboard_id_str}: {exc}")
 
 
 def _require_dashboard_editor(dashboard_id: PyObjectId, current_user: User) -> dict:
@@ -946,6 +1019,9 @@ async def update_dashboard_appearance(
     update = {"$set": {"brand_theme": payload}} if payload else {"$unset": {"brand_theme": ""}}
     dashboards_collection.update_one({"dashboard_id": dashboard_id}, update)
     logger.info(f"Dashboard {dashboard_id} appearance updated ({len(payload)} field(s))")
+    # The brand theme is part of a snapshot, so this is an edit the timeline
+    # must be able to undo, like any other.
+    _capture_version_quietly(dashboard_id, current_user)
     return {"brand_theme": payload or None}
 
 
@@ -987,6 +1063,8 @@ async def upload_dashboard_logo(
         {"$set": {"brand_theme": theme.model_dump(exclude_none=True)}},
     )
     logger.info(f"Dashboard {dashboard_id} logo updated ({len(content)} bytes)")
+    # No version capture: the bytes live in `branding_assets`, which no snapshot
+    # holds, and the next capture of the family absorbs the URL change.
     return {"logo_url": logo_url}
 
 
@@ -1079,6 +1157,14 @@ async def delete_dashboard(
                     logger.info(f"Removed {removed} version(s) for dashboard {dashboard_id}")
             except Exception as exc:  # noqa: BLE001 — cleanup must not fail the delete
                 logger.warning(f"Could not clear version ledger for {dashboard_id}: {exc}")
+        elif dashboard.get("parent_dashboard_id"):
+            # A child tab deleted through this route is the same change as
+            # DELETE /tab: anchored on the parent, since the deleted tab can no
+            # longer resolve its own family, and `explicit` so it never
+            # coalesces away.
+            _capture_version_quietly(
+                dashboard["parent_dashboard_id"], current_user, kind="explicit"
+            )
 
         message = f"Dashboard with ID '{str(dashboard_id)}' deleted successfully."
         if child_tabs_deleted > 0:
@@ -6505,12 +6591,22 @@ def _import_title(
     return yaml_title
 
 
+def _family_main_id(doc: dict) -> Any:
+    """The main tab's id of the family ``doc`` belongs to: its versions' subject."""
+    if doc.get("is_main_tab", True) is False and doc.get("parent_dashboard_id"):
+        return doc["parent_dashboard_id"]
+    return doc["dashboard_id"]
+
+
 def _keep_existing_dashboard(
     existing: dict,
     project_id: PyObjectId,
     source_key: str | None,
     title: str | None,
     tabs_added: int | None = None,
+    *,
+    current_user: Any,
+    before_write: Callable[[], None] | None = None,
 ) -> dict[str, Any]:
     """The response of an import that leaves a dashboard the project has as it is.
 
@@ -6519,14 +6615,25 @@ def _keep_existing_dashboard(
     `source_key`, so that later imports still find it once renamed. `tabs_added`,
     for a multi-tab main: the tabs it gained, which the response lists with the
     ones it had.
+
+    A version is recorded only when the family's content moved: a rename, or
+    tabs gained. A `source_key` alone names the dashboard and changes nothing on
+    screen. `before_write` is the caller's pre-import capture, already run if the
+    caller wrote tabs, so the state before them is the one recorded.
     """
+    family_id = _family_main_id(existing)
+    before_write = before_write or _capture_before_import(family_id, current_user)
     changes: dict[str, Any] = {}
     if title and title != existing.get("title"):
         changes["title"] = title
     if source_key and not existing.get("source_key"):
         changes["source_key"] = source_key
     if changes:
+        if "title" in changes:
+            before_write()
         dashboards_collection.update_one({"_id": existing["_id"]}, {"$set": changes})
+    if "title" in changes or tabs_added:
+        _capture_import(family_id, current_user)
     kept = {**existing, **changes}
     message = "Dashboard kept as it is" + (", renamed" if "title" in changes else "")
     if tabs_added:
@@ -6604,6 +6711,9 @@ def _import_multi_tab_dashboard(
     project_is_public = get_project_visibility(project_id)
     family_filter = _family_fans_out_a_filter([main_dashboard_data, *(tabs_data or [])])
     if keep_existing and existing_main is not None:
+        # Run at the first tab actually added, if any: a kept family that gains
+        # nothing records nothing.
+        before_write = _capture_before_import(existing_main["dashboard_id"], current_user)
         added = _import_family_tabs(
             tabs_data,
             existing_main["dashboard_id"],
@@ -6613,12 +6723,19 @@ def _import_multi_tab_dashboard(
             project_is_public,
             family_filter,
             keep=True,
+            before_write=before_write,
         )
         _prune_family_highlights(
             existing_main["dashboard_id"], {tab["dashboard_id"] for tab in added}
         )
         return _keep_existing_dashboard(
-            existing_main, project_id, source_key, main_title, tabs_added=len(added)
+            existing_main,
+            project_id,
+            source_key,
+            main_title,
+            tabs_added=len(added),
+            current_user=current_user,
+            before_write=before_write,
         )
 
     main_dashboard_dict = main_lite.to_full()
@@ -6677,6 +6794,8 @@ def _import_multi_tab_dashboard(
 
     is_update = existing_main is not None
     if is_update and existing_main is not None:
+        # The whole family is about to be replaced, the main tab first.
+        _capture_before_import(main_dashboard_id, current_user)()
         update_doc = main_dashboard.mongo()
         update_doc["_id"] = existing_main["_id"]
         result = dashboards_collection.replace_one({"_id": existing_main["_id"]}, update_doc)
@@ -6703,6 +6822,7 @@ def _import_multi_tab_dashboard(
         main_dashboard_id,
         {str(main_dashboard_id), *(tab["dashboard_id"] for tab in imported_tabs)},
     )
+    _capture_import(main_dashboard_id, current_user)
 
     action = "Updated" if is_update else "Imported"
     logger.info(
@@ -6734,6 +6854,7 @@ def _import_family_tabs(
     overwrite: bool = False,
     keep_titles: bool = False,
     keep: bool = False,
+    before_write: Callable[[], None] | None = None,
 ) -> list[dict[str, str]]:
     """Import the tabs of a multi-tab YAML under its main dashboard.
 
@@ -6747,6 +6868,10 @@ def _import_family_tabs(
     With `overwrite` and a `source_key`, a tab this YAML once held and holds no
     more (renamed or removed in the template) is deleted: it would otherwise stay
     beside its replacement. Tabs added in the viewer carry no such key and stay.
+
+    `before_write` runs before the first tab is written or deleted: the caller's
+    pre-import version capture, for a kept family that learns only here whether
+    it changes at all.
 
     Returns the tabs written, as {title, dashboard_id}.
     """
@@ -6856,6 +6981,8 @@ def _import_family_tabs(
                 "absent/unpopulated for this run"
             )
             if existing_tab is not None:
+                if before_write is not None:
+                    before_write()
                 dashboards_collection.delete_one({"_id": existing_tab["_id"]})
                 delete_threads_for_dashboards([existing_tab["dashboard_id"]])
             continue
@@ -6873,6 +7000,8 @@ def _import_family_tabs(
             logger.error(f"Tab validation failed for '{tab_lite.title}': {e}")
             continue
 
+        if before_write is not None:
+            before_write()
         tab_is_update = existing_tab is not None
         if tab_is_update and existing_tab is not None:
             update_doc = tab_dashboard.mongo()
@@ -6904,6 +7033,8 @@ def _import_family_tabs(
             )
         )
         if stale:
+            if before_write is not None:
+                before_write()
             logger.info(
                 "Removing tabs no longer in the YAML: "
                 + ", ".join(repr(tab.get("title")) for tab in stale)
@@ -7149,7 +7280,9 @@ async def import_dashboard_from_yaml(
         project_id, lite.title, source_key, overwrite or keep_existing, within
     )
     if keep_existing and existing_dashboard is not None:
-        return _keep_existing_dashboard(existing_dashboard, project_id, source_key, main_title)
+        return _keep_existing_dashboard(
+            existing_dashboard, project_id, source_key, main_title, current_user=current_user
+        )
     if existing_dashboard:
         logger.info(
             f"Found existing dashboard '{existing_dashboard.get('title')}' "
@@ -7213,6 +7346,14 @@ async def import_dashboard_from_yaml(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Dashboard validation failed: {e}") from e
 
+    # A child tab joins its parent's family, so the parent's timeline records
+    # it; a main dashboard is its own family.
+    family_id = (
+        parent_dashboard["dashboard_id"] if parent_dashboard is not None else new_dashboard_id
+    )
+    if existing_dashboard is not None or parent_dashboard is not None:
+        _capture_before_import(family_id, current_user)()
+
     # Insert or update in database
     is_update = existing_dashboard is not None
     if is_update and existing_dashboard is not None:
@@ -7233,6 +7374,7 @@ async def import_dashboard_from_yaml(
         {str(new_dashboard_id)},
         drop_missing_tabs=False,
     )
+    _capture_import(family_id, current_user)
 
     action = "Updated" if is_update else "Imported"
     logger.info(
@@ -7897,6 +8039,10 @@ async def import_dashboard_from_json(
     except Exception as e:
         logger.error(f"Failed to import dashboard: {e}")
         raise HTTPException(status_code=500, detail="Failed to import dashboard")
+
+    # Always a new document, so there is no earlier state to keep: only the
+    # import itself is recorded, as the family's first version.
+    _capture_import(new_dashboard_id, current_user)
 
     return {
         "success": True,

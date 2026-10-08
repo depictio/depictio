@@ -19,6 +19,8 @@ Covers:
   parent, and by title only a dashboard without a key;
 - `overwrite` deletes the family tabs the YAML no longer holds, not the tabs added
   in the viewer; `existing=keep` deletes none.
+- every import is versioned: the state it replaces when no version holds it
+  yet, then the state it made, one pair per family.
 """
 
 import asyncio
@@ -48,12 +50,26 @@ def user():
 
 @pytest.fixture
 def db(user):
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store, versioning
+
     database = mongomock.MongoClient()["depictio_test"]
+    # Imports and saves record versions; without these the capture reaches for
+    # the real Mongo and waits out its server-selection timeout on every call.
     with (
         patch.object(dash_routes, "dashboards_collection", database["dashboards"]),
         patch.object(dash_routes, "projects_collection", database["projects"]),
         patch.object(dash_routes, "_should_enqueue_screenshot", return_value=False),
         patch.object(dash_routes, "delete_threads_for_dashboards", return_value=0),
+        patch.object(versioning, "dashboards_collection", database["dashboards"]),
+        patch.object(versioning, "deltatables_collection", database["deltatables"]),
+        patch.object(
+            version_store, "dashboard_versions_collection", database["dashboard_versions"]
+        ),
+        patch.object(
+            version_store,
+            "dashboard_version_counters_collection",
+            database["dashboard_version_counters"],
+        ),
     ):
         yield database
 
@@ -1002,3 +1018,113 @@ class TestSaveKeepsTheKey:
         copy = db["dashboards"].find_one({"dashboard_id": ObjectId(copy_id)})
         assert copy.get("source_key") is None
         assert db["dashboards"].count_documents({"source_key": KEY}) == 1
+
+
+def _kinds(db):
+    return [v["kind"] for v in db["dashboard_versions"].find().sort("seq", 1)]
+
+
+def _versions(db):
+    return list(db["dashboard_versions"].find().sort("seq", 1))
+
+
+class TestImportIsVersioned:
+    """An import rewrites a family wholesale, so what it replaced must stay restorable."""
+
+    def test_a_first_import_is_the_family_first_version(self, db, user, project_id):
+        _import(_single("RNA-seq"), user, project_id, source_key=KEY)
+
+        assert _kinds(db) == ["import"]
+
+    def test_a_reimport_over_hand_edits_records_them_first(self, db, user, project_id):
+        _import(_single("RNA-seq"), user, project_id, source_key=KEY)
+        _edit(db, "RNA-seq")
+
+        _import(_single("RNA-seq"), user, project_id, overwrite=True, source_key=KEY)
+
+        assert _kinds(db) == ["import", "explicit", "import"]
+        edited = _versions(db)[1]["tabs"][0]
+        assert edited["stored_metadata"][0]["index"] == "edited"
+        assert _versions(db)[2]["tabs"][0]["stored_metadata"] == []
+
+    def test_an_identical_reimport_is_marked_but_not_duplicated_before(self, db, user, project_id):
+        _import(_single("RNA-seq"), user, project_id, source_key=KEY)
+
+        _import(_single("RNA-seq"), user, project_id, overwrite=True, source_key=KEY)
+
+        assert _kinds(db) == ["import", "import"]
+
+    def test_a_multi_tab_overwrite_is_one_pair_on_the_main_tab(self, db, user, project_id):
+        first = _import(_multi("RNA-seq", ["QC", "Expression"]), user, project_id, source_key=KEY)
+        _edit(db, "QC")
+
+        _import(
+            _multi("RNA-seq", ["QC", "Expression"]),
+            user,
+            project_id,
+            overwrite=True,
+            source_key=KEY,
+        )
+
+        assert _kinds(db) == ["import", "explicit", "import"]
+        assert {v["family_id"] for v in _versions(db)} == {first["dashboard_id"]}
+        assert [v["tab_count"] for v in _versions(db)] == [3, 3, 3]
+
+    def test_keep_with_nothing_to_add_records_nothing(self, db, user, project_id):
+        _import(_multi("RNA-seq", ["QC"]), user, project_id, source_key=KEY)
+        _edit(db, "QC")
+
+        _import(
+            _multi("RNA-seq", ["QC"]),
+            user,
+            project_id,
+            overwrite=True,
+            keep_titles=True,
+            existing="keep",
+            source_key=KEY,
+        )
+
+        assert _kinds(db) == ["import"]
+
+    def test_keep_adding_a_tab_records_the_hand_edits_before_it(self, db, user, project_id):
+        _import(_multi("RNA-seq", ["QC"]), user, project_id, source_key=KEY)
+        _edit(db, "QC")
+
+        _import(
+            _multi("RNA-seq", ["QC", "New tab"]),
+            user,
+            project_id,
+            overwrite=True,
+            keep_titles=True,
+            existing="keep",
+            source_key=KEY,
+        )
+
+        assert _kinds(db) == ["import", "explicit", "import"]
+        assert [v["tab_count"] for v in _versions(db)] == [2, 2, 3]
+
+    def test_a_child_tab_file_is_versioned_with_its_parent(self, db, user, project_id):
+        main = _import(_single("RNA-seq"), user, project_id, source_key=KEY)
+
+        _import(_child("QC", "RNA-seq"), user, project_id, source_key="file:qc.yaml")
+
+        versions = _versions(db)
+        assert [v["kind"] for v in versions] == ["import", "import"]
+        assert {v["family_id"] for v in versions} == {main["dashboard_id"]}
+        assert versions[-1]["tab_count"] == 2
+
+    def test_a_json_import_records_only_the_import(self, db, user, project_id):
+        content = {"_depictio_export_version": "1.0", "dashboard": {"title": "From JSON"}}
+
+        result = asyncio.run(
+            dash_routes.import_dashboard_from_json(
+                json_content=content,
+                project_id=str(project_id),
+                validate_integrity=False,
+                current_user=user,
+            )
+        )
+
+        versions = _versions(db)
+        assert [v["kind"] for v in versions] == ["import"]
+        assert versions[0]["family_id"] == result["dashboard_id"]

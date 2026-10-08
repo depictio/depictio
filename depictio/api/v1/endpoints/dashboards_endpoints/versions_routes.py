@@ -5,11 +5,13 @@ matched first: that module declares ``GET /{dashboard_id}/yaml`` and
 ``GET /{dashboard_id}/json``, and a greedy path parameter there would happily
 swallow ``/versions/...``.
 
-Permissions come from the same ``check_project_permission`` helper the rest of
-the dashboard routes use, resolved through the family's main tab. One
-deliberate deviation: deleting a version requires **owner**, not editor.
-Everything else here is recoverable — a bad restore is undone by restoring the
-version before it — but erasing history is not.
+Permissions come from the same helpers the rest of the dashboard routes use,
+resolved through the family's main tab: reading is project-level, as
+``GET /dashboards/get`` is, and writing goes through
+``check_dashboard_mutation_permission``, so whoever may save the dashboard may
+use its history. One deliberate deviation: deleting a version requires
+**owner**, not editor. Everything else here is recoverable (a bad restore is
+undone by restoring the version before it), but erasing history is not.
 """
 
 from __future__ import annotations
@@ -29,7 +31,9 @@ from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.models.dashboard_versions import TAB_IDENTITY_FIELDS, TabSnapshot
 from depictio.models.models.users import User
+from depictio.models.timestamps import preserved_creation_time, utc_now_str
 
 dashboard_versions_endpoint_router = APIRouter()
 
@@ -87,14 +91,29 @@ def _resolve_family(dashboard_id: PyObjectId | str) -> tuple[ObjectId, dict[str,
 
 
 def _require(main_doc: dict[str, Any], user: User, level: str) -> ObjectId:
-    """Enforce a permission level against the family's project."""
-    from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+    """Enforce a permission level against the family's main tab.
+
+    ``viewer`` is the project-level check ``GET /dashboards/get`` makes, so the
+    timeline is never readable by someone who cannot open the dashboard.
+    ``editor`` and ``owner`` are the checks the save and delete routes make,
+    which also let the dashboard's own owners through (a visitor's copy in a
+    public project, whose owner holds no project role): whoever can save a
+    dashboard can undo the save, and whoever can delete it can delete a version.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
+        check_dashboard_mutation_permission,
+        check_project_permission,
+    )
 
     project_id = main_doc.get("project_id")
     if not project_id:
         raise HTTPException(status_code=500, detail="Dashboard is not associated with a project.")
 
-    if not check_project_permission(project_id, user, level):
+    if level == "viewer":
+        allowed = check_project_permission(project_id, user, level)
+    else:
+        allowed = check_dashboard_mutation_permission(main_doc, user, level)
+    if not allowed:
         raise HTTPException(
             status_code=403, detail=f"You don't have {level} permission on this dashboard."
         )
@@ -367,29 +386,12 @@ async def delete_dashboard_version(
 # ── restore ─────────────────────────────────────────────────────────────────
 
 #: Snapshot fields written back onto a live tab document. Derived from the
-#: snapshot model minus its identity field, so adding a content field to
+#: snapshot model minus its identity fields, so adding a content field to
 #: TabSnapshot automatically restores it — while `permissions`, `is_public`
 #: and `project_id` remain structurally unreachable, because a TabSnapshot
 #: never holds them in the first place.
 _RESTORABLE_FIELDS: tuple[str, ...] = tuple(
-    name
-    for name in (
-        "title",
-        "subtitle",
-        "main_tab_name",
-        "tab_icon",
-        "tab_icon_color",
-        "icon",
-        "icon_color",
-        "icon_variant",
-        "workflow_system",
-        "notes_content",
-        "stored_metadata",
-        "left_panel_layout_data",
-        "right_panel_layout_data",
-        "tab_order",
-        "is_main_tab",
-    )
+    name for name in TabSnapshot.model_fields if name not in TAB_IDENTITY_FIELDS
 )
 
 
@@ -407,6 +409,10 @@ async def restore_dashboard_version(
     Only content is written. ``permissions``, ``is_public`` and ``project_id``
     are never taken from the snapshot — a months-old version must not be able
     to re-grant access that has since been revoked.
+
+    Only the fields a stored tab holds are written, so a version recorded
+    before a setting existed leaves that setting as it is live rather than
+    resetting it to a default.
     """
     record = _guarded_version(version_id, current_user, "editor")
 
@@ -424,19 +430,42 @@ async def restore_dashboard_version(
 
     # Capture the pre-restore state first. Without this the state being
     # replaced could be unrecoverable — precisely the situation restore exists
-    # to prevent.
-    versioning.capture_quietly(family_id, kind="explicit", author=current_user)
+    # to prevent. `only_if_changed`: when the present already is the newest
+    # version, that version is the undo point and a copy of it is noise.
+    versioning.capture_quietly(
+        family_id, kind="explicit", author=current_user, only_if_changed=True
+    )
 
     live_docs = versioning.load_family_docs(family_id)
     live_by_id = {str(d.get("dashboard_id") or d.get("_id")): d for d in live_docs}
     snapshot_by_id = {str(t["dashboard_id"]): t for t in snapshot_tabs}
 
+    # A restore is an edit like a save: the listing's thumbnail cache-buster
+    # and "last modified" column must move with it.
+    saved_ts = utc_now_str()
     updated, created, deleted = 0, 0, 0
 
     for tab_id, tab in snapshot_by_id.items():
+        live = live_by_id.get(tab_id)
         content = {f: tab[f] for f in _RESTORABLE_FIELDS if f in tab}
-        if tab_id in live_by_id:
-            dashboards_collection.update_one({"dashboard_id": ObjectId(tab_id)}, {"$set": content})
+        unset: dict[str, str] = {}
+        if "brand_theme" in content:
+            theme = versioning.restorable_brand_theme(
+                content.pop("brand_theme"), (live or {}).get("brand_theme")
+            )
+            # No override at that version: drop the field, as PATCH /appearance
+            # does for an empty theme, so the tab inherits again.
+            if theme is None:
+                unset["brand_theme"] = ""
+            else:
+                content["brand_theme"] = theme
+        content["last_saved_ts"] = saved_ts
+
+        if live is not None:
+            update: dict[str, Any] = {"$set": content}
+            if unset:
+                update["$unset"] = unset
+            dashboards_collection.update_one({"dashboard_id": ObjectId(tab_id)}, update)
             updated += 1
         else:
             # A tab that existed in the snapshot but has since been deleted.
@@ -448,11 +477,19 @@ async def restore_dashboard_version(
             doc["permissions"] = main.get("permissions")
             doc["is_public"] = main.get("is_public", False)
             doc["parent_dashboard_id"] = None if tab.get("is_main_tab") else family_id
+            # The id's own timestamp: the tab is the one created back then.
+            doc["creation_time"] = preserved_creation_time(None, doc["_id"], saved_ts)
+            # Its import origin comes back with it, so the next refresh of its
+            # YAML finds this tab instead of adding a second one.
+            if tab.get("source_key"):
+                doc["source_key"] = tab["source_key"]
             dashboards_collection.insert_one(doc)
             created += 1
 
     # Tabs added after the snapshot are removed, so the family matches the
-    # version exactly. The main tab is never deleted.
+    # version exactly. The main tab is never deleted. Their comment threads are
+    # left in place on purpose: restoring a later version recreates the tab
+    # under the same id, and its threads are then still attached to it.
     for tab_id, doc in live_by_id.items():
         if tab_id in snapshot_by_id:
             continue
@@ -474,6 +511,12 @@ async def restore_dashboard_version(
     restored = versioning.capture_quietly(
         family_id, kind="restore", author=current_user, parent_version_id=version_id
     )
+
+    # The listing thumbnail shows the main tab, which may just have changed
+    # completely. Forced, as an explicit Save is: a restore is deliberate.
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dashboard_routes
+
+    dashboard_routes._queue_screenshot(str(family_id), current_user, force=True)
 
     return {
         "restored_from": version_id,

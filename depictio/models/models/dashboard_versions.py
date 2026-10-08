@@ -42,6 +42,16 @@ from pydantic import BaseModel, ConfigDict, Field
 #: point is most wanted.
 VersionKind = Literal["auto", "explicit", "restore", "import"]
 
+#: Shape of a ``DashboardVersion`` record. Bumped when ``TabSnapshot`` gains
+#: fields, so a reader can tell a snapshot that predates a field (and so says
+#: nothing about it) from one that recorded the field's default.
+#:
+#: - 1: layout, components, titles, icons, notes.
+#: - 2: the presentation settings added since (sections, colours, brand,
+#:      guide, funnel, panel/width defaults, autofit, tab group) and
+#:      ``source_key``.
+RECORD_SCHEMA_VERSION = 2
+
 #: Which mechanism can reproduce a data collection's past state.
 #:
 #: - ``delta``    — Delta Lake time travel (``table``, table+coordinates, the
@@ -70,6 +80,12 @@ class TabSnapshot(BaseModel):
     Note ``left_panel_layout_data`` / ``right_panel_layout_data`` are the
     layouts actually in use; ``stored_layout_data`` is the legacy one and is
     empty on every current dashboard.
+
+    Every field added after record schema 1 defaults to what ``DashboardData``
+    defaults it to, so a schema-1 record still validates. Restore and preview
+    read the stored dicts rather than this model, and write only the keys a
+    stored tab actually holds: a schema-1 snapshot therefore leaves those
+    settings as they are live instead of resetting them to these defaults.
     """
 
     dashboard_id: str
@@ -89,7 +105,70 @@ class TabSnapshot(BaseModel):
     left_panel_layout_data: list[dict[str, Any]] = Field(default_factory=list)
     right_panel_layout_data: list[dict[str, Any]] = Field(default_factory=list)
 
+    # ── Record schema 2 ──
+    # Sidebar category of a child tab. Family structure, like `tab_order`.
+    tab_group: Optional[str] = None
+    # Section specs stay plain dicts: `FilterSectionSpec` forbids extras, and a
+    # snapshot must still load after that model gains or drops a key.
+    filter_sections: list[dict[str, Any]] = Field(default_factory=list)
+    grid_sections: list[dict[str, Any]] = Field(default_factory=list)
+    category_colors: Optional[dict[str, dict[str, str]]] = None
+    funnel_filtering: bool = True
+    filter_panel_default: Literal["open", "collapsed"] = "open"
+    content_width_default: Literal["full", "wide", "comfortable", "compact"] = "full"
+    show_tab_header: bool = True
+    # Read from the main tab only, as the viewer does; a child tab's own copy
+    # is never shown, so it is recorded at its default.
+    show_guide: bool = True
+    guide_intro: str = ""
+    advanced_viz_controls: Literal["popover", "rail", "header"] = "popover"
+    autofit: bool = True
+    # The stored dict, not a `BrandTheme`: dumping the model would add every
+    # unset key, and each key BrandTheme gains later would then move the hash
+    # of every branded dashboard. The logo URLs in it name bytes that are not
+    # versioned (they live in `branding_assets`), so restore keeps the live ones.
+    brand_theme: Optional[dict[str, Any]] = None
+    # Identity, not content: never hashed and never written onto a live tab.
+    # Kept so a tab a restore recreates is still the one its YAML refreshes.
+    source_key: Optional[str] = None
+
     model_config = ConfigDict(extra="forbid")
+
+
+#: Fields that name a tab rather than describe it. Restore matches tabs on
+#: ``dashboard_id`` and never rewrites it; ``source_key`` belongs to the import
+#: that made the tab, so only a recreated tab takes it back.
+TAB_IDENTITY_FIELDS: frozenset[str] = frozenset({"dashboard_id", "source_key"})
+
+#: Fields that place a tab in its family. Restore writes them, but a preview
+#: leaves them live: the sidebar builds the tab strip from the live family, so a
+#: past order or grouping would disagree with the tabs actually on screen.
+TAB_STRUCTURE_FIELDS: frozenset[str] = frozenset({"tab_order", "is_main_tab", "tab_group"})
+
+#: ``TabSnapshot`` as it was at record schema 1. Every later field is hashed only
+#: when it differs from its default, so a family that uses none of them keeps
+#: the hash it had before they existed: no spurious version on its first save
+#: after an upgrade, and the timeline still finds its current version.
+TAB_SCHEMA_1_FIELDS: frozenset[str] = frozenset(
+    {
+        "dashboard_id",
+        "is_main_tab",
+        "tab_order",
+        "title",
+        "subtitle",
+        "main_tab_name",
+        "tab_icon",
+        "tab_icon_color",
+        "icon",
+        "icon_color",
+        "icon_variant",
+        "workflow_system",
+        "notes_content",
+        "stored_metadata",
+        "left_panel_layout_data",
+        "right_panel_layout_data",
+    }
+)
 
 
 class DataCollectionStamp(BaseModel):
@@ -192,8 +271,8 @@ class DashboardVersion(BaseModel):
     parent_version_id: Optional[str] = None
 
     #: Schema version of this record itself, so a future shape change can be
-    #: migrated rather than guessed at.
-    record_schema_version: int = 1
+    #: migrated rather than guessed at. See ``RECORD_SCHEMA_VERSION``.
+    record_schema_version: int = RECORD_SCHEMA_VERSION
 
     model_config = ConfigDict(extra="forbid")
 

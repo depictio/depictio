@@ -425,3 +425,209 @@ def test_counts_follow_a_coalesced_edit(store) -> None:
 
     assert store["versions"].count_documents({}) == 1, "precondition: the saves coalesced"
     assert store["versions"].find_one({})["component_count"] == 3
+
+
+# ── Field coverage ──────────────────────────────────────────────────────────
+#
+# A snapshot is built from an explicit list of fields, so a field added to the
+# dashboard document is silently dropped by default: restore loses it, and a
+# save that only changes it looks like a no-op. These pin the list against the
+# model instead of against memory.
+
+
+def test_every_dashboard_field_is_snapshotted_or_excluded_on_purpose() -> None:
+    """A new `DashboardData` field must be versioned or deliberately excluded."""
+    from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
+        SNAPSHOT_EXCLUDED_FIELDS,
+    )
+    from depictio.models.models.dashboard_versions import TabSnapshot
+    from depictio.models.models.dashboards import DashboardData
+
+    unaccounted = (
+        set(DashboardData.model_fields) - set(TabSnapshot.model_fields) - SNAPSHOT_EXCLUDED_FIELDS
+    )
+
+    assert not unaccounted, (
+        f"{sorted(unaccounted)} would be dropped by every snapshot. Add them to "
+        "TabSnapshot (and build_tab_snapshots), or to a commented group in "
+        "SNAPSHOT_EXCLUDED_FIELDS saying why they are not content."
+    )
+
+
+def test_no_field_is_both_snapshotted_and_excluded() -> None:
+    from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
+        SNAPSHOT_EXCLUDED_FIELDS,
+    )
+    from depictio.models.models.dashboard_versions import TabSnapshot
+
+    assert not set(TabSnapshot.model_fields) & SNAPSHOT_EXCLUDED_FIELDS
+
+
+#: One value per schema-2 field, none of them its default.
+SCHEMA_2_VALUES: dict[str, Any] = {
+    "filter_sections": [{"name": "Sample", "icon": "mdi:test-tube", "collapsed": True}],
+    "grid_sections": [{"name": "Key figures", "filter_bar": True}],
+    "category_colors": {"species": {"Adelie": "#1a4f8f"}},
+    "funnel_filtering": False,
+    "filter_panel_default": "collapsed",
+    "content_width_default": "compact",
+    "show_tab_header": False,
+    "show_guide": False,
+    "guide_intro": "Start with the QC tab.",
+    "advanced_viz_controls": "rail",
+    "autofit": False,
+    "brand_theme": {"primary": "#1a4f8f", "logo_mode": "none"},
+}
+
+
+def test_snapshot_records_the_settings_added_since_schema_1(store) -> None:
+    did = _make_dashboard(store)
+    store["dashboards"].update_one({"_id": did}, {"$set": SCHEMA_2_VALUES})
+
+    record = _capture(did, kind="explicit", author=ALICE, now=BASE)
+
+    tab = store["versions"].find_one({})["tabs"][0]
+    for field, value in SCHEMA_2_VALUES.items():
+        assert tab[field] == value, f"{field} was not carried into the snapshot"
+    assert record is not None and record.record_schema_version == 2
+
+
+def test_a_change_to_a_new_setting_alone_is_a_new_version(store) -> None:
+    """The bug this guards: such a save was a no-op as far as the ledger knew."""
+    did = _make_dashboard(store, components=[{"index": "a"}])
+    _capture(did, author=ALICE, now=BASE)
+
+    store["dashboards"].update_one(
+        {"_id": did}, {"$set": {"grid_sections": [{"name": "Overview"}]}}
+    )
+    result = _capture(did, author=ALICE, now=BASE + timedelta(hours=5))
+
+    assert result is not None, "only grid_sections changed, and that is an edit"
+    assert store["versions"].count_documents({}) == 2
+
+
+def test_a_logo_cache_buster_alone_is_not_a_change(store) -> None:
+    """The boot-time logo migration rewrites `?v=`; the logo itself is the same."""
+    did = _make_dashboard(store)
+    logo = "/depictio/api/v1/dashboards/logo/abc"
+    store["dashboards"].update_one(
+        {"_id": did}, {"$set": {"brand_theme": {"logo_mode": "custom", "logo_url": f"{logo}?v=1"}}}
+    )
+    _capture(did, author=ALICE, now=BASE)
+
+    store["dashboards"].update_one({"_id": did}, {"$set": {"brand_theme.logo_url": f"{logo}?v=2"}})
+    result = _capture(did, author=ALICE, now=BASE + timedelta(hours=5))
+
+    assert result is None
+    assert store["versions"].count_documents({}) == 1
+
+
+def test_a_family_using_no_new_setting_keeps_its_schema_1_hash(store) -> None:
+    """Upgrading must not make every dashboard's next save look like an edit."""
+    import hashlib
+    import json
+
+    from depictio.api.v1.endpoints.dashboards_endpoints import versioning
+    from depictio.models.models.dashboard_versions import TAB_SCHEMA_1_FIELDS
+
+    did = _make_dashboard(store, components=[{"index": "a"}])
+    tabs = versioning.build_tab_snapshots(versioning.load_family_docs(did))
+
+    schema_1 = [t.model_dump(mode="json", include=set(TAB_SCHEMA_1_FIELDS)) for t in tabs]
+    expected = hashlib.sha256(
+        json.dumps(schema_1, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+
+    assert versioning.compute_content_hash(tabs) == expected
+
+
+def test_legacy_appearance_fields_are_folded_into_the_snapshot(store) -> None:
+    """A document still carrying the pre-brand-theme keys renders with them."""
+    did = _make_dashboard(store)
+    store["dashboards"].update_one(
+        {"_id": did},
+        {"$set": {"logo_url": "/static/logo.png", "plot_theme": {"template": "plotly_dark"}}},
+    )
+
+    _capture(did, kind="explicit", author=ALICE, now=BASE)
+
+    theme = store["versions"].find_one({})["tabs"][0]["brand_theme"]
+    assert theme["logo_url"] == "/static/logo.png"
+    assert theme["plots"] == {"template": "plotly_dark"}
+
+
+def test_a_child_tabs_own_guide_copy_is_not_recorded(store) -> None:
+    """The viewer reads the Guide from the main tab; a child's copy is invisible."""
+    main = _make_dashboard(store, title="Main")
+    child = _make_dashboard(store, title="Tab 2", parent=main, is_main_tab=False, tab_order=1)
+    store["dashboards"].update_one({"_id": child}, {"$set": {"show_guide": False}})
+
+    _capture(main, kind="explicit", author=ALICE, now=BASE)
+
+    tabs = {t["title"]: t for t in store["versions"].find_one({})["tabs"]}
+    assert tabs["Tab 2"]["show_guide"] is True
+
+
+def test_source_key_is_kept_but_never_hashed(store) -> None:
+    """Identity, not content: setting it is not an edit."""
+    did = _make_dashboard(store)
+    _capture(did, author=ALICE, now=BASE)
+
+    store["dashboards"].update_one({"_id": did}, {"$set": {"source_key": "nf-core/x:base.yaml"}})
+    assert _capture(did, author=ALICE, now=BASE + timedelta(hours=5)) is None
+
+    _capture(did, kind="explicit", author=ALICE, now=BASE + timedelta(hours=6))
+    latest = store["versions"].find_one({}, sort=[("seq", -1)])
+    assert latest["tabs"][0]["source_key"] == "nf-core/x:base.yaml"
+
+
+# ── only_if_changed ─────────────────────────────────────────────────────────
+
+
+def test_only_if_changed_writes_nothing_for_an_unchanged_family(store) -> None:
+    """Even an explicit capture: a copy of the newest version is noise."""
+    did = _make_dashboard(store, components=[{"index": "a"}])
+    _capture(did, kind="explicit", author=ALICE, now=BASE)
+
+    result = _capture(
+        did, kind="explicit", author=ALICE, now=BASE + timedelta(hours=5), only_if_changed=True
+    )
+
+    assert result is None
+    doc = store["versions"].find_one({})
+    assert store["versions"].count_documents({}) == 1
+    assert doc["save_count"] == 1, "not even a touch: nothing was saved"
+
+
+def test_only_if_changed_records_a_state_the_ledger_lacks(store) -> None:
+    did = _make_dashboard(store, components=[{"index": "a"}])
+    _capture(did, kind="explicit", author=ALICE, now=BASE)
+    _set_components(store, did, [{"index": "b"}])
+
+    result = _capture(
+        did, kind="explicit", author=ALICE, now=BASE + timedelta(hours=5), only_if_changed=True
+    )
+
+    assert result is not None
+    assert store["versions"].count_documents({}) == 2
+
+
+def test_only_if_changed_records_the_first_state_of_a_family(store) -> None:
+    """An empty ledger lacks every state, including the present one."""
+    did = _make_dashboard(store, components=[{"index": "a"}])
+
+    assert _capture(did, kind="explicit", author=ALICE, now=BASE, only_if_changed=True)
+    assert store["versions"].count_documents({}) == 1
+
+
+def test_a_fold_upgrades_the_record_schema_version(store) -> None:
+    """A version first written at schema 1 holds schema-2 tabs once folded into."""
+    did = _make_dashboard(store, components=[{"index": "a"}])
+    _capture(did, author=ALICE, now=BASE)
+    store["versions"].update_one({}, {"$set": {"record_schema_version": 1}})
+
+    _set_components(store, did, [{"index": "b"}])
+    _capture(did, author=ALICE, now=BASE + timedelta(seconds=5))
+
+    assert store["versions"].count_documents({}) == 1, "precondition: the saves coalesced"
+    assert store["versions"].find_one({})["record_schema_version"] == 2
