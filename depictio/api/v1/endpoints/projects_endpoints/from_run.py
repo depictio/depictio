@@ -25,6 +25,11 @@ The data root is built **once** and handed to both ``resolve_template`` and
 ``preview_data_root``. Both accept a pre-built root; passing the location twice
 would cost two full S3 listings for one request.
 
+What the preview says decides what is dispatched (:func:`_preflight_split`),
+and a later refresh of the project decides again the same way against the same
+folder (:func:`_refresh_preflight`), so a folder that created cleanly refreshes
+cleanly.
+
 How the run folder is read is decided from the same inputs the workers decide
 from, so the preview never accepts a folder the ingestion then refuses (see
 :func:`_run_folder_read_config`). A run folder in a private bucket comes with
@@ -66,6 +71,7 @@ from depictio.api.v1.endpoints.projects_endpoints.local_dirs import (
 )
 from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _dispatch_refresh_tasks,
+    _skip_dependants_of_absent_collections,
 )
 from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
     ProjectStorageConfigIn,
@@ -358,6 +364,16 @@ def _build_local_data_root(data_root: str, *, request, current_user):
     if policy is None:
         raise CodedHTTPException(422, LOCAL_FOLDERS_OFF, "local_folders_off")
     require_local_caller(request, current_user)
+    return _confined_local_root(policy, data_root)
+
+
+def _confined_local_root(policy, data_root: str):
+    """A :class:`LocalDataRoot` on the real path of ``data_root`` under ``policy``.
+
+    The checks on the folder itself, whoever asks: a path the policy refuses
+    (422, the policy's own message and code), a folder holding more than
+    :data:`MAX_LOCAL_RUN_FILES` files (422).
+    """
     try:
         real = policy.confine(data_root, want="dir")
     except LocalPathRefused as exc:
@@ -485,12 +501,12 @@ def _skip_reason(row) -> str:
     which is never dispatched.
 
     A required collection's failed step says it as is, an optional one's
-    skipped step after "Skipped optional collection: " (the
-    ``preflight_failed`` / ``preflight_skipped`` split in
-    ``_create_project_from_run``). A required one that misses nothing but
-    absent optional collections ends skipped instead, with the detail
-    ``_dispatch_refresh_tasks`` words for it. Display only: what is skipped is
-    decided from the preview's ``missing_collections``, never from this text.
+    skipped step after "Skipped optional collection: " (see
+    :func:`_preflight_split`). A required one that misses nothing but absent
+    optional collections ends skipped instead, with the detail
+    ``_skip_dependants_of_absent_collections`` words for it. Display only:
+    what is skipped is decided from the preview's ``missing_collections``,
+    never from this text.
     """
     if row.missing_sources:
         return (
@@ -504,7 +520,7 @@ def _missing_collections_only(preview_rows) -> dict[str, list[str]]:
     """``{tag: [collection tag, ...]}`` for each required collection of the
     preview that misses other collections and nothing else (no file of its own).
 
-    What ``_dispatch_refresh_tasks`` skips rather than fails when those
+    What :func:`_preflight_split` skips rather than fails when those
     collections are optional and absent (see
     ``manifest_ingest._skip_dependants_of_absent_collections``). Read from the
     preview rows' ``missing_collections``, so no message wording decides it.
@@ -518,6 +534,137 @@ def _missing_collections_only(preview_rows) -> dict[str, list[str]]:
         and row.missing_collections
         and len(row.missing_collections) == len(row.missing_sources)
     }
+
+
+@dataclass(frozen=True)
+class _Preflight:
+    """What the pre-flight decided for each collection of a project.
+
+    In the shapes ``_dispatch_refresh_tasks`` takes: ``to_dispatch`` as
+    ``(tag, dc_id, workflow index, files matched)``, the others as
+    ``(tag, dc_id, step detail)`` for an already-terminal step.
+    """
+
+    to_dispatch: list[tuple[str, str, int, int]]
+    failed: list[tuple[str, str, str]]
+    skipped: list[tuple[str, str, str]]
+
+
+def _preflight_split(project_dict: dict[str, Any], preview_rows) -> _Preflight:
+    """Split a project's collections on the preview of its run folder.
+
+    The one decision both a creation and a refresh make (see
+    :func:`_refresh_preflight`). A collection whose source is not there will
+    never ingest, so it is not dispatched: a required one is seeded as a
+    failed step saying why, instead of showing the UI a task that was never
+    going to succeed; one the template itself marks optional is a nominal
+    absence (a route the run didn't take), seeded "skipped" so the run can
+    still close clean around it. A required one that misses nothing but such
+    collections is skipped too
+    (``manifest_ingest._skip_dependants_of_absent_collections``, from the
+    rows' ``missing_collections``). Everything else is dispatched, ``empty``
+    rows included: the scan's own verdict on those arrives from the worker.
+
+    Decided over every collection of the project, so a caller refreshing
+    only some of them still sees each absent optional collection their
+    dependants read. A collection with no row (a ``pruned`` one is not in
+    the project at all: resolution dropped it) is dispatched.
+    """
+    rows = {row.tag: row for row in preview_rows}
+    to_dispatch: list[tuple[str, str, int, int]] = []
+    failed: list[tuple[str, str, str]] = []
+    skipped: list[tuple[str, str, str]] = []
+    for wf_index, workflow_dict in enumerate(project_dict.get("workflows") or []):
+        for dc_dict in workflow_dict.get("data_collections") or []:
+            tag = str(dc_dict.get("data_collection_tag") or "")
+            dc_id = str(dc_dict.get("_id") or dc_dict.get("id") or "")
+            row = rows.get(tag)
+            if row is not None and row.status == "missing":
+                if row.optional:
+                    skipped.append(
+                        (tag, dc_id, f"Skipped optional collection: {_skip_reason(row)}")
+                    )
+                else:
+                    failed.append((tag, dc_id, _skip_reason(row)))
+                continue
+            to_dispatch.append((tag, dc_id, wf_index, row.matched if row else 0))
+    failed, skipped = _skip_dependants_of_absent_collections(
+        failed, skipped, _missing_collections_only(rows.values())
+    )
+    return _Preflight(to_dispatch=to_dispatch, failed=failed, skipped=skipped)
+
+
+def _stored_run_folder(project_dict: dict[str, Any]):
+    """The :class:`DataRoot` of the run folder a project was made from, or None.
+
+    ``template_origin.data_root``, read the way the project's refresh workers
+    read it (``_build_cli_config_for_user``): an ``s3://`` root with the
+    instance's S3 settings and the project's storage settings
+    (``project_storage_for``), so the pre-flight reads it exactly as the
+    workers will; a folder on this disk only under the active local data
+    policy, confined and size-capped as at creation. Not the caller check of a creation: that one guards which
+    folder becomes a project, and this one already is. The pre-flight reads
+    no more of it than the workers it gates.
+
+    None when there is no data root (a manifest-driven project, or one not
+    made from a template), and for a folder on disk that local folders being
+    off or the policy now refusing it leaves unread: a shared server that
+    happens to see a CLI user's folder refreshes it as it always has, with no
+    pre-flight. Raises ``S3AccessError`` when the ``s3://`` root cannot be
+    listed.
+    """
+    data_root = str((project_dict.get("template_origin") or {}).get("data_root") or "")
+    if _is_s3_location(data_root):
+        from depictio.api.v1.configs.config import settings
+        from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
+            project_storage_for,
+        )
+        from depictio.cli.cli.utils.data_root import as_data_root
+
+        reads = _RunFolderReads(
+            s3_storage=settings.s3, remote_storage_options=project_storage_for(project_dict["_id"])
+        )
+        try:
+            return as_data_root(data_root, reads)
+        except ValueError as exc:  # pragma: no cover - creation parsed this very prefix
+            logger.warning(f"Refresh pre-flight skipped, data root '{data_root}': {exc}")
+            return None
+    if _is_local_path(data_root):
+        policy = local_data_policy()
+        if policy is None:
+            return None
+        try:
+            return _confined_local_root(policy, data_root)
+        except CodedHTTPException as exc:
+            logger.warning(f"Refresh pre-flight skipped ({exc.code}): {exc.detail}")
+            return None
+    return None
+
+
+def _refresh_preflight(project_dict: dict[str, Any]) -> tuple[str, _Preflight] | None:
+    """The creation's pre-flight, taken again when a project made from a run
+    folder is refreshed: that folder's location, and the split.
+
+    The rows are ``preview_data_collections`` over the stored collections,
+    which are the ones the creation previewed, and the split is the
+    creation's own (:func:`_preflight_split`), so the same folder gets the
+    same verdicts: an optional collection whose source is absent is skipped,
+    a required one that only misses such collections is skipped, and one
+    missing a source of its own fails. None of those is dispatched, so a
+    collection ingested before whose files went away keeps its table as it
+    was.
+
+    None when there is no folder to check (see :func:`_stored_run_folder`):
+    the refresh then dispatches as it always has.
+    """
+    root = _stored_run_folder(project_dict)
+    if root is None:
+        return None
+
+    from depictio.cli.cli.utils.template_preview import preview_data_collections
+
+    rows, _runs = preview_data_collections(project_dict, root)
+    return root.location, _preflight_split(project_dict, rows)
 
 
 def _save_storage_or_roll_back(project_oid: ObjectId, settings_in: ProjectStorageConfigIn) -> None:
@@ -641,7 +788,6 @@ def _create_project_from_run(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"Data root preview failed: {exc}")
 
-    missing_collections = _missing_collections_only(preview.data_collections)
     rows = {
         row.tag: FromRunDCPreview(
             data_collection_tag=row.tag,
@@ -722,43 +868,22 @@ def _create_project_from_run(
     # document, which they re-read for themselves; the run document in Mongo is
     # the durable status of record.
     stored = projects_collection.find_one({"_id": project_oid}) or {}
-    to_dispatch: list[tuple[str, str, int, int]] = []
-    preflight_failed: list[tuple[str, str, str]] = []
-    preflight_skipped: list[tuple[str, str, str]] = []
+    # The report's rows carry a pruned collection's reason; it has no step.
+    preflight = _preflight_split(stored, preview.data_collections)
     scan_modes: dict[str, str] = {}
-    for wf_index, workflow_dict in enumerate(stored.get("workflows") or []):
+    for workflow_dict in stored.get("workflows") or []:
         for dc_dict in workflow_dict.get("data_collections") or []:
-            tag = str(dc_dict.get("data_collection_tag") or "")
-            dc_id = str(dc_dict.get("_id") or dc_dict.get("id") or "")
             scan = (dc_dict.get("config") or {}).get("scan") or {}
+            tag = str(dc_dict.get("data_collection_tag") or "")
             scan_modes[tag] = str(scan.get("mode") or "") or "recipe"
-            row = rows.get(tag)
-            # A collection whose source is not there will never ingest. A
-            # required one is seeded as a failed step saying why, instead of
-            # showing the UI a task that was never going to succeed; one the
-            # template itself marks optional is a nominal absence (a route the
-            # run didn't take), seeded "skipped" so the run can still close
-            # clean around it. (A ``pruned`` collection is not in the project
-            # at all: resolution dropped it, so it cannot reach this loop;
-            # the report's rows carry its reason.)
-            if row is not None and row.status == "missing":
-                if row.optional:
-                    preflight_skipped.append(
-                        (tag, dc_id, f"Skipped optional collection: {_skip_reason(row)}")
-                    )
-                else:
-                    preflight_failed.append((tag, dc_id, _skip_reason(row)))
-                continue
-            to_dispatch.append((tag, dc_id, wf_index, row.matched if row else 0))
 
-    if to_dispatch or preflight_failed or preflight_skipped:
+    if preflight.to_dispatch or preflight.failed or preflight.skipped:
         run_id, all_dispatched, _results = _dispatch_refresh_tasks(
             project_dict=stored,
-            to_dispatch=to_dispatch,
+            to_dispatch=preflight.to_dispatch,
             current_user=current_user,
-            preflight_failed=preflight_failed,
-            preflight_skipped=preflight_skipped,
-            missing_collections=missing_collections,
+            preflight_failed=preflight.failed,
+            preflight_skipped=preflight.skipped,
             command="from_run",
             scan_modes=scan_modes,
             data_root=root.location,

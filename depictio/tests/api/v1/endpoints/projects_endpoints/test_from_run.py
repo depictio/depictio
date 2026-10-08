@@ -608,6 +608,54 @@ def test_poll_route_serves_a_from_run_ingestion(mock_db, megatest_s3):
     assert exc.value.status_code == 403
 
 
+def _verdicts(mock_db, run_id: str) -> dict[str, tuple[str, str | None, int]]:
+    """Each step of a run as (status, detail, files counted)."""
+    run_doc = mock_db["ingestion_runs"].find_one({"run_id": run_id})
+    counts = {dc["tag"]: dc["file_count"] for dc in run_doc["data_collections"]}
+    return {
+        step["name"]: (step["status"], step.get("detail"), counts[step["name"]])
+        for step in run_doc["steps"]
+    }
+
+
+def _refresh(mock_db, project_id: str, user):
+    """``Data refresh`` on the project, async as the viewer asks it, broker stubbed."""
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    with (
+        patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
+        patch("depictio.api.v1.celery_tasks.manifest_refresh_dc_task") as task,
+    ):
+        report = manifest_ingest._refresh_manifest_in_project(
+            project_id=project_id, current_user=user, async_run=True
+        )
+    return report, task
+
+
+def _assert_refresh_decides_as_creation(mock_db, created, created_task, user) -> None:
+    refreshed, refresh_task = _refresh(mock_db, created.project_id, user)
+
+    assert _verdicts(mock_db, refreshed.run_id) == _verdicts(mock_db, created.run_id)
+    assert sorted(p["dc_tag"] for p in _dispatched_payloads(refresh_task)) == sorted(
+        p["dc_tag"] for p in _dispatched_payloads(created_task)
+    )
+    run_doc = mock_db["ingestion_runs"].find_one({"run_id": refreshed.run_id})
+    assert (run_doc["command"], run_doc["data_root"]) == ("refresh_manifest", created.data_root)
+
+
+def test_a_refresh_decides_as_the_creation_did(mock_db, megatest_s3):
+    """The same folder, the same verdicts: an absent optional collection is
+    skipped and not dispatched, a required one missing a source fails, the
+    rest is dispatched. Before, a refresh dispatched everything and failed the
+    optional collections the creation had skipped."""
+    megatest_s3()
+    created, user, _importer, created_task = _run_from_folder(mock_db)
+
+    statuses = {status for status, _detail, _count in _verdicts(mock_db, created.run_id).values()}
+    assert statuses == {"pending", "failed", "skipped"}  # the folder exercises all three
+    _assert_refresh_decides_as_creation(mock_db, created, created_task, user)
+
+
 def test_an_unknown_command_is_still_not_pollable(mock_db):
     """Widening the poll route must not make every ingestion run readable."""
     from depictio.api.v1.monitoring import store as monitoring_store
@@ -845,6 +893,31 @@ def test_a_real_local_run_makes_the_recursive_scan_its_own_leader(mock_db, local
     )
     run_doc = mock_db["ingestion_runs"].find_one({"run_id": report.run_id})
     assert run_doc["data_root"] == os.path.realpath(local_home / "run42")
+
+
+def test_a_local_refresh_decides_as_the_creation_did(mock_db, local_home, monkeypatch):
+    """A folder on this disk is checked under the local data policy, as at
+    creation. With local folders off since, it is not read: the refresh
+    dispatches what the server sees, as it always has."""
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    user = _user(is_admin=True)
+    with (
+        _imported_dashboard(),
+        patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
+        patch("depictio.api.v1.celery_tasks.manifest_refresh_dc_task") as created_task,
+    ):
+        created = _call(
+            data_root=str(local_home / "run42"),
+            project_name="local42",
+            request=_request(),
+            user=user,
+        )
+    _assert_refresh_decides_as_creation(mock_db, created, created_task, user)
+
+    monkeypatch.delenv("DEPICTIO_LOCAL_DATA_ROOTS")
+    stored = mock_db["projects"].find_one({"_id": ObjectId(created.project_id)})
+    assert from_run._refresh_preflight(stored) is None
 
 
 # ── template detection ───────────────────────────────────────────────────────

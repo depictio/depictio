@@ -5,9 +5,11 @@ and re-ingests in place — no scan-config writes, no revert bookkeeping. These
 prove the contract: refreshable DCs are discovered from the stored scan configs,
 ``sync_files`` is threaded into the re-ingest, a manifest that dropped a DC's
 type marks it failed without running the scan, and per-DC fetch failures don't
-block DCs backed by a different manifest.
+block DCs backed by a different manifest. A project made from a run folder is
+checked against that folder first, the way its creation was.
 """
 
+from contextlib import contextmanager
 from unittest.mock import patch
 
 import mongomock
@@ -19,6 +21,13 @@ from depictio.api.v1.endpoints.datacollections_endpoints import utils as dc_util
 from depictio.api.v1.endpoints.projects_endpoints import manifest_ingest, storage_config
 from depictio.api.v1.remote_fetch import RemoteURLRejected
 from depictio.models.models.users import UserBase
+from depictio.tests.cli.s3_stubs import (
+    MEGATEST_TREE,
+    S3_BUCKET,
+    S3_KEY_PREFIX,
+    S3_ROOT,
+    install_s3_listing,
+)
 
 MANIFEST_JSON = """
 [
@@ -865,4 +874,267 @@ def test_async_run_records_each_dc_under_its_own_scan_mode(mock_db, served_manif
     assert {d["tag"]: d["scan_mode"] for d in run_doc["data_collections"]} == {
         "counts": "manifest",
         "sites": "url",
+
+# ── a project made from a run folder ───────────────────────────────────────
+
+
+@pytest.fixture()
+def run_folder(monkeypatch):
+    """The megatest run folder on a bucket marked public, read in server context.
+
+    Returns an installer for the tree the bucket holds (``MEGATEST_TREE`` by
+    default): what a refresh finds there now, whatever the creation found.
+    """
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+    monkeypatch.delenv("DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS", raising=False)
+    monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", S3_BUCKET)
+
+    def _install(tree: dict[str, bytes] | None = None):
+        return install_s3_listing(
+            monkeypatch, MEGATEST_TREE if tree is None else tree, key_prefix=S3_KEY_PREFIX
+        )
+
+    return _install
+
+
+def _run_folder_project_doc(owner_id: ObjectId) -> dict:
+    """A project as a creation from the megatest run folder stores it, cut to four
+    collections of the real ampliseq recipes.
+
+    ``samplesheet`` and ``taxonomy_composition`` read files of their own;
+    ``ancombc_results`` is optional and reads files the megatest folder does
+    not have; the required ``ma_canonical`` reads both recipe tables
+    (``dc_ref``), so it can only miss ``ancombc_results``.
+    """
+    from depictio.models.models.data_collections import (
+        DataCollection,
+        DataCollectionConfig,
+        Scan,
+        ScanURL,
+    )
+    from depictio.models.models.data_collections_types.table import DCTableConfig
+    from depictio.models.models.transforms import TransformConfig
+    from depictio.models.models.workflows import (
+        Workflow,
+        WorkflowConfig,
+        WorkflowDataLocation,
+        WorkflowEngine,
+    )
+
+    def _recipe(tag: str, recipe: str, optional: bool = False) -> DataCollection:
+        return DataCollection(
+            data_collection_tag=tag,
+            optional=optional,
+            config=DataCollectionConfig(
+                type="table",
+                metatype="metadata",
+                source="transformed",
+                transform=TransformConfig(recipe=recipe),
+                dc_specific_properties=DCTableConfig(format="csv"),
+            ),
+        )
+
+    samplesheet = DataCollection(
+        data_collection_tag="samplesheet",
+        config=DataCollectionConfig(
+            type="table",
+            metatype="metadata",
+            scan=Scan(mode="url", scan_parameters=ScanURL(url=f"{S3_ROOT}/input/samplesheet.csv")),
+            dc_specific_properties=DCTableConfig(format="csv"),
+        ),
+    )
+    workflow = Workflow(
+        name="ampliseq",
+        workflow_tag="ampliseq",
+        engine=WorkflowEngine(name="nextflow", version="24.04"),
+        config=WorkflowConfig(),
+        data_location=WorkflowDataLocation(structure="flat", locations=[S3_ROOT]),
+        data_collections=[
+            samplesheet,
+            _recipe("taxonomy_composition", "qiime2/taxonomy_composition.py"),
+            _recipe("ancombc_results", "qiime2/ancombc.py", optional=True),
+            _recipe("ma_canonical", "nf-core/ampliseq/ma_canonical.py"),
+        ],
+    )
+    return {
+        "_id": ObjectId(),
+        "name": "run42",
+        "permissions": {"owners": [{"_id": owner_id}]},
+        "workflows": [workflow.mongo()],
+        "template_origin": {
+            "template_id": "nf-core/ampliseq/2.16.0",
+            "template_version": "1.1.0",
+            "data_root": S3_ROOT,
+        },
+    }
+
+
+@contextmanager
+def _async_refresh(mock_db):
+    """The ingestion-run store on ``mock_db``, and the worker task stubbed."""
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    with (
+        patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
+        patch("depictio.api.v1.celery_tasks.manifest_refresh_dc_task") as task,
+    ):
+        yield task
+
+
+def _steps(mock_db, run_id: str) -> dict[str, dict]:
+    run_doc = mock_db["ingestion_runs"].find_one({"run_id": run_id})
+    return {step["name"]: step for step in run_doc["steps"]}
+
+
+def _finish(run_id: str, *tags: str) -> None:
+    """The workers' part: each dispatched step succeeds, then the run is closed."""
+    from depictio.api.v1.celery_tasks import _finalize_manifest_refresh_run
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    for tag in tags:
+        monitoring_store.set_ingestion_step(
+            run_id, step={"name": tag, "status": "success"}, current_step=None
+        )
+    _finalize_manifest_refresh_run(run_id)
+
+
+def _dispatched_tags(task) -> list[str]:
+    return sorted(
+        (call.kwargs.get("args") or call.args[0])[0]["dc_tag"]
+        for call in task.apply_async.call_args_list
+    )
+
+
+def test_a_run_folder_refresh_skips_an_absent_optional_collection_and_its_dependant(
+    mock_db, run_folder
+):
+    """The refresh decides as the creation did: neither is dispatched, and the run
+    closes clean once the collections that are there are in."""
+    run_folder()
+    user = _user()
+    doc = _run_folder_project_doc(user.id)
+    mock_db["projects"].insert_one(doc)
+
+    with _async_refresh(mock_db) as task:
+        report = manifest_ingest._refresh_manifest_in_project(
+            project_id=str(doc["_id"]), current_user=user, async_run=True
+        )
+        assert report.success is True
+        assert {r.data_collection_tag: r.status for r in report.refreshed} == {
+            "samplesheet": "dispatched",
+            "taxonomy_composition": "dispatched",
+            "ancombc_results": "skipped",
+            "ma_canonical": "skipped",
+        }
+        assert _dispatched_tags(task) == ["samplesheet", "taxonomy_composition"]
+
+        steps = _steps(mock_db, report.run_id)
+        assert steps["ancombc_results"]["status"] == "skipped"
+        assert steps["ancombc_results"]["detail"].startswith(
+            "Skipped optional collection: Not ingested: source(s) not found under the data "
+            "root: qiime2/ancombc/"
+        )
+        assert steps["ma_canonical"]["status"] == "skipped"
+        assert steps["ma_canonical"]["detail"] == (
+            "Not built: the optional collection 'ancombc_results' it reads is absent from this run."
+        )
+        run_doc = mock_db["ingestion_runs"].find_one({"run_id": report.run_id})
+        assert run_doc["data_root"] == S3_ROOT
+
+        _finish(report.run_id, "samplesheet", "taxonomy_composition")
+        assert mock_db["ingestion_runs"].find_one({"run_id": report.run_id})["status"] == "success"
+        assert manifest_ingest._get_refresh_run_report(report.run_id, user).success is True
+
+
+def test_a_required_collection_whose_files_are_gone_fails_without_being_dispatched(
+    mock_db, run_folder
+):
+    """Ingested before, its source gone now: failed, never dispatched, so the table
+    it already has is left as it was. A collection reading it stays failed, even
+    though the other collection it reads is an absent optional one."""
+    run_folder(
+        {rel: body for rel, body in MEGATEST_TREE.items() if rel != "qiime2/barplot/level-2.csv"}
+    )
+    user = _user()
+    doc = _run_folder_project_doc(user.id)
+    mock_db["projects"].insert_one(doc)
+
+    with _async_refresh(mock_db) as task:
+        report = manifest_ingest._refresh_manifest_in_project(
+            project_id=str(doc["_id"]), current_user=user, async_run=True
+        )
+        assert report.success is False
+        assert _dispatched_tags(task) == ["samplesheet"]
+
+        steps = _steps(mock_db, report.run_id)
+        assert steps["taxonomy_composition"]["status"] == "failed"
+        assert steps["taxonomy_composition"]["detail"] == (
+            "Not ingested: source(s) not found under the data root: qiime2/barplot/level-2.csv."
+        )
+        assert steps["ma_canonical"]["status"] == "failed"
+        assert steps["ancombc_results"]["status"] == "skipped"
+
+        _finish(report.run_id, "samplesheet")
+        assert mock_db["ingestion_runs"].find_one({"run_id": report.run_id})["status"] == "partial"
+
+
+def test_refreshing_one_collection_answers_what_refreshing_all_would(mock_db, run_folder):
+    """Decided over the whole project, then narrowed: ``ma_canonical`` alone is
+    still skipped for the absent ``ancombc_results``, and nothing is ingested."""
+    run_folder()
+    user = _user()
+    doc = _run_folder_project_doc(user.id)
+    mock_db["projects"].insert_one(doc)
+
+    with patch.object(manifest_ingest, "_run_dc_ingest", return_value=(True, None)) as ingest:
+        planned = _call(project_id=str(doc["_id"]), user=user, dry_run=True)
+        optional = _call(
+            project_id=str(doc["_id"]), user=user, data_collection_tag="ancombc_results"
+        )
+        dependant = _call(project_id=str(doc["_id"]), user=user, data_collection_tag="ma_canonical")
+
+    assert {r.data_collection_tag: r.status for r in planned.refreshed} == {
+        "samplesheet": "planned",
+        "taxonomy_composition": "planned",
+        "ancombc_results": "skipped",
+        "ma_canonical": "skipped",
+    }
+    (only,) = optional.refreshed
+    assert (only.data_collection_tag, only.status) == ("ancombc_results", "skipped")
+    assert only.message.startswith("Skipped optional collection: Not ingested:")
+    assert optional.success is True
+    assert [(r.data_collection_tag, r.status) for r in dependant.refreshed] == [
+        ("ma_canonical", "skipped")
+    ]
+    assert dependant.success is True
+    ingest.assert_not_called()
+
+
+def test_a_manifest_project_has_no_run_folder_to_check(mock_db, served_manifest, monkeypatch):
+    """A manifest-driven project stores no data root: only its manifest pre-flight
+    runs, and nothing lists a bucket."""
+    from depictio.api.v1.endpoints.projects_endpoints import from_run
+    from depictio.models.s3_access import S3Target
+
+    monkeypatch.setattr(S3Target, "client", lambda _target: pytest.fail("an S3 client was built"))
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts", "annotations"])
+    doc["template_origin"] = {
+        "template_id": "generic/manifest_tables/1.0.0",
+        "template_version": "1.0.0",
+        "data_root": None,
+        "variables": {"MANIFEST_URL": "https://example.org/manifest.json"},
+    }
+    mock_db["projects"].insert_one(doc)
+
+    assert from_run._refresh_preflight(doc) is None
+    with _async_refresh(mock_db) as task:
+        report = manifest_ingest._refresh_manifest_in_project(
+            project_id=str(doc["_id"]), current_user=user, async_run=True
+        )
+    assert report.success is True
+    assert _dispatched_tags(task) == ["annotations", "counts"]
+    assert {r.data_collection_tag: r.entries for r in report.refreshed} == {
+        "counts": 2,
+        "annotations": 1,
     }
