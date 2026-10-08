@@ -99,7 +99,7 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
           <Text size="sm" c="dimmed">
             {result.looks_like_run
               ? 'The folder holds run records, but none of them names a pipeline Depictio knows. Pick the pipeline below.'
-              : 'The folder holds no pipeline_info or multiqc folder, so it does not look like the output of a run. Check the folder, or pick the pipeline below.'}
+              : 'The folder holds no pipeline_info folder or MultiQC report, so it does not look like the output of a run. Check the folder, or pick the pipeline below.'}
           </Text>
         </Line>
       );
