@@ -7,6 +7,8 @@ parameterization ({MANIFEST_URL}, {DATA_ROOT}), the tag-based dashboard
 export, and the actual round-trip against the real resolver.
 """
 
+import io
+import zipfile
 from unittest.mock import patch
 
 import mongomock
@@ -339,3 +341,58 @@ def test_round_trip_through_resolve_template(mock_db, tmp_path):
     assert scan["scan_parameters"]["manifest_url"] == "https://mirror.example.org/manifest.json"
     assert [p.name for p in dashboard_paths] == ["run42_overview.yaml"]
     assert variables["MANIFEST_URL"] == "https://mirror.example.org/manifest.json"
+
+
+# ── bundle_to_zip: the bytes the route actually sends ───────────────────────
+
+
+def test_bundle_to_zip_round_trips_every_member():
+    bundle = {
+        "template.yaml": "name: Run42's project\n",
+        "dashboards/run42_overview.yaml": "title: Run42 Overview\n",
+    }
+
+    data = export_template.bundle_to_zip(bundle)
+
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        assert archive.testzip() is None
+        assert archive.namelist() == list(bundle)  # bundle order is archive order
+        assert {name: archive.read(name).decode("utf-8") for name in bundle} == bundle
+        assert {info.compress_type for info in archive.infolist()} == {zipfile.ZIP_DEFLATED}
+
+
+def test_bundle_to_zip_keeps_non_ascii_text():
+    text = "description: Café résumé 中文\n"
+
+    data = export_template.bundle_to_zip({"template.yaml": text})
+
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        assert archive.read("template.yaml").decode("utf-8") == text
+
+
+def test_zipped_bundle_is_what_the_cli_unpacks(mock_db, tmp_path):
+    """Route body to CLI: the archive built from a real bundle passes the CLI's
+    zip-slip guard and unpacks into the template directory layout."""
+    from depictio.cli.cli.commands.template import _members_within
+
+    user = _user()
+    doc = _manifest_project_doc(user.id)
+    mock_db["projects"].insert_one(doc)
+    wf = doc["workflows"][0]
+    mock_db["dashboards"].insert_one(
+        _dashboard_doc(doc["_id"], wf["_id"], wf["data_collections"][0]["_id"])
+    )
+    bundle = _build(str(doc["_id"]), user)
+
+    data = export_template.bundle_to_zip(bundle)
+
+    target = tmp_path / "test-lab" / "exported" / "1"
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        assert sorted(_members_within(archive, target)) == sorted(bundle)
+        target.mkdir(parents=True)
+        archive.extractall(target)
+    template = yaml.safe_load((target / "template.yaml").read_text())
+    assert template["template"]["template_id"] == "test-lab/exported/1"
+    assert (target / "dashboards" / "run42_overview.yaml").read_text() == (
+        bundle["dashboards/run42_overview.yaml"]
+    )
