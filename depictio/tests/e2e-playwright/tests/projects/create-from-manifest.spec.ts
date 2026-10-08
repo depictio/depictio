@@ -88,8 +88,15 @@ test.describe("Create project from a Data Manifest", () => {
       page.locator("[data-testid='manifest-preview-report']"),
     ).toBeVisible({ timeout: 30_000 });
 
-    // Preview → Create, then submit for real and expect the dashboard redirect.
+    // Preview → Create: the same button turns into "Create Project", and it
+    // ignores clicks for a moment after the step changes (a double click on
+    // Next must stop here), so wait for the Create step before submitting.
     await submit.click();
+    await expect(page.locator("[data-testid='manifest-create-step']")).toBeVisible();
+    await expect(submit).toHaveText("Create Project");
+    await expect(submit).toBeEnabled();
+
+    // Submit for real and expect the dashboard redirect.
     await submit.click();
     await expect(page).toHaveURL(/\/dashboard\//, { timeout: 60_000 });
   });

@@ -164,7 +164,7 @@ const ProjectsApp: React.FC = () => {
         notifications.show({
           color: 'teal',
           title: 'Project created from manifest',
-          message: `"${report.project_name}" is ready — opening its dashboard.`,
+          message: `"${report.project_name}" is ready: opening its dashboard.`,
           autoClose: 2500,
         });
         closeCreate();

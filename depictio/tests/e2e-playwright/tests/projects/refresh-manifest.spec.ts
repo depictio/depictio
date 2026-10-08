@@ -52,8 +52,12 @@ async function createManifestProject(page: Page, name: string): Promise<void> {
     page.locator("[data-testid='manifest-preview-report']"),
   ).toBeVisible({ timeout: 30_000 });
 
-  // Preview -> Create, then submit for real.
+  // Preview -> Create. The button ignores clicks for a moment after a step
+  // change, so wait for the Create step before submitting for real.
   await submit.click();
+  await expect(page.locator("[data-testid='manifest-create-step']")).toBeVisible();
+  await expect(submit).toHaveText("Create Project");
+  await expect(submit).toBeEnabled();
   await submit.click();
 
   const reviewModal = page.locator("[data-testid='manifest-created-modal']");

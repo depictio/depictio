@@ -90,6 +90,11 @@ interface SettingsNavLayoutProps {
   /** Open on this section rather than the remembered one. Read once: the
    *  modal remounts its body on every open. */
   initialSection?: string;
+  /** Keep the body of every section visited since the dialog opened mounted,
+   *  hidden while another one is shown, so a half-filled form survives a
+   *  switch to another section and back. Off by default: only the active
+   *  section is rendered. */
+  keepVisitedMounted?: boolean;
   /** Pinned to the bottom of the rail (wide layout only). */
   footer?: React.ReactNode;
   /** Names the rail and the narrow-screen select for assistive tech. */
@@ -102,6 +107,7 @@ const SettingsNavLayout: React.FC<SettingsNavLayoutProps> = ({
   storageKey,
   defaultSection,
   initialSection,
+  keepVisitedMounted = false,
   footer,
   ariaLabel,
   testIdPrefix,
@@ -109,6 +115,8 @@ const SettingsNavLayout: React.FC<SettingsNavLayoutProps> = ({
   const [stored, setStored] = React.useState<string | null>(
     () => initialSection ?? readActive(storageKey),
   );
+  /** Sections left for another one since the dialog opened (keepVisitedMounted). */
+  const [visited, setVisited] = React.useState<string[]>([]);
   const narrow = useMediaQuery(NARROW_QUERY, false, { getInitialValueInEffect: false });
 
   // A remembered section can be missing today (no feedback link configured,
@@ -118,35 +126,52 @@ const SettingsNavLayout: React.FC<SettingsNavLayoutProps> = ({
     sections.find((s) => s.key === defaultSection) ??
     sections[0];
   const select = (key: string) => {
+    if (keepVisitedMounted && active && !visited.includes(active.key)) {
+      setVisited((prev) => [...prev, active.key]);
+    }
     setStored(key);
     writeActive(storageKey, key);
   };
 
-  const page = active && (
-    <Stack gap="lg" data-testid={`${testIdPrefix}-section-${active.key}`}>
+  const renderPage = (section: SettingsNavSection) => (
+    <Stack gap="lg" data-testid={`${testIdPrefix}-section-${section.key}`}>
       {narrow ? (
         // The select above already names the section; repeating it as a
         // heading on a phone only pushes the fields down.
         <Text size="sm" c="dimmed">
-          {active.subtitle}
+          {section.subtitle}
         </Text>
       ) : (
         <Stack gap={2}>
           <Group gap="sm" wrap="nowrap">
-            <Icon icon={active.icon} width={22} height={22} style={SECTION_ICON_STYLE} />
+            <Icon icon={section.icon} width={22} height={22} style={SECTION_ICON_STYLE} />
             <Text fw={600} size="lg" lh={1.25}>
-              {active.title}
+              {section.title}
             </Text>
           </Group>
           <Text size="sm" c="dimmed">
-            {active.subtitle}
+            {section.subtitle}
           </Text>
         </Stack>
       )}
       <Divider />
-      {active.body}
+      {section.body}
     </Stack>
   );
+
+  // `hidden` takes an inactive section out of the layout, the tab order and
+  // the accessibility tree while its state stays in place.
+  const page = !active
+    ? null
+    : keepVisitedMounted
+      ? sections
+          .filter((s) => s.key === active.key || visited.includes(s.key))
+          .map((s) => (
+            <Box key={s.key} hidden={s.key !== active.key}>
+              {renderPage(s)}
+            </Box>
+          ))
+      : renderPage(active);
 
   if (narrow) {
     return (

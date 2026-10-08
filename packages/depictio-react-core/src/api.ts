@@ -4576,7 +4576,7 @@ export async function createDataCollectionFromUrl(
       lon_column: input.lonColumn ?? null,
     }),
   });
-  if (!res.ok) await throwHttpError(res, 'Failed to create data collection from URL');
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create data collection from URL');
   return res.json();
 }
 

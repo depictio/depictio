@@ -1,11 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Box, Button, Group, Loader, Select, Stack, Text, ThemeIcon } from '@mantine/core';
+import {
+  Alert,
+  Button,
+  Group,
+  Loader,
+  Select,
+  Stack,
+  Text,
+  ThemeIcon,
+  VisuallyHidden,
+} from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { getManifestRefreshRun, refreshManifest, Z_LAYERS } from 'depictio-react-core';
 import type { ManifestRefreshReport, ManifestRefreshStatus } from 'depictio-react-core';
 
-import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { DisabledReason, Field, GatedButton } from '../../components/settings/SettingsSections';
 import IngestionResultTable, { INGESTION_STATUS_META } from '../IngestionResultTable';
 
@@ -31,6 +40,8 @@ const SUMMARY_ORDER: ManifestRefreshStatus[] = [
   'running',
   'failed',
 ];
+
+const EDITORS_ONLY = 'Only project owners and editors can refresh the data.';
 
 /** Scan modes whose source the server reads over the network, so it can read
  *  it again. The server never re-reads a local path on a user's behalf: data
@@ -59,6 +70,14 @@ function isTerminal(report: ManifestRefreshReport): boolean {
   );
 }
 
+/** Outcome of a terminal report, read from its rows rather than from
+ *  `report.success`: a poll that lands between the worker's last step write
+ *  and the run's finalization sees every row final while `success` is still
+ *  false. */
+function hasFailedRow(report: ManifestRefreshReport): boolean {
+  return report.refreshed.some((entry) => entry.status === 'failed');
+}
+
 function formatElapsed(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1_000));
   const minutes = Math.floor(total / 60);
@@ -80,7 +99,15 @@ export function summarizeRefresh(report: ManifestRefreshReport): string {
   return parts.length > 0 ? parts.join(', ') : 'no collections refreshed';
 }
 
-export type RefreshState = 'idle' | 'starting' | 'running' | 'success' | 'failed';
+/** `stopped` is neither an outcome nor a failure: the page stopped polling
+ *  (the poll kept failing, or the run outlasted MAX_POLL_MS) while rows were
+ *  still queued or running, and the run may well go on server-side. */
+export type RefreshState = 'idle' | 'starting' | 'running' | 'success' | 'failed' | 'stopped';
+
+/** States in which a run has ended, as far as this page knows. */
+export function isRefreshEnded(state: RefreshState): boolean {
+  return state === 'success' || state === 'failed' || state === 'stopped';
+}
 
 /** Everything the Data refresh section shows, held by `useManifestRefresh`
  *  above the dialog so a run keeps being followed while the reader switches
@@ -209,14 +236,18 @@ export function useManifestRefresh(
     }
   };
 
+  // Polling only stops with rows still in flight when the page lost track of
+  // the run or gave up waiting: that is `stopped`, not an outcome.
   const state: RefreshState = submitting
     ? 'starting'
     : runId
       ? 'running'
       : report && finishedAt != null
-        ? report.success
-          ? 'success'
-          : 'failed'
+        ? !isTerminal(report)
+          ? 'stopped'
+          : hasFailedRow(report)
+            ? 'failed'
+            : 'success'
         : error
           ? 'failed'
           : 'idle';
@@ -234,8 +265,50 @@ export function useManifestRefresh(
   };
 }
 
+/** Words for the run as a whole once it has ended (`elapsed` is then fixed). */
+function describeEndedRefresh(
+  state: RefreshState,
+  summary: string | null,
+  elapsed: string,
+): string {
+  if (state === 'success') return `Refresh completed in ${elapsed}: ${summary ?? ''}`;
+  if (state === 'stopped') {
+    return `Stopped following the refresh after ${elapsed}${
+      summary ? `. Last seen: ${summary}` : ''
+    }`;
+  }
+  return summary
+    ? `Refresh finished with errors in ${elapsed}: ${summary}`
+    : 'The refresh failed';
+}
+
+/** What a screen reader hears, in a live region: each state change and the
+ *  final summary, never the ticking elapsed time nor every row update. */
+function announceRefresh(
+  state: RefreshState,
+  report: ManifestRefreshReport | null,
+  startedAt: number | null,
+  finishedAt: number | null,
+): string {
+  if (state === 'idle') return '';
+  if (state === 'starting') return 'Starting the refresh.';
+  if (state === 'running') return 'The refresh is running.';
+  const elapsed = formatElapsed(
+    startedAt == null || finishedAt == null ? 0 : finishedAt - startedAt,
+  );
+  return describeEndedRefresh(state, report ? summarizeRefresh(report) : null, elapsed);
+}
+
+/** Icon per ended state. `stopped` reads as a caution, not as a failure. */
+const ENDED_ICON: Record<'success' | 'failed' | 'stopped', { color: string; icon: string }> = {
+  success: { color: 'green', icon: 'mdi:check-circle' },
+  failed: { color: 'red', icon: 'mdi:alert-circle' },
+  stopped: { color: 'yellow', icon: 'mdi:eye-off-outline' },
+};
+
 /** Icon, colour and words for the run as a whole, plus the elapsed time,
- *  ticking once a second while the run is in flight. */
+ *  ticking once a second while the run is in flight. Not a live region: the
+ *  panel announces state changes separately (`announceRefresh`). */
 const RefreshStatusLine: React.FC<{
   state: RefreshState;
   report: ManifestRefreshReport | null;
@@ -258,26 +331,18 @@ const RefreshStatusLine: React.FC<{
   if (state === 'starting') text = 'Starting the refresh...';
   else if (state === 'running') {
     text = `Refreshing (${elapsed} elapsed)${summary ? `: ${summary}` : ''}`;
-  } else if (state === 'success') text = `Refresh completed in ${elapsed}: ${summary ?? ''}`;
-  else {
-    text = summary
-      ? `Refresh finished with errors in ${elapsed}: ${summary}`
-      : 'The refresh failed';
-  }
+  } else text = describeEndedRefresh(state, summary, elapsed);
+  const ended =
+    state === 'success' || state === 'failed' || state === 'stopped' ? ENDED_ICON[state] : null;
 
   return (
     <Group gap="xs" wrap="nowrap">
-      {live ? (
-        <Loader size="xs" />
-      ) : (
-        <ThemeIcon
-          variant="light"
-          size="sm"
-          radius="xl"
-          color={state === 'success' ? 'green' : 'red'}
-        >
-          <Icon icon={state === 'success' ? 'mdi:check-circle' : 'mdi:alert-circle'} width={14} />
+      {ended ? (
+        <ThemeIcon variant="light" size="sm" radius="xl" color={ended.color}>
+          <Icon icon={ended.icon} width={14} />
         </ThemeIcon>
+      ) : (
+        <Loader size="xs" />
       )}
       <Text size="sm" data-testid="manifest-refresh-status" data-state={state}>
         {text}
@@ -290,6 +355,9 @@ interface ManifestRefreshPanelProps {
   refresh: ManifestRefreshController;
   /** Owners, editors and admins may refresh (same gate as the DC actions). */
   canMutate: boolean;
+  /** Why the reader may not refresh on this deployment (public/demo mode for
+   *  non-admins, or still unknown while it loads); null otherwise. */
+  publicModeReason: string | null;
   /** Reload the project document so the delta locations and aggregation
    *  times on the page reflect the refresh. */
   onReloadProject?: () => void;
@@ -300,21 +368,16 @@ interface ManifestRefreshPanelProps {
 const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
   refresh,
   canMutate,
+  publicModeReason,
   onReloadProject,
 }) => {
-  const { user, isPublicMode } = useCurrentUser();
   const { refreshableTags, selectedTag, setSelectedTag, report, error, state } = refresh;
   const inFlight = state === 'starting' || state === 'running';
   const empty = refreshableTags.length === 0;
 
   // Disabled, never hidden: the affordance stays discoverable and the reason
   // is spelled out (same rule as the storage section and the DC actions).
-  const publicGate = isPublicMode && !user?.is_admin;
-  const gateReason = !canMutate
-    ? 'Only project owners and editors can refresh the data.'
-    : publicGate
-      ? 'Refreshing data is disabled in public/demo mode for non-admin users.'
-      : null;
+  const gateReason = publicModeReason ?? (canMutate ? null : EDITORS_ONLY);
   // The empty state below already says why there is nothing to refresh, so
   // that reason goes to the tooltip only.
   const disabledReason =
@@ -388,7 +451,7 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
           >
             Refresh now
           </GatedButton>
-          {(state === 'success' || state === 'failed') && report && onReloadProject && (
+          {isRefreshEnded(state) && report && onReloadProject && (
             <Button
               size="xs"
               variant="subtle"
@@ -403,21 +466,22 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
         <DisabledReason reason={gateReason} />
       </Stack>
 
-      <Box aria-live="polite" role="status">
-        <RefreshStatusLine
-          state={state}
-          report={report}
-          startedAt={refresh.startedAt}
-          finishedAt={refresh.finishedAt}
-        />
-      </Box>
+      <RefreshStatusLine
+        state={state}
+        report={report}
+        startedAt={refresh.startedAt}
+        finishedAt={refresh.finishedAt}
+      />
+      <VisuallyHidden role="status" aria-live="polite">
+        {announceRefresh(state, report, refresh.startedAt, refresh.finishedAt)}
+      </VisuallyHidden>
 
       {error && (
         <Alert
-          color="red"
+          color={state === 'stopped' ? 'yellow' : 'red'}
           variant="light"
           icon={<Icon icon="mdi:alert-circle-outline" width={18} />}
-          title="Refresh problem"
+          title={state === 'stopped' ? 'No longer following the refresh' : 'Refresh problem'}
           data-testid="manifest-refresh-error"
         >
           {error}

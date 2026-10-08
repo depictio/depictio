@@ -11,6 +11,7 @@ import {
 } from '../../components/settings/SettingsNavModal';
 import StoragePanel from './StoragePanel';
 import ManifestRefreshPanel, {
+  isRefreshEnded,
   summarizeRefresh,
   useManifestRefresh,
   type ManifestRefreshDc,
@@ -29,6 +30,10 @@ interface ProjectSettingsModalProps {
   canManageStorage: boolean;
   /** Owners, editors and admins: refresh and export. */
   canMutate: boolean;
+  /** Why refresh and export are unavailable to this reader on this
+   *  deployment (public/demo mode for non-admins, or not known yet while the
+   *  auth status loads); null when they are not gated by it. */
+  publicModeReason: string | null;
   dataCollections: ReadonlyArray<ManifestRefreshDc>;
   /** Reload the project page once a refresh has rebuilt its tables. */
   onReloadProject?: () => void;
@@ -47,9 +52,10 @@ interface ProjectSettingsModalProps {
  * 3. Export template: package the project as a reusable template bundle.
  *
  * Unlike the dashboard settings, nothing saves as you go: each section acts
- * on its own button, and closing the dialog drops unsaved edits. A refresh
- * keeps being followed while the dialog is closed (its state lives here, and
- * this component stays mounted on the project page), and says so with a
+ * on its own button. Unsaved edits survive a switch to another section and
+ * back, and are dropped when the dialog closes. A refresh keeps being
+ * followed while the dialog is closed (its state lives here, and this
+ * component stays mounted on the project page), and says so with a
  * notification when it ends out of sight.
  */
 const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
@@ -59,6 +65,7 @@ const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   projectName,
   canManageStorage,
   canMutate,
+  publicModeReason,
   dataCollections,
   onReloadProject,
   initialSection,
@@ -74,10 +81,20 @@ const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   useEffect(() => {
     const was = previousState.current;
     previousState.current = refresh.state;
-    const ended =
-      (was === 'starting' || was === 'running') &&
-      (refresh.state === 'success' || refresh.state === 'failed');
+    const ended = (was === 'starting' || was === 'running') && isRefreshEnded(refresh.state);
     if (!ended || openedRef.current) return;
+    if (refresh.state === 'stopped') {
+      // Not an outcome: the page stopped polling, the run may still go on.
+      notifications.show({
+        color: 'yellow',
+        title: 'Stopped following the data refresh',
+        message:
+          'It may still be running. The Ingestion tab shows how it ends; ' +
+          'project settings show what was seen so far.',
+        autoClose: 8000,
+      });
+      return;
+    }
     const ok = refresh.state === 'success';
     notifications.show({
       color: ok ? 'teal' : 'red',
@@ -107,6 +124,7 @@ const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
         <ManifestRefreshPanel
           refresh={refresh}
           canMutate={canMutate}
+          publicModeReason={publicModeReason}
           onReloadProject={onReloadProject}
         />
       ),
@@ -117,7 +135,13 @@ const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
       title: 'Export template',
       navLabel: 'Export',
       subtitle: 'Package this project and its dashboards to build them again on other data',
-      body: <ExportTemplatePanel projectId={projectId} canMutate={canMutate} />,
+      body: (
+        <ExportTemplatePanel
+          projectId={projectId}
+          canMutate={canMutate}
+          publicModeReason={publicModeReason}
+        />
+      ),
     },
   ];
 
@@ -142,6 +166,7 @@ const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
       storageKey="depictio-project-settings-active"
       defaultSection="storage"
       initialSection={initialSection}
+      keepVisitedMounted
       ariaLabel="Project settings"
       testIdPrefix="project-settings"
       footer={
