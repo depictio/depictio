@@ -263,12 +263,12 @@ def test_remote_data_root_clears_the_preflight_guard(monkeypatch, stub_cli_confi
 
 
 def test_local_data_root_that_does_not_exist_still_fails(stub_cli_config):
-    """The typo'd local path keeps failing with the message it always had."""
+    """The typo'd local path keeps failing, with main's DATA_DIR wording."""
     result = runner.invoke(
         app, ["run", "--template", TEMPLATE, "--data-root", "/nonexistent/data", "--dry-run"]
     )
     assert result.exit_code == 1
-    assert _flat("--data-root does not exist or is not a directory: /nonexistent/data") in _flat(
+    assert _flat("DATA_DIR does not exist or is not a directory: /nonexistent/data") in _flat(
         result.output
     )
 
