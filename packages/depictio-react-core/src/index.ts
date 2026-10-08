@@ -1105,6 +1105,8 @@ export {
   runFoundNothing,
 } from './runFolderReport';
 export type { RunCollectionEntry, RunCollectionSection } from './runFolderReport';
+export { humanizeVariableName, templateSettingValue } from './runFolderVariables';
+export type { TemplateSettingValue } from './runFolderVariables';
 export {
   EMPTY_RUN_STORAGE_FIELDS,
   isPrivateBucketRefusal,

@@ -118,6 +118,7 @@ const PRIVATE_RUN = inspection(PRIVATE_ROOT, {
 
 type FromRunBody = {
   template_id?: string | null;
+  variables?: Record<string, string>;
   dry_run?: boolean;
   storage?: Record<string, unknown> | null;
 };
@@ -147,8 +148,11 @@ async function openWithFolder(page: Page, folder = DATA_ROOT): Promise<void> {
   await page.locator("[data-testid='run-data-root-input']").fill(folder);
 }
 
+/** A template version's card (a radio) in the version picker. */
 const versionRadio = (page: Page, templateId: string) =>
-  page.locator(`[data-testid='run-version-control'] input[value='${templateId}']`);
+  page.locator(
+    `[data-testid='run-version-control'] [role='radio'][data-template-id='${templateId}']`,
+  );
 
 test.describe("Create project from a run folder", () => {
   // Runs for admins in standard AND single-user mode; skipped in public mode
@@ -217,7 +221,8 @@ test.describe("Create project from a run folder", () => {
     await expect(page.locator("[data-testid='run-version-detected']")).toBeVisible();
     await expect(versionRadio(page, TEMPLATE_ID)).toBeChecked();
 
-    // Versions newest first; the latest and the run's own version marked.
+    // Versions newest first, as cards; the newest and the run's own version
+    // marked.
     const options = page.locator("[data-testid^='run-version-option-']");
     await expect(options).toHaveCount(3);
     expect(
@@ -228,7 +233,7 @@ test.describe("Create project from a run folder", () => {
       "run-version-option-2.14.0",
     ]);
     await expect(page.locator("[data-testid='run-version-option-2.18.0']")).toContainText(
-      "Latest",
+      "Newest",
     );
     await expect(page.locator("[data-testid='run-version-option-2.16.0']")).toContainText(
       "Matches this run",
@@ -258,13 +263,30 @@ test.describe("Create project from a run folder", () => {
     await card.click();
     await expect(listbox).toBeHidden();
 
-    // The preview uses the template detection filled in.
+    // The template's settings are folded under one header: the server works
+    // them out from the folder, a value is typed only to override one.
+    const settings = page.locator("[data-testid='run-template-settings']");
+    const settingsToggle = page.locator("[data-testid='run-template-settings-toggle']");
+    await expect(settingsToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(settingsToggle).toContainText("Advanced: template settings (1)");
+    await expect(settingsToggle).toContainText("works these out from the run folder");
+    await settingsToggle.click();
+    const groupCol = page.locator("[data-testid='run-variable-input-GROUP_COL']");
+    await expect(groupCol).toBeVisible();
+    await expect(settings).toContainText("Group column");
+    await expect(settings).toContainText("GROUP_COL");
+    await expect(settings).toContainText("Metadata column for grouping");
+    await groupCol.fill("habitat");
+    await expect(settingsToggle).toContainText("1 overridden");
+
+    // The preview uses the template detection filled in, and the override.
     const submit = page.locator("[data-testid='create-from-run-submit']");
     await submit.click();
     await expect(page.locator("[data-testid='run-preview-report']")).toBeVisible({
       timeout: 20_000,
     });
     expect(bodies[0]?.template_id).toBe(TEMPLATE_ID);
+    expect(bodies[0]?.variables).toEqual({ GROUP_COL: "habitat" });
     await expect(page.locator("[data-testid='run-summary-match']")).toHaveAttribute(
       "data-match",
       "exact",
@@ -323,6 +345,17 @@ test.describe("Create project from a run folder", () => {
     await expect(match).toHaveAttribute("data-match", "exact");
     await expect(card.locator("[data-testid='run-use-detected']")).toHaveCount(0);
 
+    // The cards are one radio group for the keyboard: a single Tab stop, and
+    // an arrow moves the choice.
+    await expect(versionRadio(page, TEMPLATE_ID)).toHaveAttribute("tabindex", "0");
+    await expect(versionRadio(page, "nf-core/ampliseq/2.14.0")).toHaveAttribute("tabindex", "-1");
+    await versionRadio(page, TEMPLATE_ID).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(versionRadio(page, "nf-core/ampliseq/2.14.0")).toBeChecked();
+    await expect(versionRadio(page, "nf-core/ampliseq/2.14.0")).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
+    await expect(versionRadio(page, TEMPLATE_ID)).toBeChecked();
+
     // A picked version is what the preview asks for, and the preview says
     // it differs from the run.
     await page.locator("[data-testid='run-version-option-2.14.0']").click();
@@ -369,12 +402,18 @@ test.describe("Create project from a run folder", () => {
     await expect(detail).toContainText("v2.17.0");
     await expect(detail).toContainText("v2.16.0");
 
-    // The detected (closest) version is the one filled in, and no template
-    // version claims to match the run.
+    // The detected (closest) version is the one filled in and says so, and no
+    // template version claims to match the run.
     await expect(versionRadio(page, TEMPLATE_ID)).toBeChecked();
     await expect(page.locator("[data-testid='run-version-detected']")).toBeVisible();
     await expect(page.locator("[data-testid='run-version-control']")).not.toContainText(
       "Matches this run",
+    );
+    await expect(page.locator("[data-testid='run-version-option-2.16.0']")).toContainText(
+      "Closest to this run",
+    );
+    await expect(page.locator("[data-testid='run-version-option-2.18.0']")).not.toContainText(
+      "Closest to this run",
     );
   });
 
@@ -408,6 +447,12 @@ test.describe("Create project from a run folder", () => {
             ],
           }),
         ],
+        resolved_variables: {
+          DATA_ROOT,
+          GROUP_COL: "habitat",
+          METADATA_FILE: `${DATA_ROOT}/input/metadata.tsv`,
+          ANNOTATION_COLS: "habitat,site,depth,season,batch",
+        },
         truncated: true,
       }),
     }));
@@ -458,13 +503,39 @@ test.describe("Create project from a run folder", () => {
       preview.locator("[data-testid='run-missing-sources-multiqc_data']"),
     ).toContainText("multiqc/multiqc_data/multiqc.parquet");
 
-    // Template settings and detected runs are on the screen too.
-    await expect(preview.locator("[data-testid='run-resolved-variables']")).toContainText(
-      "GROUP_COL = habitat",
+    // The template settings are folded under their count; open, each reads
+    // as a label beside its raw name, a path relative to the run folder and a
+    // long list cut short.
+    const settings = preview.locator("[data-testid='run-resolved-variables']");
+    const settingsToggle = preview.locator("[data-testid='run-resolved-variables-toggle']");
+    await expect(settingsToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(settingsToggle).toContainText("Template settings (3)");
+    await settingsToggle.click();
+    await expect(settingsToggle).toHaveAttribute("aria-expanded", "true");
+    const groupRow = settings.locator("[data-testid='run-resolved-variable-GROUP_COL']");
+    await expect(groupRow).toBeVisible();
+    await expect(groupRow).toContainText("Group column");
+    await expect(groupRow).toContainText("GROUP_COL");
+    await expect(settings.locator("[data-testid='run-resolved-value-GROUP_COL']")).toHaveText(
+      "habitat",
     );
-    await expect(preview.locator("[data-testid='run-resolved-variables']")).not.toContainText(
-      "DATA_ROOT",
+    const metadataFile = settings.locator("[data-testid='run-resolved-value-METADATA_FILE']");
+    await expect(metadataFile).toHaveText("input/metadata.tsv");
+    await expect(metadataFile).toHaveAttribute(
+      "data-full-path",
+      `${DATA_ROOT}/input/metadata.tsv`,
     );
+    const annotation = settings.locator("[data-testid='run-resolved-value-ANNOTATION_COLS']");
+    await expect(annotation).toContainText("habitat, site, depth");
+    await expect(annotation).toContainText("and 2 more");
+    await expect(annotation).not.toContainText("season");
+    await expect(
+      settings.locator("[data-testid='run-resolved-variable-ANNOTATION_COLS']"),
+    ).toContainText("Annotation columns");
+    await expect(settings).not.toContainText("DATA_ROOT");
+    await expect(settings).not.toContainText("s3://");
+
+    // The runs found in the folder are on the screen too.
     await expect(preview.locator("[data-testid='run-detected-runs']")).toContainText("run_1");
 
     // A truncated listing says the counts are a lower bound.

@@ -2,15 +2,18 @@
  * The right-hand side of the folder browser: what the selected folder holds
  * and what Depictio recognises in it, read with `inspectFolder` on selection
  * (a newer selection cancels the request still in flight). From here the
- * reader can also look for run folders below the selected one. A folder in a
- * private bucket is read, and searched, with its connection details.
+ * reader can also look for run folders below the selected one: once a search
+ * ran, its hits come first and the folder's contents fold under a toggle.
+ * Each hit says who made the run in the words of the rest of the flow
+ * (workflow mark, pipeline, version, run records). A folder in a private
+ * bucket is read, and searched, with its connection details.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Anchor,
   Button,
-  Code,
+  Collapse,
   Divider,
   Group,
   Loader,
@@ -20,7 +23,9 @@ import {
   Stack,
   Text,
   ThemeIcon,
+  UnstyledButton,
 } from '@mantine/core';
+import { useId } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
 
 import {
@@ -32,12 +37,20 @@ import {
   normalizeFolder,
   relativeToFolder,
   runTemplateMatch,
+  splitTemplateId,
 } from 'depictio-react-core';
-import type { FindRunsResult, FolderInspection, RunStorageIn } from 'depictio-react-core';
+import type {
+  FindRunsResult,
+  FolderInspection,
+  FoundRunFolder,
+  RunStorageIn,
+} from 'depictio-react-core';
 
+import { TemplateSourceLogo } from '../../template';
 import { FlowBadge } from '../FlowBadge';
 import { FolderPath } from '../FolderPath';
 import { RunMadeBy, TemplateUsed } from '../RunIdentity';
+import { RunMarkers } from '../RunMarkers';
 
 const NAMES_SHOWN = 12;
 
@@ -107,6 +120,51 @@ const NameList: React.FC<{ names: string[]; count: number; icon: string; testId:
   );
 };
 
+/** "2 folders, 3 files", "at least" when the listing was cut short. */
+function contentCounts(result: FolderInspection): string {
+  const { folders, files } = result;
+  return (
+    `${folders.count} folder${folders.count === 1 ? '' : 's'}, ` +
+    `${files.count} file${files.count === 1 ? '' : 's'}${result.truncated ? ' (at least)' : ''}`
+  );
+}
+
+/** The second line of a run search hit: what made the run when the search
+ *  recognised it (detection runs for the first hits of a local search only),
+ *  else that selecting it tells; the run records found in both cases. */
+const HitIdentity: React.FC<{ run: FoundRunFolder }> = ({ run }) => {
+  const d = run.detected;
+  return (
+    <Group component="span" gap={6} wrap="wrap" mt={4} style={{ rowGap: 4 }}>
+      {d?.pipeline ? (
+        <>
+          <TemplateSourceLogo source={splitTemplateId(d.pipeline).source} size={16} />
+          <Text
+            span
+            size="xs"
+            fw={600}
+            c="var(--mantine-color-text)"
+            data-testid="browse-find-hit-pipeline"
+          >
+            {d.pipeline}
+          </Text>
+          <Text span size="xs" ff="monospace" data-testid="browse-find-hit-version">
+            {d.version ? formatVersion(d.version) : 'version unknown'}
+          </Text>
+        </>
+      ) : (
+        <>
+          <FlowBadge status="run-folder" />
+          <Text span size="xs" c="dimmed" data-testid="browse-find-hit-unidentified">
+            Select it to identify the pipeline
+          </Text>
+        </>
+      )}
+      {run.markers.length > 0 && <RunMarkers markers={run.markers} />}
+    </Group>
+  );
+};
+
 export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
   location,
   templateTitles,
@@ -116,11 +174,15 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
 }) => {
   const [inspect, setInspect] = useState<InspectState>({ status: 'loading' });
   const [find, setFind] = useState<FindState | null>(null);
+  /** The contents, folded while a search's hits are listed. */
+  const [contentsOpen, setContentsOpen] = useState(false);
+  const contentsId = useId();
 
   useEffect(() => {
     if (!location) return undefined;
     const controller = new AbortController();
     setInspect({ status: 'loading' });
+    setContentsOpen(false);
     inspectFolder(location, { signal: controller.signal, storage: storageFor?.(location) ?? null })
       .then((result) => {
         if (controller.signal.aborted) return;
@@ -142,6 +204,7 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
     if (!location) return;
     const root = location;
     setFind({ status: 'loading', root });
+    setContentsOpen(false);
     findRunFolders(root, { storage: storageFor?.(root) ?? null })
       .then((result) => setFind((cur) => (cur?.root === root ? { status: 'ready', root, result } : cur)))
       .catch((err: Error) =>
@@ -177,6 +240,28 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
   const result = inspect.status === 'ready' ? inspect.result : null;
   const detected = result?.detected ?? null;
   const unit = isS3Location(location) ? 'object' : 'folder';
+  const searching = findApplies && find !== null;
+  const contentLists =
+    result && (result.folders.names.length > 0 || result.files.names.length > 0) ? (
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+        {result.folders.names.length > 0 && (
+          <NameList
+            names={result.folders.names}
+            count={result.folders.count}
+            icon="mdi:folder-outline"
+            testId="browse-detail-folders"
+          />
+        )}
+        {result.files.names.length > 0 && (
+          <NameList
+            names={result.files.names}
+            count={result.files.count}
+            icon="mdi:file-outline"
+            testId="browse-detail-files"
+          />
+        )}
+      </SimpleGrid>
+    ) : null;
 
   return (
     <Stack gap="md" data-testid="browse-detail" data-path={location}>
@@ -247,43 +332,11 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
 
           <Section title="Run records">
             {result.markers.length > 0 ? (
-              <Group gap={6} wrap="wrap" data-testid="browse-detail-markers">
-                {result.markers.map((marker) => (
-                  <Code key={marker}>{marker}</Code>
-                ))}
-              </Group>
+              <RunMarkers markers={result.markers} testId="browse-detail-markers" />
             ) : (
               <Text size="xs" c="dimmed">
                 None found.
               </Text>
-            )}
-          </Section>
-
-          <Section title="Contents">
-            <Text size="sm" data-testid="browse-detail-counts">
-              {result.folders.count} folder{result.folders.count === 1 ? '' : 's'},{' '}
-              {result.files.count} file{result.files.count === 1 ? '' : 's'}
-              {result.truncated ? ' (at least)' : ''}
-            </Text>
-            {(result.folders.names.length > 0 || result.files.names.length > 0) && (
-              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-                {result.folders.names.length > 0 && (
-                  <NameList
-                    names={result.folders.names}
-                    count={result.folders.count}
-                    icon="mdi:folder-outline"
-                    testId="browse-detail-folders"
-                  />
-                )}
-                {result.files.names.length > 0 && (
-                  <NameList
-                    names={result.files.names}
-                    count={result.files.count}
-                    icon="mdi:file-outline"
-                    testId="browse-detail-files"
-                  />
-                )}
-              </SimpleGrid>
             )}
           </Section>
         </>
@@ -292,8 +345,8 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
       <Divider />
 
       <Section title="Run folders below this one">
-        {findApplies && find ? (
-          <Stack gap="xs" data-testid="browse-find-results" data-state={find.status}>
+        {searching && find ? (
+          <Stack gap="xs" data-testid="browse-find-results" data-state={find.status} aria-live="polite">
             {find.status === 'loading' && (
               <Group gap="xs">
                 <Loader size="xs" />
@@ -309,12 +362,23 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
             )}
             {find.status === 'ready' && (
               <>
-                <Text size="xs" c="dimmed" data-testid="browse-find-summary">
-                  {find.result.runs.length === 0
-                    ? `No run folder found under ${folderName(find.root)}`
-                    : `${find.result.runs.length} run folder${find.result.runs.length === 1 ? '' : 's'} under ${folderName(find.root)}`}
-                  {`, ${find.result.scanned} ${unit}${find.result.scanned === 1 ? '' : 's'} looked through.`}
-                </Text>
+                <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
+                  <Text size="xs" c="dimmed" data-testid="browse-find-summary">
+                    {find.result.runs.length === 0
+                      ? `No run folder found under ${folderName(find.root)}`
+                      : `${find.result.runs.length} run folder${find.result.runs.length === 1 ? '' : 's'} under ${folderName(find.root)}`}
+                    {`, ${find.result.scanned} ${unit}${find.result.scanned === 1 ? '' : 's'} looked through.`}
+                  </Text>
+                  <Anchor
+                    component="button"
+                    type="button"
+                    size="xs"
+                    onClick={() => setFind(null)}
+                    style={{ flexShrink: 0 }}
+                  >
+                    Clear the results
+                  </Anchor>
+                </Group>
                 {find.result.truncated && (
                   <Text size="xs" c="dimmed" data-testid="browse-find-truncated">
                     The search stopped at its limits, so there may be more run folders. Search
@@ -330,30 +394,27 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
                       active={normalizeFolder(run.location) === normalizeFolder(location)}
                       label={
                         isSearchedFolder(run.relative) ? (
-                          <Text size="sm" fw={500}>
+                          <Text span size="sm" fw={500}>
                             This folder
                           </Text>
                         ) : (
-                          <Text size="sm" ff="monospace" style={{ wordBreak: 'break-all' }}>
-                            {run.relative || run.name}
-                          </Text>
+                          <FolderPath
+                            location={run.location}
+                            label={run.relative || run.name}
+                            withCopy={false}
+                            maxLength={56}
+                          />
                         )
                       }
-                      description={
-                        run.detected?.pipeline
-                          ? `${run.detected.pipeline}${run.detected.version ? ` ${formatVersion(run.detected.version)}` : ''}`
-                          : run.markers.join(', ')
-                      }
+                      description={<HitIdentity run={run} />}
                       leftSection={<Icon icon="mdi:folder-check-outline" width={16} />}
                       onClick={() => onReveal(run.location)}
                       data-testid="browse-find-hit"
                       data-path={run.location}
+                      data-detected={run.detected?.pipeline ? 'true' : 'false'}
                     />
                   ))}
                 </Stack>
-                <Anchor component="button" type="button" size="xs" onClick={() => setFind(null)}>
-                  Clear the results
-                </Anchor>
               </>
             )}
           </Stack>
@@ -371,6 +432,38 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
           </Group>
         )}
       </Section>
+
+      {result &&
+        (searching ? (
+          <Stack gap={6}>
+            <UnstyledButton
+              onClick={() => setContentsOpen((open) => !open)}
+              aria-expanded={contentsOpen}
+              aria-controls={contentsId}
+              data-testid="browse-detail-contents-toggle"
+            >
+              <Group gap={4} wrap="nowrap">
+                <Icon icon={contentsOpen ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={16} />
+                <Text span size="xs" fw={700} c="dimmed" tt="uppercase">
+                  Contents
+                </Text>
+                <Text span size="xs" c="dimmed" data-testid="browse-detail-counts">
+                  ({contentCounts(result)})
+                </Text>
+              </Group>
+            </UnstyledButton>
+            <Collapse in={contentsOpen} id={contentsId} data-testid="browse-detail-contents">
+              {contentLists}
+            </Collapse>
+          </Stack>
+        ) : (
+          <Section title="Contents">
+            <Text size="sm" data-testid="browse-detail-counts">
+              {contentCounts(result)}
+            </Text>
+            {contentLists}
+          </Section>
+        ))}
     </Stack>
   );
 };

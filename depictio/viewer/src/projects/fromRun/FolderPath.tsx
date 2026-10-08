@@ -1,7 +1,9 @@
 /**
  * A folder location written once and short: the home folder as `~`, the
  * middle cut on segment boundaries, the full location in a tooltip and one
- * click away from the clipboard.
+ * click away from the clipboard. With `label`, that text is what is shown
+ * (shortened the same way), a path relative to a folder named nearby for
+ * instance, and the tooltip and the copy keep the full location.
  */
 import React from 'react';
 import { ActionIcon, Code, CopyButton, Group, Tooltip } from '@mantine/core';
@@ -11,6 +13,8 @@ import { shortenFolder, Z_LAYERS } from 'depictio-react-core';
 
 interface FolderPathProps {
   location: string;
+  /** Shown instead of `location`. */
+  label?: string;
   /** Longest shortened form, in characters. */
   maxLength?: number;
   withCopy?: boolean;
@@ -19,13 +23,16 @@ interface FolderPathProps {
 
 export const FolderPath: React.FC<FolderPathProps> = ({
   location,
+  label,
   maxLength = 56,
   withCopy = true,
   testId,
 }) => {
-  const short = shortenFolder(location, { maxLength });
+  const short = shortenFolder(label ?? location, { maxLength });
   return (
-    <Group gap={4} wrap="nowrap" style={{ minWidth: 0 }}>
+    // A span, so the path can sit in a label, or in a button without its copy
+    // button.
+    <Group component="span" gap={4} wrap="nowrap" style={{ minWidth: 0 }}>
       <Tooltip
         label={location}
         withArrow

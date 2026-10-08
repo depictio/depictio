@@ -14,10 +14,13 @@ import { Icon } from '@iconify/react';
 
 import type { ManifestRefreshStatus } from 'depictio-react-core';
 
-/** Every status a row can carry: the statuses of a polled worker run, which
- *  include those of a one-shot manifest ingestion. `planned` is a dry run;
- *  `dispatched` and `running` only show up while a worker run is being
- *  polled; `skipped` is an optional collection whose source is absent. */
+/** Every status a row can carry (`ManifestRefreshStatus`). An ingestion done
+ *  in the request answers `ingested` or `failed`, and `planned` on a dry run.
+ *  One handed to workers answers `dispatched` at once, then its poll moves
+ *  each row through `running` to `ingested` or `failed`; such a run also
+ *  lists `skipped` rows from the start: collections left out on purpose, an
+ *  optional one whose source is absent from the run folder or one that only
+ *  reads such a collection. */
 export type IngestionRowStatus = ManifestRefreshStatus;
 
 /** Visual treatment per status: an icon and a label beside the colour, so the
