@@ -265,31 +265,73 @@ export function isHttpStatus(err: unknown, status: number): boolean {
   return err instanceof HttpError && err.status === status;
 }
 
-/** The `detail` of an error body as text, or null. Object details (a code
- *  plus a message) are reduced to their message, else serialised. */
-async function readErrorDetail(res: Response): Promise<string | null> {
+/** The `detail` of an error body as text, and the machine-readable `code` it
+ *  names. Object details (a code plus a message, or an
+ *  `HTTPException(detail={detail, code})`) are reduced to their message, else
+ *  serialised; a top-level `code` wins over one inside `detail`. */
+async function readErrorBody(
+  res: Response,
+): Promise<{ detail: string | null; code: string | null }> {
   try {
     const body = await res.json();
     const detail = body?.detail;
-    if (detail == null) return null;
-    if (typeof detail === 'string') return detail;
-    if (typeof detail === 'object' && typeof detail.message === 'string') return detail.message;
-    return JSON.stringify(detail);
+    let code: string | null = null;
+    let text: string | null = null;
+    if (typeof detail === 'string') {
+      text = detail;
+    } else if (detail != null && typeof detail === 'object') {
+      if (typeof detail.code === 'string') code = detail.code;
+      text =
+        typeof detail.message === 'string'
+          ? detail.message
+          : typeof detail.detail === 'string'
+            ? detail.detail
+            : JSON.stringify(detail);
+    }
+    if (typeof body?.code === 'string') code = body.code;
+    return { detail: text, code };
   } catch {
     // ignore non-JSON error bodies
-    return null;
+    return { detail: null, code: null };
   }
+}
+
+/** The `detail` of an error body as text, or null (see `readErrorBody`). */
+async function readErrorDetail(res: Response): Promise<string | null> {
+  return (await readErrorBody(res)).detail;
+}
+
+/** The error thrown for a FastAPI `{detail}` envelope. `message` is the
+ *  human-readable detail; `code` is the machine-readable reason when the
+ *  server sends one (`{detail, code}`, e.g. `template_not_detected` or
+ *  `s3_access_denied`), so a caller can tell one refusal from another without
+ *  matching on wording. */
+export class ApiDetailError extends HttpError {
+  readonly code: string | null;
+
+  constructor(message: string, status: number, code: string | null, detail: string | null = null) {
+    super(message, status, detail);
+    this.name = 'ApiDetailError';
+    this.code = code;
+  }
+}
+
+/** The server's machine-readable error code, or null when `err` carries none. */
+export function apiErrorCode(err: unknown): string | null {
+  return err instanceof ApiDetailError ? err.code : null;
 }
 
 /** Throw using FastAPI's `{detail}` envelope when present, otherwise fall back
  *  to `<prefix>: <status>`. Both single-string and JSON `detail` bodies are
- *  surfaced (the latter reduced to its message, else stringified). */
+ *  surfaced (the latter reduced to its message, else stringified). The thrown
+ *  error is an `ApiDetailError`, carrying the status and any `code` the body
+ *  names. */
 async function throwHttpDetailError(
   res: Response,
   prefix: string,
 ): Promise<never> {
-  const detail = await readErrorDetail(res);
-  throw new HttpError(detail ?? `${prefix}: ${res.status}`, res.status, detail);
+  const { detail, code } = await readErrorBody(res);
+  throw new ApiDetailError(detail ?? `${prefix}: ${res.status}`, res.status, code, detail);
 }
 
 // ── Render errors that belong to data time travel ──────────────────────────
@@ -3368,6 +3410,11 @@ export interface AuthStatusResponse {
    *  (`DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW`). Older backends omit it, and
    *  the listing then keeps its own built-in default. */
   dashboards_default_view?: string;
+  /** The server may read run folders from its own disk (single-user mode with
+   *  allowed local folders), so the "From a run folder" tab accepts a local
+   *  path and offers a folder browser. No path is ever sent here. Older
+   *  backends omit it: treat absent as `false`. */
+  local_data_roots_enabled?: boolean;
 }
 
 /** Session payload persisted to localStorage['local-store'] on successful auth.
@@ -4070,12 +4117,29 @@ export interface FromRunDCPreview {
  *  `dryRun` nothing is created: the report comes back with the per-collection
  *  plan and null ids. */
 export interface FromRunRequest {
-  /** An `s3://bucket/prefix` pointing at one pipeline run folder. */
+  /** One pipeline run folder: an `s3://bucket/prefix`, or, when the server
+   *  allows local folders (`local_data_roots_enabled`), an absolute path or a
+   *  `~/...` path on the server's disk. */
   dataRoot: string;
-  templateId: string;
+  /** The template to use; null or absent asks the server to recognise the
+   *  pipeline from the folder (see `FromRunReport.detected_template`). A
+   *  folder it cannot recognise is a 422 with code `template_not_detected`. */
+  templateId?: string | null;
   projectName?: string | null;
   variables?: Record<string, string>;
   dryRun?: boolean;
+}
+
+/** What the server recognised in a run folder when no template was given.
+ *  Every field is null when it could not tell; `template_id` null means no
+ *  installed template matches. */
+export interface DetectedTemplate {
+  template_id: string | null;
+  /** e.g. `nf-core/ampliseq`. */
+  pipeline: string | null;
+  version: string | null;
+  /** Workflow engine, e.g. `nextflow`. */
+  engine: string | null;
 }
 
 /** Report returned by POST /projects/from_run, both for a dry-run plan and
@@ -4087,8 +4151,11 @@ export interface FromRunRequest {
 export interface FromRunReport {
   project_id: string | null;
   project_name: string;
-  /** Resolved template id, e.g. a `latest` alias expanded to its version. */
+  /** The template actually used: the one asked for, with a `latest` alias
+   *  expanded to its version, or the one detected from the folder. */
   template_id: string;
+  /** Set whenever detection ran (no template in the request), null otherwise. */
+  detected_template?: DetectedTemplate | null;
   data_root: string;
   detected_runs: string[];
   resolved_variables: Record<string, string>;
@@ -4105,7 +4172,9 @@ export interface FromRunReport {
 
 /** Create (or, with `dryRun`, plan) a project from a pipeline run folder.
  *  Backend errors carry actionable `{detail}` strings (unreadable prefix,
- *  unknown template, duplicate name) and they are surfaced verbatim. */
+ *  unknown template, duplicate name) and they are surfaced verbatim; the
+ *  thrown `ApiDetailError` keeps the server's `code` (`template_not_detected`,
+ *  `s3_access_denied`, ...). */
 export async function createProjectFromRun(
   input: FromRunRequest,
 ): Promise<FromRunReport> {
@@ -4113,7 +4182,7 @@ export async function createProjectFromRun(
     method: 'POST',
     body: JSON.stringify({
       data_root: input.dataRoot,
-      template_id: input.templateId,
+      template_id: input.templateId ?? null,
       project_name: input.projectName ?? null,
       variables: input.variables ?? {},
       dry_run: Boolean(input.dryRun),
@@ -4121,6 +4190,42 @@ export async function createProjectFromRun(
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to create project from run folder');
   return (await res.json()) as FromRunReport;
+}
+
+/** One sub-directory in a local folder listing. */
+export interface LocalDirEntry {
+  name: string;
+  /** Absolute path on the server's disk. */
+  path: string;
+  /** The folder holds `pipeline_info/` or `multiqc/`, so it is likely the
+   *  output folder of one pipeline run. */
+  looks_like_run: boolean;
+}
+
+/** Response of GET /projects/local_dirs. Without a path, `entries` are the
+ *  allowed root folders themselves and `path`, `root` and `parent` are null. */
+export interface LocalDirListing {
+  path: string | null;
+  /** The allowed root `path` sits under. */
+  root: string | null;
+  /** Null at a root and for the roots listing. */
+  parent: string | null;
+  /** Sub-directories only, sorted by name. */
+  entries: LocalDirEntry[];
+  /** More sub-directories exist than the server lists (500). */
+  truncated: boolean;
+}
+
+/** List the sub-folders of `path` on the server's disk, or the allowed root
+ *  folders when `path` is omitted. Only available when the server allows
+ *  local folders (`local_data_roots_enabled`): a 404 means the path is outside
+ *  every allowed folder, refused or missing; a 403 means the caller may not
+ *  browse. Both carry a plain-English `{detail}`, surfaced verbatim. */
+export async function listLocalDirs(path?: string | null): Promise<LocalDirListing> {
+  const query = path ? `?path=${encodeURIComponent(path)}` : '';
+  const res = await authFetch(`${API_BASE}/projects/local_dirs${query}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list folders');
+  return (await res.json()) as LocalDirListing;
 }
 
 /** Per-DC status of a manifest refresh. A synchronous refresh reports

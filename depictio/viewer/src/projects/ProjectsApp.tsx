@@ -98,7 +98,7 @@ const ProjectsApp: React.FC = () => {
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, toggleDesktop] = useProjectsSidebar();
-  const { user } = useCurrentUser();
+  const { user, localDataRootsEnabled } = useCurrentUser();
   const { status: authStatus, loading: authLoading } = useAuthMode();
   // Fail closed while the auth status is still loading — on the very first
   // frame `authStatus` is null so `is_public_mode` would silently evaluate
@@ -364,6 +364,7 @@ const ProjectsApp: React.FC = () => {
         onImport={handleImport}
         onCreateFromManifest={handleCreateFromManifest}
         onCreateFromRun={handleCreateFromRun}
+        localDataRootsEnabled={localDataRootsEnabled}
       />
       <ManifestCreatedModal report={createdReport} onClose={() => setCreatedReport(null)} />
       <FromRunCreatedModal

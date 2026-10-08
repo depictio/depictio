@@ -1,12 +1,12 @@
 /**
  * "From a run folder" project creation (CreateProjectModal, run tab).
  *
- * Both tests drive the real UI against a stubbed `/projects/from_run` and a
- * stubbed poll endpoint: the flow's value is what it shows the user (the
- * per-collection plan, the paths that were not found, the live ingestion
- * run), and none of that needs a real S3 bucket to exercise. The template
- * listing is stubbed too so the picker holds a known option whatever
- * templates the deployment ships.
+ * Every test drives the real UI against a stubbed `/projects/from_run` (and,
+ * for the create flow, a stubbed poll endpoint): the flow's value is what it
+ * shows the user (the template it recognised, the per-collection plan, the
+ * paths that were not found, the live ingestion run), and none of that needs
+ * a real S3 bucket to exercise. The template listing is stubbed too so the
+ * picker holds a known option whatever templates the deployment ships.
  */
 
 import { Page, Route } from "@playwright/test";
@@ -63,6 +63,7 @@ function report(overrides: Record<string, unknown>) {
     project_id: null,
     project_name: "Ampliseq Microbial Community Analysis",
     template_id: TEMPLATE_ID,
+    detected_template: null,
     data_root: DATA_ROOT,
     detected_runs: ["run_1", "run_2"],
     resolved_variables: { DATA_ROOT, GROUP_COL: "habitat" },
@@ -77,22 +78,54 @@ function report(overrides: Record<string, unknown>) {
   };
 }
 
+/** Two collections that found their inputs and one optional one the
+ *  template pruned. */
+const MATCHED_COLLECTIONS = [
+  dcRow({
+    data_collection_tag: "multiqc_data",
+    location: `${DATA_ROOT}/multiqc`,
+    matched: 1,
+    status: "ok",
+  }),
+  dcRow({
+    data_collection_tag: "asv_table",
+    kind: "recipe",
+    mode: null,
+    location: `${DATA_ROOT}/qiime2`,
+    matched: 3,
+    status: "ok",
+  }),
+  dcRow({
+    data_collection_tag: "metadata",
+    location: `${DATA_ROOT}/input`,
+    matched: 0,
+    optional: true,
+    status: "pruned",
+  }),
+];
+
 /** Open /projects, launch the create modal, switch to the run tab and fill in
- *  the template plus the run folder. Leaves the project name empty so nothing
+ *  the run folder, plus the template unless `detect` keeps the default
+ *  "Detect from the folder" choice. Leaves the project name empty so nothing
  *  collides with the deployment's existing projects. */
-async function openRunTab(page: Page): Promise<void> {
+async function openRunTab(page: Page, { detect = false } = {}): Promise<void> {
   await page.goto("/projects");
   await page.locator("[data-tour-id='projects-create']").click();
   await page.getByRole("tab", { name: "From a run folder" }).click();
 
-  // Mantine Select: click the input to open, then pick the option from the
-  // listbox portal. Options render name + template_id, so match on the id.
-  await page.locator("[data-testid='run-template-select']").click();
-  await page
-    .locator("[role='option']")
-    .filter({ hasText: TEMPLATE_ID })
-    .first()
-    .click();
+  const select = page.locator("[data-testid='run-template-select']");
+  // Detection is the default choice, so nothing has to be picked for it.
+  await expect(select).toHaveValue("Detect from the folder");
+  if (!detect) {
+    // Mantine Select: click the input to open, then pick the option from the
+    // listbox portal. Options render name + template_id, so match on the id.
+    await select.click();
+    await page
+      .locator("[role='option']")
+      .filter({ hasText: TEMPLATE_ID })
+      .first()
+      .click();
+  }
   await page.locator("[data-testid='run-data-root-input']").fill(DATA_ROOT);
 }
 
@@ -186,7 +219,119 @@ test.describe("Create project from a run folder", () => {
     await expect(submit).toBeDisabled();
     await expect(
       page.locator("[data-testid='run-submit-disabled-reason']"),
-    ).toContainText("No data collection matched anything under this prefix");
+    ).toContainText("No data collection matched anything in this folder");
+  });
+
+  test("recognises the template from the folder and pre-selects it", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    const sentTemplates: Array<string | null> = [];
+    await page.route("**/api/v1/projects/from_run", (route: Route) => {
+      const body = route.request().postDataJSON() as { template_id?: string | null };
+      const templateId = body?.template_id ?? null;
+      sentTemplates.push(templateId);
+      route.fulfill({
+        json: report({
+          data_collections: MATCHED_COLLECTIONS,
+          // Set only when the server ran detection, i.e. no template was sent.
+          detected_template:
+            templateId === null
+              ? {
+                  template_id: TEMPLATE_ID,
+                  pipeline: "nf-core/ampliseq",
+                  version: "2.16.0",
+                  engine: "nextflow",
+                }
+              : null,
+        }),
+      });
+    });
+
+    await loginAsAdmin();
+    await openRunTab(page, { detect: true });
+
+    const submit = page.locator("[data-testid='create-from-run-submit']");
+    await submit.click();
+
+    // The preview asked the server to detect, and says what it recognised.
+    const detected = page.locator("[data-testid='run-detected-template']");
+    await expect(detected).toBeVisible({ timeout: 20_000 });
+    expect(sentTemplates[0], "detection sends no template").toBeNull();
+    await expect(detected.locator("[data-testid='run-detected-pipeline']")).toHaveText(
+      "nf-core/ampliseq",
+    );
+    await expect(detected.locator("[data-testid='run-detected-version']")).toHaveText(
+      "2.16.0",
+    );
+    await expect(detected.locator("[data-testid='run-detected-engine']")).toHaveText(
+      "nextflow",
+    );
+    await expect(
+      detected.locator("[data-testid='run-detected-template-id']"),
+    ).toHaveText(TEMPLATE_ID);
+    await expect(submit).toBeEnabled();
+
+    // Back on the first step the recognised template is the choice, and it
+    // stays editable.
+    await page.locator("[data-testid='run-previous']").click();
+    const select = page.locator("[data-testid='run-template-select']");
+    await expect(select).toHaveValue("Ampliseq Microbial Community Analysis");
+    await expect(select).toBeEditable();
+
+    // The next preview uses that template rather than detecting again.
+    await submit.click();
+    await expect(page.locator("[data-testid='run-preview-report']")).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect.poll(() => sentTemplates.length).toBe(2);
+    expect(sentTemplates[1]).toBe(TEMPLATE_ID);
+    await expect(page.locator("[data-testid='run-detected-template']")).toHaveCount(0);
+
+    // A different folder may hold another pipeline: the choice detection made
+    // goes back to detecting.
+    await page.locator("[data-testid='run-previous']").click();
+    await page.locator("[data-testid='run-data-root-input']").fill(`${DATA_ROOT}-bis`);
+    await expect(select).toHaveValue("Detect from the folder");
+  });
+
+  test("an unrecognised folder asks for a template instead of failing", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    await page.route("**/api/v1/projects/from_run", (route: Route) =>
+      route.fulfill({
+        status: 422,
+        json: {
+          detail:
+            "No installed template matches the pipeline that produced this folder.",
+          code: "template_not_detected",
+        },
+      }),
+    );
+
+    await loginAsAdmin();
+    await openRunTab(page, { detect: true });
+
+    const submit = page.locator("[data-testid='create-from-run-submit']");
+    await submit.click();
+
+    const notDetected = page.locator("[data-testid='run-template-not-detected']");
+    await expect(notDetected).toBeVisible({ timeout: 20_000 });
+    await expect(notDetected).toContainText("No installed template matches");
+    // Not shown as a read failure: the folder was read, only the template is
+    // missing.
+    await expect(page.locator("[data-testid='run-preview-error']")).toHaveCount(0);
+    await expect(submit).toBeDisabled();
+    await expect(
+      page.locator("[data-testid='run-submit-disabled-reason']"),
+    ).toContainText("pick a template");
+
+    // The way out leads back to the template picker, still on detection.
+    await notDetected.locator("[data-testid='run-pick-template']").click();
+    const select = page.locator("[data-testid='run-template-select']");
+    await expect(select).toBeVisible();
+    await expect(select).toHaveValue("Detect from the folder");
   });
 
   test("creates the project and watches the ingestion run finish", async ({
@@ -195,38 +340,21 @@ test.describe("Create project from a run folder", () => {
   }) => {
     const RUN_ID = "run-abc123";
     const DASHBOARD_ID = "665f0f3c1e4a2d7f8e5b8ca9";
-    const matchedCollections = [
-      dcRow({
-        data_collection_tag: "multiqc_data",
-        location: `${DATA_ROOT}/multiqc`,
-        matched: 1,
-        status: "ok",
-      }),
-      dcRow({
-        data_collection_tag: "asv_table",
-        kind: "recipe",
-        mode: null,
-        location: `${DATA_ROOT}/qiime2`,
-        matched: 3,
-        status: "ok",
-      }),
-      dcRow({
-        data_collection_tag: "metadata",
-        location: `${DATA_ROOT}/input`,
-        matched: 0,
-        optional: true,
-        status: "pruned",
-      }),
-    ];
+    const matchedCollections = MATCHED_COLLECTIONS;
 
     let created = false;
+    let createdWithTemplate: string | null | undefined;
     await page.route("**/api/v1/projects/from_run", (route: Route) => {
-      const body = route.request().postDataJSON() as { dry_run?: boolean };
+      const body = route.request().postDataJSON() as {
+        dry_run?: boolean;
+        template_id?: string | null;
+      };
       if (body?.dry_run) {
         route.fulfill({ json: report({ data_collections: matchedCollections }) });
         return;
       }
       created = true;
+      createdWithTemplate = body?.template_id;
       route.fulfill({
         json: report({
           project_id: "665f0f3c1e4a2d7f8e5b8ca1",
@@ -294,6 +422,8 @@ test.describe("Create project from a run folder", () => {
     const modal = page.locator("[data-testid='run-created-modal']");
     await expect(modal).toBeVisible({ timeout: 20_000 });
     expect(created, "the real (non dry-run) create was sent").toBe(true);
+    // An explicitly picked template is sent as is.
+    expect(createdWithTemplate).toBe(TEMPLATE_ID);
     await expect(page).not.toHaveURL(/\/dashboard\//);
 
     const status = modal.locator("[data-testid='run-created-status']");

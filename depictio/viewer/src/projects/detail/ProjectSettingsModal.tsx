@@ -12,10 +12,10 @@ import {
 import StoragePanel from './StoragePanel';
 import ManifestRefreshPanel, {
   isRefreshEnded,
-  summarizeRefresh,
   useManifestRefresh,
   type ManifestRefreshDc,
 } from './ManifestRefreshPanel';
+import { summarizeManifestRun } from '../manifestRun';
 import ExportTemplatePanel from './ExportTemplatePanel';
 
 export type ProjectSettingsSectionKey = 'storage' | 'refresh' | 'export';
@@ -100,7 +100,7 @@ const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
       color: ok ? 'teal' : 'red',
       title: ok ? 'Data refresh completed' : 'Data refresh finished with errors',
       message: refresh.report
-        ? `${summarizeRefresh(refresh.report)}. Project settings show the details.`
+        ? `${summarizeManifestRun(refresh.report)}. Project settings show the details.`
         : 'Project settings show the details.',
       autoClose: 8000,
     });

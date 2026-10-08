@@ -17,26 +17,13 @@ import { useEffect, useRef, useState } from 'react';
 import { getManifestRefreshRun } from 'depictio-react-core';
 import type { ManifestRefreshReport, ManifestRefreshStatus } from 'depictio-react-core';
 
+import { INGESTION_STATUS_META } from './IngestionResultTable';
+
 export const POLL_INTERVAL_MS = 2_000;
 /** Give up polling after this long; the run keeps going server-side. */
 export const MAX_POLL_MS = 30 * 60 * 1_000;
 /** Transient poll failures tolerated before a watcher stops and reports. */
 export const MAX_CONSECUTIVE_POLL_ERRORS = 3;
-
-/** Visual treatment per run status. Colors are Mantine palette names (theme
- *  tokens), not literals, mirroring IngestionReportPanel. The key order is
- *  the order `summarizeManifestRun` lists its counts in. */
-export const MANIFEST_RUN_STATUS_META: Record<
-  ManifestRefreshStatus,
-  { color: string; icon: string; label: string }
-> = {
-  ingested: { color: 'green', icon: 'mdi:check-circle', label: 'Ingested' },
-  planned: { color: 'blue', icon: 'mdi:clock-outline', label: 'Planned' },
-  dispatched: { color: 'blue', icon: 'mdi:tray-arrow-down', label: 'Queued' },
-  running: { color: 'blue', icon: 'mdi:progress-clock', label: 'Running' },
-  failed: { color: 'red', icon: 'mdi:alert-circle', label: 'Failed' },
-  skipped: { color: 'gray', icon: 'mdi:minus-circle-outline', label: 'Skipped' },
-};
 
 /** A report is final once no row is still queued for, or running on, a
  *  worker. The poll endpoint has no run-level status field, so this is the
@@ -72,18 +59,19 @@ export function useElapsedMs(
   return startedAt == null ? 0 : (finishedAt ?? Date.now()) - startedAt;
 }
 
-/** "3 ingested, 1 failed" style summary of the per-collection statuses. */
+/** "3 ingested, 1 failed" style summary of the per-collection statuses, in
+ *  the key order of `INGESTION_STATUS_META` (the labels the rows show). */
 export function summarizeManifestRun(report: ManifestRefreshReport): string {
   const counts = new Map<ManifestRefreshStatus, number>();
   for (const entry of report.refreshed) {
     counts.set(entry.status, (counts.get(entry.status) ?? 0) + 1);
   }
   const parts: string[] = [];
-  (Object.keys(MANIFEST_RUN_STATUS_META) as ManifestRefreshStatus[]).forEach((status) => {
+  (Object.keys(INGESTION_STATUS_META) as ManifestRefreshStatus[]).forEach((status) => {
     const n = counts.get(status);
-    if (n) parts.push(`${n} ${MANIFEST_RUN_STATUS_META[status].label.toLowerCase()}`);
+    if (n) parts.push(`${n} ${INGESTION_STATUS_META[status].label.toLowerCase()}`);
   });
-  return parts.length > 0 ? parts.join(', ') : 'no collections refreshed';
+  return parts.length > 0 ? parts.join(', ') : 'no collection reported';
 }
 
 export interface ManifestRunPollOptions {
