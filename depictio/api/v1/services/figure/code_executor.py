@@ -29,9 +29,14 @@ def safe_getattr(obj, name, default=None, getattr=getattr):
     return getattr(obj, name, default)
 
 
-def safe_setitem(obj, key, value):
-    """Safe setitem for pandas DataFrame and Series operations."""
-    obj[key] = value
+def safe_write(obj):
+    """The object a subscript or attribute write lands on.
+
+    RestrictedPython compiles ``obj[key] = value`` to ``_write_(obj)[key] = value``,
+    so the guard takes the object alone and returns the target of the write.
+    Writes are allowed, as ``_setattr_`` allows them, so a figure can fill a
+    labels dict or add a pandas column.
+    """
     return obj
 
 
@@ -88,7 +93,7 @@ class SimpleCodeExecutor:
             # Guards for dataframe operations
             "_getitem_": safe_getitem,
             "_getattr_": safe_getattr,
-            "_write_": safe_setitem,
+            "_write_": safe_write,
             "_setattr_": safe_setattr,
             # Additional safe functions for complex operations
             "_iter_unpack_sequence_": safe_iter_unpack_sequence,

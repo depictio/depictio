@@ -98,3 +98,23 @@ def test_for_loop_unpacking_still_works():
     )
     ok, _, message = SimpleCodeExecutor().execute_code(code, _frame())
     assert ok, message
+
+
+@pytest.mark.parametrize(
+    "assignment",
+    [
+        "labels = {}\nlabels['x'] = 'Temperature'",
+        "pdf = df.to_pandas()\npdf['z'] = pdf['x'] * 2",
+    ],
+    ids=["dict", "pandas-column"],
+)
+def test_subscript_assignment_runs_in_a_code_figure(assignment: str) -> None:
+    """`obj[key] = value` compiles to `_write_(obj)[key] = value`.
+
+    The guard takes the object and returns what the write lands on; one that
+    took `(obj, key, value)` failed every subscript assignment with a
+    TypeError about missing arguments.
+    """
+    code = f"{assignment}\nfig = px.scatter(df.to_pandas(), x='x', y='y')\n"
+    ok, _, message = SimpleCodeExecutor().execute_code(code, _frame())
+    assert ok, message
