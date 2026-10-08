@@ -528,6 +528,49 @@ def scan_run_for_multiple_data_collections(
     return workflow_run
 
 
+def flat_run_tag(location: str) -> str:
+    """The run a ``structure: flat`` location is registered as: its directory's name."""
+    return os.path.basename(os.path.normpath(location))
+
+
+def flat_run_tag_clash(data_location: WorkflowDataLocation) -> str | None:
+    """Why two locations of a flat workflow would be registered as one run, or ``None``.
+
+    A flat run is named after its directory, so ``/scratch/a/results`` and
+    ``/scratch/b/results`` would both be run ``results``: the scan registers the
+    files of both under it, and every sample is listed twice. The same directory
+    reached twice, through a symlink for instance, is one run.
+    """
+    if data_location.structure != "flat":
+        return None
+    first_by_tag: dict[str, str] = {}
+    for location in data_location.locations:
+        tag = flat_run_tag(location)
+        first = first_by_tag.setdefault(tag, location)
+        if os.path.realpath(first) != os.path.realpath(location):
+            return (
+                f"{first} and {location} would both be run '{tag}': a flat workflow names "
+                "each run after its directory, so their samples would be listed twice. "
+                "Rename one of the directories, or ingest it into another project."
+            )
+    return None
+
+
+def _run_to_rescan(existing_run: WorkflowRun | None, run_location: str) -> WorkflowRun | None:
+    """The registered run a rescan of ``run_location`` updates, or ``None`` for a new one.
+
+    A run of the same name registered from another directory is not it: a results
+    directory that moved leaves one behind. Reused, it kept the files of the old
+    directory next to those of the new one, and every sample was listed twice. As a
+    new run, the old one is removed with its files once the scan is done.
+    """
+    if existing_run and os.path.realpath(existing_run.run_location) != os.path.realpath(
+        run_location
+    ):
+        return None
+    return existing_run
+
+
 def scan_files_for_workflow(
     workflow: Workflow,
     data_collections: list[DataCollection],
@@ -551,6 +594,10 @@ def scan_files_for_workflow(
     rescan_folders = command_parameters.get("rescan_folders", False)
     update_files = command_parameters.get("sync_files", False)
     rich_tables = command_parameters.get("rich_tables", True)
+
+    clash = flat_run_tag_clash(workflow.data_location)
+    if clash:
+        raise ValueError(clash)
 
     workflow_id = workflow.id
 
@@ -645,7 +692,7 @@ def scan_files_for_workflow(
 
         if workflow.data_location.structure == "flat":
             # Treat the provided directory as a single run
-            run_tag = os.path.basename(os.path.normpath(location))
+            run_tag = flat_run_tag(location)
             if run_tag in existing_runs_reformated and not rescan_folders:
                 logger.debug(f"Skipping existing run {run_tag}.")
                 continue
@@ -673,7 +720,7 @@ def scan_files_for_workflow(
                     permissions=permissions,
                     rescan_folders=rescan_folders,
                     update_files=update_files,
-                    existing_run=existing_runs_reformated.get(run_tag, None),
+                    existing_run=_run_to_rescan(existing_runs_reformated.get(run_tag), location),
                 )
                 if workflow_run:
                     all_workflow_runs.append(workflow_run)
@@ -731,7 +778,9 @@ def scan_files_for_workflow(
                             permissions=permissions,
                             rescan_folders=rescan_folders,
                             update_files=update_files,
-                            existing_run=existing_runs_reformated.get(run, None),
+                            existing_run=_run_to_rescan(
+                                existing_runs_reformated.get(run), run_path
+                            ),
                         )
                         if workflow_run:
                             all_workflow_runs.append(workflow_run)
@@ -745,15 +794,14 @@ def scan_files_for_workflow(
     # the loop made a multi-location workflow delete the runs of the locations not
     # yet scanned (they were then re-created with fresh ids, losing scan_results).
     if rescan_folders:
-        missing_runs_tag = (set(existing_runs_reformated) | set(gone_run_ids)) - {
-            run.run_tag for run in all_workflow_runs if run
-        }
-        missing_runs = [
-            gone_run_ids[run_tag]
-            if run_tag in gone_run_ids
-            else str(existing_runs_reformated[run_tag].id)
-            for run_tag in missing_runs_tag
-        ]
+        run_ids = {
+            run_tag: str(run.id) for run_tag, run in existing_runs_reformated.items()
+        } | gone_run_ids
+        # By id, not by name: a run replaced by a new one of the same name (see
+        # _run_to_rescan) goes too, which also frees its name for the new one.
+        scanned_ids = {str(run.id) for run in all_workflow_runs if run}
+        missing_runs_tag = {tag for tag, run_id in run_ids.items() if run_id not in scanned_ids}
+        missing_runs = [run_ids[run_tag] for run_tag in missing_runs_tag]
 
         if missing_runs:
             logger.info(f"Runs to remove: {missing_runs}")

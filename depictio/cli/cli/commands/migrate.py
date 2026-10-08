@@ -28,9 +28,11 @@ from rich.markup import escape
 
 from depictio.cli.cli.utils.api_calls import api_export_project, api_import_project, api_login
 from depictio.cli.cli.utils.common import (
+    cli_config_file,
     describe_api_target,
     env_overrides_ignored,
     load_depictio_config,
+    report_login_failure,
     say_local_server_running,
 )
 from depictio.cli.cli.utils.rich_utils import (
@@ -41,6 +43,7 @@ from depictio.cli.cli.utils.server_target import (
     DEFAULT_TARGET_CLI_CONFIG,
     SERVER_HELP,
     LegacyConfigPathOption,
+    is_local_cli_config,
     resolve_server,
     resolve_target_server,
 )
@@ -62,11 +65,27 @@ class Mode(str, Enum):
 _SERVER_OVERWRITE_FIX = "Set overwrite=true to replace it."
 
 
-def _login_as_admin(config_path: str, role: str) -> None:
+def _s3_errors_summary(count: int) -> str:
+    """The closing line of a migration whose S3 copy failed for ``count`` files or paths."""
+    errors = "1 S3 error" if count == 1 else f"{count} S3 errors"
+    return (
+        f"{errors} above left files out of the target. "
+        "Fix the cause, then run this command again with --mode files"
+    )
+
+
+def _is_local_server(config_path: str) -> bool:
+    """Whether ``config_path`` reaches the local server: named so, or by default."""
+    return is_local_cli_config(cli_config_file(config_path))
+
+
+def _login_as_admin(config_path: str, role: str, other_is_local: bool = False) -> None:
     """Log in with ``config_path``; exit 1 unless the server takes it for an administrator.
 
-    api_login reports a rejected token by returning success False, with no is_admin:
+    api_login reports a failed login by returning success False, with no is_admin:
     checked first, so an expired token is not reported as missing admin rights.
+    ``other_is_local``: the other server is the local one, so this one cannot be told
+    to use it.
     """
     rich_print_checked_statement(f"Authenticating with {role.lower()} instance...", "info")
     try:
@@ -74,14 +93,11 @@ def _login_as_admin(config_path: str, role: str) -> None:
     except httpx.HTTPError as exc:
         rich_print_checked_statement(f"{role}: cannot reach the server: {exc}", "error")
         rich_print_checked_statement(f"Tried {describe_api_target(config_path)}", "info")
-        say_local_server_running(config_path, "--server" if role == "Source" else "--to-server")
+        if not other_is_local:
+            say_local_server_running(config_path, "--server" if role == "Source" else "--to-server")
         raise typer.Exit(1) from exc
     if not auth.get("success"):
-        rich_print_checked_statement(
-            f"{role}: authentication failed, the server rejected this configuration's "
-            "token, which is invalid or expired",
-            "error",
-        )
+        report_login_failure(config_path, auth, f"{role}: authentication failed")
         raise typer.Exit(1)
     if not auth.get("is_admin"):
         rich_print_checked_statement(f"{role}: admin access required", "error")
@@ -146,7 +162,12 @@ def migrate(
     # Load configs --------------------------------------------------------
     # Labelled, and both always announced: even when they are one server, the
     # output says which one each side is.
-    source_config = load_depictio_config(yaml_config_path=source_path, label="Source server")
+    # With the local server on one side, "add --server local" said of the other would
+    # make both sides one server.
+    source_is_local, target_is_local = _is_local_server(source_path), _is_local_server(target_path)
+    source_config = load_depictio_config(
+        yaml_config_path=source_path, label="Source server", local_hint=not target_is_local
+    )
     # The env overrides stand in for the one server a command talks to: here, the
     # source. Applied to the target too, both would point at the same server.
     with env_overrides_ignored():
@@ -154,9 +175,9 @@ def migrate(
             yaml_config_path=target_path, option="--to-server", label="Target server"
         )
 
-    _login_as_admin(source_path, "Source")
+    _login_as_admin(source_path, "Source", other_is_local=target_is_local)
     with env_overrides_ignored():
-        _login_as_admin(target_path, "Target")
+        _login_as_admin(target_path, "Target", other_is_local=source_is_local)
 
     if dry_run:
         rich_print_checked_statement("DRY RUN mode: no data will be written", "info")
@@ -223,6 +244,9 @@ def migrate(
         if s3_meta.get("errors"):
             for err in s3_meta["errors"]:
                 rich_print_checked_statement(f"  S3 error: {err}", "warning")
+    # Files the target lacks: the migration is not complete, whatever the import does.
+    # A dry run copies nothing, so its errors only warn.
+    s3_errors = 0 if dry_run else len(s3_meta.get("errors") or [])
 
     # For files-only mode there is nothing to import into MongoDB
     if mode == "files":
@@ -230,6 +254,11 @@ def migrate(
             rich_print_checked_statement(
                 "Files-only mode, dry run: no S3 file copied, no MongoDB import.", "success"
             )
+        elif s3_errors:
+            rich_print_checked_statement(
+                f"Files-only mode: {_s3_errors_summary(s3_errors)}", "error"
+            )
+            raise typer.Exit(1)
         else:
             rich_print_checked_statement(
                 "Files-only mode: S3 sync complete, no MongoDB import.", "success"
@@ -264,6 +293,12 @@ def migrate(
     rich_print_checked_statement(f"{action_label} documents into target instance", "success")
     rich_print_json("Upserted per collection:", import_result.get("upserted", {}))
 
+    if s3_errors:
+        rich_print_checked_statement(
+            f"Migration incomplete for project '{project}': {_s3_errors_summary(s3_errors)}",
+            "error",
+        )
+        raise typer.Exit(1)
     rich_print_checked_statement(
         f"Migration {'dry run ' if dry_run else ''}complete for project '{project}'",
         "success",

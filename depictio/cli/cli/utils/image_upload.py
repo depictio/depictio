@@ -114,7 +114,7 @@ def s3_client(CLI_config):
     )
 
 
-def list_existing_keys(s3_client, bucket: str, prefix: str) -> set[str]:
+def list_existing_keys(client, bucket: str, prefix: str) -> set[str]:
     """Every object key already under ``prefix``, via one paginated LIST.
 
     Replaces a per-image ``head_object`` when skipping existing uploads: LIST
@@ -124,7 +124,7 @@ def list_existing_keys(s3_client, bucket: str, prefix: str) -> set[str]:
     """
     keys: set[str] = set()
     try:
-        paginator = s3_client.get_paginator("list_objects_v2")
+        paginator = client.get_paginator("list_objects_v2")
         for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
             for obj in page.get("Contents", []):
                 keys.add(obj["Key"])
@@ -137,7 +137,7 @@ def list_existing_keys(s3_client, bucket: str, prefix: str) -> set[str]:
 def upload_images(
     images: list[Path],
     source_root: Path,
-    s3_client,
+    client,
     bucket: str,
     prefix: str,
     *,
@@ -163,7 +163,7 @@ def upload_images(
     folder = f"s3://{bucket}/{prefix}"
     # Listed with overwrite too, to tell a replaced image from a new one.
     with timed("list_existing"):
-        existing_keys = list_existing_keys(s3_client, bucket, prefix)
+        existing_keys = list_existing_keys(client, bucket, prefix)
     logger.debug(f"Found {len(existing_keys)} existing object(s) under {prefix}")
 
     def _upload_one(img: Path) -> str:
@@ -173,7 +173,7 @@ def upload_images(
         if exists and not overwrite:
             return "skipped"
         try:
-            s3_client.upload_file(
+            client.upload_file(
                 str(img), bucket, s3_key, ExtraArgs={"ContentType": get_content_type(img)}
             )
             logger.debug(f"Uploaded: {rel_path} → s3://{bucket}/{s3_key}")

@@ -6,12 +6,12 @@
 # validation harness — it does NOT modify any template's data_location.structure.
 #
 #   ampliseq   (data_location.structure: flat)           — each run dir IS its
-#              own --data-root.
+#              own results directory, the one given to `ingest`.
 #   viralrecon (data_location.structure: sequencing-runs) — the template
 #              aggregates ALL run_* dirs under DATA_ROOT into ONE project. To
 #              isolate one run per project WITHOUT touching the template, we
 #              build a temp parent dir containing a single symlink to that one
-#              run_* dir and point --data-root at the temp parent.
+#              run_* dir and ingest the temp parent.
 #
 # All runs (in-scope + out-of-scope) are executed; exit codes are captured.
 # The two out-of-scope runs use a DIFFERENT nf-core sub-workflow (ampliseq
@@ -87,12 +87,10 @@ run_one() {
     # The script runs with `set -uo pipefail` (no `-e`), so a non-zero CLI exit
     # does NOT abort the harness — we capture it in $code. No set +e/-e sandwich
     # is needed (and re-enabling -e here would wrongly abort later runs).
-    "$CLI_VENV" -m depictio.cli ingest \
+    "$CLI_VENV" -m depictio.cli ingest "$data_root" \
         --server "$CLI_CONFIG" \
         --template "$template" \
-        --data-root "$data_root" \
-        --project-name "$project" \
-        --overwrite \
+        --project "$project" \
         --update-config \
         > "$log" 2>&1
     local code=$?
@@ -125,7 +123,7 @@ done
 
 # ---------------------------------------------------------------------------
 # viralrecon — sequencing-runs structure: isolate one run via a temp parent
-# dir that symlinks just that one run_* dir, then point --data-root at it.
+# dir that symlinks just that one run_* dir, then ingest that parent.
 # ---------------------------------------------------------------------------
 echo "--- viralrecon (sequencing-runs, symlink-parent isolation) ---"
 make_symlink_parent() {

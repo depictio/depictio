@@ -148,6 +148,25 @@ def test_a_running_server_is_stopped_then_exported(paths, tmp_path, monkeypatch,
     assert (out / "data" / "mongo" / "WiredTiger").is_file()
 
 
+def test_export_while_up_is_starting_fails_fast(paths, tmp_path, monkeypatch, source):
+    monkeypatch.setattr(local_compose, "running_status", lambda _: {"mongo": True})
+    _fake_local_server(paths)
+    out = tmp_path / "export"
+    held = local_stack.lock_for_startup(paths)
+    try:
+        with pytest.raises(LocalStackError, match="A `depictio local up` is starting this home"):
+            _export(paths, out)
+    finally:
+        held.close()
+
+    source.stop_all.assert_not_called()
+    assert not out.exists()
+    # Released: the export goes ahead, then releases the home for the next `up`.
+    _export(paths, out)
+    source.stop_all.assert_called_once()
+    local_stack.lock_for_startup(paths).close()
+
+
 def test_a_failed_download_names_the_url(monkeypatch):
     def urlopen(url, timeout):
         raise urllib.error.URLError("connection refused")

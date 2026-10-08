@@ -26,6 +26,10 @@ from depictio.models.utils import convert_model_to_dict
 def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     """
     Login to the Depictio API using the CLI configuration.
+
+    The result holds ``success`` and ``status_code``, the HTTP status the server
+    answered: a failure is the token's only for a 401 or a 403, or a 200 whose verdict
+    is no. See report_login_failure.
     """
     loaded_config = load_depictio_config(yaml_config_path=yaml_config_path)
     # Build headers from the MODEL (not the dumped dict) so validate_call's
@@ -51,8 +55,9 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     # cold-path; the call still returns as soon as the server responds.
     # 30 s wasn't enough in CI minikube/compose environments where the
     # first Beanie query pays the full motor + driver init cost.
+    url = f"{depictio_CLI_config['api_base_url']}/depictio/api/v1/cli/validate_cli_config"
     response = get_http_client().post(
-        f"{depictio_CLI_config['api_base_url']}/depictio/api/v1/cli/validate_cli_config",
+        url,
         json=depictio_CLI_config,
         # /validate_cli_config now requires a bearer token (was unauthenticated);
         # the same token already lives in the posted config body.
@@ -67,6 +72,7 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
         if response_data.get("success"):
             return {
                 "success": True,
+                "status_code": response.status_code,
                 "CLI_config": depictio_CLI_config,
                 "is_admin": response_data.get("is_admin", False),
                 "user_id": response_data.get("user_id"),
@@ -81,13 +87,20 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
                 f"{escape(response.text)}",
                 "error",
             )
-            return {"success": False}
+            return {"success": False, "status_code": response.status_code}
     else:
-        logger.debug(f"Depictio CLI configuration is invalid: {response.text}")
-        rich_print_checked_statement(
-            f"Depictio CLI configuration is invalid: {escape(response.text)}", "error"
-        )
-        return {"success": False}
+        logger.debug(f"The server answered HTTP {response.status_code}: {response.text}")
+        if response.status_code in (401, 403, 422):
+            rich_print_checked_statement(
+                f"Depictio CLI configuration is invalid: {escape(response.text)}", "error"
+            )
+        else:
+            # Not a verdict on the configuration: a viewer host's 404 page, a proxy's
+            # 502 page. Their HTML stays in the debug log.
+            rich_print_checked_statement(
+                f"The server answered HTTP {response.status_code} to {escape(url)}", "error"
+            )
+        return {"success": False, "status_code": response.status_code}
 
 
 @validate_call
@@ -247,7 +260,7 @@ def api_sync_project_config_to_server(
     rich_print_checked_statement("Syncing pipeline configuration to server...", "info")
 
     # Check if the project exists on the server
-    logger.info(f"Project configuration: {ProjectConfig}")
+    logger.debug(f"Project configuration: {ProjectConfig}")
     project_config = ProjectConfig
 
     # First try to find project by ID (for updates to existing projects with new names)
@@ -272,11 +285,9 @@ def api_sync_project_config_to_server(
             f"Checked project by name '{ProjectConfig['name']}': status {response.status_code}"
         )
 
-    logger.info(f"Project configuration: {project_config}")
-
     if response.status_code == 200:
         rich_print_checked_statement("Project configuration found on server", "info")
-        logger.info(f"Project configuration found on server: {response.json()}")
+        logger.debug(f"Project configuration found on server: {response.json()}")
 
         # Already on the server and no update requested: hand the decision back.
         if not update:

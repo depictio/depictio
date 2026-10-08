@@ -161,8 +161,8 @@ def build_flow() -> Sketch:
         BLUE,
         "argv it builds",
         (
-            "`--server ~/.depictio/CLI.yaml`",
-            "`--data-root params.outdir`",
+            "`<dir>` = `params.outdir`",
+            "`--server` only if a config is set",
             "`--triggered-by nextflow`",
             "`--pipeline-id manifest.name/version`",
             "`--project-config-path` / `--template`",
@@ -180,7 +180,7 @@ def build_flow() -> Sketch:
         320,
         150,
         GREEN,
-        "`depictio-cli ingest`",
+        "`depictio ingest <dir>`",
         (
             "child process, stdout+stderr merged,",
             "drained line by line into the log",

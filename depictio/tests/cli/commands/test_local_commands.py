@@ -231,9 +231,37 @@ def test_ctrl_c_during_startup_stops_what_was_started(stack):
     result, out = _invoke("up", "--no-open")
 
     assert result.exit_code == 130
-    assert "Interrupted" in out
+    assert "Interrupted: services started by this run are stopped" in out
     # Once to clear a previous run, once for the services this run started.
     assert stack.stop_all.call_count == 2
+
+
+def test_ctrl_c_that_beat_the_cleanup_does_not_claim_the_services_stopped(stack, monkeypatch):
+    # The interrupt reached `up` before start_stack could stop what it started.
+    monkeypatch.setattr(local_cmd, "start_stack", MagicMock(side_effect=KeyboardInterrupt))
+    stack.running_status.return_value = {name: name == "mongo" for name in PROCESS_ORDER}
+
+    result, out = _invoke("up", "--no-open")
+
+    assert result.exit_code == 130
+    assert (
+        "Interrupted: services started by this run may still be running "
+        "(depictio local down stops them)"
+    ) in out
+    assert "are stopped" not in out
+
+
+def test_up_on_an_unsupported_platform_creates_nothing(stack):
+    stack.check_platform_supported.side_effect = LocalStackError(
+        "depictio local is not supported on Windows. Use WSL2, or the Docker compose stack."
+    )
+
+    result, out = _invoke("up", "--no-open")
+
+    assert result.exit_code == 1
+    assert "Use WSL2" in out
+    assert not stack.paths.home.exists()
+    stack.start_services.assert_not_called()
 
 
 def test_a_failed_check_leaves_a_running_server_alone(stack):
@@ -694,6 +722,46 @@ def test_a_second_up_on_a_home_being_started_fails_fast(stack):
     # Released: the next one goes ahead.
     result, out = _invoke("up", "--no-open")
     assert result.exit_code == 0, out
+
+
+@pytest.mark.parametrize("holder", ["wipe", "export"])
+def test_up_while_wipe_or_export_holds_the_home_names_it(stack, holder):
+    local_stack.claim_home(stack.paths)
+    held = local_stack.lock_for_startup(stack.paths, holder)
+    try:
+        result, out = _invoke("up", "--no-open")
+    finally:
+        held.close()
+
+    assert result.exit_code == 1
+    assert f"`depictio local {holder}` is using this home" in out
+    stack.start_services.assert_not_called()
+
+
+def test_wipe_while_up_is_starting_fails_fast_and_deletes_nothing(tmp_path, monkeypatch):
+    paths = Paths(tmp_path / "local")
+    local_stack.claim_home(paths)
+    paths.ensure_dirs()
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(paths.home))
+    stop_all = MagicMock()
+    monkeypatch.setattr(local_cmd, "stop_all", stop_all)
+    held = local_stack.lock_for_startup(paths)
+    try:
+        result, out = _invoke("wipe", "--yes")
+    finally:
+        held.close()
+
+    assert result.exit_code == 1
+    assert (
+        f"A `depictio local up` is starting this home ({paths.home}): wait for it, or stop "
+        "it, then try again"
+    ) in out
+    assert all((paths.home / sub).is_dir() for sub in local_stack.DATA_DIRS)
+    stop_all.assert_not_called()
+    # Released: the wipe goes ahead.
+    result, out = _invoke("wipe", "--yes")
+    assert result.exit_code == 0, out
+    assert not paths.has_data()
 
 
 # --- Unreadable files ------------------------------------------------------------

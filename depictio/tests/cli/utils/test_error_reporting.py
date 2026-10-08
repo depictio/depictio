@@ -135,6 +135,81 @@ def test_a_project_the_server_refuses_is_one_x_line_with_its_reason(capsys, cli_
     assert err == ""
 
 
+_PROJECT_WITH_AN_ENV_VALUE = """\
+name: demo
+project_type: basic
+workflows:
+  - name: wf
+    engine:
+      name: python
+    data_location:
+      structure: flat
+      locations:
+        - ${DEPICTIO_TEST_SECRET}/runs
+    data_collections:
+      - data_collection_tag: table
+        config:
+          type: Table
+          metatype: Metadata
+          scan:
+            mode: single
+            scan_parameters:
+              filename: ${DEPICTIO_TEST_SECRET}/runs/table.csv
+          dc_specific_properties:
+            format: CSV
+"""
+
+
+@pytest.mark.parametrize("on_server", [False, True], ids=["first-ingest", "refresh"])
+def test_verbose_validation_and_sync_log_no_substituted_value(
+    capsys, cli_config, tmp_path, monkeypatch, on_server
+):
+    # `depictio -v` logs at INFO, and its output ends up in CI and Nextflow logs.
+    monkeypatch.setenv("DEPICTIO_TEST_SECRET", "secret-value-in-config")
+    project = tmp_path / "project.yaml"
+    project.write_text(_PROJECT_WITH_AN_ENV_VALUE)
+    login, load = _logged_in(cli_config)
+    not_found = httpx.Response(404, json={"detail": "not found"})
+    with (
+        login,
+        load,
+        patch.object(config_utils, "api_get_project_from_name", return_value=not_found),
+    ):
+        _, validation = config_utils.validate_project_config_and_check_S3_storage(
+            CLI_config_path="cli.yaml", project_config_path=str(project)
+        )
+    payload = validation["config"].model_dump(mode="json")
+    remote = httpx.Response(200, json=payload) if on_server else not_found
+
+    verbose = _cli(capsys, verbose=True)
+    with (
+        login,
+        load,
+        patch.object(config_utils, "api_get_project_from_name", return_value=remote),
+        patch("depictio.cli.cli.utils.api_calls.api_get_project_from_name", return_value=remote),
+        patch(
+            "depictio.cli.cli.utils.api_calls.api_create_project",
+            return_value=httpx.Response(200, json={"success": True}),
+        ),
+        patch(
+            "depictio.cli.cli.utils.api_calls.api_update_project",
+            return_value=httpx.Response(200, json={"success": True}),
+        ),
+    ):
+        _, validation = config_utils.validate_project_config_and_check_S3_storage(
+            CLI_config_path="cli.yaml", project_config_path=str(project)
+        )
+        api_sync_project_config_to_server(
+            CLI_config=cli_config,
+            ProjectConfig=validation["config"].model_dump(mode="json"),
+            update=on_server,
+        )
+
+    out, err = verbose.readouterr()
+    assert "secret-value-in-config" not in out + err
+    assert "Pipeline configuration validated: demo" in out + err
+
+
 class TestMultiQCLogging:
     """MultiQC's own lines only at -v, and no second copy of the CLI's records."""
 
@@ -192,3 +267,54 @@ def test_an_unreadable_multiqc_report_is_one_x_line_naming_it(capsys, monkeypatc
     assert out.count("✗") == 1
     assert "Could not read MultiQC report run1/multiqc.parquet: corrupt [report]" in out
     assert err == ""
+
+
+class TestApiLoginStatus:
+    """api_login says which HTTP status the server answered: the token is not always why."""
+
+    URL = "https://api.depictio.dev/depictio/api/v1/cli/validate_cli_config"
+
+    @pytest.fixture
+    def login(self, cli_config):
+        from depictio.cli.cli.utils import api_calls
+
+        def _login(response: httpx.Response) -> tuple[dict, list[str]]:
+            client = MagicMock()
+            client.post.return_value = response
+            with (
+                patch.object(api_calls, "load_depictio_config", return_value=cli_config),
+                patch.object(api_calls, "get_http_client", return_value=client),
+                patch.object(api_calls, "rich_print_checked_statement") as printer,
+            ):
+                result = api_calls.api_login("cli.yaml")
+            return result, [str(call.args[0]) for call in printer.call_args_list]
+
+        return _login
+
+    def test_a_valid_token(self, login):
+        result, _ = login(httpx.Response(200, json={"success": True, "is_admin": True}))
+
+        assert result["success"] is True
+        assert result["status_code"] == 200
+        assert result["is_admin"] is True
+
+    def test_a_token_the_server_does_not_know(self, login):
+        result, _ = login(httpx.Response(200, json={"success": False, "message": "expired"}))
+
+        assert result == {"success": False, "status_code": 200}
+
+    @pytest.mark.parametrize("status", [401, 403])
+    def test_a_refused_token(self, login, status):
+        result, printed = login(httpx.Response(status, json={"detail": "Invalid token"}))
+
+        assert result == {"success": False, "status_code": status}
+        assert printed[-1].startswith("Depictio CLI configuration is invalid: ")
+
+    @pytest.mark.parametrize("status", [404, 502])
+    def test_another_answer_names_its_status_not_the_configuration(self, login, status):
+        page = "<html><body>nginx error page</body></html>"
+        result, printed = login(httpx.Response(status, text=page))
+
+        assert result == {"success": False, "status_code": status}
+        assert printed[-1] == f"The server answered HTTP {status} to {self.URL}"
+        assert not any("nginx error page" in line for line in printed)

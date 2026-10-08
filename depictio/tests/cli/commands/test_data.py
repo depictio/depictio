@@ -11,6 +11,7 @@ import re
 from unittest.mock import MagicMock, patch
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from depictio.cli.cli.commands.data import app, link_app
@@ -30,8 +31,8 @@ IDS = ["scan", "process", "join", "link list", "link delete"]
 
 @pytest.fixture
 def validate():
-    """The validation, failing, so each command stops right after it."""
-    mock = MagicMock(return_value=(MagicMock(), {"success": False}))
+    """The validation, failing as it does, by ending the command: each stops right there."""
+    mock = MagicMock(side_effect=typer.Exit(code=1))
     with patch("depictio.cli.cli.commands.data.validate_project_config_and_check_S3_storage", mock):
         yield mock
 
