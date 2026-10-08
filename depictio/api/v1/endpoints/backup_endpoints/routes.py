@@ -27,6 +27,7 @@ from depictio.api.v1.db import (
     groups_collection,
     initialization_collection,
     instance_settings_collection,
+    project_storage_collection,
     projects_collection,
     runs_collection,
     users_collection,
@@ -591,6 +592,17 @@ async def _create_mongodb_backup(created_by: str, *, automatic: bool = False) ->
             "collection": dashboard_version_counters_collection,
             "exclude_filter": {},
         },
+        # Per-project storage credentials (endpoint, access key, Fernet-encrypted
+        # secret). Without them a restored project's private-bucket DCs silently
+        # fall back to the instance credentials. The secret ciphertext is only
+        # readable with the secrets key of the instance that wrote it
+        # (``<DEPICTIO_AUTH_KEYS_DIR>/secrets_key.bin``): restoring onto an
+        # instance with a different keys volume brings the config back but the
+        # first read raises ``StorageSecretUnreadable`` until an owner re-enters
+        # the secret. Restore the keys volume alongside the backup to avoid that.
+        # Ciphertext plus that key equals the plaintext, so treat backup files as
+        # credential-bearing.
+        "project_storage_configs": {"collection": project_storage_collection, "exclude_filter": {}},
     }
 
     # First, get list of temporary user IDs to exclude their resources
@@ -1486,6 +1498,9 @@ async def restore_backup(
             "comment_threads": comment_threads_collection,
             "dashboard_versions": dashboard_versions_collection,
             "dashboard_version_counters": dashboard_version_counters_collection,
+            # See the note in _create_mongodb_backup: the encrypted secret is
+            # tied to the source instance's secrets key.
+            "project_storage_configs": project_storage_collection,
         }
 
         collections_to_restore = request.collections or list(data_section.keys())
