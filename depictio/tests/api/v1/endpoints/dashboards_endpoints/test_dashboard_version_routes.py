@@ -1223,6 +1223,40 @@ def test_deleting_a_child_tab_through_the_delete_route_keeps_it_restorable(
 # each failure mode was silent: the endpoint returned 200 every time.
 
 
+def test_timeline_rows_report_what_a_version_holds(ctx) -> None:
+    """Every row read "0 components", because the counts were never stored.
+
+    ``component_count`` was a Python ``@property``, so it did not survive
+    ``model_dump`` into Mongo — and the list endpoint projects ``tabs`` away,
+    leaving nothing to count from on read. The timeline claimed every version
+    was empty, which makes the whole surface untrustworthy: a user cannot pick
+    a version to restore if none of them appear to contain anything.
+    """
+    main = _make_dashboard(ctx, components=[{"index": "a"}, {"index": "b"}])
+    _make_dashboard(ctx, title="Tab 2", parent=main, tab_order=1, components=[{"index": "c"}])
+    _capture(ctx, main, kind="explicit")
+
+    row = ctx["client"].get(f"{API}/{main}/versions").json()["versions"][0]
+
+    assert row["component_count"] == 3, "components across the whole family, not just the main tab"
+    assert row["tab_count"] == 2
+
+
+def test_coalescing_keeps_the_counts_in_step(ctx) -> None:
+    """A folded save rewrites ``tabs``; the counts must follow it."""
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    _capture(ctx, did)
+
+    ctx["dashboards"].update_one(
+        {"_id": did}, {"$set": {"stored_metadata": [{"index": "a"}, {"index": "b"}]}}
+    )
+    _capture(ctx, did, now=BASE + timedelta(seconds=30))
+
+    row = ctx["client"].get(f"{API}/{did}/versions").json()["versions"][0]
+    assert row["save_count"] == 2, "precondition: the second save folded into the first"
+    assert row["component_count"] == 2
+
+
 def test_restore_adds_exactly_one_version(ctx) -> None:
     """A restore appeared as two entries, not one.
 
@@ -1322,6 +1356,147 @@ def test_naming_requires_editor(ctx) -> None:
     assert response.status_code == 403
 
 
+def test_version_detail_carries_what_the_preview_renders(ctx) -> None:
+    """The viewer renders `?version=` from this payload, so it must be complete.
+
+    ``GET /versions/{id}`` is the only endpoint that returns ``tabs`` — the
+    list endpoint projects them away. The preview picks its tab out of this
+    response and renders it through the live component tree, so a missing
+    layout array is a blank dashboard rather than an error.
+    """
+    main = _make_dashboard(ctx, components=[{"index": "a"}])
+    child = _make_dashboard(ctx, title="Tab 2", parent=main, tab_order=1)
+    ctx["dashboards"].update_one(
+        {"_id": main}, {"$set": {"right_panel_layout_data": [{"i": "a", "x": 0, "y": 0}]}}
+    )
+    record = _capture(ctx, main, kind="explicit")
+
+    body = ctx["client"].get(f"{API}/versions/{record.version_id}").json()
+
+    by_id = {t["dashboard_id"]: t for t in body["tabs"]}
+    assert str(main) in by_id and str(child) in by_id, "the preview addresses tabs by id"
+
+    tab = by_id[str(main)]
+    assert tab["stored_metadata"] == [{"index": "a"}]
+    assert tab["right_panel_layout_data"] == [{"i": "a", "x": 0, "y": 0}]
+    assert "left_panel_layout_data" in tab
+    assert tab["is_main_tab"] is True
+
+
+def test_version_detail_never_leaks_access_control(ctx) -> None:
+    """A snapshot the viewer renders must not carry permissions at all.
+
+    Structural, not filtered: ``TabSnapshot`` has no such fields, so there is
+    nothing for a preview — or a restore — to write back.
+    """
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    record = _capture(ctx, did, kind="explicit")
+
+    tab = ctx["client"].get(f"{API}/versions/{record.version_id}").json()["tabs"][0]
+
+    for field in ("permissions", "is_public", "project_id"):
+        assert field not in tab, f"{field} must never travel inside a snapshot"
+
+
+def test_snapshot_carries_the_exact_layout_a_preview_needs(ctx) -> None:
+    """Preview did not reproduce the layout the user had.
+
+    Two halves to that. The viewer merges the snapshot onto the *live*
+    document rather than rendering it alone — a `TabSnapshot` deliberately has
+    no `project_id`, so rendering it directly leaves nothing to resolve data
+    collections against. This pins the other half: the snapshot must carry the
+    layout arrays verbatim, geometry included, or there is nothing correct to
+    merge.
+    """
+    layout = [
+        {"i": "a", "x": 0, "y": 0, "w": 4, "h": 6},
+        {"i": "b", "x": 4, "y": 0, "w": 4, "h": 3},
+    ]
+    did = _make_dashboard(ctx, components=[{"index": "a"}, {"index": "b"}])
+    ctx["dashboards"].update_one({"_id": did}, {"$set": {"right_panel_layout_data": layout}})
+    record = _capture(ctx, did, kind="explicit")
+
+    # The user rearranges everything afterwards.
+    ctx["dashboards"].update_one(
+        {"_id": did},
+        {
+            "$set": {
+                "title": "Renamed later",
+                "right_panel_layout_data": [{"i": "a", "x": 0, "y": 0, "w": 8, "h": 2}],
+            }
+        },
+    )
+
+    tab = ctx["client"].get(f"{API}/versions/{record.version_id}").json()["tabs"][0]
+
+    assert tab["right_panel_layout_data"] == layout, "geometry must survive verbatim"
+    assert tab["title"] != "Renamed later", "the snapshot must not track later edits"
+
+
+def test_deleting_a_dashboard_deletes_its_history(ctx, monkeypatch) -> None:
+    """A deleted dashboard's ledger was orphaned in Mongo forever.
+
+    `delete_family` existed but nothing called it. Snapshots are the largest
+    documents this deployment writes, and retention is scoped per family — so
+    an orphaned ledger is never pruned and never reachable again, it only
+    accumulates. The sequence counter goes too, or recreating a dashboard with
+    the same id would resume numbering at the old maximum.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+    from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+
+    monkeypatch.setattr(dash_routes, "dashboards_collection", ctx["dashboards"])
+    monkeypatch.setattr(dash_routes, "delete_logo_asset", lambda *_a: None)
+    monkeypatch.setattr(dash_routes, "delete_threads_for_dashboards", lambda *_a: 0)
+    ctx["client"].app.dependency_overrides[get_current_user] = lambda: CALLER
+
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    _capture(ctx, did, kind="explicit")
+    ctx["dashboards"].update_one({"_id": did}, {"$set": {"stored_metadata": [{"index": "b"}]}})
+    _capture(ctx, did, kind="explicit", now=BASE + timedelta(hours=1))
+    assert ctx["versions"].count_documents({"family_id": str(did)}) == 2
+
+    response = ctx["client"].delete(f"{API}/delete/{did}")
+
+    assert response.status_code == 200, response.text
+    assert ctx["versions"].count_documents({"family_id": str(did)}) == 0
+    assert (
+        version_store.dashboard_version_counters_collection.count_documents({"family_id": str(did)})
+        == 0
+    ), "the seq counter must go too, or a recreated dashboard resumes at the old max"
+
+
+def test_deleting_a_child_tab_keeps_the_family_history(ctx, monkeypatch) -> None:
+    """A child tab's versions belong to its parent's timeline.
+
+    A version covers the whole family, so dropping the ledger when one tab is
+    removed would discard the history of every other tab with it — including
+    the record of the tab that was just deleted, which is exactly what someone
+    would want to restore.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
+    from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+
+    monkeypatch.setattr(dash_routes, "dashboards_collection", ctx["dashboards"])
+    monkeypatch.setattr(dash_routes, "delete_logo_asset", lambda *_a: None)
+    monkeypatch.setattr(dash_routes, "delete_threads_for_dashboards", lambda *_a: 0)
+    ctx["client"].app.dependency_overrides[get_current_user] = lambda: CALLER
+
+    main = _make_dashboard(ctx, components=[{"index": "a"}])
+    child = _make_dashboard(ctx, title="Tab 2", parent=main, tab_order=1)
+    before = _capture(ctx, main, kind="explicit")
+    assert ctx["versions"].count_documents({"family_id": str(main)}) == 1
+
+    ctx["client"].delete(f"{API}/delete/{child}")
+
+    # The delete itself is recorded too; what matters here is that nothing
+    # before it went.
+    assert ctx["versions"].find_one({"version_id": before.version_id}), (
+        "the family's history must outlive the child tab"
+    )
+
+
 # ── the routes that bypass /save ─────────────────────────────────────────────
 #
 # `/save` is not the only way a dashboard's content changes. A rename, a tab
@@ -1373,6 +1548,20 @@ def test_renaming_a_dashboard_records_a_version(bypass) -> None:
     assert titles == ["Q3 report", "Q4 report"]
 
 
+def test_editing_a_tab_records_against_the_family(bypass) -> None:
+    """A version covers the whole family, so a child edit lands on the parent."""
+    main = _make_dashboard(bypass, components=[{"index": "a"}])
+    child = _make_dashboard(bypass, title="Tab 2", parent=main, tab_order=1)
+
+    response = bypass["client"].patch(f"{API}/tab/{child}", json={"title": "Renamed tab"})
+
+    assert response.status_code == 200, response.text
+    versions = _family_versions(bypass, main)
+    assert versions, "a child-tab edit must appear on the family timeline"
+    newest = versions[-1]
+    assert {t["title"] for t in newest["tabs"]} == {"Main", "Renamed tab"}
+
+
 def test_deleting_a_tab_records_an_explicit_version(bypass) -> None:
     """The change most worth undoing, and the one that must not coalesce.
 
@@ -1394,3 +1583,50 @@ def test_deleting_a_tab_records_an_explicit_version(bypass) -> None:
     # ...and the entry before it still holds the deleted tab, which is the whole
     # point. Asserting only the count would pass on an empty snapshot.
     assert "Doomed" in {t["title"] for t in versions[0]["tabs"]}
+
+
+def test_reordering_tabs_records_a_version(bypass) -> None:
+    """`tab_order` is snapshot content, so an unrecorded reorder is silently
+    undone by the next restore of an older version."""
+    main = _make_dashboard(bypass, components=[{"index": "a"}])
+    first = _make_dashboard(bypass, title="B", parent=main, tab_order=1)
+    second = _make_dashboard(bypass, title="C", parent=main, tab_order=2)
+
+    response = bypass["client"].post(
+        f"{API}/tabs/reorder",
+        json={
+            "parent_dashboard_id": str(main),
+            "tab_orders": [
+                {"dashboard_id": str(second), "tab_order": 1},
+                {"dashboard_id": str(first), "tab_order": 2},
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    versions = _family_versions(bypass, main)
+    assert versions, "a reorder must be recoverable"
+    order = {t["title"]: t["tab_order"] for t in versions[-1]["tabs"]}
+    assert order["C"] < order["B"], f"the new order must be recorded, got {order}"
+
+
+def test_a_failing_capture_never_breaks_the_write(bypass, monkeypatch) -> None:
+    """Versioning is an undo step; the write is the user's work.
+
+    Pinned because the capture calls sit *after* a successful write, so an
+    exception there would turn a completed rename into a 500 and invite a retry
+    against a document that has already changed.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import versioning
+
+    did = _make_dashboard(bypass, title="Before", components=[{"index": "a"}])
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("ledger unavailable")
+
+    monkeypatch.setattr(versioning, "capture_quietly", boom)
+
+    response = bypass["client"].post(f"{API}/edit/{did}", json={"title": "After"})
+
+    assert response.status_code == 200, response.text
+    assert bypass["dashboards"].find_one({"dashboard_id": did})["title"] == "After"

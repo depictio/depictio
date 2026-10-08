@@ -56,6 +56,34 @@ class CreateVersionRequest(BaseModel):
     label: Optional[str] = Field(default=None, max_length=200)
 
 
+class RestoreComponentRequest(BaseModel):
+    """Put one component back, leaving every other component alone."""
+
+    component_index: str = Field(min_length=1, max_length=200)
+    #: Restore the component's place too: its grid position and size, and the
+    #: section, group or panel it sat in. Off by default: the usual request is
+    #: "give me back what this chart *showed*", and moving the surrounding
+    #: layout to satisfy it is a surprise. On, when the place is itself the
+    #: thing being restored.
+    restore_layout: bool = False
+
+
+#: Component fields that say *where* it sits in the dashboard, not what it
+#: shows. They belong with its grid entry, so they follow ``restore_layout``.
+#: Taken from the snapshot otherwise, a component restored from before the
+#: dashboard had sections loses its section; its grid entry, kept from the
+#: live layout, is relative to that section, so the tile lands on top of the
+#: unsectioned tiles and the whole grid recompacts around it.
+_PLACEMENT_FIELDS: tuple[str, ...] = (
+    "section",
+    "group",
+    "parent_index",
+    "panel",
+    "placement",
+    "fit",
+)
+
+
 # ── shared resolution + guards ──────────────────────────────────────────────
 
 
@@ -145,11 +173,6 @@ def _guarded_version(version_id: str, user: User, level: str) -> dict[str, Any]:
 
 def _summarise(record: dict[str, Any]) -> dict[str, Any]:
     """Timeline row. ``tabs`` is already projected away by the store."""
-    kinds: dict[str, int] = {}
-    for stamp in record.get("data_collections") or []:
-        kind = stamp.get("version_kind", "none")
-        kinds[kind] = kinds.get(kind, 0) + 1
-
     return {
         "version_id": record.get("version_id"),
         "family_id": record.get("family_id"),
@@ -168,7 +191,9 @@ def _summarise(record: dict[str, Any]) -> dict[str, Any]:
         "tab_count": record.get("tab_count", 0),
         "component_count": record.get("component_count", 0),
         "parent_version_id": record.get("parent_version_id"),
-        "data_version_kinds": kinds,
+        "data_version_kinds": versioning.count_data_version_kinds(
+            record.get("data_collections") or []
+        ),
     }
 
 
@@ -594,3 +619,175 @@ async def restore_dashboard_version(
         "tabs_created": created,
         "tabs_deleted": deleted,
     }
+
+
+@dashboard_versions_endpoint_router.post("/versions/{version_id}/restore_component")
+async def restore_component_from_version(
+    version_id: str,
+    payload: RestoreComponentRequest,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """Put **one** component back, leaving the rest of the dashboard alone.
+
+    Restoring a whole version to recover a single chart is a blunt instrument:
+    it reverts every other component, and any work done since, to get one thing
+    back. This is the narrow edit — the component's stored config replaces the
+    live one, and nothing else on the dashboard moves.
+
+    Deliberately not simply "write the snapshot's component over the live one":
+
+    * **Access-control fields are not restorable.** They live on the dashboard
+      document rather than the component, so they cannot travel through here,
+      and that is checked by construction rather than by hoping.
+    * **The layout is opt-in.** ``restore_layout`` is off by default because
+      the common request is "give me back what this chart showed", and silently
+      shuffling neighbours to reinstate an old grid position is a second,
+      unasked-for change. Off, the component keeps its live place: grid entry
+      *and* section, group and panel, which a grid entry is relative to.
+    * **A component absent from the live dashboard is re-added.** Restoring a
+      component someone deleted is the single most valuable case, so it is
+      supported rather than 404'd — placed using the snapshot's layout, since
+      there is no live position to preserve.
+
+    Like a full restore, the pre-change state is captured first, so this is
+    undoable by restoring the version that precedes the new entry.
+    """
+    record = _guarded_version(version_id, current_user, "editor")
+    index = payload.component_index
+
+    family_id = ObjectId(record["family_id"])
+    main = dashboards_collection.find_one({"dashboard_id": family_id})
+    if not main:
+        raise HTTPException(status_code=404, detail="Dashboard family's main tab not found.")
+
+    # Locate the component in the snapshot, remembering which tab held it: a
+    # component restored into the wrong tab would be as good as lost.
+    located = next(
+        (
+            (tab, component)
+            for tab in record.get("tabs") or []
+            for component in tab.get("stored_metadata") or []
+            if str(component.get("index") or "") == index
+        ),
+        None,
+    )
+    if located is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Component {index} does not exist in version {version_id}.",
+        )
+    snapshot_tab, snapshot_component = located
+
+    tab_id = ObjectId(str(snapshot_tab["dashboard_id"]))
+    live_tab = dashboards_collection.find_one({"dashboard_id": tab_id})
+    if not live_tab:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "The tab this component belonged to no longer exists. "
+                "Restore the full version instead."
+            ),
+        )
+
+    # Capture before writing, so this edit is undoable exactly like a full
+    # restore. No-ops when the live state already matches the newest version.
+    versioning.capture_quietly(family_id, kind="explicit", author=current_user)
+
+    restored_component = _rehydrate_ids(snapshot_component)
+
+    components = list(live_tab.get("stored_metadata") or [])
+    position = next(
+        (i for i, component in enumerate(components) if str(component.get("index") or "") == index),
+        None,
+    )
+    replaced = position is not None
+    if position is None:
+        components.append(restored_component)
+    else:
+        if not payload.restore_layout:
+            restored_component = _with_placement_of(restored_component, components[position])
+        components[position] = restored_component
+
+    # An edit like a save, as a full restore is: the listing's thumbnail
+    # cache-buster and "last modified" column move with it.
+    update: dict[str, Any] = {"stored_metadata": components, "last_saved_ts": utc_now_str()}
+
+    # A re-added component has no live position to keep, so its snapshot
+    # layout is the only sane placement — otherwise it lands wherever the
+    # grid's fallback puts it, typically on top of something else.
+    layout_restored = payload.restore_layout or not replaced
+    if layout_restored:
+        for field_name in ("left_panel_layout_data", "right_panel_layout_data"):
+            entry = _layout_entry_for(snapshot_tab.get(field_name), index)
+            if entry is not None:
+                update[field_name] = _with_layout_entry(live_tab.get(field_name), index, entry)
+
+    dashboards_collection.update_one({"dashboard_id": tab_id}, {"$set": update})
+
+    captured = versioning.capture_quietly(
+        family_id, kind="restore", author=current_user, parent_version_id=version_id
+    )
+
+    logger.info(
+        f"restored component {index} from version {version_id} "
+        f"({'replaced' if replaced else 're-added'}) on tab {tab_id}"
+    )
+
+    # Forced, as a full restore's is: the edit is deliberate.
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dashboard_routes
+
+    dashboard_routes._queue_screenshot(str(family_id), current_user, force=True)
+
+    return {
+        "restored_from": version_id,
+        "restored_from_seq": record.get("seq"),
+        "component_index": index,
+        "readded": not replaced,
+        "layout_restored": layout_restored,
+        "new_version_id": captured.version_id if captured else None,
+    }
+
+
+def _layout_entry_for(layout: Any, index: str) -> dict[str, Any] | None:
+    """One component's grid entry, or None when it has no explicit position.
+
+    Layouts are a flat list of ``{i, x, y, w, h}`` on both the live model and
+    ``TabSnapshot``; a breakpoint-keyed map is not a shape either can hold, so
+    it is not accepted here. Handling a shape the models reject would be dead
+    code that reads as coverage.
+    """
+    if not isinstance(layout, list):
+        return None
+    for entry in layout:
+        if isinstance(entry, dict) and _layout_key(entry) == index:
+            return entry
+    return None
+
+
+def _layout_key(entry: dict[str, Any]) -> str:
+    """The component index a grid entry belongs to.
+
+    An import writes ``box-<index>`` and the editor the bare index; the
+    frontend treats both as the same tile (``stripBoxPrefix``), so must this.
+    """
+    key = str(entry.get("i") or "")
+    return key[4:] if key.startswith("box-") else key
+
+
+def _with_placement_of(restored: dict[str, Any], live: dict[str, Any]) -> dict[str, Any]:
+    """``restored`` placed where ``live`` sits now (see ``_PLACEMENT_FIELDS``)."""
+    placed = {k: v for k, v in restored.items() if k not in _PLACEMENT_FIELDS}
+    placed.update({k: live[k] for k in _PLACEMENT_FIELDS if k in live})
+    return placed
+
+
+def _with_layout_entry(layout: Any, index: str, entry: dict[str, Any]) -> list[dict[str, Any]]:
+    """Live layout with one component's entry replaced.
+
+    Only that component is touched. Rewriting the whole layout from the
+    snapshot would move every neighbour, which is precisely the blast radius
+    this endpoint exists to avoid.
+    """
+    source = layout if isinstance(layout, list) else []
+    kept = [e for e in source if not (isinstance(e, dict) and _layout_key(e) == index)]
+    return [*kept, entry]

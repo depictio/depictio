@@ -31,6 +31,10 @@ from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     load_dashboards_from_db,
     reorder_child_tabs,
 )
+from depictio.api.v1.endpoints.dashboards_endpoints.data_versions import (
+    DataVersionPins,
+    resolve_data_versions,
+)
 from depictio.api.v1.endpoints.user_endpoints.routes import (
     get_current_user,
     get_user_or_anonymous,
@@ -70,6 +74,7 @@ from depictio.models.components.category_palette import assign_category_colors
 from depictio.models.components.lite import (
     TEXT_ONLY_AGGREGATIONS,
     TEXT_PARAM_PLACEHOLDER,
+    index_from_tag,
     text_placeholders,
 )
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
@@ -99,6 +104,123 @@ _SCREENSHOTS_DIR = str(settings.performance.screenshots_path)
 # Mirrors the Dash auto-screenshot callback's 1h heuristic so the two
 # trigger sites agree on "stale".
 _SCREENSHOT_STALE_AFTER_S = 3600
+
+
+def _data_pins(request: dict) -> DataVersionPins:
+    """Time-travel pins for a render request, or empty pins for a live read.
+
+    Every render endpoint takes an untyped ``request`` body, so this is the one
+    place that reads the two time-travel keys. A malformed ``as_of_version``
+    (a version that no longer exists) is a 400 rather than a silent fallback to
+    current data: the caller asked for a specific past state, and answering
+    with today's numbers under that label is worse than an error.
+    """
+    try:
+        return resolve_data_versions(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+#: Card fields a stored version may override when recomputing a past value.
+#: Everything that decides *what* the card computes and how it is labelled —
+#: but nothing that decides *which collection* is read. See the call site.
+_CARD_DEFINITION_FIELDS = frozenset(
+    {
+        "column_name",
+        "aggregation",
+        "aggregations",
+        "breakdown_col",
+        "secondary_layout",
+        "title",
+        "cols_json",
+    }
+)
+
+#: Fields of a figure that decide what is plotted. `dict_kwargs` carries the
+#: axis/colour assignments and `visu_type` the chart kind, which is what makes
+#: "this was a histogram and is now a box plot" visible in component history.
+_FIGURE_DEFINITION_FIELDS = frozenset(
+    {
+        "dict_kwargs",
+        "visu_type",
+        "mode",
+        "code_content",
+        "title",
+        "cols_json",
+    }
+)
+
+#: Fields of a table that decide what is shown. Column selection and ordering
+#: only.
+_TABLE_DEFINITION_FIELDS = frozenset(
+    {
+        "columns",
+        "visible_columns",
+        "column_order",
+        "title",
+        "cols_json",
+    }
+)
+
+#: Per component type, the fields a client may override on a render request.
+#:
+#: Allow-lists rather than a denylist, and identical in spirit across types:
+#: `wf_id` / `dc_id` / `dc_config` are absent from every one of them because
+#: those decide *which collection is read*. Honouring them from the request
+#: would let a caller compute over data the dashboard does not reference and
+#: whose permissions were never checked. Everything here is presentation.
+_DEFINITION_FIELDS: dict[str, frozenset[str]] = {
+    "card": _CARD_DEFINITION_FIELDS,
+    "figure": _FIGURE_DEFINITION_FIELDS,
+    "table": _TABLE_DEFINITION_FIELDS,
+}
+
+
+def _definition_override(override: Any, component_type: str) -> dict:
+    """The subset of a client-supplied component definition we will honour.
+
+    Returns `{}` for anything malformed or for a type with no allow-list, so a
+    bad payload falls back to the live definition rather than failing the
+    request — one broken component in a modal should not blank the rest of the
+    dashboard.
+    """
+    if not isinstance(override, dict):
+        return {}
+    allowed = _DEFINITION_FIELDS.get(component_type)
+    if not allowed:
+        return {}
+    return {key: value for key, value in override.items() if key in allowed and value is not None}
+
+
+def _card_definition_override(override: Any) -> dict:
+    """Back-compat alias for the card allow-list."""
+    return _definition_override(override, "card")
+
+
+def _apply_component_override(component: dict, request: dict) -> dict:
+    """Draw a component from a past version's stored definition.
+
+    A dashboard version records what each component *was*, but the render
+    endpoints read the component from the live document. Without this, the
+    component-history modal would draw a past version's data using today's
+    chart definition and label it as the past — a view that never existed.
+
+    Only ever narrows to the allow-list for the component's own type, which is
+    taken from the *live* component rather than the request: letting a caller
+    declare the type would let them pick which allow-list to be judged by.
+    """
+    overrides = request.get("component_overrides")
+    if not isinstance(overrides, dict) or not overrides:
+        return component
+    override = overrides.get(str(component.get("index")))
+    narrowed = _definition_override(override, str(component.get("component_type") or ""))
+    if not narrowed:
+        return component
+    logger.info(
+        f"component override on {component.get('index')}: {sorted(narrowed)} "
+        f"(type={component.get('component_type')})"
+    )
+    return {**component, **narrowed}
 
 
 def _ensure_baseline_quietly(
@@ -474,6 +596,11 @@ def _overlay_version(
         "pinned": bool(record.get("pinned", False)),
         "created_at": record.get("created_at"),
         "author_email": record.get("author_email"),
+        # What the banner says about the data: how many collections this
+        # version can show as they were, and how many only as they are now.
+        "data_version_kinds": versioning.count_data_version_kinds(
+            record.get("data_collections") or []
+        ),
     }
     return merged, main_tab
 
@@ -813,9 +940,10 @@ async def edit_dashboard(
     )
 
     if result:
-        # Title/icon edits are content too — without this they would be the one
-        # kind of change the timeline cannot show. `auto`, so a rename burst
-        # coalesces like any other edit.
+        # A rename is content. Captured after the write, so the version holds
+        # the new title and the entry before it holds the old one — which is
+        # what makes the rename undoable from the timeline. `auto`, so a rename
+        # burst coalesces like any other edit.
         _capture_version_quietly(dashboard_id, current_user)
         return {
             "message": "Dashboard updated successfully.",
@@ -1203,8 +1331,13 @@ async def delete_dashboard(
         # Drop the version ledger with the dashboard. Versions are keyed on the
         # family id, so without this every deleted dashboard leaves its whole
         # history — and its sequence counter — behind with nothing able to
-        # reach them again. Only for a main tab: a child tab's versions belong
+        # reach them again, and the retention policy, scoped per family, never
+        # prunes it either. Only for a main tab: a child tab's versions belong
         # to the family timeline, which outlives it.
+        #
+        # Best-effort, and after the delete: leftover history is a storage leak,
+        # while a failure here must not leave a deleted dashboard reported as
+        # still present.
         if dashboard.get("is_main_tab", True):
             try:
                 from depictio.api.v1.endpoints.dashboards_endpoints.version_store import (
@@ -1338,6 +1471,8 @@ async def update_tab(
     )
 
     if result:
+        # A version covers the whole tab family, so editing a child tab is
+        # recorded against the family and shows up on the parent's timeline.
         _capture_version_quietly(dashboard_id, current_user)
         return {
             "success": True,
@@ -1407,9 +1542,12 @@ async def delete_tab(
 
     if result.deleted_count > 0:
         delete_threads_for_dashboards([dashboard_id])
-        # Anchored on the parent — the deleted tab can no longer resolve its
-        # own family. `explicit`, because losing a tab is the single thing most
-        # worth being able to undo, and it must not coalesce away.
+        # Anchored on the *parent*: the tab is gone, so it can no longer resolve
+        # its own family, and a capture addressed to it would find nothing.
+        #
+        # `explicit` rather than `auto` because losing a tab is the change most
+        # worth undoing and must not coalesce into a neighbouring autosave — the
+        # entry has to stay steppable-back-to.
         if parent_dashboard_id:
             _capture_version_quietly(parent_dashboard_id, current_user, kind="explicit")
         return {
@@ -1485,8 +1623,9 @@ async def reorder_tabs(
     # Perform the reorder
     updated_count = reorder_child_tabs(PyObjectId(parent_dashboard_id), tab_orders)
 
-    # `tab_order` is part of the snapshot and of the content hash, so a reorder
-    # is a genuine change rather than a no-op the hash would swallow.
+    # Tab order is content — a snapshot records each tab's `tab_order`, and the
+    # content hash covers it — so a reorder that recorded nothing would be
+    # restored away silently by the next restore of an older version.
     _capture_version_quietly(ObjectId(parent_dashboard_id), current_user)
 
     return {
@@ -2622,6 +2761,7 @@ def bulk_compute_cards(
     )
 
     filters = request.get("filters") or []
+    pins = _data_pins(request)
     requested_ids: list[str] | None = request.get("component_ids")
     # "Compare groups in cards" (issue #89): sanitized at this trust boundary,
     # reduced per group on the frame path below. ``include_other`` mirrors the
@@ -2663,6 +2803,21 @@ def bulk_compute_cards(
         and (requested is None or str(m.get("index")) in requested)
     ]
     cards = cards + [vc for text in texts for vc in _text_value_cards(text)]
+
+    # Historical card definitions, for the component-history modal. A card's
+    # *config* — column, aggregation, breakdown — is versioned alongside its
+    # layout, so computing a past version's value against the card's current
+    # definition would answer a question nobody asked: it would apply today's
+    # aggregation to yesterday's data and present it as "how it looked".
+    #
+    # Restricted to the presentation fields that decide what a card computes.
+    # `wf_id`/`dc_id`/`dc_config` are deliberately NOT overridable: those
+    # decide *which collection is read*, and taking them from the request
+    # would let a caller compute over data this dashboard does not reference
+    # (and whose permissions were never checked). A card not already on this
+    # dashboard is likewise ignored, since the loop only visits `cards`.
+    if isinstance(request.get("component_overrides"), dict):
+        cards = [_apply_component_override(card, request) for card in cards]
 
     if not cards and not texts:
         return {"values": {}, "filter_applied": bool(filters), "filter_count": len(filters)}
@@ -2794,8 +2949,8 @@ def bulk_compute_cards(
     def _card_cache_key(
         wf_id: Any, dc_id: Any, filter_expr: str | None = None, follow_region: bool = False
     ) -> tuple:
-        """``(wf_id, dc_id, filter signature, filter_expr)`` — the dedupe key for a
-        card's Delta load. Cards sharing it share one loaded frame (via
+        """``(wf_id, dc_id, filter signature, filter_expr, pin, follow_region)`` —
+        the dedupe key for a card's Delta load. Cards sharing it share one loaded frame (via
         ``df_cache``), so a projected load must carry the union of their columns.
 
         ``filter_expr`` is part of the key because the cached frame is stored
@@ -2812,7 +2967,20 @@ def bulk_compute_cards(
                 for fm in card_filters
             )
         )
-        return (str(wf_id), str(dc_id), filter_sig, filter_expr or "", follow_region)
+        # The pinned Delta version is part of the identity of the frame, not a
+        # property of how it is read: two cards on the same collection at
+        # different commits hold genuinely different data and must not share a
+        # cache entry. Constant per collection today, but keyed anyway so that
+        # stays true if per-component pins ever land in one request.
+        # ``follow_region`` stays last: the pushdown reads it back as ``key[-1]``.
+        return (
+            str(wf_id),
+            str(dc_id),
+            filter_sig,
+            filter_expr or "",
+            pins.for_dc(str(dc_id)),
+            follow_region,
+        )
 
     # Column projection (#7) pre-pass: the slow Delta load is shared across
     # every card with the same (wf_id, dc_id, filter) signature, so the
@@ -2911,6 +3079,9 @@ def bulk_compute_cards(
             metadata=_resolved_filters_for(str(dc_id), bool(cache_key[-1])) or None,
             init_data=init_data,
             select_columns=sorted(needed_cols_by_key.get(cache_key, set())) or None,
+            # A reduction over the scan is still a read: unpinned, it would answer
+            # a historical request with today's numbers.
+            delta_version=pins.for_dc(str(dc_id)),
         )
         if scan is None:
             return
@@ -2962,11 +3133,22 @@ def bulk_compute_cards(
         # A card-level ``filter_expr`` narrows the rows before aggregating, so the
         # precomputed specs — computed over the whole collection — are the wrong
         # answer for it. Skip straight to a path that can apply the expression.
+        #
+        # Skipped entirely too when this collection is pinned to an older commit:
+        # the specs describe the *latest* aggregation, so using them for a
+        # historical read would report today's mean under a past label — the
+        # one failure mode this feature exists to prevent. The slow path reads
+        # the pinned commit and is correct by construction.
         card_follows = follows_region(card)
         card_has_filters = has_filters if card_follows else has_region_free_filters
         # `top` / `top_share` are never in the specs: a spec that happens to be
         # called `top` (a describe()'s most frequent value) ignores the weight.
-        if not card_has_filters and not card_filter_expr and aggregation not in _TOP_AGGREGATIONS:
+        if (
+            not card_has_filters
+            and not card_filter_expr
+            and aggregation not in _TOP_AGGREGATIONS
+            and pins.for_dc(str(dc_id)) is None
+        ):
             specs = _get_specs(str(dc_id))
             col_specs = specs.get(column) or {}
             specs_value = _spec_value(col_specs, aggregation)
@@ -3047,6 +3229,7 @@ def bulk_compute_cards(
                     metadata=card_filters if card_filters else None,
                     select_columns=project_cols,
                     init_data=init_data,
+                    delta_version=pins.for_dc(str(dc_id)),
                 )
                 # The card's own conditional-aggregation expression narrows the
                 # rows before anything is reduced. Applied here rather than per
@@ -3479,6 +3662,7 @@ async def render_figure_endpoint(
     )
 
     filters = request.get("filters") or []
+    pins = _data_pins(request)
     theme = request.get("theme") or "light"
     full_load = bool(request.get("full_load", False))
     group_defs = sanitize_group_defs(request.get("groups"))
@@ -3506,6 +3690,11 @@ async def render_figure_endpoint(
     )
     if component is None:
         raise HTTPException(status_code=404, detail=f"Figure component '{component_id}' not found.")
+
+    # Component history renders a *past* version of this figure. Without this
+    # the endpoint would draw that version's data with today's chart
+    # definition — a histogram shown as the box plot it later became.
+    component = _apply_component_override(component, request)
 
     wf_id = component.get("wf_id")
     dc_id = component.get("dc_id")
@@ -3592,6 +3781,7 @@ async def render_figure_endpoint(
         "metadata": metadata,
         "filter_metadata": filter_metadata,
         "theme": theme,
+        "delta_version": pins.for_dc(str(dc_id)),
         "full_load": full_load,
         # The figure's own style, else its section's; a highlight drawing this
         # figure on another tab asks for its own through `style`.
@@ -3680,6 +3870,7 @@ def render_table_endpoint(
 
     _t0 = _time.perf_counter()
     filters = request.get("filters") or []
+    pins = _data_pins(request)
     start = int(request.get("start") or 0)
     limit = int(request.get("limit") or 100)
     limit = max(1, min(limit, 500))
@@ -3706,6 +3897,9 @@ def render_table_endpoint(
     )
     if component is None:
         raise HTTPException(status_code=404, detail=f"Table component '{component_id}' not found.")
+
+    # As in render_figure: a past version's column selection, not today's.
+    component = _apply_component_override(component, request)
 
     wf_id = component.get("wf_id")
     dc_id = component.get("dc_id")
@@ -3750,6 +3944,7 @@ def render_table_endpoint(
             workflow_id=wf_oid,
             data_collection_id=str(dc_id),
             init_data=init_data,
+            delta_version=pins.for_dc(str(dc_id)),
         )
         available_cols = list(schema.keys())
 
@@ -3934,6 +4129,7 @@ def render_image_paths_endpoint(
 
     body = request or {}
     filters = body.get("filters") or []
+    pins = _data_pins(body)
     body_max = body.get("max")
     chosen_max = body_max if body_max is not None else max
     limit = int(chosen_max) if chosen_max and int(chosen_max) > 0 else 50
@@ -4000,6 +4196,7 @@ def render_image_paths_endpoint(
             data_collection_id=str(dc_id),
             metadata=filter_metadata or None,
             init_data=init_data,
+            delta_version=pins.for_dc(str(dc_id)),
         )
     except Exception as e:
         logger.error(f"render_image_paths: DC load failed: {e}", exc_info=True)
@@ -4114,6 +4311,7 @@ def render_map_endpoint(
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
     from depictio.api.v1.services.map.render import render_map
 
+    pins = _data_pins(request)
     theme = request.get("theme") or "light"
 
     ctx = _component_context(
@@ -4135,6 +4333,7 @@ def render_map_endpoint(
             data_collection_id=ctx.dc_id,
             metadata=ctx.filter_metadata or None,
             init_data=ctx.init_data,
+            delta_version=pins.for_dc(ctx.dc_id),
         )
     except Exception as e:
         logger.error(f"render_map: DC load failed for {ctx.dc_id}: {e}", exc_info=True)
@@ -5827,8 +6026,50 @@ def _regenerate_component_fields(component: dict, project_id: PyObjectId | None 
             )
 
 
-def _regenerate_component_indices(dashboard_dict: dict) -> None:
-    """Generate new UUIDs for UUID-like component indexes; preserve semantic ones."""
+def _tag_derived_indices(lite: Any) -> set[str]:
+    """Ids on this dashboard that were derived from a component's YAML tag.
+
+    Recomputed from the lite components rather than read off the built
+    document, because ``tag`` is intentionally not persisted. An id only counts
+    when it still equals what the tag derives, so an explicitly supplied
+    ``index`` is not mistaken for a derived one.
+    """
+    keep: set[str] = set()
+    for component in getattr(lite, "components", None) or []:
+        data = component if isinstance(component, dict) else component.model_dump()
+        tag = data.get("tag")
+        index = data.get("index")
+        if tag and index and str(index) == index_from_tag(str(tag)):
+            keep.add(str(index))
+    return keep
+
+
+def _regenerate_component_indices(
+    dashboard_dict: dict, *, keep_indices: set[str] | None = None
+) -> None:
+    """Give imported components fresh ids, except where identity is meant to persist.
+
+    Two kinds of index are deliberately left alone:
+
+    * **Semantic** (e.g. ``multiqc-sampling-date``) — hand-written, referenced
+      elsewhere, and never a UUID.
+    * **Tag-derived** — listed in ``keep_indices`` by the caller, which still
+      holds the lite components and so knows which ids came from a ``tag``.
+      Regenerating these is what made a re-imported dashboard a set of
+      brand-new components: every feature that follows one through time
+      (version history, single-component restore, comparing a chart against its
+      former self) matches on ``index`` across snapshots, so fresh ids leave
+      all of them unable to match anything. The failure is silent — the
+      component-history modal reports "did not exist in that version" for a
+      component that plainly did.
+
+      Passed in rather than recomputed here because ``tag`` is deliberately not
+      persisted onto ``stored_metadata``; adding it just to re-derive the id
+      would put the same fact in two places, free to disagree.
+
+    Everything else is regenerated as before, so two imports of an untagged
+    dashboard stay independent rather than colliding.
+    """
     if "stored_metadata" not in dashboard_dict:
         return
 
@@ -5842,6 +6083,11 @@ def _regenerate_component_indices(dashboard_dict: dict) -> None:
             old_index.count("-") >= 4 or len(old_index) > 30
         )
         if not is_uuid_like:
+            continue
+
+        # The author asked for this id by naming the component. Honouring it is
+        # the whole point of deriving it.
+        if keep_indices and old_index in keep_indices:
             continue
 
         new_index = str(uuid.uuid4())
@@ -6851,7 +7097,7 @@ def _import_multi_tab_dashboard(
         _regenerate_component_fields(component, project_id=project_id)
     # Hide components whose DC is absent/unpopulated (self-adapting dashboard)
     _filter_unresolved_components(main_dashboard_dict, project_id=project_id)
-    _regenerate_component_indices(main_dashboard_dict)
+    _regenerate_component_indices(main_dashboard_dict, keep_indices=_tag_derived_indices(main_lite))
     # Colours of the dashboard this one replaces win, so a refresh keeps them.
     _resolve_auto_category_colors(
         main_dashboard_dict, project_id, (existing_main or {}).get("category_colors")
@@ -7030,7 +7276,9 @@ def _import_family_tabs(
         before_filtering = len(tab_dashboard_dict.get("stored_metadata") or [])
         _filter_unresolved_components(tab_dashboard_dict, project_id=project_id)
         was_pruned = len(tab_dashboard_dict.get("stored_metadata") or []) < before_filtering
-        _regenerate_component_indices(tab_dashboard_dict)
+        _regenerate_component_indices(
+            tab_dashboard_dict, keep_indices=_tag_derived_indices(tab_lite)
+        )
 
         # Self-adapting dashboard: a tab *reduced* by filtering is only worth
         # showing if it kept at least one filter AND one non-metadata
@@ -7402,7 +7650,7 @@ async def import_dashboard_from_yaml(
         # Regenerate s3_base_folder, etc. after dc_config is populated
         _regenerate_component_fields(component, project_id=project_id)
     _filter_unresolved_components(dashboard_dict, project_id=project_id)
-    _regenerate_component_indices(dashboard_dict)
+    _regenerate_component_indices(dashboard_dict, keep_indices=_tag_derived_indices(lite))
     _resolve_auto_category_colors(
         dashboard_dict,
         project_id,
