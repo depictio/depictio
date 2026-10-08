@@ -22,6 +22,7 @@ import AdvancedVizFrame from './AdvancedVizFrame';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import type { PlotGraphHandlers } from '../annotations/usePlotAnnotationLayer';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
+import { withAlpha } from '../../annotations/toPlotly';
 import type { PlotEventHandlers } from '../../annotations/plotDecorate';
 import {
   VizControlGroup,
@@ -124,24 +125,6 @@ const SLOPE_PANEL: [number, number] = [0, 0.26];
 const DEFAULT_DERIVATIVE_WINDOW = 5;
 
 const PALETTE = TAB10_PALETTE;
-
-/** `#rgb` / `#rrggbb` to `rgba(...)`. Returns the input untouched for any
- *  colour it does not recognise, so a themed `rgba(...)` passes through. */
-function withAlpha(colour: string, alpha: number): string {
-  const match = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(colour.trim());
-  if (!match) return colour;
-  const hex =
-    match[1].length === 3
-      ? match[1]
-          .split('')
-          .map((c) => c + c)
-          .join('')
-      : match[1];
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
 
 /**
  * Pure presentation wrapper around `<Plot>`, memoised on the (already themed
