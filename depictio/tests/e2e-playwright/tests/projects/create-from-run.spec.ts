@@ -934,8 +934,10 @@ test.describe("Create project from a run folder", () => {
     // The refusal opens the section, which says what the details are for.
     const card = page.locator("[data-testid='run-detection-card']");
     await expect(card).toHaveAttribute("data-state", "error", { timeout: 20_000 });
-    await expect(card.locator("[data-testid='run-detection-error']")).toHaveText(
-      PRIVATE_DENIED.json.detail,
+    // Read without connection details: the card does not echo the server's
+    // reason, which speaks of a project's storage settings.
+    await expect(card.locator("[data-testid='run-detection-error']")).toContainText(
+      "cannot read this bucket on its own",
     );
     await expect(card.locator("[data-testid='run-detection-error-hint']")).toContainText(
       "give its connection details above",

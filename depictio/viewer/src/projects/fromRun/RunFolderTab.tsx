@@ -319,7 +319,14 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   // An unreadable folder in a private bucket: the way forward is the
   // section above the card, not the pipeline picker.
   let detectionErrorHint: string | null = null;
+  let detectionErrorMessage: string | null = null;
   if (detectionView.status === 'error' && isPrivateBucketRefusal(detectionView.code)) {
+    // Read without connection details, the server's reason points at the
+    // storage settings of a project that does not exist yet.
+    if (!rootStorage) {
+      detectionErrorMessage =
+        'The server cannot read this bucket on its own: it is not public, and not one this server is set up to read.';
+    }
     if (privateBucketDisabledReason) {
       detectionErrorHint =
         'This bucket is not public, and reading a private bucket is not available to you here.';
@@ -599,6 +606,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
                 detectedId ? () => setChoice({ templateId: detectedId, from: 'detected' }) : undefined
               }
               errorHint={detectionErrorHint}
+              errorMessage={detectionErrorMessage}
             />
 
             <TemplatePicker
