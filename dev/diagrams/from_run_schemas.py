@@ -5,13 +5,12 @@
 
 PNG rendering needs Playwright (already a dev dependency) and a local Virgil GS;
 without the font the SVG still renders in whatever the fallback list finds.
-See sketch.py for the drawing primitives; the glyphs below (browser window,
-bucket, magnifier, folder, hourglass, tick) are composed from them.
+See sketch.py for the drawing primitives and the shared glyphs (browser window,
+bucket, magnifier, folder, hourglass, tick).
 """
 
 from __future__ import annotations
 
-import math
 import sys
 from pathlib import Path
 
@@ -22,9 +21,12 @@ sys.path.insert(0, str(Path(__file__).parent))
 from sketch import (  # noqa: E402
     DIM,
     GREEN,
+    GREEN_INK,
     GREY,
     INK,
+    LIGHT_GREY,
     ORANGE,
+    ORANGE_INK,
     PINK,
     RED,
     VIOLET,
@@ -32,203 +34,24 @@ from sketch import (  # noqa: E402
     YELLOW,
     Box,
     Sketch,
+    browser,
+    bucket,
+    button,
+    chip,
+    dot,
+    field,
+    folder,
+    hourglass,
+    magnifier,
+    mini_table,
+    page,
+    table_stack,
+    tick,
+    warning,
     write,
 )
 
 app = typer.Typer(add_completion=False)
-
-GREEN_INK = "#2f9e44"
-ORANGE_INK = "#e8590c"
-LIGHT_GREY = "#f1f3f5"
-
-
-# ── glyphs ───────────────────────────────────────────────────────────────────
-
-
-def ellipse(
-    s: Sketch, cx: float, cy: float, rx: float, ry: float, fill: str, *, n: int = 28
-) -> None:
-    pts = [
-        (cx + rx * math.cos(2 * math.pi * i / n), cy + ry * math.sin(2 * math.pi * i / n))
-        for i in range(n)
-    ]
-    s.poly(pts, fill=fill, amount=0.8)
-
-
-def circle(s: Sketch, cx: float, cy: float, r: float, fill: str) -> None:
-    ellipse(s, cx, cy, r, r, fill)
-
-
-def dot(s: Sketch, cx: float, cy: float, colour: str) -> None:
-    """A solid status dot; no outline so it reads as ink, not as a shape."""
-    s._parts.append(f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="5" fill="{colour}"/>')
-
-
-def tick(s: Sketch, cx: float, cy: float, *, size: float = 8, colour: str = GREEN_INK) -> None:
-    s.line(cx - size, cy, cx - size / 3, cy + size * 0.8, colour=colour, width=2.2, passes=1)
-    s.line(cx - size / 3, cy + size * 0.8, cx + size, cy - size, colour=colour, width=2.2, passes=1)
-
-
-def warning(s: Sketch, cx: float, cy: float, *, size: float = 11) -> None:
-    s.poly(
-        [(cx, cy - size), (cx + size, cy + size * 0.8), (cx - size, cy + size * 0.8)],
-        fill=YELLOW,
-        colour=ORANGE_INK,
-        amount=0.8,
-    )
-    s.text(cx, cy + size * 0.55, "!", size=13, weight="bold", colour=ORANGE_INK)
-
-
-def hourglass(s: Sketch, cx: float, cy: float, *, size: float = 9) -> None:
-    s.poly([(cx - size, cy - size), (cx + size, cy - size), (cx, cy)], fill=YELLOW, amount=0.8)
-    s.poly([(cx, cy), (cx + size, cy + size), (cx - size, cy + size)], fill=YELLOW, amount=0.8)
-
-
-def page(s: Sketch, x: float, y: float, w: float, h: float, fill: str = WHITE) -> None:
-    """A sheet with a folded corner and a few ruled lines."""
-    fold = min(10.0, w * 0.3)
-    s.poly(
-        [(x, y), (x + w - fold, y), (x + w, y + fold), (x + w, y + h), (x, y + h)],
-        fill=fill,
-        amount=0.8,
-    )
-    s.line(x + w - fold, y, x + w - fold, y + fold, amount=0.6, passes=1)
-    s.line(x + w - fold, y + fold, x + w, y + fold, amount=0.6, passes=1)
-    for i in range(3):
-        ly = y + h * 0.4 + i * (h * 0.18)
-        if ly < y + h - 4:
-            s.line(x + 4, ly, x + w - 5, ly, colour=GREY, amount=0.4, passes=1, width=1.2)
-
-
-def folder(s: Sketch, x: float, y: float, w: float, h: float, fill: str, label: str = "") -> Box:
-    tab = 9
-    s.poly(
-        [
-            (x, y + tab),
-            (x + w * 0.34, y + tab),
-            (x + w * 0.40, y),
-            (x + w * 0.62, y),
-            (x + w * 0.68, y + tab),
-            (x + w, y + tab),
-            (x + w, y + h),
-            (x, y + h),
-        ],
-        fill=fill,
-        amount=1.0,
-    )
-    if label:
-        s.text(x + w / 2, y + h / 2 + tab / 2 + 5, label, size=13)
-    return Box(x, y, w, h, fill, label, ())
-
-
-def bucket(s: Sketch, cx: float, top: float, w: float, h: float, fill: str) -> None:
-    """A pail: a trapezoid body under an elliptical rim, files peeking out."""
-    body = [
-        (cx - w / 2, top),
-        (cx + w / 2, top),
-        (cx + w / 2 - 14, top + h),
-        (cx - w / 2 + 14, top + h),
-    ]
-    s.poly(body, fill=fill, edges=(1, 2, 3), amount=1.2)
-    ellipse(s, cx, top, w / 2, 12, fill)
-    for i, (dx, dy, pw, ph) in enumerate(
-        ((-58, -34, 34, 44), (-16, -44, 36, 50), (28, -30, 32, 42))
-    ):
-        page(s, cx + dx, top + dy, pw, ph, fill=WHITE if i != 1 else LIGHT_GREY)
-
-
-def magnifier(s: Sketch, cx: float, cy: float, r: float) -> None:
-    circle(s, cx, cy, r, "#ffffffaa")
-    s.line(cx + r * 0.72, cy + r * 0.72, cx + r * 1.7, cy + r * 1.7, width=5, amount=0.8, passes=1)
-
-
-def browser(s: Sketch, x: float, y: float, w: float, h: float) -> Box:
-    frame = Box(x, y, w, h, WHITE, "", ())
-    s.rect(frame)
-    s.line(x, y + 28, x + w, y + 28, amount=0.8, passes=1)
-    for i, colour in enumerate(("#ff8787", "#ffd43b", "#69db7c")):
-        dot(s, x + 16 + i * 16, y + 14, colour)
-    return frame
-
-
-def field(s: Sketch, x: float, y: float, w: float, label: str, value: str) -> None:
-    s.text(x, y + 14, label, size=11, anchor="start", colour=DIM)
-    box = Box(x, y + 20, w, 26, LIGHT_GREY, "", ())
-    s.rect(box, colour=GREY)
-    s.text(x + 8, y + 38, value, size=12, anchor="start")
-
-
-def mini_table(
-    s: Sketch,
-    x: float,
-    y: float,
-    w: float,
-    rows: list[tuple[str, str, str]],
-    *,
-    row_h: float = 20,
-) -> float:
-    """rows = (collection, files, status) where status is ok / empty / skipped."""
-    s.text(x, y + 12, "collection", size=10, anchor="start", colour=GREY)
-    s.text(x + w - 62, y + 12, "files", size=10, anchor="start", colour=GREY)
-    s.line(x, y + 17, x + w, y + 17, colour=GREY, amount=0.4, passes=1, width=1)
-    for i, (name, files, status) in enumerate(rows):
-        ry = y + 20 + i * row_h
-        count_colour = INK if status == "ok" else RED if status == "empty" else DIM
-        s.text(x, ry + 13, name, size=12, anchor="start")
-        s.text(x + w - 62, ry + 13, files, size=12, anchor="start", colour=count_colour)
-        if status == "ok":
-            tick(s, x + w - 10, ry + 9, size=5)
-        elif status == "empty":
-            s.cross(x + w - 10, ry + 9, size=5)
-        else:
-            dot(s, x + w - 10, ry + 9, GREY)
-    return y + 20 + len(rows) * row_h
-
-
-def button(s: Sketch, x: float, y: float, w: float, label: str, *, enabled: bool) -> Box:
-    box = Box(x, y, w, 30, GREEN if enabled else LIGHT_GREY, "", ())
-    s.rect(box, colour=INK if enabled else GREY)
-    s.text(box.cx, y + 20, label, size=13, weight="bold", colour=INK if enabled else GREY)
-    return box
-
-
-def chip(s: Sketch, x: float, y: float, w: float, label: str, fill: str = ORANGE) -> Box:
-    """A worker task: a small card with a cog in the corner."""
-    box = Box(x, y, w, 46, fill, "", ())
-    s.rect(box)
-    cx, cy = x + w - 14, y + 13
-    circle(s, cx, cy, 6, WHITE)
-    for k in range(6):
-        a = k * math.pi / 3
-        s.line(
-            cx + 6 * math.cos(a),
-            cy + 6 * math.sin(a),
-            cx + 9 * math.cos(a),
-            cy + 9 * math.sin(a),
-            amount=0.3,
-            passes=1,
-            width=1.4,
-        )
-    s.text(x + 8, y + 31, label, size=12, anchor="start")
-    return box
-
-
-def table_stack(s: Sketch, x: float, y: float, w: float, h: float, fill: str, n: int = 3) -> None:
-    for i in range(n - 1, -1, -1):
-        s.rect(Box(x + i * 6, y - i * 6, w, h, fill, "", ()))
-    for i in range(1, 4):
-        s.line(
-            x + 6,
-            y + i * h / 4,
-            x + w - 6,
-            y + i * h / 4,
-            colour=GREY,
-            amount=0.4,
-            passes=1,
-            width=1,
-        )
-    s.line(x + w / 2, y + 4, x + w / 2, y + h - 4, colour=GREY, amount=0.4, passes=1, width=1)
-
 
 # ── figure 1: the flow ───────────────────────────────────────────────────────
 

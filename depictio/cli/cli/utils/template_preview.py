@@ -68,7 +68,7 @@ class DataCollectionPreview:
 
 @dataclass
 class RunPreview:
-    """What ``--data-root <location>`` would actually yield, before anything is created."""
+    """What DATA_DIR would actually yield, before anything is created."""
 
     template_id: str
     data_root: str

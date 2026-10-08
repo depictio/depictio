@@ -64,7 +64,7 @@ from depictio.models.models.manifest import is_remote_url
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
 
-# Colour per ``template_preview.PreviewStatus``, so a wrong --data-root is
+# Colour per ``template_preview.PreviewStatus``, so a wrong DATA_DIR is
 # visible at a glance. Same palette ``rich_print_checked_statement`` uses for
 # success / warning / error, so the table reads like the rest of the CLI.
 _PREVIEW_STATUS_STYLES = {
@@ -233,11 +233,75 @@ def _shorten_scan_pattern(pattern: str | None, locations: list[str]) -> str:
 # Scan modes whose files are remote: a dry run does not list or fetch them.
 _REMOTE_SCAN_MODES = ("url", "s3_prefix", "manifest")
 
+# Where each scan mode names its location, on the data collection itself.
+_SCAN_LOCATION_FIELDS = {"single": "filename", "url": "url", "s3_prefix": "prefix"}
+
+
+def _dc_locations(workflow: dict, dc: dict) -> list[str]:
+    """Every location a resolved data collection would read from."""
+    scan = (dc.get("config") or {}).get("scan") or {}
+    mode = str(scan.get("mode") or "").lower()
+    field = _SCAN_LOCATION_FIELDS.get(mode)
+    if field:
+        value = (scan.get("scan_parameters") or {}).get(field)
+        return [str(value)] if value else []
+    if mode == "recursive":
+        return [str(loc) for loc in (workflow.get("data_location") or {}).get("locations") or []]
+    return []
+
+
+def _remote_indexed_file_tags(resolved_config: dict) -> tuple[list[str], list[str]]:
+    """``(required, optional)`` tags of the indexed_file DCs that would read remotely.
+
+    Under a remote DATA_DIR an indexed_file DC counts as remote unless every
+    location it names is local (a ``--bind`` to a local folder, say): its files
+    are mirrored to S3 from local disk, next to their indexes.
+    """
+    required: list[str] = []
+    optional: list[str] = []
+    for wf in resolved_config.get("workflows", []):
+        for dc in wf.get("data_collections", []):
+            if str((dc.get("config") or {}).get("type", "")).lower() != "indexed_file":
+                continue
+            locations = _dc_locations(wf, dc)
+            if locations and not any(is_remote_url(loc) for loc in locations):
+                continue
+            (optional if dc.get("optional") else required).append(
+                str(dc.get("data_collection_tag"))
+            )
+    return required, optional
+
+
+def _drop_remote_indexed_file_dcs(resolved_config: dict) -> None:
+    """Refuse a required remote indexed_file DC; skip an optional one, with a warning."""
+    from depictio.cli.cli.utils.templates import prune_links_for_tags
+
+    required, optional = _remote_indexed_file_tags(resolved_config)
+    if required:
+        raise ValueError(
+            f"Indexed-file data collections ({', '.join(required)}) need a local DATA_DIR; "
+            "they cannot be read from s3:// yet. Bind them to a local folder with --bind."
+        )
+    if not optional:
+        return
+    for wf in resolved_config.get("workflows", []):
+        wf["data_collections"] = [
+            dc
+            for dc in wf.get("data_collections", [])
+            if dc.get("data_collection_tag") not in optional
+        ]
+    prune_links_for_tags(resolved_config, set(optional))
+    rich_print_checked_statement(
+        f"Skipped optional indexed-file data collection(s) {', '.join(optional)}: "
+        "they need local files and cannot be read from s3:// yet.",
+        "warning",
+    )
+
 
 def _print_dry_run_scan_preview(project_config) -> bool:
     """Show what a real scan would match, per data collection.
 
-    Answering "is --data-root pointing at the right level?" is the whole reason
+    Answering "is DATA_DIR pointing at the right level?" is the whole reason
     to run ``--dry-run``, and it could not: every step was wrapped in
     ``if not dry_run`` and the run then printed "Data scanning completed" all
     the same. The counts come from the scanner's own matcher, so a preview
@@ -284,7 +348,7 @@ def _print_dry_run_scan_preview(project_config) -> bool:
     if empty:
         rich_print_checked_statement(
             f"{len(empty)} data collection(s) would match no file: {', '.join(empty)}. "
-            "Check --data-root and the scan patterns before running for real.",
+            "Check DATA_DIR and the scan patterns before running for real.",
             "warning",
         )
     return not empty
@@ -474,7 +538,7 @@ def ingestion_record(trap_sigterm: bool = True) -> Iterator[_IngestionRecord]:
 def _render_run_preview(preview) -> None:
     """Print what a ``--dry-run`` would actually ingest, per data collection.
 
-    The point of the table is to make a wrong ``--data-root`` obvious before
+    The point of the table is to make a wrong DATA_DIR obvious before
     anything is created: a collection that found nothing names the sources it
     looked for, because "0 files" on its own does not tell you that your
     prefix is one level too high.
@@ -1361,6 +1425,9 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     # Track whether we're in template mode
     is_template_mode = template is not None
     template_resolved_config: dict | None = None
+    # The remote DATA_DIR preview already said what matched; the local scan
+    # summary of step 5 would only repeat it (and misread s3:// as a path).
+    remote_preview_shown = False
     # Only the template branch fills these; a --dashboard import outside it
     # substitutes nothing, since a hand-written dashboard names its data
     # collections directly instead of going through template variables.
@@ -1572,6 +1639,13 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                     "info",
                 )
 
+            # The files of an indexed_file collection are mirrored to S3 from
+            # local disk next to their indexes; an s3:// root has no disk to
+            # read them from. Checked after --bind, which can put one back on
+            # a local folder, and said now rather than at the processing step.
+            if data_root and is_remote_url(data_root):
+                _drop_remote_indexed_file_dcs(template_resolved_config)
+
             # Resolve dashboard paths: CLI --dashboard overrides template defaults
             if dashboard:
                 rich_print_checked_statement(
@@ -1593,6 +1667,7 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                 from depictio.cli.cli.utils.template_preview import preview_data_root
 
                 rich_print_section_separator("Dry run: what this data root would ingest")
+                remote_preview_shown = is_remote_url(data_root)
                 _render_run_preview(
                     preview_data_root(
                         template_id=template,  # type: ignore[arg-type]
@@ -2111,7 +2186,7 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                 else:
                     raise Exception("Failed to fetch remote project configuration")
 
-            if dry_run:
+            if dry_run and not remote_preview_shown:
                 # The preview warns by itself when something would match nothing;
                 # the line below is an info, not a green "completed".
                 _print_dry_run_scan_preview(project_config)
