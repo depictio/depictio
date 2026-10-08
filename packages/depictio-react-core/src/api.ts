@@ -4225,7 +4225,8 @@ export async function updateProjectPermissions(
 
 /** Per-project S3-compatible storage configuration, as returned by the
  *  backend. The secret is write-only: it is stored encrypted server-side and
- *  never echoed back — responses only carry `has_secret`. */
+ *  never echoed back; responses only carry `has_secret`. `bucket` is null
+ *  only on a config saved before the bucket became required. */
 export interface ProjectStorageConfig {
   endpoint_url: string;
   bucket: string | null;
@@ -4235,27 +4236,32 @@ export interface ProjectStorageConfig {
   updated_at: string | null;
 }
 
-/** PUT body for the storage config. Omitting (or nulling)
- *  `secret_access_key` KEEPS the previously stored secret, so edits don't
- *  require retyping it; a non-empty string replaces it. */
+/** PUT body for the storage config. `bucket` is required (an empty one is
+ *  refused with a 422). `region` defaults to `us-east-1` server-side; the
+ *  connection test detects the bucket's real region and saves it. Omitting
+ *  (or nulling) `secret_access_key` KEEPS the previously stored secret, so
+ *  edits don't require retyping it; a non-empty string replaces it. */
 export interface ProjectStorageConfigInput {
   endpoint_url: string;
-  bucket?: string | null;
+  bucket: string;
   region?: string;
   access_key_id?: string | null;
   secret_access_key?: string | null;
 }
 
 /** Result of POST /projects/{id}/storage/test. A failed connection is NOT an
- *  HTTP error — it comes back 200 with `success: false` and a sanitized
- *  message. */
+ *  HTTP error: it comes back 200 with `success: false` and a sanitized
+ *  message. `detected_region` is set when the test found the bucket's region
+ *  (the server has then already saved it on the config); null otherwise,
+ *  and absent from servers older than the region detection. */
 export interface ProjectStorageTestResult {
   success: boolean;
   message: string;
+  detected_region?: string | null;
 }
 
 /** Fetch a project's storage config. Returns null when none is set (the
- *  backend answers 404 for "not configured" — that's a normal state, not an
+ *  backend answers 404 for "not configured": that's a normal state, not an
  *  error). Other failures (401/403, invalid project) throw with the backend's
  *  `{detail}` string. */
 export async function getProjectStorage(
@@ -4268,8 +4274,8 @@ export async function getProjectStorage(
 }
 
 /** Create or update a project's storage config (owners only). Backend 400s
- *  carry actionable `{detail}` strings (e.g. a rejected private endpoint
- *  host) — surfaced verbatim. */
+ *  and 422s carry actionable `{detail}` strings (a rejected private endpoint
+ *  host, a missing bucket), surfaced verbatim. */
 export async function setProjectStorage(
   projectId: string,
   input: ProjectStorageConfigInput,
@@ -4290,9 +4296,12 @@ export async function deleteProjectStorage(projectId: string): Promise<void> {
   if (!res.ok) await throwHttpDetailError(res, 'Failed to remove storage configuration');
 }
 
-/** Test the saved storage credentials against the configured endpoint.
+/** Test the saved storage credentials against the configured bucket.
  *  Connection failures come back as `{success: false, message}` rather than
- *  throwing; only transport/authorization errors throw. */
+ *  throwing; only transport/authorization errors throw. S3 errors raised by
+ *  any route carry `{detail, code}` (`s3_refused`, `s3_access_denied`,
+ *  `s3_no_such_bucket`, `s3_wrong_region`, `s3_unreachable`, `s3_error`);
+ *  the thrown message is the `detail`. */
 export async function testProjectStorage(
   projectId: string,
 ): Promise<ProjectStorageTestResult> {

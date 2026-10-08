@@ -1,11 +1,14 @@
 /**
- * "Export as template" on the project detail page (ExportTemplateModal.tsx).
+ * The Export template section of the project settings (ExportTemplatePanel
+ * inside ProjectSettingsModal, opened from "Project settings" on the project
+ * detail page).
  *
- * The modal validates the template id client-side (same rule as the backend:
- * slash-separated `[A-Za-z0-9][A-Za-z0-9._-]*` segments) and, on success,
- * hands the zip from POST /projects/{id}/export_template to the browser as a
- * download. The download is captured and its central directory read here so
- * the assertion is on the bundle's contents, not just on a file name.
+ * The section validates the template id client-side (same rule as the
+ * backend: slash-separated `[A-Za-z0-9][A-Za-z0-9._-]*` segments) and, on
+ * success, hands the zip from POST /projects/{id}/export_template to the
+ * browser as a download. The download is captured and its central directory
+ * read here so the assertion is on the bundle's contents, not just on a file
+ * name.
  *
  * Runs for admins in standard AND single-user mode; skipped in public mode.
  * Targets the seeded Iris project and skips when that seed is absent.
@@ -48,8 +51,11 @@ function zipEntryNames(archive: Buffer): string[] {
   return names;
 }
 
-async function openExportModal(page: Page) {
-  await page.locator("[data-testid='export-template-button']").click();
+/** Open the project settings on the Export template section. */
+async function openExportSection(page: Page) {
+  await page.locator("[data-testid='project-settings-button']").click();
+  // The dialog remembers the last section per browser: pick it explicitly.
+  await page.locator("[data-testid='project-settings-nav-export']").click();
   const idInput = page.locator("[data-testid='export-template-id-input']");
   await expect(idInput).toBeVisible();
   return idInput;
@@ -63,21 +69,28 @@ test.describe("Export project as template", () => {
     await loginAsAdmin();
     await page.goto(PROJECT_URL);
 
-    // Skip (not fail) on stacks without the Iris reference seed.
-    const exportButton = page.locator("[data-testid='export-template-button']");
-    const loadError = page.getByText(/failed to load|back to projects/i);
-    await expect(exportButton.or(loadError).first()).toBeVisible({ timeout: 15_000 });
+    // Skip (not fail) on stacks without the Iris reference seed: the
+    // settings button enables once the project has loaded, and a missing
+    // project shows the load error instead.
+    const settingsButton = page.locator("[data-testid='project-settings-button']");
+    const loadError = page.getByText(/failed to (load|fetch) project/i);
+    await expect
+      .poll(async () => (await settingsButton.isEnabled()) || (await loadError.isVisible()), {
+        timeout: 15_000,
+      })
+      .toBe(true);
     test.skip(
-      !(await exportButton.isVisible()),
+      !(await settingsButton.isEnabled()),
       "Iris reference project not seeded in this stack.",
     );
-    await expect(exportButton).toBeEnabled({ timeout: 15_000 });
   });
 
   test("rejects an empty or malformed template id inline", async ({ page }) => {
-    const idInput = await openExportModal(page);
+    const idInput = await openExportSection(page);
     const submit = page.locator("[data-testid='export-template-submit']");
     const dialog = page.getByRole("dialog");
+    // Enabled once the current user is known to be allowed to export.
+    await expect(submit).toBeEnabled({ timeout: 15_000 });
 
     await submit.click();
     await expect(dialog.getByText("Template ID is required.")).toBeVisible();
@@ -95,7 +108,10 @@ test.describe("Export project as template", () => {
   });
 
   test("downloads a zip bundle whose root holds template.yaml", async ({ page }) => {
-    const idInput = await openExportModal(page);
+    const idInput = await openExportSection(page);
+    await expect(page.locator("[data-testid='export-template-submit']")).toBeEnabled({
+      timeout: 15_000,
+    });
     await idInput.fill("e2e/iris-export/1");
 
     const downloadPromise = page.waitForEvent("download", { timeout: 60_000 });
@@ -113,7 +129,10 @@ test.describe("Export project as template", () => {
     // The seeded project has dashboards, exported as tag-based YAML.
     expect(names.some((name) => /^dashboards\/[^/]+\.yaml$/.test(name))).toBeTruthy();
 
-    await expect(page.getByText("Template exported")).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+    // The outcome is shown in the section, which stays open on the result.
+    const success = page.locator("[data-testid='export-template-success']");
+    await expect(success).toBeVisible({ timeout: 10_000 });
+    await expect(success).toContainText("Template exported");
+    await expect(success).toContainText("e2e_iris-export_1.zip");
   });
 });

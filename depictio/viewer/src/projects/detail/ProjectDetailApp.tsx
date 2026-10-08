@@ -69,9 +69,7 @@ import IngestionReportPanel from './IngestionReportPanel';
 import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
 import ProjectIngestionTrigger from './ProjectIngestionTrigger';
 import { DeltaVersionHistory } from './DeltaVersionHistory';
-import StoragePanel from './StoragePanel';
-import ManifestRefreshPanel from './ManifestRefreshPanel';
-import ExportTemplateModal from './ExportTemplateModal';
+import ProjectSettingsModal from './ProjectSettingsModal';
 import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
 import {
   DcTypeBadges,
@@ -333,7 +331,7 @@ const ProjectDetailApp: React.FC = () => {
   const [manageTarget, setManageTarget] = useState<DataCollectionShape | null>(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [createDcOpened, setCreateDcOpened] = useState(false);
-  const [exportTemplateOpened, setExportTemplateOpened] = useState(false);
+  const [settingsOpened, setSettingsOpened] = useState(false);
   /** Cross-DC links for this project. Fetched alongside the project doc and
    *  refreshed when the user creates / edits / deletes a link from the
    *  Links section. Wired into the JoinsGraph for visualization. */
@@ -386,7 +384,7 @@ const ProjectDetailApp: React.FC = () => {
   }, [user, project]);
 
   // Storage credentials are owners-only (stricter than canMutate, which also
-  // covers editors) — mirrors the backend's owner gate on /storage.
+  // covers editors), mirroring the backend's owner gate on /storage.
   const isOwner = useMemo(() => {
     if (!user || !project) return false;
     if (user.is_admin) return true;
@@ -506,22 +504,17 @@ const ProjectDetailApp: React.FC = () => {
             </Title>
           </Group>
           <Group gap="xs">
-            {/* Disabled rather than hidden for viewers, like create-dc-btn:
-                the affordance stays discoverable and the title says why. */}
+            {/* Open to every reader once the project has loaded: the sections
+                inside disable what the reader may not change and say why. */}
             <Button
               variant="light"
               color={accent.secondary}
-              data-testid="export-template-button"
-              leftSection={<Icon icon="mdi:package-variant-closed" width={16} />}
-              disabled={!canMutate}
-              onClick={() => setExportTemplateOpened(true)}
-              title={
-                canMutate
-                  ? 'Export this project and its dashboards as a template bundle'
-                  : 'Owner permission required'
-              }
+              data-testid="project-settings-button"
+              leftSection={<Icon icon="ic:baseline-settings" width={16} />}
+              disabled={!project}
+              onClick={() => setSettingsOpened(true)}
             >
-              Export as template
+              Project settings
             </Button>
             <Button
               component="a"
@@ -608,17 +601,6 @@ const ProjectDetailApp: React.FC = () => {
                       }))}
                       canMutate={canMutate}
                       onLinksChange={setProjectLinks}
-                    />
-                  )}
-                  {projectId && (
-                    <StoragePanel projectId={projectId} canManage={isOwner} />
-                  )}
-                  {projectId && (
-                    <ManifestRefreshPanel
-                      projectId={projectId}
-                      canMutate={canMutate}
-                      dataCollections={allDataCollections}
-                      onReloadProject={refresh}
                     />
                   )}
                   <Box ref={dcViewerRef}>
@@ -716,11 +698,18 @@ const ProjectDetailApp: React.FC = () => {
         </Box>
       </AppShell.Main>
 
+      {/* Outside the loading switch above, so reloading the project after a
+          refresh keeps the dialog, and the run it follows, mounted. */}
       {projectId && (
-        <ExportTemplateModal
+        <ProjectSettingsModal
+          opened={settingsOpened}
+          onClose={() => setSettingsOpened(false)}
           projectId={projectId}
-          opened={exportTemplateOpened}
-          onClose={() => setExportTemplateOpened(false)}
+          projectName={project?.name}
+          canManageStorage={isOwner}
+          canMutate={canMutate}
+          dataCollections={allDataCollections}
+          onReloadProject={refresh}
         />
       )}
       <CreateDataCollectionModal
