@@ -762,9 +762,12 @@ tabs:
           .with_columns(pl.col('screen').replace_strict(names, default=pl.col('screen')))
       )
       fig = px.bar(d.to_pandas(), x='sample', y='findings', color='screen', barmode='group', log_y=True, facet_col=grp_col, color_discrete_map=depictio_category_colors.get('screen') or {}, category_orders={'screen': list(names.values())}, labels={'sample': 'Assembly', 'findings': 'Findings (log scale)', 'screen': 'Screen'})
+      # One tick per decade; the rotated assembly ids name the x axis.
+      fig.update_yaxes(dtick=1)
+      fig.update_xaxes(title_text='')
       fig.update_layout(margin=dict(t=10))
       if grp_col:
-          fig.update_xaxes(matches=None, showticklabels=True, title_text='')
+          fig.update_xaxes(matches=None, showticklabels=True)
           fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
     section: Screen composition
     tag: fs-smp-composition
@@ -917,18 +920,19 @@ tabs:
     column_name: contig_length
     column_type: int64
     filter_expr: "col('contig_length').is_not_null()"
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    secondary_layout: top_n
+    breakdown_col: top_screen
+    top_n_count: 4
     display:
       icon_name: mdi:ruler
       icon_color: orange
-      caption: median, with its spread (bp)
+      caption: median (bp), by leading screen
       decimals: 0
     section: Contigs at a glance
     tag: fs-ctg-card-length
     index: ctg-card-length
     title: Contig length
-    description: Median length of the annotated contigs whose names carry it.
+    description: Median length of the annotated contigs whose names carry it. The bars give the median per leading screen.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: funcscan
@@ -978,6 +982,7 @@ tabs:
       x_title: Contig length (bp, log scale)
       y_title: Features on the contig
       top_n_labels: 0
+      legend_pos: bottom
       selection_enabled: true
       selection_column: contig
     section: Loci
@@ -1210,11 +1215,14 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: hamronization_gene_presence
     use: hamronization/arg_dot_plot
+    config:
+      max_genes: 25
+      gene_sort: frac
     section: Gene support
     tag: fs-arg-dotplot
     index: arg-dotplot
     title: Gene support per assembly
-    description: Dot colour is the mean identity of the hits, dot size the share of tools calling the gene.
+    description: The 25 genes whose identity differs most between assemblies, ordered by tool share; colour is the mean identity, size the share of tools.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: funcscan
@@ -1529,13 +1537,13 @@ tabs:
     mode: ui
     figure_params:
       x: members
-      color: sample
-      labels: {members: Sequences in the cluster, sample: Representative from}
+      log_y: true
+      labels: {members: Sequences in the cluster}
     section: Clusters
     tag: fs-amp-cluster-sizes
     index: amp-cluster-sizes
     title: Cluster sizes
-    description: Sequences per cluster, split by the assembly that gave the representative.
+    description: Sequences per cluster across the run, the count on a log axis so the large clusters show.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: funcscan
@@ -1589,11 +1597,11 @@ tabs:
   - name: Region map
     icon: mdi:chart-timeline-variant
     color: violet
-    description: Where the predicted regions sit on their contigs
+    description: The contigs carrying the most regions, one arrow per region
   - name: Region detail
     icon: mdi:file-document-outline
     color: gray
-    description: One arrow per region along its contig, and the coordinates
+    description: The coordinates of every predicted region
     collapsed: true
   - name: Caller concordance
     icon: mdi:set-merge
@@ -1805,30 +1813,15 @@ tabs:
   - component_type: advanced_viz
     workflow_tag: funcscan
     data_collection_tag: combgc_region_track
-    use: combgc/bgc_genome_track
-    config:
-      mark: rect
-      score_title: Region length (kb)
-      selection_enabled: true
-      selection_column: contig
-    section: Region map
-    tag: fs-bgc-genome-track
-    index: bgc-genome-track
-    title: Region footprints on the contigs
-    description: One rectangle per region from start to end, as tall as its length; colour is the class.
-    layout: {x: 0, y: 0, w: 8, h: 6}
-  - component_type: advanced_viz
-    workflow_tag: funcscan
-    data_collection_tag: combgc_region_track
     use: combgc/bgc_region_arrows
     config:
       show_labels: true
       arrow_height: 0.5
-    section: Region detail
+    section: Region map
     tag: fs-bgc-region-arrows
     index: bgc-region-arrows
     title: Regions along their contig
-    description: One lane per contig, one arrow per region; comBGC reports no strand.
+    description: One lane per contig, the contigs with most regions first; colour is the product class, and comBGC reports no strand.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: funcscan
@@ -1840,7 +1833,7 @@ tabs:
     tag: fs-bgc-region-table
     index: bgc-region-table
     title: BGC region coordinates
-    layout: {x: 0, y: 6, w: 8, h: 6}
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: funcscan
     data_collection_tag: combgc_tool_overlap
@@ -2052,19 +2045,40 @@ tabs:
     workflow_tag: funcscan
     data_collection_tag: dbcan_substrates
     use: dbcan/substrates
-    visu_type: bar
-    mode: ui
-    figure_params:
-      x: substrate
-      y: clusters
-      color: sample
-      labels: {substrate: Substrate, clusters: Gene clusters, sample: Assembly}
+    mode: code
+    code_content: |-
+      # The 15 substrates with the most gene clusters, as horizontal bars. dbCAN-PUL
+      # names run long, so a label is cut at 40 characters (hover keeps the full name
+      # and the assemblies carrying it). Analysis mode's groups take the colour.
+      keys = list(depictio_group_by) + ['substrate']
+      top = (
+          df.filter(pl.col('substrate') != 'unassigned')
+          .group_by('substrate')
+          .agg(pl.col('clusters').sum())
+          .sort(['clusters', 'substrate'], descending=[True, False])
+          .head(15)['substrate']
+          .to_list()
+      )
+      d = (
+          df.filter(pl.col('substrate').is_in(top))
+          .group_by(keys)
+          .agg(pl.col('clusters').sum(), pl.col('sample').n_unique().alias('assemblies'))
+          .with_columns(
+              pl.when(pl.col('substrate').str.len_chars() > 40)
+              .then(pl.col('substrate').str.slice(0, 38) + '...')
+              .otherwise(pl.col('substrate'))
+              .alias('label')
+          )
+      )
+      fig = px.bar(d.to_pandas(), x='clusters', y='label', orientation='h', hover_data={'substrate': True, 'assemblies': True, 'label': False}, labels={'clusters': 'Gene clusters', 'label': '', 'assemblies': 'Assemblies', 'substrate': 'Substrate'}, **depictio_group_kwargs)
+      fig.update_yaxes(categoryorder='total ascending', automargin=True)
+      fig.update_layout(margin=dict(t=10))
     section: Substrates
     tag: fs-caz-substrates
     index: caz-substrates
-    title: Substrates predicted
-    description: Gene clusters per polysaccharide, split by assembly.
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    title: Top substrates
+    description: The 15 polysaccharides with the most gene clusters; hover a bar for the assemblies carrying it.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: funcscan
     data_collection_tag: dbcan_tool_overlap

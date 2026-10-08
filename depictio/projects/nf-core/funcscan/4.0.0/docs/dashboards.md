@@ -85,16 +85,17 @@ largest labelled; a lasso picks assemblies for every tab). Filters: a range per 
 sits on, so `contig_annotation` rebuilds it, one row per contig carrying at least one
 feature. The length comes from the contig name when the assembler wrote it there (SPAdes or
 MEGAHIT); other names keep the contig off the length axis. Strip: annotated contigs (a ring
-by leading screen), the median contig length and feature density, and the contigs where two
-screens or more found something. Then features against contig length (log x, no point
+by leading screen), the median contig length (with the median per leading screen) and
+feature density, and the contigs where two screens or more found something. Then features against contig length (log x, no point
 labels: contig ids say nothing) and the feature-density histogram. The contig table is
 collapsed. Filters: leading screen, screens on the contig, length and density.
 
 **Resistome.** Strip: ARG hits (a ring by tool), distinct gene names (the tools naming
 most), the median identity of aligned hits and their median reference coverage against
 ABRicate's 80% floor; HMM-based hits (fARGene) carry neither and are left out of both. Then
-the gene support dot plot per assembly (size the share of tools calling the gene, colour
-the mean identity), the sunburst from tool to drug class to gene (it starts at the tool
+the gene support dot plot per assembly (the 25 genes whose identity differs most between
+assemblies, ordered by tool share; size the share of tools calling the gene, colour the
+mean identity), the sunburst from tool to drug class to gene (it starts at the tool
 because the tools do not share a drug-class vocabulary) and the UpSet of tool agreement,
 counted on the contig. Collapsed: the drug class by assembly heatmap, then the hit quality
 scatter, the contig track of resistance islands and the hit table. Filters: tool, drug
@@ -104,21 +105,23 @@ class, identity and the number of tools calling a gene.
 against 0.8, the median peptide length and the largest peptide cluster with the sizes of
 all clusters. Then the property plane (hydrophobicity against the isoelectric point,
 coloured by charge, a line at pI 7) beside the candidate record card, which waits for a
-picked peptide; the physicochemistry PCA; and the cluster sizes. The candidate and cluster
+picked peptide; the physicochemistry PCA; and the cluster sizes on a log count axis. The candidate and cluster
 tables are collapsed. Filters: charge class, best probability and length.
 
 **BGCs.** Strip: BGC regions (a bar by completeness on the contig), distinct product
 classes (the callers naming most, Unknown left out), the median region length and CDS
 count. Then the caller to product class sunburst beside the regions per assembly, and the
-region footprints on their contigs (a genome track; a pick or a brush narrows the region
-detail). Collapsed: the region arrows and coordinates, and the caller concordance UpSet,
-counted on the contig because the callers draw region boundaries differently. Filters:
-caller, product class and size, plus a map section on the region-track collection.
+region arrows, one lane per contig with the contigs carrying most regions first. A genome
+view would lay every draft contig end to end, so the tab has none. Collapsed: the region
+coordinates, and the caller concordance UpSet, counted on the contig because the callers
+draw region boundaries differently. Filters: caller, product class and size, plus a map
+section on the region-track collection.
 
 **CAZymes.** Strip: CAZyme genes (a ring by CAZy class), the mean number of tools agreeing
 (a gauge out of three), the genes with a substrate call (split by substrate) and the median
 dbCAN-PUL bitscore of the gene clusters. Then the class to family to substrate sunburst,
-the CAZy classes per assembly and the substrates the gene clusters target. Collapsed: the
+the CAZy classes per assembly and the 15 substrates with the most gene clusters (long
+dbCAN-PUL names cut at 40 characters). Collapsed: the
 annotation concordance UpSet with the gene table, and the substrate table. Filters: CAZy
 class, substrate and tools agreeing.
 
@@ -146,7 +149,7 @@ product classes, CAZy classes and substrates have more values than the palette: 
 `auto:<abundance column>`, so the eight largest of the run take the palette, largest first.
 Unknown product classes and unassigned substrates are grey. The code figures read the same
 map: the composition bars colour by screen, and the hit quality scatter by tool, or by
-Analysis mode's groups when it has some.
+Analysis mode's groups when it has some. The substrate bars take the groups' colours.
 
 ## Cross-selection
 
@@ -154,7 +157,7 @@ A picked row or point becomes a dashboard filter that narrows the other tiles of
 collection and follows the project links to the collections they reach. The screening hub
 table and scatter select on `sample`, the contig tiles on `contig`, the hit quality scatter
 and hit table on `gene_symbol`, the AMP plane and candidate table on `cds_id`, the cluster
-table on `cluster_id`, the BGC genome track and region table on `contig`, the CAZyme gene
+table on `cluster_id`, the BGC region table on `contig`, the CAZyme gene
 table on `family`, the substrate table on `cgc_id` and the versions table on `tool`.
 
 ## Controls

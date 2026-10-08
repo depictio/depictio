@@ -261,19 +261,21 @@ main_dashboard:
     column_name: busco_complete
     column_type: float64
     filter_expr: "col('busco_complete').is_not_null()"
-    secondary_layout: coverage
-    coverage_max: 100
+    secondary_layout: threshold
+    threshold_value: 90
+    threshold_direction: min
+    threshold_warn: 80
     display:
       icon_name: mdi:shield-check-outline
       icon_color: violet
-      caption: median complete BUSCOs, of 100%
+      caption: median, against a 90% floor
       link: tab:Gene completeness
       decimals: 1
     section: Key figures
     tag: ga-ov-kf-busco
     index: ov-kf-busco
     title: BUSCO complete (%)
-    description: Median share of the lineage's single-copy genes found complete, over the assemblies BUSCO scored.
+    description: Median share of the lineage's single-copy genes found complete, over the assemblies BUSCO scored. The strip counts the assemblies at 90% or above.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Findings filter bar: the group, then the stage class.
   - component_type: interactive
@@ -313,14 +315,14 @@ main_dashboard:
     values:
       best_qv: {dc: merqury_assembly_qv, column: qv, aggregation: max, format: 'decimals:1'}
       qv_asm: {dc: merqury_assembly_qv, column: assembly_id, aggregation: top, weight: qv}
-      qv_gain: {dc: stage_steps, column: qv_gain, aggregation: max, format: 'decimals:1'}
+      n50_fold: {dc: stage_steps, column: n50_fold, aggregation: max, format: 'decimals:2'}
       best_n50: {dc: assemblies, column: n50, aggregation: max, format: si}
       n50_asm: {dc: assemblies, column: assembly_id, aggregation: top, weight: n50}
       busco: {dc: busco_batch_summary, column: complete_pct, aggregation: max, format: 'decimals:1'}
       busco_lin: {dc: busco_batch_summary, column: lineage, aggregation: top}
     body: |
       - **{{best_qv}}** consensus QV, the most accurate assembly ({{qv_asm}}) – Merqury, against the read k-mers [Accuracy](tab:Accuracy)
-      - **{{qv_gain}}** QV gained by the best polishing or scaffolding step – over the sample's raw assembly [Stages](tab:Stages)
+      - **{{n50_fold}}x** N50 of the best polishing or scaffolding step – over the sample's raw assembly [Stages](tab:Stages)
       - **{{best_n50}}** bp N50, the most contiguous assembly ({{n50_asm}}) – from its sequence lengths [Contiguity](tab:Contiguity)
       - **{{busco}}%** complete BUSCOs, the best assembly – lineage {{busco_lin}} [Gene completeness](tab:Gene completeness)
     section: Findings
@@ -581,12 +583,19 @@ tabs:
   - component_type: figure
     workflow_tag: genomeassembler
     data_collection_tag: assemblies
-    visu_type: histogram
-    mode: ui
-    figure_params:
-      x: sample
-      color: stage
-      labels: {sample: Sample, stage: Stage, count: Assessed assemblies}
+    mode: code
+    code_content: |-
+      # One block per assessed assembly, stacked by stage; a sample holds a few
+      # stages, so the count axis steps by one. The colour belongs to the stage
+      # (category_colors), so Analysis mode's groups take the facet axis.
+      grp_col = depictio_group_by[0] if depictio_group_by else None
+      fig = px.histogram(df.to_pandas(), x='sample', color='stage', facet_col=grp_col, color_discrete_map=depictio_category_colors.get('stage') or {}, labels={'sample': 'Sample', 'stage': 'Stage'})
+      fig.update_yaxes(title_text='', dtick=1)
+      fig.update_yaxes(title_text='Assessed assemblies', col=1)
+      fig.update_layout(margin=dict(t=10))
+      if grp_col:
+          fig.update_xaxes(matches=None, showticklabels=True, title_text='')
+          fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
     section: Assessed stages
     tag: ga-smp-stages
     index: smp-stages
@@ -879,12 +888,12 @@ tabs:
     column_name: busco_complete
     column_type: float64
     filter_expr: "col('busco_complete').is_not_null()"
-    secondary_layout: coverage
-    coverage_max: 100
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:shield-check-outline
       icon_color: violet
-      caption: the best, of 100%
+      caption: the best, with every assembly's spread
       decimals: 1
     section: Best assembly at a glance
     tag: ga-ba-card-busco
@@ -921,12 +930,12 @@ tabs:
       sample_col: assembly_id
       group_col: '{GROUP_COL}'
       scale: minmax
-      metric_cols: [n50, l50, total_length, n_sequences, qv, kmer_completeness, busco_complete, busco_duplicated]
+      metric_cols: [n50, n_sequences, total_length, qv, kmer_completeness]
     section: Every assembly
     tag: ga-ba-parallel
     index: ba-parallel
     title: Every assembly across the QC axes
-    description: One line per assembly, coloured by {GROUP_COL_DISPLAY}; a missing value leaves the line open.
+    description: One line per assembly, coloured by {GROUP_COL_DISPLAY}; BUSCO stays on its own tab, as an assembly missing an axis drops out.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: genomeassembler
@@ -1123,12 +1132,12 @@ tabs:
     column_name: busco_complete
     column_type: float64
     filter_expr: "col('busco_complete').is_not_null()"
-    secondary_layout: coverage
-    coverage_max: 100
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:shield-check-outline
       icon_color: violet
-      caption: the lowest step, of 100%
+      caption: the lowest step, with every step's spread
       decimals: 1
     section: Stages at a glance
     tag: ga-stg-card-busco
@@ -1145,7 +1154,7 @@ tabs:
       series_col: route
       x_col: stage_rank
       y_col: qv
-      x_title: Stage (0 assembly, 1 long-read polish, 2 short-read polish, 3 scaffold)
+      x_title: 'Stage: 0 raw, 1-2 polish, 3 scaffold'
       y_title: Consensus QV (Merqury)
       legend_pos: bottom
       selection_enabled: true
@@ -1165,7 +1174,7 @@ tabs:
       series_col: route
       x_col: stage_rank
       y_col: n50_fold
-      x_title: Stage (0 assembly, 1 long-read polish, 2 short-read polish, 3 scaffold)
+      x_title: 'Stage: 0 raw, 1-2 polish, 3 scaffold'
       y_title: N50 relative to the raw assembly
       legend_pos: bottom
       selection_enabled: true
@@ -1394,7 +1403,7 @@ tabs:
     workflow_tag: genomeassembler
     data_collection_tag: quast_length_ladder
     use: quast/cumulative_length
-    config: {x_title: Minimum contig length (bp), y_title: Bases in contigs at least that long}
+    config: {x_title: Minimum contig length (bp), y_title: Bases in contigs at least that long, legend_pos: bottom}
     section: QUAST
     tag: ga-ctg-quast-ladder
     index: ctg-quast-ladder
@@ -1593,13 +1602,13 @@ tabs:
     workflow_tag: genomeassembler
     data_collection_tag: merqury_assembly_qv
     use: merqury/qv_vs_completeness
-    config: {x_title: K-mer completeness (percent), y_title: Consensus QV, legend_pos: bottom, selection_enabled: true,
-      selection_column: assembly_id}
+    config: {x_title: K-mer completeness (percent), y_title: Consensus QV, legend_pos: none, reference_line: horizontal,
+      reference_value: 40, reference_highlight: above, selection_enabled: true, selection_column: assembly_id}
     section: QV and completeness
     tag: ga-acc-qv
     index: acc-qv-completeness
     title: QV against k-mer completeness
-    description: One point per assessed assembly, sized by its k-mer count; top right is accurate and complete.
+    description: One point per assessed assembly, sized by its k-mer count; points under the Q40 line are dimmed.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: genomeassembler
@@ -1607,7 +1616,7 @@ tabs:
     use: merqury/copy_number_bars
     config:
       normalise_to_one: false
-      sort_by: abundance
+      sort_by: alphabetical
       sample_sort: input
       top_n: 12
     section: Copy number
@@ -1717,18 +1726,20 @@ tabs:
     column_name: complete_pct
     column_type: float64
     filter_expr: "col('complete_pct').is_not_null()"
-    secondary_layout: coverage
-    coverage_max: 100
+    secondary_layout: threshold
+    threshold_value: 90
+    threshold_direction: min
+    threshold_warn: 80
     display:
       icon_name: mdi:shield-check-outline
       icon_color: violet
-      caption: median, of 100%
+      caption: median, against a 90% floor
       decimals: 1
     section: Genes at a glance
     tag: ga-gc-card-complete
     index: gc-card-complete
     title: Complete (%)
-    description: Median share of the lineage's BUSCOs found complete.
+    description: Median share of the lineage's BUSCOs found complete. The strip counts the assemblies at 90% or above.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: genomeassembler
@@ -1758,11 +1769,12 @@ tabs:
     column_name: fragmented_pct
     column_type: float64
     filter_expr: "col('fragmented_pct').is_not_null()"
-    secondary_layout: histogram
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:content-cut
       icon_color: pink
-      caption: median, with its distribution
+      caption: median, with its spread
       decimals: 1
     section: Genes at a glance
     tag: ga-gc-card-fragmented

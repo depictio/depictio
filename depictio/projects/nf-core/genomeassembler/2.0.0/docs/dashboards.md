@@ -40,13 +40,13 @@ The landing page, at compact width with the filter panel collapsed:
   opens the parameters that drive it and the tab that shows its output.
 - **Key figures**: four headline cards, each opening the tab that explains it. Samples
   (split by group), the median N50 (with its spread), the median consensus QV (against
-  QV 40, the Earth BioGenome Project floor) and the median share of complete BUSCOs (out
-  of 100%). The three assembly cards read `assemblies`, which every route writes; a QC tool
+  QV 40, the Earth BioGenome Project floor) and the median share of complete BUSCOs
+  (counting the assemblies at 90% or above). The three assembly cards read `assemblies`, which every route writes; a QC tool
   the run skipped leaves its card with a dash rather than a gap in the row. A group and a
   sample filter above them narrow these four only.
 - **Findings**: result rows whose values are computed under the filters, each with a link
-  to its tab: the best consensus QV and the assembly that reached it, the largest QV gain
-  of a polishing or scaffolding step over the raw assembly, the best N50 and its assembly,
+  to its tab: the best consensus QV and the assembly that reached it, the largest N50 fold
+  change of a polishing or scaffolding step over the raw assembly, the best N50 and its assembly,
   and the best share of complete BUSCOs with its lineage. Below them, four figures in two
   rows: N50 against QV per assembly beside the QV along each route, then the Nx curves
   beside the BUSCO classes per assembly. The route and Nx highlights hide their legends,
@@ -69,7 +69,8 @@ at most three open sections; tables, details and comparisons follow, collapsed.
 **Samples.** Strip: samples (a ring by QC status), assessed assemblies (split by stage
 class), distinct stages assessed (ranked by stage class) and the mean number of QC tools
 per assembly (a gauge out of samtools, Merqury, BUSCO and QUAST). Then the assessed stages
-per sample. Filters: QC status, stage class and assembler.
+per sample, a code figure so the count axis steps by one (with Analysis mode's groups as
+panels). Filters: QC status, stage class and assembler.
 
 **Genome profile.** Strip: GenomeScope's haploid genome size, heterozygosity, repeat share
 and the lowest model fit over the read sets. Then the jellyfish k-mer spectrum
@@ -78,8 +79,9 @@ set.
 
 **Best assembly.** Strip: the best N50, QV, share of complete BUSCOs and k-mer completeness
 over the assemblies in view, each with every assembly's spread. Then the parallel
-coordinates over N50, L50, length, sequence count, QV, k-mer completeness and BUSCO
-(coloured by group; brush an axis to keep a range), and N50 against QV coloured by
+coordinates over N50, sequence count, length, QV and k-mer completeness (coloured by group;
+brush an axis to keep a range). BUSCO stays off it: the plot drops a line that misses an
+axis, and BUSCO scores fewer assemblies than Merqury, and N50 against QV coloured by
 assembler with the assembly record card beside it (`linked_component`: it waits for a
 picked point). The assembly table is collapsed. Filters: stage class, assembler and a QV
 range.
@@ -94,17 +96,20 @@ route table. Filters: final stage and route.
 **Contiguity.** Strip: the median assembled length, N50, L50 and sequence count. Then the
 Nx curves computed from the samtools idxstats sequence lengths of every assessed assembly,
 and QUAST's reference-free view (N50 against assembled length beside the length kept above
-each contig length). Collapsed: QUAST against a reference (written only when the run had
+each contig length, its legend below). Collapsed: QUAST against a reference (written only when the run had
 one) and the QUAST tables. Filters: stage and an N50 range.
 
 **Accuracy.** Strip: the median consensus QV, k-mer completeness, the sequences Merqury
 scored (a ring, error-free or not) and the median error k-mers per assembly. Then QV
-against k-mer completeness and the copy number of the read k-mers in each assembly.
+against k-mer completeness (a line at Q40, the points under it dimmed, no legend of
+assemblies) and the copy number of the read k-mers in each assembly (classes in name
+order).
 Collapsed: the per-sequence QV scatter and the Merqury table. Filters: a QV range and
 error-free sequences.
 
-**Gene completeness.** Strip: the median share of complete BUSCOs (out of 100%), the
-highest duplicated share, the median fragmented and missing shares. Then the BUSCO classes
+**Gene completeness.** Strip: the median share of complete BUSCOs (counting the
+assemblies at 90% or above), the highest duplicated share, the median fragmented and
+missing shares, each with its spread. Then the BUSCO classes
 per assembly and complete against duplicated BUSCOs. The BUSCO table is collapsed.
 Filters: lineage and a complete range.
 
