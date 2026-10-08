@@ -6593,9 +6593,14 @@ def _import_family_tabs(
     import, its data absent then, comes in once a later run brings the data. A tab
     removed in the viewer comes back the same way, as a single-file tab does.
 
+    With `overwrite` and a `source_key`, a tab this YAML once held and holds no
+    more (renamed or removed in the template) is deleted: it would otherwise stay
+    beside its replacement. Tabs added in the viewer carry no such key and stay.
+
     Returns the tabs written, as {title, dashboard_id}.
     """
     imported_tabs = []
+    yaml_tab_keys: set[str] = set()
     dc_meta = _build_dc_meta(project_id)
     family = {"parent_dashboard_id": main_dashboard_id}
     # A tab's `auto` colours start from the main tab's, so a value is the same
@@ -6617,6 +6622,8 @@ def _import_family_tabs(
         # The tab's key comes from its title in the YAML, not in the database, so
         # a tab renamed in the viewer is still the one this tab refreshes.
         tab_source_key = f"{source_key}#{tab_lite.title}" if source_key else None
+        if tab_source_key:
+            yaml_tab_keys.add(tab_source_key)
 
         existing_tab = None
         if overwrite or keep:
@@ -6731,6 +6738,27 @@ def _import_family_tabs(
 
         next_order = tab_order + 1
         imported_tabs.append({"title": tab_dashboard.title, "dashboard_id": str(tab_dashboard_id)})
+
+    if overwrite and source_key:
+        stale = list(
+            dashboards_collection.find(
+                {
+                    **family,
+                    "source_key": {
+                        "$regex": f"^{re.escape(source_key)}#",
+                        "$nin": sorted(yaml_tab_keys),
+                    },
+                },
+                {"_id": 1, "dashboard_id": 1, "title": 1},
+            )
+        )
+        if stale:
+            logger.info(
+                "Removing tabs no longer in the YAML: "
+                + ", ".join(repr(tab.get("title")) for tab in stale)
+            )
+            dashboards_collection.delete_many({"_id": {"$in": [tab["_id"] for tab in stale]}})
+            delete_threads_for_dashboards([tab["dashboard_id"] for tab in stale])
 
     return imported_tabs
 
