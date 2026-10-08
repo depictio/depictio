@@ -103,7 +103,8 @@ main_dashboard:
 - **Simplified figures**: where the child tab's figure is too dense for a third of the row,
   draw a summary of it instead of a highlight. The tree summed by rank is one: an
   `advanced_viz` with `collapse_rank`, `top_n` and `size_by: abundance`, its dots split by the
-  group (`abundance_split_col: '{GROUP_COL}'`), with `link: tab:<Tab>` and a caption.
+  group (`abundance_split_col: '{GROUP_COL}'`), with `link: tab:<Tab>` and a caption. The
+  child tab's own tree opens on the same summary (section 4).
 - **Each figure says something the Key figures do not.** A per-group box of the measure a
   card already shows (the Shannon card, then a Shannon box) repeats it; prefer the tab's
   result (the volcano, the ordination). Figures share one header style: title, the linked
@@ -118,7 +119,16 @@ main_dashboard:
 - First section: a **KPI strip**, boxed and open, `card_variant: compact`, 4 cards w2 h1 (or
   2 cards w4 h1). Never 3 cards on a 4-slot row. The MultiQC tab has none.
 - Then at most **3 open** detail sections.
-- Then the collapsed ones: tables, per-sample details, alternate-route sections.
+- Then the collapsed ones: tables, record cards, per-sample details, alternate-route
+  sections. Never collapse a figure that answers the tab's question to save height (the UpSet
+  of shared taxa): drop it or summarise it instead.
+- A dense advanced viz opens on its readable form, the full one a switch away: the
+  phylogenetic tree on its summary (`collapse_rank`, `top_n: 10`, `size_by: abundance`, split
+  by `{GROUP_COL}`), the View switch drawing every tip.
+- Bind every view the outputs allow. A volcano takes `p_value_col` (the QQ view) and either
+  `avg_log_intensity_col` or, when the test's table has no mean abundance, `ma_dc_tag` on an
+  MA table in the canonical columns (the MA view). A filter on a column both tables carry
+  (the contrast) narrows both.
 - No intro text per section: the section `description` (one sentence, at most 90 characters)
   says what it shows. At most one short intro text per tab, and only when the subtitle is not
   enough.
@@ -181,6 +191,8 @@ main_dashboard:
   A figure that aggregates groups by `[*depictio_group_by, ...]` so the group column survives.
   Guard a group column that the no-metadata route removes: `if grp in df.columns`.
 - No hardcoded colours anywhere else (Mantine palette names in `icon_color` and section colours).
+- Sibling figures of one vocabulary share their key: the composition per group and per
+  sample both draw the ten largest taxa and Other (`top_n: 10`), so the legend repeats.
 
 ## 8. Viz controls
 
@@ -264,6 +276,11 @@ step). Text, highlights and links bind no data of their own, so:
 - At most 3 sentences per paragraph (the lint counts prose, not list items).
 - No raw column names on axes. Code figures pass `labels=` (`{"dim_1": "PCo1"}`) or set the
   axis titles; an embedding takes `axis_prefix` (`PCo` gives PCo1 / PCo2).
+- Code figures make room for their labels: `fig.update_yaxes(automargin=True)` when the
+  categories are on y (Plotly's fixed margin cuts "Groundwater"), and
+  `fig.update_layout(margin=dict(t=10))` (px keeps a title band the tile already draws).
+- Text follows the figure: when a default changes (the view, the rank, `top_n`), update the
+  title, the section description, the caption and `docs/dashboards.md` with it.
 - No megatest sample names, genes or loci: the sibling `megatest.yaml` `forbidden_terms` are
   checked in every title, description, body, caption and value filter.
 - Icons come from the bundled sets (`mdi:` mostly); section icons and colours from
@@ -275,7 +292,11 @@ On a running stack, with the template ingested from its megatest data:
 
 - the Overview fits in about two screens, values fill in, highlights draw, `tab:` links open;
 - controls dock right on full-width viz and on top of narrower ones;
-- no tile shows an empty band (autofit) or a cut body;
+- no tile shows an empty band (autofit) or a cut body; no tick label is cut, no legend
+  scrolls or overlaps the tick labels;
+- the map draws its tiles and points;
+- each dock shows a few controls and "More options", and every view switch (volcano MA/QQ,
+  tree summary/full) draws;
 - the group has the same colour on figures, advanced viz, the map and the filter chips;
 - the Guide's demos are not empty;
 - each conditional route still renders without a broken highlight or a stray `{VAR}`.
