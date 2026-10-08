@@ -1816,8 +1816,8 @@ def fetch_manifest(manifest_url: str, field_map: dict | None = None):
 
     Remote manifests are re-fetched on every scan, including scans the API
     runs in-process, so server context goes through the SSRF gateway
-    (``RemoteURLRejected`` propagates). CLI context fetches directly with the
-    same redirect and size caps.
+    (``RemoteURLRejected`` propagates) and refuses a local path. CLI context
+    fetches directly with the same redirect and size caps.
     """
     from depictio.models.models.manifest import DataManifest, is_remote_url
 
@@ -1832,6 +1832,13 @@ def fetch_manifest(manifest_url: str, field_map: dict | None = None):
         else:
             text = direct_fetch_text(manifest_url)
     else:
+        if is_server_context():
+            # A path stored on a data collection is its owner's word: the
+            # server never opens one of its own files on a user's behalf.
+            raise ValueError(
+                f"Manifest '{manifest_url}' is a local path: the server reads "
+                "manifests over https only."
+            )
         if not os.path.exists(manifest_url):
             raise ValueError(f"Manifest '{manifest_url}' does not exist.")
         with open(manifest_url) as fh:

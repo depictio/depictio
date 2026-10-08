@@ -465,6 +465,14 @@ class TestManifestScan:
         with pytest.raises(RemoteURLRejected, match="non-public address"):
             fetch_manifest(f"{http_fixture_server}/manifest.json")
 
+    def test_fetch_manifest_server_context_refuses_a_local_path(
+        self, server_context, manifest_file
+    ):
+        from depictio.cli.cli.utils.scan import fetch_manifest
+
+        with pytest.raises(ValueError, match="over https only"):
+            fetch_manifest(manifest_file)
+
     def test_fetch_manifest_server_context_refuses_redirect(
         self, server_context, allowlisted_loopback, http_fixture_server
     ):

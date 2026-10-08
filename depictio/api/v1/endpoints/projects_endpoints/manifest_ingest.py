@@ -431,28 +431,21 @@ def _ingest_manifest_into_project(
     return report
 
 
-# Scan modes whose source this process reads over the network, so it can always
-# read it again. The local modes depend on whether the data root happens to be
-# visible from this container, which is checked per data collection.
+# Scan modes whose source this process reads over the network, through the
+# fetch gateway or the S3 target resolution, which decide for the user asking.
 _REMOTE_SCAN_MODES = frozenset({"manifest", "url", "s3_prefix"})
 
 
 def _server_can_reread(workflow: dict, mode: str, scan_params: dict) -> bool:
-    """Whether this process could scan the data collection's source again.
+    """Whether this process may scan the data collection's source again.
 
-    A remote source always qualifies. A local one only if the path is visible
-    from *this* container: a CLI-created project normally points at the user's
-    own filesystem, which the API has never seen, and offering a refresh button
-    for it would only produce a scan failure with an unhelpful message.
+    Only a remote source qualifies. A local path stored on a project is its
+    owner's word, and this process can read far more of its own disk than any
+    user may (its keys, its environment), so it never re-reads one on a user's
+    behalf, even when the path exists here. A project ingested from a local
+    folder is refreshed by the CLI that ingested it.
     """
-    if mode in _REMOTE_SCAN_MODES:
-        return True
-    if mode == "single":
-        return os.path.isfile(str(scan_params.get("filename") or ""))
-    if mode == "recursive":
-        locations = (workflow.get("data_location") or {}).get("locations") or []
-        return any(os.path.isdir(str(location)) for location in locations)
-    return False
+    return mode in _REMOTE_SCAN_MODES
 
 
 def _refreshable_dc_index(project_dict: dict) -> dict[str, tuple[int, int, dict, str]]:
@@ -589,8 +582,8 @@ def _refresh_manifest_in_project(
             status_code=422,
             detail=(
                 "Project has no data collections this server can re-read. Remote "
-                "sources can always be refreshed; a local one only if its path is "
-                "visible from the server."
+                "sources (a manifest, a URL, an s3:// prefix) can be refreshed here; "
+                "data ingested from a local folder is refreshed with the CLI."
             ),
         )
     if data_collection_tag is not None:
