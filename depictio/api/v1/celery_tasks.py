@@ -3116,7 +3116,7 @@ def _unfinished_dependencies(steps: list[dict], depends_on: list[str]) -> list[s
 
 
 def _finalize_manifest_refresh_run(run_id: str) -> None:
-    """Close the run once every seeded step is terminal. Idempotent —
+    """Close the run once every seeded step is terminal. Idempotent:
     concurrent finalizers both compute the same $set."""
     from depictio.api.v1.monitoring import store
 
@@ -3151,7 +3151,10 @@ def _finalize_manifest_refresh_run(run_id: str) -> None:
     max_retries=_DEPENDENCY_MAX_WAITS,
 )
 def manifest_refresh_dc_task(self, payload: dict) -> dict:
-    """Re-ingest one manifest-backed DC — the async unit of a manifest refresh.
+    """Re-ingest one data collection: the async unit of a refresh.
+
+    Despite the task and command names, any refreshable scan mode lands here
+    (see ``_refreshable_dc_index``), not only manifest mode.
 
     Input shape (built by ``_refresh_manifest_in_project`` / ``_dispatch_refresh_tasks``):
         {
@@ -3281,7 +3284,7 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
         # detail is the step's message, the code goes to the worker log.
         logger.error(f"Manifest refresh for DC '{tag}' failed on S3 ({exc.code}): {exc.detail}")
         ok, message = False, exc.detail
-    except Exception as exc:  # noqa: BLE001 — any crash is a per-DC failure
+    except Exception as exc:  # noqa: BLE001 - any crash is a per-DC failure
         logger.error(f"Manifest refresh task crashed for DC '{tag}': {exc}")
         ok, message = False, str(exc)
 

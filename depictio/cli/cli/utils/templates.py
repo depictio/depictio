@@ -1458,10 +1458,15 @@ def resolve_template(
         data_root: The user's data root: a directory path, an ``s3://`` prefix,
             an already-built ``DataRoot``, or None for manifest-driven templates
             whose sources are named by the manifest instead (every root-derived
-            step — params introspection, samplesheet/metadata auto-detection —
-            is skipped in that case).
+            step, i.e. params introspection, samplesheet/metadata
+            auto-detection, is skipped in that case).
         project_name: Custom project name. If None, auto-generated from template.
         extra_vars: Additional variables from --var KEY=VALUE flags (e.g., METADATA_FILE).
+        provenance_files: Extra recap files from --provenance-file, collected
+            on top of the template's provenance spec.
+        allow_missing_vars: Fill missing required variables with
+            ``UNBOUND_VAR_SENTINEL`` instead of raising (for --bind); the
+            caller must then check none survives (``assert_no_unbound_vars``).
         CLI_config: Used to build a remote root's S3 client (credentials and
             endpoint). Ignored for a local root or an already-built one.
 

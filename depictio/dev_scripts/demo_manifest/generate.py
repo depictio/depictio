@@ -49,6 +49,10 @@ def _write_measurements_csv(path: Path, sample: str, rng: random.Random) -> None
             )
 
 
+# Manifest type (= the data collection tag) -> the writer of that type's per-sample CSV.
+_DC_WRITERS = (("samples", _write_sample_csv), ("measurements", _write_measurements_csv))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -68,21 +72,12 @@ def main() -> None:
 
     entries = []
     for sample in SAMPLES:
-        samples_file = f"{sample}.samples.csv"
-        measurements_file = f"{sample}.measurements.csv"
-        _write_sample_csv(out / samples_file, sample, rng)
-        _write_measurements_csv(out / measurements_file, sample, rng)
-        entries.append(
-            {"id": sample, "type": "samples", "url": f"{base}/{samples_file}", "run": "demo_run"}
-        )
-        entries.append(
-            {
-                "id": sample,
-                "type": "measurements",
-                "url": f"{base}/{measurements_file}",
-                "run": "demo_run",
-            }
-        )
+        for dc_type, write_csv in _DC_WRITERS:
+            filename = f"{sample}.{dc_type}.csv"
+            write_csv(out / filename, sample, rng)
+            entries.append(
+                {"id": sample, "type": dc_type, "url": f"{base}/{filename}", "run": "demo_run"}
+            )
 
     (out / "manifest.json").write_text(json.dumps(entries, indent=2) + "\n")
     with (out / "manifest.csv").open("w", newline="") as handle:
@@ -90,7 +85,8 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(entries)
 
-    print(f"Wrote {len(entries)} manifest entries + {2 * len(SAMPLES)} CSVs to {out}/")
+    # One CSV per entry.
+    print(f"Wrote {len(entries)} manifest entries + {len(entries)} CSVs to {out}/")
     print(f"Manifest URL once served: {base}/manifest.json")
 
 

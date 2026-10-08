@@ -6,16 +6,18 @@ the project's data-collection tags, switches each matched DC to
 CLI helpers as the create-DC flows. The result is a per-DC ingestion report.
 
 Sequencing per DC (mirrors ``_push_workflow_and_ingest``): the new scan config
-is persisted *before* the helpers run — the helpers' API callbacks read the DC
-from the project document — and reverted for any DC whose scan or process
+is persisted *before* the helpers run (the helpers' API callbacks read the DC
+from the project document) and reverted for any DC whose scan or process
 fails, so a failed ingestion never leaves a manifest scan config pointing at
 data that was never materialized. The scan also replaces the DC's File
 records with the manifest's entries, so those are snapshotted before it and
 put back on failure. Both writes touch that one DC only: the other DCs of the
 call, and anything else edited in the meantime, are left as they are.
 
-Fan-out is sequential for now; Celery parallelism is a phase-4 concern
-(the report shape is already per-DC so the switch is internal).
+``POST /projects/refresh_manifest`` re-runs the stored scan of every data
+collection this process can read again. First ingestion runs its DCs one
+after the other; a refresh can instead fan them out to Celery workers
+(``async_run``), polled through ``GET /projects/refresh_manifest/{run_id}``.
 """
 
 import copy
@@ -34,14 +36,18 @@ from depictio.api.v1.remote_fetch import (
     validate_remote_url,
 )
 from depictio.models.logging import logger
-from depictio.models.models.manifest import DataManifest
+from depictio.models.models.manifest import DataManifest, manifest_field_map
 from depictio.models.s3_access import ProjectS3Config
 
-# Manifests are indexes, not data — cap them well below the data-file cap.
+# Manifests are indexes, not data: cap them well below the data-file cap.
 MANIFEST_MAX_BYTES = 50 * 1024 * 1024
 
 # Rejected entries listed in a 400 body (the summary string names at most 5).
 MAX_REJECTED_ENTRIES_LISTED = 20
+
+S3_MANIFEST_UNSUPPORTED = (
+    "s3:// manifest locations are not supported yet: serve the manifest over https."
+)
 
 
 class ManifestEntriesRejected(RemoteURLRejected):
@@ -134,7 +140,7 @@ class RefreshManifestRequest(BaseModel):
     # Plan-only: report what would be refreshed without touching any data.
     dry_run: bool = False
     # Fan the per-DC re-ingestions out to Celery workers instead of running
-    # them inline — for long manifests. The response then reports each DC as
+    # them inline, for long manifests. The response then reports each DC as
     # "dispatched" with a run_id to poll via GET /projects/refresh_manifest/{run_id}.
     async_run: bool = False
 
@@ -153,19 +159,30 @@ class ManifestIngestReport(BaseModel):
     manifest_url: str
     manifest_entries: int
     matched: list[ManifestIngestDCResult] = Field(default_factory=list)
-    # Manifest types with no matching DC tag — data the project can't hold yet.
+    # Manifest types with no matching DC tag: data the project can't hold yet.
     unmatched_manifest_types: list[str] = Field(default_factory=list)
-    # Project DC tags the manifest says nothing about — left untouched.
+    # Project DC tags the manifest says nothing about, left untouched.
     unmatched_dc_tags: list[str] = Field(default_factory=list)
     dry_run: bool = False
     success: bool = False
+
+
+def _validate_manifest_url(manifest_url: str) -> None:
+    """Gate a manifest URL before anything is fetched. Raises ``RemoteURLRejected``.
+
+    The fetch gateway's own checks first, then the one location the gateway
+    accepts but manifest fetching does not: ``s3://`` (tracked in the RFC).
+    """
+    validate_remote_url(manifest_url)
+    if manifest_url[:5].lower() == "s3://":
+        raise RemoteURLRejected(S3_MANIFEST_UNSUPPORTED)
 
 
 def _fetch_and_parse_manifest(manifest_url: str, field_map: dict[str, str]) -> DataManifest:
     """Download the manifest through the SSRF gateway and parse it.
 
     Server context only accepts remote manifests (https; s3 is tracked in the
-    RFC) — local paths are a CLI affordance. Format is decided by extension
+    RFC): local paths are a CLI affordance. Format is decided by extension
     then content sniffing, same as the CLI's ``fetch_manifest``.
 
     Every entry URL is gateway-validated before the manifest is returned
@@ -228,6 +245,38 @@ def _live_dc_index(project_dict: dict) -> dict[str, tuple[int, int]]:
     return index
 
 
+def _dc_id(dc_dict: dict) -> str:
+    """A stored data collection's id as a string, ``""`` when it has none."""
+    return str(dc_dict.get("_id") or dc_dict.get("id") or "")
+
+
+def _load_editable_project(project_id: str, current_user) -> tuple[ObjectId, dict]:
+    """The project's id and document, once ``current_user`` may edit it.
+
+    400 for a malformed id, 404 for an unknown project, 403 without edit
+    permission.
+    """
+    from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+        _user_can_edit_project,
+    )
+
+    try:
+        project_oid = ObjectId(project_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid project_id: {exc}")
+
+    project_dict = projects_collection.find_one({"_id": project_oid})
+    if not project_dict:
+        raise HTTPException(status_code=404, detail="Project not found.")
+    if not _user_can_edit_project(
+        project_dict, current_user.id, getattr(current_user, "is_admin", False)
+    ):
+        raise HTTPException(
+            status_code=403, detail="You don't have edit permission on this project."
+        )
+    return project_oid, project_dict
+
+
 def _set_dc_scan(project_oid: ObjectId, dc_oid, scan: dict | None) -> None:
     """``$set`` one data collection's ``config.scan``, and nothing else of the project.
 
@@ -285,7 +334,7 @@ def _revert_dc_ingest(
     behind them."""
     dc_dict["config"]["scan"] = scan
     _set_dc_scan(project_oid, dc_dict.get("_id"), scan)
-    _restore_dc_files(str(dc_dict.get("_id") or dc_dict.get("id") or ""), files_before)
+    _restore_dc_files(_dc_id(dc_dict), files_before)
 
 
 def _run_dc_ingest(
@@ -307,11 +356,11 @@ def _run_dc_ingest(
     share its runs, so in a fan-out one task scans for all of them and the
     others pass ``scan=False`` and only process (see ``_scan_leaders``).
 
-    Synchronous on purpose — the helpers use a sync httpx client back into
+    Synchronous on purpose: the helpers use a sync httpx client back into
     this same FastAPI process (see ``_push_workflow_and_ingest``).
 
     ``sync_files=True`` forces File-record updates during the scan. The scan's
-    change detection keys on ``sha256(url|id)`` — an *identity* hash — so a
+    change detection keys on ``sha256(url|id)``, an *identity* hash, so a
     refresh over a manifest whose URLs are unchanged but whose remote content
     moved would otherwise skip the File metadata update.
 
@@ -386,6 +435,36 @@ def _run_dc_ingest(
     return True, None
 
 
+def _run_dc_ingest_or_fail(
+    workflow_dict: dict,
+    dc_id: str,
+    tag: str,
+    current_user,
+    *,
+    action: str,
+    sync_files: bool = False,
+    remote_storage_options: ProjectS3Config | None = None,
+) -> tuple[bool, str | None]:
+    """``_run_dc_ingest``, with a helper crash folded into a per-DC failure.
+
+    An ``HTTPException`` still propagates: it answers the request, not one DC.
+    ``action`` names the flow in the log line.
+    """
+    try:
+        return _run_dc_ingest(
+            workflow_dict,
+            dc_id,
+            current_user,
+            sync_files=sync_files,
+            remote_storage_options=remote_storage_options,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"{action} crashed for DC '{tag}': {exc}")
+        return False, str(exc)
+
+
 def _ingest_manifest_into_project(
     *,
     project_id: str,
@@ -399,42 +478,20 @@ def _ingest_manifest_into_project(
 ) -> ManifestIngestReport:
     """Map a manifest onto an existing project's DC tags and ingest each match.
 
-    Synchronous on purpose (sync httpx callbacks in the CLI helpers) — callers
+    Synchronous on purpose (sync httpx callbacks in the CLI helpers): callers
     must dispatch via ``asyncio.to_thread``.
     """
-    from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
-        _user_can_edit_project,
-    )
-
     # Gateway rejection must precede any database access.
     try:
-        validate_remote_url(manifest_url)
+        _validate_manifest_url(manifest_url)
     except RemoteURLRejected as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    if manifest_url[:5].lower() == "s3://":
-        raise HTTPException(
-            status_code=400,
-            detail="s3:// manifest locations are not supported yet — serve the manifest over https.",
-        )
 
-    try:
-        project_oid = ObjectId(project_id)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid project_id: {exc}")
+    project_oid, project_dict = _load_editable_project(project_id, current_user)
 
-    project_dict = projects_collection.find_one({"_id": project_oid})
-    if not project_dict:
-        raise HTTPException(status_code=404, detail="Project not found.")
-    if not _user_can_edit_project(
-        project_dict, current_user.id, getattr(current_user, "is_admin", False)
-    ):
-        raise HTTPException(
-            status_code=403, detail="You don't have edit permission on this project."
-        )
-
-    field_map = {"id": id_field, "type": type_field, "url": url_field}
-    if run_field:
-        field_map["run"] = run_field
+    field_map = manifest_field_map(
+        id_field=id_field, type_field=type_field, url_field=url_field, run_field=run_field
+    )
     try:
         manifest = _fetch_and_parse_manifest(manifest_url, field_map)
     except ManifestEntriesRejected as exc:
@@ -467,28 +524,35 @@ def _ingest_manifest_into_project(
         dry_run=dry_run,
     )
 
-    # ScanManifest is imported here with the rest of the model graph — keep
-    # API import-time cheap, same convention as the datacollections helpers.
-    from depictio.models.models.data_collections import ScanManifest
-
+    # (tag, workflow index, DC dict, entries), the DC dicts inside a working
+    # copy of the project's workflows. Each DC's scan config is written back
+    # on its own (``_set_dc_scan``), never the whole array.
     workflows = copy.deepcopy(project_dict.get("workflows", []) or [])
-    original_scans: dict[str, dict] = {}  # tag -> pre-ingest scan dict
+    targets: list[tuple[str, int, dict, int]] = []
     for tag in matched_tags:
         wf_i, dc_i = live[tag]
         dc_dict = workflows[wf_i]["data_collections"][dc_i]
-        entry_count = len(manifest.entries_for_type(tag))
+        targets.append((tag, wf_i, dc_dict, len(manifest.entries_for_type(tag))))
 
-        if dry_run:
-            report.matched.append(
-                ManifestIngestDCResult(
-                    data_collection_tag=tag,
-                    data_collection_id=str(dc_dict.get("_id") or dc_dict.get("id") or ""),
-                    entries=entry_count,
-                    status="planned",
-                )
+    if dry_run:
+        report.matched = [
+            ManifestIngestDCResult(
+                data_collection_tag=tag,
+                data_collection_id=_dc_id(dc_dict),
+                entries=entry_count,
+                status="planned",
             )
-            continue
+            for tag, _wf_i, dc_dict, entry_count in targets
+        ]
+        report.success = True
+        return report
 
+    # ScanManifest is imported here with the rest of the model graph, to keep
+    # API import-time cheap (same convention as the datacollections helpers).
+    from depictio.models.models.data_collections import ScanManifest
+
+    original_scans: dict[str, dict] = {}  # tag -> pre-ingest scan dict
+    for tag, _wf_i, dc_dict, _entry_count in targets:
         scan_manifest = ScanManifest(
             manifest_url=manifest_url,
             manifest_type=tag,
@@ -503,10 +567,6 @@ def _ingest_manifest_into_project(
             "scan_parameters": scan_manifest.model_dump(),
         }
 
-    if dry_run:
-        report.success = True
-        return report
-
     # Resolve the project's storage settings before touching the project
     # document: an unusable config (unreadable secret, endpoint no longer
     # allowed) must fail before any scan config is written, so there is
@@ -518,11 +578,8 @@ def _ingest_manifest_into_project(
     remote_options = project_storage_for(project_oid)
 
     all_ok = True
-    for tag in matched_tags:
-        wf_i, dc_i = live[tag]
-        dc_dict = workflows[wf_i]["data_collections"][dc_i]
-        dc_id = str(dc_dict.get("_id") or dc_dict.get("id") or "")
-        entry_count = len(manifest.entries_for_type(tag))
+    for tag, wf_i, dc_dict, entry_count in targets:
+        dc_id = _dc_id(dc_dict)
 
         # Persist this DC's manifest scan config first: the helpers' API
         # callbacks read the DC config from the project document. Its File
@@ -530,17 +587,19 @@ def _ingest_manifest_into_project(
         files_before = _dc_files(dc_id)
         _set_dc_scan(project_oid, dc_dict.get("_id"), dc_dict["config"]["scan"])
         try:
-            ok, message = _run_dc_ingest(
-                workflows[wf_i], dc_id, current_user, remote_storage_options=remote_options
+            ok, message = _run_dc_ingest_or_fail(
+                workflows[wf_i],
+                dc_id,
+                tag,
+                current_user,
+                action="Manifest ingest",
+                remote_storage_options=remote_options,
             )
         except HTTPException:
             # Aborts the whole call (no API token, say). This DC's config is
             # already written, so revert it first; later DCs never were.
             _revert_dc_ingest(project_oid, dc_dict, original_scans.get(tag), files_before)
             raise
-        except Exception as exc:  # helper crash — treat as a per-DC failure
-            logger.error(f"Manifest ingest crashed for DC '{tag}': {exc}")
-            ok, message = False, str(exc)
         if not ok:
             all_ok = False
             _revert_dc_ingest(project_oid, dc_dict, original_scans.get(tag), files_before)
@@ -634,13 +693,8 @@ def _manifest_preflight_entries(
     if key not in manifests:
         try:
             # The stored URL may predate the gateway or come from a CLI
-            # ingest of a local manifest path — re-validate before fetching.
-            validate_remote_url(manifest_url)
-            if manifest_url[:5].lower() == "s3://":
-                raise RemoteURLRejected(
-                    "s3:// manifest locations are not supported yet — "
-                    "serve the manifest over https."
-                )
+            # ingest of a local manifest path: re-validate before fetching.
+            _validate_manifest_url(manifest_url)
             manifests[key] = _fetch_and_parse_manifest(manifest_url, field_map)
         except ManifestEntriesRejected as exc:
             # Fetched fine, but an entry points somewhere the worker must
@@ -677,7 +731,7 @@ def _refresh_manifest_in_project(
     prunes File records for entries that vanished from the source, ``sync_files``
     forces metadata updates for kept entries, and the Delta table is rebuilt
     from the resulting file set. The scan configs are already persisted on the
-    project, so — unlike first ingestion — nothing is written to the project
+    project, so (unlike first ingestion) nothing is written to the project
     document and no revert bookkeeping is needed. A manifest that no longer has
     any row of a DC's type marks that DC failed *without* running the scan, so
     a refresh never silently empties a data collection.
@@ -699,27 +753,10 @@ def _refresh_manifest_in_project(
     polls ``GET /projects/refresh_manifest/{run_id}`` sees them and the run
     can never close as "success" around a DC that failed pre-flight.
 
-    Synchronous on purpose (sync httpx callbacks in the CLI helpers) — callers
+    Synchronous on purpose (sync httpx callbacks in the CLI helpers): callers
     must dispatch via ``asyncio.to_thread``.
     """
-    from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
-        _user_can_edit_project,
-    )
-
-    try:
-        project_oid = ObjectId(project_id)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid project_id: {exc}")
-
-    project_dict = projects_collection.find_one({"_id": project_oid})
-    if not project_dict:
-        raise HTTPException(status_code=404, detail="Project not found.")
-    if not _user_can_edit_project(
-        project_dict, current_user.id, getattr(current_user, "is_admin", False)
-    ):
-        raise HTTPException(
-            status_code=403, detail="You don't have edit permission on this project."
-        )
+    project_oid, project_dict = _load_editable_project(project_id, current_user)
 
     refreshable_index = _refreshable_dc_index(project_dict)
     if not refreshable_index:
@@ -771,7 +808,7 @@ def _refresh_manifest_in_project(
         folder_matched = {tag: matched for tag, _dc_id, _wf_i, matched in split.to_dispatch}
 
     # Each DC carries its own manifest URL + field map; fetch each distinct
-    # combination once. Failures are per-DC, not global — one dead manifest
+    # combination once. Failures are per-DC, not global: one dead manifest
     # must not block refreshing DCs backed by a different one.
     manifests: dict[tuple, DataManifest | str] = {}  # key -> manifest or error text
     to_dispatch: list[tuple[str, str, int, int]] = []  # (tag, dc_id, wf_i, entries)
@@ -811,8 +848,7 @@ def _refresh_manifest_in_project(
         )
 
     for tag, (wf_i, dc_i, scan_params, mode) in refreshable_index.items():
-        dc_dict = workflows[wf_i]["data_collections"][dc_i]
-        dc_id = str(dc_dict.get("_id") or dc_dict.get("id") or "")
+        dc_id = _dc_id(workflows[wf_i]["data_collections"][dc_i])
 
         # A manifest DC is checked against its manifest, every other one
         # against the run folder when the project has one. Without either, a
@@ -849,19 +885,15 @@ def _refresh_manifest_in_project(
             to_dispatch.append((tag, dc_id, wf_i, entry_count))
             continue
 
-        try:
-            ok, message = _run_dc_ingest(
-                workflows[wf_i],
-                dc_id,
-                current_user,
-                sync_files=True,
-                remote_storage_options=remote_options,
-            )
-        except HTTPException:
-            raise
-        except Exception as exc:  # helper crash — treat as a per-DC failure
-            logger.error(f"Refresh crashed for DC '{tag}': {exc}")
-            ok, message = False, str(exc)
+        ok, message = _run_dc_ingest_or_fail(
+            workflows[wf_i],
+            dc_id,
+            tag,
+            current_user,
+            action="Refresh",
+            sync_files=True,
+            remote_storage_options=remote_options,
+        )
         if not ok:
             all_ok = False
         report.refreshed.append(
@@ -1051,7 +1083,7 @@ def _dispatch_refresh_tasks(
 
     Steps are pre-seeded (one per DC tag, status "pending") so the workers'
     ``set_ingestion_step`` positional updates are atomic under concurrency.
-    Poll ``GET /projects/refresh_manifest/{run_id}`` for the aggregate report —
+    Poll ``GET /projects/refresh_manifest/{run_id}`` for the aggregate report:
     Mongo is the durable status of record; Celery is only the transport.
 
     ``preflight_failed`` DCs (manifest unfetchable, entry rejected, type
@@ -1208,7 +1240,7 @@ def _dispatch_refresh_tasks(
         try:
             manifest_refresh_dc_task.apply_async(args=[payload])
             status, message = "dispatched", None
-        except Exception as exc:  # broker down — a per-DC failure, not a 5xx
+        except Exception as exc:  # broker down: a per-DC failure, not a 5xx
             logger.error(f"Could not dispatch ingestion for DC '{tag}': {exc}")
             all_dispatched = False
             status, message = "failed", f"Could not dispatch worker task: {exc}"
@@ -1268,7 +1300,7 @@ def _get_refresh_run_report(run_id: str, current_user) -> ManifestRefreshReport:
     entries_by_tag = {
         dc.get("tag"): dc.get("file_count") or 0 for dc in doc.get("data_collections") or []
     }
-    # dc ids aren't stored on the run — rebuild the mapping from the live
+    # dc ids aren't stored on the run: rebuild the mapping from the live
     # project (empty if the project has been deleted since).
     dc_ids_by_tag: dict[str, str] = {}
     project_dict = (
@@ -1281,11 +1313,11 @@ def _get_refresh_run_report(run_id: str, current_user) -> ManifestRefreshReport:
         # reports a run that already happened, and a source that has become
         # unreadable since (an unmounted data root) must not lose its id in the
         # report of the run that refreshed it.
-        for wf in project_dict.get("workflows") or []:
-            for dc in wf.get("data_collections") or []:
-                tag = dc.get("data_collection_tag")
-                if tag and tag not in dc_ids_by_tag:
-                    dc_ids_by_tag[tag] = str(dc.get("_id") or dc.get("id") or "")
+        workflows = project_dict.get("workflows") or []
+        dc_ids_by_tag = {
+            tag: _dc_id(workflows[wf_i]["data_collections"][dc_i])
+            for tag, (wf_i, dc_i) in _live_dc_index(project_dict).items()
+        }
 
     report = ManifestRefreshReport(project_id=str(doc.get("project_id") or ""), run_id=run_id)
     for step in doc.get("steps") or []:

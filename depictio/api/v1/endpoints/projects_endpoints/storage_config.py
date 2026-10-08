@@ -17,7 +17,8 @@ from nothing else. The instance's own S3 config stays the Delta *write*
 target; these are genuinely two different credentials.
 
 Read-side contract: ``None`` means "no config stored": a server-side read is
-then public or refused, never done with the instance credentials. A config
+then public, ambient on a ``credentialed_s3_buckets`` entry, or refused, and
+never done with the instance credentials. A config
 that exists but cannot be used raises a ``ProjectStorageUnusable`` subclass
 instead of degrading to ``None``, because silently reading a private bucket
 with the wrong credentials is exactly the failure the feature exists to avoid.
@@ -191,7 +192,7 @@ class ProjectStorageConfigIn(BaseModel):
 class ProjectStorageConfigOut(BaseModel):
     endpoint_url: str
     bucket: str | None = None
-    region: str = "us-east-1"
+    region: str = AWS_DEFAULT_REGION
     access_key_id: str | None = None
     # The secret itself is never returned, only whether one is stored.
     has_secret: bool = False
@@ -523,7 +524,7 @@ def _get_project_storage(project_id: str, current_user) -> ProjectStorageConfigO
     return ProjectStorageConfigOut(
         endpoint_url=doc.get("endpoint_url", ""),
         bucket=doc.get("bucket"),
-        region=doc.get("region") or "us-east-1",
+        region=doc.get("region") or AWS_DEFAULT_REGION,
         access_key_id=doc.get("access_key_id"),
         has_secret=bool(doc.get("secret_encrypted")),
         updated_at=doc.get("updated_at"),
@@ -540,7 +541,8 @@ def project_storage_for(project_id: str | ObjectId) -> ProjectS3Config | None:
     """A project's storage settings for its remote reads, secret decrypted.
 
     Returns ``None`` when the project has no storage config: a server-side
-    read is then public or refused, never done with the instance credentials.
+    read is then public, ambient on a ``credentialed_s3_buckets`` entry, or
+    refused, and never done with the instance credentials.
     Raises:
 
     * ``ValueError`` for a malformed ``project_id``;
@@ -597,15 +599,12 @@ def _test_project_storage(project_id: str, current_user) -> StorageTestResult:
     """
     project_dict = _load_project_for_owner(project_id, current_user)
     project_oid = project_dict["_id"]
-    doc = project_storage_collection.find_one({"project_id": project_oid})
-    if not doc:
-        raise HTTPException(status_code=404, detail="No storage configured for this project.")
 
     try:
         config = project_storage_for(project_oid)
     except ProjectStorageUnusable as exc:
         return StorageTestResult(success=False, message=exc.detail)
-    if config is None:  # deleted between the two reads
+    if config is None:
         raise HTTPException(status_code=404, detail="No storage configured for this project.")
     bucket = config.bucket
     if not bucket:

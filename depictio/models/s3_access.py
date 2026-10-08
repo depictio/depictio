@@ -27,9 +27,11 @@ Server context (API process, Celery worker), in order:
 7. anything else is refused.
 
 The instance's credentials are never used for a user-supplied location in
-server context. CLI context keeps its order: the project's keys for this
-bucket, public, any other project settings, then the instance credentials of the CLI configuration (kind ``instance``), then the
-ambient chain when that configuration carries no keys.
+server context. CLI context skips steps 2 and 6 and keeps the order of the
+rest: the project's keys for this bucket, public, any other project
+settings, then the S3 credentials of the CLI configuration (kind
+``instance``), then the ambient chain when that configuration carries no
+keys.
 
 Storage settings typed in with a request, before the project they are for
 exists (``storage_only``), are the one source after step 2: the location is
@@ -415,7 +417,7 @@ def is_instance_bucket(bucket: str, instance_s3: InstanceS3 | None) -> bool:
     list reliably. Refusing a same-named bucket on another store is the price,
     and the safe side to err on.
     """
-    instance_bucket = getattr(instance_s3, "bucket", "") if instance_s3 is not None else ""
+    instance_bucket = getattr(instance_s3, "bucket", "")
     return bool(instance_bucket) and bucket == instance_bucket
 
 
@@ -607,9 +609,7 @@ def instance_target(
     )
 
 
-def _has_instance_keys(instance_s3: InstanceS3 | None) -> bool:
-    if instance_s3 is None:
-        return False
+def _has_instance_keys(instance_s3: InstanceS3) -> bool:
     return bool(instance_s3.aws_access_key_id) and bool(instance_s3.aws_secret_access_key)
 
 
@@ -812,7 +812,7 @@ def iter_object_pages(
         yield dict(page)
 
 
-# ── Public buckets (kept for the call sites that predate the targets) ───────
+# ── Public buckets (behind the public_s3_* wrappers of remote_fetch) ────────
 
 
 def public_s3_region(bucket: str, *, timeout_s: float = DEFAULT_TIMEOUT_S) -> str:

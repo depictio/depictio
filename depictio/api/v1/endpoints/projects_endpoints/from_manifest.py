@@ -6,11 +6,11 @@ template server-side (``resolve_template`` with ``data_root=None``), check the
 manifest's ``type`` coverage against the template's DC tags, create the
 project, ingest each manifest-backed DC through the same CLI helpers as
 ``/projects/ingest_manifest``, and import the template's dashboards in-process
-(no HTTP-to-self). The result is one report the UI can act on — including the
+(no HTTP-to-self). The result is one report the UI can act on, including the
 dashboard ids to redirect to.
 
 Synchronous throughout (the CLI helpers use sync httpx back into this same
-FastAPI process) — the route dispatches via ``asyncio.to_thread``.
+FastAPI process): the route dispatches via ``asyncio.to_thread``.
 """
 
 import asyncio
@@ -27,15 +27,17 @@ from depictio.api.v1.db import projects_collection
 from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     ManifestEntriesRejected,
     ManifestIngestDCResult,
+    _dc_id,
     _fetch_and_parse_manifest,
     _manifest_field_map,
     _manifest_type_of,
     _run_dc_ingest,
+    _validate_manifest_url,
 )
-from depictio.api.v1.remote_fetch import RemoteURLRejected, validate_remote_url
+from depictio.api.v1.remote_fetch import RemoteURLRejected
 from depictio.models.logging import logger
 
-# Same rule as export_template's build_template_bundle: slash-separated
+# Also the rule of export_template's build_template_bundle: slash-separated
 # segments that start alphanumeric. Rules out "..", a leading "/" or "~", so
 # an id handed to resolve_template can never spell a path outside the
 # server's templates directory.
@@ -85,7 +87,7 @@ class FromManifestReport(BaseModel):
     manifest_entries: int
     ingestion: list[ManifestIngestDCResult] = Field(default_factory=list)
     dashboards: list[DashboardImportResult] = Field(default_factory=list)
-    # Manifest types no template DC consumes — data the template can't show.
+    # Manifest types no template DC consumes: data the template can't show.
     unmatched_manifest_types: list[str] = Field(default_factory=list)
     # Optional DCs pruned because the manifest has no rows of their type.
     pruned_optional_dcs: list[str] = Field(default_factory=list)
@@ -93,18 +95,20 @@ class FromManifestReport(BaseModel):
     success: bool = False
 
 
-def _manifest_dcs(config: dict[str, Any]) -> list[tuple[dict, dict]]:
-    """[(dc_dict, scan_parameters)] for every manifest-mode DC in the config."""
-    found: list[tuple[dict, dict]] = []
+def _manifest_dcs(config: dict[str, Any]) -> list[tuple[dict, dict, dict]]:
+    """[(workflow_dict, dc_dict, scan_parameters)] for every manifest-mode DC in the config."""
+    found: list[tuple[dict, dict, dict]] = []
     for workflow in config.get("workflows", []) or []:
         for dc in workflow.get("data_collections", []) or []:
             scan = (dc.get("config") or {}).get("scan") or {}
             if str(scan.get("mode", "")).lower() == "manifest":
-                found.append((dc, scan.get("scan_parameters") or {}))
+                found.append((workflow, dc, scan.get("scan_parameters") or {}))
     return found
 
 
-def _shared_field_map(template_id: str, manifest_dcs: list[tuple[dict, dict]]) -> dict[str, str]:
+def _shared_field_map(
+    template_id: str, manifest_dcs: list[tuple[dict, dict, dict]]
+) -> dict[str, str]:
     """The columns the template's manifest DCs read the one manifest with.
 
     The coverage check parses the manifest once, so it has to read the same
@@ -113,7 +117,7 @@ def _shared_field_map(template_id: str, manifest_dcs: list[tuple[dict, dict]]) -
     all be served by it: refused.
     """
     tags_by_map: dict[tuple[tuple[str, str], ...], list[str]] = {}
-    for dc, scan_params in manifest_dcs:
+    for _workflow, dc, scan_params in manifest_dcs:
         key = tuple(sorted(_manifest_field_map(scan_params).items()))
         tags_by_map.setdefault(key, []).append(str(dc.get("data_collection_tag", "")))
     if len(tags_by_map) > 1:
@@ -282,17 +286,12 @@ def _create_project_from_manifest(
     variables: dict[str, str] | None = None,
     dry_run: bool = False,
 ) -> FromManifestReport:
-    """The full manifest → project + dashboards flow. Sync — call via to_thread."""
+    """The full manifest → project + dashboards flow. Sync: call via to_thread."""
     # Gateway rejection must precede any database access.
     try:
-        validate_remote_url(manifest_url)
+        _validate_manifest_url(manifest_url)
     except RemoteURLRejected as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    if manifest_url[:5].lower() == "s3://":
-        raise HTTPException(
-            status_code=400,
-            detail="s3:// manifest locations are not supported yet — serve the manifest over https.",
-        )
     # The request model already enforces this; re-checked here so direct
     # callers can't hand resolve_template a path either.
     try:
@@ -323,7 +322,7 @@ def _create_project_from_manifest(
     if not manifest_dcs:
         raise HTTPException(
             status_code=422,
-            detail=f"Template '{template_id}' has no manifest-mode data collection — "
+            detail=f"Template '{template_id}' has no manifest-mode data collection: "
             "it cannot be instantiated from a manifest.",
         )
 
@@ -341,11 +340,11 @@ def _create_project_from_manifest(
 
     # Coverage check: every required manifest DC needs ≥1 row of its type;
     # optional ones with no rows are pruned (same semantics as template
-    # conditionals — recorded so the report explains the gap).
+    # conditionals, recorded so the report explains the gap).
     consumed_types: set[str] = set()
     pruned: set[str] = set()
     planned: list[ManifestIngestDCResult] = []
-    for dc, scan_params in manifest_dcs:
+    for _workflow, dc, scan_params in manifest_dcs:
         tag = dc.get("data_collection_tag", "")
         manifest_type = _manifest_type_of(scan_params, tag)
         consumed_types.add(manifest_type)
@@ -424,32 +423,28 @@ def _create_project_from_manifest(
     # the DC config from the project document, ids included).
     stored = projects_collection.find_one({"_id": project_oid}) or {}
     all_ok = True
-    for workflow_dict in stored.get("workflows", []) or []:
-        for dc_dict in workflow_dict.get("data_collections", []) or []:
-            scan = (dc_dict.get("config") or {}).get("scan") or {}
-            if str(scan.get("mode", "")).lower() != "manifest":
-                continue
-            tag = dc_dict.get("data_collection_tag", "")
-            dc_id = str(dc_dict.get("_id") or dc_dict.get("id") or "")
-            manifest_type = _manifest_type_of(scan.get("scan_parameters") or {}, tag)
-            entry_count = len(manifest.entries_for_type(manifest_type))
-            try:
-                ok, message = _run_dc_ingest(workflow_dict, dc_id, current_user)
-            except HTTPException:
-                raise
-            except Exception as exc:  # helper crash — treat as a per-DC failure
-                logger.error(f"from_manifest ingest crashed for DC '{tag}': {exc}")
-                ok, message = False, str(exc)
-            all_ok = all_ok and ok
-            report.ingestion.append(
-                ManifestIngestDCResult(
-                    data_collection_tag=tag,
-                    data_collection_id=dc_id,
-                    entries=entry_count,
-                    status="ingested" if ok else "failed",
-                    message=message,
-                )
+    for workflow_dict, dc_dict, scan_params in _manifest_dcs(stored):
+        tag = dc_dict.get("data_collection_tag", "")
+        dc_id = _dc_id(dc_dict)
+        manifest_type = _manifest_type_of(scan_params, tag)
+        entry_count = len(manifest.entries_for_type(manifest_type))
+        try:
+            ok, message = _run_dc_ingest(workflow_dict, dc_id, current_user)
+        except HTTPException:
+            raise
+        except Exception as exc:  # helper crash: treat as a per-DC failure
+            logger.error(f"from_manifest ingest crashed for DC '{tag}': {exc}")
+            ok, message = False, str(exc)
+        all_ok = all_ok and ok
+        report.ingestion.append(
+            ManifestIngestDCResult(
+                data_collection_tag=tag,
+                data_collection_id=dc_id,
+                entries=entry_count,
+                status="ingested" if ok else "failed",
+                message=message,
             )
+        )
 
     # The template's dashboards, after ingestion: components whose optional DC
     # ended up empty are dropped (self-adapting import).

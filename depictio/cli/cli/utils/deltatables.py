@@ -1,3 +1,4 @@
+import contextlib
 import os
 import re
 import tempfile
@@ -146,8 +147,8 @@ def fetch_file_data(
 
     # Filter out stale file records whose paths no longer exist locally
     # (happens when re-running with a different template or data_root).
-    # Remote locations (scan mode "url") are never staleness-checked here —
-    # reachability surfaces at read time.
+    # Remote locations (url, s3_prefix and manifest scans) are never
+    # staleness-checked here: reachability surfaces at read time.
     valid_files_data = []
     for fd in files_data:
         loc = fd.get("file_location", "")
@@ -281,12 +282,15 @@ def _download_remote_to_temp(url: str) -> str:
         else:
             direct_download(url, temp_path)
     except Exception:
-        try:
-            os.unlink(temp_path)
-        except OSError:
-            pass
+        _remove_temp_file(temp_path)
         raise
     return temp_path
+
+
+def _remove_temp_file(path: str) -> None:
+    """Delete a temp file this module created; one already gone is fine."""
+    with contextlib.suppress(OSError):
+        os.unlink(path)
 
 
 def _read_remote_file_lazy(
@@ -295,7 +299,7 @@ def _read_remote_file_lazy(
     polars_kwargs: dict,
     CLI_config: CLIConfig | None = None,
 ) -> pl.LazyFrame:
-    """Read a remote file (scan mode "url") into a LazyFrame.
+    """Read a remote file (a url, s3_prefix or manifest location) into a LazyFrame.
 
     s3://: lazy scan straight through the object store, with the target
     ``s3_read_target`` resolves for this very URL from ``CLI_config``: a
@@ -339,16 +343,13 @@ def _read_remote_file_lazy(
 
     temp_path = _download_remote_to_temp(url)
     try:
-        # Eager read so the temp file can be deleted immediately — a lazy scan
+        # Eager read so the temp file can be deleted immediately: a lazy scan
         # would dangle on a path removed before collection.
         return (
             _lazy_scan_path(temp_path, file_format, polars_kwargs, confine=False).collect().lazy()
         )
     finally:
-        try:
-            os.unlink(temp_path)
-        except OSError:
-            pass
+        _remove_temp_file(temp_path)
 
 
 # How object-store (under polars) reports an S3 answer. Its messages also carry
@@ -400,8 +401,8 @@ def read_single_file_lazy(
         file_info (File): A validated File object.
         file_format (str): The file format (e.g. csv, parquet).
         polars_kwargs (dict): Additional keyword arguments for the Polars scanner.
-        CLI_config (CLIConfig | None): Configuration the s3:// remote locations
-            (scan mode "url") resolve their read target from.
+        CLI_config (CLIConfig | None): Configuration s3:// remote locations
+            resolve their read target from.
 
     Returns:
         pl.LazyFrame: The lazy DataFrame representation of the file.
@@ -423,8 +424,9 @@ def read_single_file_lazy(
         # Optionally, add a column from file_info if available (e.g., run_id)
         if hasattr(file_info, "run_id"):
             lf = lf.with_columns(pl.lit(str(file_info.run_tag)).alias("depictio_run_id"))
-        # Manifest-built DCs carry the canonical entry ID as a column — the
-        # zero-config cross-DC join key (LinkConfig `direct` resolver).
+        # Manifest-built DCs (and s3_prefix scans with an id_regex) carry the
+        # canonical entry ID as a column: the zero-config cross-DC join key
+        # (LinkConfig `direct` resolver).
         if getattr(file_info, "manifest_id", None):
             lf = lf.with_columns(pl.lit(str(file_info.manifest_id)).alias("depictio_manifest_id"))
         return lf

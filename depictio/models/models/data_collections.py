@@ -117,7 +117,7 @@ class ScanSingle(BaseModel):
 class ScanURL(BaseModel):
     """Remote single-file acquisition: the DC's data lives at an absolute
     s3:// or https:// URL instead of a scanned local path. Validation is
-    syntactic only — reachability/SSRF checks happen at the API fetch gateway.
+    syntactic only: reachability/SSRF checks happen at the API fetch gateway.
     """
 
     url: str
@@ -136,7 +136,7 @@ class ScanS3Prefix(BaseModel):
 
     The remote counterpart of ``recursive``. It is S3-only by construction:
     plain HTTPS exposes no listing operation, so a bare https:// prefix cannot
-    be enumerated — use ``url`` for one known file, or ``manifest`` to list
+    be enumerated; use ``url`` for one known file, or ``manifest`` to list
     several explicitly.
 
     ``id_regex`` optionally captures an entity id from the object key. It lands
@@ -195,7 +195,7 @@ class ScanS3Prefix(BaseModel):
             raise ValueError(f"Invalid id_regex: {exc}")
         if compiled.groups != 1:
             raise ValueError(
-                f"id_regex must have exactly one capture group (found {compiled.groups}) — "
+                f"id_regex must have exactly one capture group (found {compiled.groups}): "
                 "it captures the entity id used as the cross-DC join key"
             )
         return v

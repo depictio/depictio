@@ -874,6 +874,8 @@ def test_async_run_records_each_dc_under_its_own_scan_mode(mock_db, served_manif
     assert {d["tag"]: d["scan_mode"] for d in run_doc["data_collections"]} == {
         "counts": "manifest",
         "sites": "url",
+    }
+
 
 # ── a project made from a run folder ───────────────────────────────────────
 
