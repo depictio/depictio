@@ -1,10 +1,10 @@
 """Export a project + its dashboards as a reusable template bundle (RFC phase 5).
 
 The inverse of template instantiation: take a live project, strip everything
-runtime (ids, permissions, hashes, runs, timestamps), re-parameterize its data
-bindings (stored manifest URLs back to ``{MANIFEST_URL}``, a local data-root
-prefix back to ``{DATA_ROOT}``), export its dashboards as tag-based YAML, and
-synthesize the ``template:`` block. The result is a ``template.yaml`` +
+runtime (ids, permissions, hashes, runs, timestamps), name the DCs of its links
+by tag instead of id, re-parameterize its data bindings (stored manifest URLs
+back to ``{MANIFEST_URL}``, a local data-root prefix back to ``{DATA_ROOT}``),
+export its dashboards as tag-based YAML, and synthesize the ``template:`` block. The result is a ``template.yaml`` +
 ``dashboards/*.yaml`` bundle that drops into ``depictio/projects/<template_id>/``
 and is auto-discovered by the resolver and the picker.
 
@@ -120,6 +120,58 @@ def _replace_strings(node: Any, mapping: dict[str, str]) -> Any:
                 return placeholder + node[len(concrete.rstrip("/")) :]
         return node
     return node
+
+
+def _links_by_tag(project_dict: dict) -> list[dict]:
+    """The project's links with each DC id rewritten as that DC's tag.
+
+    Stored links name their DCs by id (``source_dc_id`` / ``target_dc_id``),
+    and those ids belong to this project: a project made from the bundle gets
+    new ones, so a copied id would keep pointing at this project's DCs and the
+    link would never match (cross-DC filtering silently doing nothing). Tags
+    survive instantiation, and ``resolve_link_tag_refs`` on the server, like
+    the CLI's template sync, turns them back into the new project's ids.
+
+    An id wins over a stored tag, as it does in ``resolve_link_tag_refs``; a
+    ``tag:<dc_tag>`` placeholder and a tag next to an empty id are kept. A
+    link whose DC is not in the project cannot be expressed by tag: it is
+    left out, with a warning (it never matched here either).
+    """
+    tags_by_id: dict[str, str] = {}
+    for workflow in project_dict.get("workflows") or []:
+        for dc in workflow.get("data_collections") or []:
+            dc_id = dc.get("_id") or dc.get("id")
+            tag = dc.get("data_collection_tag")
+            if dc_id and tag:
+                tags_by_id[str(dc_id)] = str(tag)
+    known_tags = set(tags_by_id.values())
+
+    exported: list[dict] = []
+    for link in project_dict.get("links") or []:
+        if not isinstance(link, dict):
+            continue
+        link = copy.deepcopy(link)
+        refs: dict[str, str | None] = {}
+        for id_field, tag_field in (
+            ("source_dc_id", "source_dc_tag"),
+            ("target_dc_id", "target_dc_tag"),
+        ):
+            raw = str(link.pop(id_field, None) or "")
+            if raw.startswith("tag:"):
+                refs[tag_field] = raw[4:]
+            elif raw:
+                refs[tag_field] = tags_by_id.get(raw)
+            else:
+                refs[tag_field] = link.get(tag_field)
+        if not all(tag in known_tags for tag in refs.values()):
+            logger.warning(
+                f"Export leaves out link {link.get('source_column')!r}: it names a data "
+                "collection that is not in the project."
+            )
+            continue
+        link.update(refs)
+        exported.append(link)
+    return exported
 
 
 def _slugify(title: str) -> str:
@@ -264,6 +316,9 @@ def build_template_bundle(
     for workflow in config.get("workflows", []) or []:
         workflow.pop("runs", None)
         workflow.pop("workflow_tag", None)  # regenerated from engine/name
+    # Before the ids go: links reference DCs by id, rewritten here as tags.
+    if config.get("links"):
+        config["links"] = _links_by_tag(project_dict)
     config = _strip_runtime(config)
 
     variables = _parameterize(config, data_root)

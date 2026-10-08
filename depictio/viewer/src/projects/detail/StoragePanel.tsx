@@ -173,8 +173,8 @@ const TestResult: React.FC<{
 /** Edit/create form for the storage config. The secret field is write-only:
  *  when a secret is already stored, leaving it empty keeps it (the PUT body
  *  sends null, which the backend treats as "unchanged"), unless the access
- *  key ID changes: the stored secret belongs to the old key, so a new key
- *  needs its own secret. */
+ *  key ID, the endpoint or the bucket changes: the stored secret belongs to
+ *  the key and place it was saved with, so the backend refuses to reuse it. */
 const StorageForm: React.FC<{
   projectId: string;
   existing: ProjectStorageConfig | null;
@@ -193,8 +193,12 @@ const StorageForm: React.FC<{
   const hasSecret = Boolean(existing?.has_secret);
   const typedKey = accessKeyId.trim();
   const keyChanged = typedKey !== (existing?.access_key_id ?? '');
-  /** A stored secret is kept only for the key it was saved with. */
-  const keepsStoredSecret = hasSecret && Boolean(typedKey) && !keyChanged;
+  const placeChanged =
+    endpointUrl.trim() !== (existing?.endpoint_url ?? '') ||
+    bucket.trim() !== (existing?.bucket ?? '');
+  /** A stored secret is kept only for the key, endpoint and bucket it was
+   *  saved with. */
+  const keepsStoredSecret = hasSecret && Boolean(typedKey) && !keyChanged && !placeChanged;
 
   const clearFieldError = (name: string) =>
     setFieldErrors((prev) => {
@@ -214,9 +218,11 @@ const StorageForm: React.FC<{
     if (!bucket.trim()) errors.bucket = 'Enter the bucket name.';
     const typedSecret = secret.trim();
     if (typedKey && !typedSecret && !keepsStoredSecret) {
-      errors.secret = hasSecret
-        ? 'Enter the secret for this new access key ID: the stored one belongs to the old key.'
-        : 'Enter the secret that goes with this access key ID.';
+      errors.secret = !hasSecret
+        ? 'Enter the secret that goes with this access key ID.'
+        : keyChanged
+          ? 'Enter the secret for this new access key ID: the stored one belongs to the old key.'
+          : 'Enter the secret again: a stored secret is kept only for the endpoint and bucket it was saved with.';
     }
     if (typedSecret && !typedKey) errors.accessKey = 'Enter the access key ID for this secret.';
     return errors;
@@ -236,7 +242,7 @@ const StorageForm: React.FC<{
         access_key_id: typedKey || null,
         // Empty means "keep the stored secret": send null so the backend
         // leaves the previously stored (encrypted) value in place. Validation
-        // above only lets that through for an unchanged key.
+        // above only lets that through for an unchanged key, endpoint and bucket.
         secret_access_key: secret.trim() || null,
       });
       notifications.show({
@@ -318,8 +324,10 @@ const StorageForm: React.FC<{
           description={
             keepsStoredSecret
               ? 'Leave empty to keep the stored secret.'
-              : hasSecret && typedKey
+              : hasSecret && typedKey && keyChanged
                 ? 'A new access key ID needs its own secret: the stored one is replaced.'
+                : hasSecret && typedKey
+                  ? 'A new endpoint or bucket needs the secret again: the stored one is replaced.'
                 : hasSecret
                   ? 'Without an access key ID the stored secret is removed.'
                   : 'Stored encrypted and never shown again.'

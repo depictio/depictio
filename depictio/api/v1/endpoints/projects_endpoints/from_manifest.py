@@ -26,6 +26,8 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     ManifestEntriesRejected,
     ManifestIngestDCResult,
     _fetch_and_parse_manifest,
+    _manifest_field_map,
+    _manifest_type_of,
     _run_dc_ingest,
 )
 from depictio.api.v1.remote_fetch import RemoteURLRejected, validate_remote_url
@@ -98,6 +100,37 @@ def _manifest_dcs(config: dict[str, Any]) -> list[tuple[dict, dict]]:
             if str(scan.get("mode", "")).lower() == "manifest":
                 found.append((dc, scan.get("scan_parameters") or {}))
     return found
+
+
+def _shared_field_map(template_id: str, manifest_dcs: list[tuple[dict, dict]]) -> dict[str, str]:
+    """The columns the template's manifest DCs read the one manifest with.
+
+    The coverage check parses the manifest once, so it has to read the same
+    columns as each DC's own scan will (``id_field: sample`` and the like).
+    Every DC is backed by the same manifest here, so DCs that disagree cannot
+    all be served by it: refused.
+    """
+    tags_by_map: dict[tuple[tuple[str, str], ...], list[str]] = {}
+    for dc, scan_params in manifest_dcs:
+        key = tuple(sorted(_manifest_field_map(scan_params).items()))
+        tags_by_map.setdefault(key, []).append(str(dc.get("data_collection_tag", "")))
+    if len(tags_by_map) > 1:
+        maps = [dict(key) for key in tags_by_map]
+        differing = [field for field in maps[0] if len({m[field] for m in maps}) > 1]
+        readings = "; ".join(
+            f"{', '.join(tags)} read "
+            + ", ".join(f"{field} from '{dict(key)[field]}'" for field in differing)
+            for key, tags in tags_by_map.items()
+        )
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"The manifest data collections of template '{template_id}' read the "
+                f"manifest with different columns ({readings}). One manifest backs them "
+                "all, so their id_field, type_field, url_field and run_field must match."
+            ),
+        )
+    return dict(next(iter(tags_by_map)))
 
 
 def _prune_dcs(config: dict[str, Any], tags: set[str]) -> None:
@@ -182,10 +215,9 @@ def _create_project_from_manifest(
             "it cannot be instantiated from a manifest.",
         )
 
+    field_map = _shared_field_map(template_id, manifest_dcs)
     try:
-        manifest = _fetch_and_parse_manifest(
-            manifest_url, field_map={"id": "id", "type": "type", "url": "url", "run": "run"}
-        )
+        manifest = _fetch_and_parse_manifest(manifest_url, field_map=field_map)
     except ManifestEntriesRejected as exc:
         raise HTTPException(status_code=400, detail=exc.detail())
     except RemoteURLRejected as exc:
@@ -203,7 +235,7 @@ def _create_project_from_manifest(
     planned: list[ManifestIngestDCResult] = []
     for dc, scan_params in manifest_dcs:
         tag = dc.get("data_collection_tag", "")
-        manifest_type = scan_params.get("manifest_type", tag)
+        manifest_type = _manifest_type_of(scan_params, tag)
         consumed_types.add(manifest_type)
         entry_count = len(manifest.entries_for_type(manifest_type))
         if entry_count == 0:
@@ -268,6 +300,12 @@ def _create_project_from_manifest(
     validate_workflow_uniqueness_in_project(project)
 
     create_payload = project.mongo()
+    # Template links name their DCs by tag; store the new DCs' ids next to
+    # them, as the CLI's template sync does, so readers that do not resolve
+    # tags (link cleanup on DC deletion, for one) see real ids.
+    from depictio.models.models.links import resolve_link_tag_refs
+
+    resolve_link_tag_refs(create_payload)
     create_payload["registration_time"] = utc_now_str()
     create_payload["last_modified"] = create_payload["registration_time"]
     projects_collection.insert_one(create_payload)
@@ -286,7 +324,7 @@ def _create_project_from_manifest(
                 continue
             tag = dc_dict.get("data_collection_tag", "")
             dc_id = str(dc_dict.get("_id") or dc_dict.get("id") or "")
-            manifest_type = (scan.get("scan_parameters") or {}).get("manifest_type", tag)
+            manifest_type = _manifest_type_of(scan.get("scan_parameters") or {}, tag)
             entry_count = len(manifest.entries_for_type(manifest_type))
             try:
                 ok, message = _run_dc_ingest(workflow_dict, dc_id, current_user)

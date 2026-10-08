@@ -9,7 +9,10 @@ Sequencing per DC (mirrors ``_push_workflow_and_ingest``): the new scan config
 is persisted *before* the helpers run — the helpers' API callbacks read the DC
 from the project document — and reverted for any DC whose scan or process
 fails, so a failed ingestion never leaves a manifest scan config pointing at
-data that was never materialized.
+data that was never materialized. The scan also replaces the DC's File
+records with the manifest's entries, so those are snapshotted before it and
+put back on failure. Both writes touch that one DC only: the other DCs of the
+call, and anything else edited in the meantime, are left as they are.
 
 Fan-out is sequential for now; Celery parallelism is a phase-4 concern
 (the report shape is already per-DC so the switch is internal).
@@ -24,7 +27,7 @@ from bson import ObjectId
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from depictio.api.v1.db import projects_collection
+from depictio.api.v1.db import files_collection, projects_collection
 from depictio.api.v1.remote_fetch import (
     RemoteURLRejected,
     bounded_download,
@@ -191,6 +194,34 @@ def _fetch_and_parse_manifest(manifest_url: str, field_map: dict[str, str]) -> D
     return manifest
 
 
+def _manifest_field_map(scan_params: dict) -> dict[str, str]:
+    """Canonical manifest field -> the column a DC's manifest scan reads it from.
+
+    The map ``scan_manifest_for_data_collection`` parses with: ``ScanManifest``'s
+    defaults, an empty override reading the canonical column. ``run`` is always
+    named, since an absent one reads the ``run`` column anyway, so two DCs that
+    read the same columns get equal maps.
+    """
+    return {
+        "id": scan_params.get("id_field") or "id",
+        "type": scan_params.get("type_field") or "type",
+        "url": scan_params.get("url_field") or "url",
+        "run": scan_params.get("run_field") or "run",
+    }
+
+
+def _manifest_type_of(scan_params: dict, tag: str) -> str:
+    """The manifest ``type`` a DC consumes: its ``manifest_type``, else its tag.
+
+    ``ScanManifest`` requires a non-empty ``manifest_type`` and strips it, so a
+    stored DC always carries one, and ingestion writes the tag there (the
+    convention). The fallback covers a template not validated yet: an empty
+    value counts the tag's rows rather than rows of type ``''``, and the model
+    refuses it when the project is built.
+    """
+    return str(scan_params.get("manifest_type") or "").strip() or tag
+
+
 def _live_dc_index(project_dict: dict) -> dict[str, tuple[int, int]]:
     """{dc_tag: (workflow_index, dc_index)} across all of the project's workflows."""
     index: dict[str, tuple[int, int]] = {}
@@ -200,6 +231,66 @@ def _live_dc_index(project_dict: dict) -> dict[str, tuple[int, int]]:
             if tag and tag not in index:
                 index[tag] = (wf_i, dc_i)
     return index
+
+
+def _set_dc_scan(project_oid: ObjectId, dc_oid, scan: dict | None) -> None:
+    """``$set`` one data collection's ``config.scan``, and nothing else of the project.
+
+    A ``$set`` of the whole ``workflows`` array would write back the copy this
+    request read, wiping the ``flexible_metadata`` the deltatable upsert wrote
+    for a DC ingested earlier in the same call, and any concurrent edit. The
+    path is positional (mongomock, the test backend, has no array filters), so
+    the position is read from the current document and the write is guarded by
+    the DC's id: a DC that moved in between is never confused with the one now
+    at its old position.
+    """
+    current = projects_collection.find_one({"_id": project_oid}, {"workflows": 1}) or {}
+    for wf_i, wf in enumerate(current.get("workflows") or []):
+        for dc_i, dc in enumerate(wf.get("data_collections") or []):
+            if dc.get("_id") != dc_oid:
+                continue
+            path = f"workflows.{wf_i}.data_collections.{dc_i}"
+            result = projects_collection.update_one(
+                {"_id": project_oid, f"{path}._id": dc_oid},
+                {"$set": {f"{path}.config.scan": scan}},
+            )
+            if result.matched_count:
+                return
+    logger.warning(
+        f"Data collection {dc_oid} not found in project {project_oid}: its scan config "
+        "was not written."
+    )
+
+
+def _dc_files(dc_id: str) -> list[dict]:
+    """Every File record of a data collection, as stored."""
+    if not ObjectId.is_valid(dc_id):
+        return []
+    return list(files_collection.find({"data_collection_id": ObjectId(dc_id)}))
+
+
+def _restore_dc_files(dc_id: str, snapshot: list[dict]) -> None:
+    """Put a data collection's File records back to ``snapshot``.
+
+    The manifest scan deletes the records absent from the manifest and
+    registers one per entry; this undoes both, ids included.
+    """
+    if not ObjectId.is_valid(dc_id):
+        return
+    files_collection.delete_many({"data_collection_id": ObjectId(dc_id)})
+    if snapshot:
+        files_collection.insert_many(snapshot)
+
+
+def _revert_dc_ingest(
+    project_oid: ObjectId, dc_dict: dict, scan: dict | None, files_before: list[dict]
+) -> None:
+    """One DC back to its pre-ingest scan config and File records, so a failed
+    run never leaves a manifest config, or the manifest's files, with no data
+    behind them."""
+    dc_dict["config"]["scan"] = scan
+    _set_dc_scan(project_oid, dc_dict.get("_id"), scan)
+    _restore_dc_files(str(dc_dict.get("_id") or dc_dict.get("id") or ""), files_before)
 
 
 def _run_dc_ingest(
@@ -390,30 +481,33 @@ def _ingest_manifest_into_project(
 
     remote_options = project_storage_for(project_oid)
 
-    # Persist the manifest scan configs first — the helpers' API callbacks
-    # read the DC config from the project document.
-    projects_collection.update_one({"_id": project_oid}, {"$set": {"workflows": workflows}})
-
     all_ok = True
     for tag in matched_tags:
         wf_i, dc_i = live[tag]
         dc_dict = workflows[wf_i]["data_collections"][dc_i]
         dc_id = str(dc_dict.get("_id") or dc_dict.get("id") or "")
         entry_count = len(manifest.entries_for_type(tag))
+
+        # Persist this DC's manifest scan config first: the helpers' API
+        # callbacks read the DC config from the project document. Its File
+        # records are snapshotted before the scan swaps them for the entries.
+        files_before = _dc_files(dc_id)
+        _set_dc_scan(project_oid, dc_dict.get("_id"), dc_dict["config"]["scan"])
         try:
             ok, message = _run_dc_ingest(
                 workflows[wf_i], dc_id, current_user, remote_storage_options=remote_options
             )
         except HTTPException:
+            # Aborts the whole call (no API token, say). This DC's config is
+            # already written, so revert it first; later DCs never were.
+            _revert_dc_ingest(project_oid, dc_dict, original_scans.get(tag), files_before)
             raise
         except Exception as exc:  # helper crash — treat as a per-DC failure
             logger.error(f"Manifest ingest crashed for DC '{tag}': {exc}")
             ok, message = False, str(exc)
         if not ok:
             all_ok = False
-            # Revert this DC to its pre-ingest scan config so a failed run
-            # never leaves a manifest config with no data behind it.
-            dc_dict["config"]["scan"] = original_scans.get(tag)
+            _revert_dc_ingest(project_oid, dc_dict, original_scans.get(tag), files_before)
         report.matched.append(
             ManifestIngestDCResult(
                 data_collection_tag=tag,
@@ -423,9 +517,6 @@ def _ingest_manifest_into_project(
                 message=message,
             )
         )
-
-    if not all_ok:
-        projects_collection.update_one({"_id": project_oid}, {"$set": {"workflows": workflows}})
 
     report.success = all_ok
     return report
@@ -488,14 +579,7 @@ def _manifest_preflight_entries(
     the collections that use it.
     """
     manifest_url = str(scan_params.get("manifest_url") or "")
-    field_map = {
-        "id": scan_params.get("id_field") or "id",
-        "type": scan_params.get("type_field") or "type",
-        "url": scan_params.get("url_field") or "url",
-    }
-    run_field = scan_params.get("run_field")
-    if run_field:
-        field_map["run"] = run_field
+    field_map = _manifest_field_map(scan_params)
 
     key = (manifest_url, tuple(sorted(field_map.items())))
     if key not in manifests:
@@ -520,7 +604,7 @@ def _manifest_preflight_entries(
     if isinstance(manifest, str):
         return manifest
 
-    manifest_type = str(scan_params.get("manifest_type") or tag)
+    manifest_type = _manifest_type_of(scan_params, tag)
     entry_count = len(manifest.entries_for_type(manifest_type))
     if entry_count == 0:
         return (
@@ -698,6 +782,9 @@ def _refresh_manifest_in_project(
             current_user=current_user,
             report=report,
             preflight_failed=preflight_failed,
+            # Refresh re-reads url and s3_prefix DCs too: the run's report
+            # must not show them as manifest ones.
+            scan_modes={tag: entry[3] for tag, entry in refreshable_index.items()},
         )
         all_ok = all_ok and dispatch_ok
 
@@ -712,6 +799,7 @@ def _dispatch_refresh_tasks(
     current_user,
     report: ManifestRefreshReport,
     preflight_failed: list[tuple[str, str, str]],
+    scan_modes: dict[str, str] | None = None,
 ) -> bool:
     """Fan the per-DC refreshes out to Celery, backed by an ingestion run.
 
@@ -725,6 +813,9 @@ def _dispatch_refresh_tasks(
     already-failed steps with ``file_count=0``: the finalizer computes the run
     status from the seeded steps, so leaving them out would let the run close
     as "success" with the skipped DC silently absent from the poll report.
+
+    ``scan_modes`` records each DC's real mode (``{tag: mode}``) instead of
+    assuming "manifest".
     """
     from uuid import uuid4
 
@@ -735,13 +826,14 @@ def _dispatch_refresh_tasks(
         IngestionStep,
     )
 
+    modes = scan_modes or {}
     run_id = uuid4().hex
     # Pre-flight failures first, then the DCs a worker will actually run.
     data_collections = [
-        IngestionDataCollection(tag=tag, scan_mode="manifest", file_count=0)
+        IngestionDataCollection(tag=tag, scan_mode=modes.get(tag, "manifest"), file_count=0)
         for tag, _dc_id, _message in preflight_failed
     ] + [
-        IngestionDataCollection(tag=tag, scan_mode="manifest", file_count=entries)
+        IngestionDataCollection(tag=tag, scan_mode=modes.get(tag, "manifest"), file_count=entries)
         for tag, _dc_id, _wf_i, entries in to_dispatch
     ]
     steps = [

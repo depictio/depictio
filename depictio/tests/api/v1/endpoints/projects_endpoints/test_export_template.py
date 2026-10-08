@@ -343,6 +343,111 @@ def test_round_trip_through_resolve_template(mock_db, tmp_path):
     assert variables["MANIFEST_URL"] == "https://mirror.example.org/manifest.json"
 
 
+def _linked_project_doc(owner_id: ObjectId) -> dict:
+    """The manifest project with a second DC and a link between the two, by id."""
+    from depictio.models.models.data_collections import (
+        DataCollection,
+        DataCollectionConfig,
+        Scan,
+        ScanManifest,
+    )
+    from depictio.models.models.data_collections_types.table import DCTableConfig
+    from depictio.models.models.links import DCLink
+
+    doc = _manifest_project_doc(owner_id)
+    manifest_url = "https://data.example.org/run42/manifest.json"
+    measurements = DataCollection(
+        data_collection_tag="measurements",
+        config=DataCollectionConfig(
+            type="table",
+            metatype="metadata",
+            scan=Scan(
+                mode="manifest",
+                scan_parameters=ScanManifest(
+                    manifest_url=manifest_url, manifest_type="measurements"
+                ),
+            ),
+            dc_specific_properties=DCTableConfig(format="csv"),
+        ),
+    )
+    dcs = doc["workflows"][0]["data_collections"]
+    dcs.append(measurements.mongo())
+    link = DCLink(
+        source_dc_id=str(dcs[0]["_id"]),
+        source_column="depictio_manifest_id",
+        target_dc_id=str(dcs[1]["_id"]),
+        target_type="table",
+    ).model_dump()
+    # As Project.mongo() stores it: `_id`, and the DC ids as ObjectIds.
+    link["_id"] = ObjectId(str(link.pop("id")))
+    link["source_dc_id"], link["target_dc_id"] = dcs[0]["_id"], dcs[1]["_id"]
+    doc["links"] = [link]
+    return doc
+
+
+def test_links_round_trip_by_tag(mock_db, tmp_path):
+    """Links leave by tag, never by the source project's DC ids, and a project
+    made from the bundle (resolver, then the server's or the CLI's id
+    resolution) links its own DCs."""
+    from depictio.cli.cli.utils import templates as templates_mod
+    from depictio.cli.cli.utils.config import _resolve_link_tags_after_id_assignment
+    from depictio.models.models.links import resolve_link_tag_refs
+    from depictio.models.models.projects import Project
+
+    user = _user()
+    doc = _linked_project_doc(user.id)
+    mock_db["projects"].insert_one(doc)
+    source_ids = {str(dc["_id"]) for dc in doc["workflows"][0]["data_collections"]}
+
+    bundle = _build(str(doc["_id"]), user)
+
+    (link,) = yaml.safe_load(bundle["template.yaml"])["links"]
+    assert link["source_dc_tag"] == "samples"
+    assert link["target_dc_tag"] == "measurements"
+    assert "source_dc_id" not in link and "target_dc_id" not in link
+    assert not any(dc_id in bundle["template.yaml"] for dc_id in source_ids)
+
+    template_dir = tmp_path / "test-lab" / "exported" / "1"
+    for rel_path, content in bundle.items():
+        target = template_dir / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content)
+    with patch.object(
+        templates_mod, "locate_template", return_value=template_dir / "template.yaml"
+    ):
+        resolved, *_ = templates_mod.resolve_template(
+            "test-lab/exported/1",
+            None,
+            project_name="Round Trip",
+            extra_vars={"MANIFEST_URL": "https://mirror.example.org/manifest.json"},
+        )
+    resolved["permissions"] = {"owners": [{"_id": ObjectId(), "email": "owner@example.com"}]}
+    project = Project(**resolved)
+    new_ids = {dc.data_collection_tag: str(dc.id) for dc in project.workflows[0].data_collections}
+    assert not set(new_ids.values()) & source_ids
+
+    # Server side (from_manifest, every link read): resolve_link_tag_refs.
+    (stored_link,) = resolve_link_tag_refs(project.mongo())["links"]
+    assert stored_link["source_dc_id"] == new_ids["samples"]
+    assert stored_link["target_dc_id"] == new_ids["measurements"]
+
+    # CLI side (ingest --template): the sync after id assignment.
+    _resolve_link_tags_after_id_assignment(project)
+    assert project.links[0].source_dc_id == new_ids["samples"]
+    assert project.links[0].target_dc_id == new_ids["measurements"]
+
+
+def test_a_link_to_a_dc_outside_the_project_is_left_out(mock_db):
+    user = _user()
+    doc = _linked_project_doc(user.id)
+    doc["links"][0]["target_dc_id"] = str(ObjectId())  # no such DC here
+    mock_db["projects"].insert_one(doc)
+
+    template = yaml.safe_load(_build(str(doc["_id"]), user)["template.yaml"])
+
+    assert "links" not in template
+
+
 # ── bundle_to_zip: the bytes the route actually sends ───────────────────────
 
 

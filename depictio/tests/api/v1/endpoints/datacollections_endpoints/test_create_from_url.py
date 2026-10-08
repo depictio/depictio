@@ -18,8 +18,9 @@ from fastapi import HTTPException
 
 from depictio.api.v1.endpoints.datacollections_endpoints import utils as dc_utils
 from depictio.api.v1.endpoints.projects_endpoints.storage_config import StorageSecretUnreadable
+from depictio.api.v1.remote_fetch import RemoteFetchFailed, RemoteURLRejected
 from depictio.models.models.users import UserBase
-from depictio.models.s3_access import ProjectS3Config
+from depictio.models.s3_access import ProjectS3Config, S3AccessFailed
 
 STORAGE = "depictio.api.v1.endpoints.projects_endpoints.storage_config"
 CLI_HELPER = "depictio.cli.cli.utils.helpers.process_data_collection_helper"
@@ -311,4 +312,65 @@ def test_failed_processing_is_a_500_and_rolls_the_workflow_back(mock_db):
     assert "remote read failed" in exc.value.detail
     assert [s["mode"] for s in seen] == ["scan", "process"]
     # No ghost workflow without a delta table behind it.
+    assert mock_db["projects"].find_one({"_id": project_id})["workflows"] == []
+
+
+@pytest.mark.parametrize(
+    ("error", "status", "code"),
+    [
+        (
+            RemoteURLRejected("Host 'internal.example' resolves to a non-public address."),
+            400,
+            "remote_url_rejected",
+        ),
+        (
+            RemoteFetchFailed("Could not fetch https://example.org/run42/data.csv: HTTP 503."),
+            502,
+            "remote_fetch_failed",
+        ),
+        (
+            S3AccessFailed(
+                "Could not reach the storage holding s3://bucket/data.csv. Try again later.",
+                code="s3_unreachable",
+                status_code=502,
+            ),
+            502,
+            "s3_unreachable",
+        ),
+    ],
+)
+def test_a_failed_remote_read_rolls_back_then_answers_with_its_status(mock_db, error, status, code):
+    """The remote read raises out of the process stage: the workflow $push is
+    rolled back first, then the app's handlers turn the error into its own
+    status and ``{detail, code}`` instead of a bare 500."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from depictio.api.main import app as depictio_app
+
+    user = _user()
+    project_id = _owned_project_with_token(mock_db, user)
+    modes: list[str] = []
+
+    def _fake_helper(CLI_config, wf, dc_id, mode, command_parameters=None):
+        modes.append(mode)
+        if mode == "process":
+            raise error
+        return {"result": "success"}
+
+    app = FastAPI(exception_handlers=dict(depictio_app.exception_handlers))
+
+    @app.post("/create_from_url")
+    def _route():
+        return _call("https://example.org/run42/data.csv", project_id=str(project_id), user=user)
+
+    with (
+        patch(f"{STORAGE}.project_storage_for", return_value=None),
+        patch(CLI_HELPER, side_effect=_fake_helper),
+    ):
+        response = TestClient(app).post("/create_from_url")
+
+    assert response.status_code == status
+    assert response.json() == {"detail": str(error), "code": code}
+    assert modes == ["scan", "process"]
     assert mock_db["projects"].find_one({"_id": project_id})["workflows"] == []

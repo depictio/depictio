@@ -136,12 +136,58 @@ def test_put_without_secret_keeps_stored_one(mock_db):
     _put(str(doc["_id"]), user)
     before = mock_db["storage"].find_one({"project_id": doc["_id"]})["secret_encrypted"]
 
-    out = _put(str(doc["_id"]), user, secret_access_key=None, bucket="renamed")
+    out = _put(str(doc["_id"]), user, secret_access_key=None, region="eu-west-1")
     after = mock_db["storage"].find_one({"project_id": doc["_id"]})
 
     assert out.has_secret is True
     assert after["secret_encrypted"] == before  # write-only: omitted keeps stored
-    assert after["bucket"] == "renamed"
+    assert after["region"] == "eu-west-1"
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    [
+        ({"access_key_id": "AKIA999"}, "new access key"),
+        ({"endpoint_url": "https://s3.example.org:9443"}, "new endpoint"),
+        ({"bucket": "renamed"}, "new bucket"),
+        (
+            {"endpoint_url": "https://s3.example.org:9443", "bucket": "renamed"},
+            "new endpoint and bucket",
+        ),
+    ],
+)
+def test_a_stored_secret_is_not_kept_for_another_key_endpoint_or_bucket(mock_db, change, message):
+    """Omitting the secret keeps it for the settings it was saved with only:
+    kept across a new key, endpoint or bucket, it would be sent where its owner
+    never gave it."""
+    doc, user = _stored_project(mock_db)
+    before = mock_db["storage"].find_one({"project_id": doc["_id"]})
+
+    with pytest.raises(HTTPException) as exc:
+        _put(str(doc["_id"]), user, secret_access_key=None, **change)
+
+    assert exc.value.status_code == 422
+    assert message in exc.value.detail
+    assert "s3.example.org" not in exc.value.detail
+    assert mock_db["storage"].find_one({"project_id": doc["_id"]}) == before
+
+    # With the secret given, the same change is saved.
+    out = _put(str(doc["_id"]), user, secret_access_key="n3w-s3cr3t", **change)
+    assert out.has_secret is True
+
+
+def test_updated_at_is_stored_in_utc(mock_db):
+    """Stored timestamps are naive UTC; the viewer renders them as UTC."""
+    user = _user()
+    doc = _project_doc(user.id)
+    mock_db["projects"].insert_one(doc)
+
+    with patch.object(storage_config, "utc_now_str", return_value="2026-10-08 12:00:00"):
+        out = _put(str(doc["_id"]), user)
+
+    assert out.updated_at == "2026-10-08 12:00:00"
+    stored = mock_db["storage"].find_one({"project_id": doc["_id"]})
+    assert stored["updated_at"] == "2026-10-08 12:00:00"
 
 
 def test_owner_only(mock_db):
