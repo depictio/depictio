@@ -3,10 +3,11 @@
  *
  * Against the seeded nf-core/ampliseq multi-tab dashboard:
  *   - the "Sample sheet" grid section (owned by the main tab, marked
- *     `persistent: true`) is present on a sibling tab via the fan-out host;
- *   - a value picked in the persistent "Sample filters" section survives the
- *     full-page navigation of a tab switch (sessionStorage hydration) and the
- *     control itself is present on the sibling tab.
+ *     `persistent: true`, `exclude_tabs: [Overview]`) is present on the child
+ *     tabs via the fan-out host, and absent from the Overview itself;
+ *   - a value picked in the persistent "Sample filters" section on one child
+ *     tab survives the full-page navigation of a tab switch (sessionStorage
+ *     hydration) and the control itself is present on the sibling tab.
  *
  * Skips itself when the ampliseq reference project is not seeded in the
  * target stack (not every CI leg seeds the nf-core projects).
@@ -17,34 +18,35 @@ import { credentials } from "@fixtures/credentials";
 
 interface DashboardEntry {
   dashboard_id: string;
-  title?: string;
-  parent_dashboard_id?: string | null;
 }
 
-async function findAmpliseqFamily(
+// db_init_reference_datasets.STATIC_IDS["ampliseq"]["dashboards"]: the
+// Overview main tab and two child tabs that both show the Sample sheet.
+const AMPLISEQ_OVERVIEW = "646b0f3c1e4a2d7f8e5b8ca2";
+const AMPLISEQ_ALPHA_DIVERSITY = "646b0f3c1e4a2d7f8e5b8cbe";
+const AMPLISEQ_COMMUNITY = "646b0f3c1e4a2d7f8e5b8cb3";
+
+async function ampliseqFamilySeeded(
   request: Parameters<typeof apiLogin>[0],
-): Promise<{ main: DashboardEntry; sibling: DashboardEntry } | null> {
+): Promise<boolean> {
   const admin = credentials.adminUser;
   let token: string;
   try {
     token = (await apiLogin(request, admin.email, admin.password)).access_token;
   } catch {
-    return null;
+    return false;
   }
   const res = await request.get(
     `${API_URL}${API_PREFIX}/dashboards/list?include_child_tabs=true`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
-  if (!res.ok()) return null;
+  if (!res.ok()) return false;
   const body = (await res.json()) as { dashboards?: DashboardEntry[] } | DashboardEntry[];
   const entries = Array.isArray(body) ? body : (body.dashboards ?? []);
-  const main = entries.find(
-    (d) => d.title === "nf-core/ampliseq" && !d.parent_dashboard_id,
+  const ids = new Set(entries.map((d) => d.dashboard_id));
+  return [AMPLISEQ_OVERVIEW, AMPLISEQ_ALPHA_DIVERSITY, AMPLISEQ_COMMUNITY].every((id) =>
+    ids.has(id),
   );
-  if (!main) return null;
-  const sibling = entries.find((d) => d.parent_dashboard_id === main.dashboard_id);
-  if (!sibling) return null;
-  return { main, sibling };
 }
 
 test.describe("Cross-tab persistent sections & filters", () => {
@@ -58,20 +60,26 @@ test.describe("Cross-tab persistent sections & filters", () => {
     // retry. The work is genuinely slow rather than stuck, so give it room.
     test.setTimeout(180_000);
 
-    const family = await findAmpliseqFamily(request);
-    test.skip(!family, "nf-core/ampliseq multi-tab dashboard not seeded on this stack");
+    const seeded = await ampliseqFamilySeeded(request);
+    test.skip(!seeded, "nf-core/ampliseq multi-tab dashboard not seeded on this stack");
 
     await loginAsAdmin();
-    await page.goto(`/dashboard/${family!.main.dashboard_id}`);
 
-    // The persistent grid section lives on the main tab itself, so here it is
-    // rendered by its owner: its accordion header is the landing-slot for the
-    // metadata table and the four metadata cards.
+    // The Overview excludes the Sample sheet: the main tab owns the section but
+    // does not render it.
+    await page.goto(`/dashboard/${AMPLISEQ_OVERVIEW}`);
+    await expect(page.getByText("Key figures", { exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(page.getByText("Sample sheet", { exact: true })).toHaveCount(0);
+
+    // On a child tab the fan-out host renders it (collapsed, pinned bottom).
+    await page.goto(`/dashboard/${AMPLISEQ_ALPHA_DIVERSITY}`);
     await expect(page.getByText("Sample sheet", { exact: true })).toBeVisible({
       timeout: 30_000,
     });
 
-    // Pick a sample in the persistent filter section (main tab owns it).
+    // Pick a sample in the persistent filter section (fanned out from the main tab).
     const sampleSelect = page.getByPlaceholder("Select sample…").first();
     await expect(sampleSelect).toBeVisible({ timeout: 30_000 });
     await sampleSelect.click();
@@ -90,7 +98,7 @@ test.describe("Cross-tab persistent sections & filters", () => {
 
     // Tab switch = full page navigation; the sibling tab must hydrate the
     // value back and render the fanned-out control and metadata section.
-    await page.goto(`/dashboard/${family!.sibling.dashboard_id}`);
+    await page.goto(`/dashboard/${AMPLISEQ_COMMUNITY}`);
     await expect(page.getByText("Sample sheet", { exact: true })).toBeVisible({
       timeout: 30_000,
     });

@@ -25,8 +25,8 @@
 #
 # Output:
 #   - depictio/projects/nf-core/ampliseq/2.18.0/.db_seeds/dashboard_*.json
-#     for the 8 ampliseq dashboards (multiqc + alpha_diversity + community +
-#     differential + ordination + phylogeny, from the nf-core template, plus
+#     for the 9 ampliseq dashboards (overview + multiqc + alpha_diversity +
+#     community + differential + ordination + phylogeny, from the nf-core template, plus
 #     sampling_campaign + environment from the reference-only demo layer).
 #
 # The template YAML under dashboards/ is the SOURCE OF TRUTH: `use:` catalog
@@ -48,6 +48,11 @@ REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "
 # config to target a worktree stack — both steps below read it, or step 1 would
 # silently ingest into whatever stack ~/.depictio/CLI.yaml happens to name.
 CLI_CONFIG="${DEPICTIO_CLI_CONFIG:-${HOME}/.depictio/CLI.yaml}"
+# The project the reference layer is imported into and the dashboards are
+# exported from. The default is the reference project `db_init` seeds; on an
+# instance without it (`depictio local`), pass the id of the project step 1
+# created. The remap pins every id back to the static ones either way.
+PROJECT_ID="${DEPICTIO_SEED_PROJECT_ID:-646b0f3c1e4a2d7f8e5b8ca2}"
 
 if [ ! -d "$DATA_ROOT" ]; then
     echo "ERROR: ampliseq test-data not found at $DATA_ROOT" >&2
@@ -90,13 +95,12 @@ python -m depictio.cli dashboard import \
     "$SCRIPT_DIR/dashboards/reference_extended.yaml" \
     --server "$CLI_CONFIG" \
     ${DEPICTIO_API_URL:+--api "$DEPICTIO_API_URL"} \
-    --project "646b0f3c1e4a2d7f8e5b8ca2" \
+    --project "$PROJECT_ID" \
     --overwrite
 
-# 2. Export the 8 ampliseq dashboards from Mongo into .db_seeds/. The
+# 2. Export the 9 ampliseq dashboards from Mongo into .db_seeds/. The
 #    dashboard_ids below come from db_init_reference_datasets.STATIC_IDS
 #    ("ampliseq" → "dashboards") and the template's dashboards/ YAML.
-PROJECT_ID="646b0f3c1e4a2d7f8e5b8ca2"
 
 # Keyed by TAB TITLE, not by dashboard id: `_import_multi_tab_dashboard` mints a
 # fresh ObjectId for any tab it does not already find by title, so an id-keyed
@@ -107,7 +111,8 @@ PROJECT_ID="646b0f3c1e4a2d7f8e5b8ca2"
 # 4, and macOS still ships 3.2 as /bin/bash, where it parses as an indexed array
 # and the first title's leading word explodes as an unbound variable.
 DASH_FILES="
-nf-core/ampliseq	dashboard_multiqc.json
+nf-core/ampliseq	dashboard_overview.json
+MultiQC	dashboard_multiqc.json
 Alpha Diversity	dashboard_alpha_diversity.json
 Community & Diversity	dashboard_community.json
 Differential Abundance	dashboard_differential.json

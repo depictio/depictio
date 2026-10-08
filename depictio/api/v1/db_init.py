@@ -291,6 +291,19 @@ async def create_initial_dashboards(
             "static_dc_id": STATIC_IDS["penguins"]["data_collections"]["penguins_complete"],
         },
         {
+            # The family's main tab: the synthetic Overview. Listed first so the
+            # child tabs below find their parent already imported.
+            "name": "ampliseq_overview",
+            "json_path": os.path.join(
+                projects_base,
+                rel_paths["ampliseq"],
+                ".db_seeds",
+                "dashboard_overview.json",
+            ),
+            # Use None for multi-DC dashboards to preserve DC IDs from JSON file
+            "static_dc_id": None,
+        },
+        {
             "name": "ampliseq_multiqc",
             "json_path": os.path.join(
                 projects_base,
@@ -298,7 +311,6 @@ async def create_initial_dashboards(
                 ".db_seeds",
                 "dashboard_multiqc.json",
             ),
-            # Use None for multi-DC dashboards to preserve DC IDs from JSON file
             "static_dc_id": None,
         },
         {

@@ -299,7 +299,7 @@ depictio/api/static/branding/**
 # Penguins dashboard (6824cb3b89d2b72169309738)
 !depictio/dash/static/screenshots/6824cb3b89d2b72169309738_light.png
 !depictio/dash/static/screenshots/6824cb3b89d2b72169309738_dark.png
-# Ampliseq MultiQC dashboard (646b0f3c1e4a2d7f8e5b8ca2)
+# Ampliseq main tab, the Overview (646b0f3c1e4a2d7f8e5b8ca2)
 !depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca2.png
 !depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca2_light.png
 !depictio/dash/static/screenshots/646b0f3c1e4a2d7f8e5b8ca2_dark.png

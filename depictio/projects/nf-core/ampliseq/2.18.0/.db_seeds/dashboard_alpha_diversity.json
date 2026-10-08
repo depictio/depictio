@@ -14,9 +14,32 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
+      "index": "alpha-intro",
+      "component_type": "text",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Diversity within each sample, computed by [QIIME 2](https://qiime2.org) on the rarefied feature table: richness (observed ASVs), Shannon, phylogenetic spread (Faith's PD) and evenness. The cards give each index's median and spread across the samples in view. The rarefaction curves show whether a sample was sequenced deeply enough for an index to level off.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null
+    },
+    {
       "index": "alpha-shannon-range",
       "component_type": "interactive",
-      "title": "Shannon index",
+      "title": "Shannon diversity",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "alpha_diversity_multi_canonical",
       "wf_id": {
@@ -38,7 +61,6 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "md",
       "title_align": "left",
       "section": "Alpha filters",
       "interactive_component_type": "RangeSlider",
@@ -48,42 +70,19 @@
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Alpha scope",
+      "group": null,
       "timescale": null,
       "show_marks": null,
       "show_histogram": null,
       "slider_mode": null,
-      "custom_color": "#F68B33",
+      "custom_color": "pink",
       "icon_name": "mdi:chart-bell-curve",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "alpha-section-header",
-      "component_type": "text",
-      "title": "Within-sample diversity",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": null,
-      "dc_config": {},
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Diversity at a glance",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "Alpha-diversity indices computed by [QIIME 2](https://qiime2.org) on the rarefied feature table, one value per sample: richness, phylogenetic spread (Faith's PD) and evenness, each summarised by its median and distribution. The last card is the deepest depth the rarefaction curves below were drawn to.",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "alpha-card-observed-features",
+      "index": "alpha-card-shannon",
       "component_type": "card",
-      "title": "Observed features (median)",
+      "title": "Shannon",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "alpha_diversity_multi_canonical",
       "wf_id": {
@@ -105,6 +104,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median Shannon entropy, richness and evenness in one number.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/alpha_diversity",
@@ -117,7 +117,7 @@
       },
       "section": "Diversity at a glance",
       "aggregation": "median",
-      "column_name": "observed_features",
+      "column_name": "shannon",
       "column_type": "float64",
       "value": null,
       "aggregations": [
@@ -134,17 +134,16 @@
       "attrition_cols": [],
       "trend_col": null,
       "follow_region_filter": false,
-      "icon_name": "mdi:counter",
-      "icon_color": "#45B8AC",
-      "title_color": "#45B8AC",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
+      "icon_name": "mdi:chart-bell-curve",
+      "icon_color": "grape",
+      "caption": "median, with its spread",
+      "decimals": 2,
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "alpha-card-faith-pd",
+      "index": "alpha-card-observed-features",
       "component_type": "card",
-      "title": "Faith PD (median)",
+      "title": "Observed ASVs",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "alpha_diversity_multi_canonical",
       "wf_id": {
@@ -166,6 +165,66 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median number of ASVs seen in a sample, at the rarefaction depth.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/alpha_diversity",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_alpha_diversity",
+        "use": "qiime2/alpha_diversity",
+        "description": "Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd\u2026)."
+      },
+      "section": "Diversity at a glance",
+      "aggregation": "median",
+      "column_name": "observed_features",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:counter",
+      "icon_color": "violet",
+      "caption": "median, with its distribution",
+      "decimals": 0,
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "alpha-card-faith-pd",
+      "component_type": "card",
+      "title": "Faith PD",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "alpha_diversity_multi_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cda"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample multi-metric alpha-diversity (Shannon/Observed/Faith PD/Evenness)",
+        "data_collection_tag": "alpha_diversity_multi_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cda"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median phylogenetic diversity, the tree length a sample's ASVs span.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/alpha_diversity",
@@ -196,16 +255,15 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:source-branch",
-      "icon_color": "#9C27B0",
-      "title_color": "#9C27B0",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
+      "icon_color": "indigo",
+      "caption": "median, with its spread",
+      "decimals": 2,
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "alpha-card-observed",
+      "index": "alpha-card-evenness",
       "component_type": "card",
-      "title": "Evenness (median)",
+      "title": "Evenness",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "alpha_diversity_multi_canonical",
       "wf_id": {
@@ -227,6 +285,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median Pielou evenness, from 0 (one ASV dominates) to 1 (all equal).",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/alpha_diversity",
@@ -242,14 +301,12 @@
       "column_name": "evenness",
       "column_type": "float64",
       "value": null,
-      "aggregations": [
-        "box_plot_stats"
-      ],
+      "aggregations": null,
       "filter_expr": null,
-      "secondary_layout": "box_plot",
+      "secondary_layout": "gauge",
       "breakdown_col": null,
       "top_n_count": 3,
-      "coverage_max": null,
+      "coverage_max": 1,
       "threshold_value": null,
       "threshold_direction": "min",
       "threshold_warn": null,
@@ -257,90 +314,15 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:scale-balance",
-      "icon_color": "#00BCD4",
-      "title_color": "#00BCD4",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "alpha-card-rarefaction-depth",
-      "component_type": "card",
-      "title": "Deepest rarefaction depth",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "rarefaction_canonical",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8cd1"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Multi-metric rarefaction curves (sample_id/depth/iter + per-metric cols)",
-        "data_collection_tag": "rarefaction_canonical",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "646b0f3c1e4a2d7f8e5b8cd1"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Diversity at a glance",
-      "aggregation": "max",
-      "column_name": "depth",
-      "column_type": "int64",
-      "value": null,
-      "aggregations": null,
-      "filter_expr": null,
-      "secondary_layout": "vertical",
-      "breakdown_col": null,
-      "top_n_count": 3,
-      "coverage_max": null,
-      "threshold_value": null,
-      "threshold_direction": "min",
-      "threshold_warn": null,
-      "attrition_cols": [],
-      "trend_col": null,
-      "follow_region_filter": false,
-      "icon_name": "mdi:arrow-expand-vertical",
-      "icon_color": "#3F51B5",
-      "title_color": "#3F51B5",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "alpha-rarefaction-header",
-      "component_type": "text",
-      "title": "Rarefaction",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": null,
-      "dc_config": {},
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Rarefaction",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "Diversity recomputed at increasing sequencing depths. A curve that flattens means the sample was sequenced deep enough for that index to stop climbing; one still rising means richness is bounded by depth rather than by biology.",
+      "icon_color": "pink",
+      "caption": "median, 0 to 1",
+      "decimals": 2,
       "wf_tag": "nextflow/ampliseq"
     },
     {
       "index": "alpha-rarefaction-multi",
       "component_type": "advanced_viz",
-      "title": "Rarefaction curves (multi-metric)",
+      "title": "Rarefaction curves",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "rarefaction_canonical",
       "wf_id": {
@@ -394,32 +376,9 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "alpha-section-boxplot",
-      "component_type": "text",
-      "title": "Per-Habitat Comparison",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": null,
-      "dc_config": {},
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Per-Habitat comparison",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "The same per-sample indices, grouped. Read the medians and the spread rather than the extremes, all the more when a group holds few samples.",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "alpha-boxplot-by-habitat",
+      "index": "alpha-boxplot-by-group",
       "component_type": "figure",
-      "title": "Alpha diversity by Habitat (per metric)",
+      "title": "Shannon diversity per group",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "alpha_diversity_multi_canonical",
       "wf_id": {
@@ -441,6 +400,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "One point per sample. Compare medians and spread, all the more when a group is small.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/alpha_diversity",
@@ -451,13 +411,12 @@
         "use": "qiime2/alpha_diversity",
         "description": "Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd\u2026)."
       },
-      "section": "Per-Habitat comparison",
+      "section": "Group comparison",
+      "fit": "auto",
       "visu_type": "box",
-      "dict_kwargs": {
-        "title": "Alpha diversity by Habitat (per metric)"
-      },
+      "dict_kwargs": {},
       "mode": "code",
-      "code_content": "# The axis this figure groups on: the dashboard's analysis groups when the\n# viewer has made some, else the pipeline's own Habitat. One\n# grouping axis, not two stacked on each other.\ngrp_col = depictio_group_by[0] if depictio_group_by else 'habitat'\ndf_grp = df.with_columns(pl.col(grp_col).alias('_grp')) if grp_col in df.columns else df.with_columns(pl.lit('All samples').alias('_grp'))\ndf_modified = df_grp.unpivot(\n    on=['shannon', 'observed_features', 'faith_pd', 'evenness'],\n    index=['sample_id', '_grp'],\n    variable_name='metric',\n    value_name='value',\n).filter(pl.col('value').is_not_null())\nfig = px.box(\n    df_modified.to_pandas(),\n    x='_grp', y='value', color='_grp',\n    facet_col='metric', facet_col_wrap=2,\n    points='all',\n    labels={'_grp': 'Habitat', 'value': ''},\n    color_discrete_map=depictio_group_kwargs.get('color_discrete_map', {}),\n)\nfig.update_yaxes(matches=None, showticklabels=True)\nfig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1], font={'size': 15, 'weight': 'bold'}))\nfig.update_layout(showlegend=False, title=None, margin={'t': 32, 'l': 56, 'r': 16, 'b': 40})",
+      "code_content": "# Shannon per sample, one box per group: Analysis mode's groups when it has\n# some, else the pipeline's group column, in that column's colours.\ngrp = depictio_group_by[0] if depictio_group_by else 'habitat'\ncolors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get('habitat') or {}\nd = df if grp in df.columns else df.with_columns(pl.lit('All samples').alias(grp))\nd = d.filter(pl.col('shannon').is_not_null() & pl.col(grp).is_not_null()).sort(grp)\nfig = px.box(d.to_pandas(), x=grp, y='shannon', color=grp, color_discrete_map=colors, category_orders=depictio_group_kwargs.get('category_orders') or {}, points='all', hover_data=['sample_id'], labels={grp: '', 'shannon': 'Shannon'})\nfig.update_layout(showlegend=False)",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
@@ -469,32 +428,9 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "alpha-table-header",
-      "component_type": "text",
-      "title": "Per-sample values",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": null,
-      "dc_config": {},
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Per-sample table",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "One row per sample with all four indices. Sorting a column finds the outlier a box plot only hints at.",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
       "index": "alpha-table-summary",
       "component_type": "table",
-      "title": "Per-sample alpha diversity (one row per sample)",
+      "title": "Alpha diversity per sample",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "alpha_diversity_multi_canonical",
       "wf_id": {
@@ -550,7 +486,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-alpha-section-header",
+      "i": "box-alpha-intro",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -565,86 +501,41 @@
       ]
     },
     {
-      "i": "box-alpha-card-observed-features",
+      "i": "box-alpha-card-shannon",
       "x": 0,
-      "y": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-alpha-card-observed-features",
+      "x": 2,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
     },
     {
       "i": "box-alpha-card-faith-pd",
-      "x": 2,
-      "y": 2,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-alpha-card-observed",
       "x": 4,
-      "y": 2,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-alpha-card-rarefaction-depth",
-      "x": 6,
-      "y": 2,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-alpha-rarefaction-header",
-      "x": 0,
       "y": 0,
-      "w": 8,
-      "h": 1,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-alpha-card-evenness",
+      "x": 6,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
     },
     {
       "i": "box-alpha-rarefaction-multi",
       "x": 0,
-      "y": 1,
-      "w": 8,
-      "h": 8,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-alpha-section-boxplot",
-      "x": 0,
       "y": 0,
-      "w": 8,
-      "h": 1,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-alpha-boxplot-by-habitat",
-      "x": 0,
-      "y": 1,
       "w": 8,
       "h": 6,
       "static": false,
@@ -657,11 +548,11 @@
       ]
     },
     {
-      "i": "box-alpha-table-header",
+      "i": "box-alpha-boxplot-by-group",
       "x": 0,
-      "y": 20,
+      "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 4,
       "static": false,
       "resizeHandles": [
         "se",
@@ -674,7 +565,7 @@
     {
       "i": "box-alpha-table-summary",
       "x": 0,
-      "y": 21,
+      "y": 0,
       "w": 8,
       "h": 6,
       "static": false,
@@ -691,53 +582,94 @@
     {
       "name": "Alpha filters",
       "icon": "mdi:filter-variant",
-      "color": "orange",
-      "description": "Narrows the diversity tiles and the rarefaction curves by index value",
+      "color": "grape",
+      "description": "Narrows the samples by their diversity, curves included",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     }
   ],
   "grid_sections": [
     {
       "name": "Diversity at a glance",
       "icon": "mdi:counter",
-      "color": "orange",
-      "description": "Four per-sample indices, each summarised the way its shape asks for",
+      "color": "grape",
+      "description": "The median of each index over the samples in view",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     },
     {
       "name": "Rarefaction",
       "icon": "mdi:chart-line",
       "color": "grape",
-      "description": "Whether sequencing depth reached saturation",
+      "description": "Whether each index levels off as sequencing depth grows",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     },
     {
-      "name": "Per-Habitat comparison",
+      "name": "Group comparison",
       "icon": "mdi:scale-balance",
-      "color": "teal",
-      "description": "The same indices, contrasted between groups",
+      "color": "grape",
+      "description": "Shannon diversity per sample, one box per group",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     },
     {
       "name": "Per-sample table",
       "icon": "mdi:table",
       "color": "gray",
-      "description": "The numbers behind the cards, one row per sample",
+      "description": "Every index for every sample",
       "collapsed": true,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     }
   ],
+  "category_colors": null,
   "funnel_filtering": true,
-  "advanced_viz_controls": "header",
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
   "autofit": true,
   "brand_theme": null,
   "buttons_data": {
@@ -750,7 +682,7 @@
     "count": 0
   },
   "title": "Alpha Diversity",
-  "subtitle": "Within-sample richness, evenness and phylogenetic spread: rarefaction and per-group box plots",
+  "subtitle": "How diverse is each sample, and was it sequenced deeply enough?",
   "icon": "/assets/images/workflows/nf-core.png",
   "icon_color": "green",
   "icon_variant": "filled",
@@ -766,7 +698,7 @@
         "flexible_metadata": null,
         "hash": null,
         "email": "admin@example.com",
-        "is_admin": true,
+        "is_admin": false,
         "is_anonymous": false,
         "is_temporary": false,
         "expiration_time": null
@@ -777,7 +709,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2023-05-22 06:44:12",
+  "creation_time": "2026-10-08 12:18:23",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
@@ -786,10 +718,14 @@
   "parent_dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
   },
-  "tab_order": 1,
+  "tab_order": 2,
   "main_tab_name": null,
   "tab_icon": "mdi:chart-bell-curve",
-  "tab_icon_color": "orange",
+  "tab_icon_color": "grape",
+  "tab_group": "Diversity",
   "parent_dashboard_title": null,
-  "project_realtime": null
+  "project_realtime": null,
+  "inherited_brand_theme": null,
+  "inherited_category_colors": null,
+  "source_key": "nf-core/ampliseq:dashboards/base.yaml#Alpha Diversity"
 }

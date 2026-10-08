@@ -90,6 +90,7 @@ def test_optional_datasets_are_not_in_the_default_set():
         ("iris_petal", "iris"),
         ("penguins", "penguins"),
         ("penguins_island_season", "penguins"),
+        ("ampliseq_overview", "ampliseq"),
         ("ampliseq_multiqc", "ampliseq"),
         ("ampliseq_phylogeny", "ampliseq"),
         ("advanced_viz_volcano", "advanced_viz_showcase"),

@@ -1,0 +1,1735 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "version": 1,
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_metadata": [
+    {
+      "index": "ov-kf-group",
+      "component_type": "interactive",
+      "title": "Habitat",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Key figures",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "habitat",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "violet",
+      "icon_name": "mdi:shape-outline",
+      "strip_label": "Habitat",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ov-kf-sample",
+      "component_type": "interactive",
+      "title": "Sample ID",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Key figures",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "teal",
+      "icon_name": "mdi:flask-outline",
+      "strip_label": "Sample",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ov-hero",
+      "component_type": "text",
+      "title": "nf-core/ampliseq",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Amplicon reads turned into a census of each sample's community: who is there, how diverse it is and what differs between groups. [Run parameters](params:)\n",
+      "surface": "none",
+      "accent": null,
+      "logo": "/assets/images/workflows/ampliseq.png",
+      "logo_dark": null
+    },
+    {
+      "index": "ov-about",
+      "component_type": "text",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "### About this dashboard\nnf-core/ampliseq turns amplicon reads (16S, 18S or ITS) into amplicon sequence variants (ASVs), names each against a reference taxonomy and compares the communities of the samples. This page sums up one run; each tab behind it answers one question, in the order of the steps below.\n\nThe sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.\n",
+      "surface": "card",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null
+    },
+    {
+      "index": "ov-run",
+      "component_type": "text",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "### The run\n- ![](icon:mdi:flask-outline) **Samples** {{samples}}\n- ![](icon:mdi:dna) **Primers** {{param:FW_primer}} \u00b7 {{param:RV_primer}}\n- ![](icon:mdi:tag-outline) **Taxonomy** {{param:dada_ref_taxonomy}}\n- ![](icon:mdi:filter-remove-outline) **Removed** {{param:exclude_taxa}}\n",
+      "surface": "card",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "values": {
+        "samples": {
+          "dc": "samplesheet",
+          "column": "sampleID",
+          "aggregation": "nunique",
+          "format": "integer",
+          "wf_id": {
+            "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+          },
+          "dc_id": {
+            "$oid": "646b0f3c1e4a2d7f8e5b8cab"
+          }
+        }
+      }
+    },
+    {
+      "index": "ov-steps",
+      "component_type": "text",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "### Six steps from reads to communities\nEach step names its settings and the tab that shows its result.\n\n::: steps\n1. ![](icon:mdi:content-cut) **Trim** Primers cut by Cutadapt \u00b7 [Settings](params:primer) \u00b7 [MultiQC](tab:MultiQC)\n2. ![](icon:mdi:dna) **Denoise** DADA2 infers the ASVs \u00b7 [Settings](params:trunc) \u00b7 [Phylogeny](tab:Phylogeny)\n3. ![](icon:mdi:tag-outline) **Classify** Against {{param:dada_ref_taxonomy}} \u00b7 [Settings](params:taxonomy) \u00b7 [Community](tab:Community & Diversity)\n4. ![](icon:mdi:chart-bell-curve) **Alpha** Diversity within samples \u00b7 [Settings](params:rarefaction) \u00b7 [Alpha](tab:Alpha Diversity)\n5. ![](icon:mdi:chart-scatter-plot) **Beta** Distances between samples \u00b7 [Settings](params:adonis) \u00b7 [Ordination](tab:Ordination & Clustering)\n6. ![](icon:mdi:scale-balance) **Test** ANCOM-BC between groups \u00b7 [Settings](params:ancombc) \u00b7 [Differential](tab:Differential Abundance)\n:::\n",
+      "surface": "card",
+      "accent": "green",
+      "logo": null,
+      "logo_dark": null
+    },
+    {
+      "index": "ov-kf-samples",
+      "component_type": "card",
+      "title": "Samples",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Samples in the sample sheet. The bar splits them by Habitat.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Key figures",
+      "aggregation": "nunique",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "composition",
+      "breakdown_col": "habitat",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:flask-outline",
+      "icon_color": "orange",
+      "caption": "in the sample sheet, by Habitat",
+      "link": "tab:MultiQC",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ov-kf-phyla",
+      "component_type": "card",
+      "title": "Phyla",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "taxonomy_rel_abundance",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxonomic relative abundance at Phylum level (from raw abundance table)",
+        "data_collection_tag": "taxonomy_rel_abundance",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Distinct phyla the classifier assigned. The bar splits them by kingdom.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/rel_abundance",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_rel_abundance",
+        "use": "qiime2/rel_abundance",
+        "description": "Per-sample relative-abundance table with taxonomy ranks."
+      },
+      "section": "Key figures",
+      "aggregation": "nunique",
+      "column_name": "Phylum",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "composition",
+      "breakdown_col": "Kingdom",
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:bacteria-outline",
+      "icon_color": "teal",
+      "caption": "distinct phyla, by kingdom",
+      "link": "tab:Community & Diversity",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ov-kf-shannon",
+      "component_type": "card",
+      "title": "Shannon diversity",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "alpha_diversity_multi_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cda"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample multi-metric alpha-diversity (Shannon/Observed/Faith PD/Evenness)",
+        "data_collection_tag": "alpha_diversity_multi_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cda"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median Shannon diversity of the samples in view. The box shows how it spreads.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "qiime2/alpha_diversity",
+      "catalog_source": {
+        "toolId": "qiime2",
+        "toolName": "QIIME 2",
+        "outputId": "qiime2_alpha_diversity",
+        "use": "qiime2/alpha_diversity",
+        "description": "Multi-metric alpha-diversity per sample (shannon, evenness, faith_pd\u2026)."
+      },
+      "section": "Key figures",
+      "aggregation": "median",
+      "column_name": "shannon",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:chart-bell-curve",
+      "icon_color": "grape",
+      "caption": "median per sample",
+      "link": "tab:Alpha Diversity",
+      "decimals": 2,
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ov-kf-reads-kept",
+      "component_type": "card",
+      "title": "Reads kept (%)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "read_tracking",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cdd"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample read counts through trimming, denoising and filtering, with the share kept",
+        "data_collection_tag": "read_tracking",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cdd"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median share of each sample's reads left after trimming, denoising and filtering.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Key figures",
+      "aggregation": "median",
+      "column_name": "kept_percent",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": "col('input_reads') > 0",
+      "secondary_layout": "coverage",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": 100,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:filter-outline",
+      "icon_color": "orange",
+      "caption": "median share of input reads",
+      "link": "tab:MultiQC",
+      "decimals": 1,
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ov-findings-group",
+      "component_type": "interactive",
+      "title": "Habitat",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Findings",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "habitat",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "violet",
+      "icon_name": "mdi:shape-outline",
+      "strip_label": "Habitat",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ov-findings-kingdom",
+      "component_type": "interactive",
+      "title": "Kingdom",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "taxonomy_rel_abundance",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Taxonomic relative abundance at Phylum level (from raw abundance table)",
+        "data_collection_tag": "taxonomy_rel_abundance",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Findings",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "Kingdom",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": null,
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "grape",
+      "icon_name": "mdi:bacteria",
+      "strip_label": "Kingdom",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ov-findings",
+      "component_type": "text",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Findings",
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "- **{{top_share}}** of the community is {{top}} \u2013 the most abundant phylum [Community](tab:Community & Diversity)\n- **{{shannon}}** median Shannon diversity \u2013 one value per sample [Alpha](tab:Alpha Diversity)\n- **{{r2}}** of the variation is explained by Habitat \u2013 PERMANOVA, all samples [Ordination](tab:Ordination & Clustering)\n- **{{n_sig}}** of {{n_tested}} phyla differ between groups \u2013 ANCOM-BC, 5% FDR [Differential](tab:Differential Abundance)\n",
+      "surface": "card",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null,
+      "values": {
+        "top": {
+          "dc": "taxonomy_rel_abundance",
+          "column": "Phylum",
+          "aggregation": "top",
+          "weight": "rel_abundance",
+          "wf_id": {
+            "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+          },
+          "dc_id": {
+            "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+          }
+        },
+        "top_share": {
+          "dc": "taxonomy_rel_abundance",
+          "column": "Phylum",
+          "aggregation": "top_share",
+          "weight": "rel_abundance",
+          "format": "percent",
+          "wf_id": {
+            "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+          },
+          "dc_id": {
+            "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+          }
+        },
+        "shannon": {
+          "dc": "alpha_diversity_multi_canonical",
+          "column": "shannon",
+          "aggregation": "median",
+          "format": "decimals:2",
+          "wf_id": {
+            "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+          },
+          "dc_id": {
+            "$oid": "646b0f3c1e4a2d7f8e5b8cda"
+          }
+        },
+        "r2": {
+          "dc": "beta_adonis",
+          "column": "r2",
+          "aggregation": "max",
+          "filter_expr": "(col('metric') == 'bray_curtis') & (col('term') == 'habitat')",
+          "format": "percent",
+          "wf_id": {
+            "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+          },
+          "dc_id": {
+            "$oid": "646b0f3c1e4a2d7f8e5b8cde"
+          }
+        },
+        "n_sig": {
+          "dc": "ancombc_results",
+          "column": "id",
+          "aggregation": "nunique",
+          "filter_expr": "col('q_val') < 0.05",
+          "format": "integer",
+          "wf_id": {
+            "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+          },
+          "dc_id": {
+            "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+          }
+        },
+        "n_tested": {
+          "dc": "ancombc_results",
+          "column": "id",
+          "aggregation": "nunique",
+          "format": "integer",
+          "wf_id": {
+            "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+          },
+          "dc_id": {
+            "$oid": "646b0f3c1e4a2d7f8e5b8caa"
+          }
+        }
+      }
+    },
+    {
+      "index": "ov-hl-composition",
+      "component_type": "highlight",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Findings",
+      "source_tab": "Community & Diversity",
+      "source_component": "comm-composition-by-group",
+      "caption": "The eight most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it."
+    },
+    {
+      "index": "ov-tree",
+      "component_type": "advanced_viz",
+      "title": "Tree of life",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "phylogenetic_tree_canonical",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8cdb"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "QIIME2 phylogenetic tree (Newick) \u2014 tips are ASV identifiers",
+        "data_collection_tag": "phylogenetic_tree_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cdb"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Findings",
+      "viz_kind": "phylogenetic",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "phylogenetic",
+        "tree_wf_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+        },
+        "tree_dc_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cdb"
+        },
+        "tree_dc_tag": "phylogenetic_tree_canonical",
+        "metadata_wf_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+        },
+        "metadata_dc_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8cdc"
+        },
+        "metadata_dc_tag": "phylogenetic_tree_metadata_canonical",
+        "taxon_col": "taxon",
+        "color_col": "Kingdom",
+        "label_col": null,
+        "extra_color_cols": [
+          "dominant_habitat"
+        ],
+        "category_palettes": null,
+        "default_layout": "rectangular",
+        "ladderize": true,
+        "show_metadata_strip": true,
+        "show_branch_lengths": true,
+        "show_internal_labels": false,
+        "collapse_rank": "Phylum",
+        "top_n": 8,
+        "size_by": "abundance",
+        "show_shares": null,
+        "abundance_wf_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+        },
+        "abundance_dc_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+        },
+        "abundance_dc_tag": "taxonomy_rel_abundance",
+        "abundance_col": "rel_abundance",
+        "abundance_sample_col": "sample",
+        "abundance_split_col": "habitat",
+        "show_split": true,
+        "split_scale": "shared",
+        "show_tip_dots": true
+      },
+      "link": "tab:Phylogeny",
+      "caption": "The eight largest phyla, one tip each, their share of the reads split by group beside them. Branch lengths are not to scale.",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ov-hl-volcano",
+      "component_type": "highlight",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Findings",
+      "source_tab": "Differential Abundance",
+      "source_component": "adv-volcano",
+      "caption": "One point per phylum and contrast; right of the line, more abundant than in the reference group."
+    },
+    {
+      "index": "ov-hl-ordination",
+      "component_type": "highlight",
+      "title": "Sample ordination (PCoA)",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Findings",
+      "source_tab": "Ordination & Clustering",
+      "source_component": "ord-embedding",
+      "caption": "One point per sample; the closer two points, the more alike their communities (Bray-Curtis, PCoA)."
+    },
+    {
+      "index": "ov-how-to-read",
+      "component_type": "text",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "How to read this dashboard",
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "### Data & QC\n- [MultiQC](tab:MultiQC)\n- [Sampling Campaign](tab:Sampling Campaign)\n- [Environment (CTD)](tab:Environment (CTD))\n\n### Diversity\n- [Alpha Diversity](tab:Alpha Diversity)\n- [Ordination & Clustering](tab:Ordination & Clustering)\n\n### Taxa\n- [Community & Diversity](tab:Community & Diversity)\n- [Differential Abundance](tab:Differential Abundance)\n- [Phylogeny](tab:Phylogeny)\n- [SIDLE](tab:SIDLE)\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null
+    },
+    {
+      "index": "sample-filters-group",
+      "component_type": "interactive",
+      "title": "Habitat",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Sample filters",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "habitat",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sample scope",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "violet",
+      "icon_name": "mdi:shape-outline",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "sample-filters-sample",
+      "component_type": "interactive",
+      "title": "Sample ID",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Sample filters",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "sample",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sample scope",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "teal",
+      "icon_name": "mdi:flask-outline",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "sample-sheet",
+      "component_type": "table",
+      "title": "Sample sheet",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample sheet",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": true,
+      "row_selection_column": "sample",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-sampling-date",
+      "component_type": "interactive",
+      "title": "Sampling date",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Campaign design",
+      "interactive_component_type": "DateRangePicker",
+      "column_name": "sampling_date",
+      "column_type": "datetime",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Where & when",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "indigo",
+      "icon_name": "mdi:calendar-outline",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-city",
+      "component_type": "interactive",
+      "title": "Site",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Campaign design",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "city",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Where & when",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "orange",
+      "icon_name": "mdi:map-marker-outline",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-ctd-temperature",
+      "component_type": "interactive",
+      "title": "Temperature (\u00b0C)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Environment",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "ctd_temperature_c",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sonde readings",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "red",
+      "icon_name": "mdi:thermometer",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-ctd-conductivity",
+      "component_type": "interactive",
+      "title": "Conductivity (\u00b5S/cm)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Environment",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "ctd_conductivity_us_cm",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sonde readings",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "yellow",
+      "icon_name": "mdi:flash",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-ctd-do",
+      "component_type": "interactive",
+      "title": "Dissolved O\u2082 (mg/L)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Environment",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "ctd_do_mg_l",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sonde readings",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "blue",
+      "icon_name": "mdi:water-percent",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-ctd-nitrate",
+      "component_type": "interactive",
+      "title": "Nitrate (mg/L)",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": "Environment",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "ctd_nitrate_mg_l",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Sonde readings",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
+      "custom_color": "green",
+      "icon_name": "mdi:molecule",
+      "wf_tag": "nextflow/ampliseq"
+    },
+    {
+      "index": "ref-sampling-sites",
+      "component_type": "map",
+      "title": "Sampling sites",
+      "workflow_tag": "ampliseq",
+      "data_collection_tag": "metadata",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Sample metadata TSV (optional \u2014 provide via --var METADATA_FILE=...)",
+        "data_collection_tag": "metadata",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca5"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": null,
+      "map_type": "scatter_map",
+      "lat_column": "lat",
+      "lon_column": "lon",
+      "color_column": "habitat",
+      "size_column": null,
+      "hover_columns": [
+        "sample",
+        "city",
+        "sampling_date"
+      ],
+      "text_column": null,
+      "map_style": "carto-positron",
+      "default_zoom": null,
+      "default_center": null,
+      "opacity": 0.9,
+      "size_max": 22,
+      "z_column": null,
+      "radius": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
+      "dict_kwargs": {},
+      "locations_column": null,
+      "featureidkey": "id",
+      "geojson_data": null,
+      "geojson_url": null,
+      "geojson_dc_id": null,
+      "geojson_dc_tag": null,
+      "choropleth_aggregation": null,
+      "color_continuous_scale": null,
+      "range_color": null,
+      "placement": "floating",
+      "floating_initial_state": "docked",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "wf_tag": "nextflow/ampliseq"
+    }
+  ],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-ov-kf-group",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 1,
+      "static": false
+    },
+    {
+      "i": "box-ov-kf-sample",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 1,
+      "static": false
+    },
+    {
+      "i": "box-ov-findings-group",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 1,
+      "static": false
+    },
+    {
+      "i": "box-ov-findings-kingdom",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 1,
+      "static": false
+    },
+    {
+      "i": "box-sample-filters-group",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 2,
+      "static": false
+    },
+    {
+      "i": "box-sample-filters-sample",
+      "x": 0,
+      "y": 2,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ref-sampling-date",
+      "x": 0,
+      "y": 5,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ref-city",
+      "x": 0,
+      "y": 8,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ref-ctd-temperature",
+      "x": 0,
+      "y": 11,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ref-ctd-conductivity",
+      "x": 0,
+      "y": 14,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ref-ctd-do",
+      "x": 0,
+      "y": 17,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-ref-ctd-nitrate",
+      "x": 0,
+      "y": 20,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-ov-hero",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 1,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ov-about",
+      "x": 0,
+      "y": 1,
+      "w": 5,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ov-run",
+      "x": 5,
+      "y": 1,
+      "w": 3,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ov-steps",
+      "x": 0,
+      "y": 4,
+      "w": 8,
+      "h": 3,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ov-kf-samples",
+      "x": 0,
+      "y": 7,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ov-kf-phyla",
+      "x": 2,
+      "y": 7,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ov-kf-shannon",
+      "x": 4,
+      "y": 7,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ov-kf-reads-kept",
+      "x": 6,
+      "y": 7,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-ov-findings",
+      "x": 0,
+      "y": 9,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ov-hl-composition",
+      "x": 0,
+      "y": 11,
+      "w": 5,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ov-hl-volcano",
+      "x": 5,
+      "y": 11,
+      "w": 3,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ov-hl-ordination",
+      "x": 0,
+      "y": 16,
+      "w": 3,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ov-tree",
+      "x": 3,
+      "y": 16,
+      "w": 5,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-ov-how-to-read",
+      "x": 0,
+      "y": 21,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-sample-sheet",
+      "x": 0,
+      "y": 23,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "filter_sections": [
+    {
+      "name": "Sample filters",
+      "icon": "mdi:filter-variant",
+      "color": "teal",
+      "description": "Applies to every tab",
+      "collapsed": false,
+      "persistent": true,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Campaign design",
+      "icon": "mdi:calendar-outline",
+      "color": "indigo",
+      "description": "When and where each sample was taken",
+      "collapsed": false,
+      "persistent": true,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Environment",
+      "icon": "mdi:waves",
+      "color": "cyan",
+      "description": "Sonde readings; synthetic in this reference dataset",
+      "collapsed": true,
+      "persistent": true,
+      "pin": "bottom",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Key figures",
+      "icon": "mdi:counter",
+      "color": "gray",
+      "description": "The run in four numbers. The filters here narrow these four only.",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "plain",
+      "exclude_tabs": null,
+      "card_variant": "headline",
+      "display": null,
+      "filter_bar": true,
+      "visible_filters": 2,
+      "figure_style": null
+    },
+    {
+      "name": "Findings",
+      "icon": "mdi:star-outline",
+      "color": "gray",
+      "description": "What the data says, each with the tab that shows it, then the figures behind it.",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "plain",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": true,
+      "visible_filters": 2,
+      "figure_style": "minimal"
+    },
+    {
+      "name": "How to read this dashboard",
+      "icon": "mdi:information-outline",
+      "color": "gray",
+      "description": "The tabs by group, each with the question it answers.",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "plain",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Sample sheet",
+      "icon": "mdi:table-account",
+      "color": "gray",
+      "description": "The sample sheet behind every tab, narrowed by the sample filters",
+      "collapsed": true,
+      "persistent": true,
+      "pin": "bottom",
+      "appearance": "box",
+      "exclude_tabs": [
+        "Overview"
+      ],
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    }
+  ],
+  "category_colors": {
+    "habitat": {
+      "Riverwater": "#348ABD",
+      "Groundwater": "#45B8AC",
+      "Sediment": "#8B5A2B",
+      "Soil": "#E24A33"
+    },
+    "Kingdom": {
+      "Archaea": "#7048e8",
+      "Bacteria": "#1098ad",
+      "Unclassified": "#adb5bd",
+      "Eukaryota": "#c2255c"
+    },
+    "Phylum": {
+      "Pseudomonadota": "#2a78d6",
+      "Acidobacteriota": "#eb6834",
+      "Unclassified": "#868e96",
+      "Bacteroidota": "#1baf7a",
+      "Desulfobacterota": "#eda100",
+      "Actinomycetota": "#e87ba4",
+      "Verrucomicrobiota": "#008300",
+      "Thermoproteota": "#4a3aa7",
+      "Chloroflexota": "#e34948",
+      "Other": "#adb5bd"
+    }
+  },
+  "funnel_filtering": true,
+  "filter_panel_default": "collapsed",
+  "content_width_default": "compact",
+  "show_tab_header": false,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
+  "autofit": true,
+  "brand_theme": null,
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "nf-core/ampliseq",
+  "subtitle": "Ammer catchment reference dataset: QC, diversity, campaign and environment",
+  "icon": "/assets/images/workflows/nf-core.png",
+  "icon_color": "green",
+  "icon_variant": "filled",
+  "workflow_system": "nf-core",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": false,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-08-29 00:00:00",
+  "creation_time": "2026-10-08 12:18:22",
+  "screenshot_ts": "",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
+  },
+  "is_main_tab": true,
+  "parent_dashboard_id": null,
+  "tab_order": 0,
+  "main_tab_name": "Overview",
+  "tab_icon": "mdi:compass-outline",
+  "tab_icon_color": "brandPrimary",
+  "tab_group": null,
+  "parent_dashboard_title": null,
+  "project_realtime": null,
+  "inherited_brand_theme": null,
+  "inherited_category_colors": null,
+  "source_key": "nf-core/ampliseq:dashboards/base.yaml"
+}

@@ -14,6 +14,29 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
+      "index": "phylo-intro",
+      "component_type": "text",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "The ASV phylogeny built by the pipeline, each tip annotated with its taxonomic assignment. The cards report how many tips there are, how far down the ranks the classifier reached and how confident it was. The tree opens on the largest phyla; its View switch draws every ASV.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null
+    },
+    {
       "index": "phylo-kingdom-filter",
       "component_type": "interactive",
       "title": "Kingdom",
@@ -38,7 +61,6 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "md",
       "title_align": "left",
       "section": "Tree filters",
       "interactive_component_type": "MultiSelect",
@@ -53,7 +75,7 @@
       "show_marks": null,
       "show_histogram": null,
       "slider_mode": null,
-      "custom_color": "#377EB8",
+      "custom_color": "grape",
       "icon_name": "mdi:bacteria",
       "wf_tag": "nextflow/ampliseq"
     },
@@ -82,7 +104,6 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "md",
       "title_align": "left",
       "section": "Tree filters",
       "interactive_component_type": "MultiSelect",
@@ -97,37 +118,14 @@
       "show_marks": null,
       "show_histogram": null,
       "slider_mode": null,
-      "custom_color": "#8BC34A",
+      "custom_color": "grape",
       "icon_name": "mdi:bacteria-outline",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "phylo-section-header",
-      "component_type": "text",
-      "title": "Tree context",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": null,
-      "dc_config": {},
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Tree at a glance",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "The ASV phylogeny built by the pipeline, annotated with the taxonomic assignment of each tip. The cards report how many tips there are, how far down the ranks the classifier reached, and how confident it was getting there.",
       "wf_tag": "nextflow/ampliseq"
     },
     {
       "index": "phylo-card-asvs",
       "component_type": "card",
-      "title": "Total ASVs",
+      "title": "ASVs",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "phylogenetic_tree_metadata_canonical",
       "wf_id": {
@@ -149,6 +147,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Tips of the tree, one per ASV.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/tree_metadata",
@@ -160,14 +159,14 @@
         "description": "Per-ASV classification: the assigned taxon, its rank columns and the classifier confidence. Annotates the phylogenetic tree, and stands on its own as the taxonomy assignment table."
       },
       "section": "Tree at a glance",
-      "aggregation": "nunique",
+      "aggregation": "count",
       "column_name": "taxon",
       "column_type": "object",
       "value": null,
       "aggregations": null,
       "filter_expr": null,
-      "secondary_layout": "top_n",
-      "breakdown_col": "Phylum",
+      "secondary_layout": "donut",
+      "breakdown_col": "Kingdom",
       "top_n_count": 3,
       "coverage_max": null,
       "threshold_value": null,
@@ -177,16 +176,14 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:dna",
-      "icon_color": "#9C27B0",
-      "title_color": "#9C27B0",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
+      "icon_color": "lime",
+      "caption": "one tip each, by kingdom",
       "wf_tag": "nextflow/ampliseq"
     },
     {
       "index": "phylo-card-classified",
       "component_type": "card",
-      "title": "Genus-level classification",
+      "title": "With a genus",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "phylogenetic_tree_metadata_canonical",
       "wf_id": {
@@ -208,6 +205,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "ASVs the classifier assigned down to genus.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/tree_metadata",
@@ -236,16 +234,14 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:check-circle-outline",
-      "icon_color": "#2E7D32",
-      "title_color": "#2E7D32",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
+      "icon_color": "teal",
+      "caption": "ASVs assigned down to a genus",
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "phylo-card-phyla",
+      "index": "phylo-card-confidence",
       "component_type": "card",
-      "title": "Mean classifier confidence",
+      "title": "Confidence",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "phylogenetic_tree_metadata_canonical",
       "wf_id": {
@@ -267,6 +263,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median confidence of the classifier's assignments, from 0 to 1.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/tree_metadata",
@@ -278,35 +275,32 @@
         "description": "Per-ASV classification: the assigned taxon, its rank columns and the classifier confidence. Annotates the phylogenetic tree, and stands on its own as the taxonomy assignment table."
       },
       "section": "Tree at a glance",
-      "aggregation": "average",
+      "aggregation": "median",
       "column_name": "confidence",
       "column_type": "float64",
       "value": null,
-      "aggregations": [
-        "box_plot_stats"
-      ],
+      "aggregations": null,
       "filter_expr": null,
-      "secondary_layout": "box_plot",
+      "secondary_layout": "threshold",
       "breakdown_col": null,
       "top_n_count": 3,
       "coverage_max": null,
-      "threshold_value": null,
+      "threshold_value": 0.7,
       "threshold_direction": "min",
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
       "follow_region_filter": false,
-      "icon_name": "mdi:check-decagram",
-      "icon_color": "#1976D2",
-      "title_color": "#1976D2",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
+      "icon_name": "mdi:target",
+      "icon_color": "orange",
+      "caption": "median; at or above 0.7, the classifier's default",
+      "decimals": 2,
       "wf_tag": "nextflow/ampliseq"
     },
     {
       "index": "phylo-card-genera",
       "component_type": "card",
-      "title": "Unique Genera",
+      "title": "Genera",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "phylogenetic_tree_metadata_canonical",
       "wf_id": {
@@ -328,6 +322,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Distinct genera among the tips.",
       "title_size": "sm",
       "title_align": "left",
       "use": "qiime2/tree_metadata",
@@ -344,9 +339,9 @@
       "column_type": "object",
       "value": null,
       "aggregations": null,
-      "filter_expr": null,
-      "secondary_layout": "concentration",
-      "breakdown_col": "Genus",
+      "filter_expr": "col('Genus').is_not_null()",
+      "secondary_layout": "top_n",
+      "breakdown_col": "Phylum",
       "top_n_count": 3,
       "coverage_max": null,
       "threshold_value": null,
@@ -355,40 +350,15 @@
       "attrition_cols": [],
       "trend_col": null,
       "follow_region_filter": false,
-      "icon_name": "mdi:format-list-group",
-      "icon_color": "#7B1FA2",
-      "title_color": "#7B1FA2",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "phylo-tree-header",
-      "component_type": "text",
-      "title": "Phylogenetic tree",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": null,
-      "dc_config": {},
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Tree",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "Every ASV as a tip, coloured by its assignment. Filtering Kingdom or Phylum on the left prunes the tree to that clade rather than greying it out, which is what keeps a tree of this size readable.",
+      "icon_name": "mdi:tag-multiple-outline",
+      "icon_color": "grape",
+      "caption": "the richest phyla",
       "wf_tag": "nextflow/ampliseq"
     },
     {
       "index": "phylo-tree",
       "component_type": "advanced_viz",
-      "title": "ASV phylogenetic tree",
+      "title": "Phylogenetic tree",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "phylogenetic_tree_canonical",
       "wf_id": {
@@ -449,37 +419,31 @@
         "ladderize": true,
         "show_metadata_strip": false,
         "show_branch_lengths": false,
-        "show_internal_labels": false
+        "show_internal_labels": false,
+        "collapse_rank": "Phylum",
+        "top_n": 8,
+        "size_by": "abundance",
+        "show_shares": null,
+        "abundance_wf_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
+        },
+        "abundance_dc_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8ca9"
+        },
+        "abundance_dc_tag": "taxonomy_rel_abundance",
+        "abundance_col": "rel_abundance",
+        "abundance_sample_col": "sample",
+        "abundance_split_col": "habitat",
+        "show_split": true,
+        "split_scale": "shared",
+        "show_tip_dots": true
       },
-      "wf_tag": "nextflow/ampliseq"
-    },
-    {
-      "index": "phylo-table-header",
-      "component_type": "text",
-      "title": "Tip taxonomy",
-      "workflow_tag": "ampliseq",
-      "data_collection_tag": "",
-      "wf_id": {
-        "$oid": "646b0f3c1e4a2d7f8e5b8ca3"
-      },
-      "dc_id": null,
-      "dc_config": {},
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Tip taxonomy",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "One row per tip with the full lineage and the classifier confidence behind it.",
       "wf_tag": "nextflow/ampliseq"
     },
     {
       "index": "phylo-table-metadata",
       "component_type": "table",
-      "title": "ASV taxonomy table",
+      "title": "ASV taxonomy",
       "workflow_tag": "ampliseq",
       "data_collection_tag": "phylogenetic_tree_metadata_canonical",
       "wf_id": {
@@ -543,7 +507,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-phylo-section-header",
+      "i": "box-phylo-intro",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -560,7 +524,7 @@
     {
       "i": "box-phylo-card-asvs",
       "x": 0,
-      "y": 1,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
@@ -568,15 +532,15 @@
     {
       "i": "box-phylo-card-classified",
       "x": 2,
-      "y": 1,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
     },
     {
-      "i": "box-phylo-card-phyla",
+      "i": "box-phylo-card-confidence",
       "x": 4,
-      "y": 1,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
@@ -584,47 +548,17 @@
     {
       "i": "box-phylo-card-genera",
       "x": 6,
-      "y": 1,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
     },
     {
-      "i": "box-phylo-tree-header",
+      "i": "box-phylo-tree",
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-phylo-tree",
-      "x": 0,
-      "y": 1,
-      "w": 8,
-      "h": 12,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-phylo-table-header",
-      "x": 0,
-      "y": 17,
-      "w": 8,
-      "h": 1,
+      "h": 6,
       "static": false,
       "resizeHandles": [
         "se",
@@ -637,7 +571,7 @@
     {
       "i": "box-phylo-table-metadata",
       "x": 0,
-      "y": 18,
+      "y": 0,
       "w": 8,
       "h": 6,
       "static": false,
@@ -658,7 +592,14 @@
       "description": "Prunes the tree and its tip table to one clade",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     }
   ],
   "grid_sections": [
@@ -669,16 +610,30 @@
       "description": "How many tips, how deeply classified, how confidently",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     },
     {
       "name": "Tree",
       "icon": "mdi:family-tree",
       "color": "lime",
-      "description": "Every ASV as a tip, coloured by assignment",
+      "description": "The largest phyla, one tip each; the View switch draws every ASV",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     },
     {
       "name": "Tip taxonomy",
@@ -687,11 +642,24 @@
       "description": "One row per tip with its full lineage",
       "collapsed": true,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     }
   ],
+  "category_colors": null,
   "funnel_filtering": true,
-  "advanced_viz_controls": "header",
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
   "autofit": true,
   "brand_theme": null,
   "buttons_data": {
@@ -704,12 +672,12 @@
     "count": 0
   },
   "title": "Phylogeny",
-  "subtitle": "QIIME2 phylogenetic tree with ASV taxonomy annotation",
+  "subtitle": "How are the ASVs related, and how deeply are they classified?",
   "icon": "/assets/images/workflows/nf-core.png",
   "icon_color": "green",
   "icon_variant": "filled",
   "workflow_system": "nf-core",
-  "notes_content": "",
+  "notes_content": "<p></p>",
   "permissions": {
     "owners": [
       {
@@ -720,7 +688,7 @@
         "flexible_metadata": null,
         "hash": null,
         "email": "admin@example.com",
-        "is_admin": true,
+        "is_admin": false,
         "is_anonymous": false,
         "is_temporary": false,
         "expiration_time": null
@@ -731,7 +699,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2023-05-22 06:44:12",
+  "creation_time": "2026-10-08 12:18:23",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
@@ -740,10 +708,17 @@
   "parent_dashboard_id": {
     "$oid": "646b0f3c1e4a2d7f8e5b8ca2"
   },
-  "tab_order": 5,
+  "tab_order": 6,
   "main_tab_name": null,
   "tab_icon": "mdi:family-tree",
   "tab_icon_color": "lime",
-  "parent_dashboard_title": null,
-  "project_realtime": null
+  "tab_group": "Taxa",
+  "parent_dashboard_title": "nf-core/ampliseq",
+  "project_realtime": {
+    "enabled": false,
+    "debounce_ms": 1000
+  },
+  "inherited_brand_theme": null,
+  "inherited_category_colors": null,
+  "source_key": "nf-core/ampliseq:dashboards/base.yaml#Phylogeny"
 }
