@@ -471,3 +471,81 @@ def test_a_follower_whose_own_scan_failed_is_failed_with_its_reason(worker_db):
     step = _steps(worker_db)["b"]
     assert step["status"] == "failed"
     assert step["detail"] == "Scan failed: empty (scanned by 'a')"
+
+
+def test_a_soft_time_limit_in_a_followers_scan_stops_the_leader(registry):
+    """The task's time is up: the leader neither goes on to the next scan nor
+    processes, so the task can still close its step before the hard limit."""
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    project = _project()
+    ids = _ids(project)
+    a, b = ids["a"][0], ids["b"][0]
+
+    def _time_up(dc_id):
+        if dc_id == b:
+            raise SoftTimeLimitExceeded()
+
+    with pytest.raises(SoftTimeLimitExceeded):
+        _lead(project, "a", scan_dc_ids=[a, b], scan_side_effect=_time_up)
+
+
+def test_the_task_closes_its_step_when_time_is_up(worker_db):
+    from celery.exceptions import SoftTimeLimitExceeded
+
+    from depictio.api.v1 import celery_tasks
+
+    project = _project()
+    worker_db["projects"].insert_one(project)
+    worker_db["ingestion_runs"].insert_one(_run_doc(project, {"status": "pending"}))
+
+    with patch.object(manifest_ingest, "_run_dc_ingest", side_effect=SoftTimeLimitExceeded()):
+        result = celery_tasks.manifest_refresh_dc_task(_payload(project, "a"))
+
+    assert result["ok"] is False
+    step = _steps(worker_db)["a"]
+    assert step["status"] == "failed"
+    assert "time limit" in step["detail"]
+
+
+def test_a_follower_starts_once_its_own_scan_is_recorded(worker_db):
+    """Not when the leader is done: the leader may still be scanning the others,
+    or processing itself, within its own time."""
+    from depictio.api.v1 import celery_tasks
+
+    project = _project()
+    ids = _ids(project)
+    worker_db["projects"].insert_one(project)
+    leader = {"status": "running", "scans": {ids["b"][0]: None}}
+    worker_db["ingestion_runs"].insert_one(_run_doc(project, leader))
+
+    with patch.object(manifest_ingest, "_run_dc_ingest", return_value=(True, None)) as ingest:
+        result = celery_tasks.manifest_refresh_dc_task(
+            _payload(project, "b", scan_leader="a", depends_on=["a"])
+        )
+
+    assert result["ok"] is True
+    assert ingest.call_args.kwargs["scan"] is False
+
+
+def test_a_follower_still_waits_while_its_scan_is_not_recorded(worker_db):
+    from celery.exceptions import Retry
+
+    from depictio.api.v1 import celery_tasks
+
+    project = _project()
+    ids = _ids(project)
+    worker_db["projects"].insert_one(project)
+    leader = {"status": "running", "scans": {ids["a"][0]: None}}
+    worker_db["ingestion_runs"].insert_one(_run_doc(project, leader))
+
+    with (
+        patch.object(manifest_ingest, "_run_dc_ingest") as ingest,
+        patch.object(celery_tasks.manifest_refresh_dc_task, "retry", side_effect=Retry()),
+        pytest.raises(Retry),
+    ):
+        celery_tasks.manifest_refresh_dc_task(
+            _payload(project, "b", scan_leader="a", depends_on=["a"])
+        )
+    ingest.assert_not_called()
+    assert _steps(worker_db)["b"]["status"] == "pending"
