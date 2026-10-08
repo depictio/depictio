@@ -625,26 +625,54 @@ _REMOTE_SCAN_MODES = frozenset({"manifest", "url", "s3_prefix"})
 def _server_can_reread(workflow: dict, mode: str, scan_params: dict) -> bool:
     """Whether this process may scan the data collection's source again.
 
-    Only a remote source qualifies. A local path stored on a project is its
-    owner's word, and this process can read far more of its own disk than any
-    user may (its keys, its environment), so it never re-reads one on a user's
-    behalf, even when the path exists here. A project ingested from a local
-    folder is refreshed by the CLI that ingested it.
+    A remote source qualifies. A local path stored on a project is its owner's
+    word, and this process can read far more of its own disk than any user may
+    (its keys, its environment), so it never re-reads one on a user's behalf,
+    even when the path exists here: a project ingested from a local folder is
+    refreshed by the CLI that ingested it. The one exception is a server that
+    is the user's own computer (``depictio local``): there a local source
+    qualifies when the active local-data policy lets this server read it and
+    it is still on disk, as at creation.
 
     ``mode == ""`` is a ``source: transformed`` recipe collection: it has no
     scan block of its own, so there is no per-DC location to check. Its
     inputs are read from the *workflow's* data root at process time (see
-    ``_run_dc_ingest``), so it qualifies when that root is an ``s3://``
-    prefix, which the recipe layer reads through the S3 target resolution.
+    ``_run_dc_ingest``), so it qualifies when every location of that root is
+    an ``s3://`` prefix, which the recipe layer reads through the S3 target
+    resolution, or a folder the local-data policy allows.
     """
     if mode in _REMOTE_SCAN_MODES:
         return True
+    locations = [str(loc) for loc in (workflow.get("data_location") or {}).get("locations") or []]
+    if mode == "single":
+        filename = str(scan_params.get("filename") or "")
+        return _policy_reads(filename) and os.path.isfile(filename)
+    if mode == "recursive":
+        return (
+            bool(locations)
+            and all(_policy_reads(location) for location in locations)
+            and any(os.path.isdir(location) for location in locations)
+        )
     if mode == "":
-        locations = (workflow.get("data_location") or {}).get("locations") or []
         return bool(locations) and all(
-            str(location).lower().startswith("s3://") for location in locations
+            location[:5].lower() == "s3://" or _policy_reads(location) for location in locations
         )
     return False
+
+
+def _policy_reads(path: str) -> bool:
+    """Whether ``path`` lies under a root of the active local-data policy.
+
+    The roots only, as at creation (``LocalDataPolicy.confine``): the server's
+    own folders (its temporary directory, the bundled projects) are read for
+    the request that wrote them, never re-read from a path stored on a
+    project. False when local folders are off, which they are everywhere but
+    on a single-user ``depictio local`` server with roots configured.
+    """
+    from depictio.api.v1.configs.settings_models import local_data_policy
+
+    policy = local_data_policy()
+    return policy is not None and bool(path) and policy.allows(path)
 
 
 def _refreshable_dc_index(project_dict: dict) -> dict[str, tuple[int, int, dict, str]]:
