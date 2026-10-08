@@ -48,6 +48,29 @@ CODE_GROUP_BY = "depictio_group_by"
 # Always bound (an empty dict when the dashboard declares none), so code that
 # reads it never fails on a dashboard without colours.
 CODE_CATEGORY_COLORS = "depictio_category_colors"
+
+
+def code_group_globals(
+    group_kwargs: dict | None = None,
+    group_by: list[str] | None = None,
+    category_colors: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """The names every code figure is executed with, grouped or not.
+
+    One place for both execution paths, the dashboard render task and the
+    catalog preview, so a figure that spreads ``depictio_group_kwargs`` or
+    ``depictio_group_by``, or reads ``depictio_category_colors``, runs on
+    either. Called with no arguments it binds the ungrouped values (an empty
+    dict and an empty list) and no category colours, which is what a preview
+    with no saved groups renders.
+    """
+    return {
+        CODE_GROUP_KWARGS: dict(group_kwargs or {}),
+        CODE_GROUP_BY: list(group_by or []),
+        CODE_CATEGORY_COLORS: dict(category_colors or {}),
+    }
+
+
 OTHER_LABEL = "Other"
 # Neutral gray for unassigned rows: context, not a category of its own.
 OTHER_COLOR = "#adb5bd"

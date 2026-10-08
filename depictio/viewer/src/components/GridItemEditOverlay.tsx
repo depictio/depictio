@@ -5,6 +5,7 @@ import {
   EDIT_MENU_STYLE,
   Glyph,
   canDuplicate,
+  effectiveFit,
   SectionIcon,
   TILE_ACTION_STYLE,
   tabDisplayName,
@@ -37,6 +38,17 @@ import { resolveTabColor, resolveTabIcon, tabImageSrc } from '../chrome/Sidebar'
  * Hidden via the `editMode` prop so the same renderer tree can be reused for
  * read-only mode.
  */
+
+/** The types that publish a height of their own, the ones `fitLayoutHeights`
+ *  has a policy for. Mirrors `FIT_POLICIES` in depictio-react-core's autofit. */
+const AUTOFITTABLE_COMPONENT_TYPES = new Set([
+  'text',
+  'card',
+  'table',
+  'figure',
+  'advanced_viz',
+]);
+
 /** Steps for the per-figure font-size multiplier. Wider than the
  *  dashboard-wide preference on purpose: axis labels on a dense figure are
  *  the case that motivates going up to 2×. */
@@ -105,6 +117,12 @@ interface GridItemEditOverlayProps {
   /** Replaces the default "Edit" (a navigation to the builder). The Guide
    *  shows the real menu and says what each item does instead of doing it. */
   onEdit?: (componentId: string) => void;
+  /** The component's `fit` (`stored_metadata.fit`). Undefined means the
+   *  per-type default. */
+  fit?: 'auto' | 'fixed' | null;
+  /** Puts a tile back under autofit after a manual resize (or opts a figure
+   *  in). Omit to hide the item. */
+  onResetFit?: (componentId: string) => void;
 }
 
 const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
@@ -125,6 +143,8 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
   highlightTargets,
   onHighlightOnTab,
   onEdit,
+  fit,
+  onResetFit,
 }) => {
   // The dropdown shows one page at a time: the actions, the section list or
   // the tab list. A dashboard can declare any number of sections and tabs, and
@@ -165,6 +185,15 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
 
   const showCopyToTab = !!onCopyToTab && !!copyTargets?.length;
   const showHighlightOn = !!onHighlightOnTab && !!highlightTargets?.length;
+  // "Size to content" is offered on the types that can answer with a height of
+  // their own, and only when the tile is not already following its content  -
+  // after a manual resize, or on a figure, which holds its authored aspect
+  // ratio until someone asks for this.
+  const showResetFit =
+    !!onResetFit &&
+    !!componentType &&
+    AUTOFITTABLE_COMPONENT_TYPES.has(componentType) &&
+    effectiveFit(componentType, fit) !== 'auto';
 
   // Per-figure font-size multiplier (#854 follow-up). Figures only: their
   // whole Plotly layout font (axis labels, ticks, legend) follows it.
@@ -217,6 +246,15 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
                 onClick={handleDuplicate}
               >
                 {EDIT_MENU_STYLE.duplicate.label}
+              </Menu.Item>
+            )}
+            {showResetFit && (
+              <Menu.Item
+                leftSection={<Icon icon="tabler:arrow-autofit-height" width={14} />}
+                onClick={() => onResetFit!(componentId)}
+                data-testid="reset-auto-height"
+              >
+                Reset to auto height
               </Menu.Item>
             )}
             {showMoveToSection && (

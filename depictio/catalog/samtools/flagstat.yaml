@@ -1,0 +1,14 @@
+id: samtools_flagstat
+name: Alignment flagstat
+description: >-
+  How many reads placed, before and after a run's mapping-quality filter ,
+  samtools flagstat, one row per (sample, stage).
+find:
+  path_glob: "**/*flagstat.stats"
+recipe: samtools/flagstat.py
+fixture: flagstat.tsv
+renders_as:
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: mapped_reads, color: stage, title: Mapped reads before and after the mapping-quality filter} }
+  - { component: card, column: mapped_reads, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: mapped_pct, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

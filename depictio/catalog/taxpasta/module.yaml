@@ -1,5 +1,6 @@
-# taxpasta. Lightweight: identity is derived from the nf-core meta.yml that
-# `nf_core_url` points at (not duplicated). Override a field here only on drift.
 id: taxpasta
 name: taxpasta
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge
+description: TAXonomic Profile Aggregation and STAndardisation.
+homepage: https://taxpasta.readthedocs.io/
+biotools_url: https://bio.tools/taxpasta

@@ -31,6 +31,8 @@ import {
   useResolvedBrandTheme,
   Z_LAYERS,
   type BrandTheme,
+  isControlsPlacement,
+  type ControlsPlacement,
   type DashboardData,
   type LogoMode,
 } from 'depictio-react-core';
@@ -297,6 +299,56 @@ const TabDefaultsBlock: React.FC<{
       onChange={(checked) => onChange({ show_tab_header: checked })}
       testId="tab-default-header-switch"
     />
+  </Stack>
+);
+
+// ---------------------------------------------------------------------------
+// Tiles (editor, saved on the dashboard)
+// ---------------------------------------------------------------------------
+
+/**
+ * Dashboard-wide tile behaviour: whether tiles size themselves to their
+ * content (`autofit`), and where advanced visualisations draw their controls
+ * (`advanced_viz_controls`). Each control renders only when its callback is
+ * given.
+ */
+const TilesBlock: React.FC<{
+  dashboard: DashboardData | null;
+  onToggleAutofit?: (enabled: boolean) => void;
+  onChangeAdvancedVizControls?: (placement: ControlsPlacement) => void;
+}> = ({ dashboard, onToggleAutofit, onChangeAdvancedVizControls }) => (
+  <Stack gap="lg">
+    {onToggleAutofit && (
+      <SwitchField
+        label="Fit tiles to their content"
+        description="Text, cards, tables and advanced visualisations take the height their content needs, levelled row by row. A tile you resize by hand keeps the height you gave it."
+        checked={dashboard?.autofit !== false}
+        onChange={onToggleAutofit}
+        testId="autofit-section"
+      />
+    )}
+    {onChangeAdvancedVizControls && (
+      <Field
+        label="Advanced viz controls"
+        description="Where every advanced visualisation draws its controls. A tile that carries its own placement keeps it."
+        testId="advanced-viz-controls-section"
+      >
+        <SegmentedControl
+          size="xs"
+          data={[
+            { value: 'popover', label: 'Popover' },
+            { value: 'header', label: 'Under title' },
+            { value: 'rail', label: 'Side rail' },
+          ]}
+          value={
+            isControlsPlacement(dashboard?.advanced_viz_controls)
+              ? dashboard.advanced_viz_controls
+              : 'popover'
+          }
+          onChange={(value) => isControlsPlacement(value) && onChangeAdvancedVizControls(value)}
+        />
+      </Field>
+    )}
   </Stack>
 );
 
@@ -627,6 +679,7 @@ type SectionKey =
   | 'about'
   | 'view'
   | 'tab-defaults'
+  | 'tiles'
   | 'filtering'
   | 'guide'
   | 'branding'
@@ -925,6 +978,12 @@ interface SettingsDrawerProps {
   /** Editor only: persists the dashboard's `funnel_filtering` field (issue
    *  #939) and shows the Filtering section. */
   onToggleFunnelFiltering?: (enabled: boolean) => void;
+  /** Editor-only: persists the dashboard's default placement for advanced-viz
+   *  controls. Omitted in the viewer, where the block is not rendered. */
+  onChangeAdvancedVizControls?: (placement: ControlsPlacement) => void;
+  /** Editor-only: persists the dashboard's `autofit` field. Omitted in the
+   *  viewer, where the block is not rendered. */
+  onToggleAutofit?: (enabled: boolean) => void;
   /** Editor only: uploads a dashboard logo (the server stamps it on the
    *  dashboard's brand theme) — reject to surface an error. */
   onUploadLogo?: (file: File) => Promise<void>;
@@ -952,6 +1011,7 @@ interface SettingsDrawerProps {
  *    this browser.
  * 3. Tab defaults (editor): page width, filter panel and tab name the tab
  *    opens with, for everyone; a reader's own choice still wins.
+ *    Tiles (editor): autofit and the advanced-viz controls placement.
  * 4. Filtering (editor): the funnel-filtering default (#939).
  *    Guide (editor): whether readers are offered the Guide, and its intro.
  * 5. Branding (editor): the dashboard's brand override (#397 — logo, colors,
@@ -974,13 +1034,21 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   layout = DEFAULT_LAYOUT,
   onChangeBrandTheme,
   onToggleFunnelFiltering,
+  onChangeAdvancedVizControls,
+  onToggleAutofit,
   onUploadLogo,
   onChangeTabDefaults,
   guide,
   initialSection,
 }) => {
   const surface: Surface =
-    onChangeBrandTheme || onToggleFunnelFiltering || onChangeTabDefaults ? 'editor' : 'viewer';
+    onChangeBrandTheme ||
+    onToggleFunnelFiltering ||
+    onChangeTabDefaults ||
+    onToggleAutofit ||
+    onChangeAdvancedVizControls
+      ? 'editor'
+      : 'viewer';
   const brandScope = useBrandScopeAttributes();
 
   const feedback = useFeedbackLink({
@@ -1018,6 +1086,21 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       title: 'Tab defaults',
       subtitle: 'What this tab opens with, for everyone',
       body: <TabDefaultsBlock dashboard={dashboard} onChange={onChangeTabDefaults} />,
+    });
+  }
+  if (onToggleAutofit || onChangeAdvancedVizControls) {
+    sections.push({
+      key: 'tiles',
+      icon: 'mdi:view-dashboard-outline',
+      title: 'Tiles',
+      subtitle: 'How tiles size themselves and place their controls, for everyone',
+      body: (
+        <TilesBlock
+          dashboard={dashboard}
+          onToggleAutofit={onToggleAutofit}
+          onChangeAdvancedVizControls={onChangeAdvancedVizControls}
+        />
+      ),
     });
   }
   if (onToggleFunnelFiltering) {

@@ -14,6 +14,15 @@ import './plotlyStrictMode';
 // Grid + top-level renderer
 export { default as DashboardGrid, SectionSummary } from './components/DashboardGrid';
 export type { ComponentSection } from './utils/groupInteractive';
+// Content-aware sizing: the demand channel renderers publish on, and the two
+// predicates a host needs to offer "size this tile to its content" as an action.
+export {
+  publishContentDemand,
+  useContentDemand,
+  effectiveFit,
+  isAutofitted,
+} from './components/autofit';
+export type { ContentDemand, FitMode } from './components/autofit';
 export { default as PersistentSectionsHost } from './components/PersistentSectionsHost';
 export type { PersistentSectionsHostProps } from './components/PersistentSectionsHost';
 // The grid's own geometry + per-type default box, for consumers that render a
@@ -168,7 +177,13 @@ export { default as InteractiveGroupCard } from './components/InteractiveGroupCa
 // One swatch for every place a section is drawn — the two panel headers and the
 // viewer's authoring UI — so a section named "QC" never looks different
 // depending on where you meet it.
-export { default as SectionIcon, sectionColorVar } from './components/SectionIcon';
+export {
+  default as SectionIcon,
+  DEFAULT_SECTION_PALETTE,
+  resolveSectionColor,
+  SectionColorContext,
+  sectionColorVar,
+} from './components/SectionIcon';
 // The section chrome itself, for surfaces that show a section without a grid
 // behind it (the dashboard Guide's demo).
 export {
@@ -299,6 +314,17 @@ export {
 export type { PhyloDcRef, PhyloSource } from './components/advanced_viz/phylo/sources';
 export { orderTaxonomicRanks } from './components/advanced_viz/phylo/view';
 export { rankChoices as phyloRankChoices } from './components/advanced_viz/phylo/view';
+// Dashboard-level default for where advanced-viz controls are drawn. Free of
+// renderer imports, like the two providers above, so the app shell can mount it
+// without pulling the plotly-heavy lazy chunk onto its boot path.
+export {
+  AdvancedVizPlacementDefaultProvider,
+  CONTROLS_PLACEMENTS,
+  isControlsPlacement,
+} from './components/advanced_viz/AdvancedVizInlineControls';
+export type { ControlsPlacement } from './components/advanced_viz/AdvancedVizInlineControls';
+// The controls container, so the inspector lays controls out like the popover.
+export { VizControlsGrid } from './components/advanced_viz/controls/VizControls';
 // The shared show-data grid, so the inspector can dock the same table the
 // renderers' popovers show.
 export { default as DataGridBody } from './components/data/DataGridBody';
@@ -324,6 +350,9 @@ export {
   SelectionHintAction,
   InspectorProvider,
   useInspectorControl,
+  CommentsButton,
+  CommentsControlProvider,
+  useCommentsControl,
   actionsFor,
   canDuplicate,
   wrapWithChrome,
@@ -335,6 +364,7 @@ export {
 export type {
   ComponentChromeProps,
   ChromeAction,
+  CommentsControl,
   EditMenuStyleKey,
   InspectorControl,
   LoadAllState,
@@ -342,6 +372,41 @@ export type {
   TileActionStyleKey,
   WrapWithChromeOpts,
 } from './components/chrome';
+
+// Component comments & annotation threads (/comments API).
+export {
+  TAB_THREAD_KEY,
+  fetchCommentAccess,
+  fetchCommentThreads,
+  fetchCommentCounts,
+  createCommentThread,
+  addThreadComment,
+  editThreadComment,
+  deleteThreadComment,
+  updateCommentThread,
+  reviewCommentThread,
+  deleteCommentThread,
+  fetchPublishedAnnotations,
+} from './api';
+export type {
+  CommentThreadStatus,
+  CommentViewState,
+  CommentSelection,
+  CommentAnchor,
+  CommentAgentInfo,
+  CommentAuthor,
+  CommentEvidence,
+  CommentReview,
+  ThreadComment,
+  ThreadStaleness,
+  CommentThread,
+  ThreadCreatePayload,
+  AnnotationPatch,
+  ThreadUpdatePayload,
+  CommentCounts,
+  PublishedAnnotation,
+  ListThreadsOptions,
+} from './api';
 
 // API surface — fetchers, payload types, filter types
 export {
@@ -523,6 +588,8 @@ export type {
   IngestionSummary,
   RegisteredFile,
   VizKindSuggestion,
+  VizSuggestionContext,
+  VizSuggestionMatch,
   VizSuggestionsResponse,
   CatalogRender,
   CatalogOutputMatch,
@@ -543,7 +610,13 @@ export {
   hasSelectionFilters,
   enrichFilterWithDcId,
   supportsSelectionGrouping,
+  genomeRegionFilters,
+  genomePosFilterIndex,
+  regionFromFilters,
+  isRegionFilter,
+  cardScopedFilters,
 } from './selection';
+export type { GenomeRegionSelection } from './selection';
 
 // Map panel: a map lifted out of the grid, available from every tab as a
 // floating card or as a dock under the filter panel. Mount both shells — each
@@ -619,6 +692,7 @@ export type { GroupStatusEntry, GroupStatusSummary } from './groupStatus';
 export { useSelectionGroups } from './hooks/useSelectionGroups';
 export type { SelectionGroupsApi } from './hooks/useSelectionGroups';
 export { useCategoricalColumns, useColorByColumnRender } from './hooks/useColorByColumns';
+export { defaultFilterValue, withInteractiveDefaults } from './interactiveDefaults';
 export type { ColorByColumn, ColorByColumnRender } from './hooks/useColorByColumns';
 export type { GroupSummaryRow } from './components/interactive/ActiveFilterSummary';
 
@@ -917,3 +991,20 @@ export type {
   GuideTab,
   GuideTabGroup,
 } from './guide/guideModel';
+
+// Datawrapper-style chart annotations: types, Plotly conversion, event capture.
+export * from './annotations';
+export {
+  AnnotateToolbar,
+  AnnotationColorPicker,
+  AnnotationEditor,
+  AnnotationForm,
+  InlineAnnotationEditor,
+} from './components/annotations';
+export type {
+  AnnotateToolbarProps,
+  AnnotationColorPickerProps,
+  AnnotationEditorProps,
+  AnnotationFormProps,
+  InlineAnnotationEditorProps,
+} from './components/annotations';

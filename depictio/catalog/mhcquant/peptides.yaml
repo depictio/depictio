@@ -1,0 +1,36 @@
+id: mhcquant_peptides
+name: Identified peptides
+mode: immunopeptidomics/peptides
+description: >-
+  Every FDR-filtered peptide precursor of every sample, one row per sample,
+  peptidoform and charge: score, PSM count, observed and predicted retention
+  time, m/z, charge, neutral mass, hydropathy, P2 and C-terminal anchors, source
+  proteins, consensus intensity and the number of replicates it was quantified
+  in. Read from the per-sample tables mhcquant writes at the top of its output.
+find: { path_glob: "*.tsv" }
+recipe: mhcquant/peptides.py
+fixture: peptides.tsv
+renders_as:
+  # Observed against DeepLC-predicted retention time: identifications that sit
+  # far off the diagonal are the ones rescoring could not support.
+  - id: rt_observed_predicted
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: predicted_rt_min, y: rt_min, label: peptide, color: sample }
+  # Retention time follows hydrophobicity on reversed-phase chromatography, so
+  # a sample whose cloud tilts differently has a gradient problem.
+  - id: rt_hydropathy
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: gravy, y: rt_min, label: peptide, color: length_class }
+  - id: mz_retention
+    component: advanced_viz
+    kind: scatter_xy
+    roles: { x: rt_min, y: mz, label: peptide, color: charge_state }
+  - { component: figure, visu_type: histogram, dict_kwargs: { x: score, color: sample } }
+  - { component: card, column: psms, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: sequence, aggregation: nunique, secondary_layout: composition, breakdown_col: length_class }
+  - { component: card, column: rt_error_min, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: length_class }
+  - { component: interactive, interactive_type: RangeSlider, column_name: score }
+  - { component: table, row_selection_enabled: true, row_selection_column: sequence }

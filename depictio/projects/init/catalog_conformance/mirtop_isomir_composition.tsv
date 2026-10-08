@@ -1,0 +1,18 @@
+sample	rank	taxon	abundance	percent
+c1	3' addition	No addition	2248324.0	86.95512941993663
+c1	3' addition	+A	136752.0	5.288956510909981
+c1	3' addition	+U	89607.0	3.465598500008122
+c1	3' addition	+2 nt or more	72797.0	2.8154627875622578
+c1	3' addition	+G	24905.0	0.9632141533887115
+c1	3' addition	+C	13229.0	0.5116386281943089
+c1	3' end	Reference 3' end	1217969.0	47.10560044925499
+c1	3' end	3' trimmed	850100.0	32.8780707406442
+c1	3' end	Non-templated 3' addition	337290.0	13.044870580063382
+c1	3' end	3' templated extension	180255.0	6.97145823003743
+c1	5' end	Reference 5' end	2511426.0	97.13073954581
+c1	5' end	5' shift, 1 nt	57666.0	2.2302632952946575
+c1	5' end	5' shift, 2 nt or more	16522.0	0.6389971588953339
+c1	Nucleotide change	No change	2517821.0	97.3780695803782
+c1	Nucleotide change	Central change	27644.0	1.069146438718231
+c1	Nucleotide change	Seed change	22259.0	0.8608786926432175
+c1	Nucleotide change	Other change	17890.0	0.6919052882603514

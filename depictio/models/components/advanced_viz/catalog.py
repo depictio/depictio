@@ -715,6 +715,21 @@ def check_existence(entries: tuple[CatalogEntry, ...] | list[CatalogEntry]) -> l
     return problems
 
 
+def check_identity(entries: tuple[CatalogEntry, ...] | list[CatalogEntry]) -> list[str]:
+    """Flag tools whose catalog card would render without a description or homepage.
+
+    Nothing derives a tool's identity from its nf-core ``meta.yml``: the payload
+    reads ``description`` and ``homepage`` from ``module.yaml`` alone, so a module
+    that leaves them out ships an empty card.
+    """
+    problems: list[str] = []
+    for entry in entries:
+        missing = [field for field in ("description", "homepage") if not getattr(entry, field)]
+        if missing:
+            problems.append(f"{entry.id}: module.yaml declares no {' or '.join(missing)}")
+    return problems
+
+
 # ---------------------------------------------------------------------------
 # Recipe output columns — used by `catalog validate` to ground recipe outputs.
 # Imports a recipe module, so it lives here but is only called from the CLI/CI.

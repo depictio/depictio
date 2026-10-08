@@ -51,6 +51,8 @@
       "group": "Typing calls",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#E74C3C",
       "icon_name": "mdi:virus",
       "wf_tag": "nextflow/viralrecon"
@@ -93,6 +95,8 @@
       "group": "Typing calls",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#9C27B0",
       "icon_name": "mdi:family-tree",
       "wf_tag": "nextflow/viralrecon"
@@ -135,6 +139,8 @@
       "group": "Typing calls",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#E74C3C",
       "icon_name": "mdi:check-decagram",
       "wf_tag": "nextflow/viralrecon"
@@ -177,12 +183,14 @@
       "group": "Typing calls",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#7B1FA2",
       "icon_name": "mdi:shield-check-outline",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "578ccfcb-c1f8-4bac-822c-a5ed6ec1a3f6",
+      "index": "b8d6e44e-9564-4940-9095-dec993ee520b",
       "component_type": "text",
       "title": "Typing at a glance",
       "workflow_tag": "viralrecon",
@@ -202,7 +210,6 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
       "title_align": "left",
       "section": "Typing at a glance",
       "order": 2,
@@ -212,7 +219,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "042203d4-d9fb-46b5-a60c-48e56c1ecc62",
+      "index": "f73adf25-ffe3-42e4-bd93-261fab3a0ecd",
       "component_type": "card",
       "title": "Unique Lineages",
       "workflow_tag": "viralrecon",
@@ -262,6 +269,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:virus",
       "icon_color": "#E74C3C",
       "title_color": "#E74C3C",
@@ -270,7 +278,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "634b76db-ca05-447e-a79a-ad75867fdb3f",
+      "index": "422b1dca-8016-40cf-b3a3-9b1a9b3595c7",
       "component_type": "card",
       "title": "Unique Clades",
       "workflow_tag": "viralrecon",
@@ -320,6 +328,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:family-tree",
       "icon_color": "#9C27B0",
       "title_color": "#9C27B0",
@@ -330,7 +339,7 @@
     {
       "index": "lin-nextclade-coverage",
       "component_type": "card",
-      "title": "Consensus coverage",
+      "title": "Consensus coverage (median)",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "nextclade_results",
       "wf_id": {
@@ -363,7 +372,7 @@
         "description": "Per-sample clade assignment + sequence QC."
       },
       "section": "Typing at a glance",
-      "aggregation": "average",
+      "aggregation": "median",
       "column_name": "coverage",
       "column_type": "float64",
       "value": null,
@@ -380,6 +389,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:chart-areaspline",
       "icon_color": "#1976D2",
       "title_color": "#1976D2",
@@ -438,6 +448,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:check-decagram",
       "icon_color": "#2E7D32",
       "title_color": "#2E7D32",
@@ -465,11 +476,11 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Sample counts per Pangolin lineage and per Nextclade clade. On a run where one lineage dominates, the interesting reading is the tail rather than the mode.",
+      "body": "Sample counts per Pangolin lineage and per Nextclade clade. When one lineage dominates, read the tail rather than the mode.",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "bcdce4e3-047b-43ca-b4f7-e3ef57f3eb9f",
+      "index": "1817ae9e-34c8-4547-a516-ca4aa23d8e4a",
       "component_type": "figure",
       "title": "Pangolin lineage distribution",
       "workflow_tag": "viralrecon",
@@ -493,7 +504,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Number of samples per PANGO lineage, sorted by frequency.",
+      "description": "Number of samples per Pangolin lineage, sorted by frequency.",
       "title_size": "h3",
       "title_align": "left",
       "use": "pangolin/report",
@@ -520,7 +531,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "a0a7cb95-77b0-49ea-9f76-02ce04fa3702",
+      "index": "eb173867-1926-455f-bc7f-ade823f0867d",
       "component_type": "figure",
       "title": "Nextclade clade distribution",
       "workflow_tag": "viralrecon",
@@ -544,7 +555,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "WHO-style clade designations, complementary to Pangolin lineage.",
+      "description": "Number of samples per Nextclade clade, complementary to the Pangolin lineage.",
       "title_size": "h3",
       "title_align": "left",
       "use": "nextclade/report",
@@ -596,7 +607,7 @@
     {
       "index": "adv-lin-sankey",
       "component_type": "advanced_viz",
-      "title": "Classification sankey (QC -> lineage -> clade)",
+      "title": "Classification flow: QC verdict, lineage, clade",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "sankey_canonical",
       "wf_id": {
@@ -618,12 +629,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Ribbon width = samples on that path. Surfaces mismatched calls and dominant lineage->clade pairs.",
+      "description": "Ribbon width is the number of samples on that path, which surfaces mismatched calls and the dominant lineage and clade pairs.",
       "title_size": "h3",
       "title_align": "left",
       "section": "Classification flow",
       "viz_kind": "sankey",
       "config": {
+        "controls_placement": "popover",
         "viz_kind": "sankey",
         "step_cols": [
           "qc_status",
@@ -674,6 +686,7 @@
       "section": "Classification flow",
       "viz_kind": "embedding",
       "config": {
+        "controls_placement": "popover",
         "viz_kind": "embedding",
         "sample_id_col": "sample_id",
         "dim_1_col": "dim_1",
@@ -730,7 +743,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "f3533b46-ac27-44be-b370-56d0acaef41b",
+      "index": "00c585bb-06fa-4cf3-848e-7ab37b784dab",
       "component_type": "table",
       "title": "Pangolin lineage assignments",
       "workflow_tag": "viralrecon",
@@ -754,7 +767,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Per-sample lineage, conflict, scorpio, QC status.",
+      "description": "Per-sample lineage, conflict, scorpio, QC status. Tick a row to read the full Pangolin call beside the table.",
       "title_size": "h3",
       "title_align": "left",
       "use": "pangolin/report",
@@ -776,7 +789,78 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "89506171-f629-4170-ab3a-e9ab5e10aba8",
+      "index": "lin-pangolin-record",
+      "component_type": "advanced_viz",
+      "title": "Lineage record",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "pangolin_lineages",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c14"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Pangolin lineage assignments for each sample",
+        "data_collection_tag": "pangolin_lineages",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c14"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "The ticked sample's Pangolin call, with the scorpio notes a table cell cuts short.",
+      "title_size": "h3",
+      "title_align": "left",
+      "section": "Typing tables",
+      "viz_kind": "record_card",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "record_card",
+        "id_col": "sample",
+        "title_col": "sample",
+        "sections": {
+          "Lineage": [
+            "lineage",
+            "conflict",
+            "ambiguity_score",
+            "qc_status"
+          ],
+          "Scorpio": [
+            "scorpio_call",
+            "scorpio_support",
+            "scorpio_conflict",
+            "scorpio_notes"
+          ],
+          "Run": [
+            "pangolin_version",
+            "note"
+          ]
+        },
+        "labels": {
+          "lineage": "Pangolin lineage",
+          "ambiguity_score": "Ambiguity score",
+          "qc_status": "QC status",
+          "scorpio_call": "Scorpio call",
+          "scorpio_support": "Scorpio support",
+          "scorpio_conflict": "Scorpio conflict",
+          "scorpio_notes": "Scorpio notes",
+          "pangolin_version": "Pangolin version"
+        },
+        "link_templates": null,
+        "selection_source": "table_selection",
+        "linked_component": "00c585bb-06fa-4cf3-848e-7ab37b784dab",
+        "max_fields": 40,
+        "default_record": null
+      },
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "71f09f2f-f624-43bf-9f53-f6d5c2f55fbe",
       "component_type": "table",
       "title": "Nextclade clade assignments",
       "workflow_tag": "viralrecon",
@@ -859,7 +943,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-578ccfcb-c1f8-4bac-822c-a5ed6ec1a3f6",
+      "i": "box-b8d6e44e-9564-4940-9095-dec993ee520b",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -874,7 +958,7 @@
       ]
     },
     {
-      "i": "box-042203d4-d9fb-46b5-a60c-48e56c1ecc62",
+      "i": "box-f73adf25-ffe3-42e4-bd93-261fab3a0ecd",
       "x": 0,
       "y": 1,
       "w": 2,
@@ -882,7 +966,7 @@
       "static": true
     },
     {
-      "i": "box-634b76db-ca05-447e-a79a-ad75867fdb3f",
+      "i": "box-422b1dca-8016-40cf-b3a3-9b1a9b3595c7",
       "x": 2,
       "y": 1,
       "w": 2,
@@ -921,7 +1005,7 @@
       ]
     },
     {
-      "i": "box-bcdce4e3-047b-43ca-b4f7-e3ef57f3eb9f",
+      "i": "box-1817ae9e-34c8-4547-a516-ca4aa23d8e4a",
       "x": 0,
       "y": 1,
       "w": 4,
@@ -936,7 +1020,7 @@
       ]
     },
     {
-      "i": "box-a0a7cb95-77b0-49ea-9f76-02ce04fa3702",
+      "i": "box-eb173867-1926-455f-bc7f-ade823f0867d",
       "x": 4,
       "y": 1,
       "w": 4,
@@ -1011,10 +1095,10 @@
       ]
     },
     {
-      "i": "box-f3533b46-ac27-44be-b370-56d0acaef41b",
+      "i": "box-00c585bb-06fa-4cf3-848e-7ab37b784dab",
       "x": 0,
       "y": 1,
-      "w": 8,
+      "w": 5,
       "h": 5,
       "static": false,
       "resizeHandles": [
@@ -1026,7 +1110,22 @@
       ]
     },
     {
-      "i": "box-89506171-f629-4170-ab3a-e9ab5e10aba8",
+      "i": "box-lin-pangolin-record",
+      "x": 5,
+      "y": 1,
+      "w": 3,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-71f09f2f-f624-43bf-9f53-f6d5c2f55fbe",
       "x": 0,
       "y": 6,
       "w": 8,
@@ -1091,6 +1190,8 @@
     }
   ],
   "funnel_filtering": true,
+  "advanced_viz_controls": "header",
+  "autofit": true,
   "brand_theme": null,
   "buttons_data": {
     "unified_edit_mode": true,
@@ -1129,7 +1230,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-09-05 04:48:08",
+  "creation_time": "2026-09-17 09:20:46",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"

@@ -13,6 +13,7 @@ import ErrorBoundary from '../ErrorBoundary';
 import ComponentSkeleton from '../ComponentSkeleton';
 import { GroupStatusBadgeContext } from '../GroupStatusBadge';
 import { ComponentIndexContext, useReportLoadStatus } from '../DashboardLoadingProvider';
+import { GRID_ROW_GAP_PX, GRID_ROW_PX, publishContentDemand, useAutofitScope } from '../autofit';
 import {
   AdvancedVizExtrasContext,
   type AdvancedVizExtrasPayload,
@@ -24,6 +25,18 @@ import FigureHeader from '../FigureHeader';
 import { ControlsDockContext, ControlsLeadContext, resolveDock } from './controlsDock';
 import DockedControls from './DockedControls';
 import './controlsDock.css';
+import {
+  InlineControlsRail,
+  InlineControlsStrip,
+  RAIL_WIDTH_PX,
+  inlineLayoutFor,
+  selectionEcho,
+  useControlsPlacement,
+  useRegionEcho,
+} from './AdvancedVizInlineControls';
+import { VizControlsGrid } from './controls/VizControls';
+import { frameTiers } from './frameTiers';
+import { usePlotSlotResize } from './plotSlotResize';
 
 /**
  * Server-side downsampling state, mirroring the scatter-figure reduction badge
@@ -53,13 +66,43 @@ interface AdvancedVizFrameProps {
   /** Optional sub-title shown below the title (dim, smaller). */
   subtitle?: string;
   /**
-   * Tier-2 controls (sliders / dropdowns / toggles). Docked beside or above
-   * the plot where the tile allows (see controlsDock.ts), else behind the
-   * Settings ActionIcon in ComponentChrome's hover-revealed action row; both
-   * through the payload published via AdvancedVizExtrasContext, which also
-   * feeds the inspector.
+   * Tier-2 controls (sliders / dropdowns / toggles). Where they are drawn is
+   * the tile's controls placement (`controls_placement` in the config, see
+   * controlsPlacement.ts): in the tile's own strip or rail when pinned there,
+   * otherwise docked beside or above the plot where the tile allows (see
+   * controlsDock.ts), else behind the Settings ActionIcon in ComponentChrome's
+   * hover-revealed action row. Every surface reads the payload published via
+   * AdvancedVizExtrasContext, which also feeds the inspector.
    */
   controls?: React.ReactNode;
+  /**
+   * The encoding tier: the controls that decide *what* is plotted (axes,
+   * colour-by, normalise, rank, view switch, gene picker, run button), as
+   * opposed to the cosmetic tier in `controls` (opacity, point size, labels).
+   *
+   * Pass a fragment of individual compact controls, not a pre-arranged Stack:
+   * the frame lays the same node out as a strip under the title (`header`), as
+   * a column in the rail (`rail`), as the first rows of a docked panel, or
+   * hands it to the settings popover ahead of the cosmetic tier (`popover`,
+   * the default). Sizes are the renderer's to set, `size="xs"` and an explicit
+   * `w`, since Mantine sizes cannot cascade from a wrapper.
+   */
+  primaryControls?: React.ReactNode;
+  /**
+   * How many grid rows this tile's content actually needs, published to the
+   * autofit channel so a viz with three bars stops occupying five rows. The
+   * frame adds the inline controls area's own height when it draws one below
+   * the plot.
+   */
+  contentDemand?: { rows: number };
+  /**
+   * What this tile is currently showing, as one dim line under the title
+   * (`412 / 5,000 rows`, `chr7:55,000,000-56,000,000`, `A (412) vs B (388)`).
+   * Renderers that know better than the frame set it; otherwise the frame
+   * derives it from `reduction` and from any region filter that reached the
+   * tile.
+   */
+  echo?: string;
   /** Loading state for initial fetch. */
   loading?: boolean;
   /** Error to display in place of children. */
@@ -101,6 +144,8 @@ interface AdvancedVizFrameProps {
    * with no Load-All toggle to hang it off.
    */
   estimated?: boolean;
+  /** Extra header badges, e.g. the annotation layer's "N/M points found". */
+  badges?: React.ReactNode[];
 }
 
 /** Subtle Mantine theme colour for each canonical tier name (no hardcoded
@@ -156,6 +201,9 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   title,
   subtitle,
   controls,
+  primaryControls,
+  contentDemand,
+  echo,
   loading,
   error,
   emptyMessage,
@@ -165,23 +213,14 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   counts,
   reduction,
   estimated,
+  badges,
 }) => {
   const publish = useContext(AdvancedVizExtrasContext);
   const dock = useContext(ControlsDockContext);
   // A view switch a router put ahead of this renderer's controls (see
-  // VolcanoViews). Behind the icon it heads the popover's list; docked it sits
-  // above the fold.
+  // VolcanoViews). It decides what is plotted, so it heads the encoding tier
+  // wherever that tier is drawn; docked it sits above the fold.
   const lead = useContext(ControlsLeadContext);
-  const panel = useMemo(
-    () =>
-      lead && controls ? (
-        <Stack gap="xs">
-          {lead}
-          {controls}
-        </Stack>
-      ) : (controls ?? lead ?? null),
-    [lead, controls],
-  );
   // "not grouped", when the dispatch found the analysis groups cannot reach
   // this component. Null otherwise, and with no provider.
   const groupBadge = useContext(GroupStatusBadgeContext);
@@ -212,20 +251,48 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   const redPresent = Boolean(reduction);
   const redFull = reduction?.full ?? false;
   const redLoading = reduction?.loading ?? false;
+  const redDisplayed = reduction?.displayed ?? 0;
+  const redTotal = reduction?.total ?? 0;
   const onToggleRef = useRef(reduction?.onToggle);
   onToggleRef.current = reduction?.onToggle;
   const stableToggle = useCallback(() => onToggleRef.current?.(), []);
 
+  // Where this tile's controls are drawn. Resolved once by the dispatch (which
+  // holds the config and the dashboard default) and read here and there, so
+  // the strip and the popover cannot disagree about which tier lives where.
+  const { placement } = useControlsPlacement();
+  const regionEcho = useRegionEcho();
+
+  const encoding = useMemo(
+    () =>
+      lead && primaryControls ? (
+        <>
+          {lead}
+          {primaryControls}
+        </>
+      ) : (primaryControls ?? lead ?? null),
+    [lead, primaryControls],
+  );
+
+  // A renderer with only a cosmetic tier still gets a strip under `header`:
+  // its controls are promoted, which also leaves the popover empty.
+  const tiers = useMemo(
+    () => frameTiers(placement, encoding, controls),
+    [placement, encoding, controls],
+  );
+  const stripControls = tiers.primary;
+  const cosmeticControls = tiers.cosmetic;
+
   // The tile's share of its grid row, which decides where the controls dock.
   // Measured rather than read from the layout: a responsive grid puts every
   // tile on its own row on a phone, and a fullscreen tile spans the screen.
-  const rootRef = useRef<HTMLDivElement | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
   const [measure, setMeasure] = useState<{ rowShare: number | null; width: number }>({
     rowShare: null,
     width: 0,
   });
   useLayoutEffect(() => {
-    const el = rootRef.current;
+    const el = frameRef.current;
     if (!el) return;
     const tile = el.closest('.react-grid-item') as HTMLElement | null;
     const grid = (tile?.parentElement?.closest('.react-grid-layout') ?? null) as HTMLElement | null;
@@ -243,9 +310,25 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     return () => ro.disconnect();
   }, []);
   const showcase = useAdvancedVizShowcase();
-  const dockSide = panel
-    ? resolveDock(dock?.placement, { ...measure, showcase: Boolean(showcase) })
-    : null;
+
+  // Docking is what `popover` placement does on a tile with room for it: a
+  // tile pinned to its strip or rail already draws its controls in place.
+  // Both tiers dock, the encoding one first; the view switch heads the panel
+  // and is never folded under "More options".
+  const docking = useMemo(
+    () =>
+      primaryControls || controls ? (
+        <VizControlsGrid layout="column">
+          {primaryControls}
+          {controls}
+        </VizControlsGrid>
+      ) : null,
+    [primaryControls, controls],
+  );
+  const dockSide =
+    placement === 'popover' && (docking || lead)
+      ? resolveDock(dock?.placement, { ...measure, showcase: Boolean(showcase) })
+      : null;
   const docked = dockSide != null;
   const dockOpen = docked && !dock?.collapsed;
 
@@ -255,7 +338,8 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   // left the inspector with nothing it could re-present.
   const extras = useMemo<AdvancedVizExtrasPayload | null>(() => {
     const payload: AdvancedVizExtrasPayload = {};
-    if (panel) payload.controls = panel;
+    if (cosmeticControls) payload.controls = cosmeticControls;
+    if (stripControls) payload.primaryControls = stripControls;
     if (docked) payload.docked = true;
     if (dataRows) {
       payload.data = { rows: dataRows, columns: dataColumns, tierAnnotation };
@@ -271,7 +355,9 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     }
     return Object.keys(payload).length ? payload : null;
   }, [
-    panel,
+    cosmeticControls,
+    stripControls,
+    docked,
     dataRows,
     dataColumns,
     tierAnnotation,
@@ -280,7 +366,6 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     redLoading,
     stableToggle,
     showReduction,
-    docked,
   ]);
 
   useEffect(() => {
@@ -288,6 +373,88 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     publish(extras);
     return () => publish(null);
   }, [publish, extras]);
+
+  // The rail moves beside the plot only on a tile wide enough for both. Width
+  // rather than the grid's `w`: the frame never sees the layout item, and a
+  // dashboard renders at several breakpoints anyway.
+  const [frameWidth, setFrameWidth] = useState<number | null>(null);
+  useEffect(() => {
+    const node = frameRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+    const measureWidth = () =>
+      setFrameWidth((prev) => {
+        const next = node.clientWidth;
+        // Sub-pixel churn would re-render the whole subtree on every reflow.
+        return prev !== null && Math.abs(prev - next) < 1 ? prev : next;
+      });
+    measureWidth();
+    const observer = new ResizeObserver(measureWidth);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+
+  const hasInlineControls = Boolean(stripControls || cosmeticControls);
+  const inlineLayout = inlineLayoutFor(placement, frameWidth, hasInlineControls);
+
+  // An inline area under the plot is content the tile has to make room for:
+  // without this, turning the strip on squeezes the figure instead of growing
+  // the tile. A side rail takes width, not height, so it adds nothing.
+  const inlineRef = useRef<HTMLDivElement | null>(null);
+  const [inlineHeight, setInlineHeight] = useState(0);
+  useEffect(() => {
+    const node = inlineRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') {
+      setInlineHeight(0);
+      return;
+    }
+    const measureHeight = () =>
+      setInlineHeight((prev) => {
+        const next = Math.round(node.getBoundingClientRect().height);
+        return Math.abs(prev - next) < 2 ? prev : next;
+      });
+    measureHeight();
+    const observer = new ResizeObserver(measureHeight);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [inlineLayout]);
+
+  // The strip, the rail, the dock and the badge rows all take room from the
+  // plot slot without the window moving, which is the only resize Plotly
+  // listens to.
+  const plotSlotRef = useRef<HTMLDivElement | null>(null);
+  usePlotSlotResize(plotSlotRef);
+
+  // Published under the tile's autofit scope, so a copy drawn in the Guide
+  // never resizes the tile on the canvas.
+  const autofitScope = useAutofitScope();
+  const demandRows = contentDemand?.rows;
+  useEffect(() => {
+    if (!componentIndex || demandRows === undefined) return;
+    const stacked = inlineLayout === 'header' || inlineLayout === 'rail-below';
+    const extraRows =
+      stacked && inlineHeight > 0
+        ? Math.ceil(inlineHeight / (GRID_ROW_PX + GRID_ROW_GAP_PX))
+        : 0;
+    publishContentDemand(autofitScope + String(componentIndex), {
+      rows: demandRows + extraRows,
+    });
+  }, [autofitScope, componentIndex, demandRows, inlineLayout, inlineHeight]);
+
+  // One dim line saying what is on screen. Derived from the reduction the
+  // renderer already publishes unless it passed something better.
+  // The rows the renderer handed the data popover, as the count to echo when
+  // nothing was sampled, which is most tiles, most of the time.
+  const dataRowCount = dataRows ? (Object.values(dataRows)[0]?.length ?? 0) : 0;
+  const echoText = useMemo(
+    () =>
+      selectionEcho({
+        echo,
+        reduction: redPresent ? { displayed: redDisplayed, total: redTotal, full: redFull } : null,
+        rows: dataRowCount,
+        region: regionEcho,
+      }),
+    [echo, redPresent, redDisplayed, redTotal, redFull, dataRowCount, regionEcho],
+  );
 
   // Tier counts (volcano UP/DN/NS, …). When ``tierAnnotation.selectedOrder``
   // is provided, that's the source of truth for which tier is "highlighted" —
@@ -329,22 +496,42 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           : `${reduction.displayed.toLocaleString()} / ${reduction.total.toLocaleString()} pts`}
       </Badge>
     ) : null;
+  const extraBadges = badges && badges.length > 0 ? badges : null;
+  const echoLine = echoText ? (
+    <Text size="xs" c="dimmed" lineClamp={1} data-testid="advanced-viz-echo">
+      {echoText}
+    </Text>
+  ) : null;
+  const strip =
+    inlineLayout === 'header' ? (
+      <div ref={inlineRef} style={{ marginTop: 4 }}>
+        <InlineControlsStrip>{stripControls}</InlineControlsStrip>
+      </div>
+    ) : null;
 
   // `minimal`: the landing-page tile. The header is the figures' own (badge,
   // title, subtitle inline, the tab it summarises), the frame the metric
   // cards'. The status chips sit at the end of the header line, as on a figure;
   // tier counts keep their own line under it.
   const statusBadges =
-    reductionBadge || estimated || groupBadge ? (
+    reductionBadge || estimated || groupBadge || extraBadges ? (
       <>
         {reductionBadge}
         {estimated ? <EstimatedBadge /> : null}
         {groupBadge}
+        {extraBadges}
       </>
     ) : null;
 
   const header = showcase ? (
-    showcase.icon || title || showcase.subtitle || showcase.source || statusBadges || countBadges ? (
+    showcase.icon ||
+    title ||
+    showcase.subtitle ||
+    showcase.source ||
+    statusBadges ||
+    countBadges ||
+    echoLine ||
+    strip ? (
       <>
         <FigureHeader
           title={title}
@@ -354,10 +541,24 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           source={showcase.source}
           badges={statusBadges ?? undefined}
         />
-        {countBadges ? <div style={{ marginBottom: 6 }}>{countBadges}</div> : null}
+        {echoLine || countBadges || strip ? (
+          <Stack gap={2} mb={6}>
+            {echoLine}
+            {countBadges}
+            {strip}
+          </Stack>
+        ) : null}
       </>
     ) : null
-  ) : title || subtitle || countBadges || reductionBadge || estimated || groupBadge ? (
+  ) : title ||
+    subtitle ||
+    echoLine ||
+    strip ||
+    countBadges ||
+    reductionBadge ||
+    estimated ||
+    groupBadge ||
+    extraBadges ? (
     <Stack gap={2} mb="xs">
       {title ? (
         <Text fw={600} size="sm" lineClamp={1}>
@@ -369,6 +570,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           {subtitle}
         </Text>
       ) : null}
+      {echoLine}
       {countBadges}
       {reductionBadge ? (
         <Group gap={4} wrap="nowrap" mt={2}>
@@ -385,13 +587,65 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
           {groupBadge}
         </Group>
       ) : null}
+      {extraBadges ? (
+        <Group gap={4} wrap="nowrap" mt={2}>
+          {extraBadges}
+        </Group>
+      ) : null}
+      {strip}
     </Stack>
   ) : null;
+
+  // Once the plot has drawn, a refetch keeps it mounted under the skeleton
+  // instead of swapping it out. Unmounting purges Plotly, and a purged GL plot
+  // leaves its WebGL contexts alive until GC, so every filter change on a busy
+  // tab used to churn contexts until Chrome evicted a live plot's (a blank
+  // UMAP after creating a group). It also removes the flash between renders.
+  const hasDrawnRef = useRef(false);
+  if (!loading && !error && !emptyMessage) hasDrawnRef.current = true;
+  const skeleton = (
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', zIndex: 1 }}>
+      <ComponentSkeleton variant="block" />
+    </div>
+  );
+  const body = loading ? (
+    hasDrawnRef.current ? (
+      <>
+        {children}
+        {skeleton}
+      </>
+    ) : (
+      skeleton
+    )
+  ) : error ? (
+    <Alert color="red" title="Failed to render" variant="light">
+      <Text size="xs">{error}</Text>
+    </Alert>
+  ) : emptyMessage ? (
+    <div
+      data-testid="advanced-viz-empty"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        color: 'var(--mantine-color-dimmed)',
+        fontSize: '0.85rem',
+      }}
+    >
+      {emptyMessage}
+    </div>
+  ) : (
+    children
+  );
+
+  const rail = inlineLayout === 'rail-side' || inlineLayout === 'rail-below';
+  const sideBySide = inlineLayout === 'rail-side' || dockSide === 'right';
 
   return (
     <ErrorBoundary>
       <Paper
-        ref={rootRef}
+        ref={frameRef}
         p={showcase ? 'md' : 'sm'}
         withBorder={!showcase}
         radius="md"
@@ -410,40 +664,37 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
             flex: '1 1 auto',
             minHeight: 0,
             display: 'flex',
-            flexDirection: dockSide === 'right' ? 'row' : 'column',
-            gap: dockSide === 'right' ? 10 : 0,
+            flexDirection: sideBySide ? 'row' : 'column',
+            gap: dockSide === 'right' ? 10 : rail ? 8 : 0,
           }}
         >
-        {dockOpen && dockSide === 'top' ? <DockedControls controls={controls} lead={lead} side="top" /> : null}
-        <div style={{ flex: '1 1 auto', minHeight: 0, minWidth: 0, position: 'relative' }}>
-          {loading ? (
-            <div style={{ position: 'absolute', inset: 0, display: 'flex' }}>
-              <ComponentSkeleton variant="block" />
-            </div>
-          ) : error ? (
-            <Alert color="red" title="Failed to render" variant="light">
-              <Text size="xs">{error}</Text>
-            </Alert>
-          ) : emptyMessage ? (
+          {dockOpen && dockSide === 'top' ? (
+            <DockedControls controls={docking} lead={lead} side="top" />
+          ) : null}
+          <div
+            ref={plotSlotRef}
+            style={{ flex: '1 1 auto', minHeight: 0, minWidth: 0, position: 'relative' }}
+          >
+            {body}
+          </div>
+          {dockOpen && dockSide === 'right' ? (
+            <DockedControls controls={docking} lead={lead} side="right" />
+          ) : null}
+          {rail ? (
             <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                color: 'var(--mantine-color-dimmed)',
-                fontSize: '0.85rem',
-              }}
+              ref={inlineLayout === 'rail-below' ? inlineRef : undefined}
+              style={
+                inlineLayout === 'rail-side'
+                  ? { flex: `0 0 ${RAIL_WIDTH_PX}px`, minHeight: 0, display: 'flex' }
+                  : { flex: '0 0 auto' }
+              }
             >
-              {emptyMessage}
+              <InlineControlsRail layout={inlineLayout}>
+                {stripControls}
+                {cosmeticControls}
+              </InlineControlsRail>
             </div>
-          ) : (
-            children
-          )}
-        </div>
-        {dockOpen && dockSide === 'right' ? (
-          <DockedControls controls={controls} lead={lead} side="right" />
-        ) : null}
+          ) : null}
         </div>
       </Paper>
     </ErrorBoundary>

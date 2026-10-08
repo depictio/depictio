@@ -231,6 +231,32 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   gene_arrow_track: 'none',
   gsea_running_score: 'none',
   sashimi: 'none',
+  // A binned matrix re-derived per group would rebuild its own bins and axes,
+  // same bucket as complex_heatmap. Neither renderer takes a `groupRender`
+  // prop (no selection/grouping wiring; see the kind's renderer docstring).
+  contact_map: 'none',
+  knee_plot: 'none',
+  damage_profile: 'none',
+  // Same genome-wide axis as the Manhattan, so splitting is out for the same
+  // reason; the genome view colours by chromosome or by its category column
+  // and does not take the dashboard's groups, so it is honest about doing
+  // neither.
+  genome_view: 'none',
+  // Computed on demand between two groups: the groups are the input, not a
+  // split to apply on top.
+  group_compare: 'none',
+  // One gene's lanes, a segment profile and a chord ring each read as one
+  // figure; per-group copies would not share an axis worth comparing.
+  transcript_structure: 'none',
+  cnv_profile: 'none',
+  genome_chord: 'none',
+  // One row read as text: there is no mark for a group to colour and no
+  // distribution for a panel to re-derive.
+  record_card: 'none',
+  // Every polyline already stands for one sample, and the axes are shared, so
+  // splitting would redraw the same axes beside each other; the kind colours by
+  // its own `group_col` rather than taking the dashboard's groups.
+  parallel_coordinates: 'none',
 };
 
 /** The policy for `vizKind`.

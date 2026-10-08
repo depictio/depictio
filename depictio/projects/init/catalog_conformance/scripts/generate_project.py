@@ -141,6 +141,26 @@ def pick_group_fixture(outputs: list[CatalogOutput]) -> CatalogOutput:
 # --------------------------------------------------------------------------
 
 
+def _fill_wildcards(name: str) -> str:
+    """Fill each `*` of a file-name glob with a sample name.
+
+    The filler is set off with an underscore from an adjacent letter or digit,
+    so `samplesheet*.csv` stages as `samplesheet_sample_01.csv` and not as a
+    run-together `samplesheetsample_01.csv`; next to a dot, dash or underscore
+    it goes in as is.
+    """
+    filler = "sample_01"
+    out = []
+    for i, char in enumerate(name):
+        if char != "*":
+            out.append(char)
+            continue
+        before = name[i - 1] if i else ""
+        after = name[i + 1] if i + 1 < len(name) else ""
+        out.append(("_" if before.isalnum() else "") + filler + ("_" if after.isalnum() else ""))
+    return "".join(out)
+
+
 def raw_relative_path(entry: CatalogEntry, output: CatalogOutput) -> str:
     """Where to stage a recipe-free output's fixture inside the run directory.
 
@@ -149,15 +169,23 @@ def raw_relative_path(entry: CatalogEntry, output: CatalogOutput) -> str:
     with the leading `**` dropped, a bare `filename` is placed under the tool's
     own folder. Any `*` left over is filled with a sample name, since a glob
     cannot be a path.
+
+    A `**/<name>` glob with no directory of its own is also placed under the
+    tool's folder, not at the run root: `**` means "anywhere", and the run root
+    is claimed by root-anchored globs (mhcquant writes its per-sample reports
+    there as `*.tsv`), so a file staged there would be recognised as those
+    outputs too.
     """
     find = output.find
     if find.path_glob:
         parts = [p for p in find.path_glob.split("/") if p not in ("", "**")]
+        if len(parts) == 1 and find.path_glob.startswith("**/"):
+            parts = [entry.id, *parts]
     elif find.filename:
         parts = [entry.id, find.filename]
     else:  # unreachable: CatalogFind requires at least one clause
         raise SystemExit(f"{output.id}: no find clause to derive a path from")
-    parts[-1] = parts[-1].replace("*", "sample_01")
+    parts[-1] = _fill_wildcards(parts[-1])
     return "/".join(parts)
 
 
@@ -273,7 +301,7 @@ def build_multiqc_report(sections: list[str], destination: Path) -> tuple[list[s
         anchors = sorted(multiqc.list_modules())
         parquet = outputs / "multiqc_data" / "multiqc.parquet"
         if not parquet.exists():
-            raise SystemExit("MultiQC produced no parquet — cannot build the report collection")
+            raise SystemExit("MultiQC produced no parquet, cannot build the report collection")
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(parquet, destination)
         pin_creation_date(destination)
@@ -337,7 +365,7 @@ def recipe_collection(
     return {
         "id": static_id("dc", tag),
         "data_collection_tag": tag,
-        "description": f"{names} — recipe output ({recipe}), seeded from the catalog fixture",
+        "description": f"{names}: recipe output ({recipe}), seeded from the catalog fixture",
         "config": {
             "type": "Table",
             "metatype": "Aggregate",
@@ -352,7 +380,7 @@ def raw_table_collection(entry: CatalogEntry, output: CatalogOutput, relative: s
     return {
         "id": static_id("dc", output.id),
         "data_collection_tag": output.id,
-        "description": f"{output.name or output.id} — raw {entry.name} output, recognised by find",
+        "description": f"{output.name or output.id}: raw {entry.name} output, recognised by find",
         "config": {
             "type": "Table",
             "metatype": "Aggregate",
@@ -390,7 +418,7 @@ def multiqc_collection(relative: str, anchors: list[str], plots: dict[str, list[
 # --------------------------------------------------------------------------
 
 HEADER = """\
-# GENERATED FILE — do not edit by hand.
+# GENERATED FILE: do not edit by hand.
 #
 # Rebuild with:
 #   uv run python -m depictio.projects.init.catalog_conformance.scripts.generate_project

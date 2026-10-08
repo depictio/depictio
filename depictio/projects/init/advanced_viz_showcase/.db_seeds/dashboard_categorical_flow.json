@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "A Sankey over three categorical columns: each band is a set of samples carrying the same combination of calls, and its width is how many. It answers what a set of bar charts cannot, such as whether the samples that fail QC are the ones that end up unassigned.\n",
+      "body": "Each band is a set of SARS-CoV-2 samples sharing the same QC status, Pangolin lineage and Nextclade clade, its width the sample count. It answers what three bar charts cannot, such as whether the samples failing QC are the ones left unassigned. The steps and the sort order are in the tile header. Input: the QC, Pangolin and Nextclade reports of nf-core/viralrecon.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "Sankey flow across qc_status \u2192 lineage \u2192 clade. Server-side aggregation via Celery; sort / colour / opacity / threshold live in the Settings \u2699 popover.",
+      "description": "Sankey across qc_status, lineage and clade, aggregated on the server. Steps and sort order sit in the tile header.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Categorical flow",
       "viz_kind": "sankey",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "sankey",
         "step_cols": [
           "qc_status",
@@ -121,6 +122,7 @@
       "group": "Call filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#2E7D32",
       "icon_name": "mdi:check-circle",
       "wf_tag": "python/advanced_viz_demo"
@@ -163,6 +165,7 @@
       "group": "Call filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#7B1FA2",
       "icon_name": "mdi:virus",
       "wf_tag": "python/advanced_viz_demo"
@@ -205,6 +208,7 @@
       "group": "Call filters",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
       "custom_color": "#3F51B5",
       "icon_name": "mdi:family-tree",
       "wf_tag": "python/advanced_viz_demo"
@@ -246,7 +250,7 @@
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
+      "h": 2,
       "static": false,
       "resizeHandles": [
         "se",
@@ -261,7 +265,7 @@
       "x": 0,
       "y": 2,
       "w": 8,
-      "h": 8,
+      "h": 9,
       "static": false,
       "resizeHandles": [
         "se",
@@ -281,8 +285,8 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Categorical flow (Sankey)",
-  "subtitle": "Per-sample classification flow across QC \u2192 Pangolin lineage \u2192 Nextclade clade. Server-side aggregation via Celery + categorical filtering.",
+  "title": "Lineage assignment flow",
+  "subtitle": "SARS-CoV-2 samples flowing from QC status to Pangolin lineage to Nextclade clade",
   "icon": "mdi:chart-sankey",
   "icon_color": "violet",
   "icon_variant": "filled",
@@ -318,7 +322,7 @@
   },
   "tab_order": 23,
   "main_tab_name": null,
-  "tab_icon": "mdi:chart-sankey",
+  "tab_icon": "mdi:virus",
   "tab_icon_color": "violet",
   "parent_dashboard_title": null,
   "filter_sections": [
@@ -344,5 +348,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

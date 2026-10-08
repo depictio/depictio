@@ -1,0 +1,17 @@
+sample	aligner	rank	umi_count	is_cell
+pbmc8k	simpleaf	1	38191	true
+pbmc8k	simpleaf	2	28895	true
+pbmc8k	simpleaf	3	27793	true
+pbmc8k	simpleaf	4	27780	true
+pbmc8k	simpleaf	5	25207	true
+pbmc8k	simpleaf	6	24671	true
+pbmc8k	simpleaf	7	23951	true
+pbmc8k	simpleaf	8	23926	true
+pbmc8k	simpleaf	9	23730	true
+pbmc8k	simpleaf	10	23599	true
+pbmc8k	simpleaf	11	23514	true
+pbmc8k	simpleaf	12	22844	true
+pbmc8k	simpleaf	13	22747	true
+pbmc8k	simpleaf	14	22598	true
+pbmc8k	simpleaf	15	22485	true
+pbmc8k	simpleaf	16	22434	true

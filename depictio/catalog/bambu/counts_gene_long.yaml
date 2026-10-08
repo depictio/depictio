@@ -1,0 +1,18 @@
+id: bambu_counts_gene_long
+name: Gene counts per sample
+mode: quantification/gene-long
+description: >-
+  Bambu gene counts melted to one row per sample and gene, with CPM and
+  log2(CPM + 1) normalised against the full library. The long shape is what a
+  sample filter can reach: the wide matrix next to it carries no sample column.
+find: { path_glob: "**/bambu/counts_gene.txt" }
+recipe: bambu/counts_gene_long.py
+fixture: counts_gene_long.tsv
+renders_as:
+  - { component: figure, visu_type: box, dict_kwargs: {x: sample, y: log_cpm, color: condition, title: Expression distribution per library} }
+  - { component: card, column: log_cpm, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: gene_biotype, top_n_count: 3 }
+  - { component: card, column: count, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: gene_biotype, aggregation: nunique, secondary_layout: donut, breakdown_col: gene_biotype }
+  - { component: card, column: cpm, aggregation: max, secondary_layout: top_n, breakdown_col: condition, top_n_count: 2 }
+  - { component: table, page_size: 25 }

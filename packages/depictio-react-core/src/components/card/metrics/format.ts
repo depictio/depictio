@@ -4,15 +4,66 @@
  *  which strip happens to draw it.
  */
 
-/** Full-precision-ish rendering for a stat list or an axis anchor. */
+const NUMBER_FORMATS = new Map<number, Intl.NumberFormat>();
+
+function fixed(digits: number): Intl.NumberFormat {
+  let f = NUMBER_FORMATS.get(digits);
+  if (!f) {
+    // en-US, like the builder preview: a card must read the same in both.
+    f = new Intl.NumberFormat('en-US', { maximumFractionDigits: digits });
+    NUMBER_FORMATS.set(digits, f);
+  }
+  return f;
+}
+
+const SMALL = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 3 });
+
+/**
+ * A card number, readable at a glance: thousands separators, and decimals that
+ * shrink as the magnitude grows (879,737,777 / 3,641 / 907.1 / 12.35 / 0.0123).
+ * Integers are never rounded; values too small for three significant digits
+ * switch to scientific notation rather than printing as 0.
+ */
+export function formatCardNumber(v: number): string {
+  if (!Number.isFinite(v)) return '—';
+  if (Number.isInteger(v)) return fixed(0).format(v);
+  const abs = Math.abs(v);
+  if (abs >= 1000) return fixed(0).format(v);
+  if (abs >= 100) return fixed(1).format(v);
+  if (abs >= 1) return fixed(2).format(v);
+  if (abs >= 0.001) return SMALL.format(v);
+  return v.toExponential(2);
+}
+
+const DECIMAL_FORMATS = new Map<number, Intl.NumberFormat>();
+
+/**
+ * A number at an author's `decimals`, kept as written (7.10, not 7.1) so a row
+ * of figures lines up. Integers are left whole; thousands separators as in
+ * `formatCardNumber`.
+ */
+export function formatDecimals(v: number, decimals: number): string {
+  if (!Number.isFinite(v)) return '—';
+  if (Number.isInteger(v)) return fixed(0).format(v);
+  const digits = Math.min(20, Math.max(0, Math.round(decimals)));
+  let f = DECIMAL_FORMATS.get(digits);
+  if (!f) {
+    f = new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+    DECIMAL_FORMATS.set(digits, f);
+  }
+  return f.format(v);
+}
+
+/** Rendering for a stat list or an axis anchor. */
 export function formatSecondary(v: unknown, decimals?: number): string {
   if (v === null || v === undefined) return '—';
   if (typeof v === 'number') {
-    if (!Number.isFinite(v)) return '—';
     // The card's own `decimals`, so the strip agrees with the value above it.
-    if (typeof decimals === 'number' && !Number.isInteger(v)) return v.toFixed(decimals);
-    if (!Number.isInteger(v)) return v.toFixed(4).replace(/\.?0+$/, '');
-    return String(v);
+    if (typeof decimals === 'number') return formatDecimals(v, decimals);
+    return formatCardNumber(v);
   }
   return String(v);
 }

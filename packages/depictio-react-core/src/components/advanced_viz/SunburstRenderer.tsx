@@ -1,13 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import {
@@ -21,6 +13,7 @@ import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { isUnassigned, lineageShade, surfaceColour, unassignedGrey } from './hierarchyColors';
 import { pinnedPalette } from './phylo/palette';
+import { VizControlGroup, VizFullRow, VizNumberInput, VizSelect, VizSwitch } from './controls/VizControls';
 import { applyDataTheme, applyLayoutTheme, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
@@ -330,78 +323,84 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     };
   }, [rows, config, ranks, startRankIdx, maxDepth, colourByIdx, palette, showCounts, minPercent, colorScheme, theme, colourRankUniverse, isDark, pinned]);
 
-  const controls = useMemo(
+  // Encoding tier: which ranks the rings are built from and which one carries
+  // the colour. The palette, the minimum arc and the labels are paint on the
+  // same hierarchy.
+  const primaryControls = useMemo(
     () => {
       const visibleEnd = Math.min(ranks.length, startRankIdx + maxDepth);
       const colourOptions = ranks.filter((_, i) => i >= startRankIdx && i < visibleEnd);
       const maxDepthAllowed = Math.max(1, ranks.length - startRankIdx);
       // Most used first: a docked panel shows the first few (DockedControls).
       return (
-      <Stack gap="xs">
-        <Select
-          size="xs"
+      <VizControlGroup title="Hierarchy">
+        <VizSelect
           label="Start from rank"
-          description="Innermost ring — pick a deeper rank to collapse outer splits"
           value={ranks[startRankIdx] ?? null}
           onChange={(v) => v != null && setStartRank(v)}
           data={ranks}
           allowDeselect={false}
         />
-        <NumberInput
-          size="xs"
+        <VizNumberInput
           label="Max depth"
-          description={`1–${maxDepthAllowed}; 3 keeps rings readable`}
           value={maxDepth}
           onChange={(v) => setMaxDepth(Math.max(1, Math.min(maxDepthAllowed, Number(v) || 1)))}
           min={1}
           max={maxDepthAllowed}
         />
-        <Select
-          size="xs"
+        <VizSelect
           label="Colour by rank"
           value={ranks[colourByIdx] ?? null}
           onChange={(v) => v != null && setColourByRank(v)}
           data={colourOptions}
           allowDeselect={false}
         />
-        <Select
-          size="xs"
-          label="Palette"
-          value={palette}
-          onChange={(v) => v && setPalette(v as 'brand' | 'tab10' | 'tab20')}
-          data={[
-            ...(brandPalette ? [{ value: 'brand', label: 'Brand colours' }] : []),
-            { value: 'tab20', label: 'tab20 (20 colours)' },
-            { value: 'tab10', label: 'tab10 (10 colours)' },
-          ]}
-          allowDeselect={false}
-        />
-        <NumberInput
-          size="xs"
-          label="Min arc (% of root)"
-          description="Fold slices below this share into Other"
-          value={minPercent}
-          onChange={(v) => setMinPercent(Math.max(0, Math.min(50, Number(v) || 0)))}
-          min={0}
-          max={50}
-          step={0.5}
-          decimalScale={1}
-        />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Show
-          </Text>
-          <Switch
-          size="xs"
-          checked={showCounts}
-          onChange={(e) => setShowCounts(e.currentTarget.checked)}
-          label="Show % on arcs"
-        />
-        </Stack>
-      </Stack>
+      </VizControlGroup>
       );
     },
-    [colourByIdx, ranks, startRankIdx, maxDepth, palette, minPercent, showCounts],
+    [colourByIdx, ranks, startRankIdx, maxDepth],
+  );
+
+  const controls = useMemo(
+    () => (
+      <>
+        <VizControlGroup title="Colour">
+          <VizSelect
+            label="Palette"
+            value={palette}
+            onChange={(v) => v && setPalette(v as 'brand' | 'tab10' | 'tab20')}
+            data={[
+              ...(brandPalette ? [{ value: 'brand', label: 'Brand colours' }] : []),
+              { value: 'tab20', label: 'tab20 (20 colours)' },
+              { value: 'tab10', label: 'tab10 (10 colours)' },
+            ]}
+            allowDeselect={false}
+          />
+        </VizControlGroup>
+        <VizControlGroup title="Arcs">
+          <VizNumberInput
+            label="Min arc (% of root)"
+            value={minPercent}
+            onChange={(v) => setMinPercent(Math.max(0, Math.min(50, Number(v) || 0)))}
+            min={0}
+            max={50}
+            step={0.5}
+            decimalScale={1}
+          />
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              Fold slices below this share into Other
+            </Text>
+          </VizFullRow>
+          <VizSwitch
+            checked={showCounts}
+            onChange={(e) => setShowCounts(e.currentTarget.checked)}
+            label="Show % on arcs"
+          />
+        </VizControlGroup>
+      </>
+    ),
+    [palette, minPercent, showCounts, brandPalette],
   );
 
   return (
@@ -409,6 +408,7 @@ const SunburstRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       estimated={estimated}
       title={metadata.title || 'Sunburst'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

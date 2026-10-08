@@ -2,7 +2,7 @@
  * Cross-tab persistent sections & global filters (issue #858).
  *
  * Against the seeded nf-core/ampliseq multi-tab dashboard:
- *   - the "Sample metadata" grid section (owned by the main tab, marked
+ *   - the "Sample sheet" grid section (owned by the main tab, marked
  *     `persistent: true`) is present on a sibling tab via the fan-out host;
  *   - a value picked in the persistent "Sample filters" section survives the
  *     full-page navigation of a tab switch (sessionStorage hydration) and the
@@ -67,7 +67,7 @@ test.describe("Cross-tab persistent sections & filters", () => {
     // The persistent grid section lives on the main tab itself, so here it is
     // rendered by its owner: its accordion header is the landing-slot for the
     // metadata table and the four metadata cards.
-    await expect(page.getByText("Sample metadata", { exact: true })).toBeVisible({
+    await expect(page.getByText("Sample sheet", { exact: true })).toBeVisible({
       timeout: 30_000,
     });
 
@@ -91,7 +91,7 @@ test.describe("Cross-tab persistent sections & filters", () => {
     // Tab switch = full page navigation; the sibling tab must hydrate the
     // value back and render the fanned-out control and metadata section.
     await page.goto(`/dashboard/${family!.sibling.dashboard_id}`);
-    await expect(page.getByText("Sample metadata", { exact: true })).toBeVisible({
+    await expect(page.getByText("Sample sheet", { exact: true })).toBeVisible({
       timeout: 30_000,
     });
     // Mantine MultiSelect renders the selected value as a pill inside the

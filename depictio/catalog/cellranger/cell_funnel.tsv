@@ -1,0 +1,2 @@
+sample	barcodes_observed	cells_called	cellbender_cells	cells_qc_pass	pct_called	pct_qc_pass
+pbmc8k	499387	8767	8743	8645	1.7555523071285395	98.60841793087715

@@ -8,18 +8,28 @@ import MetadataPopover from './MetadataPopover';
 import FullscreenButton from './FullscreenButton';
 import InspectButton from './InspectButton';
 import { useInspectorControl } from './InspectorContext';
+import CommentsButton from './CommentsButton';
+import { useCommentsControl } from './CommentsContext';
+import AnnotateButton from './AnnotateButton';
+import { useAnnotationLayer } from '../../annotations/AnnotationLayerContext';
+import { componentSupportsAnnotation } from '../../annotations/plotDecorate';
 import DownloadButton from './DownloadButton';
 import ResetButton from './ResetButton';
+import ClearSelectionButton from './ClearSelectionButton';
 import SaveGroupAction, { SaveGroupContext, SelectionHintAction } from './SaveGroupAction';
 import { supportsSelectionGrouping } from '../../selection';
 import { useGroupingColorVar } from '../../selectionGroups';
-import { actionsFor, type ChromeAction } from './chromeActions';
+import { actionsFor, type ChromeAction as TypeChromeAction } from './chromeActions';
 import { TILE_ACTION_STYLE } from './actionStyles';
 import { resolveFigureStyle } from '../figureStyle';
 import './chrome.css';
 
 export { actionsFor };
-export type { ChromeAction };
+
+/** Every action the chrome draws: the per-type ones (`actionsFor`, the table
+ *  the Guide also reads), plus those that depend on the viewer rather than on
+ *  the component type. */
+export type ChromeAction = TypeChromeAction | 'comments' | 'annotate';
 
 export interface ComponentChromeProps {
   metadata: StoredMetadata;
@@ -42,13 +52,14 @@ export interface ComponentChromeProps {
    *  wired by react-grid-layout via `draggableHandle=".react-grid-dragHandle"`. */
   showDragHandle?: boolean;
   /** When true, this component is the SOURCE of an active dashboard filter
-   *  (e.g. a scatter selection, a table row selection, a map polygon). The
-   *  reset action icon stays in its original position in the chrome row but
-   *  switches to a filled-orange style; otherwise it renders disabled in the
-   *  light variant. The action-icon order is preserved either way. Whether it
-   *  also stays visible without hover is a further question — see
-   *  `persistentReset` below. */
+   *  (e.g. a scatter selection, a table row selection, a map polygon). A
+   *  selection source then shows its clear action even without hover (see
+   *  `showClear` below); an interactive control's in-row reset switches to a
+   *  filled-orange style instead. */
   sourceFilterActive?: boolean;
+  /** Values the tile's own selection holds, for the clear action's
+   *  "Clear selection (N)" label. Omitted or 0 leaves the count out. */
+  selectionCount?: number;
   /**
    * Render the action row at the density of a filter-panel row rather than of a
    * dashboard tile.
@@ -101,6 +112,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   extraActions,
   showDragHandle = false,
   sourceFilterActive = false,
+  selectionCount,
   compact = false,
 }) => {
   const localFullscreenRef = useRef<HTMLDivElement | null>(null);
@@ -122,6 +134,30 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   const inspector = useInspectorControl();
   const actions: ChromeAction[] = [];
   if (inspector) actions.push('inspect');
+  // Same again for comments: the viewer only provides a control to users who
+  // may comment (editors and owners), on every component type alike.
+  const comments = useCommentsControl();
+  const commentOpenCount = comments?.openCounts[metadata.index] ?? 0;
+  const commentProposedCount = comments?.proposedCounts[metadata.index] ?? 0;
+  const commentStaleCount = comments?.staleCounts[metadata.index] ?? 0;
+  // A component with threads keeps its comments icon on screen without hover:
+  // the count is the point, and a hover-only badge would hide it.
+  const persistentComments =
+    commentOpenCount > 0 || commentProposedCount > 0 || commentStaleCount > 0;
+  if (comments) actions.push('comments');
+  // Annotate mode: cartesian Plotly figures, the advanced_viz kinds whose
+  // renderer wires the annotation layer, and tables with a row-id column; and
+  // only when the app's annotation layer lets this user create annotations
+  // and the mounted renderer reports it can capture in its current view (not
+  // a 3D embedding, a multi-panel barplot tab...).
+  const annotationLayer = useAnnotationLayer();
+  const canAnnotateHere =
+    Boolean(annotationLayer?.canAnnotate) &&
+    componentSupportsAnnotation(componentType, metadata as Record<string, unknown>) &&
+    Boolean(annotationLayer?.isAnnotatable(String(metadata.index)));
+  const annotateActive =
+    canAnnotateHere && annotationLayer?.annotate?.componentIndex === String(metadata.index);
+  if (canAnnotateHere) actions.push('annotate');
   // Same reasoning as `inspect`: whether this action exists is a property of
   // the component's provenance, not of its type.
   if (metadata.catalog_source) actions.push('catalog');
@@ -148,25 +184,25 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   actions.push(...actionsFor(componentType));
 
   /**
-   * Whether the reset icon stays on screen without hover.
+   * Whether the tile draws its clear-selection action.
    *
-   * The action row floats over the component, so a persistent icon costs
-   * whatever is under the top-right corner. A figure, table or map has plot
-   * area to spare there, and it needs the icon: a scatter selection or a
-   * highlighted row is easy to miss, and nothing else on screen says the
-   * component is filtering the dashboard.
+   * A figure, table, map, image or advanced viz selection is easy to miss, and
+   * nothing else on screen says the tile is filtering the dashboard, so the
+   * way out stays visible while the selection lasts. It is a slot of the action
+   * row, but the one slot that escapes the hover-only default: at rest it shows
+   * alone, with no row frame and the other icons hidden, and on hover the whole
+   * row appears around it. It sits in the slot nearest the tile corner (first
+   * in a vertical row, last in a horizontal one), so the lone icon at rest
+   * stays in the corner rather than floating beside empty slots.
    *
-   * An interactive control has neither. Its frame is a title line and the
-   * control itself with nothing in reserve, so the icon lands on the slider
-   * track or the select's chevron — and it is the one component type whose
-   * active filter is already legible, because the value is displayed in the
-   * control. The panel's summary list, the group headers and "Reset all" all
-   * carry a persistent clear for it too. So here the icon reverts to
-   * hover-only, like every other action; it still turns filled-orange when
-   * revealed, so the state it signalled is not lost.
+   * An interactive control is excluded. Its frame is a title line and the
+   * control itself, so a corner icon lands on the slider track or the select's
+   * chevron, and its active filter is already legible in the control. It keeps
+   * the in-row reset, hover-only, which turns filled-orange when revealed.
    */
-  const persistentReset =
+  const showClear =
     sourceFilterActive && Boolean(onResetFilter) && componentType !== 'interactive';
+  const vertical = orientationFor(componentType) === 'vertical';
 
   const renderAction = (action: ChromeAction) => {
     switch (action) {
@@ -178,6 +214,32 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
             componentId={metadata.index}
             active={inspector.selectedId === metadata.index}
             onInspect={inspector.select}
+          />
+        );
+      case 'comments':
+        if (!comments) return null;
+        return (
+          <CommentsButton
+            key="comments"
+            componentId={metadata.index}
+            openCount={commentOpenCount}
+            proposedCount={commentProposedCount}
+            staleCount={commentStaleCount}
+            onOpen={comments.openDrawer}
+          />
+        );
+      case 'annotate':
+        if (!canAnnotateHere || !annotationLayer) return null;
+        return (
+          <AnnotateButton
+            key="annotate"
+            active={annotateActive}
+            onToggle={() =>
+              annotationLayer.setAnnotate(
+                annotateActive ? null : String(metadata.index),
+                annotateActive ? null : 'range',
+              )
+            }
           />
         );
       case 'catalog':
@@ -226,9 +288,11 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           />
         );
       case 'reset':
-        // Skip reset entirely when the host didn't wire one up — keeps the
-        // figure/table/map chrome clean for components without selection.
-        if (!onResetFilter) return null;
+        // Skip reset entirely when the host didn't wire one up, and on every
+        // selection source: their clear action is the standalone one drawn
+        // slot of its own (see `showClear`), only while there is something to
+        // clear.
+        if (!onResetFilter || componentType !== 'interactive') return null;
         return (
           <ResetButton
             key="reset"
@@ -290,8 +354,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
       // The escape from the hover-only default has to live on THIS span, not on
       // the action inside it: the rule that hides the row targets
       // `.depictio-component-actions > *`, and `opacity` applies to the whole
-      // subtree — so a class on the inner button could never win. Same reason
-      // `depictio-active-reset` is set on the wrapper below.
+      // subtree, so a class on the inner button could never win.
       className={'dgl-no-drag' + extraClass}
       style={{ display: 'inline-flex', alignItems: 'center' }}
       onMouseDown={(e) => e.stopPropagation()}
@@ -301,6 +364,18 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
       {child}
     </span>
   );
+  // The clear-selection slot, placed by orientation in the row below: the end
+  // nearest the tile corner, see `showClear`.
+  const clearSlot =
+    showClear && onResetFilter
+      ? wrapAction(
+          <ClearSelectionButton onClear={onResetFilter} count={selectionCount} />,
+          'clear-selection',
+          ' depictio-clear-selection',
+          // The Guide's legend knows it as the tile's reset.
+          'reset',
+        )
+      : null;
 
   return (
     <div
@@ -320,17 +395,19 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
         gap={compact ? 2 : 4}
         className={
           'depictio-component-actions' +
-          (orientationFor(componentType) === 'vertical' ? ' depictio-actions-vertical' : '') +
+          (vertical ? ' depictio-actions-vertical' : '') +
           // Cards only: the top-right corner is where a card draws its value's
           // icon, so the row moves to the quiet bottom edge. Still horizontal.
           (componentType === 'card' ? ' depictio-actions-bottom' : '') +
-          // Any icon that stays on screen without hover needs the backdrop to
-          // stay with it: the active-reset icon, and the analysis marker.
-          (persistentReset || selectionCapable ? ' has-persistent-action' : '') +
+          // No backdrop pinned on without hover: the two slots that stay
+          // visible (the analysis marker, the clear-selection action) carry
+          // their own `light` tint, and a pinned backdrop framed the row's
+          // empty slots around them.
           (compact ? ' is-compact' : '')
         }
         wrap="nowrap"
       >
+        {vertical && clearSlot}
         {/* Grouping action first (after the grip, which stays where authors
          * expect it): the analysis marker / save-as-group action belongs above
          * metadata, not buried at the end of the utility icons. */}
@@ -377,7 +454,8 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           // Load-All toggle) looks detached / misaligned from the rest.
           const node = renderAction(a);
           if (!node) return null;
-          const isActiveReset = a === 'reset' && persistentReset;
+          const isPersistentComments = a === 'comments' && persistentComments;
+          const isActiveAnnotate = a === 'annotate' && annotateActive;
           return (
             <span
               key={a}
@@ -385,7 +463,11 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
               // the row (the Guide's legend rings the icon it describes).
               // The renderers' own actions carry the same attribute.
               data-tile-action={a}
-              className={'dgl-no-drag' + (isActiveReset ? ' depictio-active-reset' : '')}
+              className={
+                'dgl-no-drag' +
+                (isPersistentComments ? ' depictio-comments-persistent' : '') +
+                (isActiveAnnotate ? ' depictio-annotate-active' : '')
+              }
               style={{ display: 'inline-flex', alignItems: 'center' }}
               onMouseDown={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}
@@ -401,6 +483,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
          *  span would force them to share one slot and break the vertical
          *  orientation. */}
         {otherActions.map((child, i) => wrapAction(child, `extra-${i}`))}
+        {!vertical && clearSlot}
       </Group>
       {children}
     </div>

@@ -2,10 +2,174 @@
   "kinds": [
     {
       "category": "plot",
+      "description": "Log2 ratio per bin along the genome with the called segments over it and, when bound, the B-allele frequency underneath.",
+      "heavy": false,
+      "icon": "tabler:chart-dots-3",
+      "label": "Copy-number profile",
+      "legacy": false,
+      "required_roles": [
+        "sample",
+        "chrom",
+        "start",
+        "end",
+        "log2"
+      ],
+      "role_names": {
+        "chrom": [
+          "chr",
+          "chrom",
+          "chromosome",
+          "contig",
+          "seqid"
+        ],
+        "end": [
+          "bin_end",
+          "end",
+          "loc_end",
+          "stop",
+          "to"
+        ],
+        "log2": [
+          "depth_ratio",
+          "log2",
+          "log2_ratio",
+          "log2ratio",
+          "logr",
+          "lrr",
+          "ratio",
+          "seg_mean"
+        ],
+        "sample": [
+          "id",
+          "library",
+          "sample",
+          "sample_id",
+          "tumor",
+          "tumour"
+        ],
+        "start": [
+          "begin",
+          "bin_start",
+          "from",
+          "loc_start",
+          "start"
+        ]
+      },
+      "roles": {
+        "baf": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
+        "chrom": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "copy_number": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "end": {
+          "description": "End coordinate of the interval.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "label": {
+          "description": "Optional text label for points.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "log2": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "segment": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "start": {
+          "description": "Start coordinate of the interval.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "cnv_profile"
+    },
+    {
+      "category": "plot",
       "description": "Clustered heatmap with dendrograms + annotation tracks. Server-side clustering via plotly-complexheatmap, dispatched as a Celery task.",
       "heavy": true,
       "icon": "tabler:grid-pattern",
       "label": "ComplexHeatmap (clustered)",
+      "legacy": false,
       "required_roles": [
         "index"
       ],
@@ -38,6 +202,7 @@
       "heavy": false,
       "icon": "tabler:grid-dots",
       "label": "Confusion matrix",
+      "legacy": false,
       "required_roles": [
         "label",
         "tp",
@@ -145,10 +310,215 @@
     },
     {
       "category": "plot",
+      "description": "Binned Hi-C style contact matrix, symmetric heatmap with log colour scale, chromosome selector and optional row/column balancing.",
+      "heavy": false,
+      "icon": "tabler:layout-grid",
+      "label": "Contact map",
+      "legacy": false,
+      "required_roles": [
+        "chrom1",
+        "start1",
+        "chrom2",
+        "start2",
+        "count"
+      ],
+      "role_names": {
+        "chrom1": [
+          "chr1",
+          "chr_1",
+          "chrom1",
+          "chrom_1",
+          "chrom_a",
+          "chromosome1"
+        ],
+        "chrom2": [
+          "chr2",
+          "chr_2",
+          "chrom2",
+          "chrom_2",
+          "chrom_b",
+          "chromosome2"
+        ],
+        "count": [
+          "balanced",
+          "contacts",
+          "count",
+          "iced",
+          "n",
+          "score",
+          "value"
+        ],
+        "end1": [
+          "bin1_end",
+          "end1",
+          "end_1",
+          "end_a"
+        ],
+        "end2": [
+          "bin2_end",
+          "end2",
+          "end_2",
+          "end_b"
+        ],
+        "resolution": [
+          "bin_size",
+          "binsize",
+          "resolution"
+        ],
+        "sample": [
+          "library",
+          "replicate",
+          "sample",
+          "sample_id"
+        ],
+        "start1": [
+          "bin1",
+          "bin1_start",
+          "pos1",
+          "start1",
+          "start_1",
+          "start_a"
+        ],
+        "start2": [
+          "bin2",
+          "bin2_start",
+          "pos2",
+          "start2",
+          "start_2",
+          "start_b"
+        ]
+      },
+      "roles": {
+        "chrom1": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "chrom2": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "count": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "end1": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "end2": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "resolution": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "start1": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "start2": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "contact_map"
+    },
+    {
+      "category": "plot",
       "description": "Read depth / signal along a coordinate axis. Optional per-sample faceting and categorical annotation lane (gene region, peak class, \u2026).",
       "heavy": false,
       "icon": "tabler:chart-area-line",
       "label": "Coverage track",
+      "legacy": false,
       "required_roles": [
         "chromosome",
         "position",
@@ -251,6 +621,7 @@
       "heavy": false,
       "icon": "tabler:chart-bar-popular",
       "label": "Differential-abundance bars (tool)",
+      "legacy": false,
       "required_roles": [
         "feature_id",
         "contrast",
@@ -321,10 +692,122 @@
     },
     {
       "category": "plot",
+      "description": "Ancient-DNA misincorporation frequency by position from the read end, 5p and 3p panels, C>T / G>A substitutions highlighted.",
+      "heavy": false,
+      "icon": "tabler:dna-2",
+      "label": "Damage profile",
+      "legacy": false,
+      "required_roles": [
+        "sample",
+        "end",
+        "position",
+        "base_change",
+        "frequency"
+      ],
+      "role_names": {
+        "base_change": [
+          "base_change",
+          "change",
+          "mutation",
+          "substitution",
+          "type"
+        ],
+        "end": [
+          "end",
+          "read_end",
+          "side",
+          "strand_end",
+          "terminus"
+        ],
+        "frequency": [
+          "damage",
+          "fraction",
+          "freq",
+          "frequency",
+          "rate",
+          "value"
+        ],
+        "position": [
+          "cycle",
+          "distance",
+          "offset",
+          "pos",
+          "position"
+        ],
+        "sample": [
+          "library",
+          "run",
+          "sample",
+          "sample_id"
+        ]
+      },
+      "roles": {
+        "base_change": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "end": {
+          "description": "End coordinate of the interval.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "frequency": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "position": {
+          "description": "Genomic or sequence position (integer).",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "damage_profile"
+    },
+    {
+      "category": "plot",
       "description": "scanpy / Seurat marker dot plot: cluster \u00d7 gene with size = fraction expressing, colour = mean expression.",
       "heavy": false,
       "icon": "tabler:circle-dot",
       "label": "Dot plot",
+      "legacy": false,
       "required_roles": [
         "cluster",
         "gene",
@@ -397,6 +880,7 @@
       "heavy": true,
       "icon": "tabler:atom",
       "label": "Embedding / clustering",
+      "legacy": false,
       "required_roles": [
         "sample_id",
         "dim_1",
@@ -501,6 +985,7 @@
       "heavy": false,
       "icon": "tabler:chart-dots",
       "label": "GSEA / pathway enrichment (tool)",
+      "legacy": true,
       "required_roles": [
         "term",
         "nes",
@@ -591,6 +1076,7 @@
       "heavy": false,
       "icon": "tabler:arrows-join-2",
       "label": "Fusion structure",
+      "legacy": false,
       "required_roles": [
         "fusion_id",
         "partner",
@@ -741,6 +1227,7 @@
       "heavy": false,
       "icon": "tabler:arrow-big-right-lines",
       "label": "Gene arrow track",
+      "legacy": false,
       "required_roles": [
         "contig",
         "feature_id",
@@ -894,10 +1381,307 @@
     },
     {
       "category": "plot",
+      "description": "Chromosomes on a ring, one chord per link between two loci: gene fusions, translocations, structural variants.",
+      "heavy": false,
+      "icon": "tabler:circle-dotted",
+      "label": "Genome chord",
+      "legacy": false,
+      "required_roles": [
+        "chrom_a",
+        "pos_a",
+        "chrom_b",
+        "pos_b"
+      ],
+      "role_names": {
+        "chrom_a": [
+          "chr1",
+          "chr_a",
+          "chrom1",
+          "chrom_a",
+          "chrom_left",
+          "chromosome_1",
+          "left_chrom"
+        ],
+        "chrom_b": [
+          "chr2",
+          "chr_b",
+          "chrom2",
+          "chrom_b",
+          "chrom_right",
+          "chromosome_2",
+          "right_chrom"
+        ],
+        "pos_a": [
+          "breakpoint1",
+          "left_pos",
+          "pos1",
+          "pos_a",
+          "pos_left",
+          "start1",
+          "start_a"
+        ],
+        "pos_b": [
+          "breakpoint2",
+          "pos2",
+          "pos_b",
+          "pos_right",
+          "right_pos",
+          "start2",
+          "start_b"
+        ]
+      },
+      "roles": {
+        "category": {
+          "description": "Categorical grouping / annotation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "chrom_a": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "chrom_b": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "label": {
+          "description": "Optional text label for points.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "pos_a": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "pos_b": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "weight": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        }
+      },
+      "viz_kind": "genome_chord"
+    },
+    {
+      "category": "tool",
+      "description": "chr / pos / score drawn by GenomeSpy on a chromosome-aware locus axis: native genome zoom, points, intervals or coverage bars, per-sample lanes, a gene annotation lane, and a region brush that filters the dashboard.",
+      "heavy": false,
+      "icon": "tabler:dna-2",
+      "label": "Genome view",
+      "legacy": false,
+      "required_roles": [
+        "chr",
+        "pos",
+        "score"
+      ],
+      "role_names": {
+        "chr": [
+          "#chrom",
+          "chr",
+          "chrom",
+          "chromosome",
+          "contig"
+        ],
+        "pos": [
+          "bp",
+          "chromstart",
+          "pos",
+          "position",
+          "start"
+        ],
+        "score": [
+          "af",
+          "coverage",
+          "depth",
+          "minus_log10_p",
+          "neg_log_p",
+          "p_value",
+          "pvalue",
+          "score",
+          "signal",
+          "value"
+        ]
+      },
+      "roles": {
+        "category": {
+          "description": "Categorical grouping / annotation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "chr": {
+          "description": "Chromosome / contig name.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "end": {
+          "description": "End coordinate of the interval.",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "feature": {
+          "description": "Optional feature annotation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "pos": {
+          "description": "Genomic or sequence position (integer).",
+          "dtypes": [
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "score": {
+          "description": "Value plotted on the y-axis (e.g. -log10 p, signal).",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "genome_view"
+    },
+    {
+      "category": "plot",
+      "description": "Differential test between two saved selection groups, computed on demand: a volcano of the features and the ranked table behind it.",
+      "heavy": false,
+      "icon": "tabler:arrows-diff",
+      "label": "Group comparison",
+      "legacy": false,
+      "required_roles": [
+        "index"
+      ],
+      "role_names": {
+        "index": [
+          "barcode",
+          "cell",
+          "cell_id",
+          "id",
+          "index",
+          "sample",
+          "sample_id"
+        ]
+      },
+      "roles": {
+        "group": {
+          "description": "Grouping column for colouring / faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "index": {
+          "description": "Row identifier used as the heatmap index.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "group_compare"
+    },
+    {
+      "category": "plot",
       "description": "The enrichment-score curve over the ranked list, its hit rug and the ranked metric, with the leading edge shaded.",
       "heavy": false,
       "icon": "tabler:chart-area-line",
       "label": "GSEA running score",
+      "legacy": false,
       "required_roles": [
         "gene_set",
         "rank",
@@ -988,10 +1772,111 @@
     },
     {
       "category": "plot",
+      "description": "Barcode-rank curve, UMI count vs rank on log-log axes, one line per sample, cell-calling cutoff marked.",
+      "heavy": false,
+      "icon": "tabler:trending-down",
+      "label": "Knee plot",
+      "legacy": false,
+      "required_roles": [
+        "sample",
+        "rank",
+        "umi_count"
+      ],
+      "role_names": {
+        "is_cell": [
+          "called",
+          "cell",
+          "filtered",
+          "in_filtered",
+          "is_cell"
+        ],
+        "rank": [
+          "barcode_rank",
+          "index",
+          "order",
+          "rank"
+        ],
+        "sample": [
+          "library",
+          "run",
+          "sample",
+          "sample_id"
+        ],
+        "umi_count": [
+          "counts",
+          "total",
+          "total_umi",
+          "umi",
+          "umi_count",
+          "umis"
+        ]
+      },
+      "roles": {
+        "is_cell": {
+          "description": "",
+          "dtypes": [
+            "Boolean",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "rank": {
+          "description": "Taxonomic rank / level (e.g. Phylum, Genus).",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "umi_count": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "knee_plot"
+    },
+    {
+      "category": "plot",
       "description": "Variant tracks along genes: vertical stems coloured by consequence, marker size = effect.",
       "heavy": false,
       "icon": "tabler:chart-arcs",
       "label": "Lollipop / needle plot",
+      "legacy": false,
       "required_roles": [
         "feature_id",
         "position",
@@ -1079,6 +1964,7 @@
       "heavy": false,
       "icon": "tabler:chart-bubble",
       "label": "MA plot",
+      "legacy": true,
       "required_roles": [
         "feature_id",
         "avg_log_intensity",
@@ -1155,6 +2041,7 @@
       "heavy": false,
       "icon": "tabler:chart-histogram",
       "label": "Manhattan plot",
+      "legacy": false,
       "required_roles": [
         "chr",
         "pos",
@@ -1238,6 +2125,7 @@
       "heavy": false,
       "icon": "tabler:chart-bar",
       "label": "Metric bars with CI",
+      "legacy": false,
       "required_roles": [
         "label",
         "value",
@@ -1313,6 +2201,7 @@
       "heavy": true,
       "icon": "tabler:grid-pattern",
       "label": "Oncoplot",
+      "legacy": false,
       "required_roles": [
         "sample_id",
         "gene",
@@ -1365,10 +2254,60 @@
     },
     {
       "category": "plot",
+      "description": "One polyline per sample across N metric axes, each axis brushable. Reads a many-column QC table as a whole where a scatter would need one panel per pair.",
+      "heavy": false,
+      "icon": "tabler:chart-line",
+      "label": "Parallel coordinates",
+      "legacy": false,
+      "required_roles": [
+        "sample"
+      ],
+      "role_names": {
+        "group": [
+          "batch",
+          "category",
+          "class",
+          "condition",
+          "group",
+          "treatment"
+        ],
+        "sample": [
+          "id",
+          "library",
+          "name",
+          "run",
+          "run_id",
+          "sample",
+          "sample_id"
+        ]
+      },
+      "roles": {
+        "group": {
+          "description": "Optional categorical column driving the line colour.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "sample": {
+          "description": "One polyline per distinct value: the line identity, not a facet.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "parallel_coordinates"
+    },
+    {
+      "category": "plot",
       "description": "Newick tree + tip metadata (Microreact-style): 5 layouts, tip search, subtree highlight.",
       "heavy": false,
       "icon": "tabler:hierarchy-3",
       "label": "Phylogenetic tree",
+      "legacy": false,
       "required_roles": [
         "taxon"
       ],
@@ -1426,6 +2365,7 @@
       "heavy": false,
       "icon": "tabler:target-arrow",
       "label": "Precision-recall benchmark",
+      "legacy": false,
       "required_roles": [
         "label",
         "recall",
@@ -1521,6 +2461,7 @@
       "heavy": false,
       "icon": "tabler:chart-line",
       "label": "Signal profile",
+      "legacy": false,
       "required_roles": [
         "series",
         "x",
@@ -1620,6 +2561,7 @@
       "heavy": false,
       "icon": "tabler:chart-line",
       "label": "QQ plot",
+      "legacy": true,
       "required_roles": [
         "p_value"
       ],
@@ -1666,6 +2608,7 @@
       "heavy": false,
       "icon": "tabler:chart-line",
       "label": "Rarefaction curves",
+      "legacy": false,
       "required_roles": [
         "sample_id",
         "depth",
@@ -1763,10 +2706,59 @@
     },
     {
       "category": "plot",
+      "description": "One row of a collection read as labelled fields and links, filled by the selection another tile emits. The detail half of a master/detail dashboard.",
+      "heavy": false,
+      "icon": "tabler:id",
+      "label": "Record card",
+      "legacy": false,
+      "required_roles": [
+        "id"
+      ],
+      "role_names": {
+        "id": [
+          "feature_id",
+          "id",
+          "library",
+          "name",
+          "run_id",
+          "sample",
+          "sample_id"
+        ],
+        "title": [
+          "description",
+          "label",
+          "name",
+          "sample_name",
+          "title"
+        ]
+      },
+      "roles": {
+        "id": {
+          "description": "Column the incoming selection is matched against: which row the card shows.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "title": {
+          "description": "Optional column shown as the card's heading.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        }
+      },
+      "viz_kind": "record_card"
+    },
+    {
+      "category": "plot",
       "description": "Threshold-sweep precision-recall curve with AUC, one line per tool / caller.",
       "heavy": false,
       "icon": "tabler:chart-line",
       "label": "ROC / PR curve",
+      "legacy": true,
       "required_roles": [
         "recall",
         "precision"
@@ -1832,6 +2824,7 @@
       "heavy": true,
       "icon": "tabler:chart-sankey",
       "label": "Sankey (categorical flow)",
+      "legacy": false,
       "required_roles": [],
       "role_names": {},
       "roles": {},
@@ -1843,6 +2836,7 @@
       "heavy": false,
       "icon": "tabler:chart-arcs",
       "label": "Splice junctions",
+      "legacy": false,
       "required_roles": [
         "chr",
         "start",
@@ -1963,6 +2957,7 @@
       "heavy": false,
       "icon": "tabler:chart-dots",
       "label": "Scatter (X/Y)",
+      "legacy": false,
       "required_roles": [
         "x",
         "y"
@@ -2076,6 +3071,7 @@
       "heavy": false,
       "icon": "tabler:grid-pattern",
       "label": "Signal matrix",
+      "legacy": false,
       "required_roles": [
         "region_id",
         "position",
@@ -2165,6 +3161,7 @@
       "heavy": false,
       "icon": "tabler:chart-pie",
       "label": "Stacked taxonomy",
+      "legacy": false,
       "required_roles": [
         "sample_id",
         "taxon",
@@ -2254,6 +3251,7 @@
       "heavy": false,
       "icon": "tabler:sun",
       "label": "Sunburst",
+      "legacy": false,
       "required_roles": [
         "abundance"
       ],
@@ -2291,10 +3289,192 @@
     },
     {
       "category": "plot",
+      "description": "Isoforms of one gene stacked on a base-pair axis, exons as blocks and introns as lines, novel and known transcripts told apart.",
+      "heavy": false,
+      "icon": "tabler:layout-rows",
+      "label": "Transcript structure",
+      "legacy": false,
+      "required_roles": [
+        "transcript_id",
+        "gene_id",
+        "chrom",
+        "start",
+        "end",
+        "feature",
+        "strand"
+      ],
+      "role_names": {
+        "chrom": [
+          "chr",
+          "chrom",
+          "chromosome",
+          "contig",
+          "seqid",
+          "seqname"
+        ],
+        "end": [
+          "block_end",
+          "end",
+          "exon_end",
+          "stop",
+          "to"
+        ],
+        "feature": [
+          "block",
+          "block_type",
+          "feature",
+          "feature_type",
+          "type"
+        ],
+        "gene_id": [
+          "gene",
+          "gene_id",
+          "gene_name",
+          "symbol"
+        ],
+        "start": [
+          "begin",
+          "block_start",
+          "exon_start",
+          "from",
+          "start"
+        ],
+        "strand": [
+          "orientation",
+          "sense",
+          "strand"
+        ],
+        "transcript_id": [
+          "isoform",
+          "isoform_id",
+          "transcript",
+          "transcript_id",
+          "tx_id"
+        ]
+      },
+      "roles": {
+        "chrom": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "end": {
+          "description": "End coordinate of the interval.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "expression": {
+          "description": "",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": false
+        },
+        "feature": {
+          "description": "Optional feature annotation.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "gene_id": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "gene_name": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "sample": {
+          "description": "Optional sample column for faceting.",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "start": {
+          "description": "Start coordinate of the interval.",
+          "dtypes": [
+            "Float32",
+            "Float64",
+            "Int16",
+            "Int32",
+            "Int64",
+            "Int8",
+            "UInt16",
+            "UInt32",
+            "UInt64",
+            "UInt8"
+          ],
+          "required": true
+        },
+        "strand": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        },
+        "transcript_class": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": false
+        },
+        "transcript_id": {
+          "description": "",
+          "dtypes": [
+            "String",
+            "Utf8"
+          ],
+          "required": true
+        }
+      },
+      "viz_kind": "transcript_structure"
+    },
+    {
+      "category": "plot",
       "description": "Set-intersection visualisation (alternative to Venn diagrams). Server-side compute via plotly-upset, dispatched as a Celery task.",
       "heavy": true,
       "icon": "tabler:chart-bar-popular",
       "label": "UpSet plot",
+      "legacy": false,
       "required_roles": [],
       "role_names": {},
       "roles": {},
@@ -2306,6 +3486,7 @@
       "heavy": false,
       "icon": "tabler:chart-scatter",
       "label": "Volcano plot",
+      "legacy": false,
       "required_roles": [
         "feature_id",
         "effect_size",

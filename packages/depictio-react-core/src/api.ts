@@ -11,6 +11,13 @@ import type { BrandTheme } from './brandTheme';
 import { enqueueFetch } from './fetchQueue';
 import type { GroupStatusEntry } from './groupStatus';
 import type { GroupingDisplay, GroupRenderDef } from './selectionGroups';
+import type {
+  Annotation,
+  AnnotationColor,
+  AnnotationKind,
+  AnnotationStyle,
+  Geometry,
+} from './annotations/types';
 
 const API_BASE = '/depictio/api/v1';
 
@@ -279,6 +286,9 @@ export interface StoredMetadata {
   aggregation?: string;
   aggregations?: string[];
   filter_expr?: string;
+  /** Card: let a locus navigator's genome region narrow this card (off by
+   *  default, see `cardScopedFilters`). */
+  follow_region_filter?: boolean;
   title_color?: string;
   background_color?: string;
   title_font_size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
@@ -313,6 +323,8 @@ export interface StoredMetadata {
   // Interactive
   interactive_component_type?: string;
   default_state?: { default_value?: unknown; default_range?: unknown; options?: unknown[] };
+  /** Slider only: comparison with the value (gte when absent). */
+  slider_mode?: string;
   /** Visual grouping — interactive components sharing the same `group` are
    *  rendered together inside one collapsible Mantine Paper. See
    *  MAX_INTERACTIVE_GROUP_SIZE in depictio/models/components/constants.py. */
@@ -343,6 +355,8 @@ export interface StoredMetadata {
   strip_label?: string | null;
   /** Filter bar only: whether the icon badge precedes the label. Unset = shown. */
   strip_icon?: boolean | null;
+  /** RangeSlider only: draw the column's histogram above the slider. */
+  show_histogram?: boolean;
   /** Per-component font-size multiplier (figures: scales the whole Plotly
    *  layout font — axis labels, ticks, legend). Multiplies the dashboard-wide
    *  content scale; 1/undefined = no override. */
@@ -472,6 +486,11 @@ export interface DashboardData {
    *  Persisted as HTML via the NotesFooter TipTap editor (see
    *  depictio/viewer/src/components/NotesFooter.tsx). */
   notes_content?: string;
+  /** Dashboard-wide default for where advanced viz tiles draw their controls
+   *  (`controls_placement` on a tile wins). Absent means `popover`. */
+  advanced_viz_controls?: 'popover' | 'rail' | 'header';
+  /** Content-aware tile heights (autofit v2). Absent means on. */
+  autofit?: boolean;
   [key: string]: unknown;
 }
 
@@ -904,6 +923,14 @@ export type InteractiveFilterSource =
   | 'map_selection'
   | 'image_selection'
   | 'tree_selection'
+  /** A region brushed on a `genome_view` tile's genome axis. Unlike the other
+   *  sources it emits a *pair* of entries (a chromosome multi-select and a
+   *  position range) because the pipeline filters by column and a genomic
+   *  region is two columns. See `genomeRegionFilters` in `selection.ts`. */
+  | 'genome_selection'
+  /** A range brushed on one axis of a `parallel_coordinates` tile. Emits an
+   *  ordinary RangeSlider entry on that axis's column. */
+  | 'axis_selection'
   /** Derived projection of saved selection groups (see `selectionGroups.ts`).
    *  Never merged into the user's filter list — composed at the fetch
    *  boundary only. */
@@ -932,6 +959,8 @@ export interface InteractiveFilter {
     interactive_component_type?: string;
     selection_column?: string;
     filter_expr?: string;
+    /** Slider comparison (gte, gt, lte, lt, eq, ne); the server defaults to gte. */
+    slider_mode?: string;
   };
 }
 
@@ -1034,6 +1063,11 @@ export interface FigureResponse {
     /** Column the figure was actually colored by (global "Color by" mode),
      *  null/absent when the override didn't apply to this frame. */
     column_colored?: string | null;
+    /** Grid rows this figure's content needs, one count the client cannot
+     *  make, since a Plotly figure fills whatever box it is given. Sent for the
+     *  categorical visu types (bar, box, violin) and absent everywhere else;
+     *  acted on only when the component's `fit` is `auto`. */
+    content_demand?: { rows: number };
   };
 }
 
@@ -1134,7 +1168,17 @@ export type AdvancedVizKind =
   | 'gene_arrow_track'
   | 'gsea_running_score'
   | 'sashimi'
-  | 'scatter_xy';
+  | 'scatter_xy'
+  | 'contact_map'
+  | 'knee_plot'
+  | 'damage_profile'
+  | 'genome_view'
+  | 'group_compare'
+  | 'transcript_structure'
+  | 'cnv_profile'
+  | 'genome_chord'
+  | 'record_card'
+  | 'parallel_coordinates';
 
 /** Accepted dtypes for one role, plus whether the role is required. Sourced
  *  from the backend canonical schema so the builder never duplicates the
@@ -1158,6 +1202,12 @@ export interface AdvancedVizKindDescriptor {
   /** "plot" for pure visualisations, "tool" for statistical methods that
    *  compute then plot (GSEA, GWAS, ANCOM-BC, DA barplot per contrast). */
   category: 'plot' | 'tool';
+  /** True for a kind kept alive only so stored dashboards keep loading: the
+   *  backend rewrites it into a view of another kind at read time (`ma`, `qq`,
+   *  `enrichment`, `roc_pr_curve`). Pickers must hide these. Optional because
+   *  an older backend's descriptor does not carry the flag, and an absent flag
+   *  means "not legacy". */
+  legacy?: boolean;
 }
 
 /** Metadata used by the builder's viz-kind picker. Cached on first load. */
@@ -1176,17 +1226,33 @@ export async function fetchPolarsSchema(dcId: string): Promise<Record<string, st
   return res.json();
 }
 
+/** The evidence behind a suggestion: every distinctive role has a column named
+ *  like it (`named`), the table has the shape the kind reads (`shape`), the
+ *  dashboard tab makes it right (`context`), or none of these (`weak`). */
+export type VizSuggestionMatch = 'named' | 'shape' | 'context' | 'weak';
+
 /** One viz kind scored against a DC schema by the backend suggestion engine.
- *  `score` is a graded 0-1 fit (dtype compatibility × column-name similarity).
- *  `role_candidates` lists dtype-compatible columns per required role, ranked
- *  best-first, for pre-filling bindings. `unmet_roles` / `weak_roles` drive the
- *  builder's inline guidance. */
+ *  `score` (0-1) is for ranking only; what the UI shows is `match` and the
+ *  short `reasons` behind it. `role_candidates` lists dtype-compatible columns
+ *  per required role, ranked best-first, for pre-filling bindings.
+ *  `unmet_roles` / `weak_roles` drive the builder's inline guidance. */
 export interface VizKindSuggestion {
   viz_kind: string;
   score: number;
   role_candidates: Record<string, string[]>;
   unmet_roles: string[];
   weak_roles: string[];
+  /** Absent on older APIs. */
+  match?: VizSuggestionMatch;
+  reasons?: string[];
+}
+
+/** What the builder knows about the dashboard tab a new tile lands on. */
+export interface VizSuggestionContext {
+  /** Columns emitted by the tab's selection-capable tiles. */
+  selectionColumns?: readonly string[];
+  /** Advanced-viz kinds already on the tab. */
+  existingKinds?: readonly string[];
 }
 
 export interface VizSuggestionsResponse {
@@ -1198,11 +1264,19 @@ export interface VizSuggestionsResponse {
 /** Ranked viz-kind suggestions for an existing DC. Reads the DC's inferred
  *  polars schema server-side and runs the graded scoring engine, returning
  *  every kind scored (best-first) so the builder can present a "suggest but
- *  tolerate" picker. */
+ *  tolerate" picker. `context` lets kinds that depend on the dashboard (a
+ *  record card following a selection) be recommended. */
 export async function fetchVizSuggestions(
   dcId: string,
+  context?: VizSuggestionContext,
 ): Promise<VizSuggestionsResponse> {
-  const res = await authFetch(`${API_BASE}/datacollections/viz-suggestions/${dcId}`);
+  const params = new URLSearchParams();
+  for (const c of context?.selectionColumns ?? []) params.append('selection_columns', c);
+  for (const k of context?.existingKinds ?? []) params.append('existing_kinds', k);
+  const qs = params.toString();
+  const res = await authFetch(
+    `${API_BASE}/datacollections/viz-suggestions/${dcId}${qs ? `?${qs}` : ''}`,
+  );
   if (!res.ok) throw new Error(`Failed to fetch viz suggestions: ${res.status}`);
   return res.json();
 }
@@ -1476,6 +1550,8 @@ export interface CoverageTrackPayload {
   samples_filter?: string[] | null;
   smoothing_window?: number;
   max_rows?: number | null;
+  /** Server bins each sample track to at most this many rows when wider. */
+  max_bins_per_track?: number | null;
   filter_metadata: InteractiveFilter[];
 }
 
@@ -1496,6 +1572,10 @@ export interface CoverageTrackResult {
     n_samples: number;
     mean_value: number | null;
     max_value: number | null;
+    /** Bin width (bp) when the server binned the tracks to its row budget. */
+    bin_width?: number | null;
+    /** Rows before binning. */
+    input_rows?: number;
   };
   row_count: number;
   load_ms?: number;
@@ -1529,6 +1609,99 @@ export async function pollCoverageTrack(jobId: string): Promise<CoverageTrackJob
   return res.json();
 }
 
+/**
+ * One window of a Hi-C matrix, at one resolution.
+ *
+ * `resolution: null` asks the server to pick: it compares the span the tile is
+ * showing (`start`..`end` over `pixels`) against the resolutions the data
+ * collection actually holds as partitions, and reads the one whose bins land
+ * closest to `target_bins_per_pixel`. A collection with no resolution column
+ * is served as a single matrix, which is what every contact map authored
+ * before multi-resolution gets.
+ */
+export interface ContactMapPayload {
+  wf_id: string;
+  dc_id: string;
+  chrom1_col: string;
+  start1_col: string;
+  chrom2_col: string;
+  start2_col: string;
+  count_col: string;
+  end1_col?: string | null;
+  end2_col?: string | null;
+  sample_col?: string | null;
+  resolution_col?: string | null;
+  chrom?: string | null;
+  start?: number | null;
+  end?: number | null;
+  resolution?: number | null;
+  pixels?: number | null;
+  target_bins_per_pixel?: number | null;
+  sample?: string | null;
+  max_cells?: number | null;
+  filter_metadata: InteractiveFilter[];
+}
+
+export interface ContactMapResult {
+  rows: Record<string, unknown[]>;
+  columns: {
+    chrom1: string;
+    start1: string;
+    end1?: string | null;
+    chrom2: string;
+    start2: string;
+    end2?: string | null;
+    count: string;
+    sample?: string | null;
+    resolution?: string | null;
+  };
+  summary: {
+    row_count: number;
+    /** Every resolution the collection holds, ascending. Empty = flat DC. */
+    resolutions: number[];
+    /** The one this window was read at, or null on a flat DC. */
+    resolution: number | null;
+    resolution_col?: string | null;
+    chromosomes: string[];
+    samples: string[];
+    n_samples: number;
+    bin_count: number;
+    region: { chrom: string | null; start: number | null; end: number | null } | null;
+    bins_per_pixel: number | null;
+    multi_resolution: boolean;
+    /** The window did not fit the cell budget and no coarser level existed. */
+    truncated: boolean;
+  };
+  row_count: number;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface ContactMapJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: ContactMapResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch a contact-map window Celery task. */
+export async function dispatchContactMap(payload: ContactMapPayload): Promise<ContactMapJob> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_contact_map`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_contact_map: ${res.status}`);
+  return res.json();
+}
+
+/** Poll a previously-dispatched contact-map window. */
+export async function pollContactMap(jobId: string): Promise<ContactMapJob> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_contact_map/${jobId}`);
+  if (!res.ok) throw new Error(`Failed to poll compute_contact_map: ${res.status}`);
+  return res.json();
+}
+
 /** Dispatch payload for the Sankey Celery task. NOTE: `color_mode`,
  *  `link_opacity`, and `show_node_labels` from SankeyConfig (Pydantic) are
  *  intentionally NOT in this payload — those are pure presentation tweaks
@@ -1543,6 +1716,8 @@ export interface SankeyPayload {
   sort_mode?: 'alphabetical' | 'total_flow' | 'input';
   min_link_value?: number;
   step_filters?: Record<string, string[]> | null;
+  /** Columns whose distinct values come back as `step_options`. */
+  option_cols?: string[] | null;
   filter_metadata: InteractiveFilter[];
 }
 
@@ -1554,6 +1729,10 @@ export interface SankeyResult {
   link_count: number;
   total_flow: number;
   row_count: number;
+  /** Rows before the step filters (absent on older APIs). */
+  input_rows?: number;
+  /** Distinct values per `option_cols` column, before the step filters. */
+  step_options?: Record<string, string[]>;
   load_ms?: number;
   compute_ms?: number;
 }
@@ -1580,6 +1759,95 @@ export async function dispatchSankey(payload: SankeyPayload): Promise<SankeyJob>
 export async function pollSankey(jobId: string): Promise<SankeyJob> {
   const res = await authFetch(`${API_BASE}/advanced_viz/compute_sankey/${jobId}`);
   if (!res.ok) throw new Error(`Failed to poll compute_sankey: ${res.status}`);
+  return res.json();
+}
+
+
+/** One arm of a group comparison: the column a selection was captured on and
+ *  the values it captured. A saved selection group (`GroupRenderDef`) and a
+ *  single value of the config's `group_col` both collapse to this shape, which
+ *  is what lets the worker treat "two lassos" and "two labels" identically. */
+export interface GroupCompareSelector {
+  label: string;
+  column: string;
+  values: string[];
+}
+
+export interface GroupComparePayload {
+  wf_id: string;
+  dc_id: string;
+  index_col: string;
+  group_a: GroupCompareSelector;
+  group_b: GroupCompareSelector;
+  test?: 'wilcoxon' | 't_test';
+  log_transform?: boolean;
+  max_features?: number;
+  min_observations?: number;
+  fdr_threshold?: number;
+  log2fc_threshold?: number;
+  top_n_labels?: number;
+  filter_metadata: InteractiveFilter[];
+}
+
+/** One feature's result. `log2fc` is A relative to B, so positive means higher
+ *  in group A. Any statistic that came out non-finite arrives as null. */
+export interface GroupCompareRow {
+  feature: string;
+  mean_a: number | null;
+  mean_b: number | null;
+  log2fc: number | null;
+  p_value: number | null;
+  fdr: number | null;
+  significant: boolean;
+  direction: 'up' | 'down' | 'ns';
+}
+
+export interface GroupCompareResult {
+  /** Sorted by raw p-value, most significant first. */
+  rows: GroupCompareRow[];
+  group_a: { label: string; n: number };
+  group_b: { label: string; n: number };
+  /** Observations claimed by both selectors, dropped from both arms. */
+  overlap_dropped: number;
+  /** Numeric feature columns in the matrix, before the `max_features` cap. */
+  feature_count: number;
+  tested_features: number;
+  significant_count: number;
+  test: string;
+  log_transform: boolean;
+  fdr_threshold: number;
+  log2fc_threshold: number;
+  top_n_labels: number;
+  row_count: number;
+  load_ms?: number;
+  compute_ms?: number;
+}
+
+export interface GroupCompareJob {
+  job_id: string;
+  status: 'pending' | 'done' | 'failed';
+  result?: GroupCompareResult | null;
+  error?: string | null;
+  from_cache?: boolean;
+}
+
+/** Dispatch a two-group differential test. Same dispatch + poll + cache
+ *  contract as the UpSet and Sankey computes. */
+export async function dispatchGroupCompare(
+  payload: GroupComparePayload,
+): Promise<GroupCompareJob> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_group_compare`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(`Failed to dispatch compute_group_compare: ${res.status}`);
+  return res.json();
+}
+
+/** Poll a previously-dispatched group comparison. */
+export async function pollGroupCompare(jobId: string): Promise<GroupCompareJob> {
+  const res = await authFetch(`${API_BASE}/advanced_viz/compute_group_compare/${jobId}`);
+  if (!res.ok) throw new Error(`Failed to poll compute_group_compare: ${res.status}`);
   return res.json();
 }
 
@@ -4984,4 +5252,268 @@ export async function fetchCatalogPreviewPayload(
   const res = await authFetch(`${API_BASE}/catalog/output/${outputId}/preview-payload`);
   if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch catalog preview');
   return (await res.json()) as CatalogPreviewPayload;
+}
+
+// ---------------------------------------------------------------------------
+// Component comments & annotations (/comments). Mirrors the Pydantic contract
+// in depictio/models/models/comments.py. Threads are internal to a project's
+// editors and owners: every endpoint but /published answers 403 to others.
+// ---------------------------------------------------------------------------
+
+export type CommentThreadStatus = 'open' | 'resolved' | 'proposed' | 'rejected';
+
+/** What the author was looking at: the viewer's own filter payloads, plus the
+ *  selection summary. Stored as-is so the viewer can restore it untranslated. */
+export interface CommentViewState {
+  filters: InteractiveFilter[];
+  selection?: CommentSelection | null;
+}
+
+/** Selection attached to a comment: which selection filter(s) were active on
+ *  the anchored component, how many rows they held, and the raw filters. */
+export interface CommentSelection {
+  source?: string;
+  count?: number;
+  filters?: InteractiveFilter[];
+  [key: string]: unknown;
+}
+
+export interface CommentAnchor {
+  dashboard_id: string;
+  /** Null pins the thread to the tab itself. */
+  component_index?: string | null;
+  component_title?: string | null;
+  view_state?: CommentViewState | null;
+  component_hash?: string | null;
+  data_hashes?: Record<string, string>;
+  version_id?: string | null;
+  pins?: Record<string, number>;
+}
+
+export interface CommentAgentInfo {
+  name: string;
+  model?: string | null;
+  run_id?: string | null;
+  /** User id of the person who launched the agent. */
+  on_behalf_of?: string | null;
+}
+
+export interface CommentAuthor {
+  kind: 'human' | 'agent';
+  user_id: string;
+  email?: string | null;
+  agent?: CommentAgentInfo | null;
+}
+
+export interface CommentEvidence {
+  claim: string;
+  query?: string | null;
+  values?: Record<string, unknown> | unknown[] | null;
+  view_state?: CommentViewState | null;
+}
+
+export interface CommentReview {
+  decision: 'accepted' | 'rejected';
+  by: string;
+  at: string;
+  reason?: string | null;
+}
+
+export interface ThreadComment {
+  id: string;
+  author: CommentAuthor;
+  body: string;
+  created_at: string;
+  edited_at?: string | null;
+  deleted?: boolean;
+}
+
+export interface ThreadStaleness {
+  component_missing: boolean;
+  component_changed: boolean;
+  data_changed: boolean;
+}
+
+export interface CommentThread {
+  id: string;
+  project_id: string;
+  parent_dashboard_id: string;
+  anchor: CommentAnchor;
+  annotation?: Annotation | null;
+  number?: number | null;
+  status: CommentThreadStatus;
+  review?: CommentReview | null;
+  evidence?: CommentEvidence[] | null;
+  dedupe_key?: string | null;
+  run_id?: string | null;
+  created_by: CommentAuthor;
+  created_at: string;
+  updated_at: string;
+  resolved_by?: string | null;
+  resolved_at?: string | null;
+  /** A person edited this agent-created thread (its annotation or text). */
+  human_edited?: boolean;
+  comments: ThreadComment[];
+  staleness: ThreadStaleness;
+}
+
+export interface ThreadCreatePayload {
+  anchor: Pick<CommentAnchor, 'dashboard_id' | 'component_index' | 'component_title' | 'view_state'>;
+  body?: string | null;
+  annotation?: Annotation | null;
+  evidence?: CommentEvidence[] | null;
+  dedupe_key?: string | null;
+  agent?: CommentAgentInfo | null;
+}
+
+export interface AnnotationPatch {
+  geometry?: Geometry | null;
+  label?: string | null;
+  color?: AnnotationColor | null;
+  style?: AnnotationStyle | null;
+  published?: boolean | null;
+}
+
+export interface ThreadUpdatePayload {
+  status?: 'open' | 'resolved';
+  annotation?: AnnotationPatch;
+}
+
+/** Key used in counts for threads pinned to the tab itself. */
+export const TAB_THREAD_KEY = '__tab__';
+
+export interface CommentCounts {
+  /** Open threads per component index (`__tab__` for tab-level threads). */
+  open: Record<string, number>;
+  /** Agent proposals awaiting review, same keys. */
+  proposed: Record<string, number>;
+}
+
+export interface PublishedAnnotation {
+  thread_id: string;
+  dashboard_id: string;
+  component_index: string | null;
+  number: number | null;
+  kind: AnnotationKind;
+  geometry: Geometry;
+  label: string;
+  color: AnnotationColor;
+  style: AnnotationStyle;
+  variant?: string | null;
+}
+
+export interface ListThreadsOptions {
+  /** `tab` (default): this tab only; `family`: every tab of the dashboard. */
+  scope?: 'tab' | 'family';
+  componentIndex?: string;
+  status?: CommentThreadStatus;
+}
+
+const COMMENTS_BASE = `${API_BASE}/comments`;
+const enc = encodeURIComponent;
+
+async function commentsJson<T>(res: Response, prefix: string): Promise<T> {
+  if (!res.ok) await throwHttpDetailError(res, prefix);
+  return (await res.json()) as T;
+}
+
+/** Whether the current user may read and write comments on this dashboard.
+ *  Resolves `{can_comment: false}` rather than throwing on 401/403/404, so a
+ *  viewer simply sees no comments UI. */
+export async function fetchCommentAccess(dashboardId: string): Promise<{ can_comment: boolean }> {
+  const res = await authFetch(`${COMMENTS_BASE}/access/${enc(dashboardId)}`);
+  if (res.status === 401 || res.status === 403 || res.status === 404) return { can_comment: false };
+  return commentsJson(res, 'Failed to check comment access');
+}
+
+export async function fetchCommentThreads(
+  dashboardId: string,
+  opts: ListThreadsOptions = {},
+): Promise<CommentThread[]> {
+  const qs = new URLSearchParams();
+  if (opts.scope) qs.set('scope', opts.scope);
+  if (opts.componentIndex) qs.set('component_index', opts.componentIndex);
+  if (opts.status) qs.set('status', opts.status);
+  const q = qs.toString();
+  const res = await authFetch(`${COMMENTS_BASE}/dashboard/${enc(dashboardId)}${q ? `?${q}` : ''}`);
+  return commentsJson(res, 'Failed to load comments');
+}
+
+export async function fetchCommentCounts(dashboardId: string): Promise<CommentCounts> {
+  const res = await authFetch(`${COMMENTS_BASE}/counts/${enc(dashboardId)}`);
+  return commentsJson(res, 'Failed to load comment counts');
+}
+
+export async function createCommentThread(payload: ThreadCreatePayload): Promise<CommentThread> {
+  const res = await authFetch(`${COMMENTS_BASE}/threads`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  return commentsJson(res, 'Failed to create comment');
+}
+
+export async function addThreadComment(threadId: string, body: string): Promise<CommentThread> {
+  const res = await authFetch(`${COMMENTS_BASE}/threads/${enc(threadId)}/comments`, {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  });
+  return commentsJson(res, 'Failed to post reply');
+}
+
+export async function editThreadComment(
+  threadId: string,
+  commentId: string,
+  body: string,
+): Promise<CommentThread> {
+  const res = await authFetch(
+    `${COMMENTS_BASE}/threads/${enc(threadId)}/comments/${enc(commentId)}`,
+    { method: 'PATCH', body: JSON.stringify({ body }) },
+  );
+  return commentsJson(res, 'Failed to edit comment');
+}
+
+export async function deleteThreadComment(
+  threadId: string,
+  commentId: string,
+): Promise<CommentThread | null> {
+  const res = await authFetch(
+    `${COMMENTS_BASE}/threads/${enc(threadId)}/comments/${enc(commentId)}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete comment');
+  return res.status === 204 ? null : ((await res.json().catch(() => null)) as CommentThread | null);
+}
+
+export async function updateCommentThread(
+  threadId: string,
+  patch: ThreadUpdatePayload,
+): Promise<CommentThread> {
+  const res = await authFetch(`${COMMENTS_BASE}/threads/${enc(threadId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
+  });
+  return commentsJson(res, 'Failed to update thread');
+}
+
+export async function reviewCommentThread(
+  threadId: string,
+  decision: 'accepted' | 'rejected',
+  reason?: string,
+): Promise<CommentThread> {
+  const res = await authFetch(`${COMMENTS_BASE}/threads/${enc(threadId)}/review`, {
+    method: 'POST',
+    body: JSON.stringify(reason ? { decision, reason } : { decision }),
+  });
+  return commentsJson(res, 'Failed to review thread');
+}
+
+export async function deleteCommentThread(threadId: string): Promise<void> {
+  const res = await authFetch(`${COMMENTS_BASE}/threads/${enc(threadId)}`, { method: 'DELETE' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete thread');
+}
+
+/** Published annotations of a tab — the only comment data viewers can read. */
+export async function fetchPublishedAnnotations(dashboardId: string): Promise<PublishedAnnotation[]> {
+  const res = await authFetch(`${COMMENTS_BASE}/published/${enc(dashboardId)}`);
+  return commentsJson(res, 'Failed to load annotations');
 }

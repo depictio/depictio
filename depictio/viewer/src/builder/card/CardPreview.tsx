@@ -18,7 +18,7 @@
  * split evenly at 33/33/34, so a perfectly good card looked broken in the
  * builder and then rendered completely different numbers once saved.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Center, Text } from '@mantine/core';
 import { DepictioCard } from 'depictio-components';
 import { useBuilderStore } from '../store/useBuilderStore';
@@ -28,6 +28,7 @@ import { useSectionCardVariant } from '../shared/useSectionCardVariant';
 import { autoCardTitle } from './cardTitle';
 import {
   SecondaryMetrics,
+  cardScopedFilters,
   fetchBreakdown,
   fetchCardHeroValue,
   fetchCardMetric,
@@ -287,6 +288,7 @@ const CardPreview: React.FC = () => {
     threshold_warn?: number | null;
     attrition_cols?: string[] | null;
     trend_col?: string | null;
+    follow_region_filter?: boolean;
     background_color?: string;
     title_color?: string;
     icon_name?: string;
@@ -299,7 +301,14 @@ const CardPreview: React.FC = () => {
   };
   const cols = useBuilderStore((s) => s.cols);
   const dcId = useBuilderStore((s) => s.dcId);
-  const previewFilters = useBuilderPreviewFilters();
+  // Same scope as the saved card: a locus navigator's region does not narrow
+  // a card unless it opts in with ``follow_region_filter``.
+  const allPreviewFilters = useBuilderPreviewFilters();
+  const followRegion = config.follow_region_filter === true;
+  const previewFilters = useMemo(
+    () => cardScopedFilters(allPreviewFilters, { follow_region_filter: followRegion }),
+    [allPreviewFilters, followRegion],
+  );
   // Drawn the way the grid will: the card's own style, else its section's.
   const sectionVariant = useSectionCardVariant();
 
@@ -494,6 +503,7 @@ const CardPreview: React.FC = () => {
                   coverageMax={coverageMax}
                   minimal={stripIsMinimal(variant)}
                   decimals={decimals}
+                  heroColumn={config.column_name}
                 />
               ) : undefined
             }

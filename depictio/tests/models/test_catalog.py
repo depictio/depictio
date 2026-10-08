@@ -11,11 +11,13 @@ from __future__ import annotations
 from pathlib import Path, PurePosixPath
 
 import pytest
+import yaml
 
 from depictio.models.components.advanced_viz.catalog import (
     CatalogEntry,
     CatalogFind,
     CatalogOutput,
+    check_identity,
     load_catalog_entries,
     match_run_dir,
     recipe_output_columns,
@@ -57,6 +59,27 @@ def test_identity_is_stored_as_urls():
     qiime2 = entries["qiime2"]
     assert qiime2.biotools_url == "https://bio.tools/qiime2"
     assert qiime2.nf_core_url is None
+
+
+def test_every_module_declares_its_card_identity():
+    # The payload reads a tool's identity from module.yaml alone (nothing derives
+    # it from the nf-core meta.yml), so a missing field is an empty catalog card.
+    assert check_identity(load_catalog_entries()) == []
+    # bio.tools has no entry for some tools: those say so with an explicit
+    # `biotools_url: null` rather than leaving the field out unchecked.
+    catalog = REPO_ROOT / "depictio" / "catalog"
+    undeclared = [
+        path.parent.name
+        for path in sorted(catalog.glob("*/module.yaml"))
+        if "biotools_url" not in yaml.safe_load(path.read_text())
+    ]
+    assert undeclared == []
+
+
+def test_check_identity_flags_an_empty_card():
+    ivar = next(e for e in load_catalog_entries() if e.id == "ivar")
+    bare = ivar.model_copy(update={"description": "", "homepage": None})
+    assert check_identity([bare]) == ["ivar: module.yaml declares no description or homepage"]
 
 
 # ---------------------------------------------------------------------------
@@ -839,7 +862,10 @@ def test_read_fixture_schema_parquet_dtypes_are_not_parametrised(tmp_path):
 
 def _write_tool(directory, tool_id, fixture_text, fixture_name="results.csv"):
     directory.mkdir(parents=True, exist_ok=True)
-    (directory / "module.yaml").write_text(f"id: {tool_id}\nname: {tool_id}\n")
+    (directory / "module.yaml").write_text(
+        f"id: {tool_id}\nname: {tool_id}\ndescription: A test tool.\n"
+        "homepage: https://example.org\n"
+    )
     (directory / "results.yaml").write_text(
         f'id: {tool_id}_results\nfind: {{path_glob: "**/{tool_id}/*.csv"}}\n'
         f"fixture: {fixture_name}\n"

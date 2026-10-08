@@ -1,0 +1,2 @@
+sample	total_raw_counts	total_output_counts	total_counts_removed	fraction_counts_removed	expected_cells	found_cells	ratio_of_found_cells_to_expected_cells	target_fpr
+pbmc8k	46859112.0	45579602.0	1279510.0	0.027	4388.0	8805.0	2.007	0.01

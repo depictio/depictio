@@ -1,0 +1,19 @@
+id: mirtop_mirna_counts
+name: miRNA expression per sample
+mode: mirna/expression
+description: >-
+  Reads per mature miRNA and sample, summed over all its isomiRs from the
+  joined mirtop table, with counts per million miRNA-assigned reads, their
+  log2, the number of distinct isomiRs and the share of reads matching the
+  reference sequence. Design columns ride along when a design table is given.
+find:
+  path_glob: "**/mirtop/joined_samples_mirtop.tsv"
+recipe: mirtop/mirna_counts.py
+fixture: mirna_counts.tsv
+renders_as:
+  - { component: figure, visu_type: box, dict_kwargs: {x: mirna, y: log2_cpm, points: all} }
+  - { component: card, column: reads, aggregation: sum, secondary_layout: top_n, breakdown_col: mirna, top_n_count: 5 }
+  - { component: card, column: mirna, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: interactive, interactive_type: MultiSelect, column_name: mirna }
+  - { component: interactive, interactive_type: RangeSlider, column_name: log2_cpm }
+  - { component: table }

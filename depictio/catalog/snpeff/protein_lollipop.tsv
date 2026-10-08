@@ -1,0 +1,16 @@
+sample	caller	gene	aa_pos	impact	consequence	hgvs_p	variant_key	vaf
+NA12878_200M	deepvariant	AC099489.1	209	LOW	synonymous_variant	p.Leu209Leu	chr16:11515956:G:C	1.0
+NA12878_200M	freebayes	AC099489.1	209	LOW	synonymous_variant	p.Leu209Leu	chr16:11515956:G:C	1.0
+NA12878_200M	haplotypecaller	AC099489.1	209	LOW	synonymous_variant	p.Leu209Leu	chr16:11515956:G:C	1.0
+NA12878_200M	strelka	AC099489.1	209	LOW	synonymous_variant	p.Leu209Leu	chr16:11515956:G:C	1.0
+NA12878_75M	deepvariant	AC099489.1	209	LOW	synonymous_variant	p.Leu209Leu	chr16:11515956:G:C	1.0
+NA12878_75M	freebayes	AC099489.1	209	LOW	synonymous_variant	p.Leu209Leu	chr16:11515956:G:C	1.0
+NA12878_75M	haplotypecaller	AC099489.1	209	LOW	synonymous_variant	p.Leu209Leu	chr16:11515956:G:C	1.0
+NA12878_75M	strelka	AC099489.1	209	LOW	synonymous_variant	p.Leu209Leu	chr16:11515956:G:C	1.0
+NA12878_200M	deepvariant	AC099489.1	251	MODERATE	missense_variant	p.Pro251Ser	chr16:11514443:G:A	0.443396
+NA12878_200M	freebayes	AC099489.1	251	MODERATE	missense_variant	p.Pro251Ser	chr16:11514443:G:A	0.445141065830721
+NA12878_200M	haplotypecaller	AC099489.1	251	MODERATE	missense_variant	p.Pro251Ser	chr16:11514443:G:A	0.44936708860759494
+NA12878_200M	strelka	AC099489.1	251	MODERATE	missense_variant	p.Pro251Ser	chr16:11514443:G:A	0.445859872611465
+NA12878_75M	deepvariant	AC099489.1	251	MODERATE	missense_variant	p.Pro251Ser	chr16:11514443:G:A	0.425373
+NA12878_75M	freebayes	AC099489.1	251	MODERATE	missense_variant	p.Pro251Ser	chr16:11514443:G:A	0.4253731343283582
+NA12878_75M	haplotypecaller	AC099489.1	251	MODERATE	missense_variant	p.Pro251Ser	chr16:11514443:G:A	0.4318181818181818
