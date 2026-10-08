@@ -116,8 +116,12 @@ main_dashboard:
 
 ## 4. Child tabs
 
-- First section: a **KPI strip**, boxed and open, `card_variant: compact`, 4 cards w2 h1 (or
-  2 cards w4 h1). Never 3 cards on a 4-slot row. The MultiQC tab has none.
+- At the top, unsectioned, **one intro text** (`order: 1`, w8, at most 3 sentences, `body: >`):
+  the method with a link to its tool, and how to read the tab ("pick a contrast first", "the
+  tree opens on its summary"). A warning the reader must see (synthetic values) goes there.
+  The MultiQC tab has one too.
+- First section: a **KPI strip**, boxed and open, in the default card style (section 5), 4
+  cards w2 h2 (or 2 cards w4 h2). Never 3 cards on a 4-slot row. The MultiQC tab has none.
 - Then at most **3 open** detail sections.
 - Then the collapsed ones: tables, record cards, per-sample details, alternate-route
   sections. Never collapse a figure that answers the tab's question to save height (the UpSet
@@ -130,16 +134,15 @@ main_dashboard:
   MA table in the canonical columns (the MA view). A filter on a column both tables carry
   (the contrast) narrows both.
 - No intro text per section: the section `description` (one sentence, at most 90 characters)
-  says what it shows. At most one short intro text per tab, and only when the subtitle is not
-  enough.
-- Order inside a tab: cards, then distributions, then detail, then tables.
+  says what it shows. The tab's intro is the only text tile in a child tab.
+- Order inside a tab: the intro, cards, then distributions, then detail, then tables.
 
 ## 5. Card styles by context
 
 | Where | `variant` (or section `card_variant`) | Secondary layouts |
 |---|---|---|
 | Overview Key figures | `headline`, with `caption`, `link`, `description` | `composition`, `box_plot`, `coverage` |
-| Child KPI strip | `compact` | `composition`, `coverage` (others are not drawn at this size) |
+| Child KPI strip | `default` | one per card, chosen for what it says (below) |
 | Detail sections | `default` | any, with its required fields |
 
 - The icon is the watermark on the right. Never `icon_style: badge`.
@@ -147,6 +150,29 @@ main_dashboard:
   `icon_color` take their section's colour.
 - `top_n` only under an aggregation with a per-group meaning; a percentage column is not
   averaged without a `filter_expr` (lint rules b and f).
+
+A KPI strip is four different readings, not four numbers in one style:
+
+- Each card has its own icon and its own `icon_color`, a Mantine palette name (the viewer
+  resolves it to the theme's shade); no two cards of a strip share a colour.
+- Each card has a secondary chosen for what it says: `box_plot` or `histogram` for a
+  per-sample index, `gauge` for a bounded value (`coverage_max`), `threshold` for a cut-off the
+  tool defines, `completeness` for how many reached a rank, `donut` or `composition` for parts
+  of a whole, `top_n` for a ranking.
+- Every card with a secondary has a `caption` saying what the secondary shows ("median, with
+  its spread", "calls, by contrast", "the richest phyla"). Without one the viewer prints the
+  bare aggregation ("(Nunique)").
+- Rings and composition bars need parts of a whole: a `count` over a table whose rows are the
+  entities (one row per sample, tip or call), or a breakdown on the card's own column. A
+  `nunique` broken down by another column draws ranked bars scaled to the leader, whatever the
+  layout asked for: give it `top_n` and say what it ranks.
+- On a long table (one row per sample and taxon) a breakdown on the card's own column counts
+  rows, and every bar reads about 1%. Rank by a parent column (taxa by phylum), by sample or
+  by group instead.
+- Leave unnamed values out of counts and rankings: a lineage with no name at a rank is `''`,
+  not null (`(col('taxon') != '')`), and some tables write `Unclassified`.
+- A `{GROUP_COL}` breakdown needs a DC that carries the joined metadata columns. Without
+  metadata the secondary falls away and the card keeps its number.
 
 ## 6. Filters
 
@@ -229,7 +255,7 @@ viz to their content. Never write `fit: fixed`.
 | Type | Stored `h` |
 |---|---|
 | text | the estimate of `depictio/models/components/text_layout.py` (the lint checks it) |
-| card | headline 2, compact 1 |
+| card | 2 (headline and KPI strips); compact 1 |
 | table | 6 (tables only shrink) |
 | figure | 4; add `layout: {fit: auto}` only to a bar, box or violin whose category axis is short (groups, not samples) |
 | advanced viz | 5 for kinds that report their height (heatmaps, stacked taxonomy, UpSet, DA bars, record card), 6 otherwise |
@@ -298,5 +324,7 @@ On a running stack, with the template ingested from its megatest data:
 - each dock shows a few controls and "More options", and every view switch (volcano MA/QQ,
   tree summary/full) draws;
 - the group has the same colour on figures, advanced viz, the map and the filter chips;
+- every child tab opens on its intro; every KPI card draws its secondary and its caption, no
+  bar reads about 1%, and each icon shows in its own colour;
 - the Guide's demos are not empty;
 - each conditional route still renders without a broken highlight or a stray `{VAR}`.
