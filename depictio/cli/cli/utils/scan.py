@@ -1,5 +1,6 @@
 import hashlib
 import os
+import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
