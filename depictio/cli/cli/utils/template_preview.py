@@ -12,13 +12,24 @@ one :class:`DataRoot`, so previewing a remote prefix costs a single listing.
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from fnmatch import translate
+from pathlib import Path
 from typing import Any, Literal
 
-from depictio.cli.cli.utils.data_root import DataRoot, as_data_root
+from depictio.cli.cli.utils.data_root import (
+    DataRoot,
+    LocalDataRoot,
+    as_data_root,
+    relative_to_root,
+)
 from depictio.cli.cli.utils.scan_utils import construct_full_regex
-from depictio.cli.cli.utils.templates import OPTIONAL_SOURCE_MISSING_REASON, resolve_template
+from depictio.cli.cli.utils.templates import (
+    OPTIONAL_SOURCE_MISSING_REASON,
+    _local_fallback_allowed,
+    resolve_template,
+)
 from depictio.cli.cli_logging import logger
 from depictio.models.models.data_collections import Regex
 
@@ -241,6 +252,9 @@ def _preview_recipe_dc(
         return row
 
     overrides = transform.get("source_overrides") or {}
+    # A URL outside the root is read as it is at ingest, so it cannot be
+    # counted from here, and must not be reported missing either.
+    uncounted = False
     for source in module.SOURCES:
         if source.dc_ref is not None:
             if source.dc_ref in settled_tags:
@@ -258,7 +272,17 @@ def _preview_recipe_dc(
         if glob_pattern:
             hits = len(root.glob(glob_pattern))
         elif path:
-            hits = 1 if root.exists(path) else 0
+            # The recipe layer's own rule (``resolve_sources``): a location
+            # under the root is looked up in it, one outside it as it is.
+            relative = relative_to_root(root, path)
+            if relative is not None:
+                hits = 1 if root.exists(relative) else 0
+            elif "://" in path:
+                uncounted = True
+                continue
+            else:
+                found = _local_fallback_allowed(root, path) and Path(path).is_file()
+                hits = 1 if found else 0
         else:
             continue
         row.matched += hits
@@ -267,11 +291,36 @@ def _preview_recipe_dc(
 
     if row.missing_sources:
         row.status = "missing"
-    elif row.matched:
+    elif row.matched or uncounted:
         row.status = "ok"
     else:
         row.status = "empty"
     return row
+
+
+def _workflow_root(workflow: dict, root: DataRoot) -> DataRoot:
+    """The root a workflow's walk and its recipes read: ``root``, unless the
+    workflow's ``data_location`` names another local folder.
+
+    A local ``--bind`` moves the walk of its whole workflow to the folder it
+    names (``bindings.apply_bindings``), and ingestion then walks that folder
+    and runs the workflow's recipes against it, so the preview counts there
+    too. A folder below ``root`` is a view of it; one outside it is looked at
+    only where any location outside the root may be (``_local_fallback_allowed``).
+    No location, several, a URL or a placeholder: ``root``.
+    """
+    locations = (workflow.get("data_location") or {}).get("locations") or []
+    if len(locations) != 1:
+        return root
+    location = str(locations[0])
+    if "://" in location or not os.path.isabs(location):
+        return root
+    relative = root.relative_of(location)
+    if relative is not None:
+        return root.scoped(relative)
+    if not _local_fallback_allowed(root, location):
+        return root
+    return LocalDataRoot(location, root.CLI_config)
 
 
 def preview_data_collections(
@@ -285,17 +334,21 @@ def preview_data_collections(
     So the same folder gets the same rows whichever of the two is asked, which
     is what lets a refresh decide exactly as the creation did.
 
+    A workflow whose ``data_location`` a local ``--bind`` moved is counted in
+    the folder it now walks (see :func:`_workflow_root`).
+
     Pruned collections are not in ``config`` at all, so they have no row here.
     """
     rows: list[DataCollectionPreview] = []
     detected_runs: list[str] = []
-    recipe_slots: list[tuple[int, str, dict, bool]] = []
+    recipe_slots: list[tuple[int, str, dict, bool, DataRoot]] = []
     for workflow in config.get("workflows") or []:
+        workflow_root = _workflow_root(workflow, root)
         data_location = workflow.get("data_location") or {}
         runs: list[str] = []
         if data_location.get("structure") == "sequencing-runs" and data_location.get("runs_regex"):
             # One run directory per scan pass, the same way the walk scopes it.
-            runs = root.runs(data_location["runs_regex"])
+            runs = workflow_root.runs(data_location["runs_regex"])
             detected_runs.extend(run for run in runs if run not in detected_runs)
 
         for dc in workflow.get("data_collections") or []:
@@ -305,10 +358,10 @@ def preview_data_collections(
             # A materialized recipe DC has a scan block over its seed, so it is
             # previewed as what it now is: a file scan.
             if dc_config.get("source") == "transformed" and not dc_config.get("scan"):
-                recipe_slots.append((len(rows), tag, dc_config, optional))
-                rows.append(_preview_recipe_dc(tag, dc_config, root, optional))
+                recipe_slots.append((len(rows), tag, dc_config, optional, workflow_root))
+                rows.append(_preview_recipe_dc(tag, dc_config, workflow_root, optional))
             else:
-                rows.append(_preview_scan_dc(tag, dc_config, root, runs, optional))
+                rows.append(_preview_scan_dc(tag, dc_config, workflow_root, runs, optional))
 
     # Recipes chain through dc_ref (a canonical reads the table another recipe
     # writes), so recipe rows are re-evaluated until no further collection
@@ -316,8 +369,8 @@ def preview_data_collections(
     # ends within the depth of the longest chain.
     settled = frozenset(row.tag for row in rows if row.status == "ok")
     while True:
-        for index, tag, dc_config, optional in recipe_slots:
-            rows[index] = _preview_recipe_dc(tag, dc_config, root, optional, settled)
+        for index, tag, dc_config, optional, workflow_root in recipe_slots:
+            rows[index] = _preview_recipe_dc(tag, dc_config, workflow_root, optional, settled)
         now_settled = frozenset(row.tag for row in rows if row.status == "ok")
         if now_settled == settled:
             break
@@ -327,9 +380,10 @@ def preview_data_collections(
 
 def preview_data_root(
     template_id: str,
-    data_root: str,
+    data_root: str | DataRoot,
     variables: dict[str, str] | None = None,
     CLI_config=None,
+    resolution: tuple | None = None,
 ) -> RunPreview:
     """What a template would resolve to against a data root, without creating anything.
 
@@ -348,17 +402,23 @@ def preview_data_root(
         data_root: The directory or ``s3://`` prefix to preview.
         variables: ``--var`` values, exactly as ``resolve_template`` takes them.
         CLI_config: Used to build a remote root's S3 client.
+        resolution: What a ``resolve_template`` call already returned, possibly
+            changed since (``depictio ingest --bind`` rebinds collections in
+            it). Previewed as it is instead of resolving the template again,
+            so the preview shows the configuration the run will use.
     """
     root = as_data_root(data_root, CLI_config)
     if root is None:
         raise ValueError("preview_data_root needs a data root; got None")
 
-    config, template_metadata, template_origin, dashboard_paths, resolved = resolve_template(
-        template_id=template_id,
-        data_root=root,
-        extra_vars=dict(variables) if variables else None,
-        CLI_config=CLI_config,
-    )
+    if resolution is None:
+        resolution = resolve_template(
+            template_id=template_id,
+            data_root=root,
+            extra_vars=dict(variables) if variables else None,
+            CLI_config=CLI_config,
+        )
+    config, template_metadata, template_origin, dashboard_paths, resolved = resolution
 
     rows, detected_runs = preview_data_collections(config, root)
 
