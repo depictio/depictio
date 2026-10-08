@@ -272,8 +272,15 @@ def _manifest_route(name: str):
         )
         return routes.ingest_manifest, {"payload": payload}, "_ingest_manifest_into_project"
     if name == "refresh_manifest":
+        from starlette.requests import Request
+
         payload = RefreshManifestRequest(project_id=project_id, dry_run=True)
-        return routes.refresh_manifest, {"payload": payload}, "_refresh_manifest_in_project"
+        request = Request({"type": "http", "headers": [(b"host", b"localhost:8058")]})
+        return (
+            routes.refresh_manifest,
+            {"payload": payload, "request": request},
+            "_refresh_manifest_in_project",
+        )
     payload = ExportTemplateRequest(template_id="lab/tool/1")
     return (
         routes.export_project_template,

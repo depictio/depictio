@@ -729,10 +729,9 @@ def _server_can_reread(workflow: dict, mode: str, scan_params: dict) -> bool:
         filename = str(scan_params.get("filename") or "")
         return _policy_reads(filename) and os.path.isfile(filename)
     if mode == "recursive":
-        return (
-            bool(locations)
-            and all(_policy_reads(location) for location in locations)
-            and any(os.path.isdir(location) for location in locations)
+        # Every location, as the walk stops on the first one missing.
+        return bool(locations) and all(
+            _policy_reads(location) and os.path.isdir(location) for location in locations
         )
     if mode == "":
         return bool(locations) and all(
@@ -833,6 +832,7 @@ def _refresh_manifest_in_project(
     data_collection_tag: str | None = None,
     dry_run: bool = False,
     async_run: bool = False,
+    request=None,
 ) -> ManifestRefreshReport:
     """Re-run each refreshable DC's stored scan and re-ingest it in place.
 
@@ -862,9 +862,23 @@ def _refresh_manifest_in_project(
     polls ``GET /projects/refresh_manifest/{run_id}`` sees them and the run
     can never close as "success" around a DC that failed pre-flight.
 
+    With local folders on (``depictio local``) a refresh may read this disk:
+    the folder a project was made from, a local source under a policy root.
+    So it takes the guards every local read takes (``require_local_caller``:
+    a loopback ``Host``, the DNS-rebinding defence, and an admin), before the
+    project is even loaded. ``request`` is the incoming request; without one
+    the guard refuses.
+
     Synchronous on purpose (sync httpx callbacks in the CLI helpers): callers
     must dispatch via ``asyncio.to_thread``.
     """
+    from depictio.api.v1.configs.settings_models import local_data_policy
+
+    if local_data_policy() is not None:
+        from depictio.api.v1.endpoints.projects_endpoints.local_dirs import require_local_caller
+
+        require_local_caller(request, current_user)
+
     project_oid, project_dict = _load_editable_project(project_id, current_user)
 
     refreshable_index = _refreshable_dc_index(project_dict)
