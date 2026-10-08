@@ -481,12 +481,16 @@ def _detect_template(root) -> tuple[str, DetectedTemplate]:
 
 
 def _skip_reason(row) -> str:
-    """Why a data collection the preview called ``missing`` isn't dispatched.
+    """The step detail of a data collection the preview called ``missing``,
+    which is never dispatched.
 
-    Used verbatim for a required collection's failed-step detail; prefixed
-    with "Skipped optional collection: " for an optional one's skipped-step
-    detail (see the ``preflight_failed`` / ``preflight_skipped`` split in
-    ``_create_project_from_run``).
+    A required collection's failed step says it as is, an optional one's
+    skipped step after "Skipped optional collection: " (the
+    ``preflight_failed`` / ``preflight_skipped`` split in
+    ``_create_project_from_run``). A required one that misses nothing but
+    absent optional collections ends skipped instead, with the detail
+    ``_dispatch_refresh_tasks`` words for it. Display only: what is skipped is
+    decided from the preview's ``missing_collections``, never from this text.
     """
     if row.missing_sources:
         return (
@@ -494,6 +498,26 @@ def _skip_reason(row) -> str:
             f"{', '.join(row.missing_sources)}."
         )
     return f"Not ingested: '{row.location}' is not present under the data root."
+
+
+def _missing_collections_only(preview_rows) -> dict[str, list[str]]:
+    """``{tag: [collection tag, ...]}`` for each required collection of the
+    preview that misses other collections and nothing else (no file of its own).
+
+    What ``_dispatch_refresh_tasks`` skips rather than fails when those
+    collections are optional and absent (see
+    ``manifest_ingest._skip_dependants_of_absent_collections``). Read from the
+    preview rows' ``missing_collections``, so no message wording decides it.
+    """
+    # ``missing_sources`` lists those collections and the row's own missing
+    # files, so the same length means no file of its own.
+    return {
+        row.tag: list(row.missing_collections)
+        for row in preview_rows
+        if not row.optional
+        and row.missing_collections
+        and len(row.missing_collections) == len(row.missing_sources)
+    }
 
 
 def _save_storage_or_roll_back(project_oid: ObjectId, settings_in: ProjectStorageConfigIn) -> None:
@@ -617,6 +641,7 @@ def _create_project_from_run(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"Data root preview failed: {exc}")
 
+    missing_collections = _missing_collections_only(preview.data_collections)
     rows = {
         row.tag: FromRunDCPreview(
             data_collection_tag=row.tag,
@@ -733,6 +758,7 @@ def _create_project_from_run(
             current_user=current_user,
             preflight_failed=preflight_failed,
             preflight_skipped=preflight_skipped,
+            missing_collections=missing_collections,
             command="from_run",
             scan_modes=scan_modes,
             data_root=root.location,

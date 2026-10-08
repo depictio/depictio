@@ -9,8 +9,10 @@ optional, absent collection cannot be built for that reason alone, so
 missing. One that misses a file of its own, or reads a collection that failed,
 stays failed.
 
-The pre-flight messages are built with ``from_run._skip_reason`` itself, so a
-change of its wording shows up here rather than as a silent "failed" live.
+The decision is structural: from_run hands the dispatch the collections each
+failure misses, from the preview rows' ``missing_collections``
+(``from_run._missing_collections_only``). The step details are display only,
+so rewording them changes nothing.
 """
 
 from types import SimpleNamespace
@@ -21,18 +23,35 @@ import pytest
 from bson import ObjectId
 
 from depictio.api.v1.endpoints.projects_endpoints import from_run, manifest_ingest
+from depictio.cli.cli.utils.template_preview import DataCollectionPreview
 from depictio.models.models.users import UserBase
 
 OPTIONAL_PREFIX = "Skipped optional collection: "
 
 
-def _missing(*sources: str) -> str:
-    """The detail from_run seeds for a collection whose sources are missing."""
-    return from_run._skip_reason(SimpleNamespace(missing_sources=list(sources), location=""))
-
-
-def _collection(tag: str) -> str:
-    return f"collection '{tag}'"
+def _row(
+    tag: str,
+    *,
+    files=(),
+    collections=(),
+    optional: bool = False,
+    location: str = "",
+    labels=None,
+) -> DataCollectionPreview:
+    """The preview row of a collection that misses ``files`` of its own and the
+    other ``collections``; ``labels`` is how those collections are shown."""
+    shown = labels if labels is not None else [f"collection '{ref}'" for ref in collections]
+    return DataCollectionPreview(
+        tag=tag,
+        kind="recipe",
+        mode=None,
+        location=location,
+        matched=0,
+        missing_sources=[*shown, *files],
+        missing_collections=list(collections),
+        optional=optional,
+        status="missing",
+    )
 
 
 @pytest.fixture()
@@ -48,10 +67,10 @@ def db():
         yield database
 
 
-def _dispatch(db, *, failed, skipped, dispatched=()):
-    """Run the dispatch for a project holding every tag named; returns the run's steps."""
+def _dispatch(db, *rows: DataCollectionPreview, dispatched=()):
+    """Seed the missing ``rows`` as from_run does and dispatch; returns the run's steps."""
     user = UserBase(id=ObjectId(), email="owner@example.com", is_admin=False)
-    tags = [*failed, *skipped, *dispatched]
+    tags = [*(row.tag for row in rows), *dispatched]
     ids = {tag: str(ObjectId()) for tag in tags}
     project = {
         "_id": ObjectId(),
@@ -66,10 +85,15 @@ def _dispatch(db, *, failed, skipped, dispatched=()):
         project_dict=project,
         to_dispatch=[(tag, ids[tag], 0, 1) for tag in dispatched],
         current_user=user,
-        preflight_failed=[(tag, ids[tag], message) for tag, message in failed.items()],
-        preflight_skipped=[
-            (tag, ids[tag], f"{OPTIONAL_PREFIX}{message}") for tag, message in skipped.items()
+        preflight_failed=[
+            (row.tag, ids[row.tag], from_run._skip_reason(row)) for row in rows if not row.optional
         ],
+        preflight_skipped=[
+            (row.tag, ids[row.tag], f"{OPTIONAL_PREFIX}{from_run._skip_reason(row)}")
+            for row in rows
+            if row.optional
+        ],
+        missing_collections=from_run._missing_collections_only(rows),
         command="from_run",
     )
     run_doc = db["ingestion_runs"].find_one({"run_id": run_id})
@@ -80,8 +104,8 @@ def _dispatch(db, *, failed, skipped, dispatched=()):
 def test_a_required_collection_reading_an_absent_optional_one_is_skipped(db):
     run = _dispatch(
         db,
-        failed={"ma_canonical": _missing(_collection("ancombc_results"))},
-        skipped={"ancombc_results": _missing("qiime2/ancombc/*.tsv")},
+        _row("ma_canonical", collections=["ancombc_results"]),
+        _row("ancombc_results", files=["qiime2/ancombc/*.tsv"], optional=True),
         dispatched=["taxonomy"],
     )
 
@@ -108,57 +132,48 @@ def test_a_required_collection_reading_an_absent_optional_one_is_skipped(db):
 
 
 def test_a_collection_reading_a_failed_required_one_stays_failed(db):
-    reason = _missing(_collection("summary_metrics"))
+    reading = _row("variants_canonical", collections=["summary_metrics"])
     run = _dispatch(
-        db,
-        failed={
-            "summary_metrics": _missing("multiqc/summary_variants_metrics_mqc.csv"),
-            "variants_canonical": reason,
-        },
-        skipped={},
+        db, _row("summary_metrics", files=["multiqc/summary_variants_metrics_mqc.csv"]), reading
     )
 
     assert run.steps["summary_metrics"]["status"] == "failed"
     assert run.steps["variants_canonical"]["status"] == "failed"
-    assert run.steps["variants_canonical"]["detail"] == reason
+    assert run.steps["variants_canonical"]["detail"] == from_run._skip_reason(reading)
 
 
 def test_a_collection_missing_a_file_of_its_own_stays_failed(db):
-    reason = _missing(_collection("ancombc_results"), "qiime2/ancombc/levels.tsv")
+    own_file = _row(
+        "ma_canonical", collections=["ancombc_results"], files=["qiime2/ancombc/levels.tsv"]
+    )
     run = _dispatch(
-        db,
-        failed={"ma_canonical": reason},
-        skipped={"ancombc_results": _missing("qiime2/ancombc/*.tsv")},
+        db, own_file, _row("ancombc_results", files=["qiime2/ancombc/*.tsv"], optional=True)
     )
 
     assert run.steps["ma_canonical"]["status"] == "failed"
-    assert run.steps["ma_canonical"]["detail"] == reason
+    assert run.steps["ma_canonical"]["detail"] == from_run._skip_reason(own_file)
 
 
 def test_a_collection_reading_both_an_absent_and_a_failed_one_stays_failed(db):
-    reason = _missing(_collection("ancombc_results"), _collection("summary_metrics"))
+    joined = _row("joined", collections=["ancombc_results", "summary_metrics"])
     run = _dispatch(
         db,
-        failed={
-            "summary_metrics": _missing("multiqc/summary_variants_metrics_mqc.csv"),
-            "joined": reason,
-        },
-        skipped={"ancombc_results": _missing("qiime2/ancombc/*.tsv")},
+        _row("summary_metrics", files=["multiqc/summary_variants_metrics_mqc.csv"]),
+        joined,
+        _row("ancombc_results", files=["qiime2/ancombc/*.tsv"], optional=True),
     )
 
     assert run.steps["joined"]["status"] == "failed"
-    assert run.steps["joined"]["detail"] == reason
+    assert run.steps["joined"]["detail"] == from_run._skip_reason(joined)
 
 
 def test_a_chain_built_on_one_absent_collection_is_skipped_whole(db):
     # The dependant comes first: settling must not depend on the order.
     run = _dispatch(
         db,
-        failed={
-            "ma_plot_ready": _missing(_collection("ma_canonical")),
-            "ma_canonical": _missing(_collection("ancombc_results")),
-        },
-        skipped={"ancombc_results": _missing("qiime2/ancombc/*.tsv")},
+        _row("ma_plot_ready", collections=["ma_canonical"]),
+        _row("ma_canonical", collections=["ancombc_results"]),
+        _row("ancombc_results", files=["qiime2/ancombc/*.tsv"], optional=True),
     )
 
     assert run.steps["ma_canonical"]["status"] == "skipped"
@@ -171,13 +186,10 @@ def test_a_chain_built_on_one_absent_collection_is_skipped_whole(db):
 
 
 def test_a_scan_collection_absent_from_the_root_stays_failed(db):
-    reason = from_run._skip_reason(
-        SimpleNamespace(missing_sources=[], location="s3://bucket/run42/samplesheet.csv")
-    )
     run = _dispatch(
         db,
-        failed={"samplesheet": reason},
-        skipped={"ancombc_results": _missing("qiime2/ancombc/*.tsv")},
+        _row("samplesheet", location="s3://bucket/run42/samplesheet.csv"),
+        _row("ancombc_results", files=["qiime2/ancombc/*.tsv"], optional=True),
     )
 
     assert run.steps["samplesheet"]["status"] == "failed"
@@ -185,8 +197,9 @@ def test_a_scan_collection_absent_from_the_root_stays_failed(db):
 
 def test_several_absent_optional_collections_are_all_named():
     failed, skipped = manifest_ingest._skip_dependants_of_absent_collections(
-        [("joined", "id-j", _missing(_collection("a"), _collection("b")))],
+        [("joined", "id-j", "Not ingested.")],
         [("a", "id-a", OPTIONAL_PREFIX), ("b", "id-b", OPTIONAL_PREFIX)],
+        {"joined": ["a", "b"]},
     )
 
     assert failed == []
@@ -195,3 +208,32 @@ def test_several_absent_optional_collections_are_all_named():
         "id-j",
         "Not built: the optional collections 'a', 'b' it reads are absent from this run.",
     )
+
+
+def test_only_a_required_collection_missing_nothing_but_collections_is_named():
+    rows = [
+        _row("reads_only", collections=["a", "b"]),
+        _row("own_file_too", collections=["a"], files=["x.tsv"]),
+        _row("optional_reader", collections=["a"], optional=True),
+        _row("files_only", files=["y.tsv"]),
+    ]
+    assert from_run._missing_collections_only(rows) == {"reads_only": ["a", "b"]}
+
+
+def test_the_wording_of_a_detail_decides_nothing(db):
+    """The structure decides: a reworded label still skips, and a detail in the
+    exact wording an older release parsed does not skip without it."""
+    reworded = _row("ma_canonical", collections=["ancombc_results"], labels=["the ANCOM table"])
+    run = _dispatch(
+        db, reworded, _row("ancombc_results", files=["qiime2/ancombc/*.tsv"], optional=True)
+    )
+    assert run.steps["ma_canonical"]["status"] == "skipped"
+
+    old_wording = "Not ingested: source(s) not found under the data root: collection 'a'."
+    failed, skipped = manifest_ingest._skip_dependants_of_absent_collections(
+        [("joined", "id-j", old_wording), ("other", "id-o", "anything at all")],
+        [("a", "id-a", OPTIONAL_PREFIX)],
+        {"other": ["a"]},
+    )
+    assert failed == [("joined", "id-j", old_wording)]
+    assert [tag for tag, _dc_id, _detail in skipped] == ["a", "other"]

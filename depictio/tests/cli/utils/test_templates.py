@@ -911,6 +911,8 @@ class TestPreviewDataRoot:
         row = self._row(self._preview(monkeypatch), "alpha_rarefaction")
         assert (row.kind, row.mode, row.status) == ("recipe", None, "missing")
         assert row.missing_sources == ["qiime2/alpha-rarefaction/faith_pd.csv"]
+        # A file of its own, no other collection.
+        assert row.missing_collections == []
 
     def test_a_recipe_dc_whose_source_is_present(self, monkeypatch):
         row = self._row(self._preview(monkeypatch), "taxonomy_composition")
@@ -950,6 +952,8 @@ class TestPreviewDataRoot:
             "missing",
             ["collection 'taxonomy_rel_abundance'"],
         )
+        # The same, as tags a caller reads without parsing the label.
+        assert row.missing_collections == ["taxonomy_rel_abundance"]
         settled = frozenset({"taxonomy_rel_abundance"})
         row = _preview_recipe_dc("upset_canonical", dc_config, root, False, settled)
         assert (row.matched, row.status, row.missing_sources) == (1, "ok", [])

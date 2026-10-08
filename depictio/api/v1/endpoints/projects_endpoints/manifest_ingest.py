@@ -20,7 +20,6 @@ Fan-out is sequential for now; Celery parallelism is a phase-4 concern
 
 import copy
 import os
-import re
 import tempfile
 from urllib.parse import urlparse
 
@@ -923,22 +922,6 @@ def _scan_leaders(
     return leaders, followers
 
 
-# A from_run pre-flight failure whose missing sources are other collections
-# only: ``template_preview`` names a missing dc_ref "collection '<tag>'" and
-# ``from_run._skip_reason`` lists the missing sources in this sentence. Any
-# other wording (a file of its own missing) does not match.
-_MISSING_COLLECTIONS_ONLY = re.compile(
-    r"Not ingested: source\(s\) not found under the data root: "
-    r"(collection '[^']+'(?:, collection '[^']+')*)\."
-)
-
-
-def _missing_collections(message: str) -> list[str]:
-    """The collections a pre-flight failure misses, when they are all it misses."""
-    match = _MISSING_COLLECTIONS_ONLY.fullmatch(message or "")
-    return re.findall(r"collection '([^']+)'", match.group(1)) if match else []
-
-
 def _not_built_detail(refs: list[str], absent: set[str]) -> str:
     """Why a collection whose own inputs are there is skipped: what it reads is not."""
 
@@ -960,6 +943,7 @@ def _not_built_detail(refs: list[str], absent: set[str]) -> str:
 def _skip_dependants_of_absent_collections(
     preflight_failed: list[tuple[str, str, str]],
     preflight_skipped: list[tuple[str, str, str]],
+    missing_collections: dict[str, list[str]],
 ) -> tuple[list[tuple[str, str, str]], list[tuple[str, str, str]]]:
     """Move to the skipped steps a pre-flight failure that only reads skipped collections.
 
@@ -969,6 +953,12 @@ def _skip_dependants_of_absent_collections(
     collection it is missing, rather than failed. One that misses a file of its
     own, or reads a collection that failed, stays failed. Repeated until nothing
     moves, so a chain built on one absent collection is skipped whole.
+
+    Decided from structure, never from a message: ``missing_collections`` maps
+    the tag of a failure that misses other collections and nothing else to
+    their tags (from the preview's ``missing_collections``), and the absent
+    collections are the tags of ``preflight_skipped``. A failure it does not
+    name stays failed, whatever its detail says.
 
     Returns ``(preflight_failed, preflight_skipped)`` with those entries moved.
     """
@@ -980,8 +970,8 @@ def _skip_dependants_of_absent_collections(
     while moved:
         moved = False
         for entry in list(failed):
-            tag, dc_id, message = entry
-            refs = _missing_collections(message)
+            tag, dc_id, _message = entry
+            refs = missing_collections.get(tag) or []
             if not refs or any(ref not in absent and ref not in unbuilt for ref in refs):
                 continue
             failed.remove(entry)
@@ -998,6 +988,7 @@ def _dispatch_refresh_tasks(
     current_user,
     preflight_failed: list[tuple[str, str, str]],
     preflight_skipped: list[tuple[str, str, str]] | None = None,
+    missing_collections: dict[str, list[str]] | None = None,
     command: str = "refresh_manifest",
     scan_modes: dict[str, str] | None = None,
     data_root: str | None = None,
@@ -1019,8 +1010,10 @@ def _dispatch_refresh_tasks(
     run folder never produces), seeded "skipped" rather than "failed" so the
     run can still close "success" around it (see
     ``_finalize_manifest_refresh_run``). So is a failure that only misses such
-    a collection: see ``_skip_dependants_of_absent_collections``. Both default
-    to empty, so the manifest refresh flow, which never has one, is unaffected.
+    a collection, as ``missing_collections`` ({failed tag: [collection tag,
+    ...]}, for a failure that misses those and nothing else) says: see
+    ``_skip_dependants_of_absent_collections``. All three default to empty, so
+    the manifest refresh flow, which never has one, is unaffected.
 
     A recipe DC's payload carries ``depends_on`` (see ``_recipe_dependencies``)
     for every dc_ref that still has a step *in this run* (``seeded_tags``
@@ -1060,7 +1053,7 @@ def _dispatch_refresh_tasks(
     )
 
     preflight_failed, skipped = _skip_dependants_of_absent_collections(
-        preflight_failed, preflight_skipped or []
+        preflight_failed, preflight_skipped or [], missing_collections or {}
     )
     modes = scan_modes or {}
     run_id = uuid4().hex
