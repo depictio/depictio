@@ -13,25 +13,31 @@ import React, { useEffect, useState } from 'react';
 import {
   Alert,
   Badge,
+  Box,
   Button,
   Group,
   Loader,
   Modal,
+  Paper,
+  SimpleGrid,
   Stack,
   Table,
   Text,
+  ThemeIcon,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { useBrandAccents } from 'depictio-react-core';
 import type {
+  DetectedTemplate,
   FromRunDCPreview,
   FromRunReport,
   ManifestRefreshReport,
 } from 'depictio-react-core';
 
+import { DisabledReason, GatedButton } from '../components/settings/SettingsSections';
+import IngestionResultTable from './IngestionResultTable';
 import {
-  MANIFEST_RUN_STATUS_META,
   formatElapsed,
   summarizeManifestRun,
   useElapsedMs,
@@ -100,6 +106,109 @@ const MissingSources: React.FC<{ dc: FromRunDCPreview }> = ({ dc }) => (
   </Table.Tr>
 );
 
+/** One labelled value of the detection summary; a value the server could not
+ *  tell reads "Not recognised" rather than leaving a blank. */
+const DetectedField: React.FC<{
+  label: string;
+  value: string | null;
+  testId: string;
+  mono?: boolean;
+}> = ({ label, value, testId, mono }) => (
+  <Stack gap={0} style={{ minWidth: 0 }}>
+    <Text size="xs" c="dimmed">
+      {label}
+    </Text>
+    <Text
+      size="sm"
+      fw={value ? 500 : 400}
+      c={value ? undefined : 'dimmed'}
+      ff={value && mono ? 'monospace' : undefined}
+      style={{ wordBreak: 'break-all' }}
+      data-testid={testId}
+    >
+      {value ?? 'Not recognised'}
+    </Text>
+  </Stack>
+);
+
+/** What the server recognised in the folder when no template was picked:
+ *  the pipeline, its version and engine, and the template it chose for them.
+ *  Shown above the plan so the reader can check the guess before creating. */
+export const DetectedTemplateSummary: React.FC<{
+  detected: DetectedTemplate;
+  /** The template actually used (`FromRunReport.template_id`). */
+  templateId: string;
+  /** A preview, where the template can still be changed. */
+  editable?: boolean;
+}> = ({ detected, templateId, editable = false }) => (
+  <Paper withBorder radius="md" p="sm" data-testid="run-detected-template">
+    <Group gap="sm" wrap="nowrap" align="flex-start">
+      <ThemeIcon variant="light" color="green" size="lg" radius="md">
+        <Icon icon="mdi:auto-fix" width={20} />
+      </ThemeIcon>
+      <Stack gap="xs" style={{ minWidth: 0, flex: 1 }}>
+        <Stack gap={0}>
+          <Text size="sm" fw={600}>
+            Recognised from the folder
+          </Text>
+          {editable && (
+            <Text size="xs" c="dimmed">
+              Go back to the first step to pick another template.
+            </Text>
+          )}
+        </Stack>
+        <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="sm" verticalSpacing="xs">
+          <DetectedField label="Pipeline" value={detected.pipeline} testId="run-detected-pipeline" />
+          <DetectedField label="Version" value={detected.version} testId="run-detected-version" />
+          <DetectedField label="Engine" value={detected.engine} testId="run-detected-engine" />
+          <DetectedField
+            label="Template"
+            value={templateId || detected.template_id}
+            testId="run-detected-template-id"
+            mono
+          />
+        </SimpleGrid>
+      </Stack>
+    </Group>
+  </Paper>
+);
+
+/** The preview's answer when no template was picked and the server could not
+ *  tell which pipeline produced the folder: say so, and send the reader back
+ *  to pick one. `message` is the server's own explanation. */
+export const TemplateNotDetectedAlert: React.FC<{
+  message: string;
+  onPickTemplate: () => void;
+}> = ({ message, onPickTemplate }) => (
+  <Alert
+    color="yellow"
+    variant="light"
+    icon={<Icon icon="mdi:help-circle-outline" width={18} />}
+    title="Pipeline not recognised, pick a template"
+    data-testid="run-template-not-detected"
+  >
+    <Stack gap="xs">
+      <Text size="sm">{message}</Text>
+      <Text size="sm">
+        Choose the template that matches the pipeline that produced this folder, then
+        preview again.
+      </Text>
+      <Group>
+        <Button
+          size="xs"
+          variant="light"
+          color="yellow"
+          leftSection={<Icon icon="mdi:arrow-left" width={14} />}
+          onClick={onPickTemplate}
+          data-testid="run-pick-template"
+        >
+          Pick a template
+        </Button>
+      </Group>
+    </Stack>
+  </Alert>
+);
+
 /** The dry-run plan: what each data collection of the template resolved to
  *  under the given data root. Also renders the real report after creation,
  *  where the dashboards that failed to import are listed as well. */
@@ -108,9 +217,24 @@ export const FromRunPreviewReport: React.FC<{ report: FromRunReport }> = ({ repo
   const { matched, considered } = fromRunMatchTotals(report);
   const failedDashboards = report.dashboards.filter((d) => !d.success);
   const variables = Object.entries(report.resolved_variables ?? {});
+  const summaryColor = matched === 0 ? 'red' : matched < considered ? 'yellow' : 'green';
+  const summaryIcon =
+    matched === 0
+      ? 'mdi:alert-circle'
+      : matched < considered
+        ? 'mdi:alert-circle-outline'
+        : 'mdi:check-circle';
 
   return (
     <Stack gap="sm" data-testid="run-preview-report">
+      {report.detected_template && (
+        <DetectedTemplateSummary
+          detected={report.detected_template}
+          templateId={report.template_id}
+          editable={report.dry_run}
+        />
+      )}
+
       <Group gap="xs" wrap="wrap">
         <Badge variant="light" color={accent.secondary} radius="sm">
           {report.project_name}
@@ -118,14 +242,17 @@ export const FromRunPreviewReport: React.FC<{ report: FromRunReport }> = ({ repo
         <Badge variant="light" color="gray" radius="sm">
           {report.template_id}
         </Badge>
-        <Badge
-          variant="light"
-          color={matched === 0 ? 'red' : matched < considered ? 'yellow' : 'green'}
-          radius="sm"
-          data-testid="run-match-summary"
-        >
-          {matched} of {considered} collection{considered === 1 ? '' : 's'} matched
-        </Badge>
+        {considered > 0 && (
+          <Badge
+            variant="light"
+            color={summaryColor}
+            radius="sm"
+            leftSection={<Icon icon={summaryIcon} width={12} />}
+            data-testid="run-match-summary"
+          >
+            {matched} of {considered} collection{considered === 1 ? '' : 's'} matched
+          </Badge>
+        )}
       </Group>
 
       <Text
@@ -152,78 +279,97 @@ export const FromRunPreviewReport: React.FC<{ report: FromRunReport }> = ({ repo
         </Alert>
       )}
 
-      <Table verticalSpacing="xs" striped highlightOnHover>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Data collection</Table.Th>
-            <Table.Th>Kind</Table.Th>
-            <Table.Th>Mode</Table.Th>
-            <Table.Th>Inputs</Table.Th>
-            <Table.Th style={{ width: 120 }}>Status</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {report.data_collections.map((dc) => {
-            const meta = FROM_RUN_STATUS_META[dc.status] ?? FROM_RUN_STATUS_META.missing;
-            return (
-              <React.Fragment key={dc.data_collection_tag}>
-                <Table.Tr
-                  data-testid={`run-preview-row-${dc.data_collection_tag}`}
-                  data-status={dc.status}
-                  style={meta.dim ? { opacity: 0.6 } : undefined}
-                >
-                  <Table.Td>
-                    <Stack gap={0}>
-                      <Group gap={6} wrap="nowrap">
-                        <Text size="sm" fw={600}>
-                          {dc.data_collection_tag}
-                        </Text>
-                        {dc.optional && (
-                          <Badge variant="outline" color="gray" size="xs" radius="sm">
-                            optional
-                          </Badge>
-                        )}
-                      </Group>
-                      <Text
-                        size="xs"
-                        c="dimmed"
-                        ff="monospace"
-                        style={{ wordBreak: 'break-all' }}
-                      >
-                        {dc.location}
-                      </Text>
-                    </Stack>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm">{dc.kind}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm" c={dc.mode ? undefined : 'dimmed'}>
-                      {dc.mode ?? 'n/a'}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm" fw={dc.matched > 0 ? 600 : 400}>
-                      {dc.matched}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge
-                      variant="light"
-                      color={meta.color}
-                      size="sm"
-                      leftSection={<Icon icon={meta.icon} width={12} />}
+      {report.data_collections.length === 0 ? (
+        <Group gap="xs" wrap="nowrap" data-testid="run-preview-empty">
+          <ThemeIcon variant="light" color="gray" size="md" radius="md">
+            <Icon icon="mdi:table-off" width={16} />
+          </ThemeIcon>
+          <Text size="sm" c="dimmed">
+            The template defines no data collection to look for in this folder.
+          </Text>
+        </Group>
+      ) : (
+        <Table.ScrollContainer minWidth={640}>
+          <Table verticalSpacing="xs" striped highlightOnHover>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Data collection</Table.Th>
+                <Table.Th>Kind</Table.Th>
+                <Table.Th>Mode</Table.Th>
+                <Table.Th ta="right">Inputs</Table.Th>
+                <Table.Th style={{ width: 120 }}>Status</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {report.data_collections.map((dc) => {
+                const meta = FROM_RUN_STATUS_META[dc.status] ?? FROM_RUN_STATUS_META.missing;
+                return (
+                  <React.Fragment key={dc.data_collection_tag}>
+                    <Table.Tr
+                      data-testid={`run-preview-row-${dc.data_collection_tag}`}
+                      data-status={dc.status}
+                      style={meta.dim ? { opacity: 0.6 } : undefined}
                     >
-                      {meta.label}
-                    </Badge>
-                  </Table.Td>
-                </Table.Tr>
-                {dc.missing_sources.length > 0 && <MissingSources dc={dc} />}
-              </React.Fragment>
-            );
-          })}
-        </Table.Tbody>
-      </Table>
+                      <Table.Td>
+                        <Stack gap={0}>
+                          <Group gap={6} wrap="nowrap">
+                            <Text size="sm" fw={600}>
+                              {dc.data_collection_tag}
+                            </Text>
+                            {dc.optional && (
+                              <Badge variant="outline" color="gray" size="xs" radius="sm">
+                                optional
+                              </Badge>
+                            )}
+                          </Group>
+                          <Text
+                            size="xs"
+                            c="dimmed"
+                            ff="monospace"
+                            style={{ wordBreak: 'break-all' }}
+                          >
+                            {dc.location}
+                          </Text>
+                        </Stack>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm">{dc.kind}</Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="sm" c={dc.mode ? undefined : 'dimmed'}>
+                          {dc.mode ?? 'n/a'}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td ta="right">
+                        {dc.matched > 0 ? (
+                          <Text size="sm" fw={600}>
+                            {dc.matched}
+                          </Text>
+                        ) : (
+                          <Text size="sm" c="dimmed">
+                            none
+                          </Text>
+                        )}
+                      </Table.Td>
+                      <Table.Td>
+                        <Badge
+                          variant="light"
+                          color={meta.color}
+                          size="sm"
+                          leftSection={<Icon icon={meta.icon} width={12} />}
+                        >
+                          {meta.label}
+                        </Badge>
+                      </Table.Td>
+                    </Table.Tr>
+                    {dc.missing_sources.length > 0 && <MissingSources dc={dc} />}
+                  </React.Fragment>
+                );
+              })}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      )}
 
       {report.detected_runs.length > 0 && (
         <Group gap="xs" wrap="wrap">
@@ -339,6 +485,7 @@ export const FromRunCreatedModal: React.FC<{
 
   const dashboardId =
     report?.dashboards.find((d) => d.success && d.dashboard_id)?.dashboard_id ?? null;
+  const noDashboardReason = dashboardId ? null : 'No dashboard was imported for this project.';
 
   let state: WatchState = 'idle';
   if (runId) {
@@ -380,117 +527,94 @@ export const FromRunCreatedModal: React.FC<{
             </Text>
           </Alert>
 
-          <Group gap="xs" wrap="nowrap">
-            {state === 'running' && <Loader size="xs" color={accent.secondary} />}
-            {state === 'success' && (
-              <Icon icon="mdi:check-circle" width={16} color="var(--mantine-color-green-6)" />
-            )}
-            {state === 'failed' && (
-              <Icon icon="mdi:alert-circle" width={16} color="var(--mantine-color-red-6)" />
-            )}
-            <Text size="sm" data-testid="run-created-status" data-state={state}>
-              {state === 'idle' && 'No ingestion run to watch.'}
-              {state === 'running' &&
-                `Ingesting (${formatElapsed(elapsedMs)} elapsed)` +
-                  (progress ? `: ${summarizeManifestRun(progress)}` : '')}
-              {state === 'success' &&
-                progress &&
-                `Ingestion completed in ${formatElapsed(elapsedMs)}: ${summarizeManifestRun(progress)}`}
-              {state === 'failed' &&
-                (progress
-                  ? `Ingestion finished with errors in ${formatElapsed(elapsedMs)}: ${summarizeManifestRun(progress)}`
-                  : 'Ingestion failed')}
-            </Text>
-          </Group>
+          <Box aria-live="polite" role="status">
+            <Group gap="xs" wrap="nowrap">
+              {state === 'running' && <Loader size="xs" color={accent.secondary} />}
+              {(state === 'success' || state === 'failed') && (
+                <ThemeIcon
+                  variant="light"
+                  size="sm"
+                  radius="xl"
+                  color={state === 'success' ? 'green' : 'red'}
+                >
+                  <Icon
+                    icon={state === 'success' ? 'mdi:check-circle' : 'mdi:alert-circle'}
+                    width={14}
+                  />
+                </ThemeIcon>
+              )}
+              {state === 'idle' && (
+                <ThemeIcon variant="light" size="sm" radius="xl" color="gray">
+                  <Icon icon="mdi:minus-circle-outline" width={14} />
+                </ThemeIcon>
+              )}
+              <Text size="sm" data-testid="run-created-status" data-state={state}>
+                {state === 'idle' && 'No ingestion run to watch.'}
+                {state === 'running' &&
+                  `Ingesting (${formatElapsed(elapsedMs)} elapsed)` +
+                    (progress ? `: ${summarizeManifestRun(progress)}` : '')}
+                {state === 'success' &&
+                  progress &&
+                  `Ingestion completed in ${formatElapsed(elapsedMs)}: ${summarizeManifestRun(progress)}`}
+                {state === 'failed' &&
+                  (progress
+                    ? `Ingestion finished with errors in ${formatElapsed(elapsedMs)}: ${summarizeManifestRun(progress)}`
+                    : 'Ingestion failed')}
+              </Text>
+            </Group>
+          </Box>
 
           {error && (
             <Alert
               color="red"
               variant="light"
-              icon={<Icon icon="mdi:alert-circle" width={16} />}
+              icon={<Icon icon="mdi:alert-circle-outline" width={16} />}
               data-testid="run-created-error"
             >
               {error}
             </Alert>
           )}
 
-          {progress && progress.refreshed.length > 0 && (
-            <Table verticalSpacing="xs" striped highlightOnHover>
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Data collection</Table.Th>
-                  <Table.Th>Status</Table.Th>
-                  <Table.Th>Entries</Table.Th>
-                  <Table.Th>Message</Table.Th>
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {progress.refreshed.map((entry) => {
-                  const meta =
-                    MANIFEST_RUN_STATUS_META[entry.status] ?? MANIFEST_RUN_STATUS_META.failed;
-                  return (
-                    <Table.Tr
-                      key={entry.data_collection_tag}
-                      data-testid={`run-progress-row-${entry.data_collection_tag}`}
-                      data-status={entry.status}
-                    >
-                      <Table.Td>
-                        <Text size="sm" fw={600}>
-                          {entry.data_collection_tag}
-                        </Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <Badge
-                          variant="light"
-                          color={meta.color}
-                          size="sm"
-                          leftSection={<Icon icon={meta.icon} width={12} />}
-                        >
-                          {meta.label}
-                        </Badge>
-                      </Table.Td>
-                      <Table.Td>
-                        <Text size="sm">{entry.entries}</Text>
-                      </Table.Td>
-                      <Table.Td>
-                        {entry.message && (
-                          <Text size="xs" c={entry.status === 'failed' ? 'red' : 'dimmed'}>
-                            {entry.message}
-                          </Text>
-                        )}
-                      </Table.Td>
-                    </Table.Tr>
-                  );
-                })}
-              </Table.Tbody>
-            </Table>
+          {progress && (
+            <IngestionResultTable
+              rows={progress.refreshed}
+              rowTestIdPrefix="run-progress"
+              emptyText="The ingestion run reported no collection yet."
+              testId="run-progress-results"
+            />
           )}
 
           <FromRunPreviewReport report={report} />
 
-          <Group justify="flex-end" gap="xs">
-            <Button variant="default" onClick={onClose} data-testid="run-created-stay">
-              Stay on projects
-            </Button>
-            <Button
-              color={accent.secondary}
-              leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
-              disabled={!dashboardId}
-              title={
-                dashboardId
-                  ? state === 'running'
-                    ? 'Ingestion is still running; the dashboard fills in as collections finish'
-                    : undefined
-                  : 'No dashboard was imported for this project'
-              }
-              onClick={() => {
-                if (dashboardId) window.location.assign(`/dashboard/${dashboardId}`);
-              }}
-              data-testid="run-created-open-dashboard"
-            >
-              Open dashboard
-            </Button>
-          </Group>
+          <Stack gap={4}>
+            <Group justify="flex-end" gap="xs">
+              <Button variant="default" onClick={onClose} data-testid="run-created-stay">
+                Stay on projects
+              </Button>
+              <GatedButton
+                color={accent.secondary}
+                leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
+                reason={noDashboardReason}
+                onClick={() => {
+                  if (dashboardId) window.location.assign(`/dashboard/${dashboardId}`);
+                }}
+                data-testid="run-created-open-dashboard"
+              >
+                Open dashboard
+              </GatedButton>
+            </Group>
+            {noDashboardReason ? (
+              <Group justify="flex-end">
+                <DisabledReason reason={noDashboardReason} icon="mdi:information-outline" />
+              </Group>
+            ) : (
+              state === 'running' && (
+                <Text size="xs" c="dimmed" ta="right" data-testid="run-created-dashboard-hint">
+                  Ingestion is still running: the dashboard fills in as collections finish.
+                </Text>
+              )
+            )}
+          </Stack>
         </Stack>
       )}
     </Modal>
