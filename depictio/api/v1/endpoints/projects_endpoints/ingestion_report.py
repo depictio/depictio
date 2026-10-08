@@ -279,7 +279,13 @@ def _dc_source_inputs(config: dict, data_root: str | None) -> list[str]:
             )
             if not rel:
                 continue
-            path = os.path.join(data_root, rel) if (data_root and not os.path.isabs(rel)) else rel
+            if "://" in rel or os.path.isabs(rel) or not data_root:
+                # Shown as stored: an override outside the data root (a URL, an
+                # absolute path a template variable set) is not this server's
+                # disk to probe on a reader's behalf.
+                out.append(rel)
+                continue
+            path = os.path.join(data_root, rel)
             out.append(os.path.realpath(path) if os.path.exists(path) else path)
     except Exception:
         return out
