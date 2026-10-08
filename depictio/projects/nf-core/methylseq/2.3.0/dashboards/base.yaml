@@ -1662,7 +1662,7 @@ tabs:
   - name: Library relationships
     icon: mdi:chart-scatter-plot
     color: grape
-    description: The PCA beside the pairwise correlation it summarises
+    description: The PCA, then the pairwise correlation it summarises
   # Collapsed: the heatmap autofits to its 150 rows (about 15 grid rows), past
   # the tab's budget; the PCA and the correlation answer the tab's question.
   - name: Variable windows
@@ -1750,7 +1750,7 @@ tabs:
     index: coh-pca
     title: Libraries on their binned methylome (PCA)
     description: Coloured by {GROUP_COL_DISPLAY}; with few libraries the first component can carry depth as much as design.
-    layout: {x: 0, y: 0, w: 4, h: 6}
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: methylseq
     data_collection_tag: bismark_window_correlation
@@ -1764,7 +1764,7 @@ tabs:
     index: coh-correlation
     title: Library correlation over the shared windows
     description: Pearson correlation of the 10 kb window means, clustered on both axes.
-    layout: {x: 4, y: 0, w: 4, h: 5}
+    layout: {x: 0, y: 6, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: methylseq
     data_collection_tag: bismark_top_variable_windows

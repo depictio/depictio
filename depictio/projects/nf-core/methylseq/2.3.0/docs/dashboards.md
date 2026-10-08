@@ -140,7 +140,7 @@ transcription start site, and the same metagene as a signal matrix.
 
 **Cohort structure.** The library-by-window matrix read three ways. Strip: the libraries placed
 by the PCA (a ring by group) and the 150 most variable windows ranked by contig. Then the PCA
-coloured by group (a lasso makes an analysis group) beside the pairwise Pearson correlation,
+coloured by group (a lasso makes an analysis group), then the pairwise Pearson correlation,
 clustered. Collapsed below them, the heatmap of the 150 windows whose methylation varies most
 (one column per library), too tall to open by default. A library that
 lands with the wrong block in all three is a swap, a mislabelled sheet or a conversion failure.

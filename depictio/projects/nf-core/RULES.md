@@ -251,6 +251,8 @@ A KPI strip is four different readings, not four numbers in one style:
   or `rail`, and leave the component's `controls_placement` unset.
 - Advanced viz tiles are `w: 8` (controls on the right) or `w: 3` to `w: 7` (controls on top).
   Never `w <= 2`.
+- A heatmap labelled with library ids on both axes (a sample correlation matrix) takes `w: 8`:
+  at `w: 4` the labels leave the plot no room and it renders blank.
 - Minimal tiles and highlights on the Overview keep their controls behind the icon, by design.
 
 ## 9. Live values in text
