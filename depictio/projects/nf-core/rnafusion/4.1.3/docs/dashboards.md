@@ -60,8 +60,8 @@ child tab, collapsed, and absent from the Overview.
 
 Each child tab opens with a short intro (the method, with a link to its tool, and how to
 read the tab), then a strip of four key numbers, each card with its own colour and a
-secondary that reads it (a box plot, a distribution, a gauge, a threshold, a ranking or a
-share), then at most three open sections; tables and details follow, collapsed.
+secondary that reads it (a box plot, a distribution, a threshold, a ranking or a share),
+then at most three open sections; tables and details follow, collapsed.
 
 **MultiQC.** MultiQC panels only. Open: general statistics, the raw FastQC quality
 histograms beside fastp's filtered reads, then STAR's alignment scores beside Picard's
@@ -69,48 +69,47 @@ transcript region assignment. Collapsed: the post-trim FastQC quality scores (Mu
 anchors the second FastQC pass as `fastqc-1`), Picard's insert size and gene body coverage,
 and STAR's gene counts. Its own sample filter reads the MultiQC report.
 
-**Caller Agreement.** Strip: distinct fusions (with how many recur across samples), calls
-split by how many callers agree (a ring), the median Fusion Indication Index (a box) and
-the calls a knowledge base already lists (split by the bases). Then the UpSet of the
+**Caller Agreement.** Strip: distinct fusions (the 5' partners in most fusions ranked),
+calls split by how many callers agree (a ring), the median Fusion Indication Index (a box)
+and the calls a knowledge base already lists (split by the bases). Then the UpSet of the
 fusions each combination of callers found, its sets read from the caller flag columns by
-`set_columns_pattern` so a run with another caller needs no change, and every fusion at its
-place in fusion-report's ranking (a lollipop sized by the index). Collapsed: the consensus
-table. Filters: index and rank ranges, the number of knowledge bases, the bases themselves
-and the 5' partner gene.
+`set_columns_pattern` so a run with another caller needs no change, and the 30 fusions
+fusion-report ranks highest, as bars of their index coloured by how many callers agree.
+Collapsed: the consensus table. Filters: index and rank ranges, the number of knowledge
+bases, the bases themselves and the 5' partner gene.
 
 **Caller Evidence.** Strip: caller reports (one per fusion, sample and caller, a ring by
-caller), their median read support (a box), the total support with the best-supported
-fusions ranked, and the median share of a fusion's reads one caller accounts for (a gauge).
-Then the dot plot of read support per fusion and caller (colour: log10 reads, size: the
-caller's share) and a scatter of Arriba against STAR-Fusion, one point per fusion and
-sample, sized by FusionCatcher's support and coloured by the index (by the groups when
-Analysis mode has some). Collapsed: each caller's own dot plot (Arriba by confidence,
-STAR-Fusion by splice type, FusionCatcher by predicted effect) and the four tables (the
-per-caller evidence and each caller's calls). Filters: caller, supporting reads and caller
-share.
+caller), their median read support (a box), the total support (split by caller) and the
+median share of a fusion's reads one caller accounts for (its distribution). Then the dot
+plot of read support per fusion and caller (colour: log10 reads, size: the caller's share)
+and a scatter of Arriba against STAR-Fusion on log axes, one point per fusion and sample,
+sized by FusionCatcher's support and coloured by the index (by the groups when Analysis
+mode has some). Collapsed: each caller's own dot plot (Arriba by confidence, STAR-Fusion by
+splice type, FusionCatcher by predicted effect) and the four tables (the per-caller
+evidence and each caller's calls). Filters: caller, supporting reads and caller share.
 
 **Breakpoints.** Arriba's calls as loci. Strip: Arriba calls (split by event class), the
-calls between chromosomes (the most frequent contig pairs ranked), the median share of the
-local reads that support a call (a gauge) and the median split reads (a box). Then the flow
-from the contig of the 5' partner to that of the 3' partner beside the chord ring of the
-same calls, and the read support by event class (split by confidence) and by breakpoint
+calls between chromosomes (a ring by Arriba confidence), the median share of the local
+reads that support a call (its distribution) and the median split reads (a box). Then the
+flow from the contig of the 5' partner to that of the 3' partner beside the chord ring of
+the same calls, and the read support by event class (split by confidence) and by breakpoint
 site. Filters: contig pair, event class and Arriba confidence; they narrow the Arriba
 collection, not the chord's, which the sample and fusion filters reach.
 
 **Validation.** FusionInspector's re-quantified calls. Strip: validated fusions (ranked by
 predicted protein), the median fragments per million (against 0.1, STAR-Fusion's default
-floor), the median share of the support that crosses the junction (a gauge) and the median
-re-aligned support (a box). Then the abundance dot plot by predicted protein, and the
-scatter of the 5' against the 3' fusion allelic ratio on log axes beside the record of the
-picked call. Collapsed: the FusionInspector table. Filters: predicted protein and
+floor), the median share of the support that crosses the junction (its distribution) and
+the median re-aligned support (a box). Then the abundance dot plot by predicted protein,
+and the scatter of the 5' against the 3' fusion allelic ratio on log axes beside the record
+of the picked call. Collapsed: the FusionInspector table. Filters: predicted protein and
 fragments per million.
 
 **Protein Domains.** The Pfam domains of both partners. Strip: domain hits (a ring by
-partner side), the hits the breakpoint cuts through (ranked by fusion), the median domain
-length (a box) and the median hit strength (its distribution). Then the fusion protein
-structure (the six fusions with the most domains, partners end to end) and the lollipop of
-every domain at its start position. Collapsed: the Pfam table. Filters: partner side and
-predicted protein.
+partner side), the hits the breakpoint cuts through (split by predicted protein), the
+median domain length (a box) and the median hit strength (its distribution). Then the
+fusion protein structure (the six fusions with the most domains, partners end to end) and
+the lollipop of every domain at its start position. Collapsed: the Pfam table. Filters:
+partner side and predicted protein.
 
 **Splice Junctions.** CTAT-splicing's junctions. Strip: distinct junctions (the genes
 holding most ranked), the median unique read support (a box), the reads summed over every
@@ -140,12 +139,13 @@ agreement runs from grey (one caller) to dark violet (three); each caller, Arrib
 confidence classes, the predicted protein (in frame, frameshift, unknown), the partner side
 and Arriba's event classes (under both names the two Arriba collections give them) are
 written out, with any other value coloured at import. Strandedness is coloured `auto`. Code
-figures read the same map; the Arriba against STAR-Fusion scatter spreads Analysis mode's
-groups when it has some.
+figures read the same map; the ranked fusion bars and the Arriba against STAR-Fusion
+scatter spread Analysis mode's groups when it has some.
 
 ## Cross-selection
 
-Tables select rows and the two scatters select points; a pick becomes a dashboard filter
+Tables select rows, the ranked fusion bars select fusions and the two scatters select
+points; a pick becomes a dashboard filter
 that narrows the other tiles of the same collection and, through the project links, the
 collections downstream of it. Row selection is on `sample` in the sample sheet, `fusion` in
 the consensus, evidence, caller, FusionInspector and Pfam tables, and `gene` in the junction

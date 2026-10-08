@@ -71,7 +71,7 @@ alignment details (Picard duplicates, Salmon fragment lengths, read strand compo
 transcript QC (Qualimap gene body coverage, dupRadar, RSeQC inner distance). Its own sample
 filter reads the MultiQC report, whose library names carry read suffixes.
 
-**Library QC.** Strip: reads received by STAR (the deepest libraries), the uniquely mapped
+**Library QC.** Strip: reads received by STAR (split by condition), the uniquely mapped
 share on a 0 to 100 gauge, the duplication share with its spread and the exonic share with
 its distribution. Then the per-library QC profile, eleven MultiQC general statistics as
 parallel coordinates coloured by condition, and the RSeQC read distribution per library,
@@ -79,13 +79,13 @@ switchable between the five region classes and the individual features. Filters:
 mapped and duplication ranges.
 
 **Sample Space.** Strip: libraries in the TPM matrix (a ring by condition), genes expressed
-with their spread, genes detected with their distribution and the median TPM (the highest
-libraries). The same four cards open the Sample Space tab of nf-core/rnasplice. Then the
+with their spread, genes detected with their distribution and the median TPM (ranked by
+condition). The same four cards open the Sample Space tab of nf-core/rnasplice. Then the
 pipeline's own DESeq2 QC PCA beside the sample distance matrix it clusters on (`ward`,
 `Blues`). Collapsed: the library summary table with the library record card beside it.
 Filters: genes expressed and median TPM ranges.
 
-**Variable Genes.** Strip: genes in view (ranked by condition), the median log2(TPM + 1)
+**Variable Genes.** Strip: genes at 1 TPM or more (counted per condition), the median log2(TPM + 1)
 with its spread, the genes two-fold higher in one condition (split by that condition) and
 the highest TPM with the genes that reach it. Then the 500 most variable genes as a
 clustered, row z-scored heatmap with the design strips on top (condition, replicate, read
@@ -95,9 +95,10 @@ log2(TPM + 1) range.
 
 **Gene Explorer.** Strip: expressed genes (a ring by the condition they peak in), the
 median of their mean expression (a distribution) and of their spread (a box plot), and the
-libraries most genes peak in. Then the mean-variance plane, one point per expressed gene
-coloured by the condition it peaks in, beside the gene record card (its id links to
-Ensembl). Collapsed: the gene rows (one per gene and library) and the merged count matrix,
+median lead of the top condition over the others (the genes two-fold or more ahead pass).
+Then the mean-variance plane, one point per expressed gene coloured by the condition it
+peaks in and unlabelled (the most variable genes sit too close to name), beside the gene
+record card (its id links to Ensembl). Collapsed: the gene rows (one per gene and library) and the merged count matrix,
 which moved here from the old pinned reference tables. Filters: a gene picker and a mean
 log2(TPM + 1) range.
 
@@ -117,7 +118,8 @@ These flags are passed by hand with `--var` (see Reproducing).
 
 `category_colors` is declared once, on the Overview, and read by every tab. `condition`,
 `group` and `top_condition` are coloured `auto`: they hold the same values, so a condition
-takes the same colour in the parallel coordinates, the box plot, the plane and the cards.
+takes the same colour in the parallel coordinates, the heatmap strip, the box plot and the
+plane.
 The five RSeQC region classes are written out, `Other intergenic` in grey. The box plot is
 a code figure: it reads the same map and follows Analysis mode's groups when it has some.
 

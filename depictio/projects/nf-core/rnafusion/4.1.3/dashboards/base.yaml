@@ -655,9 +655,9 @@ tabs:
     color: violet
     description: The fusions each combination of callers found
   - name: Ranked fusions
-    icon: mdi:chart-timeline-variant
+    icon: mdi:chart-bar
     color: violet
-    description: Every fusion at its place in fusion-report's ranking
+    description: The fusions fusion-report ranks highest, by their index
   - name: Consensus table
     icon: mdi:table
     color: gray
@@ -752,8 +752,8 @@ tabs:
     index: agree-gene5p-filter
     title: 5' partner gene
     layout: {x: 0, y: 12, w: 1, h: 3}
-  # The consensus has one row per fusion and sample, so a fusion repeated in
-  # the uniqueness strip is one called in more than one sample.
+  # Ranked by the 5' partner: a gene in several fusions is a promiscuous
+  # partner. A uniqueness strip read 100% distinct on any one-sample run.
   - component_type: card
     workflow_tag: rnafusion
     data_collection_tag: fusion_consensus
@@ -761,16 +761,18 @@ tabs:
     aggregation: nunique
     column_name: fusion
     column_type: object
-    secondary_layout: uniqueness
+    secondary_layout: top_n
+    breakdown_col: gene_5p
+    top_n_count: 3
     display:
       icon_name: mdi:dna
       icon_color: indigo
-      caption: distinct, and how many recur across samples
+      caption: distinct, the 5' partners in most fusions
     section: Agreement at a glance
     tag: rf-agree-card-fusions
     index: agree-card-fusions
     title: Distinct fusions
-    description: Distinct fusions in the consensus; a repeated one was called in several samples.
+    description: Distinct fusions in the consensus; the bars rank the 5' partner genes found in most of them.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnafusion
@@ -850,21 +852,34 @@ tabs:
     index: agree-upset
     title: Fusions per combination of callers
     layout: {x: 0, y: 0, w: 8, h: 5}
-  - component_type: advanced_viz
+  # The ranking as bars, the fusion names on the axis. The lollipop it
+  # replaced drew one fusion per lane, so past six fusions it showed a single
+  # stem behind a fusion picker.
+  - component_type: figure
     workflow_tag: rnafusion
     data_collection_tag: fusion_consensus
-    use: fusionreport/fii_lollipop
-    config:
-      effect_col: fii
-      scale_points_by_effect: true
-      show_stems: true
-      gene_sort: effect
-      top_n_labels: 10
+    use: fusionreport/fusions
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Each fusion at its highest index over the samples in view, the 30 highest
+      # first, coloured by how many callers agree (by the groups in Analysis mode).
+      keys = [*depictio_group_by, 'fusion']
+      d = df.group_by(keys).agg(pl.col('fii').max().alias('fii'), pl.col('tool_support').sort_by('n_tools').last().alias('tool_support'), pl.col('sample').n_unique().alias('samples'))
+      order = d.group_by('fusion').agg(pl.col('fii').max()).sort(['fii', 'fusion'], descending=[True, False]).head(30)['fusion'].to_list()
+      d = d.filter(pl.col('fusion').is_in(order))
+      colour = depictio_group_kwargs or {'color': 'tool_support', 'color_discrete_map': depictio_category_colors.get('tool_support') or {}, 'category_orders': {'tool_support': ['3 callers', '2 callers', '1 caller']}}
+      fig = px.bar(d.to_pandas(), x='fusion', y='fii', hover_data=['samples'], custom_data=['fusion'], labels={'fusion': 'Fusion', 'fii': 'Fusion Indication Index', 'tool_support': 'Callers agreeing', 'samples': 'Samples'}, **colour)
+      fig.update_layout(barmode='group', margin=dict(t=10))
+      fig.update_xaxes(categoryorder='array', categoryarray=order, tickangle=-40, automargin=True)
+    selection_enabled: true
+    selection_column: fusion
     section: Ranked fusions
-    tag: rf-agree-lollipop
-    index: agree-lollipop
-    title: Fusions by rank, sized by the index
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    tag: rf-agree-ranked
+    index: agree-ranked
+    title: Fusions by the index, highest first
+    description: The 30 highest-ranked fusions, coloured by how many callers agree. Select bars to filter the dashboard.
+    layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: table
     workflow_tag: rnafusion
     data_collection_tag: fusion_consensus
@@ -1023,20 +1038,22 @@ tabs:
     aggregation: sum
     column_name: supporting_reads
     column_type: int64
-    secondary_layout: top_n
-    breakdown_col: fusion
-    top_n_count: 3
+    # Split by caller rather than ranked by fusion: fusion names are cut at a
+    # card's width. Beside the reports ring, it shows which caller counts more.
+    secondary_layout: composition
+    breakdown_col: caller
     display:
       icon_name: mdi:sigma
       icon_color: cyan
-      caption: the best-supported fusions
+      caption: reads, by caller
     section: Evidence at a glance
     tag: rf-evid-card-total
     index: evid-card-total
     title: Total read support
-    description: Reads summed over every caller and fusion; the bars rank the fusions by their total.
+    description: Reads summed over every caller and fusion; the bar splits them by the caller that counted them.
     layout: {x: 4, y: 0, w: 2, h: 2}
-  # A share from 0 to 1, so a gauge; a report without counted reads has no share.
+  # A share from 0 to 1 with no published floor: its distribution, not a gauge
+  # (which prints "0.35 of 1"). A report without counted reads has no share.
   - component_type: card
     workflow_tag: rnafusion
     data_collection_tag: caller_evidence
@@ -1045,12 +1062,11 @@ tabs:
     column_name: evidence_fraction
     column_type: float64
     filter_expr: col('supporting_reads') > 0
-    secondary_layout: gauge
-    coverage_max: 1
+    secondary_layout: histogram
     display:
       icon_name: mdi:scale-balance
       icon_color: orange
-      caption: median share of a fusion's reads
+      caption: median share of a fusion's reads, with its distribution
       decimals: 2
     section: Evidence at a glance
     tag: rf-evid-card-share
@@ -1082,17 +1098,21 @@ tabs:
     visu_type: scatter
     mode: code
     code_content: |-
-      # The two split-read callers face each other; FusionCatcher is the marker size.
+      # The two split-read callers face each other on log axes, reads + 1 so a
+      # fusion one caller missed sits on the other's edge; FusionCatcher is the
+      # marker size, the dotted diagonal equal support.
       keys = [*depictio_group_by, 'sample', 'fusion']
       wide = df.pivot(on='caller', index=keys, values='supporting_reads', aggregate_function='sum').fill_null(0)
       for caller in ('arriba', 'starfusion', 'fusioncatcher'):
           if caller not in wide.columns:
               wide = wide.with_columns(pl.lit(0).alias(caller))
       fii = df.group_by(keys).agg(pl.col('fii').max().alias('fii'))
-      wide = wide.join(fii, on=keys, how='left').with_columns(pl.col('fii').fill_null(0.0))
+      wide = wide.join(fii, on=keys, how='left').with_columns(pl.col('fii').fill_null(0.0), (pl.col('arriba') + 1).alias('arriba_1'), (pl.col('starfusion') + 1).alias('starfusion_1'))
       colour = depictio_group_kwargs or {'color': 'fii', 'color_continuous_scale': 'Tealgrn'}
       size = 'fusioncatcher' if wide['fusioncatcher'].sum() > 0 else None
-      fig = px.scatter(wide.to_pandas(), x='arriba', y='starfusion', size=size, size_max=28, hover_name='fusion', hover_data=['sample'], custom_data=['fusion'], labels={'arriba': 'Arriba supporting reads', 'starfusion': 'STAR-Fusion supporting reads', 'fusioncatcher': 'FusionCatcher reads', 'fii': 'FII'}, **colour)
+      fig = px.scatter(wide.to_pandas(), x='arriba_1', y='starfusion_1', size=size, size_max=28, log_x=True, log_y=True, hover_name='fusion', hover_data=['sample', 'arriba', 'starfusion'], custom_data=['fusion'], labels={'arriba_1': 'Arriba supporting reads + 1', 'starfusion_1': 'STAR-Fusion supporting reads + 1', 'arriba': 'Arriba reads', 'starfusion': 'STAR-Fusion reads', 'fusioncatcher': 'FusionCatcher reads', 'fii': 'FII'}, **colour)
+      top = max(wide['arriba_1'].max(), wide['starfusion_1'].max())
+      fig.add_scatter(x=[1, top], y=[1, top], mode='lines', line=dict(dash='dot', width=1), hoverinfo='skip', showlegend=False)
       fig.update_layout(margin=dict(t=10))
     selection_enabled: true
     selection_column: fusion
@@ -1100,7 +1120,7 @@ tabs:
     tag: rf-evid-scatter
     index: evid-scatter
     title: Arriba against STAR-Fusion
-    description: One point per fusion and sample, sized by FusionCatcher's support. Select points to filter the dashboard.
+    description: One point per fusion and sample on log axes, sized by FusionCatcher's support. Select points to filter the dashboard.
     layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: rnafusion
@@ -1305,21 +1325,23 @@ tabs:
     column_name: fusion
     column_type: object
     filter_expr: col('chrom_5p') != col('chrom_3p')
-    secondary_layout: top_n
-    breakdown_col: chrom_pair
-    top_n_count: 3
+    # Split by Arriba's confidence: contig pairs rarely repeat, so a ranking
+    # of them drew bars of one call each, their labels cut.
+    secondary_layout: donut
+    breakdown_col: confidence
     display:
       icon_name: mdi:arrow-left-right
       icon_color: red
-      caption: the most frequent contig pairs
+      caption: calls, by Arriba confidence
     section: Breakpoints at a glance
     tag: rf-bp-card-inter
     index: bp-card-inter
     title: Between chromosomes
-    description: Calls whose two breakpoints sit on different contigs.
+    description: Calls whose two breakpoints sit on different contigs, split by Arriba's confidence.
     layout: {x: 2, y: 0, w: 2, h: 2}
-  # Split reads plus discordant mates over the local coverage: a share, so a
-  # gauge; a call with no local coverage has none.
+  # Split reads plus discordant mates over the local coverage: a share with no
+  # published floor, so its distribution rather than a gauge ("0.12 of 1"). A
+  # call with no local coverage has none.
   - component_type: card
     workflow_tag: rnafusion
     data_collection_tag: arriba_fusions
@@ -1328,12 +1350,11 @@ tabs:
     column_name: support_fraction
     column_type: float64
     filter_expr: col('coverage') > 0
-    secondary_layout: gauge
-    coverage_max: 1
+    secondary_layout: histogram
     display:
       icon_name: mdi:percent-outline
       icon_color: green
-      caption: median share of the local reads
+      caption: median share of the local reads, with its distribution
       decimals: 2
     section: Breakpoints at a glance
     tag: rf-bp-card-fraction
@@ -1397,7 +1418,11 @@ tabs:
     data_collection_tag: arriba_fusions
     use: arriba/type_bars
     visu_type: bar
-    dict_kwargs: {x: fusion_type, y: supporting_reads, color: confidence}
+    dict_kwargs:
+      x: fusion_type
+      y: supporting_reads
+      color: confidence
+      labels: {fusion_type: Event class, supporting_reads: Supporting reads, confidence: Arriba confidence}
     section: Event classes
     tag: rf-bp-type-bars
     index: bp-type-bars
@@ -1409,7 +1434,11 @@ tabs:
     data_collection_tag: arriba_fusions
     use: arriba/site_bars
     visu_type: bar
-    dict_kwargs: {x: site_5p, y: supporting_reads, color: site_3p}
+    dict_kwargs:
+      x: site_5p
+      y: supporting_reads
+      color: site_3p
+      labels: {site_5p: 5' breakpoint site, supporting_reads: Supporting reads, site_3p: 3' breakpoint site}
     section: Event classes
     tag: rf-bp-site-bars
     index: bp-site-bars
@@ -1542,12 +1571,12 @@ tabs:
     column_name: junction_fraction
     column_type: float64
     filter_expr: col('supporting_reads') > 0
-    secondary_layout: gauge
-    coverage_max: 1
+    # A share with no published floor: its distribution, not a gauge ("0.73 of 1").
+    secondary_layout: histogram
     display:
       icon_name: mdi:bullseye-arrow
       icon_color: violet
-      caption: median, 0 to 1
+      caption: median, 0 to 1, with its distribution
       decimals: 2
     section: Validation at a glance
     tag: rf-valid-card-junction
@@ -1746,13 +1775,14 @@ tabs:
     column_name: domain
     column_type: object
     filter_expr: col('domain').str.ends_with('-PARTIAL')
-    secondary_layout: top_n
-    breakdown_col: fusion
-    top_n_count: 3
+    # Split by the predicted protein rather than ranked by fusion, whose names
+    # a card cuts short.
+    secondary_layout: composition
+    breakdown_col: prot_fusion_type
     display:
       icon_name: mdi:content-cut
       icon_color: red
-      caption: truncated domains, by fusion
+      caption: truncated domains, by predicted protein
     section: Domains at a glance
     tag: rf-dom-card-cut
     index: dom-card-cut

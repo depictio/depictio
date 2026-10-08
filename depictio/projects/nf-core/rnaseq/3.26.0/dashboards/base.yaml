@@ -722,19 +722,21 @@ tabs:
     aggregation: sum
     column_name: total_reads_m
     column_type: float64
-    secondary_layout: top_n
-    breakdown_col: sample
+    # Split by condition, not ranked by library: the library names are cut at
+    # a card's width, and the condition shares say whether depth is balanced.
+    secondary_layout: composition
+    breakdown_col: condition
     top_n_count: 4
     display:
       icon_name: mdi:counter
       icon_color: blue
-      caption: the deepest libraries
+      caption: reads, by condition
       decimals: 1
     section: QC at a glance
     tag: rna-libqc-card-reads
     index: libqc-card-reads
     title: Reads (M)
-    description: Reads STAR received after trimming, in millions, summed over the libraries in view.
+    description: Reads STAR received after trimming, in millions, summed over the libraries in view and split by condition.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnaseq
@@ -976,19 +978,20 @@ tabs:
     aggregation: median
     column_name: median_tpm
     column_type: float64
+    # Ranked by condition: library names are cut at a card's width.
     secondary_layout: top_n
-    breakdown_col: sample_id
+    breakdown_col: group
     top_n_count: 4
     display:
       icon_name: mdi:chart-bell-curve
       icon_color: orange
-      caption: the highest libraries
+      caption: median per condition, highest first
       decimals: 2
     section: Libraries at a glance
     tag: rna-space-card-median-tpm
     index: space-card-median-tpm
     title: Median TPM
-    description: Median TPM of the genes a library detects. One far above its peers spent its reads on few genes.
+    description: Median TPM of the genes a library detects. A condition far above the others spent its reads on few genes.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # The pipeline publishes its DESeq2 QC PCA as a text file next to the plot
   # MultiQC embeds. Reading the file instead of the picture is what makes the
@@ -1138,18 +1141,21 @@ tabs:
     aggregation: nunique
     column_name: gene_name
     column_type: object
+    # The table keeps every library's row of a gene expressed anywhere, so
+    # without the floor each condition counts the same genes.
+    filter_expr: col('tpm') >= 1
     secondary_layout: top_n
     breakdown_col: group
     top_n_count: 4
     display:
       icon_name: mdi:dna
       icon_color: teal
-      caption: expressed, by condition
+      caption: at 1 TPM or more, by condition
     section: Genes at a glance
     tag: rna-var-card-genes
     index: var-card-genes
     title: Genes in view
-    description: Genes with a TPM above zero in the libraries in view, ranked by condition.
+    description: Genes at 1 TPM or more in a library in view. The bars count them per condition.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnaseq
@@ -1397,24 +1403,27 @@ tabs:
     title: Spread across libraries
     description: Median standard deviation of a gene's log2(TPM + 1) over the libraries, the plane's y axis.
     layout: {x: 4, y: 0, w: 2, h: 2}
+  # The lead of each gene's top condition over the others, split at two-fold.
+  # It replaced a ranking of peak libraries whose names a card cuts short.
   - component_type: card
     workflow_tag: rnaseq
     data_collection_tag: gene_summary
-    aggregation: count
-    column_name: gene_id
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: top_sample
-    top_n_count: 4
+    aggregation: median
+    column_name: log2fc_top_vs_rest
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 1
+    threshold_direction: min
     display:
-      icon_name: mdi:flask-outline
+      icon_name: mdi:arrow-up-bold-outline
       icon_color: orange
-      caption: the libraries most genes peak in
+      caption: median; at or above 1, two-fold over the rest
+      decimals: 2
     section: Expression at a glance
-    tag: rna-gene-card-peak-library
-    index: gene-card-peak-library
-    title: Peak libraries
-    description: Genes counted by the library they reach their highest TPM in. One library far ahead stands apart.
+    tag: rna-gene-card-lead
+    index: gene-card-lead
+    title: Lead of the top condition
+    description: Median lead of a gene's top condition over the others, in log2(TPM + 1). The bar counts the genes two-fold or more ahead.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: rnaseq
@@ -1431,7 +1440,10 @@ tabs:
       marker_size: 4
       opacity: 0.6
       marker_outline: false
-      top_n_labels: 10
+      # No point labels: the most variable genes sit within a few pixels of
+      # each other at the top, so their names pile up. The hover, the record
+      # and the Variable Genes box plot name them.
+      top_n_labels: 0
       # Tens of thousands of expressed genes: keep the points (a click needs a
       # point) rather than the binned view the renderer switches to above 3,000
       # rows. The reader can still turn density on in the controls.

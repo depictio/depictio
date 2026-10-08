@@ -235,17 +235,18 @@ main_dashboard:
     column_type: object
     filter_expr: col('tools_significant') >= 2
     secondary_layout: composition
-    breakdown_col: contrast
+    breakdown_col: tools_significant
+    top_n_count: 4
     display:
       icon_name: mdi:set-merge
       icon_color: violet
-      caption: genes, by contrast
+      caption: genes, by the number of tools calling them
       link: tab:Tool Agreement
     section: Key figures
     tag: rs-ov-kf-agreed
     index: ov-kf-agreed
     title: Called by two tools or more
-    description: Genes that at least two of the five splicing tests call, counted once per contrast.
+    description: Genes that at least two of the five splicing tests call, counted once per contrast. The bar splits them by how many tools call them.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnasplice
@@ -326,10 +327,10 @@ main_dashboard:
   - component_type: highlight
     section: Findings
     source_tab: Tool Agreement
-    source_component: rs-agree-upset
-    caption: Genes called per combination of tools; the tallest bars are the calls one tool makes alone.
-    tag: rs-ov-hl-upset
-    index: ov-hl-upset
+    source_component: rs-agree-per-tool
+    caption: Genes each tool calls, darker where more tools agree; the lightest segment is the calls a tool makes alone.
+    tag: rs-ov-hl-tools
+    index: ov-hl-tools
     layout: {x: 0, y: 2, w: 5, h: 5}
   - component_type: highlight
     section: Findings
@@ -343,7 +344,7 @@ main_dashboard:
     section: Findings
     source_tab: Transcript Usage
     source_component: rs-tx-volcano
-    caption: DEXSeq DTU, one point per transcript, labelled with its gene.
+    caption: DEXSeq DTU, one point per transcript, coloured by the direction of its usage change.
     tag: rs-ov-hl-dtu
     index: ov-hl-dtu
     layout: {x: 0, y: 7, w: 3, h: 5}
@@ -797,18 +798,18 @@ tabs:
     column_name: median_tpm
     column_type: float64
     secondary_layout: top_n
-    breakdown_col: sample_id
+    breakdown_col: group
     top_n_count: 4
     display:
       icon_name: mdi:chart-bell-curve
       icon_color: orange
-      caption: the highest libraries
+      caption: median per condition, highest first
       decimals: 2
     section: Libraries at a glance
     tag: rs-space-card-median-tpm
     index: space-card-median-tpm
     title: Median TPM
-    description: Median TPM of the genes a library detects. One far above its peers spent its reads on few genes.
+    description: Median TPM of the genes a library detects. A condition far above the others spent its reads on few genes.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: rnasplice
@@ -817,6 +818,7 @@ tabs:
     config:
       color_col: group
       point_size: 12
+      axis_prefix: PC
       show_centroids: true
       selection_enabled: true
       selection_column: sample_id
@@ -889,6 +891,10 @@ tabs:
     icon: mdi:counter
     color: violet
     description: Genes tested and called, alone and together, over the contrasts in view
+  - name: Calls per tool
+    icon: mdi:chart-bar
+    color: violet
+    description: The genes each tool calls, by how many tools agree
   - name: Tool combinations
     icon: mdi:set-merge
     color: violet
@@ -908,8 +914,9 @@ tabs:
       [rMATS](https://rnaseq-mats.sourceforge.io) and
       [SUPPA2](https://github.com/comprehensive-genomics/SUPPA)) joined per gene: a gene that
       several of them call is a stronger candidate than one a single tool reports. Pick one
-      contrast first in the left panel, since a contrast and its mirror both count. Each UpSet
-      bar counts the genes one combination of tools calls.
+      contrast first in the left panel, since a contrast and its mirror both count. The bars
+      split each tool's calls by how many tools agree, and the UpSet counts the genes each
+      combination of tools calls.
     tag: rs-agree-intro
     index: agree-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -933,18 +940,18 @@ tabs:
     aggregation: nunique
     column_name: gene_id
     column_type: object
-    secondary_layout: top_n
-    breakdown_col: contrast
-    top_n_count: 4
+    secondary_layout: composition
+    breakdown_col: tools_tested
+    top_n_count: 5
     display:
       icon_name: mdi:dna
       icon_color: blue
-      caption: per contrast
+      caption: genes, by the number of tests covering them
     section: Agreement at a glance
     tag: rs-agree-card-tested
     index: agree-card-tested
     title: Genes tested
-    description: Genes at least one splicing test covered, ranked by contrast.
+    description: Genes at least one splicing test covered. The bar splits them by how many of the five tests covered them.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnasplice
@@ -953,18 +960,18 @@ tabs:
     column_name: gene_id
     column_type: object
     filter_expr: col('tools_significant') >= 1
-    secondary_layout: top_n
-    breakdown_col: tools
+    secondary_layout: composition
+    breakdown_col: contrast
     top_n_count: 4
     display:
       icon_name: mdi:check-decagram
       icon_color: teal
-      caption: the most frequent tool combinations
+      caption: genes, by contrast
     section: Agreement at a glance
     tag: rs-agree-card-called
     index: agree-card-called
     title: Called by any tool
-    description: Genes at least one test calls, ranked by the combination of tools that call them.
+    description: Genes at least one test calls, split by contrast.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnasplice
@@ -974,16 +981,17 @@ tabs:
     column_type: object
     filter_expr: col('tools_significant') >= 2
     secondary_layout: composition
-    breakdown_col: contrast
+    breakdown_col: tools_significant
+    top_n_count: 4
     display:
       icon_name: mdi:relation-many-to-many
       icon_color: violet
-      caption: genes, by contrast
+      caption: genes, by the number of tools calling them
     section: Agreement at a glance
     tag: rs-agree-card-agreed
     index: agree-card-agreed
     title: Called by two tools or more
-    description: Genes at least two tests call, counted once per contrast.
+    description: Genes at least two tests call, counted once per contrast. The bar splits them by how many tools call them.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnasplice
@@ -1005,6 +1013,28 @@ tabs:
     title: Tools per called gene
     description: How many of the five tests call a gene, over the genes at least one calls.
     layout: {x: 6, y: 0, w: 2, h: 2}
+  # Each tool's calls, stacked by how many tools call the gene: the summary the
+  # Overview highlights, since a five-set UpSet cannot read at a third of the row.
+  # No sample column, so Analysis mode's groups do not apply here.
+  - component_type: figure
+    workflow_tag: rnasplice
+    data_collection_tag: splicing_genes
+    visu_type: bar
+    mode: code
+    code_content: |-
+      names = {'dexseq_exon': 'DEXSeq exon', 'edger': 'edgeR', 'dexseq_dtu': 'DEXSeq DTU', 'rmats': 'rMATS', 'suppa': 'SUPPA2'}
+      parts = [df.filter(pl.col(c)).select(pl.lit(n).alias('tool'), pl.col('tools_significant')) for c, n in names.items()]
+      d = pl.concat(parts).group_by(['tool', 'tools_significant']).agg(pl.len().alias('genes'))
+      d = d.with_columns(pl.when(pl.col('tools_significant') == 1).then(pl.lit('this tool alone')).otherwise(pl.col('tools_significant').cast(pl.Utf8) + pl.lit(' tools')).alias('agreement'))
+      order = ['this tool alone', '2 tools', '3 tools', '4 tools', '5 tools']
+      fig = px.bar(d.to_pandas(), x='genes', y='tool', color='agreement', orientation='h', category_orders={'agreement': order, 'tool': list(names.values())}, color_discrete_sequence=px.colors.sequential.Purples[4:], labels={'genes': 'Called genes, per contrast', 'tool': 'Tool', 'agreement': 'Tools calling the gene'})
+      fig.update_layout(barmode='stack', margin=dict(t=10))
+    section: Calls per tool
+    tag: rs-agree-per-tool
+    index: rs-agree-per-tool
+    title: Genes each tool calls, by agreement
+    description: A gene counts once per contrast; a tool the run skipped draws no bar.
+    layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: rnasplice
     data_collection_tag: splicing_genes
@@ -1070,7 +1100,7 @@ tabs:
   - name: Exon usage filters
     icon: mdi:filter-variant
     color: indigo
-    description: Direction and size of the exon usage change, per tool
+    description: Direction and size of the exon usage change; each narrows both tools
   grid_sections:
   - name: Exon usage at a glance
     icon: mdi:counter
@@ -1102,10 +1132,13 @@ tabs:
     tag: rs-exon-intro
     index: exon-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
+  # Both tools name these columns alike, and a filter narrows every collection
+  # with its column: one filter each, on different tools so a run that skips
+  # either keeps one.
   - component_type: interactive
     workflow_tag: rnasplice
-    data_collection_tag: dexseq_exon_genes
-    use: dexseq/exon_genes
+    data_collection_tag: edger_genes
+    use: edger/diffsplice_genes
     interactive_component_type: MultiSelect
     column_name: direction
     column_type: object
@@ -1113,10 +1146,9 @@ tabs:
       icon_name: mdi:swap-vertical
       custom_color: indigo
     section: Exon usage filters
-    group: DEXSeq
-    tag: rs-exon-filter-dexseq-direction
-    index: exon-dexseq-direction-filter
-    title: DEXSeq call
+    tag: rs-exon-filter-direction
+    index: exon-direction-filter
+    title: Call, both tools
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     workflow_tag: rnasplice
@@ -1128,42 +1160,10 @@ tabs:
       icon_name: mdi:ruler
       custom_color: indigo
     section: Exon usage filters
-    group: DEXSeq
-    tag: rs-exon-filter-dexseq-fc
-    index: exon-dexseq-fc-filter
-    title: DEXSeq absolute log2 fold change
+    tag: rs-exon-filter-fc
+    index: exon-fc-filter
+    title: Absolute log2 fold change, both tools
     layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
-    workflow_tag: rnasplice
-    data_collection_tag: edger_genes
-    use: edger/diffsplice_genes
-    interactive_component_type: MultiSelect
-    column_name: direction
-    column_type: object
-    display:
-      icon_name: mdi:swap-vertical
-      custom_color: blue
-    section: Exon usage filters
-    group: edgeR
-    tag: rs-exon-filter-edger-direction
-    index: exon-edger-direction-filter
-    title: edgeR call
-    layout: {x: 0, y: 6, w: 1, h: 3}
-  - component_type: interactive
-    workflow_tag: rnasplice
-    data_collection_tag: edger_genes
-    interactive_component_type: RangeSlider
-    column_name: abs_log2fc
-    column_type: float64
-    display:
-      icon_name: mdi:ruler
-      custom_color: blue
-    section: Exon usage filters
-    group: edgeR
-    tag: rs-exon-filter-edger-fc
-    index: exon-edger-fc-filter
-    title: edgeR absolute log2 fold change
-    layout: {x: 0, y: 9, w: 1, h: 3}
   - component_type: card
     workflow_tag: rnasplice
     data_collection_tag: dexseq_exon_genes
@@ -1252,8 +1252,10 @@ tabs:
     config:
       significance_threshold: 0.05
       effect_threshold: 1.0
-      top_n_labels: 15
-      show_labels: true
+      # Gene ids, often several per bin (ENSG1+ENSG2): labels would pile up.
+      show_labels: false
+      effect_label: Log2 fold change, top bin
+      significance_label: -log10 gene q-value
       view: volcano
     section: DEXSeq exon usage
     tag: rs-exon-dexseq-volcano
@@ -1267,8 +1269,10 @@ tabs:
     config:
       significance_threshold: 0.05
       effect_threshold: 1.0
-      top_n_labels: 15
-      show_labels: true
+      # Gene ids only (edgeR reports no symbol): labels would pile up.
+      show_labels: false
+      effect_label: Log2 fold change, top exon
+      significance_label: -log10 gene FDR
       view: volcano
     section: edgeR diffSpliceDGE
     tag: rs-exon-edger-volcano
@@ -1393,13 +1397,13 @@ tabs:
     column_name: gene_id
     column_type: object
     filter_expr: col('gene_significant')
-    secondary_layout: top_n
+    secondary_layout: composition
     breakdown_col: contrast
     top_n_count: 4
     display:
       icon_name: mdi:dna
       icon_color: grape
-      caption: per contrast
+      caption: genes, by contrast
     section: Transcript usage at a glance
     tag: rs-tx-card-genes
     index: tx-card-genes
@@ -1413,19 +1417,20 @@ tabs:
     aggregation: median
     column_name: log2fc
     column_type: float64
-    filter_expr: col('significant')
+    # Rising transcripts only: over both directions the median sits at 0.
+    filter_expr: col('significant') & (col('log2fc') > 0)
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
     display:
       icon_name: mdi:arrow-up-down
       icon_color: orange
-      caption: median over called transcripts, with its spread
+      caption: median over called transcripts gaining usage, with its spread
       decimals: 2
     section: Transcript usage at a glance
     tag: rs-tx-card-fc
     index: tx-card-fc
-    title: Usage log2 fold change
-    description: Usage fold change of the called transcripts, treatment over control. The box shows both directions.
+    title: Usage gain
+    description: Usage log2 fold change of the called transcripts that gain share of their gene, treatment over control.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnasplice
@@ -1453,8 +1458,10 @@ tabs:
     config:
       significance_threshold: 0.05
       effect_threshold: 1.0
-      top_n_labels: 15
-      show_labels: true
+      # Labelled with gene ids, one per transcript: labels would pile up.
+      show_labels: false
+      effect_label: Usage log2 fold change
+      significance_label: -log10 adjusted p-value
       p_value_col: pvalue
       view: volcano
       views: [volcano, qq]
@@ -1487,7 +1494,7 @@ tabs:
   - name: Event filters
     icon: mdi:filter-variant
     color: grape
-    description: Event types, direction and size of the inclusion change, per tool
+    description: Event type, direction and size of the inclusion change; each narrows both tools
   grid_sections:
   - name: Events at a glance
     icon: mdi:counter
@@ -1529,52 +1536,9 @@ tabs:
     tag: rs-ev-intro
     index: ev-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: interactive
-    workflow_tag: rnasplice
-    data_collection_tag: rmats_events
-    use: rmats/events
-    interactive_component_type: MultiSelect
-    column_name: event_type
-    column_type: object
-    display:
-      icon_name: mdi:shape-outline
-      custom_color: grape
-    section: Event filters
-    group: rMATS
-    tag: rs-ev-filter-rmats-type
-    index: ev-rmats-type-filter
-    title: rMATS event type
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    workflow_tag: rnasplice
-    data_collection_tag: rmats_events
-    interactive_component_type: MultiSelect
-    column_name: direction
-    column_type: object
-    display:
-      icon_name: mdi:swap-vertical
-      custom_color: grape
-    section: Event filters
-    group: rMATS
-    tag: rs-ev-filter-rmats-direction
-    index: ev-rmats-direction-filter
-    title: rMATS call
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
-    workflow_tag: rnasplice
-    data_collection_tag: rmats_events
-    interactive_component_type: RangeSlider
-    column_name: abs_dpsi
-    column_type: float64
-    display:
-      icon_name: mdi:ruler
-      custom_color: grape
-    section: Event filters
-    group: rMATS
-    tag: rs-ev-filter-rmats-dpsi
-    index: ev-rmats-dpsi-filter
-    title: rMATS absolute PSI change
-    layout: {x: 0, y: 6, w: 1, h: 3}
+  # rMATS and SUPPA2 name these columns alike, and a filter narrows every
+  # collection with its column: one filter each, split over the two tools so a
+  # run that skips either keeps one. SUPPA2 carries all seven event types.
   - component_type: interactive
     workflow_tag: rnasplice
     data_collection_tag: suppa_events
@@ -1584,28 +1548,41 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:shape-outline
-      custom_color: pink
+      custom_color: grape
     section: Event filters
-    group: SUPPA2
-    tag: rs-ev-filter-suppa-type
-    index: ev-suppa-type-filter
-    title: SUPPA2 event type
-    layout: {x: 0, y: 9, w: 1, h: 3}
+    tag: rs-ev-filter-type
+    index: ev-type-filter
+    title: Event type, both tools
+    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
     workflow_tag: rnasplice
-    data_collection_tag: suppa_events
+    data_collection_tag: rmats_events
+    use: rmats/events
     interactive_component_type: MultiSelect
     column_name: direction
     column_type: object
     display:
       icon_name: mdi:swap-vertical
-      custom_color: pink
+      custom_color: grape
     section: Event filters
-    group: SUPPA2
-    tag: rs-ev-filter-suppa-direction
-    index: ev-suppa-direction-filter
-    title: SUPPA2 call
-    layout: {x: 0, y: 12, w: 1, h: 3}
+    tag: rs-ev-filter-direction
+    index: ev-direction-filter
+    title: Call, both tools
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: rnasplice
+    data_collection_tag: suppa_events
+    interactive_component_type: RangeSlider
+    column_name: abs_dpsi
+    column_type: float64
+    display:
+      icon_name: mdi:ruler
+      custom_color: grape
+    section: Event filters
+    tag: rs-ev-filter-dpsi
+    index: ev-dpsi-filter
+    title: Absolute PSI change, both tools
+    layout: {x: 0, y: 6, w: 1, h: 3}
   - component_type: card
     workflow_tag: rnasplice
     data_collection_tag: rmats_events
@@ -1651,18 +1628,17 @@ tabs:
     column_name: abs_dpsi
     column_type: float64
     filter_expr: col('significant')
-    secondary_layout: gauge
-    coverage_max: 1
+    secondary_layout: histogram
     display:
       icon_name: mdi:ruler
       icon_color: orange
-      caption: median over calls, of a full switch
+      caption: median over calls, with its distribution
       decimals: 2
     section: Events at a glance
     tag: rs-ev-card-rmats-dpsi
     index: ev-card-rmats-dpsi
     title: rMATS absolute PSI change
-    description: Inclusion change of the called events, where 1 is an event fully switched between conditions.
+    description: Inclusion change of the called events, from MIN_DPSI up to 1 for an event fully switched between conditions.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnasplice
@@ -1672,13 +1648,13 @@ tabs:
     column_name: event_id
     column_type: object
     filter_expr: col('significant')
-    secondary_layout: top_n
+    secondary_layout: donut
     breakdown_col: event_type
     top_n_count: 4
     display:
       icon_name: mdi:target
       icon_color: pink
-      caption: the event types it calls most
+      caption: calls, by event type
     section: Events at a glance
     tag: rs-ev-card-suppa
     index: ev-card-suppa
@@ -1724,8 +1700,11 @@ tabs:
     config:
       significance_threshold: 0.05
       effect_threshold: 0.1
-      top_n_labels: 15
+      # Gene symbols; one gene can carry several top events, so keep few labels.
+      top_n_labels: 8
       show_labels: true
+      effect_label: PSI change, treatment minus control
+      significance_label: -log10 FDR
       p_value_col: pvalue
       view: volcano
       views: [volcano, qq]
@@ -1741,8 +1720,10 @@ tabs:
     config:
       significance_threshold: 0.05
       effect_threshold: 0.1
-      top_n_labels: 15
-      show_labels: true
+      # Gene ids, often joined (ENSG1_and_ENSG2): labels would pile up.
+      show_labels: false
+      effect_label: Delta PSI, treatment minus control
+      significance_label: -log10 p-value
       p_value_col: pvalue
       view: volcano
       views: [volcano, qq]

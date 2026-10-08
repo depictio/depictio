@@ -36,15 +36,16 @@ The landing page, at compact width with the filter panel collapsed:
   opens the parameters that drive it and the tab that shows its output.
 - **Key figures**: four headline cards, each opening the tab that explains it. Samples
   (split by group), the median number of genes a library expresses (with its spread), the
-  genes called by two tests or more (split by contrast) and the rMATS events called (split
-  by direction of inclusion). A group and a sample filter above them narrow these four only;
+  genes called by two tests or more (split by how many tests call them) and the rMATS events
+  called (split by direction of inclusion). A group and a sample filter above them narrow these four only;
   the splicing cards follow the contrast and gene filters of the left panel.
 - **Findings**: result rows whose values are computed under the filters, each with a link
   to its tab: genes called by two tests or more out of those called by any, genes with an
   exon usage call (DEXSeq), genes with a transcript switch (DEXSeq DTU) and the event type
   most rMATS calls fall in, with its share. Below them, four figures in two rows, each
-  linking its tab: the UpSet of tool combinations beside the DEXSeq exon volcano, then the
-  DTU volcano beside the called rMATS events per type. The bar of this section filters by
+  linking its tab: each tool's calls by how many tools agree beside the DEXSeq exon volcano,
+  then the DTU volcano beside the called rMATS events per type. The volcanoes carry no
+  labels there or on their tabs, since their points are gene ids. The bar of this section filters by
   contrast and rMATS event type.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
@@ -60,8 +61,8 @@ collapsed, and absent from the Overview.
 
 Each child tab opens with a short intro (the method, with a link to its tool, and how to
 read the tab), then a strip of four key numbers, each card with its own colour and a
-secondary that reads it (a box plot, a distribution, a gauge, a ranking or a share), then at
-most three open sections; tables and details follow, collapsed.
+secondary that reads it (a box plot, a distribution, a ring, a gauge, a ranking or a
+share), then at most three open sections; tables and details follow, collapsed.
 
 **MultiQC.** MultiQC panels only, no key-number strip. Open: general statistics, FastQC
 sequence counts beside the reads Trim Galore kept, STAR's summary beside samtools' percent
@@ -71,39 +72,43 @@ duplication and status from FastQC, STAR alignment scores, samtools stats and fl
 own sample filter reads the MultiQC report, whose library names carry read suffixes.
 
 **Sample Space.** Strip: libraries in the TPM matrix (a ring by group), genes expressed
-with their spread, genes detected with their distribution and the median TPM (the highest
-libraries), the same four cards as the Sample Space tab of nf-core/rnaseq. Then the Salmon
-TPM PCA, with centroids per group, beside the sample record card it fills on a pick, and
-the most variable genes as a clustered, row z-scored heatmap. Collapsed: the per-sample
-summary table. Filters: genes expressed and median TPM ranges.
+with their spread, genes detected with their distribution and the median TPM (ranked by
+condition), the same four cards as the Sample Space tab of nf-core/rnaseq. Then the Salmon
+TPM PCA, with centroids per group and its axes named PC1 and PC2, beside the sample record
+card it fills on a pick, and the most variable genes as a clustered, row z-scored heatmap.
+Collapsed: the per-sample summary table. Filters: genes expressed and median TPM ranges.
 
-**Tool Agreement.** Strip: genes tested (ranked by contrast), genes called by any test
-(ranked by the combination of tests that call them), genes called by two or more (split by
-contrast) and the median number of tests calling a called gene, on a 0 to 5 gauge. Then the
-UpSet of called genes across the five tests; a test the run skipped shows an empty set.
-Collapsed: the cross-tool gene table with the gene record card beside it (each test's call
-and strongest evidence, the gene id linked to Ensembl). Filter: how many tests must call a
+**Tool Agreement.** Strip: genes tested (split by how many tests covered them), genes
+called by any test (split by contrast), genes called by two or more (split by how many
+tests call them) and the median number of tests calling a called gene, on a 0 to 5 gauge.
+Then each test's calls as a bar, stacked by how many tests call the gene (the Overview
+highlights it, since a five-set UpSet cannot read at a third of the row), and the UpSet of
+called genes across the five tests; a test the run skipped shows an empty set. Collapsed:
+the cross-tool gene table with the gene record card beside it (each test's call and
+strongest evidence, the gene id linked to Ensembl). Filter: how many tests must call a
 gene, which reaches the per-tool tabs through the gene links.
 
 **Exon Usage.** Strip: DEXSeq calls (split by the direction of the gene's top bin), their
 absolute fold change (a box plot), edgeR calls (a ring by direction) and their absolute
 fold change (a distribution). Then the DEXSeq and edgeR gene volcanoes, one point per gene
-at its most significant bin or exon. Collapsed: the two per-gene tables. Filters: call
-direction and absolute fold change, per tool.
+at its most significant bin or exon, unlabelled since both name genes by id. Collapsed: the
+two per-gene tables. Filters: call direction and absolute fold change, each narrowing both
+tools, since a filter reaches every collection with its column.
 
 **Transcript Usage.** Strip: called transcripts (split by direction), genes with a switch
-(ranked by contrast), the usage fold change of the called transcripts (a box plot, both
-directions) and their mean count (a distribution). Then the DTU volcano, its View switch
-drawing a QQ plot of the raw p-values. Collapsed: the transcript table. Filters: call
-direction and usage fold change.
+(split by contrast), the usage gain of the called transcripts that rise (a box plot; over
+both directions the median sits at 0) and their mean count (a distribution). Then the DTU
+volcano, unlabelled, its View switch drawing a QQ plot of the raw p-values. Collapsed: the
+transcript table. Filters: call direction and usage fold change.
 
 **Splicing Events.** Strip: rMATS events tested (a ring by type), rMATS calls (split by
-direction of inclusion), their absolute PSI change on a 0 to 1 gauge and the event types
-SUPPA2 calls most. Then the called events per type and direction for each tool, and the
-rMATS and SUPPA2 volcanoes (each with a QQ view). Collapsed: the rMATS event table with the
-event record card beside it (inclusion and junction reads per condition, the locus linked to
-the UCSC browser on `GENOME`), and the SUPPA2 event table. Filters: event type, call and
-absolute PSI change for rMATS; event type and call for SUPPA2.
+direction of inclusion), their absolute PSI change (a distribution) and SUPPA2 calls (a
+ring by type). Then the called events per type and direction for each tool, and the rMATS
+and SUPPA2 volcanoes (each with a QQ view); only the rMATS one is labelled, with the
+symbols of its top genes. Collapsed: the rMATS event table with the event record card
+beside it (inclusion and junction reads per condition, the locus linked to the UCSC browser
+on `GENOME`), and the SUPPA2 event table. Filters: event type, call and absolute PSI
+change, each narrowing both tools.
 
 ## Routes and pruning
 
@@ -128,8 +133,9 @@ The import re-packs the Overview grid after a drop, so a lone highlight takes th
 column, the PCA's `group` and the contrast are coloured `auto` (each value takes a
 colour-blind-safe colour at import, kept on a re-import). The seven event types and the
 three call directions (up red, down blue, not significant grey) are written out, so the
-volcanoes, the event-type bars and the cards draw a type or a direction in one colour. The
-two event-type figures are code figures: they read the same map.
+volcanoes and the event-type bars draw a type or a direction in one colour. The two
+event-type figures are code figures: they read the same map. The per-tool agreement bars
+shade from light (one tool alone) to dark (all five).
 
 ## Cross-selection
 
