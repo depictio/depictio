@@ -24,6 +24,7 @@ from depictio.api.v1.endpoints.routers import router
 from depictio.api.v1.json_response import CustomJSONResponse
 from depictio.api.v1.middleware.analytics_middleware import AnalyticsMiddleware
 from depictio.api.v1.services.lifespan import lifespan
+from depictio.models.s3_access import S3AccessError
 from depictio.version import get_api_version, get_version
 
 
@@ -419,3 +420,17 @@ async def validation_exception_handler(
 ) -> JSONResponse:
     """Handle request validation errors with formatted error details."""
     return JSONResponse(status_code=422, content={"detail": [str(error) for error in exc.errors()]})
+
+
+@app.exception_handler(S3AccessError)
+async def s3_access_exception_handler(_request: object, exc: S3AccessError) -> JSONResponse:
+    """S3 reads refused by the configuration, or failed at the store.
+
+    ``detail`` is the sanitized message (kind, bucket and prefix, never the
+    instance endpoint, keys or request ids) and ``code`` lets the viewer tell
+    a refusal from a denial or an outage: ``s3_refused`` and the access
+    errors are 422, a wrong region or an unreachable store 502.
+    """
+    return JSONResponse(
+        status_code=exc.status_code, content={"detail": exc.detail, "code": exc.code}
+    )

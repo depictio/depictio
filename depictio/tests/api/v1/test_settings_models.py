@@ -714,6 +714,7 @@ class TestRemoteConfig:
                 "DEPICTIO_REMOTE_URL_ALLOWLIST": None,
                 "DEPICTIO_REMOTE_URL_DENYLIST": None,
                 "DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS": None,
+                "DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS": None,
                 "DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES": None,
                 "DEPICTIO_REMOTE_TIMEOUT_S": None,
                 "DEPICTIO_REMOTE_MAX_REDIRECTS": None,
@@ -723,8 +724,9 @@ class TestRemoteConfig:
         assert remote.allow_http is False
         assert remote.url_allowlist == ""
         assert remote.url_denylist == ""
-        # Unsigned public-bucket reads are opt-in.
+        # Unsigned public-bucket reads are opt-in, and so are ambient-credential ones.
         assert remote.public_s3_buckets == ""
+        assert remote.credentialed_s3_buckets == ""
         assert remote.max_download_bytes == 500 * 1024 * 1024
         assert remote.timeout_s == 30.0
         assert remote.max_redirects == 3
@@ -736,6 +738,7 @@ class TestRemoteConfig:
                 "DEPICTIO_REMOTE_URL_ALLOWLIST": "data.example, mirror.example",
                 "DEPICTIO_REMOTE_URL_DENYLIST": "evil.example",
                 "DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS": "open-bucket,megatests/ampliseq",
+                "DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS": "lab-shared, results/run_*/ ",
                 "DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES": "1048576",
                 "DEPICTIO_REMOTE_TIMEOUT_S": "12.5",
                 "DEPICTIO_REMOTE_MAX_REDIRECTS": "1",
@@ -746,9 +749,23 @@ class TestRemoteConfig:
         assert remote.url_allowlist == "data.example, mirror.example"
         assert remote.url_denylist == "evil.example"
         assert remote.public_s3_buckets == "open-bucket,megatests/ampliseq"
+        assert remote.credentialed_s3_buckets == "lab-shared, results/run_*/ "
         assert remote.max_download_bytes == 1048576
         assert remote.timeout_s == 12.5
         assert remote.max_redirects == 1
+
+    def test_credentialed_buckets_share_the_public_list_syntax(self):
+        """Same ``bucket[/prefix]`` parser and path-boundary matching as the public list."""
+        from depictio.models.s3_access import bucket_list_matches, parse_bucket_list
+
+        with env_vars({"DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS": " lab-shared , results/run_1/ "}):
+            remote = RemoteConfig()
+        assert parse_bucket_list(remote.credentialed_s3_buckets) == [
+            ("lab-shared", ""),
+            ("results", "run_1"),
+        ]
+        assert bucket_list_matches(remote.credentialed_s3_buckets, "results", "run_1/x.csv")
+        assert not bucket_list_matches(remote.credentialed_s3_buckets, "results", "run_10/x.csv")
 
     def test_invalid_values_fail_loudly(self):
         from pydantic import ValidationError

@@ -15,10 +15,9 @@ from depictio.api.v1.remote_fetch import (
     direct_fetch_text,
     direct_probe,
     fetch_validated_text,
-    is_public_s3_location,
     is_server_context,
     probe_remote_url,
-    public_s3_region,
+    s3_read_target,
     validate_remote_url,
 )
 from depictio.cli.cli.utils.api_calls import (
@@ -72,6 +71,7 @@ from depictio.models.models.workflows import (
     WorkflowRun,
     WorkflowRunScan,
 )
+from depictio.models.s3_access import S3AccessError, S3Target, ensure_region, iter_object_pages
 
 #: Counter keys carried by every per-data-collection scan stat block. Declared
 #: once so the run-level aggregate stays in sync when a counter is added.
@@ -230,7 +230,7 @@ def scan_single_file(
     else:
         # Record the real on-disk path, resolving any symlinks in the scanned path.
         # Runs can be scanned through an intermediate symlink (e.g. per-run isolation
-        # that points --data-root at a temporary symlink tree), and the stored path
+        # that points DATA_DIR at a temporary symlink tree), and the stored path
         # should be the original target, not the transient symlink. file_hash is
         # derived from basename + size + mtime (not the path), so this does not affect
         # change detection or hash-based dedup.
@@ -976,9 +976,9 @@ def _resolve_pending_runs(
 
         # A flat location is itself one run; otherwise each subdirectory matching
         # the regex is. The candidates carry every subdirectory, matching or not,
-        # so matching nothing can say *why*: a wrong --data-root level reads very
-        # differently from everything matched but already ingested, which is a
-        # legitimate no-op.
+        # so matching nothing can say *why*: a DATA_DIR at the wrong level reads
+        # very differently from everything matched but already ingested, which
+        # is a legitimate no-op.
         candidates = collect_run_candidates(location, structure, runs_regex)
         if structure != "flat" and not candidates.matched:
             rich_print_checked_statement(
@@ -1557,54 +1557,16 @@ def scan_url_for_data_collection(
     return {"result": "success"}
 
 
-def _s3_read_client(CLI_config: CLIConfig, url: str | None = None):
-    """boto3 client for *reading* user data buckets (scan mode ``s3_prefix``).
+def _s3_read_target(CLI_config: CLIConfig, url: str) -> S3Target:
+    """Read target for a user data bucket (scan mode ``s3_prefix``), in its region.
 
-    A location on the administrator's public bucket allowlist gets an unsigned
-    client: signing with credentials that have no relationship to someone else's
-    open bucket only earns a rejection. The allowlist is configuration, so this
-    is decided before the client makes any call.
-
-    Otherwise credential precedence mirrors the read/write split in CLIConfig:
-    the per-project ``remote_storage_options`` win, then the instance's own
-    ``s3_storage``. Anything still missing is left to boto3's default chain
-    (env vars, ~/.aws, IAM role) so real AWS deployments work without ever
-    putting keys in a config file.
+    The same resolution as the remote file reads in ``deltatables``: a public
+    bucket unsigned, the project's own storage settings and nothing else, or,
+    in CLI context only, the configuration's S3 credentials, then the ambient
+    chain. Decided from configuration before any request; only an accepted
+    bucket is then asked for its region. Raises ``S3AccessRefused``.
     """
-    import boto3
-
-    if url and is_public_s3_location(url):
-        from botocore import UNSIGNED
-        from botocore.config import Config
-
-        return boto3.client(
-            "s3",
-            config=Config(signature_version=UNSIGNED),
-            region_name=public_s3_region(urlparse(url).netloc),
-        )
-
-    remote = CLI_config.remote_storage_options or {}
-    # polars storage_options spells the endpoint either way depending on version
-    endpoint = remote.get("aws_endpoint_url") or remote.get("endpoint_url")
-    key = remote.get("aws_access_key_id")
-    secret = remote.get("aws_secret_access_key")
-    # ``region`` is what storage_options_for_project (per-project storage
-    # config) emits; the other two are the polars/boto3 spellings.
-    region = remote.get("aws_region") or remote.get("region_name") or remote.get("region")
-
-    if not key and CLI_config.s3_storage:
-        key = CLI_config.s3_storage.aws_access_key_id
-        secret = CLI_config.s3_storage.aws_secret_access_key
-        endpoint = endpoint or CLI_config.s3_storage.url
-
-    # Passing None lets botocore fall through to its own resolution chain.
-    return boto3.client(
-        "s3",
-        aws_access_key_id=key or None,
-        aws_secret_access_key=secret or None,
-        endpoint_url=endpoint or None,
-        region_name=region or None,
-    )
+    return ensure_region(s3_read_target(url, CLI_config))
 
 
 # Keys examined per unit of ``max_files`` before a prefix listing stops asking
@@ -1627,7 +1589,8 @@ def list_s3_prefix(prefix: str, pattern: str, max_files: int, CLI_config: CLICon
     full, which is why the budget is checked between pages.
 
     Returns dicts of {url, key, size, etag, last_modified}; raises ValueError on
-    a malformed prefix so the caller can surface it as a scan failure.
+    a malformed prefix so the caller can surface it as a scan failure, and an
+    ``S3AccessError`` when the read is refused or fails.
     """
     import fnmatch
 
@@ -1639,15 +1602,16 @@ def list_s3_prefix(prefix: str, pattern: str, max_files: int, CLI_config: CLICon
     if not bucket:
         raise ValueError(f"s3_prefix '{prefix}' has no bucket")
 
-    client = _s3_read_client(CLI_config, url=prefix)
-    paginator = client.get_paginator("list_objects_v2")
+    target = _s3_read_target(CLI_config, prefix)
 
     key_budget = max_files * S3_PREFIX_KEY_BUDGET_FACTOR
     examined = 0
     budget_exhausted = False
     matches: list[dict] = []
     truncated = False
-    for page in paginator.paginate(Bucket=bucket, Prefix=key_prefix):
+    # A prefix that holds nothing lists as empty, even on gateways that answer
+    # it with a 404; every other failure is an ``S3AccessFailed``.
+    for page in iter_object_pages(target, key_prefix):
         for obj in page.get("Contents", []):
             examined += 1
             key = obj["Key"]
@@ -1727,6 +1691,9 @@ def scan_s3_prefix_for_data_collection(
             max_files=scan_params.max_files,  # type: ignore[union-attr]
             CLI_config=CLI_config,
         )
+    except S3AccessError:
+        # Sanitized, with its own code: the API answers with it as is.
+        raise
     except Exception as exc:
         message = f"S3 prefix listing failed for {prefix}: {exc}"
         logger.error(message)

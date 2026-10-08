@@ -32,6 +32,7 @@ from depictio.api.v1.remote_fetch import (
 )
 from depictio.models.logging import logger
 from depictio.models.models.manifest import DataManifest
+from depictio.models.s3_access import ProjectS3Config
 
 # Manifests are indexes, not data — cap them well below the data-file cap.
 MANIFEST_MAX_BYTES = 50 * 1024 * 1024
@@ -206,7 +207,7 @@ def _run_dc_ingest(
     dc_id: str,
     current_user,
     sync_files: bool = False,
-    remote_storage_options: dict | None = None,
+    remote_storage_options: ProjectS3Config | None = None,
 ) -> tuple[bool, str | None]:
     """Scan + process one DC through the CLI helpers. Returns (ok, error_message).
 
@@ -379,15 +380,15 @@ def _ingest_manifest_into_project(
         report.success = True
         return report
 
-    # Resolve the project's storage credentials before touching the project
+    # Resolve the project's storage settings before touching the project
     # document: an unusable config (unreadable secret, endpoint no longer
     # allowed) must fail before any scan config is written, so there is
     # nothing to revert.
     from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
-        storage_options_for_project,
+        project_storage_for,
     )
 
-    remote_options = storage_options_for_project(project_oid)
+    remote_options = project_storage_for(project_oid)
 
     # Persist the manifest scan configs first — the helpers' API callbacks
     # read the DC config from the project document.
@@ -606,16 +607,15 @@ def _refresh_manifest_in_project(
     report = ManifestRefreshReport(project_id=str(project_oid), dry_run=dry_run)
     workflows = project_dict.get("workflows", []) or []
 
-    # Project-scoped read credentials (per-project storage config), resolved
-    # once; async workers re-resolve for themselves so no secret ever crosses
-    # the broker.
-    remote_options: dict | None = None
+    # The project's storage settings, resolved once; async workers re-resolve
+    # for themselves so no secret ever crosses the broker.
+    remote_options: ProjectS3Config | None = None
     if not dry_run and not async_run:
         from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
-            storage_options_for_project,
+            project_storage_for,
         )
 
-        remote_options = storage_options_for_project(project_oid)
+        remote_options = project_storage_for(project_oid)
 
     # Each DC carries its own manifest URL + field map; fetch each distinct
     # combination once. Failures are per-DC, not global — one dead manifest

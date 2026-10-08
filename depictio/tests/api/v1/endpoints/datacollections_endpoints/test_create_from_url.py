@@ -19,6 +19,7 @@ from fastapi import HTTPException
 from depictio.api.v1.endpoints.datacollections_endpoints import utils as dc_utils
 from depictio.api.v1.endpoints.projects_endpoints.storage_config import StorageSecretUnreadable
 from depictio.models.models.users import UserBase
+from depictio.models.s3_access import ProjectS3Config
 
 STORAGE = "depictio.api.v1.endpoints.projects_endpoints.storage_config"
 CLI_HELPER = "depictio.cli.cli.utils.helpers.process_data_collection_helper"
@@ -142,12 +143,12 @@ def _owned_project_with_token(mock_db, user) -> ObjectId:
 @pytest.mark.parametrize(
     "resolved",
     [
-        None,  # no storage config: read with the instance credentials
-        {
-            "endpoint_url": "https://s3.example.org",
-            "aws_access_key_id": "AKIA123",
-            "aws_secret_access_key": "s3cr3t",
-        },
+        None,  # no storage config: only a public location is readable
+        ProjectS3Config(
+            endpoint_url="https://s3.example.org",
+            access_key_id="AKIA123",
+            secret_access_key="s3cr3t",
+        ),
     ],
 )
 def test_project_storage_options_reach_the_cli_config(mock_db, resolved):
@@ -160,7 +161,7 @@ def test_project_storage_options_reach_the_cli_config(mock_db, resolved):
         return {"result": "success"}
 
     with (
-        patch(f"{STORAGE}.storage_options_for_project", return_value=resolved) as resolver,
+        patch(f"{STORAGE}.project_storage_for", return_value=resolved) as resolver,
         patch(CLI_HELPER, side_effect=_fake_helper),
     ):
         result = _call("s3://private-bucket/data.csv", project_id=str(project_id), user=user)
@@ -177,7 +178,7 @@ def test_unusable_project_storage_is_a_clean_http_error_before_any_write(mock_db
 
     with (
         patch(
-            f"{STORAGE}.storage_options_for_project",
+            f"{STORAGE}.project_storage_for",
             side_effect=StorageSecretUnreadable(project_id, "/app/depictio/keys"),
         ),
         patch(CLI_HELPER) as helper,
@@ -223,7 +224,7 @@ def test_https_url_becomes_a_url_scan_workflow_that_is_ingested(mock_db):
     seen, fake_helper = _ingest_recorder()
 
     with (
-        patch(f"{STORAGE}.storage_options_for_project", return_value=None),
+        patch(f"{STORAGE}.project_storage_for", return_value=None),
         patch(CLI_HELPER, side_effect=fake_helper),
     ):
         result = _call(url, project_id=str(project_id), user=user, name="  remote-dc  ")
@@ -238,7 +239,7 @@ def test_https_url_becomes_a_url_scan_workflow_that_is_ingested(mock_db):
     assert seen[1]["command_parameters"] == {"overwrite": True}
     cli_config = seen[0]["cli_config"]
     assert str(cli_config.user.id) == str(user.id)
-    assert cli_config.remote_storage_options is None  # no project storage: instance creds
+    assert cli_config.remote_storage_options is None  # no project storage settings
 
     # The workflow the ingest ran on is the one persisted on the project.
     (workflow,) = mock_db["projects"].find_one({"_id": project_id})["workflows"]
@@ -263,7 +264,7 @@ def test_coordinate_columns_select_the_coordinates_table_config(mock_db):
     _, fake_helper = _ingest_recorder()
 
     with (
-        patch(f"{STORAGE}.storage_options_for_project", return_value=None),
+        patch(f"{STORAGE}.project_storage_for", return_value=None),
         patch(CLI_HELPER, side_effect=fake_helper),
     ):
         result = dc_utils._create_dc_from_url(
@@ -300,7 +301,7 @@ def test_failed_processing_is_a_500_and_rolls_the_workflow_back(mock_db):
     )
 
     with (
-        patch(f"{STORAGE}.storage_options_for_project", return_value=None),
+        patch(f"{STORAGE}.project_storage_for", return_value=None),
         patch(CLI_HELPER, side_effect=fake_helper),
     ):
         with pytest.raises(HTTPException) as exc:

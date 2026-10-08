@@ -9,15 +9,19 @@ project credentials into the manifest re-ingest path.
 
 from unittest.mock import patch
 
+import boto3
 import mongomock
 import pytest
+from botocore.stub import Stubber
 from bson import ObjectId
 from fastapi import HTTPException
+from pydantic import ValidationError
 from pymongo.errors import DuplicateKeyError
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.projects_endpoints import storage_config
 from depictio.models.models.users import UserBase
+from depictio.models.s3_access import ProjectS3Config, S3AccessRefused, S3Target
 
 
 def _user(is_admin: bool = False) -> UserBase:
@@ -154,6 +158,73 @@ def test_owner_only(mock_db):
     assert out.has_secret is True
 
 
+def test_the_bucket_is_required(mock_db):
+    for bucket in ("", "   ", "/"):
+        with pytest.raises(ValidationError, match="bucket"):
+            storage_config.ProjectStorageConfigIn(
+                endpoint_url="https://s3.example.org", bucket=bucket
+            )
+    with pytest.raises(ValidationError, match="bucket"):
+        storage_config.ProjectStorageConfigIn(endpoint_url="https://s3.example.org")
+
+
+def test_a_secret_needs_its_key(mock_db):
+    with pytest.raises(ValidationError, match="access key ID"):
+        storage_config.ProjectStorageConfigIn(
+            endpoint_url="https://s3.example.org", bucket="b", secret_access_key="s3cr3t"
+        )
+
+
+def test_a_key_without_any_secret_is_refused_at_save_time(mock_db):
+    user = _user()
+    doc = _project_doc(user.id)
+    mock_db["projects"].insert_one(doc)
+
+    with pytest.raises(HTTPException) as exc:
+        _put(str(doc["_id"]), user, secret_access_key=None)
+    assert exc.value.status_code == 422
+    assert mock_db["storage"].find_one({"project_id": doc["_id"]}) is None
+
+
+def test_clearing_the_key_drops_the_stored_secret(mock_db):
+    """No key means an unsigned read: a leftover secret would make the config refused."""
+    doc, user = _stored_project(mock_db)
+
+    out = _put(str(doc["_id"]), user, access_key_id="  ", secret_access_key=None)
+
+    stored = mock_db["storage"].find_one({"project_id": doc["_id"]})
+    assert out.has_secret is False
+    assert stored["access_key_id"] is None
+    assert stored["secret_encrypted"] is None
+
+
+def test_the_instance_bucket_cannot_back_a_project(mock_db):
+    user = _user()
+    doc = _project_doc(user.id)
+    mock_db["projects"].insert_one(doc)
+
+    with pytest.raises(S3AccessRefused, match="instance's own data") as exc:
+        _put(str(doc["_id"]), user, bucket=settings.s3.bucket)
+    assert exc.value.status_code == 422
+    assert exc.value.code == "s3_refused"
+    assert mock_db["storage"].find_one({"project_id": doc["_id"]}) is None
+
+
+def test_the_instance_endpoint_is_exempt_from_host_gating(mock_db, monkeypatch):
+    """The compose service URL is private; it is allowed because it is ``settings.s3``'s."""
+    monkeypatch.setattr(settings.s3, "service_name", "s3-under-test")
+    monkeypatch.setattr(settings.s3, "service_port", 9000)
+
+    assert storage_config._storage_endpoint_rejection("http://s3-under-test:9000") is None
+    assert storage_config._storage_endpoint_rejection("http://s3-under-test:9000/") is None
+    # Another private host, or the old service alias, still goes through the gate.
+    assert storage_config._storage_endpoint_rejection("http://minio:9000") is not None
+
+
+def test_a_malformed_port_is_a_rejection_not_a_crash(mock_db):
+    assert "port" in storage_config._storage_endpoint_rejection("https://s3.example.org:abc")
+
+
 def test_private_endpoint_rejected(mock_db):
     user = _user()
     doc = _project_doc(user.id)
@@ -213,25 +284,28 @@ def test_writes_ensure_the_index_and_upsert_one_document(mock_db):
 # ── Read-side resolver ──────────────────────────────────────────────────────
 
 
-def test_storage_options_for_project_decrypts(mock_db):
+def test_project_storage_for_decrypts(mock_db):
     doc, _ = _stored_project(mock_db)
 
-    options = storage_config.storage_options_for_project(doc["_id"])
+    config = storage_config.project_storage_for(doc["_id"])
 
-    assert options is not None
-    assert options["endpoint_url"] == "https://s3.example.org"
-    assert options["aws_access_key_id"] == "AKIA123"
-    assert options["aws_secret_access_key"] == "s3cr3t"
-    assert options["use_ssl"] == "true"
+    assert config == ProjectS3Config(
+        endpoint_url="https://s3.example.org",
+        bucket="private-bucket",
+        region="us-east-1",
+        access_key_id="AKIA123",
+        secret_access_key="s3cr3t",
+    )
+    assert "s3cr3t" not in repr(config)
 
 
 def test_storage_options_none_without_config(mock_db):
-    assert storage_config.storage_options_for_project(ObjectId()) is None
+    assert storage_config.project_storage_for(ObjectId()) is None
 
 
 def test_storage_options_invalid_project_id_raises(mock_db):
     with pytest.raises(ValueError):
-        storage_config.storage_options_for_project("not-an-object-id")
+        storage_config.project_storage_for("not-an-object-id")
 
 
 def test_storage_options_raise_on_undecryptable_secret(mock_db, keys_dir):
@@ -243,7 +317,7 @@ def test_storage_options_raise_on_undecryptable_secret(mock_db, keys_dir):
     )
 
     with pytest.raises(storage_config.StorageSecretUnreadable) as exc:
-        storage_config.storage_options_for_project(doc["_id"])
+        storage_config.project_storage_for(doc["_id"])
 
     err = exc.value
     assert isinstance(err, storage_config.ProjectStorageUnusable)
@@ -266,7 +340,7 @@ def test_storage_options_raise_when_another_key_encrypted_the_secret(
 
     monkeypatch.setattr(settings.auth, "keys_dir", tmp_path / "worker-keys")
     with pytest.raises(storage_config.StorageSecretUnreadable):
-        storage_config.storage_options_for_project(doc["_id"])
+        storage_config.project_storage_for(doc["_id"])
 
 
 def test_storage_options_regate_endpoint_at_read_time(mock_db, monkeypatch):
@@ -275,7 +349,7 @@ def test_storage_options_regate_endpoint_at_read_time(mock_db, monkeypatch):
 
     monkeypatch.setenv("DEPICTIO_REMOTE_URL_ALLOWLIST", "other.example.org")
     with pytest.raises(storage_config.StorageEndpointRejected) as exc:
-        storage_config.storage_options_for_project(doc["_id"])
+        storage_config.project_storage_for(doc["_id"])
 
     assert exc.value.status_code == 409
     assert "s3.example.org" in exc.value.detail
@@ -293,6 +367,147 @@ def test_test_endpoint_reports_unusable_config_without_raising(mock_db):
     assert result.success is False
     assert str(doc["_id"]) in result.message
     assert "secrets_key.bin" not in result.message
+
+
+# ── Storage test ────────────────────────────────────────────────────────────
+
+
+class _StubbedS3:
+    """One stubbed client for every target; Stubber fails any unexpected call
+    (``list_buckets`` included) and checks the parameters of the expected ones."""
+
+    def __init__(self, monkeypatch):
+        self.client = boto3.client(
+            "s3", region_name="us-east-1", aws_access_key_id="x", aws_secret_access_key="y"
+        )
+        self.stubber = Stubber(self.client)
+        self.stubber.activate()
+        self.targets: list[S3Target] = []
+
+        def _client(target):
+            self.targets.append(target)
+            return self.client
+
+        monkeypatch.setattr(S3Target, "client", _client)
+
+    def head(self, region: str | None = None):
+        headers = {"x-amz-bucket-region": region} if region else {}
+        self.stubber.add_response(
+            "head_bucket",
+            {"ResponseMetadata": {"HTTPStatusCode": 200, "HTTPHeaders": headers}},
+            {"Bucket": "private-bucket"},
+        )
+
+    def list_one(self):
+        self.stubber.add_response(
+            "list_objects_v2",
+            {"KeyCount": 0, "IsTruncated": False},
+            {"Bucket": "private-bucket", "MaxKeys": 1},
+        )
+
+
+@pytest.fixture
+def stubbed_s3(monkeypatch):
+    stub = _StubbedS3(monkeypatch)
+    yield stub
+    stub.stubber.assert_no_pending_responses()
+
+
+def test_storage_test_heads_then_lists_the_bucket_and_never_lists_buckets(mock_db, stubbed_s3):
+    """EMBL: HeadBucket answers 200 with no region header, list_buckets is denied."""
+    doc, user = _stored_project(mock_db)
+    stubbed_s3.head(None)
+    stubbed_s3.list_one()
+
+    result = storage_config._test_project_storage(str(doc["_id"]), user)
+
+    assert result.success is True
+    assert "private-bucket" in result.message
+    assert result.detected_region is None
+    # No header: the configured region stays, nothing is written back.
+    assert mock_db["storage"].find_one({"project_id": doc["_id"]})["region"] == "us-east-1"
+    target = stubbed_s3.targets[0]
+    assert (target.kind, target.endpoint_url, target.access_key_id) == (
+        "project",
+        "https://s3.example.org",
+        "AKIA123",
+    )
+
+
+def test_storage_test_writes_a_detected_region_back(mock_db, stubbed_s3):
+    doc, user = _stored_project(mock_db)
+    stubbed_s3.head("eu-west-1")
+    stubbed_s3.list_one()
+
+    result = storage_config._test_project_storage(str(doc["_id"]), user)
+
+    assert result.success is True
+    assert result.detected_region == "eu-west-1"
+    assert "eu-west-1" in result.message
+    assert mock_db["storage"].find_one({"project_id": doc["_id"]})["region"] == "eu-west-1"
+    # The listing ran in the detected region.
+    assert stubbed_s3.targets[-1].region == "eu-west-1"
+
+
+def test_storage_test_follows_a_301_once(mock_db, stubbed_s3):
+    doc, user = _stored_project(mock_db)
+    stubbed_s3.stubber.add_client_error(
+        "head_bucket",
+        service_error_code="PermanentRedirect",
+        http_status_code=301,
+        response_meta={"HTTPHeaders": {"x-amz-bucket-region": "ap-south-1"}},
+    )
+    stubbed_s3.head("ap-south-1")
+    stubbed_s3.list_one()
+
+    result = storage_config._test_project_storage(str(doc["_id"]), user)
+
+    assert result.success is True
+    assert result.detected_region == "ap-south-1"
+    assert [t.region for t in stubbed_s3.targets] == ["us-east-1", "ap-south-1", "ap-south-1"]
+
+
+def test_storage_test_failures_use_the_sanitized_mapping(mock_db, stubbed_s3):
+    doc, user = _stored_project(mock_db)
+    stubbed_s3.stubber.add_client_error(
+        "head_bucket",
+        service_error_code="403",
+        http_status_code=403,
+        response_meta={"RequestId": "REQ-0123456789", "HostId": "hostid-abcdef"},
+    )
+
+    result = storage_config._test_project_storage(str(doc["_id"]), user)
+
+    assert result.success is False
+    assert "denied" in result.message
+    assert "private-bucket" in result.message
+    for leaked in ("REQ-0123456789", "hostid-abcdef", "AKIA123", "s3cr3t"):
+        assert leaked not in result.message
+
+
+def test_storage_test_refuses_a_stored_instance_bucket(mock_db, monkeypatch):
+    """A config saved before the refusal existed: refused without any request."""
+    doc, user = _stored_project(mock_db)
+    mock_db["storage"].update_one(
+        {"project_id": doc["_id"]}, {"$set": {"bucket": settings.s3.bucket}}
+    )
+    monkeypatch.setattr(S3Target, "client", lambda target: pytest.fail("no request expected"))
+
+    result = storage_config._test_project_storage(str(doc["_id"]), user)
+
+    assert result.success is False
+    assert "instance's own data" in result.message
+
+
+def test_storage_test_asks_for_a_bucket_on_old_configs(mock_db, monkeypatch):
+    doc, user = _stored_project(mock_db)
+    mock_db["storage"].update_one({"project_id": doc["_id"]}, {"$set": {"bucket": None}})
+    monkeypatch.setattr(S3Target, "client", lambda target: pytest.fail("no request expected"))
+
+    result = storage_config._test_project_storage(str(doc["_id"]), user)
+
+    assert result.success is False
+    assert "bucket" in result.message
 
 
 # ── Threading into re-ingestion ─────────────────────────────────────────────
@@ -342,7 +557,7 @@ def test_refresh_threads_project_storage_into_ingest(mock_db, monkeypatch):
     with (
         patch.object(manifest_ingest, "projects_collection", mock_db["projects"]),
         patch.object(manifest_ingest, "bounded_download", side_effect=_fake_download),
-        patch.object(storage_config, "storage_options_for_project", return_value=resolved),
+        patch.object(storage_config, "project_storage_for", return_value=resolved),
         patch.object(manifest_ingest, "_run_dc_ingest", return_value=(True, None)) as ingest,
     ):
         report = manifest_ingest._refresh_manifest_in_project(

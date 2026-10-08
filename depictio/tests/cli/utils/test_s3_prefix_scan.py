@@ -1,7 +1,9 @@
 """Tests for the s3_prefix scan mode (remote counterpart of `recursive`).
 
 Listing is exercised against a stubbed boto3 paginator: the S3 wire protocol is
-not what can break here, the key filtering and pagination handling are.
+not what can break here, the key filtering and pagination handling are. Which
+credentials a listing uses is decided by ``_s3_read_target`` from
+configuration alone, so those tests assert on the resolved target.
 """
 
 import hashlib
@@ -9,8 +11,10 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+from botocore.exceptions import ClientError
 from bson import ObjectId
 
+from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.cli.cli.utils import scan as scan_module
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.data_collections import (
@@ -25,6 +29,12 @@ from depictio.models.models.workflows import (
     WorkflowConfig,
     WorkflowDataLocation,
     WorkflowEngine,
+)
+from depictio.models.s3_access import (
+    S3AccessFailed,
+    S3AccessRefused,
+    S3Target,
+    split_s3_url,
 )
 
 
@@ -49,14 +59,59 @@ class _StubClient:
         return _StubPaginator(self._pages)
 
 
+def _project_target(bucket: str) -> S3Target:
+    return S3Target(
+        kind="project",
+        bucket=bucket,
+        endpoint_url="https://s3.example.org",
+        access_key_id="k",
+        secret_access_key="s",
+    )
+
+
 @pytest.fixture
 def stub_s3(monkeypatch):
-    def _install(keys):
-        monkeypatch.setattr(
-            scan_module, "_s3_read_client", lambda _cfg, url=None: _StubClient(keys)
+    """Resolve every prefix to a project target whose client is ``client``.
+
+    Takes the keys to list, or a ready client stub.
+    """
+
+    def _install(keys_or_client):
+        client = (
+            keys_or_client
+            if hasattr(keys_or_client, "get_paginator")
+            else _StubClient(keys_or_client)
         )
+        monkeypatch.setattr(
+            scan_module, "_s3_read_target", lambda _cfg, url: _project_target(split_s3_url(url)[0])
+        )
+        monkeypatch.setattr(S3Target, "client", lambda self: client)
+        return client
 
     return _install
+
+
+class _FailingClient:
+    """A client whose first ListObjectsV2 page answers with ``code``/``status``."""
+
+    def __init__(self, code: str, status: int):
+        self._error = ClientError(
+            {
+                "Error": {"Code": code, "Message": "x"},
+                "ResponseMetadata": {"HTTPStatusCode": status},
+            },
+            "ListObjectsV2",
+        )
+
+    def get_paginator(self, _name):
+        error = self._error
+
+        class _Paginator:
+            def paginate(self, **_kwargs):
+                raise error
+                yield  # a generator, like botocore's page iterator
+
+        return _Paginator()
 
 
 KEYS = [
@@ -152,112 +207,148 @@ class TestListS3Prefix:
         assert found[0]["url"] == "s3://b/run42/sample_A.measurements.csv"
 
 
-class TestS3ReadClientRegion:
-    """Per-project storage options spell the region as ``region``."""
+class TestListS3PrefixFailures:
+    def test_an_absent_prefix_lists_as_empty(self, stub_s3):
+        """Some gateways answer a prefix that holds nothing with a 404."""
+        stub_s3(_FailingClient("NoSuchKey", 404))
+        assert scan_module.list_s3_prefix("s3://b/run42/", "*", 10, None) == []
+
+    @pytest.mark.parametrize(
+        ("code", "status", "expected", "names"),
+        [
+            ("NoSuchBucket", 404, "s3_no_such_bucket", "The bucket 'b'"),
+            ("AccessDenied", 403, "s3_access_denied", "s3://b/run42/"),
+        ],
+    )
+    def test_other_failures_carry_their_code(self, stub_s3, code, status, expected, names):
+        stub_s3(_FailingClient(code, status))
+        with pytest.raises(S3AccessFailed) as exc:
+            scan_module.list_s3_prefix("s3://b/run42/", "*", 10, None)
+        assert exc.value.code == expected
+        assert names in exc.value.detail
+        assert "s3.example.org" not in exc.value.detail
+
+
+class TestS3ReadTarget:
+    """Which credentials a prefix listing uses, decided before any request."""
 
     @pytest.fixture
-    def captured_boto3(self, monkeypatch):
-        import boto3
+    def regions(self, monkeypatch):
+        """Record what is asked for its region, and answer with a fixed one."""
+        asked: list[S3Target] = []
 
-        calls: list[dict] = []
+        def fake_ensure_region(target):
+            asked.append(target)
+            return target.with_region(f"region-of-{target.bucket}")
 
-        def fake_client(service, **kwargs):
-            calls.append({"service": service, **kwargs})
-            return object()
-
-        monkeypatch.setattr(boto3, "client", fake_client)
-        return calls
-
-    def test_region_key_is_honoured(self, captured_boto3):
-        from types import SimpleNamespace
-
-        cfg = SimpleNamespace(
-            remote_storage_options={
-                "aws_access_key_id": "k",
-                "aws_secret_access_key": "s",
-                "endpoint_url": "https://s3.example",
-                "region": "eu-central-1",
-            },
-            s3_storage=None,
-        )
-        scan_module._s3_read_client(cfg)
-        assert captured_boto3[0]["region_name"] == "eu-central-1"
-        assert captured_boto3[0]["endpoint_url"] == "https://s3.example"
-
-    def test_polars_spelling_still_wins(self, captured_boto3):
-        from types import SimpleNamespace
-
-        cfg = SimpleNamespace(
-            remote_storage_options={"aws_region": "us-west-2", "region": "eu-central-1"},
-            s3_storage=None,
-        )
-        scan_module._s3_read_client(cfg)
-        assert captured_boto3[0]["region_name"] == "us-west-2"
-
-
-class TestS3ReadClientPublicBuckets:
-    """A location on the administrator's allowlist is listed unsigned.
-
-    Signing with credentials that have no relationship to someone else's open
-    bucket only earns a rejection, and the allowlist is configuration, so the
-    choice is made before the client makes any call.
-    """
-
-    @pytest.fixture
-    def captured_boto3(self, monkeypatch):
-        import boto3
-
-        calls: list[dict] = []
-
-        def fake_client(service, **kwargs):
-            calls.append({"service": service, **kwargs})
-            return object()
-
-        monkeypatch.setattr(boto3, "client", fake_client)
-        return calls
+        monkeypatch.setattr(scan_module, "ensure_region", fake_ensure_region)
+        return asked
 
     @staticmethod
-    def _cfg():
+    def _cfg(project=None):
         return SimpleNamespace(
-            remote_storage_options={"aws_access_key_id": "k", "aws_secret_access_key": "s"},
-            s3_storage=None,
+            remote_storage_options=project,
+            s3_storage=S3DepictioCLIConfig(
+                bucket="depictio-bucket", root_user="instance-key", root_password="instance-pw-1"
+            ),
         )
 
-    def test_an_allowlisted_bucket_drops_the_signature(self, captured_boto3, monkeypatch):
+    @staticmethod
+    def _project(**overrides):
+        return {
+            "aws_access_key_id": "k",
+            "aws_secret_access_key": "s",
+            "endpoint_url": "https://s3.example",
+            "region": "eu-central-1",
+            **overrides,
+        }
+
+    def test_the_project_storage_is_used_as_configured(self, regions):
+        target = scan_module._s3_read_target(self._cfg(self._project()), "s3://lab/run42/")
+
+        assert target.kind == "project"
+        assert regions[0].region == "eu-central-1"
+        assert target.endpoint_url == "https://s3.example"
+        assert target.access_key_id == "k"
+
+    def test_the_polars_spellings_still_load(self, regions):
+        project = {
+            "aws_endpoint_url": "https://s3.example",
+            "aws_region": "us-west-2",
+            "aws_access_key_id": "k",
+            "aws_secret_access_key": "s",
+        }
+        scan_module._s3_read_target(self._cfg(project), "s3://lab/run42/")
+
+        assert regions[0].region == "us-west-2"
+        assert regions[0].access_key_id == "k"
+
+    def test_the_listing_runs_in_the_buckets_own_region(self, regions):
+        """object-store and boto3 fail on S3's cross-region redirect rather than
+        following it, so the target is moved to the bucket's own region."""
+        target = scan_module._s3_read_target(self._cfg(self._project()), "s3://lab/run42/")
+
+        assert target.region == "region-of-lab"
+
+    def test_an_allowlisted_bucket_is_listed_unsigned(self, regions, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
+
+        target = scan_module._s3_read_target(self._cfg(self._project()), "s3://open-data/run42/")
+
+        assert target.kind == "public"
+        assert target.unsigned is True
+        assert not target.access_key_id
+
+    def test_the_unsigned_client_sends_no_credentials(self, monkeypatch):
+        import boto3
         from botocore import UNSIGNED
 
-        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
-        monkeypatch.setattr(scan_module, "public_s3_region", lambda bucket: "eu-west-1")
-
-        scan_module._s3_read_client(self._cfg(), url="s3://open-data/run42/x.csv")
-
-        assert captured_boto3[0]["config"].signature_version is UNSIGNED
-        assert "aws_access_key_id" not in captured_boto3[0]
-
-    def test_the_unsigned_client_uses_the_buckets_own_region(self, captured_boto3, monkeypatch):
-        """object-store fails on S3's cross-region redirect rather than
-        following it, so the client has to be built in the bucket's own region."""
-        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
-        monkeypatch.setattr(scan_module, "public_s3_region", lambda bucket: f"region-of-{bucket}")
-
-        scan_module._s3_read_client(self._cfg(), url="s3://open-data/run42/x.csv")
-
-        assert captured_boto3[0]["region_name"] == "region-of-open-data"
-
-    def test_an_unlisted_bucket_keeps_its_credentials(self, captured_boto3, monkeypatch):
+        calls: list[dict] = []
+        monkeypatch.setattr(boto3, "client", lambda service, **kwargs: calls.append(kwargs))
+        monkeypatch.setattr(scan_module, "ensure_region", lambda target: target)
         monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
 
-        scan_module._s3_read_client(self._cfg(), url="s3://private-data/run42/x.csv")
+        scan_module._s3_read_target(self._cfg(self._project()), "s3://open-data/run42/").client()
 
-        assert captured_boto3[0]["aws_access_key_id"] == "k"
-        assert "config" not in captured_boto3[0]
+        assert calls[0]["config"].signature_version is UNSIGNED
+        assert calls[0].get("aws_access_key_id") is None
 
-    def test_nothing_is_unsigned_without_an_allowlist(self, captured_boto3, monkeypatch):
-        monkeypatch.delenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", raising=False)
+    def test_an_unlisted_bucket_uses_the_project_storage(self, regions, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
 
-        scan_module._s3_read_client(self._cfg(), url="s3://open-data/run42/x.csv")
+        target = scan_module._s3_read_target(self._cfg(self._project()), "s3://private/run42/")
 
-        assert captured_boto3[0]["aws_access_key_id"] == "k"
+        assert target.kind == "project"
+        assert target.access_key_id == "k"
+
+    def test_the_server_refuses_a_bucket_without_storage_settings(self, regions):
+        """No project storage, not public: refused, never listed with the root keys."""
+        with pytest.raises(S3AccessRefused):
+            scan_module._s3_read_target(self._cfg(), "s3://someone-elses/run42/")
+        assert regions == []
+
+    def test_the_server_refuses_the_instance_bucket(self, regions):
+        with pytest.raises(S3AccessRefused, match="instance's own data"):
+            scan_module._s3_read_target(self._cfg(self._project()), "s3://depictio-bucket/6512/")
+        assert regions == []
+
+    def test_keyless_project_storage_never_borrows_the_instance_keys(self, regions, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "CLI")
+        project = {"endpoint_url": "https://s3.example"}
+
+        target = scan_module._s3_read_target(self._cfg(project), "s3://lab/run42/")
+
+        assert target.kind == "project"
+        assert target.unsigned is True
+        assert not target.access_key_id
+
+    def test_the_cli_lists_with_its_own_credentials(self, regions, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "CLI")
+
+        target = scan_module._s3_read_target(self._cfg(), "s3://depictio-bucket/run42/")
+
+        assert target.kind == "instance"
+        assert target.access_key_id == "instance-key"
 
 
 class TestListS3PrefixKeyBudget:
@@ -287,11 +378,11 @@ class TestListS3PrefixKeyBudget:
 
             return _Paginator()
 
-    def test_budget_stops_the_walk_and_warns(self, monkeypatch):
+    def test_budget_stops_the_walk_and_warns(self, monkeypatch, stub_s3):
         # max_files=1 -> budget of 10 keys; the only match sits past it.
         keys = [f"run42/noise_{i}.txt" for i in range(40)] + ["run42/late.csv"]
         client = self._CountingClient(keys, page_size=5)
-        monkeypatch.setattr(scan_module, "_s3_read_client", lambda _cfg, url=None: client)
+        stub_s3(client)
         messages = []
         monkeypatch.setattr(
             scan_module,
@@ -307,14 +398,14 @@ class TestListS3PrefixKeyBudget:
         assert "budget of 10 keys" in warning
         assert "partial" in warning
 
-    def test_listing_ending_exactly_at_the_budget_is_complete(self, monkeypatch):
+    def test_listing_ending_exactly_at_the_budget_is_complete(self, monkeypatch, stub_s3):
         # Ten keys, budget ten: the last page says IsTruncated=False, so this
         # is the whole listing and no warning is due.
         keys = [f"run42/noise_{i}.txt" for i in range(9)] + ["run42/late.csv"]
         client = self._CountingClient(keys, page_size=5)
         for page in client._pages:
             page["IsTruncated"] = False
-        monkeypatch.setattr(scan_module, "_s3_read_client", lambda _cfg, url=None: client)
+        stub_s3(client)
         messages = []
         monkeypatch.setattr(
             scan_module,
@@ -325,10 +416,10 @@ class TestListS3PrefixKeyBudget:
         assert [o["relative"] for o in found] == ["late.csv"]
         assert messages == []
 
-    def test_budget_scales_with_max_files(self, monkeypatch):
+    def test_budget_scales_with_max_files(self, monkeypatch, stub_s3):
         keys = [f"run42/noise_{i}.txt" for i in range(40)] + ["run42/late.csv"]
         client = self._CountingClient(keys, page_size=5)
-        monkeypatch.setattr(scan_module, "_s3_read_client", lambda _cfg, url=None: client)
+        stub_s3(client)
         messages = []
         monkeypatch.setattr(
             scan_module,
@@ -459,10 +550,10 @@ class TestScanS3PrefixForDataCollection:
         assert api.created == []
 
     def test_listing_failure_is_reported_as_a_scan_error(self, monkeypatch, api):
-        def _no_client(_cfg, url=None):
+        def _no_client(_cfg, url):
             raise RuntimeError("no credentials")
 
-        monkeypatch.setattr(scan_module, "_s3_read_client", _no_client)
+        monkeypatch.setattr(scan_module, "_s3_read_target", _no_client)
 
         result = self._scan(_s3_prefix_dc())
 
@@ -470,6 +561,35 @@ class TestScanS3PrefixForDataCollection:
         assert "S3 prefix listing failed" in result["message"]
         assert "no credentials" in result["message"]
         assert api.created == []
+
+    def test_a_refused_read_propagates_with_its_code(self, monkeypatch, api):
+        """Sanitized and coded already: the API answers with it as is."""
+
+        def _refuse(_cfg, url):
+            raise S3AccessRefused(f"{url} cannot be read by the server.")
+
+        monkeypatch.setattr(scan_module, "_s3_read_target", _refuse)
+
+        with pytest.raises(S3AccessRefused) as exc:
+            self._scan(_s3_prefix_dc())
+        assert exc.value.code == "s3_refused"
+        assert api.created == []
+
+    def test_a_failed_listing_propagates_with_its_code(self, stub_s3, api):
+        stub_s3(_FailingClient("AccessDenied", 403))
+
+        with pytest.raises(S3AccessFailed) as exc:
+            self._scan(_s3_prefix_dc())
+        assert exc.value.code == "s3_access_denied"
+        assert api.created == []
+
+    def test_an_absent_prefix_is_a_no_match_error(self, stub_s3, api):
+        stub_s3(_FailingClient("NoSuchKey", 404))
+
+        result = self._scan(_s3_prefix_dc())
+
+        assert result["result"] == "error"
+        assert "No object under" in result["message"]
 
     def test_unchanged_objects_are_skipped_and_stale_records_removed(self, stub_s3, api):
         stub_s3(KEYS)

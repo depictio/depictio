@@ -6,6 +6,7 @@ from pydantic import BaseModel, field_validator
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.s3 import S3DepictioCLIConfig
 from depictio.models.models.users import Group, TokenBase, UserBase
+from depictio.models.s3_access import ProjectS3Config
 
 
 class TokenData(BaseModel):
@@ -85,11 +86,13 @@ class CLIConfig(BaseModel):
     user: UserBaseCLIConfig
     s3_storage: S3DepictioCLIConfig
     instance_label: str | None = None  # Friendly CLI instance name for server-side monitoring
-    # Per-project credentials for *reading* remote url/manifest sources
-    # (polars storage_options shape). None = read with s3_storage. The Delta
-    # write target always stays s3_storage — read and write are two different
-    # credentials by design (RFC remote-data §5.3).
-    remote_storage_options: dict | None = None
+    # The project's own storage settings, for *reading* remote s3:// sources
+    # (url, manifest and s3_prefix scans). None = no project storage: the read
+    # is then public, refused, or, in CLI context only, done with s3_storage
+    # (see depictio.models.s3_access). The Delta write target always stays
+    # s3_storage: read and write are two different credentials by design
+    # (RFC remote-data section 5.3). A dict in the polars spelling still loads.
+    remote_storage_options: ProjectS3Config | None = None
 
     class ConfigDict:
         extra = "forbid"  # Reject unexpected fields
