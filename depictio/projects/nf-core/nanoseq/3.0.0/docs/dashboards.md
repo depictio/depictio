@@ -57,10 +57,13 @@ The landing page, at compact width with the filter panel collapsed:
   down). A condition and a library filter above them narrow these four only.
 - **Findings**: result rows whose values are computed under the filters, each with a link to
   its tab: the median share of a library's reads at Q10 or above, the share of the expression
-  variance on the first principal component, the genes DESeq2 calls up and down, and the
-  transcripts DEXSeq calls. Below them, four figures in two rows, each linking its tab: length
-  against quality per library beside the library PCA, then the DESeq2 volcano beside the
-  DEXSeq volcano. The bar of this section filters by condition and library.
+  variance on the first principal component, the DESeq2 calls up and down (one per tested
+  annotation entry, as the Key figure and the volcano count them; the Gene expression tab
+  counts the distinct genes), and the transcripts DEXSeq calls. Below them, four figures in
+  two rows, each linking its tab: length against quality per library beside the library PCA,
+  then the DESeq2 volcano beside the DEXSeq volcano. The two narrow figures take a short title,
+  the source's being cut at that width. The bar of this section filters by condition and
+  library.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
 The persistent `Sample filters` (condition, library, then the library preparation, flow-cell
@@ -91,32 +94,37 @@ mean-quality floor and an N50 range.
 
 **Alignment.** Strip, from the `samtools stats` summary rows: the median share of reads placed
 (a gauge), the median per-base identity (with its spread), reads mapped (with their
-distribution) and supplementary alignments (the share the three libraries with the most
-hold). Then the coverage depth distribution, the indel length spectrum beside the aligned
-read-length profile. The distributions table is collapsed. Filter: a library picker.
+distribution) and supplementary alignments (per library, with its spread). Then the coverage
+depth distribution, the indel length spectrum (no legend: two curves per library pass eight
+entries, a hover names each) beside the aligned read-length profile. The distributions table is collapsed. Filter: a library picker.
 
 **Quantification.** Strip: reads Bambu assigned (by condition), the median genes detected
 (with its spread), the median protein-coding share (a gauge) and the median share of the 50 top
-genes (with its distribution). Then the PCA on log CPM over the 500 most variable genes, the
-Spearman correlation heatmap (full width: library ids on both axes) and the 100 most variable
-genes, row-standardised. Collapsed: depth against complexity, the libraries by preparation and
-by flow-cell run, the per-library gene expression distribution, then the tables. Filters:
+genes (with its distribution). Then the PCA on log CPM over the 500 most variable genes and
+the Spearman correlation heatmap (full width: library ids on both axes; the libraries only, not
+the mean-correlation column). Collapsed: the 100 most variable genes, row-standardised (the
+libraries only, not the variance they were ranked by; its hundred rows outgrow the tab's
+budget), depth against complexity, the libraries by preparation and by flow-cell run, the
+per-library gene expression distribution, then the tables. Filters:
 biotype (it also narrows the variable-gene heatmap) and a log-CPM range on the gene counts.
 
 **Gene expression.** DESeq2 on Bambu's gene counts. Strip: the significant genes (ranked up
 and down), the median log2 fold change of the up calls (with its spread) and of the down calls
 (with its distribution), each direction on its own card so neither cancels the other, and the
-strongest significance (rows against padj 0.05). Then one volcano tile with three views (MA
+strongest significance (tested rows against the 5% FDR). Then one volcano tile with three views (MA
 from `log2_base_mean`, QQ from the raw p-values), without point labels (the labels are Ensembl
 ids), and the twenty largest fold changes. The 200 best-measured rows are collapsed. Filters:
 adjusted p-value, log2 fold change, biotype and mean expression; no direction filter, which
 would empty one of the two direction cards.
 
 **Isoform usage.** DEXSeq on Bambu's transcript counts: whether a transcript is used more or
-less relative to its gene's other transcripts. Strip: the transcripts tested (a ring by
-direction), the median usage gain and the median usage loss, each on its own card, and the
-reads on isoforms (by condition). Then the volcano (QQ view; DEXSeq writes no mean intensity,
-so no MA view), without point labels, and the per-library transcript shares of the top genes.
+less relative to its gene's other transcripts. Strip: the transcripts tested (against a 5%
+gene-level q-value: a ring by direction would be all "not significant"), the median usage gain
+and the median usage loss over every tested transcript, each on its own card (the calls alone
+can leave one direction with a single value), and the reads on isoforms (by condition). Then
+the volcano (QQ view; DEXSeq writes no mean intensity, so no MA view), without point labels and
+with no fold-change cut, so its colours are DEXSeq's own calls, and the per-library transcript
+shares of the top genes (no legend: a hover names the transcript).
 Collapsed: the per-library transcript expression distribution, the isoform lane view (it reads
 `bambu/extended_annotations.gtf` and is dropped on a quantification-only run), then the tables.
 No sashimi view: nanoseq publishes no splice-junction table. Filters: biotype and a log-CPM

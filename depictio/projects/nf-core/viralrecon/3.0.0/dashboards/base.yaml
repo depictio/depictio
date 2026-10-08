@@ -120,21 +120,9 @@ main_dashboard:
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Samples, below).
-  - component_type: interactive
-    workflow_tag: viralrecon
-    data_collection_tag: summary_metrics
-    interactive_component_type: MultiSelect
-    column_name: lineage
-    column_type: object
-    display:
-      icon_name: mdi:virus
-      custom_color: red
-      strip_label: Lineage
-    section: Key figures
-    tag: vr-ov-kf-lineage
-    index: ov-kf-lineage
-    title: Lineage
-    layout: {x: 0, y: 0, w: 2, h: 1}
+  # No lineage here: the summary's lineage is Pangolin's, so a run without
+  # Pangolin output (non-SARS, or a partial run) would offer "NA" alone. The
+  # sample and the 10x breadth are in every run's summary.
   - component_type: interactive
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
@@ -149,6 +137,21 @@ main_dashboard:
     tag: vr-ov-kf-sample
     index: ov-kf-sample
     title: Sample ID
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    interactive_component_type: RangeSlider
+    column_name: pct_genome_covered_10x
+    column_type: float64
+    display:
+      icon_name: mdi:chart-areaspline
+      custom_color: cyan
+      strip_label: 10x (%)
+    section: Key figures
+    tag: vr-ov-kf-genome-10x-range
+    index: ov-kf-genome-10x-range
+    title: Genome at 10x (%)
     layout: {x: 2, y: 0, w: 2, h: 1}
   - component_type: text
     title: nf-core/viralrecon
@@ -206,51 +209,55 @@ main_dashboard:
     layout: {x: 0, y: 4, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
   # explains it. The icon colour is that tab's colour. All four read
-  # summary_metrics, the hub every illumina run writes; a nanopore run prunes
-  # it and keeps the Findings rows and figures of its own collections.
+  # summary_metrics, the hub of every illumina run, and none splits by
+  # lineage: a run without Pangolin output writes "NA" there. A nanopore run
+  # prunes the hub (template.yaml), which keeps no collection of its own to
+  # stand in: the fix is the hub's recipe (see docs/dashboards.md).
+  # 1,000 reads: the pipeline's default --min_mapped_reads, under which a
+  # sample is left out of variant calling. One row per sample, so the count of
+  # mapped-read values is the sample count.
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
     use: multiqc/summary_metrics
     aggregation: count
-    column_name: sample
-    column_type: object
-    secondary_layout: composition
-    breakdown_col: lineage
-    display:
-      icon_name: mdi:flask-outline
-      icon_color: red
-      caption: in the run, by Pangolin lineage
-      link: tab:Lineage & Clustering
-    section: Key figures
-    tag: vr-ov-kf-samples
-    index: ov-kf-samples
-    title: Samples
-    description: Samples in the run summary. The bar splits them by Pangolin lineage.
-    layout: {x: 0, y: 0, w: 2, h: 2}
-  # 1,000 reads: the pipeline's default --min_mapped_reads, under which a
-  # sample is left out of variant calling.
-  - component_type: card
-    workflow_tag: viralrecon
-    data_collection_tag: summary_metrics
-    use: multiqc/summary_metrics
-    aggregation: median
     column_name: num_reads_mapped
     column_type: float64
     secondary_layout: threshold
     threshold_value: 1000
     threshold_direction: min
     display:
-      icon_name: mdi:target
+      icon_name: mdi:flask-outline
+      icon_color: orange
+      caption: against the 1,000-read floor for calling
+      link: tab:MultiQC
+      decimals: 0
+    section: Key figures
+    tag: vr-ov-kf-samples
+    index: ov-kf-samples
+    title: Samples
+    description: Samples in the run summary. The bar counts those above the pipeline's default 1,000 mapped reads, the floor for variant calling.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    use: multiqc/summary_metrics
+    aggregation: median
+    column_name: coverage_median
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-line
       icon_color: indigo
-      caption: samples against the 1,000-read floor
+      caption: median per sample, with its spread
       link: tab:Sample QC
       decimals: 0
     section: Key figures
-    tag: vr-ov-kf-mapped
-    index: ov-kf-mapped
-    title: Reads mapped
-    description: Median reads aligned per sample. The bar counts the samples above the pipeline's default 1,000-read floor for variant calling.
+    tag: vr-ov-kf-depth
+    index: ov-kf-depth
+    title: Median depth
+    description: Median of each sample's median depth along the genome. The box shows how it spreads.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: viralrecon
@@ -274,6 +281,9 @@ main_dashboard:
     title: Genome at 10x (%)
     description: Median share of each sample's genome covered by 10 reads or more, the depth the consensus needs.
     layout: {x: 4, y: 0, w: 2, h: 2}
+  # The summary writes NA for both counts of a sample no caller reached (a
+  # partial run), which the recipe adds up to 0: those rows are left out, so
+  # such a run reads "–" here, not 0.
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
@@ -281,6 +291,7 @@ main_dashboard:
     aggregation: median
     column_name: num_variants_total
     column_type: float64
+    filter_expr: col('num_variants_snp').is_not_null() | col('num_variants_indel').is_not_null()
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
     display:
@@ -295,23 +306,8 @@ main_dashboard:
     title: Variants per sample
     description: Median number of variants called per sample. The box shows how it spreads.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  # Findings filter bar: the lineage, then the sample, on the hub; the links
-  # carry the pick to every collection the figures below read.
-  - component_type: interactive
-    workflow_tag: viralrecon
-    data_collection_tag: summary_metrics
-    interactive_component_type: MultiSelect
-    column_name: lineage
-    column_type: object
-    display:
-      icon_name: mdi:virus
-      custom_color: red
-      strip_label: Lineage
-    section: Findings
-    tag: vr-ov-findings-lineage
-    index: ov-findings-lineage
-    title: Lineage
-    layout: {x: 0, y: 0, w: 2, h: 1}
+  # Findings filter bar: the sample, then the 10x breadth, on the hub; the
+  # links carry the pick to every collection the figures below read.
   - component_type: interactive
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
@@ -326,6 +322,21 @@ main_dashboard:
     tag: vr-ov-findings-sample
     index: ov-findings-sample
     title: Sample ID
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: viralrecon
+    data_collection_tag: summary_metrics
+    interactive_component_type: RangeSlider
+    column_name: pct_genome_covered_10x
+    column_type: float64
+    display:
+      icon_name: mdi:chart-areaspline
+      custom_color: cyan
+      strip_label: 10x (%)
+    section: Findings
+    tag: vr-ov-findings-genome-10x
+    index: ov-findings-genome-10x
+    title: Genome at 10x (%)
     layout: {x: 2, y: 0, w: 2, h: 1}
   # One result row per finding, each citing one data collection, so the import
   # removes a row with its data (a non-SARS run loses the Nextclade and
@@ -359,11 +370,11 @@ main_dashboard:
   - component_type: highlight
     section: Findings
     source_tab: Sample QC
-    source_component: qc-coverage-variants
-    caption: One point per sample, median depth against variants called, coloured by lineage. Few calls at low depth is a thin sample, not a divergent genome.
+    source_component: qc-depth-breadth
+    caption: One point per sample, median depth against the share of the genome at 10x, coloured by lineage. Low and left is a thin sample; deep but low lost amplicons.
     hide_legend: true
-    tag: vr-ov-hl-coverage-variants
-    index: ov-hl-coverage-variants
+    tag: vr-ov-hl-depth-breadth
+    index: ov-hl-depth-breadth
     layout: {x: 0, y: 2, w: 5, h: 5}
   # A summary of the Coverage tab's amplicon track: one line for the samples in
   # view rather than one lane per sample.
@@ -381,6 +392,8 @@ main_dashboard:
       d = d.with_columns(pl.col('depth').clip(lower_bound=1))
       fig = px.line(d.to_pandas(), x='start', y='depth', hover_data=['region'], markers=True, log_y=True, labels={'start': 'Genome position', 'depth': 'Median depth', 'region': 'Amplicon'}, **depictio_group_kwargs)
       fig.add_hline(y=10, line_dash='dash')
+      # One tick per power of ten: a log axis otherwise labels 2 and 5 between.
+      fig.update_yaxes(dtick=1)
       fig.update_layout(margin=dict(t=10))
     title: Depth per amplicon
     link: tab:Coverage & Depth
@@ -795,7 +808,7 @@ tabs:
   - name: Diagnostics
     icon: mdi:chart-scatter-plot
     color: indigo
-    description: Depth against calls, then the consensus as Nextclade reads it
+    description: Depth against breadth, then the consensus as Nextclade reads it
   - name: Breadth per sample
     icon: mdi:chart-bar
     color: indigo
@@ -808,7 +821,7 @@ tabs:
       Each sample's alignment and consensus, from the pipeline's
       [variant summary](https://nf-co.re/viralrecon/3.0.0/docs/output) and the
       [Nextclade](https://clades.nextstrain.org) QC of its consensus. The first scatter tells a
-      thin sample from a divergent one; lasso a point to read its record beside it.
+      thin sample from one that lost amplicons; lasso a point to read its record beside it.
     tag: vr-qc-intro
     index: qc-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -942,6 +955,8 @@ tabs:
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Colours by lineage, or by Analysis mode's groups when it has some.
   # hover_data puts sample first in customdata, which the selection reads.
+  # Depth and breadth, not variant calls: every run's summary carries both,
+  # while a run no caller reached writes NA for its calls.
   - component_type: figure
     workflow_tag: viralrecon
     data_collection_tag: summary_metrics
@@ -949,19 +964,23 @@ tabs:
     visu_type: scatter
     mode: code
     code_content: |-
-      # Depth against calls, one point per sample: by lineage, or by Analysis
-      # mode's groups when it has some.
+      # Depth against 10x breadth, one point per sample: by lineage, or by
+      # Analysis mode's groups when it has some. Depth on a log axis: samples
+      # of one run span orders of magnitude. The dashed line is the 80% breadth
+      # floor of the bars below.
       kw = depictio_group_kwargs or {'color': 'lineage', 'color_discrete_map': depictio_category_colors.get('lineage') or {}}
-      fig = px.scatter(df.to_pandas(), x='coverage_median', y='num_variants_total', hover_data=['sample', 'pct_genome_covered_10x'], labels={'coverage_median': 'Median depth', 'num_variants_total': 'Variants called', 'lineage': 'Lineage', 'pct_genome_covered_10x': 'Genome at 10x (%)'}, **kw)
+      fig = px.scatter(df.to_pandas(), x='coverage_median', y='pct_genome_covered_10x', log_x=True, hover_data=['sample', 'num_variants_total'], labels={'coverage_median': 'Median depth', 'pct_genome_covered_10x': 'Genome at 10x (%)', 'lineage': 'Lineage', 'num_variants_total': 'Variants called'}, **kw)
       fig.update_traces(marker=dict(size=10))
+      fig.add_hline(y=80, line_dash='dash')
+      fig.update_yaxes(range=[0, 105])
       fig.update_layout(margin=dict(t=10))
     selection_enabled: true
     selection_column: sample
     section: Diagnostics
-    tag: vr-qc-coverage-variants
-    index: qc-coverage-variants
-    title: Median depth against variants called
-    description: A thin sample calls few variants at low depth; a divergent one calls many at good depth.
+    tag: vr-qc-depth-breadth
+    index: qc-depth-breadth
+    title: Median depth against genome covered at 10x
+    description: A thin sample sits low and left; a deep one under the line lost amplicons.
     layout: {x: 0, y: 0, w: 5, h: 5}
   # No default_record: the card waits for a pick rather than opening on a
   # sample of the reference run.
@@ -971,7 +990,7 @@ tabs:
     viz_kind: record_card
     config:
       viz_kind: record_card
-      linked_component: vr-qc-coverage-variants
+      linked_component: vr-qc-depth-breadth
       id_col: sample
       title_col: sample
       selection_source: any
@@ -1007,6 +1026,9 @@ tabs:
       kw = depictio_group_kwargs or {'color': 'clade', 'color_discrete_map': depictio_category_colors.get('clade') or {}}
       fig = px.scatter(df.to_pandas(), x='totalSubstitutions', y='totalDeletions', hover_data=['sample', 'qc_overallStatus', 'totalMissing'], opacity=0.8, labels={'totalSubstitutions': 'Substitutions', 'totalDeletions': 'Deleted bases', 'clade': 'Clade', 'qc_overallStatus': 'Nextclade QC', 'totalMissing': 'Missing bases'}, **kw)
       fig.update_traces(marker=dict(size=10))
+      # Counts: from zero, in whole steps (a narrow range otherwise ticks 0.5).
+      fig.update_xaxes(rangemode='tozero', dtick=max(1, round((df['totalSubstitutions'].max() or 0) / 5)))
+      fig.update_yaxes(rangemode='tozero', dtick=max(1, round((df['totalDeletions'].max() or 0) / 5)))
       fig.update_layout(margin=dict(t=10))
     selection_enabled: true
     selection_column: sample
@@ -1148,7 +1170,9 @@ tabs:
     title: Window depth
     description: Median depth over every sample and 200 bp window in view.
     layout: {x: 0, y: 0, w: 2, h: 2}
-  # 10x: the depth under which the consensus masks a position.
+  # 10x: the depth under which the consensus masks a position. No trend along
+  # `start`: its first-to-last change ("1 → 3 ▲ 200%") reads as growth over
+  # time, which a genome position is not.
   - component_type: card
     workflow_tag: viralrecon
     data_collection_tag: mosdepth_genome_coverage
@@ -1157,18 +1181,17 @@ tabs:
     column_name: coverage
     column_type: float64
     filter_expr: col('coverage') < 10
-    secondary_layout: trend
-    trend_col: start
+    secondary_layout: histogram
     display:
       icon_name: mdi:chart-timeline-variant
       icon_color: orange
-      caption: where they fall along the genome
+      caption: their depth, from no reads to just under 10x
       decimals: 0
     section: Coverage at a glance
     tag: vr-cov-card-low-windows
     index: cov-card-low-windows
     title: Windows under 10x
-    description: Sample and window pairs under 10x, which the consensus masks, and where along the genome they fall.
+    description: Sample and window pairs under 10x, which the consensus masks; a bar at 0 is a true gap, the rest thin coverage.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: viralrecon
@@ -1607,6 +1630,8 @@ tabs:
       fig = px.bar(d.to_pandas(), x='GENE', y='calls', color='FUNCLASS', color_discrete_map=depictio_category_colors.get('FUNCLASS') or {}, labels={'GENE': 'Gene', 'calls': 'Calls', 'FUNCLASS': 'Functional class'})
       fig.update_layout(barmode='stack', xaxis={'categoryorder': 'total descending'}, margin=dict(t=10))
       fig.update_xaxes(tickangle=-45)
+      # A count axis in whole steps: a short one otherwise ticks 0.5.
+      fig.update_yaxes(dtick=max(1, round((d.group_by('GENE').agg(pl.col('calls').sum())['calls'].max() or 0) / 5)))
     section: Genes and effects
     tag: vr-var-by-gene
     index: var-by-gene
@@ -1625,6 +1650,8 @@ tabs:
       fig = px.bar(d.to_pandas(), x='sample', y='calls', color='FUNCLASS', color_discrete_map=depictio_category_colors.get('FUNCLASS') or {}, labels={'sample': 'Sample', 'calls': 'Calls', 'FUNCLASS': 'Functional class'})
       fig.update_layout(barmode='stack', margin=dict(t=10))
       fig.update_xaxes(tickangle=-45, tickfont={'size': 9})
+      # A count axis in whole steps: a short one otherwise ticks 0.5.
+      fig.update_yaxes(dtick=max(1, round((d.group_by('sample').agg(pl.col('calls').sum())['calls'].max() or 0) / 5)))
     section: Genes and effects
     tag: vr-var-by-sample
     index: var-by-sample
@@ -1848,7 +1875,9 @@ tabs:
       - clade
       value_col: null
       sort_mode: total_flow
-      color_mode: source
+      # Every flow leaves the one QC verdict "pass" on most runs: coloured by
+      # source, they would all take its colour.
+      color_mode: target
       link_opacity: 0.5
       min_link_value: 0.0
       show_node_labels: true
@@ -1881,7 +1910,8 @@ tabs:
     description: PCA of which mutations each sample carries; colour is the lineage, shape the clade.
     layout: {x: 0, y: 0, w: 8, h: 6}
   # `degree`, not `set`: the sets are lineages found at ingest, so no set
-  # colour map can be written in a generic template.
+  # colour map can be written in a generic template. No annotation strip: one
+  # colour per mutation label lists every mutation in the legend.
   - component_type: advanced_viz
     workflow_tag: viralrecon
     viz_kind: upset_plot
@@ -1895,8 +1925,6 @@ tabs:
       min_size: 1
       show_set_sizes: true
       color_intersections_by: degree
-      default_annotation_cols:
-      - mutation_label
     section: Variant profiles
     tag: vr-lin-upset
     index: lin-upset
@@ -1917,6 +1945,8 @@ tabs:
       d = d.with_columns(pl.when(pl.col('lineage').is_in(top)).then(pl.col('lineage')).otherwise(pl.lit('Other')).alias('lineage')).group_by('lineage').agg(pl.col('samples').sum()).sort('samples', descending=True)
       fig = px.bar(d.to_pandas(), x='lineage', y='samples', color='lineage', color_discrete_map=depictio_category_colors.get('lineage') or {}, labels={'lineage': 'Pangolin lineage', 'samples': 'Samples'})
       fig.update_layout(showlegend=False, margin=dict(t=10))
+      # A count axis in whole steps: a short one otherwise ticks 0.5.
+      fig.update_yaxes(dtick=max(1, round((d['samples'].max() or 0) / 5)))
     section: Calls per lineage and clade
     tag: vr-lin-lineage-bar
     index: lin-lineage-bar
@@ -1936,6 +1966,8 @@ tabs:
       d = d.with_columns(pl.when(pl.col('clade').is_in(top)).then(pl.col('clade')).otherwise(pl.lit('Other')).alias('clade')).group_by('clade').agg(pl.col('samples').sum()).sort('samples', descending=True)
       fig = px.bar(d.to_pandas(), x='clade', y='samples', color='clade', color_discrete_map=depictio_category_colors.get('clade') or {}, labels={'clade': 'Nextclade clade', 'samples': 'Samples'})
       fig.update_layout(showlegend=False, margin=dict(t=10))
+      # A count axis in whole steps: a short one otherwise ticks 0.5.
+      fig.update_yaxes(dtick=max(1, round((d['samples'].max() or 0) / 5)))
     section: Calls per lineage and clade
     tag: vr-lin-clade-bar
     index: lin-clade-bar

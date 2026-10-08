@@ -301,16 +301,20 @@ main_dashboard:
     layout: {x: 2, y: 0, w: 2, h: 1}
   # One result row per finding, each citing one data collection, so the import
   # removes a row with its data. The two test rows are computed once over the
-  # whole run, so no sample filter changes them.
+  # whole run, so no sample filter changes them. The DESeq2 row counts calls
+  # (one per tested annotation entry), as the Key figure and the volcano's
+  # badges do; the Gene expression tab counts the distinct genes.
+  # The DEXSeq row counts the transcripts of the genes under a 5% gene-level
+  # q-value, which the volcano colours (effect_threshold 0 on its source).
   - component_type: text
     surface: card
     values:
       q10: {dc: nanostats_quality, column: pct_reads, aggregation: median, filter_expr: "col('q_cutoff') == 10",
         format: 'decimals:1'}
       pc1: {dc: bambu_sample_pca, column: pc1_var_pct, aggregation: max, format: 'decimals:1'}
-      n_up: {dc: deseq2_results, column: gene_id, aggregation: nunique, filter_expr: "col('direction') == 'up'",
+      n_up: {dc: deseq2_results, column: gene_id, aggregation: count, filter_expr: "col('direction') == 'up'",
         format: integer}
-      n_down: {dc: deseq2_results, column: gene_id, aggregation: nunique, filter_expr: "col('direction') == 'down'",
+      n_down: {dc: deseq2_results, column: gene_id, aggregation: count, filter_expr: "col('direction') == 'down'",
         format: integer}
       n_dtu: {dc: dexseq_results, column: feature_id, aggregation: nunique, filter_expr: "col('significant') == True",
         format: integer}
@@ -318,7 +322,7 @@ main_dashboard:
     body: |
       - **{{q10}}%** of a library's reads reach Q10 or above – the median over the libraries [Reads](tab:Reads)
       - **{{pc1}}%** of the expression variance lies on the first principal component – log CPM of the most variable genes [Quantification](tab:Quantification)
-      - **{{n_up}}** genes up and **{{n_down}}** down between the conditions – DESeq2, 5% FDR and a two-fold change [Genes](tab:Gene expression)
+      - **{{n_up}}** calls up and **{{n_down}}** down between the conditions – DESeq2, 5% FDR and a two-fold change [Genes](tab:Gene expression)
       - **{{n_dtu}}** of {{n_tx}} transcripts shift their share of their gene – DEXSeq, gene-level 5% FDR [Isoforms](tab:Isoform usage)
     section: Findings
     tag: ns-ov-findings
@@ -335,8 +339,10 @@ main_dashboard:
     tag: ns-ov-hl-length-quality
     index: ov-hl-length-quality
     layout: {x: 0, y: 2, w: 5, h: 5}
+  # The w3 highlights take a short title: the source's is cut at that width.
   - component_type: highlight
     section: Findings
+    title: Libraries (PCA)
     source_tab: Quantification
     source_component: qt-pca
     caption: One point per library on the first two components of log CPM, coloured by condition; replicates should sit together.
@@ -347,6 +353,7 @@ main_dashboard:
   # up over the points.
   - component_type: highlight
     section: Findings
+    title: DESeq2 volcano
     source_tab: Gene expression
     source_component: de-volcano
     caption: One point per tested gene, effect against significance; the coloured calls clear a 5% FDR and a two-fold change.
@@ -1056,12 +1063,12 @@ tabs:
     column_name: supplementary_alignments
     column_type: float64
     filter_expr: col('section') == 'SN'
-    secondary_layout: concentration
-    breakdown_col: sample
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:set-merge
       icon_color: violet
-      caption: share held by the three libraries with the most
+      caption: per library, with its spread
     section: Alignment at a glance
     tag: ns-al-card-suppl
     index: al-card-suppl
@@ -1094,13 +1101,16 @@ tabs:
       y_title: Events
       log_x: true
       log_y: true
+      # Two curves per library (insertions, deletions): past 8 entries the
+      # legend scrolls and eats the plot. A hover names the curve.
+      legend_pos: none
       selection_enabled: true
       selection_column: sample
     section: Indels and read lengths
     tag: ns-al-indels
     index: al-indels
     title: Indel length spectrum
-    description: Insertions and deletions per library, by length.
+    description: Insertions and deletions per library, by length; hover a curve for its name.
     layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: nanoseq
@@ -1159,10 +1169,13 @@ tabs:
     icon: mdi:relation-many-to-many
     color: violet
     description: Spearman correlation between the libraries, clustered
+  # Collapsed: its 100 rows autofit to about ten grid rows, past the tab's
+  # budget, and the PCA and the correlation above already answer the tab.
   - name: Most variable genes
     icon: mdi:chart-box-outline
-    color: violet
+    color: gray
     description: The genes that separate the libraries, row-standardised
+    collapsed: true
   - name: Libraries and counts
     icon: mdi:chart-bar
     color: gray
@@ -1324,6 +1337,8 @@ tabs:
     use: bambu/correlation_heatmap
     config:
       index_column: sample_id
+      # Every library column, not the per-row mean the table also carries.
+      value_columns_pattern: '^(?!mean_correlation$)'
       row_annotation_cols: [condition]
       cluster_rows: true
       cluster_cols: true
@@ -1341,6 +1356,8 @@ tabs:
     use: bambu/variable_gene_heatmap
     config:
       index_column: gene_id
+      # Every library column, not the variance the genes were ranked by.
+      value_columns_pattern: '^(?!log_cpm_variance$)'
       row_annotation_cols: [gene_biotype]
       normalize: row_z
       cluster_rows: true
@@ -1642,7 +1659,7 @@ tabs:
     display:
       icon_name: mdi:target
       icon_color: violet
-      caption: rows against padj 0.05 (1.3)
+      caption: tested rows against the 5% FDR (1.3)
       decimals: 1
     section: Calls at a glance
     tag: ns-de-card-strongest
@@ -1787,25 +1804,29 @@ tabs:
     index: is-logcpm-filter
     title: log2(CPM + 1)
     layout: {x: 0, y: 3, w: 1, h: 3}
+  # Not a ring by direction: "not significant" fills it, and one call in 400
+  # rounds to 0%. The threshold counts the calls exactly. One row per
+  # transcript, every one with a q-value, so the count is the transcripts.
   - component_type: card
     workflow_tag: nanoseq
     data_collection_tag: dexseq_results
     use: dexseq/results
     aggregation: count
-    column_name: feature_id
-    column_type: object
-    secondary_layout: donut
-    breakdown_col: direction
+    column_name: padj
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.05
+    threshold_direction: max
     display:
       icon_name: mdi:chart-donut
       icon_color: pink
-      caption: transcripts, by direction
+      caption: transcripts against a 5% gene-level q-value
       decimals: 0
     section: Usage at a glance
     tag: ns-is-card-tested
     index: is-card-tested
     title: Transcripts tested
-    description: Transcripts DEXSeq tested, split by the direction of their usage change.
+    description: Transcripts DEXSeq tested; the bar counts those whose gene clears a 5% q-value.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: nanoseq
@@ -1814,7 +1835,7 @@ tabs:
     aggregation: median
     column_name: log2fc
     column_type: float64
-    filter_expr: col('direction') == 'up'
+    filter_expr: col('log2fc') > 0
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
     display:
@@ -1826,7 +1847,7 @@ tabs:
     tag: ns-is-card-gain
     index: is-card-gain
     title: Usage gain (log2)
-    description: Median log2 fold change of the transcripts used more in the contrast's first condition.
+    description: Median log2 fold change of the tested transcripts used more in the contrast's first condition.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: nanoseq
@@ -1835,7 +1856,7 @@ tabs:
     aggregation: median
     column_name: log2fc
     column_type: float64
-    filter_expr: col('direction') == 'down'
+    filter_expr: col('log2fc') < 0
     secondary_layout: histogram
     display:
       icon_name: mdi:trending-down
@@ -1846,7 +1867,7 @@ tabs:
     tag: ns-is-card-loss
     index: is-card-loss
     title: Usage loss (log2)
-    description: Median log2 fold change of the transcripts used less in the contrast's first condition.
+    description: Median log2 fold change of the tested transcripts used less in the contrast's first condition.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: nanoseq
@@ -1880,7 +1901,9 @@ tabs:
       label_col: feature_id
       category_col: direction
       significance_threshold: 0.05
-      effect_threshold: 1.0
+      # 0: DEXSeq's call is the gene-level q-value alone, so the badges count
+      # the transcripts the cards and the Findings row count.
+      effect_threshold: 0.0
       show_labels: false
       effect_label: log2 fold change in usage
       significance_label: -log10 gene-level q-value
@@ -1901,12 +1924,13 @@ tabs:
       d = df.sort(['gene_label', 'sample'])
       fig = px.bar(d.to_pandas(), x='sample', y='usage_pct', color='transcript_id', facet_col='gene_label', facet_col_wrap=3, labels={'sample': 'Library', 'usage_pct': 'Share of the gene (%)', 'transcript_id': 'Transcript', 'gene_label': 'Gene'})
       fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
-      fig.update_layout(barmode='stack', margin=dict(t=30))
+      # No legend: one entry per transcript id of every panel; a hover names it.
+      fig.update_layout(barmode='stack', showlegend=False, margin=dict(t=30))
     section: Usage per library
     tag: ns-is-usage
     index: is-usage
     title: Transcript usage per library, top DEXSeq genes
-    description: Each bar sums to 100% of its gene's reads; a called gene shifts its colours between conditions.
+    description: Each bar sums to 100% of its gene's reads; hover a segment for its transcript.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
     workflow_tag: nanoseq
