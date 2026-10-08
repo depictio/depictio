@@ -36,6 +36,8 @@ import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragm
 import {
   classifyTiers,
   genomicInflation,
+  MA_TABLE_COLUMNS,
+  maTableOf,
   matchSearch,
   offeredDeViews,
   qqConfidenceBand,
@@ -73,7 +75,12 @@ interface VolcanoConfig {
   point_size?: number;
   view?: DeView;
   views?: DeView[] | null;
+  /** Or an MA table of its own (`ma_dc_tag`), for a test with no abundance. */
+  ma_wf_id?: string | null;
+  ma_dc_id?: string | null;
 }
+
+const MA_TABLE_COLUMN_LIST = Object.values(MA_TABLE_COLUMNS);
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: VolcanoConfig };
@@ -151,6 +158,10 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   // The MA view's y is a log fold change, which for most tables is the same
   // column the volcano puts on x.
   const maYCol = config.log2_fold_change_col || config.effect_size_col;
+  // Or the MA view reads a table of its own, in the MA plot's canonical
+  // columns, fetched only while that view is on screen.
+  const maTable = useMemo(() => maTableOf(config), [config]);
+  const maFromTable = activeView === 'ma' && maTable !== null;
 
   // One fetch for the tile: the union over every view it can show, so the
   // switch is instant and never re-queries a 17M-row table.
@@ -275,6 +286,49 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     };
   }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad]);
 
+  // The MA table: same filters as the test's table (its contrast column is
+  // narrowed by the same contrast filter), kept whole below the cutoff.
+  const [maRows, setMaRows] = useState<Record<string, unknown[]> | null>(null);
+  const [maLoading, setMaLoading] = useState<boolean>(false);
+  const [maError, setMaError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!maFromTable || !maTable) return;
+    let cancelled = false;
+    const ctrl = new AbortController();
+    setMaLoading(true);
+    setMaError(null);
+    fetchAdvancedVizData(
+      {
+        wfId: maTable.wfId,
+        dcId: maTable.dcId,
+        columns: MA_TABLE_COLUMN_LIST,
+        filters,
+        fullLoad,
+        vizKind: 'ma',
+        tail: {
+          column: MA_TABLE_COLUMNS.significance,
+          direction: 'low',
+          threshold: config.significance_threshold ?? 0.05,
+        },
+      },
+      ctrl.signal,
+    )
+      .then((res) => {
+        if (!cancelled) setMaRows(res.rows);
+      })
+      .catch((err: unknown) => {
+        if (cancelled || isStaleFetch(err)) return;
+        setMaError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setMaLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+    };
+  }, [maFromTable, maTable?.wfId, maTable?.dcId, filterSig, refreshTick, fullLoad]);
+
   // Every view draws a marker cloud, so the tile always competes for one of the
   // bounded WebGL slots. Without one it renders as SVG, see webglBudget.
   const glGranted = useWebglSlot(true);
@@ -296,6 +350,31 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         showIdentity,
         pointSize,
         topN,
+        isDark,
+        theme,
+        glGranted,
+      });
+    }
+
+    if (maFromTable) {
+      if (!maRows) return null;
+      const c = MA_TABLE_COLUMNS;
+      const maIds = (maRows[c.featureId] || []) as (string | number)[];
+      return buildMa({
+        xs: (maRows[c.avgLogIntensity] || []) as number[],
+        ys: (maRows[c.log2FoldChange] || []) as number[],
+        sigRaw: (maRows[c.significance] || []) as number[],
+        ids: maIds,
+        labels: (maRows[c.label] as (string | number)[] | undefined) ?? maIds,
+        xTitle: 'Mean log abundance',
+        yTitle: config.effect_label || 'Log fold change',
+        sigTitle: c.significance,
+        isNegLog10: false,
+        sigThreshold,
+        fcThreshold,
+        topN,
+        search,
+        showLabels,
         isDark,
         theme,
         glGranted,
@@ -344,6 +423,8 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     });
   }, [
     rows,
+    maRows,
+    maFromTable,
     config,
     activeView,
     pValueCol,
@@ -577,10 +658,16 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     layout: plotLayout,
     pointIdIndex: 0,
     pointIdColumn:
-      (activeView === 'qq' ? config.feature_id_col : config.label_col || config.feature_id_col) ||
-      undefined,
+      (maFromTable
+        ? MA_TABLE_COLUMNS.label
+        : activeView === 'qq'
+          ? config.feature_id_col
+          : config.label_col || config.feature_id_col) || undefined,
     variant: offered.length > 1 ? activeView : undefined,
   });
+
+  // The rows behind the figure on screen, for the frame's data view.
+  const shownRows = maFromTable ? maRows : rows;
 
   return (
     <AdvancedVizFrame
@@ -588,11 +675,11 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}
-      loading={loading}
-      error={error}
-      emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
-      dataRows={rows ?? undefined}
-      dataColumns={requiredCols}
+      loading={loading || (maFromTable && maLoading)}
+      error={error || (maFromTable ? maError : null)}
+      emptyMessage={shownRows && Object.values(shownRows)[0]?.length === 0 ? 'No data' : undefined}
+      dataRows={shownRows ?? undefined}
+      dataColumns={maFromTable ? MA_TABLE_COLUMN_LIST : requiredCols}
       counts={figure?.counts}
       tierAnnotation={tierAnnotation}
       badges={annotations.badges}

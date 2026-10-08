@@ -5,6 +5,7 @@ import {
   classifyTiers,
   genomicInflation,
   matchSearch,
+  maTableOf,
   offeredDeViews,
   qqConfidenceBand,
   qqSeries,
@@ -98,9 +99,25 @@ describe('qqConfidenceBand', () => {
   });
 });
 
+describe('maTableOf', () => {
+  it('reads the MA table only when the test table has no abundance column', () => {
+    expect(maTableOf({ ma_wf_id: 'wf', ma_dc_id: 'dc' })).toEqual({ wfId: 'wf', dcId: 'dc' });
+    expect(maTableOf({ ma_wf_id: 'wf', ma_dc_id: 'dc', avg_log_intensity_col: 'base_mean' })).toBeNull();
+    expect(maTableOf({ ma_dc_id: 'dc' })).toBeNull();
+  });
+});
+
 describe('offeredDeViews', () => {
   it('offers the volcano alone when nothing else is bound', () => {
     expect(offeredDeViews({ significance_is_neg_log10: true })).toEqual(['volcano']);
+  });
+
+  it('adds the MA view for an MA table of its own', () => {
+    expect(
+      offeredDeViews({ ma_wf_id: 'wf', ma_dc_id: 'dc', significance_is_neg_log10: true }),
+    ).toEqual(['volcano', 'ma']);
+    // An unresolved tag leaves no id: no MA view rather than an empty one.
+    expect(offeredDeViews({ ma_wf_id: 'wf', significance_is_neg_log10: true })).toEqual(['volcano']);
   });
 
   it('adds the MA view once abundance is bound', () => {
