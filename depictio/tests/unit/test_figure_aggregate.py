@@ -61,6 +61,26 @@ def test_box_quartiles_match_numpy(frame):
     assert trace.upperfence[i] <= subset.max()
 
 
+def test_box_coloured_by_its_own_x_column(frame):
+    """`x=g, color=g` is ordinary, and it used to fall off the aggregate path.
+
+    The keys were built as `[plan.x, plan.color]`, which names the same column
+    twice, and Polars rejects a duplicate group-by key. The figure still
+    appeared, because the caller catches the failure and re-renders through px,
+    so the only symptom was a warning in the log and the loss of the reduction
+    on exactly the config the iris demo ships.
+    """
+    plan = plan_aggregation("box", {"x": "g", "y": "v", "color": "g"})
+    fig = build_aggregated_figure(frame.lazy(), plan, "light", {})
+    assert fig is not None, "duplicate group-by key sent this back to px"
+
+    # One trace per group, each holding that group's single box.
+    assert {t.name for t in fig.data} == {"a", "b", "c"}
+    trace = next(t for t in fig.data if t.name == "b")
+    subset = frame.filter(pl.col("g") == "b")["v"].to_numpy()
+    assert trace.median[0] == pytest.approx(np.percentile(subset, 50))
+
+
 def test_box_without_grouping_is_a_single_box(frame):
     plan = plan_aggregation("box", {"y": "v"})
     fig = build_aggregated_figure(frame.lazy(), plan, "light", {})

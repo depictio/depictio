@@ -37,6 +37,7 @@ def _load_uniform_sample(
     init_data: dict,
     cap: int,
     render_stats: dict,
+    delta_version: int | None = None,
 ):
     """Load at most ``cap`` rows drawn uniformly from the whole (filtered) table.
 
@@ -44,6 +45,10 @@ def _load_uniform_sample(
     reads (so no projection) or whether it aggregates (so no reduction) — but we
     still must bound how much lands in the worker. The one thing we *can* fix is
     which rows: a uniform sample instead of the leading N.
+
+    ``delta_version`` pins the sample to a past commit, so a code-mode figure
+    opened at a dashboard version samples the rows that version recorded rather
+    than today's.
 
     Returns ``None`` if the scan can't be opened, so the caller falls back to the
     ordinary loader. Records the pre-sample total in ``render_stats`` so the
@@ -58,6 +63,7 @@ def _load_uniform_sample(
         data_collection_id=dc_id,
         metadata=filter_metadata or None,
         init_data=init_data,
+        delta_version=delta_version,
     )
     if scan is None:
         return None
@@ -113,6 +119,8 @@ def build_figure_preview(payload: dict) -> dict:
             "hide_legend": bool,
           },
           "category_colors": {column: {value: colour}},  # optional
+          "delta_version": <int|None>   # optional; pin the read to a past
+                                        # Delta commit (data time travel)
         }
 
     Returns:
@@ -352,6 +360,12 @@ def build_figure_preview(payload: dict) -> dict:
     # is `full_load`, which is the user explicitly asking for the exact px render.
     agg_fig = None
     started = time.monotonic()
+    # A pinned read (dashboard version time travel) has to reach every one of the
+    # three load paths below, not just the row loader: the aggregation fast path
+    # and the code-mode sample would otherwise answer a historical request with
+    # today's rows, and both return 200 with a plausible-looking chart.
+    delta_version = payload.get("delta_version")
+
     if mode != "code" and not full_load:
         from depictio.api.v1.deltatables_utils import open_deltatable_scan
         from depictio.api.v1.services.figure.aggregate import (
@@ -367,6 +381,7 @@ def build_figure_preview(payload: dict) -> dict:
                 metadata=filter_metadata or None,
                 init_data=init_data,
                 select_columns=select_columns,
+                delta_version=delta_version,
             )
             if scan is not None:
                 from depictio.api.v1.services.figure.figure_builder import (
@@ -417,7 +432,13 @@ def build_figure_preview(payload: dict) -> dict:
     df = None
     if agg_fig is None and code_sample_cap:
         df = _load_uniform_sample(
-            wf_oid, str(dc_id), filter_metadata, init_data, code_sample_cap, render_stats
+            wf_oid,
+            str(dc_id),
+            filter_metadata,
+            init_data,
+            code_sample_cap,
+            render_stats,
+            delta_version=delta_version,
         )
     if agg_fig is None and df is None:
         df = load_deltatable_lite(
@@ -427,6 +448,7 @@ def build_figure_preview(payload: dict) -> dict:
             select_columns=select_columns,
             limit_rows=limit_rows,
             init_data=init_data,
+            delta_version=delta_version,
         )
     # Row-loader path: the overrides are (re-)applied here when the scan-level
     # aggregation didn't run or didn't take them. The two modes are mutually
