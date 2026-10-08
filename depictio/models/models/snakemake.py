@@ -96,6 +96,13 @@ class SnakemakeRunInfoReader:
     name = ENGINE
     priority = 50
 
+    footprint: tuple[str, ...] = (
+        *_CONFIG_FILES,
+        *(f"{_METADATA_DIR}/{pattern}" for pattern in _CONDA_ENV_GLOBS),
+    )
+    # A Snakefile is only looked for, never parsed.
+    markers: tuple[str, ...] = (_METADATA_DIR, *_SNAKEFILES)
+
     def read(self, run_dir: Path) -> WorkflowRunInfo | None:
         run_dir = Path(run_dir)
         if not run_dir.is_dir():
