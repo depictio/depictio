@@ -1,26 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Alert,
-  Badge,
-  Button,
-  Group,
-  Loader,
-  Paper,
-  Select,
-  Stack,
-  Table,
-  Text,
-  Title,
-} from '@mantine/core';
+import { Alert, Box, Button, Group, Loader, Select, Stack, Text, ThemeIcon } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { getManifestRefreshRun, refreshManifest, useBrandAccents } from 'depictio-react-core';
-import type {
-  ManifestRefreshReport,
-  ManifestRefreshStatus,
-} from 'depictio-react-core';
+import { getManifestRefreshRun, refreshManifest, Z_LAYERS } from 'depictio-react-core';
+import type { ManifestRefreshReport, ManifestRefreshStatus } from 'depictio-react-core';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
+import { DisabledReason, Field, GatedButton } from '../../components/settings/SettingsSections';
+import IngestionResultTable, { INGESTION_STATUS_META } from '../IngestionResultTable';
 
 /** The slice of a project data collection this panel reads: its tag and the
  *  raw `config` bag, whose `scan.mode` says whether the server can re-read the
@@ -30,36 +17,20 @@ export interface ManifestRefreshDc {
   config?: Record<string, unknown>;
 }
 
-interface ManifestRefreshPanelProps {
-  projectId: string;
-  /** Owners, editors and admins may refresh (same gate as the DC actions). */
-  canMutate: boolean;
-  dataCollections: ReadonlyArray<ManifestRefreshDc>;
-  /** Reload the project document so the delta locations and aggregation
-   *  times reflect the refresh. Offered as a button rather than called
-   *  automatically: the parent's reload remounts this panel, which would
-   *  wipe the per-collection report the user is looking at. */
-  onReloadProject?: () => void;
-}
-
 const POLL_INTERVAL_MS = 2_000;
 /** Give up polling after this long; the run keeps going server-side. */
 const MAX_POLL_MS = 30 * 60 * 1_000;
 /** Transient poll failures tolerated before the panel stops and reports. */
 const MAX_CONSECUTIVE_POLL_ERRORS = 3;
 
-/** Visual treatment per refresh status. Colors are Mantine palette names
- *  (theme tokens), not literals, mirroring IngestionReportPanel. */
-const STATUS_META: Record<
-  ManifestRefreshStatus,
-  { color: string; icon: string; label: string }
-> = {
-  ingested: { color: 'green', icon: 'mdi:check-circle', label: 'Ingested' },
-  planned: { color: 'blue', icon: 'mdi:clock-outline', label: 'Planned' },
-  dispatched: { color: 'blue', icon: 'mdi:tray-arrow-down', label: 'Queued' },
-  running: { color: 'blue', icon: 'mdi:progress-clock', label: 'Running' },
-  failed: { color: 'red', icon: 'mdi:alert-circle', label: 'Failed' },
-};
+/** Order of the statuses in the "3 ingested, 1 failed" summary. */
+const SUMMARY_ORDER: ManifestRefreshStatus[] = [
+  'ingested',
+  'planned',
+  'dispatched',
+  'running',
+  'failed',
+];
 
 /** Scan modes whose source the server reads over the network, so it can always
  *  read it again. A local source depends on whether the data root is mounted in
@@ -97,33 +68,46 @@ function formatElapsed(ms: number): string {
 }
 
 /** "3 ingested, 1 failed" style summary of the per-collection statuses. */
-function summarize(report: ManifestRefreshReport): string {
+export function summarizeRefresh(report: ManifestRefreshReport): string {
   const counts = new Map<ManifestRefreshStatus, number>();
   for (const entry of report.refreshed) {
     counts.set(entry.status, (counts.get(entry.status) ?? 0) + 1);
   }
   const parts: string[] = [];
-  (Object.keys(STATUS_META) as ManifestRefreshStatus[]).forEach((status) => {
+  for (const status of SUMMARY_ORDER) {
     const n = counts.get(status);
-    if (n) parts.push(`${n} ${STATUS_META[status].label.toLowerCase()}`);
-  });
+    if (n) parts.push(`${n} ${INGESTION_STATUS_META[status].label.toLowerCase()}`);
+  }
   return parts.length > 0 ? parts.join(', ') : 'no collections refreshed';
 }
 
-type PanelState = 'idle' | 'starting' | 'running' | 'success' | 'failed';
+export type RefreshState = 'idle' | 'starting' | 'running' | 'success' | 'failed';
 
-/** "Refresh data" for projects with a collection whose source the server can
- *  read again. Dispatches the refresh to the workers and polls the run until
- *  every collection is either ingested or failed, showing the rows live. */
-const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
-  projectId,
-  canMutate,
-  dataCollections,
-  onReloadProject,
-}) => {
-  const accent = useBrandAccents();
-  const { user, isPublicMode } = useCurrentUser();
+/** Everything the Data refresh section shows, held by `useManifestRefresh`
+ *  above the dialog so a run keeps being followed while the reader switches
+ *  sections or closes the dialog. */
+export interface ManifestRefreshController {
+  refreshableTags: string[];
+  selectedTag: string | null;
+  setSelectedTag: (tag: string | null) => void;
+  report: ManifestRefreshReport | null;
+  error: string | null;
+  state: RefreshState;
+  startedAt: number | null;
+  finishedAt: number | null;
+  start: () => void;
+}
 
+/**
+ * Dispatches a refresh of the collections whose source the server can read
+ * again, then polls the run until every collection is either ingested or
+ * failed. Call it where it outlives the dialog body (the dialog remounts its
+ * page on every open and shows one section at a time).
+ */
+export function useManifestRefresh(
+  projectId: string,
+  dataCollections: ReadonlyArray<ManifestRefreshDc>,
+): ManifestRefreshController {
   const refreshableTags = useMemo(() => refreshableTagsOf(dataCollections), [dataCollections]);
 
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
@@ -133,7 +117,6 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
   const [runId, setRunId] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [finishedAt, setFinishedAt] = useState<number | null>(null);
-  const [now, setNow] = useState(() => Date.now());
   const [error, setError] = useState<string | null>(null);
 
   // Poll the run every POLL_INTERVAL_MS until it is terminal, the deadline
@@ -175,7 +158,7 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
       }
       if (Date.now() - startedAt >= MAX_POLL_MS) {
         setError(
-          'Stopped polling after 30 minutes. The refresh may still be running; ' +
+          'Stopped following the refresh after 30 minutes. It may still be running; ' +
             'the Ingestion tab shows the outcome.',
         );
         stop();
@@ -190,20 +173,13 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
     };
   }, [runId, startedAt]);
 
-  // One-second ticker for the elapsed-time display while a run is in flight.
-  useEffect(() => {
-    if (!runId) return;
-    const id = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(id);
-  }, [runId]);
-
   // Drop a selection that no longer matches a refreshable collection (the DC
   // may have been renamed or deleted since it was picked).
   useEffect(() => {
     if (selectedTag && !refreshableTags.includes(selectedTag)) setSelectedTag(null);
   }, [refreshableTags, selectedTag]);
 
-  const handleRefresh = async () => {
+  const run = async () => {
     const started = Date.now();
     setSubmitting(true);
     setError(null);
@@ -211,7 +187,6 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
     setRunId(null);
     setFinishedAt(null);
     setStartedAt(started);
-    setNow(started);
     try {
       const first = await refreshManifest({
         projectId,
@@ -228,26 +203,14 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
         setFinishedAt(Date.now());
       }
     } catch (err) {
-      setError((err as Error).message || 'Failed to refresh.');
+      setError((err as Error).message || 'The refresh did not start.');
       setFinishedAt(Date.now());
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Disabled, never hidden: the affordance stays discoverable and the reason
-  // is spelled out (same rule as the storage panel and the DC actions).
-  const publicGate = isPublicMode && !user?.is_admin;
-  const disabledReason = !canMutate
-    ? 'Owner permission required'
-    : refreshableTags.length === 0
-      ? 'No data collection has a source this server can re-read'
-      : publicGate
-        ? 'Refresh is disabled in public/demo mode for non-admin users'
-        : null;
-
-  const inFlight = submitting || Boolean(runId);
-  const state: PanelState = submitting
+  const state: RefreshState = submitting
     ? 'starting'
     : runId
       ? 'running'
@@ -258,163 +221,219 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
         : error
           ? 'failed'
           : 'idle';
-  const elapsedMs = startedAt == null ? 0 : (finishedAt ?? now) - startedAt;
+
+  return {
+    refreshableTags,
+    selectedTag,
+    setSelectedTag,
+    report,
+    error,
+    state,
+    startedAt,
+    finishedAt,
+    start: () => void run(),
+  };
+}
+
+/** Icon, colour and words for the run as a whole, plus the elapsed time,
+ *  ticking once a second while the run is in flight. */
+const RefreshStatusLine: React.FC<{
+  state: RefreshState;
+  report: ManifestRefreshReport | null;
+  startedAt: number | null;
+  finishedAt: number | null;
+}> = ({ state, report, startedAt, finishedAt }) => {
+  const live = state === 'starting' || state === 'running';
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!live) return;
+    setNow(Date.now());
+    const id = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(id);
+  }, [live]);
+
+  if (state === 'idle') return null;
+  const elapsed = formatElapsed(startedAt == null ? 0 : (finishedAt ?? now) - startedAt);
+  const summary = report ? summarizeRefresh(report) : null;
+  let text: string;
+  if (state === 'starting') text = 'Starting the refresh...';
+  else if (state === 'running') {
+    text = `Refreshing (${elapsed} elapsed)${summary ? `: ${summary}` : ''}`;
+  } else if (state === 'success') text = `Refresh completed in ${elapsed}: ${summary ?? ''}`;
+  else {
+    text = summary
+      ? `Refresh finished with errors in ${elapsed}: ${summary}`
+      : 'The refresh failed';
+  }
 
   return (
-    <Paper withBorder radius="md" p="sm" data-testid="manifest-refresh-panel">
-      <Group justify="space-between" wrap="nowrap" align="flex-start">
-        <Group gap="xs" wrap="nowrap">
-          <Icon
-            icon="mdi:file-sync-outline"
-            width={20}
-            color={`var(--mantine-color-${accent.secondary}-6)`}
-          />
-          <Title order={4}>Refresh data</Title>
-          <Badge variant="light" size="sm" color="gray">
-            {refreshableTags.length} refreshable collection
-            {refreshableTags.length === 1 ? '' : 's'}
-          </Badge>
+    <Group gap="xs" wrap="nowrap">
+      {live ? (
+        <Loader size="xs" />
+      ) : (
+        <ThemeIcon
+          variant="light"
+          size="sm"
+          radius="xl"
+          color={state === 'success' ? 'green' : 'red'}
+        >
+          <Icon icon={state === 'success' ? 'mdi:check-circle' : 'mdi:alert-circle'} width={14} />
+        </ThemeIcon>
+      )}
+      <Text size="sm" data-testid="manifest-refresh-status" data-state={state}>
+        {text}
+      </Text>
+    </Group>
+  );
+};
+
+interface ManifestRefreshPanelProps {
+  refresh: ManifestRefreshController;
+  /** Owners, editors and admins may refresh (same gate as the DC actions). */
+  canMutate: boolean;
+  /** Reload the project document so the delta locations and aggregation
+   *  times on the page reflect the refresh. */
+  onReloadProject?: () => void;
+}
+
+/** The Data refresh section of the project settings: pick the collections to
+ *  re-read, start the refresh, and follow it row by row. */
+const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
+  refresh,
+  canMutate,
+  onReloadProject,
+}) => {
+  const { user, isPublicMode } = useCurrentUser();
+  const { refreshableTags, selectedTag, setSelectedTag, report, error, state } = refresh;
+  const inFlight = state === 'starting' || state === 'running';
+  const empty = refreshableTags.length === 0;
+
+  // Disabled, never hidden: the affordance stays discoverable and the reason
+  // is spelled out (same rule as the storage section and the DC actions).
+  const publicGate = isPublicMode && !user?.is_admin;
+  const gateReason = !canMutate
+    ? 'Only project owners and editors can refresh the data.'
+    : publicGate
+      ? 'Refreshing data is disabled in public/demo mode for non-admin users.'
+      : null;
+  // The empty state below already says why there is nothing to refresh, so
+  // that reason goes to the tooltip only.
+  const disabledReason =
+    gateReason ?? (empty ? 'No data collection here has a source the server can re-read.' : null);
+
+  return (
+    <Stack gap="lg" data-testid="manifest-refresh-panel">
+      <Text size="sm" c="dimmed">
+        Re-read each refreshable collection from its own source and rebuild its table: a
+        manifest is fetched again and the entries it lists now are used, a URL or a prefix is
+        read again. A collection whose source no longer yields its type is reported failed and
+        left untouched.
+      </Text>
+
+      {empty ? (
+        <Group gap="sm" wrap="nowrap" align="flex-start" data-testid="manifest-refresh-empty">
+          <ThemeIcon variant="light" color="gray" size="lg" radius="md">
+            <Icon icon="mdi:sync-off" width={20} />
+          </ThemeIcon>
+          <Stack gap={2} style={{ minWidth: 0 }}>
+            <Text size="sm" fw={500}>
+              Nothing to refresh
+            </Text>
+            <Text size="xs" c="dimmed" lh={1.35}>
+              Refresh re-reads collections whose source is a manifest, a URL or a bucket
+              prefix. This project has none: its collections were uploaded or read from
+              local folders.
+            </Text>
+          </Stack>
         </Group>
-        <Group gap="xs" wrap="nowrap">
-          {refreshableTags.length > 1 && (
+      ) : (
+        <Field
+          label="Collections"
+          description={
+            refreshableTags.length === 1
+              ? 'One collection can be re-read from its source.'
+              : `${refreshableTags.length} collections can be re-read from their source. Refresh them all, or pick one.`
+          }
+        >
+          {refreshableTags.length > 1 ? (
             <Select
-              size="xs"
-              w={220}
+              size="sm"
+              maw={360}
               placeholder="All refreshable collections"
               aria-label="Collection to refresh"
               data={refreshableTags}
               value={selectedTag}
               onChange={setSelectedTag}
               clearable
-              disabled={inFlight || Boolean(disabledReason)}
+              disabled={inFlight || Boolean(gateReason)}
+              comboboxProps={{ zIndex: Z_LAYERS.tooltip }}
               data-testid="manifest-refresh-dc-select"
             />
+          ) : (
+            <Text size="sm" ff="monospace">
+              {refreshableTags[0]}
+            </Text>
           )}
-          <Button
+        </Field>
+      )}
+
+      <Stack gap={6}>
+        <Group gap="xs">
+          <GatedButton
             size="xs"
             data-testid="manifest-refresh-button"
             leftSection={<Icon icon="mdi:refresh" width={14} />}
-            onClick={handleRefresh}
+            onClick={refresh.start}
             loading={inFlight}
-            disabled={Boolean(disabledReason) || inFlight}
-            title={disabledReason ?? undefined}
+            reason={disabledReason}
           >
             Refresh now
-          </Button>
-        </Group>
-      </Group>
-
-      <Text size="sm" c="dimmed" pt="xs">
-        Re-read each refreshable collection from its own source and rebuild its
-        table: a manifest is fetched again and the entries it lists now are used,
-        a URL or a prefix is read again. A collection whose source no longer
-        yields its type is reported failed and left untouched.
-        {disabledReason && ` ${disabledReason}.`}
-      </Text>
-
-      {state !== 'idle' && (
-        <Group gap="xs" pt="sm" wrap="nowrap">
-          {(state === 'starting' || state === 'running') && (
-            <Loader size="xs" color={accent.secondary} />
-          )}
-          {state === 'success' && (
-            <Icon
-              icon="mdi:check-circle"
-              width={16}
-              color="var(--mantine-color-green-6)"
-            />
-          )}
-          {state === 'failed' && (
-            <Icon
-              icon="mdi:alert-circle"
-              width={16}
-              color="var(--mantine-color-red-6)"
-            />
-          )}
-          <Text size="sm" data-testid="manifest-refresh-status" data-state={state}>
-            {state === 'starting' && 'Starting the refresh...'}
-            {state === 'running' &&
-              `Refreshing (${formatElapsed(elapsedMs)} elapsed)` +
-                (report ? `: ${summarize(report)}` : '')}
-            {state === 'success' &&
-              report &&
-              `Refresh completed in ${formatElapsed(elapsedMs)}: ${summarize(report)}`}
-            {state === 'failed' &&
-              (report
-                ? `Refresh finished with errors in ${formatElapsed(elapsedMs)}: ${summarize(report)}`
-                : 'Refresh failed')}
-          </Text>
+          </GatedButton>
           {(state === 'success' || state === 'failed') && report && onReloadProject && (
-            <Button size="compact-xs" variant="subtle" onClick={onReloadProject}>
+            <Button
+              size="xs"
+              variant="subtle"
+              leftSection={<Icon icon="mdi:reload" width={14} />}
+              onClick={onReloadProject}
+              data-testid="manifest-refresh-reload"
+            >
               Reload project
             </Button>
           )}
         </Group>
-      )}
+        <DisabledReason reason={gateReason} />
+      </Stack>
+
+      <Box aria-live="polite" role="status">
+        <RefreshStatusLine
+          state={state}
+          report={report}
+          startedAt={refresh.startedAt}
+          finishedAt={refresh.finishedAt}
+        />
+      </Box>
 
       {error && (
         <Alert
-          mt="sm"
           color="red"
           variant="light"
-          icon={<Icon icon="mdi:alert-circle" width={16} />}
+          icon={<Icon icon="mdi:alert-circle-outline" width={18} />}
+          title="Refresh problem"
           data-testid="manifest-refresh-error"
         >
           {error}
         </Alert>
       )}
 
-      {report && report.refreshed.length > 0 && (
-        <Table verticalSpacing="xs" mt="sm" striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Data collection</Table.Th>
-              <Table.Th>Status</Table.Th>
-              <Table.Th>Entries</Table.Th>
-              <Table.Th>Message</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {report.refreshed.map((entry) => {
-              const meta = STATUS_META[entry.status] ?? STATUS_META.failed;
-              return (
-                <Table.Tr
-                  key={entry.data_collection_tag}
-                  data-testid={`manifest-refresh-row-${entry.data_collection_tag}`}
-                  data-status={entry.status}
-                >
-                  <Table.Td>
-                    <Text size="sm" fw={600}>
-                      {entry.data_collection_tag}
-                    </Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Badge
-                      variant="light"
-                      color={meta.color}
-                      size="sm"
-                      leftSection={<Icon icon={meta.icon} width={12} />}
-                    >
-                      {meta.label}
-                    </Badge>
-                  </Table.Td>
-                  <Table.Td>
-                    <Text size="sm">{entry.entries}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    {entry.message && (
-                      <Text size="xs" c={entry.status === 'failed' ? 'red' : 'dimmed'}>
-                        {entry.message}
-                      </Text>
-                    )}
-                  </Table.Td>
-                </Table.Tr>
-              );
-            })}
-          </Table.Tbody>
-        </Table>
+      {report && (
+        <IngestionResultTable
+          rows={report.refreshed}
+          rowTestIdPrefix="manifest-refresh"
+          emptyText="The refresh reported no collection."
+          testId="manifest-refresh-results"
+        />
       )}
-    </Paper>
+    </Stack>
   );
 };
 

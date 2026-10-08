@@ -15,7 +15,6 @@ import {
   Stack,
   Stepper,
   Switch,
-  Table,
   Tabs,
   Text,
   Textarea,
@@ -33,6 +32,8 @@ import type {
   TemplateInfo,
 } from 'depictio-react-core';
 
+import IngestionResultTable from './IngestionResultTable';
+
 type Tab = 'create' | 'import' | 'manifest';
 type ProjectType = 'basic' | 'advanced';
 
@@ -46,14 +47,6 @@ interface CreateProjectModalProps {
 }
 
 
-
-/** Visual treatment per manifest-ingestion status. Colors are Mantine palette
- *  names (theme tokens), not literals — mirrors IngestionReportPanel. */
-const MANIFEST_STATUS_META: Record<string, { color: string; icon: string; label: string }> = {
-  ingested: { color: 'green', icon: 'mdi:check-circle', label: 'Ingested' },
-  planned: { color: 'blue', icon: 'mdi:clock-outline', label: 'Planned' },
-  failed: { color: 'red', icon: 'mdi:alert-circle', label: 'Failed' },
-};
 
 const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   opened,
@@ -711,56 +704,28 @@ export const ManifestPreviewReport: React.FC<{ report: FromManifestReport }> = (
         <Badge variant="light" color={accent.secondary} radius="sm">
           {report.project_name}
         </Badge>
-        <Badge variant="light" color="gray" radius="sm">
-          {report.manifest_entries} manifest entries
-        </Badge>
-        <Badge variant="light" color="gray" radius="sm">
-          {report.dashboards.length} dashboard{report.dashboards.length === 1 ? '' : 's'}
-        </Badge>
+        {report.manifest_entries > 0 && (
+          <Badge variant="light" color="gray" radius="sm">
+            {report.manifest_entries} manifest entr{report.manifest_entries === 1 ? 'y' : 'ies'}
+          </Badge>
+        )}
+        {report.dashboards.length > 0 && (
+          <Badge variant="light" color="gray" radius="sm">
+            {report.dashboards.length} dashboard{report.dashboards.length === 1 ? '' : 's'}
+          </Badge>
+        )}
       </Group>
-      <Table verticalSpacing="xs" striped highlightOnHover>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Data collection</Table.Th>
-            <Table.Th>Entries</Table.Th>
-            <Table.Th>Status</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {report.ingestion.map((dc) => {
-            const meta = MANIFEST_STATUS_META[dc.status] ?? MANIFEST_STATUS_META.planned;
-            return (
-              <Table.Tr key={dc.data_collection_tag}>
-                <Table.Td>
-                  <Text size="sm" fw={600}>
-                    {dc.data_collection_tag}
-                  </Text>
-                </Table.Td>
-                <Table.Td>
-                  <Text size="sm">{dc.entries}</Text>
-                </Table.Td>
-                <Table.Td>
-                  <Group gap={6} wrap="nowrap">
-                    <Badge
-                      variant="light"
-                      color={meta.color}
-                      size="sm"
-                      leftSection={<Icon icon={meta.icon} width={12} />}
-                    >
-                      {meta.label}
-                    </Badge>
-                    {dc.message && (
-                      <Text size="xs" c="dimmed">
-                        {dc.message}
-                      </Text>
-                    )}
-                  </Group>
-                </Table.Td>
-              </Table.Tr>
-            );
-          })}
-        </Table.Tbody>
-      </Table>
+      {(report.manifest_entries === 0 || report.dashboards.length === 0) && (
+        <Text size="xs" c="dimmed">
+          {report.manifest_entries === 0 ? 'The manifest lists no entry. ' : ''}
+          {report.dashboards.length === 0 ? 'The template has no dashboard to import.' : ''}
+        </Text>
+      )}
+      <IngestionResultTable
+        rows={report.ingestion}
+        rowTestIdPrefix="manifest-preview"
+        emptyText="The template matched no data collection in this manifest."
+      />
       {report.unmatched_manifest_types.length > 0 && (
         <Group gap="xs" wrap="wrap">
           <Text size="xs" c="dimmed">

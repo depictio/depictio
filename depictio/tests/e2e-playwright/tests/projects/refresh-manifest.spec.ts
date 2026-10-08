@@ -1,11 +1,12 @@
 /**
- * The "Refresh data" panel on the project detail page (ManifestRefreshPanel).
+ * The Data refresh section of the project settings (ManifestRefreshPanel
+ * inside ProjectSettingsModal, opened from "Project settings" on the project
+ * detail page).
  *
  * Needs a Data Manifest reachable from the API: set MANIFEST_E2E_URL, exactly
  * like the full-flow test in create-from-manifest.spec.ts. A project is
  * created from that manifest through the UI first, then refreshed from its
- * detail page, and every manifest collection is expected to come back
- * ingested.
+ * settings, and every manifest collection is expected to come back ingested.
  */
 
 import { APIRequestContext, Page } from "@playwright/test";
@@ -106,6 +107,11 @@ test.describe("Refresh a project from its Data Manifest", () => {
     const projectId = await findProjectId(request, tokens.access_token, name);
 
     await page.goto(`/projects/${projectId}`);
+    const settingsButton = page.locator("[data-testid='project-settings-button']");
+    await expect(settingsButton).toBeEnabled({ timeout: 15_000 });
+    await settingsButton.click();
+    // The dialog remembers the last section per browser: pick it explicitly.
+    await page.locator("[data-testid='project-settings-nav-refresh']").click();
     const panel = page.locator("[data-testid='manifest-refresh-panel']");
     await expect(panel).toBeVisible({ timeout: 15_000 });
 

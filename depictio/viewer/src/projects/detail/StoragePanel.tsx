@@ -1,18 +1,24 @@
 import React, { useEffect, useState } from 'react';
 import {
+  ActionIcon,
   Alert,
   Badge,
   Button,
+  Code,
+  Collapse,
+  CopyButton,
+  Divider,
   Group,
   Loader,
-  Modal,
   Paper,
   PasswordInput,
   SimpleGrid,
   Stack,
   Text,
   TextInput,
-  Title,
+  ThemeIcon,
+  Tooltip,
+  UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
@@ -22,31 +28,147 @@ import {
   getProjectStorage,
   setProjectStorage,
   testProjectStorage,
-  useBrandAccents,
+  Z_LAYERS,
 } from 'depictio-react-core';
-import type { ProjectStorageConfig } from 'depictio-react-core';
+import type { ProjectStorageConfig, ProjectStorageTestResult } from 'depictio-react-core';
+
+import {
+  DisabledReason,
+  Field,
+  GatedButton,
+} from '../../components/settings/SettingsSections';
+import { formatDateTime } from '../../lib/datetime';
 
 interface StoragePanelProps {
   projectId: string;
-  /** Only project owners (or admins) may view/edit storage credentials —
+  /** Only project owners (or admins) may view/edit storage credentials,
    *  stricter than the page-level `canMutate`, which includes editors. */
   canManage: boolean;
 }
 
-/** One "label: value" line of the configured-state summary. */
-const ConfigRow: React.FC<{ label: string; value: string | null }> = ({
+const OWNER_ONLY = 'Only project owners can change the storage settings.';
+
+/** A value the reader may want to paste elsewhere (an endpoint, a key id),
+ *  laid out like the dashboard identifiers. */
+const CopyableValue: React.FC<{ label: string; value: string | null; empty: string }> = ({
   label,
   value,
+  empty,
 }) => (
-  <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
-    <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
-      {label}
-    </Text>
-    <Text size="xs" fw={500} ff="monospace" truncate>
-      {value || '—'}
-    </Text>
+  <Group gap="xs" wrap="nowrap" align="center">
+    <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
+      <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+        {label}
+      </Text>
+      {value ? (
+        <Code style={{ overflowWrap: 'anywhere' }}>{value}</Code>
+      ) : (
+        <Text size="sm" c="dimmed">
+          {empty}
+        </Text>
+      )}
+    </Stack>
+    {value && (
+      <CopyButton value={value} timeout={1500}>
+        {({ copied, copy }) => (
+          <Tooltip label={copied ? 'Copied' : 'Copy'} withArrow zIndex={Z_LAYERS.tooltip}>
+            <ActionIcon
+              variant="subtle"
+              color={copied ? 'teal' : 'gray'}
+              size="sm"
+              onClick={copy}
+              aria-label={`Copy ${label.toLowerCase()}`}
+            >
+              <Icon icon={copied ? 'mdi:check' : 'mdi:content-copy'} width={14} />
+            </ActionIcon>
+          </Tooltip>
+        )}
+      </CopyButton>
+    )}
   </Group>
 );
+
+/** Endpoint and access key, folded by default: connection detail for someone
+ *  checking the setup, not something to read on every open. */
+const ConnectionDetails: React.FC<{ config: ProjectStorageConfig }> = ({ config }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <Stack gap="xs" data-testid="storage-details">
+      <UnstyledButton
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        data-testid="storage-details-toggle"
+      >
+        <Divider
+          labelPosition="left"
+          my={4}
+          label={
+            <Group gap={4} wrap="nowrap">
+              <Icon icon={open ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={14} />
+              <span>Connection details</span>
+            </Group>
+          }
+        />
+      </UnstyledButton>
+      <Collapse in={open}>
+        <Stack gap="xs">
+          <CopyableValue label="Endpoint" value={config.endpoint_url} empty="Not set" />
+          <CopyableValue
+            label="Access key ID"
+            value={config.access_key_id}
+            empty="None: the bucket is read without signing in"
+          />
+        </Stack>
+      </Collapse>
+    </Stack>
+  );
+};
+
+/** Outcome of the last connection test, read out when it lands. */
+const TestResult: React.FC<{
+  result: ProjectStorageTestResult | null;
+  error: string | null;
+}> = ({ result, error }) => {
+  if (error) {
+    return (
+      <Alert
+        color="red"
+        variant="light"
+        icon={<Icon icon="mdi:alert-circle-outline" width={18} />}
+        title="Could not run the connection test"
+        data-testid="storage-test-result"
+        data-success="false"
+      >
+        {error}
+      </Alert>
+    );
+  }
+  if (!result) return null;
+  return (
+    <Alert
+      color={result.success ? 'teal' : 'orange'}
+      variant="light"
+      icon={
+        <Icon
+          icon={result.success ? 'mdi:check-circle-outline' : 'mdi:alert-circle-outline'}
+          width={18}
+        />
+      }
+      title={result.success ? 'Storage connection OK' : 'Storage connection failed'}
+      data-testid="storage-test-result"
+      data-success={result.success ? 'true' : 'false'}
+    >
+      <Stack gap={4}>
+        <Text size="sm">{result.message}</Text>
+        {result.detected_region && (
+          <Text size="sm" data-testid="storage-detected-region">
+            Region detected: {result.detected_region}. It is saved on this project.
+          </Text>
+        )}
+      </Stack>
+    </Alert>
+  );
+};
 
 /** Edit/create form for the storage config. The secret field is write-only:
  *  when a secret is already stored, leaving it empty keeps it (the PUT body
@@ -62,88 +184,139 @@ const StorageForm: React.FC<{
   const [region, setRegion] = useState(existing?.region ?? 'us-east-1');
   const [accessKeyId, setAccessKeyId] = useState(existing?.access_key_id ?? '');
   const [secret, setSecret] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const hasSecret = Boolean(existing?.has_secret);
 
-  const handleSave = async () => {
-    if (!endpointUrl.trim()) {
-      setError('Endpoint URL is required.');
-      return;
+  const clearFieldError = (name: string) =>
+    setFieldErrors((prev) => {
+      if (!(name in prev)) return prev;
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+
+  const validate = (): Record<string, string> => {
+    const errors: Record<string, string> = {};
+    const endpoint = endpointUrl.trim();
+    if (!endpoint) errors.endpoint = 'Enter the address of the storage service.';
+    else if (!/^https?:\/\//i.test(endpoint)) {
+      errors.endpoint = 'Enter the full address, starting with https://.';
     }
+    if (!bucket.trim()) errors.bucket = 'Enter the bucket name.';
+    const key = accessKeyId.trim();
+    const typedSecret = secret.trim();
+    if (key && !typedSecret && !hasSecret) {
+      errors.secret = 'Enter the secret that goes with this access key ID.';
+    }
+    if (typedSecret && !key) errors.accessKey = 'Enter the access key ID for this secret.';
+    return errors;
+  };
+
+  const handleSave = async () => {
+    const errors = validate();
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) return;
     setSaving(true);
     setError(null);
     try {
       const saved = await setProjectStorage(projectId, {
         endpoint_url: endpointUrl.trim(),
-        bucket: bucket.trim() || null,
+        bucket: bucket.trim(),
         region: region.trim() || 'us-east-1',
         access_key_id: accessKeyId.trim() || null,
-        // Empty string means "keep the stored secret" — send null so the
-        // backend leaves the previously stored (encrypted) value in place.
+        // Empty means "keep the stored secret": send null so the backend
+        // leaves the previously stored (encrypted) value in place.
         secret_access_key: secret.trim() || null,
       });
       notifications.show({
         color: 'teal',
-        title: 'Storage configuration saved',
-        message: `Endpoint ${saved.endpoint_url} is attached to this project.`,
+        title: 'Storage settings saved',
+        message: saved.bucket
+          ? `Bucket ${saved.bucket} is attached to this project.`
+          : 'The endpoint is attached to this project.',
         autoClose: 3000,
       });
       onSaved(saved);
     } catch (err) {
-      setError((err as Error).message || 'Failed to save storage configuration.');
+      setError((err as Error).message || 'The storage settings could not be saved.');
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Stack gap="sm" pt="sm">
+    <Stack gap="md" data-testid="storage-form">
       <TextInput
         label="Endpoint URL"
+        description="The address of the S3-compatible storage service, such as https://s3.eu-west-1.amazonaws.com."
         placeholder="https://s3.example.org"
         required
         data-testid="storage-endpoint-input"
         value={endpointUrl}
-        onChange={(e) => setEndpointUrl(e.currentTarget.value)}
+        onChange={(e) => {
+          setEndpointUrl(e.currentTarget.value);
+          clearFieldError('endpoint');
+        }}
+        error={fieldErrors.endpoint}
         disabled={saving}
       />
-      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-        <TextInput
-          label="Bucket"
-          placeholder="my-bucket"
-          value={bucket}
-          onChange={(e) => setBucket(e.currentTarget.value)}
-          disabled={saving}
-        />
-        <TextInput
-          label="Region"
-          placeholder="us-east-1"
-          value={region}
-          onChange={(e) => setRegion(e.currentTarget.value)}
-          disabled={saving}
-        />
-      </SimpleGrid>
-      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+      <TextInput
+        label="Bucket"
+        description="The bucket this project's data lives in. The connection test checks that it can be read."
+        placeholder="my-bucket"
+        required
+        data-testid="storage-bucket-input"
+        value={bucket}
+        onChange={(e) => {
+          setBucket(e.currentTarget.value);
+          clearFieldError('bucket');
+        }}
+        error={fieldErrors.bucket}
+        disabled={saving}
+      />
+      <TextInput
+        label="Region"
+        description="Keep us-east-1 if you are not sure: the connection test finds the bucket's region and saves it."
+        placeholder="us-east-1"
+        data-testid="storage-region-input"
+        value={region}
+        onChange={(e) => setRegion(e.currentTarget.value)}
+        disabled={saving}
+      />
+      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm" verticalSpacing="md">
         <TextInput
           label="Access key ID"
-          placeholder="AKIA…"
+          description="Leave both keys empty for a bucket anyone may read."
+          placeholder="AKIA..."
+          data-testid="storage-access-key-input"
           value={accessKeyId}
-          onChange={(e) => setAccessKeyId(e.currentTarget.value)}
+          onChange={(e) => {
+            setAccessKeyId(e.currentTarget.value);
+            clearFieldError('accessKey');
+            clearFieldError('secret');
+          }}
+          error={fieldErrors.accessKey}
           disabled={saving}
         />
         <PasswordInput
           label="Secret access key"
-          placeholder={hasSecret ? 'unchanged' : 'Secret access key'}
           description={
             hasSecret
               ? 'Leave empty to keep the stored secret.'
-              : 'Stored encrypted; never shown again.'
+              : 'Stored encrypted and never shown again.'
           }
+          placeholder={hasSecret ? 'unchanged' : 'Secret access key'}
           data-testid="storage-secret-input"
           value={secret}
-          onChange={(e) => setSecret(e.currentTarget.value)}
+          onChange={(e) => {
+            setSecret(e.currentTarget.value);
+            clearFieldError('secret');
+            clearFieldError('accessKey');
+          }}
+          error={fieldErrors.secret}
           disabled={saving}
         />
       </SimpleGrid>
@@ -151,7 +324,9 @@ const StorageForm: React.FC<{
         <Alert
           color="red"
           variant="light"
-          icon={<Icon icon="mdi:alert-circle" width={16} />}
+          icon={<Icon icon="mdi:alert-circle-outline" width={18} />}
+          title="The storage settings were not saved"
+          data-testid="storage-save-error"
         >
           {error}
         </Alert>
@@ -174,24 +349,29 @@ const StorageForm: React.FC<{
   );
 };
 
-/** Project-level S3-compatible storage credentials. The secret is write-only
- *  end to end — the backend stores it encrypted and only ever reports
- *  `has_secret`, so this panel never displays or re-populates it. */
+/**
+ * Project-level S3-compatible storage credentials, as the Storage section of
+ * the project settings. The secret is write-only end to end: the backend
+ * stores it encrypted and only ever reports `has_secret`, so this panel never
+ * displays or re-populates it.
+ */
 const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => {
-  const accent = useBrandAccents();
   const [config, setConfig] = useState<ProjectStorageConfig | null>(null);
   // Nothing to load for non-owners (see the effect below), so don't flash the
   // loading row at them.
   const [loading, setLoading] = useState(canManage);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<ProjectStorageTestResult | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
   const [removing, setRemoving] = useState(false);
-  const [confirmRemoveOpened, setConfirmRemoveOpened] = useState(false);
 
   useEffect(() => {
     // GET /projects/{id}/storage is owner-gated (403 otherwise). Skip the
-    // request we know will be refused and show the empty state directly;
+    // request we know will be refused and show the owner-only state;
     // `canManage` flips once the project and user have loaded, which re-runs
     // this effect for owners.
     if (!canManage) {
@@ -203,15 +383,13 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
-    // getProjectStorage maps 404 → null ("not configured" is a normal state).
+    // getProjectStorage maps 404 to null ("not configured" is a normal state).
     getProjectStorage(projectId)
       .then((c) => {
         if (!cancelled) setConfig(c);
       })
       .catch((err: Error) => {
-        // Transport errors (or a stale owner check) land here: render the
-        // panel read-only with the message instead of toasting.
-        if (!cancelled) setLoadError(err.message || 'Failed to load storage configuration.');
+        if (!cancelled) setLoadError(err.message || 'The storage settings could not be loaded.');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -221,23 +399,33 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
     };
   }, [projectId, canManage]);
 
+  const clearTest = () => {
+    setTestResult(null);
+    setTestError(null);
+  };
+
   const handleTest = async () => {
     setTesting(true);
+    setJustSaved(false);
+    clearTest();
     try {
       const result = await testProjectStorage(projectId);
-      notifications.show({
-        color: result.success ? 'teal' : 'orange',
-        title: result.success ? 'Storage connection OK' : 'Storage connection failed',
-        message: result.message,
-        autoClose: result.success ? 4000 : 8000,
-      });
+      setTestResult(result);
+      const detected = result.detected_region;
+      if (detected) {
+        // The server saved the detected region already: show it now, then
+        // re-read the config so its other fields (updated time) follow.
+        setConfig((c) => (c ? { ...c, region: detected } : c));
+        getProjectStorage(projectId)
+          .then((c) => {
+            if (c) setConfig(c);
+          })
+          .catch(() => {
+            // The region is already shown; the next open re-reads the rest.
+          });
+      }
     } catch (err) {
-      notifications.show({
-        color: 'orange',
-        title: 'Storage connection test failed',
-        message: (err as Error).message,
-        autoClose: 8000,
-      });
+      setTestError((err as Error).message || 'The connection test did not run.');
     } finally {
       setTesting(false);
     }
@@ -248,17 +436,19 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
     try {
       await deleteProjectStorage(projectId);
       setConfig(null);
-      setConfirmRemoveOpened(false);
+      setConfirmingRemove(false);
+      setJustSaved(false);
+      clearTest();
       notifications.show({
         color: 'teal',
-        title: 'Storage configuration removed',
-        message: 'The stored credentials were deleted.',
+        title: 'Storage settings removed',
+        message: 'The endpoint and the keys were deleted.',
         autoClose: 3000,
       });
     } catch (err) {
       notifications.show({
         color: 'red',
-        title: 'Failed to remove storage configuration',
+        title: 'The storage settings were not removed',
         message: (err as Error).message,
       });
     } finally {
@@ -266,172 +456,206 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
     }
   };
 
-  // Non-owners get the actions disabled, not hidden (same rule as
-  // create-dc-btn): the affordance stays discoverable and the title explains
-  // what is missing.
-  const ownerOnly = {
-    disabled: !canManage,
-    title: canManage ? undefined : 'Owner permission required',
-  };
+  const ownerReason = canManage ? null : OWNER_ONLY;
 
-  return (
-    <Paper withBorder radius="md" p="sm" data-testid="storage-panel">
-      <Group justify="space-between" wrap="nowrap">
-        <Group gap="xs" wrap="nowrap">
-          <Icon
-            icon="mdi:cloud-key-outline"
-            width={20}
-            color={`var(--mantine-color-${accent.secondary}-6)`}
-          />
-          <Title order={4}>Storage</Title>
-          {config && (
-            <Badge
-              variant="light"
-              size="sm"
-              color={config.has_secret ? 'teal' : 'gray'}
-              leftSection={
-                <Icon
-                  icon={config.has_secret ? 'mdi:key-chain' : 'mdi:key-remove'}
-                  width={12}
-                />
-              }
-            >
-              {config.has_secret ? 'Secret set' : 'No secret'}
-            </Badge>
-          )}
-        </Group>
-        {!loading && !editing && (
-          <Group gap="xs" wrap="nowrap">
-            {config && (
-              <>
-                <Button
-                  size="xs"
-                  variant="light"
-                  data-testid="storage-test-button"
-                  leftSection={<Icon icon="mdi:connection" width={14} />}
-                  onClick={handleTest}
-                  loading={testing}
-                  {...ownerOnly}
-                >
-                  Test connection
-                </Button>
-                <Button
-                  size="xs"
-                  variant="light"
-                  leftSection={<Icon icon="mdi:pencil" width={14} />}
-                  onClick={() => setEditing(true)}
-                  {...ownerOnly}
-                >
-                  Edit
-                </Button>
-                <Button
-                  size="xs"
-                  variant="light"
-                  color="red"
-                  leftSection={<Icon icon="mdi:delete-outline" width={14} />}
-                  onClick={() => setConfirmRemoveOpened(true)}
-                  {...ownerOnly}
-                >
-                  Remove
-                </Button>
-              </>
-            )}
-            {!config && !loadError && (
-              <Button
-                size="xs"
-                data-testid="storage-configure-button"
-                leftSection={<Icon icon="mdi:plus" width={14} />}
-                onClick={() => setEditing(true)}
-                {...ownerOnly}
-              >
-                Configure storage
-              </Button>
-            )}
-          </Group>
-        )}
+  let body: React.ReactNode;
+  if (loading) {
+    body = (
+      <Group gap="xs" aria-live="polite">
+        <Loader size="xs" />
+        <Text size="sm" c="dimmed">
+          Loading the storage settings...
+        </Text>
       </Group>
-
-      {loading ? (
-        <Group gap="xs" pt="sm">
-          <Loader size="xs" />
-          <Text size="sm" c="dimmed">
-            Loading storage configuration…
-          </Text>
-        </Group>
-      ) : editing ? (
-        <StorageForm
-          projectId={projectId}
-          existing={config}
-          onSaved={(saved) => {
-            setConfig(saved);
-            setEditing(false);
-          }}
-          onCancel={() => setEditing(false)}
-        />
-      ) : loadError ? (
-        <Alert
-          mt="sm"
-          color="red"
-          variant="light"
-          icon={<Icon icon="mdi:alert-circle" width={16} />}
-        >
-          {loadError}
-        </Alert>
-      ) : config ? (
-        <Stack gap={4} pt="xs">
-          <ConfigRow label="Endpoint" value={config.endpoint_url} />
-          <ConfigRow label="Bucket" value={config.bucket} />
-          <ConfigRow label="Region" value={config.region} />
-          <ConfigRow label="Access key" value={config.access_key_id} />
+    );
+  } else if (editing) {
+    body = (
+      <StorageForm
+        projectId={projectId}
+        existing={config}
+        onSaved={(saved) => {
+          setConfig(saved);
+          setEditing(false);
+          setJustSaved(true);
+          clearTest();
+        }}
+        onCancel={() => setEditing(false)}
+      />
+    );
+  } else if (loadError) {
+    body = (
+      <Alert
+        color="red"
+        variant="light"
+        icon={<Icon icon="mdi:alert-circle-outline" width={18} />}
+        title="Could not load the storage settings"
+      >
+        {loadError}
+      </Alert>
+    );
+  } else if (config) {
+    body = (
+      <Stack gap="md">
+        <Group gap="xs">
+          <Badge
+            variant="light"
+            size="md"
+            color={config.has_secret ? 'teal' : 'gray'}
+            leftSection={
+              <Icon icon={config.has_secret ? 'mdi:key-chain' : 'mdi:key-remove'} width={14} />
+            }
+          >
+            {config.has_secret ? 'Secret set' : 'No secret'}
+          </Badge>
           {config.updated_at && (
             <Text size="xs" c="dimmed">
-              Updated {config.updated_at}
+              Updated {formatDateTime(config.updated_at)}
+            </Text>
+          )}
+        </Group>
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+          <Field label="Bucket">
+            <Text size="sm" ff="monospace" data-testid="storage-bucket-value">
+              {config.bucket || 'Not set: edit the settings to add it'}
+            </Text>
+          </Field>
+          <Field label="Region">
+            <Text size="sm" ff="monospace" data-testid="storage-region-value">
+              {config.region}
+            </Text>
+          </Field>
+        </SimpleGrid>
+        <ConnectionDetails config={config} />
+        <Stack gap={6}>
+          <Group gap="xs">
+            <GatedButton
+              size="xs"
+              variant="light"
+              data-testid="storage-test-button"
+              leftSection={<Icon icon="mdi:connection" width={14} />}
+              onClick={handleTest}
+              loading={testing}
+              reason={ownerReason}
+            >
+              Test connection
+            </GatedButton>
+            <GatedButton
+              size="xs"
+              variant="light"
+              data-testid="storage-edit-button"
+              leftSection={<Icon icon="mdi:pencil" width={14} />}
+              onClick={() => {
+                setEditing(true);
+                setConfirmingRemove(false);
+                setJustSaved(false);
+              }}
+              reason={ownerReason}
+            >
+              Edit
+            </GatedButton>
+            <GatedButton
+              size="xs"
+              variant="light"
+              color="red"
+              data-testid="storage-remove-button"
+              leftSection={<Icon icon="mdi:delete-outline" width={14} />}
+              onClick={() => setConfirmingRemove(true)}
+              reason={ownerReason}
+            >
+              Remove
+            </GatedButton>
+          </Group>
+          <DisabledReason reason={ownerReason} />
+          {justSaved && (
+            <Text size="xs" c="dimmed" data-testid="storage-saved-hint">
+              Saved. Test the connection to check the bucket and detect its region.
             </Text>
           )}
         </Stack>
-      ) : (
-        <Text size="sm" c="dimmed" pt="xs">
-          Attach S3-compatible credentials so this project's remote data
-          collections can read private buckets.
-          {!canManage && ' Only project owners can configure storage.'}
-        </Text>
-      )}
-
-      <Modal
-        opened={confirmRemoveOpened}
-        onClose={() => !removing && setConfirmRemoveOpened(false)}
-        title="Remove storage configuration?"
-        centered
-        size="sm"
-      >
-        <Stack gap="md">
-          <Text size="sm">
-            This deletes the stored endpoint and credentials (including the
-            encrypted secret). Remote data collections relying on them will no
-            longer be able to read private buckets.
-          </Text>
-          <Group justify="flex-end" gap="xs">
-            <Button
-              variant="default"
+        {confirmingRemove && (
+          <Paper withBorder radius="md" p="sm" data-testid="storage-remove-confirm">
+            <Stack gap="xs">
+              <Text size="sm" fw={500}>
+                Remove the storage settings?
+              </Text>
+              <Text size="xs" c="dimmed">
+                This deletes the endpoint and the keys, the encrypted secret included. Data
+                collections that read a private bucket with them stop working until new
+                settings are saved.
+              </Text>
+              <Group justify="flex-end" gap="xs">
+                <Button
+                  variant="default"
+                  size="xs"
+                  onClick={() => setConfirmingRemove(false)}
+                  disabled={removing}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="xs"
+                  color="red"
+                  data-testid="storage-remove-confirm-button"
+                  leftSection={<Icon icon="mdi:delete-outline" width={14} />}
+                  onClick={handleRemove}
+                  loading={removing}
+                >
+                  Remove settings
+                </Button>
+              </Group>
+            </Stack>
+          </Paper>
+        )}
+        <div aria-live="polite">
+          <TestResult result={testResult} error={testError} />
+        </div>
+      </Stack>
+    );
+  } else {
+    body = (
+      <Stack gap="md">
+        <Group gap="sm" wrap="nowrap" align="flex-start">
+          <ThemeIcon variant="light" color="gray" size="lg" radius="md">
+            <Icon icon="mdi:cloud-off-outline" width={20} />
+          </ThemeIcon>
+          <Stack gap={2} style={{ minWidth: 0 }}>
+            <Text size="sm" fw={500}>
+              {canManage ? 'No storage configured' : 'Storage settings are for project owners'}
+            </Text>
+            <Text size="xs" c="dimmed" lh={1.35}>
+              {canManage
+                ? 'Without storage settings this project reads only public addresses and the buckets this server lists as public. Add an endpoint, a bucket and its keys to read a private bucket.'
+                : 'The owners of this project can attach a private bucket here. Ask one of them if a data collection cannot reach its files.'}
+            </Text>
+          </Stack>
+        </Group>
+        <Stack gap={6}>
+          <Group>
+            <GatedButton
               size="xs"
-              onClick={() => setConfirmRemoveOpened(false)}
-              disabled={removing}
+              data-testid="storage-configure-button"
+              leftSection={<Icon icon="mdi:plus" width={14} />}
+              onClick={() => setEditing(true)}
+              reason={ownerReason}
             >
-              Cancel
-            </Button>
-            <Button
-              size="xs"
-              color="red"
-              leftSection={<Icon icon="mdi:delete-outline" width={14} />}
-              onClick={handleRemove}
-              loading={removing}
-            >
-              Remove
-            </Button>
+              Configure storage
+            </GatedButton>
           </Group>
+          <DisabledReason reason={ownerReason} />
         </Stack>
-      </Modal>
-    </Paper>
+      </Stack>
+    );
+  }
+
+  return (
+    <Stack gap="lg" data-testid="storage-panel">
+      <Text size="sm" c="dimmed">
+        Lets this project&apos;s data collections that read a URL, a manifest or a bucket
+        prefix reach a private bucket on any S3-compatible service. The keys are used for
+        this project only.
+      </Text>
+      {body}
+    </Stack>
   );
 };
 
