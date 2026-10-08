@@ -43,7 +43,7 @@ The landing page, at compact width with the filter panel collapsed:
   pipeline on all samples, so no filter changes it) and the number of phyla ANCOM-BC calls
   significant at 5% FDR. Below them, four figures in two rows, each linking its tab: phylum
   composition per group beside the ANCOM-BC volcano, then the PCoA beside a tree of the
-  ten largest phyla (dot area: share of the reads, split by group). The bar of this
+  eight largest phyla (dot area: share of the reads, split by group). The bar of this
   section filters by group and kingdom.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
@@ -79,8 +79,8 @@ heatmap rows.
 
 **Community & Diversity.** Strip: distinct phyla (by kingdom), classes (the richest
 samples), orders (the richest groups) and families (the richest phyla); lineages with no
-name at a rank are left out. Then the phylum composition per group (ten phyla and Other, as 100% bars), the
-stacked composition per sample (the same ten and Other), the sunburst hierarchy and the
+name at a rank are left out. Then the phylum composition per group (eight phyla and Other, as 100% bars), the
+stacked composition per sample (the same eight and Other), the sunburst hierarchy and the
 UpSet of taxa shared between groups. Collapsed: the relative abundance table. No Sankey:
 it restates the sunburst. Filters: kingdom and phylum.
 
@@ -95,7 +95,7 @@ p-values. Filters: contrast, phylum, kingdom and a log-fold-change range.
 
 **Phylogeny.** Strip: ASVs (a ring by kingdom), ASVs classified to genus (their share),
 the median classifier confidence (tips at or above 0.7, the classifier's default) and
-distinct genera (the richest phyla). Then the tree, opening on the Overview's summary: the ten largest
+distinct genera (the richest phyla). Then the tree, opening on the Overview's summary: the eight largest
 phyla, one tip each, with their share of the reads per group. Its View switch draws the
 full ASV tree, coloured by any rank and pruned to the clade picked in the left panel. The
 tip taxonomy table is collapsed. The tip-metadata recipe
@@ -133,8 +133,10 @@ The import re-packs the Overview grid after a drop, so a lone highlight takes th
 
 `category_colors` is declared once, on the Overview, and read by every tab: the group
 column is coloured `auto` (each value takes a colour-blind-safe colour at import, kept on
-a re-import), kingdoms are written out, and the Other and Unclassified phylum buckets are
-grey. Code figures read the same map and follow Analysis mode's groups when it has some;
+a re-import), kingdoms are written out, and phyla are coloured `auto:rel_abundance`: the eight
+most abundant of the run take the palette, largest first, so every figure that draws the
+top eight (composition bars, stacked composition, tree) gives a phylum the same colour.
+The Other and Unclassified buckets are grey. Code figures read the same map and follow Analysis mode's groups when it has some;
 the UpSet colours its sets through `set_category_column`.
 
 ## Cross-selection

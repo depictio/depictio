@@ -36,6 +36,7 @@ main_dashboard:
       Eukaryota: '#c2255c'
       Unclassified: '#adb5bd'
     Phylum:
+      '*': auto:rel_abundance
       Other: '#adb5bd'
       Unclassified: '#868e96'
   filter_sections:
@@ -522,7 +523,7 @@ main_dashboard:
     section: Findings
     source_tab: Community & Diversity
     source_component: comm-composition-by-group
-    caption: The ten most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it.
+    caption: The eight most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it.
     tag: am-ov-hl-composition
     index: ov-hl-composition
     layout:
@@ -534,7 +535,7 @@ main_dashboard:
     section: Findings
     source_tab: Community & Diversity
     source_component: comm-sintax-composition
-    caption: The ten most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it.
+    caption: The eight most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it.
     tag: am-ov-hl-composition-sintax
     index: ov-hl-composition-sintax
     layout:
@@ -546,7 +547,7 @@ main_dashboard:
     section: Findings
     source_tab: SIDLE
     source_component: sidle-composition
-    caption: The ten most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it.
+    caption: The eight most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it.
     tag: am-ov-hl-composition-sidle
     index: ov-hl-composition-sidle
     layout:
@@ -569,7 +570,7 @@ main_dashboard:
       taxon_col: taxon
       color_col: Kingdom
       collapse_rank: Phylum
-      top_n: 10
+      top_n: 8
       size_by: abundance
       abundance_dc_tag: taxonomy_rel_abundance
       abundance_col: rel_abundance
@@ -579,7 +580,7 @@ main_dashboard:
       - dominant_habitat
     title: Tree of life
     link: tab:Phylogeny
-    caption: The ten largest phyla, one tip each, their share of the reads split by group beside them. Branch lengths are not to scale.
+    caption: The eight largest phyla, one tip each, their share of the reads split by group beside them. Branch lengths are not to scale.
     section: Findings
     tag: am-ov-tree
     index: ov-tree
@@ -1746,7 +1747,7 @@ tabs:
     use: qiime2/rel_abundance
     visu_type: bar
     mode: code
-    code_content: '# One 100% bar per group: the ten most abundant phyla of the samples in view,
+    code_content: '# One 100% bar per group: the eight most abundant phyla of the samples in view,
 
       # the rest folded into Other. The groups are Analysis mode''s when it has some.
 
@@ -1754,7 +1755,7 @@ tabs:
 
       d = df if grp in df.columns else df.with_columns(pl.lit(''All samples'').alias(grp))
 
-      top = d.group_by(''Phylum'').agg(pl.col(''rel_abundance'').sum().alias(''n'')).sort(''n'', descending=True).head(10)[''Phylum''].to_list()
+      top = d.group_by(''Phylum'').agg(pl.col(''rel_abundance'').sum().alias(''n'')).sort(''n'', descending=True).head(8)[''Phylum''].to_list()
 
       d = d.filter(pl.col(grp).is_not_null()).with_columns(pl.when(pl.col(''Phylum'').is_in(top)).then(pl.col(''Phylum'')).otherwise(pl.lit(''Other'')).alias(''Phylum''))
 
@@ -1771,7 +1772,7 @@ tabs:
     tag: am-comm-composition-by-group
     index: comm-composition-by-group
     title: Phylum composition per group
-    description: The ten most abundant phyla of each group, the rest folded into Other.
+    description: The eight most abundant phyla of each group, the rest folded into Other.
     layout:
       x: 0
       y: 0
@@ -1784,7 +1785,7 @@ tabs:
     use: vsearch/sintax_abundance
     visu_type: bar
     mode: code
-    code_content: '# One 100% bar per group: the ten most abundant phyla of the samples in view,
+    code_content: '# One 100% bar per group: the eight most abundant phyla of the samples in view,
 
       # the rest folded into Other. The groups are Analysis mode''s when it has some.
 
@@ -1792,7 +1793,7 @@ tabs:
 
       d = df if grp in df.columns else df.with_columns(pl.lit(''All samples'').alias(grp))
 
-      top = d.group_by(''Phylum'').agg(pl.col(''rel_abundance'').sum().alias(''n'')).sort(''n'', descending=True).head(10)[''Phylum''].to_list()
+      top = d.group_by(''Phylum'').agg(pl.col(''rel_abundance'').sum().alias(''n'')).sort(''n'', descending=True).head(8)[''Phylum''].to_list()
 
       d = d.filter(pl.col(grp).is_not_null()).with_columns(pl.when(pl.col(''Phylum'').is_in(top)).then(pl.col(''Phylum'')).otherwise(pl.lit(''Other'')).alias(''Phylum''))
 
@@ -1809,7 +1810,7 @@ tabs:
     tag: am-comm-sintax-composition
     index: comm-sintax-composition
     title: Phylum composition per group (SINTAX)
-    description: The ten most abundant SINTAX phyla of each group, the rest folded into Other.
+    description: The eight most abundant SINTAX phyla of each group, the rest folded into Other.
     layout:
       x: 0
       y: 0
@@ -1822,7 +1823,7 @@ tabs:
     data_collection_tag: stacked_taxonomy_canonical
     config:
       default_rank: Phylum
-      top_n: 10
+      top_n: 8
       sort_by: abundance
       normalise_to_one: true
       annotation_strips:
@@ -2411,7 +2412,7 @@ tabs:
       color_col: Phylum
       label_col: null
       collapse_rank: Phylum
-      top_n: 10
+      top_n: 8
       size_by: abundance
       abundance_dc_tag: taxonomy_rel_abundance
       abundance_col: rel_abundance

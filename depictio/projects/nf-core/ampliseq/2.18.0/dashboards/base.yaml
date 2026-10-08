@@ -29,9 +29,11 @@ main_dashboard:
       Archaea: '#7048e8'
       Eukaryota: '#c2255c'
       Unclassified: '#adb5bd'
-    # Only the catch-all buckets: phyla are too many for a palette, but the
-    # composition bars fold the long tail into Other and keep it grey.
+    # The eight most abundant phyla of the run take the palette, largest first,
+    # so the composition bars, the stacked composition and the tree agree; those
+    # figures show the same eight and fold the rest into Other, kept grey.
     Phylum:
+      '*': 'auto:rel_abundance'
       Other: '#adb5bd'
       Unclassified: '#868e96'
   # Persistent: drawn in every tab's filter panel, picks kept across tabs. Bound
@@ -394,7 +396,7 @@ main_dashboard:
     section: Findings
     source_tab: Community & Diversity
     source_component: comm-composition-by-group
-    caption: The ten most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it.
+    caption: The eight most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it.
     tag: am-ov-hl-composition
     index: ov-hl-composition
     layout: {x: 0, y: 2, w: 5, h: 5}
@@ -402,7 +404,7 @@ main_dashboard:
     section: Findings
     source_tab: Community & Diversity
     source_component: comm-sintax-composition
-    caption: The ten most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it.
+    caption: The eight most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it.
     tag: am-ov-hl-composition-sintax
     index: ov-hl-composition-sintax
     layout: {x: 0, y: 2, w: 5, h: 5}
@@ -410,7 +412,7 @@ main_dashboard:
     section: Findings
     source_tab: SIDLE
     source_component: sidle-composition
-    caption: The ten most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it.
+    caption: The eight most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it.
     tag: am-ov-hl-composition-sidle
     index: ov-hl-composition-sidle
     layout: {x: 0, y: 2, w: 5, h: 5}
@@ -433,7 +435,7 @@ main_dashboard:
       taxon_col: taxon
       color_col: Kingdom
       collapse_rank: Phylum
-      top_n: 10
+      top_n: 8
       size_by: abundance
       abundance_dc_tag: taxonomy_rel_abundance
       abundance_col: rel_abundance
@@ -441,7 +443,7 @@ main_dashboard:
       abundance_split_col: '{GROUP_COL}'
     title: Tree of life
     link: tab:Phylogeny
-    caption: The ten largest phyla, one tip each, their share of the reads split by group beside them. Branch lengths are not to scale.
+    caption: The eight largest phyla, one tip each, their share of the reads split by group beside them. Branch lengths are not to scale.
     section: Findings
     tag: am-ov-tree
     index: ov-tree
@@ -1277,11 +1279,11 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      # One 100% bar per group: the ten most abundant phyla of the samples in view,
+      # One 100% bar per group: the eight most abundant phyla of the samples in view,
       # the rest folded into Other. The groups are Analysis mode's when it has some.
       grp = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
       d = df if grp in df.columns else df.with_columns(pl.lit('All samples').alias(grp))
-      top = d.group_by('Phylum').agg(pl.col('rel_abundance').sum().alias('n')).sort('n', descending=True).head(10)['Phylum'].to_list()
+      top = d.group_by('Phylum').agg(pl.col('rel_abundance').sum().alias('n')).sort('n', descending=True).head(8)['Phylum'].to_list()
       d = d.filter(pl.col(grp).is_not_null()).with_columns(pl.when(pl.col('Phylum').is_in(top)).then(pl.col('Phylum')).otherwise(pl.lit('Other')).alias('Phylum'))
       shares = d.group_by([grp, 'Phylum']).agg(pl.col('rel_abundance').sum().alias('n')).with_columns((pl.col('n') / pl.col('n').sum().over(grp) * 100).alias('share')).sort(grp)
       orders = dict(depictio_group_kwargs.get('category_orders') or {}, Phylum=top + ['Other'])
@@ -1292,7 +1294,7 @@ tabs:
     tag: am-comm-composition-by-group
     index: comm-composition-by-group
     title: Phylum composition per group
-    description: The ten most abundant phyla of each group, the rest folded into Other.
+    description: The eight most abundant phyla of each group, the rest folded into Other.
     layout: {x: 0, y: 0, w: 8, h: 4, fit: auto}
   - component_type: figure
     workflow_tag: ampliseq
@@ -1301,11 +1303,11 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      # One 100% bar per group: the ten most abundant phyla of the samples in view,
+      # One 100% bar per group: the eight most abundant phyla of the samples in view,
       # the rest folded into Other. The groups are Analysis mode's when it has some.
       grp = depictio_group_by[0] if depictio_group_by else '{GROUP_COL}'
       d = df if grp in df.columns else df.with_columns(pl.lit('All samples').alias(grp))
-      top = d.group_by('Phylum').agg(pl.col('rel_abundance').sum().alias('n')).sort('n', descending=True).head(10)['Phylum'].to_list()
+      top = d.group_by('Phylum').agg(pl.col('rel_abundance').sum().alias('n')).sort('n', descending=True).head(8)['Phylum'].to_list()
       d = d.filter(pl.col(grp).is_not_null()).with_columns(pl.when(pl.col('Phylum').is_in(top)).then(pl.col('Phylum')).otherwise(pl.lit('Other')).alias('Phylum'))
       shares = d.group_by([grp, 'Phylum']).agg(pl.col('rel_abundance').sum().alias('n')).with_columns((pl.col('n') / pl.col('n').sum().over(grp) * 100).alias('share')).sort(grp)
       orders = dict(depictio_group_kwargs.get('category_orders') or {}, Phylum=top + ['Other'])
@@ -1316,7 +1318,7 @@ tabs:
     tag: am-comm-sintax-composition
     index: comm-sintax-composition
     title: Phylum composition per group (SINTAX)
-    description: The ten most abundant SINTAX phyla of each group, the rest folded into Other.
+    description: The eight most abundant SINTAX phyla of each group, the rest folded into Other.
     layout: {x: 0, y: 0, w: 8, h: 4, fit: auto}
   - component_type: advanced_viz
     workflow_tag: ampliseq
@@ -1325,7 +1327,7 @@ tabs:
     config:
       default_rank: Phylum
       # Ten and Other, as in the per-group bars above: the same key twice.
-      top_n: 10
+      top_n: 8
       sort_by: abundance
       normalise_to_one: true
       annotation_strips:
@@ -1831,7 +1833,7 @@ tabs:
       # Opens on the Overview's summary (one tip per phylum, read shares per
       # group); the View switch in its settings draws the full ASV tree.
       collapse_rank: Phylum
-      top_n: 10
+      top_n: 8
       size_by: abundance
       abundance_dc_tag: taxonomy_rel_abundance
       abundance_col: rel_abundance

@@ -127,7 +127,7 @@ main_dashboard:
   sections. Never collapse a figure that answers the tab's question to save height (the UpSet
   of shared taxa): drop it or summarise it instead.
 - A dense advanced viz opens on its readable form, the full one a switch away: the
-  phylogenetic tree on its summary (`collapse_rank`, `top_n: 10`, `size_by: abundance`, split
+  phylogenetic tree on its summary (`collapse_rank`, `top_n: 8`, `size_by: abundance`, split
   by `{GROUP_COL}`), the View switch drawing every tip.
 - Bind every view the outputs allow. A volcano takes `p_value_col` (the QQ view) and either
   `avg_log_intensity_col` or, when the test's table has no mean abundance, `ma_dc_tag` on an
@@ -195,6 +195,10 @@ A KPI strip is four different readings, not four numbers in one style:
   - The group column takes `"{GROUP_COL}": auto`: the server gives each of its values a colour
     from a colour-blind-safe palette at import, and keeps them on a re-import.
   - `{"*": auto, control: "#868e96"}` pins some values and fills the rest.
+  - A column with more values than the palette's 8 colours (phyla, genera, species) takes
+    `"*": "auto:<abundance column>"`: the import ranks the values by that column's sum and
+    gives the 8 largest the palette, largest first. Plain `auto` colours none of them past 8.
+    Pin `Other` and `Unclassified` grey beside it.
 - No per-figure colour map (`color_discrete_map`, `set_colors`, `col_annotation_colors`) for a
   column `category_colors` already covers. UI figures, advanced viz, maps and filter chips all
   read it.
@@ -217,8 +221,10 @@ A KPI strip is four different readings, not four numbers in one style:
   A figure that aggregates groups by `[*depictio_group_by, ...]` so the group column survives.
   Guard a group column that the no-metadata route removes: `if grp in df.columns`.
 - No hardcoded colours anywhere else (Mantine palette names in `icon_color` and section colours).
-- Sibling figures of one vocabulary share their key: the composition per group and per
-  sample both draw the ten largest taxa and Other (`top_n: 10`), so the legend repeats.
+- Sibling figures of one vocabulary share their key: the composition per group, the
+  composition per sample and the tree summary all draw the 8 largest taxa and Other
+  (`top_n: 8`, `.head(8)` in code), the 8 that `auto:<column>` coloured, so a taxon keeps its
+  colour and the legend repeats.
 
 ## 8. Viz controls
 
