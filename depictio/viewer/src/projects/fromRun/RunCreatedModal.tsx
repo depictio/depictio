@@ -31,6 +31,57 @@ export interface RunCreatedContext {
 
 type WatchState = 'idle' | 'running' | 'success' | 'failed';
 
+/** What the status line says in each state. */
+function watchText(
+  state: WatchState,
+  elapsedMs: number,
+  progress: ManifestRefreshReport | null,
+): string | null {
+  const elapsed = formatElapsed(elapsedMs);
+  const summary = progress ? summarizeManifestRun(progress) : null;
+  switch (state) {
+    case 'idle':
+      return 'No ingestion run to watch.';
+    case 'running':
+      return `Ingesting (${elapsed} elapsed)` + (summary ? `: ${summary}` : '');
+    case 'success':
+      return summary ? `Ingestion completed in ${elapsed}: ${summary}` : null;
+    case 'failed':
+      return summary
+        ? `Ingestion finished with errors in ${elapsed}: ${summary}`
+        : 'Ingestion failed';
+  }
+}
+
+/** The glyph beside the status line: a loader while the run goes on. */
+const WatchIcon: React.FC<{ state: WatchState; loaderColor: string }> = ({
+  state,
+  loaderColor,
+}) => {
+  switch (state) {
+    case 'running':
+      return <Loader size="xs" color={loaderColor} />;
+    case 'success':
+      return (
+        <ThemeIcon variant="light" size="sm" radius="xl" color="green">
+          <Icon icon="mdi:check-circle" width={14} />
+        </ThemeIcon>
+      );
+    case 'failed':
+      return (
+        <ThemeIcon variant="light" size="sm" radius="xl" color="red">
+          <Icon icon="mdi:alert-circle" width={14} />
+        </ThemeIcon>
+      );
+    case 'idle':
+      return (
+        <ThemeIcon variant="light" size="sm" radius="xl" color="gray">
+          <Icon icon="mdi:minus-circle-outline" width={14} />
+        </ThemeIcon>
+      );
+  }
+};
+
 export const RunCreatedModal: React.FC<{
   report: FromRunReport | null;
   context?: RunCreatedContext | null;
@@ -133,37 +184,9 @@ export const RunCreatedModal: React.FC<{
 
           <Box aria-live="polite" role="status">
             <Group gap="xs" wrap="nowrap">
-              {state === 'running' && <Loader size="xs" color={accent.secondary} />}
-              {(state === 'success' || state === 'failed') && (
-                <ThemeIcon
-                  variant="light"
-                  size="sm"
-                  radius="xl"
-                  color={state === 'success' ? 'green' : 'red'}
-                >
-                  <Icon
-                    icon={state === 'success' ? 'mdi:check-circle' : 'mdi:alert-circle'}
-                    width={14}
-                  />
-                </ThemeIcon>
-              )}
-              {state === 'idle' && (
-                <ThemeIcon variant="light" size="sm" radius="xl" color="gray">
-                  <Icon icon="mdi:minus-circle-outline" width={14} />
-                </ThemeIcon>
-              )}
+              <WatchIcon state={state} loaderColor={accent.secondary} />
               <Text size="sm" data-testid="run-created-status" data-state={state}>
-                {state === 'idle' && 'No ingestion run to watch.'}
-                {state === 'running' &&
-                  `Ingesting (${formatElapsed(elapsedMs)} elapsed)` +
-                    (progress ? `: ${summarizeManifestRun(progress)}` : '')}
-                {state === 'success' &&
-                  progress &&
-                  `Ingestion completed in ${formatElapsed(elapsedMs)}: ${summarizeManifestRun(progress)}`}
-                {state === 'failed' &&
-                  (progress
-                    ? `Ingestion finished with errors in ${formatElapsed(elapsedMs)}: ${summarizeManifestRun(progress)}`
-                    : 'Ingestion failed')}
+                {watchText(state, elapsedMs, progress)}
               </Text>
             </Group>
           </Box>
@@ -211,16 +234,15 @@ export const RunCreatedModal: React.FC<{
                 Open dashboard
               </GatedButton>
             </Group>
-            {noDashboardReason ? (
+            {noDashboardReason && (
               <Group justify="flex-end">
                 <DisabledReason reason={noDashboardReason} icon="mdi:information-outline" />
               </Group>
-            ) : (
-              state === 'running' && (
-                <Text size="xs" c="dimmed" ta="right" data-testid="run-created-dashboard-hint">
-                  Ingestion is still running: the dashboard fills in as collections finish.
-                </Text>
-              )
+            )}
+            {!noDashboardReason && state === 'running' && (
+              <Text size="xs" c="dimmed" ta="right" data-testid="run-created-dashboard-hint">
+                Ingestion is still running: the dashboard fills in as collections finish.
+              </Text>
             )}
           </Stack>
         </Stack>

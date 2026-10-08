@@ -16,12 +16,9 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Anchor,
-  Box,
   Button,
   Grid,
   Group,
-  Loader,
   Modal,
   Paper,
   ScrollArea,
@@ -50,18 +47,56 @@ import type {
 } from 'depictio-react-core';
 
 import { DisabledReason, GatedButton } from '../../../components/settings/SettingsSections';
-import { FlowBadge } from '../FlowBadge';
 import { FolderPath } from '../FolderPath';
 import { readRecentRunFolders, rememberRunFolder } from '../recentFolders';
 import type { RecentRunFolders } from '../recentFolders';
 import { FolderDetailPane } from './FolderDetailPane';
+import { FolderTreeNode, SOURCE_ICON } from './FolderTreeNode';
 import { PathBar } from './PathBar';
 import { GROUP_KEY, useFolderTree } from './useFolderTree';
-import type { TreeNodeProps } from './useFolderTree';
 
-const SOURCE_ICON: Record<FolderSource, string> = {
-  local: 'mdi:laptop',
-  s3: 'mdi:cloud-outline',
+/** Both source groups open, as every opening starts. */
+const GROUPS_EXPANDED = { [GROUP_KEY.local]: true, [GROUP_KEY.s3]: true };
+
+interface RecentEntry {
+  path: string;
+  source: FolderSource;
+}
+
+/** The reader's last run folders, above the tree; nothing when there are none. */
+const RecentFolders: React.FC<{ entries: RecentEntry[]; onOpen: (path: string) => void }> = ({
+  entries,
+  onOpen,
+}) => {
+  if (entries.length === 0) return null;
+  return (
+    <Stack gap={2} data-testid="browse-recent">
+      <Group gap={6} px={4}>
+        <Icon icon="mdi:history" width={14} />
+        <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+          Recent
+        </Text>
+      </Group>
+      {entries.map(({ path, source }) => (
+        <Tooltip key={path} label={path} withArrow zIndex={Z_LAYERS.tooltip} openDelay={400}>
+          <UnstyledButton
+            onClick={() => onOpen(path)}
+            px={4}
+            py={2}
+            data-testid="browse-recent-item"
+            data-path={path}
+          >
+            <Group gap={6} wrap="nowrap">
+              <Icon icon={SOURCE_ICON[source]} width={14} style={{ flexShrink: 0 }} />
+              <Text size="sm" ff="monospace" truncate>
+                {shortenFolder(path, { maxLength: 40 })}
+              </Text>
+            </Group>
+          </UnstyledButton>
+        </Tooltip>
+      ))}
+    </Stack>
+  );
 };
 
 interface FolderBrowserModalProps {
@@ -97,9 +132,7 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
 }) => {
   const folderTree = useFolderTree({ opened, localEnabled, s3Enabled, privateBucket });
   const s3Shown = s3Enabled || Boolean(privateBucket);
-  const tree = useTree({
-    initialExpandedState: { [GROUP_KEY.local]: true, [GROUP_KEY.s3]: true },
-  });
+  const tree = useTree({ initialExpandedState: GROUPS_EXPANDED });
   const selected = tree.selectedState[0] ?? null;
   const [pathInput, setPathInput] = useState('');
   const [pathError, setPathError] = useState<string | null>(null);
@@ -150,7 +183,7 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
   useEffect(() => {
     if (!opened) return;
     tree.clearSelected();
-    tree.setExpandedState({ [GROUP_KEY.local]: true, [GROUP_KEY.s3]: true });
+    tree.setExpandedState(GROUPS_EXPANDED);
     setPathInput('');
     setPathError(null);
     setInspected({});
@@ -198,9 +231,10 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
     [folderTree],
   );
 
-  const selectedLooksLikeRun = selected
-    ? (inspected[selected] ?? folderTree.nodes[selected]?.looksLikeRun ?? false)
-    : false;
+  /** What the detail pane read, else what the listing said. */
+  const looksLikeRun = (path: string): boolean =>
+    inspected[path] ?? folderTree.nodes[path]?.looksLikeRun ?? false;
+  const selectedLooksLikeRun = selected ? looksLikeRun(selected) : false;
   const selectedInspected = selected ? selected in inspected : false;
   const selectReason = selected ? null : 'Select a folder first.';
 
@@ -215,133 +249,19 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
   const recentS3 = s3Enabled
     ? recent.s3
     : recent.s3.filter((path) => privateBucket && s3BucketOf(path) === privateBucket.bucket);
-  const recentEntries = [
+  const recentEntries: RecentEntry[] = [
     ...(localEnabled ? recent.local.map((path) => ({ path, source: 'local' as const })) : []),
     ...recentS3.map((path) => ({ path, source: 's3' as const })),
   ];
 
-  const renderNode = ({ node, expanded, hasChildren, elementProps, tree: controller }: RenderTreeNodePayload) => {
-    const props = (node.nodeProps ?? {}) as TreeNodeProps;
-
-    if (props.kind === 'placeholder') {
-      return (
-        <Group gap={6} wrap="nowrap" py={4} {...elementProps} style={{ ...elementProps.style, cursor: 'default' }}>
-          <Box w={18} style={{ flexShrink: 0 }} />
-          {props.placeholder === 'loading' && (
-            <>
-              <Loader size={12} />
-              <Text size="xs" c="dimmed">
-                Listing folders...
-              </Text>
-            </>
-          )}
-          {props.placeholder === 'empty' && (
-            <Text size="xs" c="dimmed" data-testid="browse-tree-empty">
-              No folder is available here.
-            </Text>
-          )}
-          {props.placeholder === 'truncated' && (
-            <Text size="xs" c="dimmed" data-testid="browse-tree-truncated">
-              Only the first 500 folders are listed. Type a path above to reach the others.
-            </Text>
-          )}
-          {props.placeholder === 'error' && (
-            <Group gap={6} wrap="nowrap" data-testid="browse-tree-error">
-              <Text size="xs" c="red">
-                {String(node.label) || 'This folder could not be listed.'}
-              </Text>
-              {props.parent && (
-                <Anchor
-                  component="button"
-                  type="button"
-                  size="xs"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    folderTree.retry(props.parent as string);
-                  }}
-                >
-                  Try again
-                </Anchor>
-              )}
-            </Group>
-          )}
-        </Group>
-      );
-    }
-
-    const chevron = (
-      <Box
-        w={18}
-        style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-        onClick={(event) => {
-          if (!hasChildren) return;
-          event.stopPropagation();
-          controller.toggleExpanded(node.value);
-        }}
-        aria-hidden
-        data-testid={hasChildren ? 'browse-tree-chevron' : undefined}
-      >
-        {hasChildren && (
-          <Icon icon={expanded ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={16} />
-        )}
-      </Box>
-    );
-
-    if (props.kind === 'group') {
-      const source = props.source ?? 'local';
-      return (
-        <Group
-          gap={6}
-          wrap="nowrap"
-          py={6}
-          {...elementProps}
-          onClick={(event) => {
-            elementProps.onClick(event);
-            controller.toggleExpanded(node.value);
-          }}
-          data-testid={`browse-group-${source}`}
-        >
-          {chevron}
-          <Icon icon={SOURCE_ICON[source]} width={16} />
-          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-            {node.label}
-          </Text>
-        </Group>
-      );
-    }
-
-    const folder = folderTree.nodes[node.value];
-    const isRun = inspected[node.value] ?? folder?.looksLikeRun ?? false;
-    return (
-      <Group
-        gap={6}
-        wrap="nowrap"
-        py={4}
-        pr="xs"
-        {...elementProps}
-        style={{ ...elementProps.style, borderRadius: 'var(--mantine-radius-sm)' }}
-        onClick={(event) => {
-          elementProps.onClick(event);
-          selectFolder(node.value);
-        }}
-        onDoubleClick={() => hasChildren && controller.toggleExpanded(node.value)}
-        data-testid="browse-tree-node"
-        data-path={node.value}
-        data-run-folder={isRun || undefined}
-      >
-        {chevron}
-        <Icon
-          icon={isRun ? 'mdi:folder-check-outline' : expanded ? 'mdi:folder-open-outline' : 'mdi:folder-outline'}
-          width={16}
-          style={{ flexShrink: 0 }}
-        />
-        <Text size="sm" truncate style={{ flex: 1, minWidth: 0 }}>
-          {node.label}
-        </Text>
-        {isRun && <FlowBadge status="run-folder" />}
-      </Group>
-    );
-  };
+  const renderNode = (payload: RenderTreeNodePayload) => (
+    <FolderTreeNode
+      payload={payload}
+      isRun={looksLikeRun}
+      onSelect={selectFolder}
+      onRetry={folderTree.retry}
+    />
+  );
 
   return (
     <Modal
@@ -383,34 +303,7 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
             <Paper withBorder radius="md" p="xs">
               <ScrollArea h={{ base: 260, md: 440 }} type="auto" offsetScrollbars>
                 <Stack gap="xs" ref={treeBoxRef}>
-                  {recentEntries.length > 0 && (
-                    <Stack gap={2} data-testid="browse-recent">
-                      <Group gap={6} px={4}>
-                        <Icon icon="mdi:history" width={14} />
-                        <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-                          Recent
-                        </Text>
-                      </Group>
-                      {recentEntries.map(({ path, source }) => (
-                        <Tooltip key={path} label={path} withArrow zIndex={Z_LAYERS.tooltip} openDelay={400}>
-                          <UnstyledButton
-                            onClick={() => void goTo(path)}
-                            px={4}
-                            py={2}
-                            data-testid="browse-recent-item"
-                            data-path={path}
-                          >
-                            <Group gap={6} wrap="nowrap">
-                              <Icon icon={SOURCE_ICON[source]} width={14} style={{ flexShrink: 0 }} />
-                              <Text size="sm" ff="monospace" truncate>
-                                {shortenFolder(path, { maxLength: 40 })}
-                              </Text>
-                            </Group>
-                          </UnstyledButton>
-                        </Tooltip>
-                      ))}
-                    </Stack>
-                  )}
+                  <RecentFolders entries={recentEntries} onOpen={(path) => void goTo(path)} />
                   <Tree
                     data={folderTree.treeData}
                     tree={tree}

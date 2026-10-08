@@ -8,7 +8,7 @@
  * `--var` use); the label only spares the reader the UPPER_SNAKE.
  */
 
-import { isS3Location, relativeToRunFolder } from './runFolderPaths';
+import { isLocalFolderPath, isS3Location, relativeToRunFolder } from './runFolderPaths';
 
 /** Words kept in capitals. */
 const ACRONYMS = new Set(['ID', 'IDS', 'URL', 'QC', 'FDR', 'GSEA', 'ASV', 'UMI', 'SNP', 'CSV', 'TSV', 'UCSC']);
@@ -58,7 +58,7 @@ export type TemplateSettingValue =
 
 /** A location the server would read: absolute, under the home folder, or S3. */
 function looksLikeLocation(value: string): boolean {
-  return value.startsWith('/') || value === '~' || value.startsWith('~/') || isS3Location(value);
+  return isLocalFolderPath(value) || isS3Location(value);
 }
 
 /** How to write `value`, a setting the server resolved for `runFolder`.

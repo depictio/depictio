@@ -30,7 +30,7 @@ export type FlowStatus =
   | 'matches-run'
   | 'closest-to-run';
 
-export const FLOW_STATUS: Record<FlowStatus, { color: string; icon: string; label: string }> = {
+const FLOW_STATUS: Record<FlowStatus, { color: string; icon: string; label: string }> = {
   ready: { color: 'green', icon: 'mdi:check-circle', label: 'Ready' },
   'not-found': { color: 'red', icon: 'mdi:file-remove-outline', label: 'Not found' },
   'no-files': { color: 'orange', icon: 'mdi:folder-alert-outline', label: 'No matching files' },

@@ -265,31 +265,18 @@ export function isHttpStatus(err: unknown, status: number): boolean {
   return err instanceof HttpError && err.status === status;
 }
 
-/** The `detail` of an error body as text, and the machine-readable `code` it
- *  names. Object details (a code plus a message, or an
- *  `HTTPException(detail={detail, code})`) are reduced to their message, else
- *  serialised; a top-level `code` wins over one inside `detail`. */
+/** The `detail` of an error body as text (see `detailMessage`), and the
+ *  machine-readable `code` it names; a top-level `code` wins over one inside
+ *  `detail`. */
 async function readErrorBody(
   res: Response,
 ): Promise<{ detail: string | null; code: string | null }> {
   try {
     const body = await res.json();
     const detail = body?.detail;
-    let code: string | null = null;
-    let text: string | null = null;
-    if (typeof detail === 'string') {
-      text = detail;
-    } else if (detail != null && typeof detail === 'object') {
-      if (typeof detail.code === 'string') code = detail.code;
-      text =
-        typeof detail.message === 'string'
-          ? detail.message
-          : typeof detail.detail === 'string'
-            ? detail.detail
-            : JSON.stringify(detail);
-    }
+    let code: string | null = typeof detail?.code === 'string' ? detail.code : null;
     if (typeof body?.code === 'string') code = body.code;
-    return { detail: text, code };
+    return { detail: detail == null ? null : detailMessage(detail), code };
   } catch {
     // ignore non-JSON error bodies
     return { detail: null, code: null };
@@ -319,6 +306,17 @@ export class ApiDetailError extends HttpError {
 /** The server's machine-readable error code, or null when `err` carries none. */
 export function apiErrorCode(err: unknown): string | null {
   return err instanceof ApiDetailError ? err.code : null;
+}
+
+/** The human text of a FastAPI `detail`: the string itself, else the
+ *  `message` or `detail` a structured one carries (e.g. a rejected-entries
+ *  report, or an `HTTPException(detail={detail, code})`), else the raw JSON. */
+function detailMessage(detail: unknown): string {
+  if (typeof detail === 'string') return detail;
+  const structured = detail as { message?: unknown; detail?: unknown } | null;
+  if (typeof structured?.message === 'string') return structured.message;
+  if (typeof structured?.detail === 'string') return structured.detail;
+  return JSON.stringify(detail);
 }
 
 /** Throw using FastAPI's `{detail}` envelope when present, otherwise fall back

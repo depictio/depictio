@@ -81,61 +81,70 @@ export const TemplateUsed: React.FC<{
   /** Heading override, e.g. "Template used" once the choice is final. */
   heading?: string;
 }> = ({ templateId, title, match, runVersion, testIdPrefix, heading }) => {
-  const version = templateId ? splitTemplateId(templateId).version : null;
+  const parts = templateId ? splitTemplateId(templateId) : null;
+  const version = parts?.version ?? null;
   const text = match ? runTemplateMatchText(match, { run: runVersion, template: version }) : null;
+  // Without a template there is no version to spell out, so no tooltip.
+  const matchBadge =
+    match && text ? (
+      <FlowBadge
+        status={matchStatus(match)}
+        label={text.label}
+        tooltip={templateId ? text.detail : undefined}
+        testId={`${testIdPrefix}-match`}
+        dataAttributes={{ 'data-match': match }}
+      />
+    ) : null;
+
+  let body: React.ReactNode;
+  if (templateId && parts) {
+    body = (
+      <Group gap="sm" wrap="nowrap" align="flex-start">
+        <TemplateSourceLogo source={parts.source} size={28} />
+        <Stack gap={2} style={{ minWidth: 0 }}>
+          <Text
+            size="sm"
+            fw={600}
+            style={{ wordBreak: 'break-word' }}
+            data-testid={`${testIdPrefix}-template`}
+            data-template-id={templateId}
+          >
+            {title || templateId}
+          </Text>
+          <Group gap={8} wrap="wrap">
+            <Text size="sm" ff="monospace" data-testid={`${testIdPrefix}-template-version`}>
+              {version ? formatVersion(version) : 'single version'}
+            </Text>
+            {matchBadge}
+          </Group>
+          <Text size="xs" c="dimmed">
+            Template version: the pipeline version it was written for
+          </Text>
+        </Stack>
+      </Group>
+    );
+  } else if (matchBadge) {
+    body = (
+      <Stack gap={4}>
+        <Group gap={8} wrap="wrap">
+          {matchBadge}
+        </Group>
+      </Stack>
+    );
+  } else {
+    body = (
+      <Stack gap={4}>
+        <Text size="sm" c="dimmed" data-testid={`${testIdPrefix}-template`}>
+          Not chosen yet
+        </Text>
+      </Stack>
+    );
+  }
+
   return (
     <Stack gap={6} style={{ minWidth: 0 }}>
       <Heading>{heading ?? 'Template Depictio uses'}</Heading>
-      {templateId ? (
-        <Group gap="sm" wrap="nowrap" align="flex-start">
-          <TemplateSourceLogo source={splitTemplateId(templateId).source} size={28} />
-          <Stack gap={2} style={{ minWidth: 0 }}>
-            <Text
-              size="sm"
-              fw={600}
-              style={{ wordBreak: 'break-word' }}
-              data-testid={`${testIdPrefix}-template`}
-              data-template-id={templateId}
-            >
-              {title || templateId}
-            </Text>
-            <Group gap={8} wrap="wrap">
-              <Text size="sm" ff="monospace" data-testid={`${testIdPrefix}-template-version`}>
-                {version ? formatVersion(version) : 'single version'}
-              </Text>
-              {match && text && (
-                <FlowBadge
-                  status={matchStatus(match)}
-                  label={text.label}
-                  tooltip={text.detail}
-                  testId={`${testIdPrefix}-match`}
-                  dataAttributes={{ 'data-match': match }}
-                />
-              )}
-            </Group>
-            <Text size="xs" c="dimmed">
-              Template version: the pipeline version it was written for
-            </Text>
-          </Stack>
-        </Group>
-      ) : (
-        <Stack gap={4}>
-          {match && text ? (
-            <Group gap={8} wrap="wrap">
-              <FlowBadge
-                status={matchStatus(match)}
-                label={text.label}
-                testId={`${testIdPrefix}-match`}
-                dataAttributes={{ 'data-match': match }}
-              />
-            </Group>
-          ) : (
-            <Text size="sm" c="dimmed" data-testid={`${testIdPrefix}-template`}>
-              Not chosen yet
-            </Text>
-          )}
-        </Stack>
-      )}
+      {body}
     </Stack>
   );
 };
