@@ -14,7 +14,7 @@ runner = CliRunner()
 def test_manifest_requires_template():
     result = runner.invoke(app, ["run", "--manifest", "https://example.org/m.json"])
     assert result.exit_code == 1
-    assert "--manifest requires --template" in result.output
+    assert "--manifest needs --template" in result.output
 
 
 def test_manifest_and_data_root_are_exclusive(tmp_path):
@@ -31,13 +31,13 @@ def test_manifest_and_data_root_are_exclusive(tmp_path):
         ],
     )
     assert result.exit_code == 1
-    assert "mutually exclusive" in result.output
+    assert "Give DATA_DIR or --manifest, not both" in result.output
 
 
 def test_template_requires_data_root_or_manifest():
     result = runner.invoke(app, ["run", "--template", "generic/manifest-tables/1"])
     assert result.exit_code == 1
-    assert "--data-root (or --manifest, or --bind)" in result.output
+    assert "(or --manifest, or --bind)" in result.output
 
 
 def test_template_accepts_bind_instead_of_data_root():
