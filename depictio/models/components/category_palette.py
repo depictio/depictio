@@ -49,6 +49,7 @@ def assign_category_colors(
     values: Iterable[str],
     pinned: Mapping[str, str] | None = None,
     previous: Mapping[str, str] | None = None,
+    ranked: bool = False,
 ) -> dict[str, str]:
     """A colour for every value of a column, from its data.
 
@@ -58,6 +59,9 @@ def assign_category_colors(
         pinned: Colours the template sets for some values (``control: "#868e96"``).
         previous: The column's colours on the dashboard this import replaces,
             so a re-import keeps every surviving value's colour.
+        ranked: `values` come largest first (`auto:<column>`). Slots then follow
+            that order, and when they run out the largest values keep theirs
+            and the rest get none, where unranked values would all get none.
 
     Returns:
         ``{value: colour}``. Each value takes, in order of precedence, its
@@ -70,7 +74,10 @@ def assign_category_colors(
     """
     pinned = dict(pinned or {})
     previous = dict(previous or {})
-    ordered = sorted({str(v) for v in values}, key=natural_sort_key)
+    if ranked:
+        ordered = list(dict.fromkeys(str(v) for v in values))
+    else:
+        ordered = sorted({str(v) for v in values}, key=natural_sort_key)
 
     fixed: dict[str, str] = {}
     for value in ordered:
@@ -81,7 +88,8 @@ def assign_category_colors(
     used = {c.lower() for c in fixed.values()} | {c.lower() for c in pinned.values()}
     free = [c for c in CATEGORY_PALETTE if c.lower() not in used]
     unassigned = [v for v in ordered if v not in fixed]
-    generated = dict(zip(unassigned, free)) if len(unassigned) <= len(free) else {}
+    fits = ranked or len(unassigned) <= len(free)
+    generated = dict(zip(unassigned, free)) if fits else {}
 
     result = {v: fixed.get(v) or generated[v] for v in ordered if v in fixed or v in generated}
     for value, colour in pinned.items():

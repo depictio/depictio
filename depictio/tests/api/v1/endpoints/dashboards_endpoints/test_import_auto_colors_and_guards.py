@@ -15,6 +15,7 @@ import asyncio
 from unittest.mock import patch
 
 import mongomock
+import polars as pl
 import pytest
 import yaml
 from bson import ObjectId
@@ -204,6 +205,47 @@ class TestResolveAutoCategoryColors:
         dashboard = {"category_colors": {"Phylum": {"*": "auto"}}, "stored_metadata": []}
         dash_routes._resolve_auto_category_colors(dashboard, project_id)
         assert dashboard["category_colors"] == {"Phylum": {"a": P[0], "b": P[1]}}
+
+    def test_a_ranked_auto_colours_the_largest_values(self, project_id, column_data):
+        column_data[0][str(REL_DC)]["rel_abundance"] = [1.0]
+        ranked = [f"p{i}" for i in range(len(P) + 2)]
+        dashboard = {
+            "category_colors": {"Phylum": {"*": "auto:rel_abundance", "Unclassified": "#868e96"}},
+            "stored_metadata": [],
+        }
+        with patch.object(dash_routes, "_ranked_column_values", return_value=ranked) as read:
+            dash_routes._resolve_auto_category_colors(dashboard, project_id)
+        read.assert_called_once_with(str(REL_DC), "Phylum", "rel_abundance")
+        assert dashboard["category_colors"] == {
+            "Phylum": {**dict(zip(ranked, P)), "Unclassified": "#868e96"}
+        }
+
+    def test_a_ranked_auto_needs_a_table_with_the_rank_column(self, project_id, column_data):
+        dashboard = {
+            "category_colors": {"Phylum": "auto:rel_abundance"},
+            "stored_metadata": [
+                {"component_type": "interactive", "column_name": "Phylum", "dc_id": REL_DC}
+            ],
+        }
+        with patch.object(dash_routes, "_ranked_column_values") as read:
+            dash_routes._resolve_auto_category_colors(dashboard, project_id)
+        read.assert_not_called()
+        assert dashboard["category_colors"] is None
+
+    def test_ranking_sums_the_column_and_breaks_ties_by_name(self):
+        frame = pl.LazyFrame(
+            {
+                "Phylum": ["b", "a", "c", "a", None, ""],
+                "rel_abundance": [1.0, 0.5, 2.0, 0.5, 9.0, 9.0],
+            }
+        )
+        with (
+            patch("depictio.api.v1.db.deltatables_collection") as tables,
+            patch("depictio.api.v1.deltatables_utils._create_delta_scan", return_value=frame),
+        ):
+            tables.find_one.return_value = {"delta_table_location": "s3://bucket/rel"}
+            ranked = dash_routes._ranked_column_values(str(ObjectId()), "Phylum", "rel_abundance")
+        assert ranked == ["c", "a", "b"]
 
     def test_a_column_no_table_holds_is_dropped(self, project_id, column_data):
         dashboard = {

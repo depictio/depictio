@@ -77,6 +77,7 @@ from depictio.models.models.dashboards import (
     AUTO_CATEGORY_KEY,
     DashboardData,
     DashboardDataLite,
+    parse_auto_category_spec,
 )
 from depictio.models.models.multiqc_reports import general_stats_available
 from depictio.models.models.users import User
@@ -6033,19 +6034,27 @@ def _prune_family_highlights(
         doc.update(update)
 
 
-def _category_column_dc(column: str, dashboard_dict: dict, project_id: Any) -> str | None:
+def _category_column_dc(
+    column: str, dashboard_dict: dict, project_id: Any, rank_by: str | None = None
+) -> str | None:
     """The data collection whose values `category_colors.<column>: auto` colours.
 
     An interactive component of the dashboard filtering on the column names it
     first, since that is where a reader picks the values. Else the first table
     of the project holding the column, sample sheets and metadata tables before
-    the others.
+    the others. With `rank_by` (`auto:<rank_by>`), only a table holding that
+    column too will do.
     """
+
+    def holds_rank(dc_id: str) -> bool:
+        return rank_by is None or rank_by in (_dc_column_names(dc_id) or set())
+
     for comp in dashboard_dict.get("stored_metadata") or []:
         if (
             comp.get("component_type") == "interactive"
             and comp.get("column_name") == column
             and comp.get("dc_id")
+            and holds_rank(str(comp["dc_id"]))
         ):
             return str(comp["dc_id"])
     if not project_id:
@@ -6062,7 +6071,7 @@ def _category_column_dc(column: str, dashboard_dict: dict, project_id: Any) -> s
             preferred = preferred or (config.get("metatype") or "").lower() == "metadata"
             tables.append((not preferred, str(dc["_id"])))
     for _, dc_id in sorted(tables, key=lambda t: t[0]):
-        if column in (_dc_column_names(dc_id) or set()):
+        if column in (_dc_column_names(dc_id) or set()) and holds_rank(dc_id):
             return dc_id
     return None
 
@@ -6094,6 +6103,40 @@ def _distinct_column_values(dc_id: str, column: str) -> list[str] | None:
     return frame[column].to_list()
 
 
+def _ranked_column_values(dc_id: str, column: str, rank_by: str) -> list[str] | None:
+    """A column's non-empty values, largest summed `rank_by` first; None when unreadable.
+
+    Ties go to the name, so two imports of the same data rank it the same way.
+    """
+    import polars as pl
+
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import _create_delta_scan
+
+    try:
+        dt = deltatables_collection.find_one(
+            {"data_collection_id": ObjectId(dc_id)}, {"delta_table_location": 1}
+        )
+        location = (dt or {}).get("delta_table_location")
+        if not location:
+            return None
+        frame = (
+            _create_delta_scan(location)
+            .select(pl.col(column).cast(pl.Utf8), pl.col(rank_by).cast(pl.Float64))
+            .filter(pl.col(column).is_not_null() & (pl.col(column) != ""))
+            .group_by(column)
+            .agg(pl.col(rank_by).sum().alias("__weight__"))
+            .sort(["__weight__", column], descending=[True, False], nulls_last=True)
+            .collect()
+        )
+    except Exception as exc:
+        logger.warning(
+            f"category_colors: ranking {column!r} by {rank_by!r} of {dc_id} failed: {exc}"
+        )
+        return None
+    return frame[column].to_list()
+
+
 def _resolve_auto_category_colors(
     dashboard_dict: dict, project_id: Any, previous: dict | None = None
 ) -> None:
@@ -6102,33 +6145,42 @@ def _resolve_auto_category_colors(
     For each column so marked, the values are read from the collection
     `_category_column_dc` finds, and coloured by `assign_category_colors`:
     `previous` (the column's colours on the dashboard this import replaces)
-    first, the template's pins next, palette slots for the rest. A column no
-    collection of the project holds is dropped, pins included: nothing on the
-    dashboard can be drawn by it. The stored map never keeps a `"*"`.
+    first, the template's pins next, palette slots for the rest. `auto:<column>`
+    hands the slots out largest first, by that column's sum, and stops when they
+    run out. A column no collection of the project holds is dropped, pins
+    included: nothing on the dashboard can be drawn by it. The stored map never
+    keeps a `"*"`.
     """
     colors = dashboard_dict.get("category_colors")
     if not isinstance(colors, dict):
         return
     resolved: dict[str, dict[str, str]] = {}
     for column, mapping in colors.items():
-        if mapping == "auto":
-            mapping = {AUTO_CATEGORY_KEY: "auto"}
+        if parse_auto_category_spec(mapping)[0]:
+            mapping = {AUTO_CATEGORY_KEY: mapping}
         if not isinstance(mapping, dict):
             continue
         pinned = {k: v for k, v in mapping.items() if k != AUTO_CATEGORY_KEY}
-        if mapping.get(AUTO_CATEGORY_KEY) != "auto":
+        is_auto, rank_by = parse_auto_category_spec(mapping.get(AUTO_CATEGORY_KEY))
+        if not is_auto:
             if pinned:
                 resolved[column] = pinned
             continue
-        dc_id = _category_column_dc(column, dashboard_dict, project_id)
+        dc_id = _category_column_dc(column, dashboard_dict, project_id, rank_by)
         if dc_id is None:
             logger.info(f"category_colors.{column}: auto, but no table of the project has it")
             continue
+        values = (
+            _ranked_column_values(dc_id, column, rank_by)
+            if rank_by
+            else _distinct_column_values(dc_id, column)
+        )
         before = (previous or {}).get(column)
         colours = assign_category_colors(
-            _distinct_column_values(dc_id, column) or [],
+            values or [],
             pinned,
             before if isinstance(before, dict) else None,
+            ranked=rank_by is not None,
         )
         if colours:
             resolved[column] = colours

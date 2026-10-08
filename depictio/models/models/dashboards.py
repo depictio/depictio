@@ -155,6 +155,18 @@ UNBOUND_COMPONENT_TYPES: frozenset[str] = frozenset({"text", "highlight"})
 # real colours, and `strip_auto_category_colors` drops any it did not resolve.
 AUTO_CATEGORY_KEY = "*"
 
+# `auto`, or `auto:<column>`: the values ranked by the sum of that numeric
+# column first. A column with more values than the palette has slots (phyla,
+# genera) then colours its largest and leaves the tail to the figures' Other,
+# where a plain `auto` colours none of them.
+_AUTO_CATEGORY_SPEC = re.compile(r"auto(?::(?P<rank_by>[^\s:]+))?")
+
+
+def parse_auto_category_spec(spec: Any) -> tuple[bool, str | None]:
+    """Whether `spec` asks the import for colours, and the column ranking the values."""
+    match = _AUTO_CATEGORY_SPEC.fullmatch(spec) if isinstance(spec, str) else None
+    return (match is not None, match.group("rank_by") if match else None)
+
 
 def strip_auto_category_colors(category_colors: Any) -> Any:
     """`category_colors` without the `"*": "auto"` entries an import left unresolved.
@@ -166,7 +178,7 @@ def strip_auto_category_colors(category_colors: Any) -> Any:
         return category_colors
     out: dict[str, Any] = {}
     for column, mapping in category_colors.items():
-        if mapping == "auto":
+        if parse_auto_category_spec(mapping)[0]:
             continue
         if isinstance(mapping, dict):
             mapping = {k: v for k, v in mapping.items() if k != AUTO_CATEGORY_KEY}
@@ -507,15 +519,19 @@ class DashboardDataLite(BaseModel):
     # bar's underline. Shared contract between the filter bar and the figures.
     # `auto` (bare, or as `"*": auto` beside some pins) asks the import to colour
     # every value the data holds; see `_normalise_auto_category_colors`.
-    category_colors: dict[str, dict[str, str] | Literal["auto"]] | None = Field(
+    # `auto:<column>` ranks the values by that column first (see
+    # `parse_auto_category_spec`).
+    category_colors: dict[str, dict[str, str] | str] | None = Field(
         default=None,
         description="Optional fixed colours per categorical value, keyed by column name "
         "then value (e.g. `locality: {Athens: '#1c7ed6'}`). `auto` instead of the value "
         "map (`condition: auto`), or `'*': auto` inside it beside some pinned values, "
         "colours every value the data holds at import, from a colour-blind safe palette; "
-        "a re-import keeps the colours values already had. Values not listed fall back "
-        "to the dashboard brand's colorway in the order of the column's values, then to "
-        "a neutral grey.",
+        "a re-import keeps the colours values already had. `auto:<column>` ranks the "
+        "values by the sum of that numeric column first and colours the largest, for a "
+        "column with more values than the palette (`Phylum: 'auto:rel_abundance'`). "
+        "Values not listed fall back to the dashboard brand's colorway in the order of "
+        "the column's values, then to a neutral grey.",
     )
 
     @field_validator("category_colors", mode="before")
@@ -524,7 +540,7 @@ class DashboardDataLite(BaseModel):
         """A bare `auto` is the column map `{"*": "auto"}`, so later code sees one shape."""
         if isinstance(value, dict):
             return {
-                column: {AUTO_CATEGORY_KEY: "auto"} if spec == "auto" else spec
+                column: {AUTO_CATEGORY_KEY: spec} if parse_auto_category_spec(spec)[0] else spec
                 for column, spec in value.items()
             }
         return value
@@ -532,19 +548,23 @@ class DashboardDataLite(BaseModel):
     @field_validator("category_colors")
     @classmethod
     def _check_auto_category_colors(
-        cls, value: dict[str, dict[str, str] | Literal["auto"]] | None
-    ) -> dict[str, dict[str, str] | Literal["auto"]] | None:
+        cls, value: dict[str, dict[str, str] | str] | None
+    ) -> dict[str, dict[str, str] | str] | None:
         """`"*"` only ever means "every other value", and `auto` only under it."""
         for column, mapping in (value or {}).items():
             if not isinstance(mapping, dict):
-                continue
+                raise ValueError(
+                    f"category_colors.{column}: a map of values to colours, or `auto` "
+                    f"(got {mapping!r})"
+                )
             for key, colour in mapping.items():
-                if key == AUTO_CATEGORY_KEY and colour != "auto":
+                is_auto = parse_auto_category_spec(colour)[0]
+                if key == AUTO_CATEGORY_KEY and not is_auto:
                     raise ValueError(
-                        f"category_colors.{column}: '*' only takes `auto` (got {colour!r}); "
-                        "pin a value by its name instead"
+                        f"category_colors.{column}: '*' only takes `auto` or `auto:<column>` "
+                        f"(got {colour!r}); pin a value by its name instead"
                     )
-                if key != AUTO_CATEGORY_KEY and colour == "auto":
+                if key != AUTO_CATEGORY_KEY and is_auto:
                     raise ValueError(
                         f"category_colors.{column}.{key}: `auto` colours a whole column; "
                         f"write `{column}: auto`, or `'*': auto` beside the pinned values"

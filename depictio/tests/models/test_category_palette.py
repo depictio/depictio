@@ -88,6 +88,19 @@ class TestAssignCategoryColors:
     def test_no_values_returns_the_pins(self):
         assert assign_category_colors([], pinned={"a": "#123456"}) == {"a": "#123456"}
 
+    def test_ranked_values_take_the_slots_in_their_order(self):
+        assert assign_category_colors(["big", "a", "mid", "big"], ranked=True) == {
+            "big": P[0],
+            "a": P[1],
+            "mid": P[2],
+        }
+
+    def test_ranked_over_the_cap_colours_the_largest(self):
+        values = [f"v{i}" for i in range(len(P) + 3)]
+        colours = assign_category_colors(values, pinned={"Unclassified": "#868e96"}, ranked=True)
+        assert list(colours) == [*values[: len(P)], "Unclassified"]
+        assert [colours[v] for v in values[: len(P)]] == list(P)
+
 
 class TestLiteCategoryColorsAuto:
     def test_a_bare_auto_is_the_star_map(self):
@@ -114,6 +127,21 @@ class TestLiteCategoryColorsAuto:
         assert back.category_colors == lite.category_colors
         assert DashboardDataLite.from_yaml(back.to_yaml()).category_colors == lite.category_colors
 
+    def test_a_ranked_auto_is_the_star_map_too(self):
+        colors = {"Phylum": "auto:rel_abundance", "Genus": {"*": "auto:n", "x": "#000000"}}
+        assert DashboardDataLite(title="T", category_colors=colors).category_colors == {
+            "Phylum": {"*": "auto:rel_abundance"},
+            "Genus": {"*": "auto:n", "x": "#000000"},
+        }
+
+    def test_a_ranked_auto_for_one_value_is_refused(self):
+        with pytest.raises(ValidationError, match="colours a whole column"):
+            DashboardDataLite(title="T", category_colors={"Phylum": {"a": "auto:n"}})
+
+    def test_a_column_given_a_bare_colour_is_refused(self):
+        with pytest.raises(ValidationError, match="a map of values to colours"):
+            DashboardDataLite(title="T", category_colors={"condition": "#ffffff"})
+
     def test_yaml_with_a_template_key(self):
         lite = DashboardDataLite.from_yaml(
             'title: T\ncategory_colors:\n  "{GROUP_COL}": auto\n  Kingdom: {B: "#1098ad"}\n'
@@ -127,6 +155,9 @@ class TestStoredDashboardsHoldNoStar:
             {"a": {"*": "auto"}, "b": {"*": "auto", "x": "#000000"}, "c": "auto", "d": {"y": "#1"}}
         ) == {"b": {"x": "#000000"}, "d": {"y": "#1"}}
         assert strip_auto_category_colors({"a": {"*": "auto"}}) is None
+        assert strip_auto_category_colors(
+            {"p": "auto:n", "g": {"*": "auto:n", "Other": "#adb5bd"}}
+        ) == {"g": {"Other": "#adb5bd"}}
 
     def test_the_full_model_strips_them(self):
         lite = DashboardDataLite(title="T", category_colors={"c": "auto", "k": {"B": "#1098ad"}})
