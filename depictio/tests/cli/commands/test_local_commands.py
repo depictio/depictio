@@ -201,8 +201,12 @@ def test_up_data_flags_are_hidden_from_the_help():
         # 1.12.0b1's `up --template` seeded no example.
         (["--template", "t", "--data-root", "/d"], "depictio local up --examples none --no-open"),
         (["--data-root", "/d"], "depictio local up --no-open Add the data"),
+        (
+            ["--data-root-allow", "/data", "--template", "t"],
+            "depictio local up --examples none --data-root-allow /data --no-open",
+        ),
     ],
-    ids=["other-flags", "template-means-no-examples", "data-root-only"],
+    ids=["other-flags", "template-means-no-examples", "data-root-only", "data-root-allow"],
 )
 def test_the_start_command_keeps_the_other_up_flags(stack, args, start):
     result, out = _invoke("up", *args, "--no-open")
@@ -291,6 +295,96 @@ def test_up_on_a_running_server_names_the_flags_it_ignores(stack):
     result, out = _invoke("up", "--port", "18058", "--no-screenshots", "--no-open")
     assert result.exit_code == 0, out
     assert "is ignored" not in out
+
+
+@pytest.fixture
+def user_home(tmp_path, monkeypatch):
+    home = tmp_path / "me"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    return home.resolve()
+
+
+def _plain(output: str) -> str:
+    """``output`` without the borders of Rich's error panel, whitespace normalised."""
+    return " ".join("".join(c for c in output if c not in "│╭╮╰╯─").split())
+
+
+def test_up_lets_the_web_ui_read_the_home_folder_and_each_allowed_one(stack, tmp_path, user_home):
+    data = tmp_path / "data"
+    data.mkdir()
+
+    result, out = _invoke("up", "--data-root-allow", str(data), "--no-open")
+
+    assert result.exit_code == 0, out
+    roots = [str(user_home), str(data.resolve())]
+    env = stack.start_services.call_args.args[3]
+    assert env["DEPICTIO_LOCAL_DATA_ROOTS"] == ",".join(roots)
+    assert env["DEPICTIO_LOCAL_HOME"] == str(stack.paths.home)
+    assert State.load(stack.paths).data_roots == roots
+
+
+@pytest.mark.parametrize(
+    ("allowed", "reason"),
+    [("relative", "is not an absolute path"), ("{tmp}/missing", "is not an existing folder")],
+    ids=["relative", "missing"],
+)
+def test_up_refuses_a_data_root_before_creating_anything(
+    stack, tmp_path, user_home, allowed, reason
+):
+    result, _ = _invoke("up", "--data-root-allow", allowed.format(tmp=tmp_path), "--no-open")
+
+    assert result.exit_code == 2, result.output
+    assert reason in _plain(result.output)
+    stack.start_services.assert_not_called()
+    assert not stack.paths.home.exists()
+
+
+def test_up_refuses_a_data_root_inside_the_local_home(stack, user_home):
+    stack.paths.ensure_dirs()
+
+    result, _ = _invoke("up", "--data-root-allow", str(stack.paths.logs), "--no-open")
+
+    assert result.exit_code == 2, result.output
+    assert "is inside the local home" in _plain(result.output)
+    stack.start_services.assert_not_called()
+
+
+def test_up_on_a_running_server_says_other_data_roots_need_a_restart(stack, tmp_path, user_home):
+    stack.running_status.return_value = dict.fromkeys(PROCESS_ORDER, True)
+    stack.paths.ensure_dirs()
+    State(ports={"api": 18058}, home="x", data_roots=[str(user_home)]).save(stack.paths)
+    data = tmp_path / "data"
+    data.mkdir()
+
+    result, out = _invoke("up", "--data-root-allow", str(data), "--no-open")
+
+    assert result.exit_code == 0, out
+    assert "The running server lets the web UI read run folders under" in out
+    assert "restart it to change that (depictio local down first)" in out
+    stack.start_services.assert_not_called()
+    # Not restarted, so what it was started with stays recorded.
+    assert State.load(stack.paths).data_roots == [str(user_home)]
+
+    # The folders it runs with.
+    result, out = _invoke("up", "--no-open")
+    assert result.exit_code == 0, out
+    assert "lets the web UI read" not in out
+
+    # Started before they were recorded: nothing to compare with.
+    State(ports={"api": 18058}, home="x").save(stack.paths)
+    result, out = _invoke("up", "--data-root-allow", str(data), "--no-open")
+    assert result.exit_code == 0, out
+    assert "lets the web UI read" not in out
+
+
+def test_up_help_says_what_data_root_allow_does():
+    up = get_command(local_cmd.app).commands["up"]
+    option = next(param for param in up.params if param.opts[0] == "--data-root-allow")
+    assert option.help == (
+        "Also let the web UI read run folders under PATH. Your home folder is always allowed."
+    )
+    assert option.multiple and not option.hidden
 
 
 def test_up_does_not_reuse_a_server_whose_api_hangs(stack):

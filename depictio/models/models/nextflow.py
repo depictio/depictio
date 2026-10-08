@@ -40,6 +40,10 @@ _REPORT_GLOB = "execution_report*.html"
 _TRACE_GLOB = "execution_trace*.txt"
 _DAG_GLOB = "pipeline_dag*"
 
+# Where `read` looks for pipeline_info: the root (a flat project), else one
+# level down (a sequencing-runs project).
+_PIPELINE_INFO_DIRS: tuple[str, ...] = ("pipeline_info", "*/pipeline_info")
+
 # The key inside the versions YAML that holds the run's identity rather than a
 # process's tool versions.
 _WORKFLOW_SECTION = "Workflow"
@@ -218,6 +222,21 @@ class NextflowRunInfoReader:
 
     name = ENGINE
     priority = 100
+
+    # The versions YAML and params JSON of each pipeline_info, a checkout's
+    # manifest, and the legacy `software_versions.yml` that
+    # `read_software_versions` searches the whole tree for.
+    footprint: tuple[str, ...] = (
+        *(f"{d}/{p}" for d in _PIPELINE_INFO_DIRS for p in (*_VERSIONS_GLOBS, *PARAMS_GLOBS)),
+        "nextflow.config",
+        "**/software_versions.yml",
+    )
+    # Only their paths are reported: an execution report embeds megabytes of
+    # JavaScript that recognition never reads.
+    markers: tuple[str, ...] = (
+        *_PIPELINE_INFO_DIRS,
+        *(f"{d}/{p}" for d in _PIPELINE_INFO_DIRS for p in (_REPORT_GLOB, _TRACE_GLOB, _DAG_GLOB)),
+    )
 
     def read(self, run_dir: Path) -> WorkflowRunInfo | None:
         run_dir = Path(run_dir)

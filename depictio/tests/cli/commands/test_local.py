@@ -256,6 +256,7 @@ def test_state_reads_an_older_file_and_writes_the_same_keys(paths):
         "examples",
         "first_run",
         "screenshots",
+        "data_roots",
         "start_times",
     }
 
@@ -695,6 +696,80 @@ def test_backups_land_in_the_local_home(paths):
     assert "backups" in DATA_DIRS
 
 
+def test_the_remote_data_policy_reaches_the_server_and_aws_settings_do_not(paths, monkeypatch):
+    monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "nf-core-awsmegatests")
+    monkeypatch.setenv("DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS", "my-lab/runs")
+    monkeypatch.setenv("AWS_PROFILE", "from-the-shell")
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+
+    env = server_env(paths, ports, SECRETS, "none", False)
+
+    assert env["DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS"] == "nf-core-awsmegatests"
+    assert env["DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS"] == "my-lab/runs"
+    assert "AWS_PROFILE" not in env
+
+
+def test_the_server_is_told_its_data_roots_and_its_local_home(paths, monkeypatch):
+    monkeypatch.setenv("DEPICTIO_LOCAL_DATA_ROOTS", "/from/the/shell")
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", "/another/home")
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+
+    env = server_env(paths, ports, SECRETS, "none", False, ["/home/me", "/data"])
+
+    assert env["DEPICTIO_LOCAL_DATA_ROOTS"] == "/home/me,/data"
+    assert env["DEPICTIO_LOCAL_HOME"] == str(paths.home)
+    # None given, none inherited.
+    assert "DEPICTIO_LOCAL_DATA_ROOTS" not in server_env(paths, ports, SECRETS, "none", False)
+
+
+# --- The folders the web UI may read run folders from --------------------------------
+
+
+@pytest.fixture
+def user_home(tmp_path, monkeypatch):
+    home = tmp_path / "me"
+    home.mkdir()
+    monkeypatch.setenv("HOME", str(home))
+    return home.resolve()
+
+
+def test_the_home_folder_is_always_a_data_root(tmp_path, user_home):
+    assert local_stack.local_data_roots(Paths(tmp_path / "local")) == [str(user_home)]
+
+
+def test_allowed_folders_follow_the_home_folder_once_each_resolved(tmp_path, user_home):
+    data = tmp_path / "data"
+    data.mkdir()
+    (tmp_path / "link").symlink_to(data)
+
+    roots = local_stack.local_data_roots(
+        Paths(tmp_path / "local"), [data, str(tmp_path / "link"), user_home]
+    )
+
+    assert roots == [str(user_home), str(data.resolve())]
+
+
+@pytest.mark.parametrize(
+    ("allowed", "reason"),
+    [
+        ("relative/dir", "is not an absolute path"),
+        ("{tmp}/missing", "is not an existing folder"),
+        ("{tmp}/a-file", "is not an existing folder"),
+        ("{tmp}/local", "is inside the local home"),
+        ("{tmp}/local/logs", "is inside the local home"),
+        ("{tmp}/with,comma", "holds a comma"),
+    ],
+    ids=["relative", "missing", "file", "local-home", "inside-local-home", "comma"],
+)
+def test_a_folder_that_cannot_be_a_data_root_is_refused(tmp_path, user_home, allowed, reason):
+    (tmp_path / "local" / "logs").mkdir(parents=True)
+    (tmp_path / "a-file").write_text("x")
+    (tmp_path / "with,comma").mkdir()
+
+    with pytest.raises(LocalStackError, match=reason):
+        local_stack.local_data_roots(Paths(tmp_path / "local"), [allowed.format(tmp=tmp_path)])
+
+
 # --- Files `up` writes, and what it makes of broken ones ---------------------------
 
 
@@ -713,7 +788,15 @@ def test_state_ports_and_secrets_are_replaced_whole_and_keep_their_mode(paths):
 
 
 @pytest.mark.parametrize(
-    "content", ["{garbage", "", "[1, 2]", '{"pids": [1]}', '{"pids": {"api": "x"}}']
+    "content",
+    [
+        "{garbage",
+        "",
+        "[1, 2]",
+        '{"pids": [1]}',
+        '{"pids": {"api": "x"}}',
+        '{"data_roots": "/data"}',
+    ],
 )
 def test_an_unreadable_state_names_the_file_and_the_way_out(paths, content):
     paths.state.write_text(content)
@@ -940,6 +1023,36 @@ def test_start_services_stops_every_service_it_started_despite_a_second_ctrl_c(p
     assert err.value is first
     assert stopped == [4002, 4001, 4000]
     assert signal.getsignal(signal.SIGINT) == before
+
+
+def _recording_start_services(seen: dict):
+    def start_services(paths, ports, secret_values, env, record=None):
+        seen.update(env)
+        return {name: MagicMock(pid=1) for name in local_stack.PROCESS_ORDER}
+
+    return start_services
+
+
+def test_the_data_roots_given_to_the_server_are_recorded(paths, fake_start, monkeypatch):
+    seen: dict = {}
+    monkeypatch.setattr(local_stack, "start_services", _recording_start_services(seen))
+
+    local_stack.start_stack(
+        paths, None, "none", False, log=lambda _: None, data_roots=["/home/me", "/data"]
+    )
+
+    assert State.load(paths).data_roots == ["/home/me", "/data"]
+    assert seen["DEPICTIO_LOCAL_DATA_ROOTS"] == "/home/me,/data"
+
+
+def test_the_data_roots_default_to_the_home_folder(paths, fake_start, monkeypatch, user_home):
+    seen: dict = {}
+    monkeypatch.setattr(local_stack, "start_services", _recording_start_services(seen))
+
+    local_stack.start_stack(paths, None, "none", False, log=lambda _: None)
+
+    assert State.load(paths).data_roots == [str(user_home)]
+    assert seen["DEPICTIO_LOCAL_DATA_ROOTS"] == str(user_home)
 
 
 def test_a_cli_config_deleted_after_the_first_run_is_written_again(paths, fake_start, monkeypatch):

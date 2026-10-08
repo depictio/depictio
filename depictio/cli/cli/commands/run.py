@@ -1286,12 +1286,41 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     # trigger path forwards --pipeline-id, which already resolved a
     # template above, but the engine version and the tool list exist nowhere
     # except the run directory. Gating this on "no template yet" left every
-    # pipeline-triggered project with empty provenance.
+    # pipeline-triggered project with empty provenance. An s3:// DATA_DIR is
+    # read too: only the few files the run readers look at are fetched.
     detected_info = None
-    if data_root and Path(data_root).is_dir():
-        from depictio.models.models.run_info import read_run_info
+    remote_data_root = bool(data_root) and data_root.lower().startswith("s3://")
+    if data_root and (remote_data_root or Path(data_root).is_dir()):
+        from depictio.cli.cli.utils.data_root import as_data_root
+        from depictio.cli.cli.utils.run_detection import read_run_info_for_root
+        from depictio.models.s3_access import S3AccessError
 
-        detected_info = read_run_info(data_root)
+        # The S3 client is built from the CLI config, as for step 0's listing.
+        # Only an existing file is loaded here: a missing one is reported by
+        # the steps that need it, and a public bucket is read without it.
+        detection_config = None
+        if remote_data_root and os.path.isfile(cli_config_file(CLI_config_path)):
+            try:
+                detection_config = load_depictio_config(yaml_config_path=CLI_config_path)
+            except Exception as exc:
+                logger.debug(f"CLI config not available for run detection: {exc}")
+        try:
+            detected_info = read_run_info_for_root(
+                as_data_root(data_root, detection_config)  # type: ignore[arg-type]
+            )
+        except (S3AccessError, ValueError) as exc:
+            # With a template, step 0 lists DATA_DIR again and reports the
+            # failure there; without one, nothing else can choose it.
+            if template or project_config_path:
+                rich_print_checked_statement(
+                    f"Could not read DATA_DIR to detect its pipeline: {escape(str(exc))}",
+                    "warning",
+                )
+            else:
+                rich_print_checked_statement(
+                    f"Could not read DATA_DIR: {escape(str(exc))}", "error"
+                )
+                raise typer.Exit(code=1)
         if detected_info is not None:
             version = f" {detected_info.pipeline_version}" if detected_info.pipeline_version else ""
             rich_print_checked_statement(
@@ -1425,9 +1454,10 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     # Track whether we're in template mode
     is_template_mode = template is not None
     template_resolved_config: dict | None = None
-    # The remote DATA_DIR preview already said what matched; the local scan
-    # summary of step 5 would only repeat it (and misread s3:// as a path).
-    remote_preview_shown = False
+    # The template preview of step 0 already said what each data collection
+    # matches; the scan summary of step 5 would only repeat it (and misread
+    # an s3:// DATA_DIR as a path).
+    template_preview_shown = False
     # Only the template branch fills these; a --dashboard import outside it
     # substitutes nothing, since a hand-written dashboard names its data
     # collections directly instead of going through template variables.
@@ -1660,23 +1690,7 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                         "info",
                     )
 
-            if dry_run and data_root:
-                # The whole point of a dry run: say what this data root
-                # would actually yield, per data collection, rather than
-                # reporting success for steps that were all skipped.
-                from depictio.cli.cli.utils.template_preview import preview_data_root
-
-                rich_print_section_separator("Dry run: what this data root would ingest")
-                remote_preview_shown = is_remote_url(data_root)
-                _render_run_preview(
-                    preview_data_root(
-                        template_id=template,  # type: ignore[arg-type]
-                        data_root=template_root,
-                        variables=extra_vars or None,
-                        CLI_config=CLI_config,
-                    )
-                )
-            elif dry_run:
+            if dry_run:
                 # A summary, not the full config. Printed, not logged: at the
                 # default log level the heading used to be followed by nothing.
                 rich_print_checked_statement("Resolved template configuration:", "info")
@@ -1696,6 +1710,23 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                     ),
                 ):
                     rich_print_checked_statement(f"  {escape(line)}", "info")
+
+            if dry_run and data_root:
+                # The whole point of a dry run: say what this data root
+                # would actually yield, per data collection, rather than
+                # reporting success for steps that were all skipped.
+                from depictio.cli.cli.utils.template_preview import preview_data_root
+
+                rich_print_section_separator("Dry run: what this data root would ingest")
+                template_preview_shown = True
+                _render_run_preview(
+                    preview_data_root(
+                        template_id=template,  # type: ignore[arg-type]
+                        data_root=template_root,
+                        variables=extra_vars or None,
+                        CLI_config=CLI_config,
+                    )
+                )
 
         except typer.Exit:
             raise
@@ -2186,7 +2217,7 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                 else:
                     raise Exception("Failed to fetch remote project configuration")
 
-            if dry_run and not remote_preview_shown:
+            if dry_run and not template_preview_shown:
                 # The preview warns by itself when something would match nothing;
                 # the line below is an info, not a green "completed".
                 _print_dry_run_scan_preview(project_config)
