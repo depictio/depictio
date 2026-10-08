@@ -34,6 +34,22 @@ export function isManifestRunTerminal(report: ManifestRefreshReport): boolean {
   );
 }
 
+/** How a watched run ended, as far as the page knows. `stopped` is neither an
+ *  outcome nor a failure: the watcher gave up (the poll kept failing, or the
+ *  run outlasted `MAX_POLL_MS`) while rows were still queued or running, and
+ *  the run may well go on server-side. */
+export type ManifestRunOutcome = 'success' | 'failed' | 'stopped';
+
+/** The outcome of a run whose watcher has stopped, read from its rows rather
+ *  than from `report.success`: a poll that lands between the worker's last
+ *  step write and the run's finalization sees every row final while
+ *  `success` is still false. No report at all, or one with rows still in
+ *  flight, is `stopped`. */
+export function manifestRunOutcome(report: ManifestRefreshReport | null): ManifestRunOutcome {
+  if (!report || !isManifestRunTerminal(report)) return 'stopped';
+  return report.refreshed.some((entry) => entry.status === 'failed') ? 'failed' : 'success';
+}
+
 export function formatElapsed(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1_000));
   const minutes = Math.floor(total / 60);

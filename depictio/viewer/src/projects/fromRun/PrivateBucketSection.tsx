@@ -28,7 +28,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { runStorageFromFields, testRunStorage } from 'depictio-react-core';
+import { runStorageFromFields, s3BucketOf, testRunStorage } from 'depictio-react-core';
 import type {
   ProjectStorageTestResult,
   RunStorageFieldErrors,
@@ -147,9 +147,17 @@ export const PrivateBucketSection: React.FC<PrivateBucketSectionProps> = ({
 
   /** What the settings lack, the access key and its secret included. */
   const firstError = Object.values(fieldErrors)[0] ?? null;
-  const testReason = disabledReason ?? firstError;
+  /** The field already names another bucket while the section, still about
+   *  to follow it, holds this one's details: they are never tried there. */
+  const otherBucket = s3BucketOf(location) !== bucket;
+  const testReason =
+    disabledReason ??
+    (otherBucket
+      ? `The run folder is no longer in the bucket ${bucket}.`
+      : firstError);
 
   const handleTest = async () => {
+    if (otherBucket) return;
     setShowKeyErrors(true);
     const storage = runStorageFromFields(fields);
     if (disabled || !storage || firstError) return;
@@ -238,7 +246,10 @@ export const PrivateBucketSection: React.FC<PrivateBucketSectionProps> = ({
                 error={errorFor('accessKeyId')}
                 disabled={disabled}
                 spellCheck={false}
+                // Keep password managers from filling in the reader's own login.
                 autoComplete="off"
+                data-1p-ignore
+                data-lpignore="true"
                 data-testid="run-private-bucket-access-key"
               />
               <PasswordInput
@@ -249,7 +260,11 @@ export const PrivateBucketSection: React.FC<PrivateBucketSectionProps> = ({
                 onChange={(e) => change('secretAccessKey', e.currentTarget.value)}
                 error={errorFor('secretAccessKey')}
                 disabled={disabled}
+                // Neither fill in the reader's own password nor offer to save
+                // the bucket secret as one.
                 autoComplete="new-password"
+                data-1p-ignore
+                data-lpignore="true"
                 data-testid="run-private-bucket-secret"
               />
             </SimpleGrid>

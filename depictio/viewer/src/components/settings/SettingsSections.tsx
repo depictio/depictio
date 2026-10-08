@@ -168,10 +168,11 @@ export type GatedButtonProps = ButtonProps &
  * hover. A natively disabled button swallows the pointer events a tooltip
  * needs, so this one is marked `data-disabled` and `aria-disabled` instead
  * (Mantine's documented pattern) and ignores clicks while gated. Pair it with
- * a `DisabledReason` line for readers without a pointer.
+ * a `DisabledReason` line for readers without a pointer. A caller's own
+ * `aria-disabled` (a step still settling, say) is kept, without the gated look.
  */
 export const GatedButton = React.forwardRef<HTMLButtonElement, GatedButtonProps>(
-  ({ reason, onClick, ...props }, ref) => {
+  ({ reason, onClick, 'aria-disabled': ariaDisabled, ...props }, ref) => {
     const gated = Boolean(reason);
     return (
       <Tooltip
@@ -186,7 +187,7 @@ export const GatedButton = React.forwardRef<HTMLButtonElement, GatedButtonProps>
           ref={ref}
           {...props}
           data-disabled={gated || undefined}
-          aria-disabled={gated || undefined}
+          aria-disabled={gated || ariaDisabled || undefined}
           onClick={(event) => {
             if (gated) {
               event.preventDefault();
