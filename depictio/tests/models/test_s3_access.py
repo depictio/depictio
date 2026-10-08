@@ -67,13 +67,16 @@ def _project(**overrides) -> ProjectS3Config:
     return ProjectS3Config(**fields)
 
 
-def _resolve(url, *, context="server", project=None, instance=None, policy=None):
+def _resolve(
+    url, *, context="server", project=None, instance=None, policy=None, storage_only=False
+):
     return resolve_s3_target(
         url,
         context=context,
         project_storage=project,
         instance_s3=instance if instance is not None else _Instance(),
         policy=policy or _Policy(),
+        storage_only=storage_only,
     )
 
 
@@ -303,6 +306,42 @@ class TestInstanceBucket:
         assert not is_instance_bucket("depictio-bucket-2", _Instance())
         assert not is_instance_bucket("depictio-bucket", None)
         assert not is_instance_bucket("", _Instance(bucket=""))
+
+
+class TestStorageOnly:
+    """Settings typed in with a request, before their project exists: read with them
+    or not at all."""
+
+    @pytest.mark.parametrize(
+        "policy",
+        [
+            _Policy(),
+            _Policy(public_s3_buckets="lab-bucket"),
+            _Policy(credentialed_s3_buckets="lab-bucket"),
+        ],
+        ids=["unlisted", "listed-public", "listed-credentialed"],
+    )
+    def test_read_with_them_whatever_the_lists_say(self, policy):
+        target = _resolve(
+            "s3://lab-bucket/run1/", project=_project(), policy=policy, storage_only=True
+        )
+        assert target.kind == "project"
+        assert (target.endpoint_url, target.access_key_id) == (
+            "https://s3.example.org",
+            "PROJECTKEY",
+        )
+
+    def test_the_instance_bucket_stays_refused(self):
+        with pytest.raises(S3AccessRefused, match="instance's own data"):
+            _resolve("s3://depictio-bucket/x/", project=_project(), storage_only=True)
+
+    def test_without_settings_nothing_is_read(self):
+        with pytest.raises(S3AccessRefused, match="no storage settings"):
+            _resolve(
+                "s3://open-data/x/",
+                policy=_Policy(public_s3_buckets="open-data"),
+                storage_only=True,
+            )
 
 
 class TestCliContext:

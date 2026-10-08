@@ -27,10 +27,14 @@ would cost two full S3 listings for one request.
 
 How the run folder is read is decided from the same inputs the workers decide
 from, so the preview never accepts a folder the ingestion then refuses (see
-:func:`_run_folder_read_config`). A refused or failed S3 read is left to
-propagate as ``S3AccessError``: the API answers it with ``{detail, code}``. So
-does every refusal raised here as ``CodedHTTPException`` (a local folder, an
-unrecognised pipeline), which the route turns into the same body.
+:func:`_run_folder_read_config`). A run folder in a private bucket comes with
+storage settings (``FromRunRequest.storage``): the preview reads with them
+alone, and the creation stores them on the new project before any worker
+starts, so the workers read with the same ones. A refused or failed S3 read
+is left to propagate as ``S3AccessError``: the API answers it with
+``{detail, code}``. So does every refusal raised here as
+``CodedHTTPException`` (a local folder, an unrecognised pipeline), which the
+route turns into the same body.
 
 Synchronous throughout (the CLI helpers use sync httpx back into this same
 FastAPI process) - the route dispatches via ``asyncio.to_thread``. Ingestion
@@ -62,6 +66,11 @@ from depictio.api.v1.endpoints.projects_endpoints.local_dirs import (
 )
 from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _dispatch_refresh_tasks,
+)
+from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
+    ProjectStorageConfigIn,
+    RunStorageIn,
+    read_settings,
 )
 from depictio.models.local_access import LocalPathRefused
 from depictio.models.logging import logger
@@ -111,6 +120,10 @@ class FromRunRequest(BaseModel):
     variables: dict[str, str] = Field(default_factory=dict)
     # Plan-only: resolve + preview without creating or ingesting anything.
     dry_run: bool = False
+    # A private bucket's endpoint and keys, for an s3:// data_root only: the
+    # run folder is read with them alone, and they become the new project's
+    # storage settings. Ignored for a folder on this computer.
+    storage: RunStorageIn | None = None
 
     @field_validator("template_id")
     @classmethod
@@ -210,6 +223,8 @@ class FromRunReport(BaseModel):
     truncated: bool = False
     # Ingestion-run id to poll via GET /projects/refresh_manifest/{run_id}.
     run_id: str | None = None
+    # The request's storage settings were stored on the created project.
+    storage_saved: bool = False
     dry_run: bool = False
     success: bool = False
 
@@ -275,30 +290,41 @@ def _assert_data_collections_confined(config: dict[str, Any], root) -> None:
 
 @dataclass(frozen=True)
 class _RunFolderReads:
-    """The two fields of a CLI configuration ``remote_fetch.s3_read_target`` reads.
+    """The fields of a CLI configuration ``remote_fetch.s3_read_target`` reads.
 
     Deciding how a location is read needs no user and no token, and a dry run
-    mints none, so the preview carries these two alone.
+    mints none, so the preview carries these alone. ``storage_only``: the
+    storage settings were typed in with the request, and decide every read.
     """
 
     s3_storage: S3DepictioCLIConfig
     remote_storage_options: ProjectS3Config | None = None
+    storage_only: bool = False
 
 
-def _run_folder_read_config() -> _RunFolderReads:
+def _run_folder_read_config(storage: ProjectS3Config | None = None) -> _RunFolderReads:
     """The read configuration of the preview, the same the workers will read with.
 
     A worker reads with ``_build_cli_config_for_user``: the instance's S3
     settings (``settings.s3``, which name the instance's own bucket, refused as
     a data source) and the project's storage settings (``project_storage_for``).
-    A project created from a run folder has no storage settings yet, so both
-    sides decide from the instance settings and the bucket lists alone: an
-    administrator-listed public bucket is read unsigned, a credentialed one with
-    the server's own credentials, anything else is refused.
+
+    Without ``storage`` the project has none, so both sides decide from the
+    instance settings and the bucket lists alone: an administrator-listed
+    public bucket is read unsigned, a credentialed one with the server's own
+    credentials, anything else is refused. With ``storage`` (settings typed in
+    for a private bucket, stored on the project when it is created) every read
+    is made with them and nothing else, the instance's bucket still refused.
     """
     from depictio.api.v1.configs.config import settings
 
-    return _RunFolderReads(s3_storage=settings.s3)
+    return _RunFolderReads(
+        s3_storage=settings.s3, remote_storage_options=storage, storage_only=storage is not None
+    )
+
+
+def _is_s3_location(location: str) -> bool:
+    return location[:5].lower() == "s3://"
 
 
 def _is_local_path(data_root: str) -> bool:
@@ -470,6 +496,37 @@ def _skip_reason(row) -> str:
     return f"Not ingested: '{row.location}' is not present under the data root."
 
 
+def _save_storage_or_roll_back(project_oid: ObjectId, settings_in: ProjectStorageConfigIn) -> None:
+    """Store the new project's storage settings, or delete the project and answer why.
+
+    Called right after the insert, before anything else is made for the
+    project, so a failure leaves only the documents removed here. Never says
+    or logs more of the error than its type: it was raised holding the secret.
+    """
+    from depictio.api.v1.endpoints.projects_endpoints import storage_config
+
+    try:
+        storage_config._store_project_storage(project_oid, settings_in)
+    except Exception as exc:
+        # No project without the settings its collections are read with.
+        storage_config.project_storage_collection.delete_one({"project_id": project_oid})
+        projects_collection.delete_one({"_id": project_oid})
+        if isinstance(exc, HTTPException | S3AccessError):
+            raise
+        logger.error(
+            f"Could not save the storage settings of new project {project_oid} "
+            f"({type(exc).__name__}); the project was removed."
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "The storage settings could not be saved, so the project was not created. "
+                "Try again; if it keeps failing, ask an administrator to check the "
+                "server's secrets key."
+            ),
+        ) from None
+
+
 def _create_project_from_run(
     *,
     data_root: str,
@@ -479,11 +536,15 @@ def _create_project_from_run(
     variables: dict[str, str] | None = None,
     dry_run: bool = False,
     request=None,
+    storage: RunStorageIn | None = None,
 ) -> FromRunReport:
     """The full run folder → project + dashboards + dispatched ingestion flow.
 
     ``template_id=None`` recognises the template from the folder. ``request``
     is the HTTP request, which a local data root needs for its ``Host`` guard.
+    ``storage`` (an ``s3://`` data root only) is read with alone, validated
+    first as a saved config is, and stored on the created project before its
+    ingestion is dispatched; a dry run stores nothing.
 
     Sync: call via ``asyncio.to_thread``.
     """
@@ -495,7 +556,14 @@ def _create_project_from_run(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
 
-    read_config = _run_folder_read_config()
+    storage_settings = (
+        storage.settings_for(data_root)
+        if storage is not None and _is_s3_location(data_root)
+        else None
+    )
+    read_config = _run_folder_read_config(
+        read_settings(storage_settings) if storage_settings is not None else None
+    )
     root = _build_data_root(data_root, read_config, request=request, current_user=current_user)
     _assert_variables_confined(variables or {}, root)
 
@@ -605,6 +673,12 @@ def _create_project_from_run(
     create_payload["last_modified"] = create_payload["registration_time"]
     projects_collection.insert_one(create_payload)
     project_oid = create_payload["_id"]
+
+    # Before the workers start: they read the run folder through
+    # ``project_storage_for``, as any later refresh does.
+    if storage_settings is not None:
+        _save_storage_or_roll_back(project_oid, storage_settings)
+        report.storage_saved = True
     report.project_id = str(project_oid)
 
     # Import the template's dashboards in-process, before the workers start:

@@ -64,9 +64,12 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _refresh_manifest_in_project,
 )
 from depictio.api.v1.endpoints.projects_endpoints.run_folders import (
+    FindRunsRequest,
     FolderInspection,
+    FolderInspectRequest,
     FoundRuns,
     S3DirListing,
+    S3DirsRequest,
     find_runs,
     inspect_folder,
     list_s3_dirs,
@@ -75,11 +78,13 @@ from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
     ProjectStorageConfigIn,
     ProjectStorageConfigOut,
     ProjectStorageUnusable,
+    RunStorageTestRequest,
     StorageTestResult,
     _delete_project_storage,
     _get_project_storage,
     _set_project_storage,
     _test_project_storage,
+    _test_run_storage,
 )
 from depictio.api.v1.endpoints.projects_endpoints.templates_catalog import (
     TemplateCatalog,
@@ -878,6 +883,30 @@ async def test_project_storage(project_id: str, current_user=Depends(get_user_or
     return await asyncio.to_thread(_test_project_storage, project_id, current_user)
 
 
+# Storage settings typed in for a private bucket before the project exists: the
+# same callers as POST /projects/from_run, which stores them.
+PRIVATE_BUCKET_ACTION = "Reading a private bucket"
+
+
+@projects_endpoint_router.post("/storage_test", response_model=StorageTestResult)
+async def test_run_storage(
+    payload: RunStorageTestRequest,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Probe the bucket of ``location`` with storage settings that are not stored anywhere.
+
+    The probes of ``POST /projects/{project_id}/storage/test`` (HeadBucket,
+    region detection, one one-key listing under the location's prefix), for
+    the settings of a project not created yet. Settings no read could use and
+    failed probes answer ``success: false``; the detected region is answered,
+    not saved.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    _reject_non_admin_in_public_mode(current_user, PRIVATE_BUCKET_ACTION)
+    return await asyncio.to_thread(_test_run_storage, payload.location, payload.storage)
+
+
 @projects_endpoint_router.get("/templates", response_model=TemplateCatalog)
 async def list_project_templates(current_user=Depends(get_user_or_anonymous)):
     """List the project templates shipped with this instance.
@@ -946,6 +975,11 @@ async def create_project_from_run(
     folder on the server's disk. Without ``template_id`` the pipeline is
     recognised from the folder (``detected_template`` in the report).
 
+    A run folder in a private bucket comes with ``storage``: it is read with
+    those settings alone, and they are stored on the created project before
+    its ingestion starts (``storage_saved``); a failure to store them removes
+    the project. A dry run stores nothing.
+
     A taken project name is a 409, as on ``POST /projects/create``. A run
     folder the server may not read, or whose read fails, and a pipeline that
     is not recognised answer ``{detail, code}``.
@@ -970,6 +1004,7 @@ async def create_project_from_run(
             variables=payload.variables,
             dry_run=payload.dry_run,
             request=request,
+            storage=payload.storage,
         )
     except CodedHTTPException as exc:
         return exc.response()
@@ -1018,6 +1053,24 @@ async def get_s3_dirs(
     return await asyncio.to_thread(list_s3_dirs, url)
 
 
+@projects_endpoint_router.post("/s3_dirs", response_model=S3DirListing)
+async def post_s3_dirs(
+    payload: S3DirsRequest,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """``GET /projects/s3_dirs``, with storage settings for a private bucket in the body.
+
+    With ``storage``, ``url`` is read with those settings alone: the bucket
+    lists do not apply and the bucket itself is the root. The settings are not
+    stored. Without ``storage``, the GET route's answer.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    if payload.storage is not None:
+        _reject_non_admin_in_public_mode(current_user, PRIVATE_BUCKET_ACTION)
+    return await asyncio.to_thread(list_s3_dirs, payload.url, payload.storage)
+
+
 @projects_endpoint_router.get("/folder_inspect", response_model=FolderInspection)
 async def get_folder_inspect(
     request: Request,
@@ -1042,6 +1095,34 @@ async def get_folder_inspect(
         return exc.response()
 
 
+@projects_endpoint_router.post("/folder_inspect", response_model=FolderInspection)
+async def post_folder_inspect(
+    payload: FolderInspectRequest,
+    request: Request,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """``GET /projects/folder_inspect``, with storage settings for a private bucket.
+
+    An ``s3://`` location is read, and its run detected, with ``storage``
+    alone when given. The settings are not stored.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    if payload.storage is not None:
+        _reject_non_admin_in_public_mode(current_user, PRIVATE_BUCKET_ACTION)
+    try:
+        return await asyncio.to_thread(
+            inspect_folder,
+            payload.location,
+            detect=payload.detect,
+            storage=payload.storage,
+            request=request,
+            current_user=current_user,
+        )
+    except CodedHTTPException as exc:
+        return exc.response()
+
+
 @projects_endpoint_router.get("/find_runs", response_model=FoundRuns)
 async def get_find_runs(
     request: Request,
@@ -1061,6 +1142,33 @@ async def get_find_runs(
     try:
         return await asyncio.to_thread(
             find_runs, location, request=request, current_user=current_user
+        )
+    except CodedHTTPException as exc:
+        return exc.response()
+
+
+@projects_endpoint_router.post("/find_runs", response_model=FoundRuns)
+async def post_find_runs(
+    payload: FindRunsRequest,
+    request: Request,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """``GET /projects/find_runs``, with storage settings for a private bucket.
+
+    An ``s3://`` location is listed with ``storage`` alone when given. The
+    settings are not stored.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    if payload.storage is not None:
+        _reject_non_admin_in_public_mode(current_user, PRIVATE_BUCKET_ACTION)
+    try:
+        return await asyncio.to_thread(
+            find_runs,
+            payload.location,
+            storage=payload.storage,
+            request=request,
+            current_user=current_user,
         )
     except CodedHTTPException as exc:
         return exc.response()

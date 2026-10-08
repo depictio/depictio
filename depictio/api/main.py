@@ -428,8 +428,20 @@ async def health_check() -> dict[str, str]:
 async def validation_exception_handler(
     _request: object, exc: RequestValidationError
 ) -> JSONResponse:
-    """Handle request validation errors with formatted error details."""
-    return JSONResponse(status_code=422, content={"detail": [str(error) for error in exc.errors()]})
+    """Handle request validation errors with formatted error details.
+
+    The rejected input is left out of each error: for a missing field it is
+    the whole body, storage secrets included, and the caller sent it anyway.
+    """
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": [
+                str({key: value for key, value in error.items() if key != "input"})
+                for error in exc.errors()
+            ]
+        },
+    )
 
 
 @app.exception_handler(S3AccessError)
