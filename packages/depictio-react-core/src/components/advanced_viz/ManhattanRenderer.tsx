@@ -18,6 +18,7 @@ import {
   hasOwnSelection,
 } from '../../selection';
 import { adaptGlTrace, useWebglSlot } from '../../webglBudget';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame, { TIER_COLORS } from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { regionXRange, useFollowedRegion } from './genomicAxis';
@@ -174,6 +175,12 @@ const ManhattanRenderer: React.FC<Props> = ({
   );
   const rainfall = mode === 'rainfall';
   const rainfallClassCol = rainfall ? config.rainfall_class_col || null : null;
+  // A value of the Colour-by column, or of the rainfall class column, wears
+  // the dashboard's colour for it; the rest take the palette.
+  const colorByPinned = usePinnedCategoryColors(
+    colorBy === COLOR_BY_CHROMOSOME || colorBy === COLOR_BY_SCORE ? null : colorBy,
+  );
+  const classPinned = usePinnedCategoryColors(rainfallClassCol);
 
   // ---- Following a region someone else brushed ----------------------------
   // A `genome_selection` filter on this collection's own `chr_col` / `pos_col`
@@ -505,7 +512,9 @@ const ManhattanRenderer: React.FC<Props> = ({
           uniqueVals.push(s);
         }
       }
-      const map = new Map(uniqueVals.map((v, i) => [v, _palette[i % _palette.length]]));
+      const map = new Map(
+        uniqueVals.map((v, i) => [v, colorByPinned?.[v] ?? _palette[i % _palette.length]]),
+      );
       categoricalColor = (i: number) => {
         const v = colorByValues[i];
         const key = v == null ? '∅' : String(v);
@@ -542,7 +551,9 @@ const ManhattanRenderer: React.FC<Props> = ({
     if (classValues) {
       const keyOf = (i: number) => (classValues[i] == null ? '∅' : String(classValues[i]));
       const uniqueVals = Array.from(new Set(rowIdx.map(keyOf))).sort();
-      const map = new Map(uniqueVals.map((v, i) => [v, _palette[i % _palette.length]]));
+      const map = new Map(
+        uniqueVals.map((v, i) => [v, classPinned?.[v] ?? _palette[i % _palette.length]]),
+      );
       rainfallClassColor = (i: number) => map.get(keyOf(i)) ?? _palette[0];
       rainfallLegendItems = uniqueVals.map((v) => ({
         name: v,
@@ -915,8 +926,10 @@ const ManhattanRenderer: React.FC<Props> = ({
     markerSizeUniform,
     highlight,
     colorBy,
+    colorByPinned,
     rainfall,
     rainfallClassCol,
+    classPinned,
     colorScheme,
     theme,
     glGranted,

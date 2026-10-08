@@ -10,7 +10,9 @@ import {
 import type { RootSpec } from '@genome-spy/core/spec/root.js';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
+import { columnCategoryColors } from '../../categoryColors';
 import { resolveCategoricalPalette } from '../../colors';
+import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
   advancedVizSelectionFilter,
@@ -435,6 +437,18 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
 
   const themeColors = plotlyThemeColors(isDark, theme);
   const palette = resolveCategoricalPalette(theme);
+  // A category (or a chromosome) wears the dashboard's colour for it. Keyed
+  // by content below, so a refetched dashboard with the same colours does not
+  // tear the embed down.
+  const categorySource = useCategoryColorSource();
+  const pinned = useMemo(() => {
+    const out: Record<string, Record<string, string>> = {};
+    for (const column of [effectiveConfig.category_col, effectiveConfig.chr_col]) {
+      const colours = columnCategoryColors(categorySource, column);
+      if (column && colours) out[column] = colours;
+    }
+    return Object.keys(out).length ? out : null;
+  }, [categorySource, effectiveConfig.category_col, effectiveConfig.chr_col]);
 
   // The rows as GenomeSpy reads them, from the *current* fetch: they feed the
   // dataset swap below and the row count the chrome reports.
@@ -470,6 +484,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
         gridColor: themeColors.gridColor,
         ruleColor: themeColors.zeroLineColor,
         palette,
+        pinned,
       },
       assemblyContigs,
       genes: geneAnnotation?.genes ?? null,
@@ -488,6 +503,7 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
     themeColors.gridColor,
     themeColors.zeroLineColor,
     palette.join(','),
+    JSON.stringify(pinned),
   ]);
   // The file-backed spec. Built from the manifest, so it changes when the
   // presigned URLs are refreshed; that is a genuine remount, since the lazy

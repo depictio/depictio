@@ -16,6 +16,8 @@ import {
   pollComplexHeatmap,
   StoredMetadata,
 } from '../../api';
+import { columnCategoryColors } from '../../categoryColors';
+import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import {
   VizControlGroup,
@@ -24,6 +26,7 @@ import {
   VizSelect,
   VizSwitch,
 } from './controls/VizControls';
+import { recolourAnnotationStrips, type Trace } from './heatmapAnnotationColors';
 import { namedColumns } from './namedColumns';
 import { withRanksInOrder } from './phylo/view';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
@@ -240,6 +243,19 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     JSON.stringify(rowAnnotationCols),
     JSON.stringify(colAnnotationCols),
   ]);
+
+  // The annotation strips wear the dashboard's colours for their column (a
+  // condition is the colour here it is on every other tile); the component's
+  // own `col_annotation_colors`, which the server already drew, win per value.
+  const categorySource = useCategoryColorSource();
+  const plotData = useMemo(() => {
+    if (!figure) return null;
+    const ownColours = config.col_annotation_colors;
+    const recoloured = recolourAnnotationStrips(figure.data as Trace[], (strip) =>
+      columnCategoryColors(categorySource, strip, ownColours?.[strip]),
+    );
+    return applyDataTheme(recoloured, isDark, theme);
+  }, [figure, categorySource, config.col_annotation_colors, isDark, theme]);
 
   // Fetch the column schema once so the MultiSelect knows what's available.
   useEffect(() => {
@@ -462,7 +478,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     >
       {figure ? (
         <Plot
-          data={applyDataTheme(figure.data, isDark, theme) as any}
+          data={plotData as any}
           // plotly-complexheatmap bakes an explicit width/height into its
           // figure layout (sized for its own jupyter/standalone use case);
           // strip them so the chart fills the chrome panel responsively.

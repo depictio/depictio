@@ -16,6 +16,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import { isStaleFetch } from '../../fetchQueue';
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
@@ -109,6 +110,8 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as VolcanoConfig;
+  // The QQ view's categories wear the dashboard's colours for `category_col`.
+  const categoryPinned = usePinnedCategoryColors(config.category_col);
 
   // Tier-2 controls (never enter the global filter array). The thresholds and
   // the label budget say what the chart is, so they persist; the search box is
@@ -285,6 +288,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         ps: (rows[pValueCol] || []) as number[],
         ids: config.feature_id_col ? ids : null,
         cats: config.category_col ? ((rows[config.category_col] || []) as (string | number)[]) : null,
+        catColours: categoryPinned,
         showCi,
         showIdentity,
         pointSize,
@@ -349,6 +353,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     showCi,
     showIdentity,
     pointSize,
+    categoryPinned,
     isDark,
     theme,
     glGranted,
@@ -886,6 +891,9 @@ function buildQq(input: {
   ps: number[];
   ids: (string | number)[] | null;
   cats: (string | number)[] | null;
+  /** Colours pinned for the categories (the dashboard's, see
+   *  `columnCategoryColors`); the rest take the palette. */
+  catColours?: Record<string, string> | null;
   showCi: boolean;
   showIdentity: boolean;
   pointSize: number;
@@ -906,7 +914,11 @@ function buildQq(input: {
 
   if (cats) {
     const names = Array.from(new Set(cats.map(String))).sort();
-    const colours = stableColorMap(names, resolveCategoricalPalette(input.theme, TAB10_PALETTE));
+    const colours = stableColorMap(
+      names,
+      resolveCategoricalPalette(input.theme, TAB10_PALETTE),
+      input.catColours,
+    );
     const allPs: number[] = [];
     for (const name of names) {
       const indices: number[] = [];

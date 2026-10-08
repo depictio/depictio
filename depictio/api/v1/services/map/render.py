@@ -159,12 +159,28 @@ def _compute_geojson_center_zoom(
     return _compute_auto_zoom(lats, lons)
 
 
+def _dashboard_column_colors(category_colors: Any, column: str | None) -> dict[str, str]:
+    """The dashboard's colours for one column, ``{}`` when it pins none.
+
+    ``category_colors`` is the dashboard family's effective map
+    (``effective_category_colors``). A ``"*"`` key is a template's "colour every
+    other value from the data", resolved at import; a stray one is not a value.
+    """
+    if not column or not isinstance(category_colors, dict):
+        return {}
+    values = category_colors.get(column)
+    if not isinstance(values, dict):
+        return {}
+    return {str(k): v for k, v in values.items() if str(k) != "*" and isinstance(v, str) and v}
+
+
 def render_map(
     df: Any,
     trigger_data: dict,
     theme: str = "light",
     existing_metadata: dict | None = None,
     access_token: str | None = None,
+    category_colors: dict | None = None,
 ) -> tuple[Any, dict]:
     """Render a Plotly map figure from DataFrame and configuration.
 
@@ -177,6 +193,10 @@ def render_map(
         theme: Theme name ('light' or 'dark').
         existing_metadata: Previous render metadata with stored center/zoom
             to preserve viewport when filters change.
+        category_colors: The dashboard family's ``{column: {value: colour}}``
+            (``effective_category_colors``). A value of ``color_column`` it
+            names is drawn in that colour, as on every other tile; the
+            component's own ``color_discrete_map`` still wins value by value.
 
     Note:
         Selection highlighting is entirely client-side (``MapRenderer`` sets
@@ -307,15 +327,38 @@ def render_map(
 
     # Lock color mapping so palette doesn't shift when data is filtered
     # Priority: existing_metadata > trigger_data > dict_kwargs > auto-generated
-    color_discrete_map = (existing_metadata or {}).get("color_discrete_map")
-    if not color_discrete_map:
-        color_discrete_map = trigger_data.get("color_discrete_map")
-    if not color_discrete_map:
-        color_discrete_map = extra_kwargs.get("color_discrete_map")
-    if not color_discrete_map and color_column and color_column in pandas_df.columns:
+    locked_map = (existing_metadata or {}).get("color_discrete_map")
+    color_discrete_map = (
+        locked_map
+        or trigger_data.get("color_discrete_map")
+        or extra_kwargs.get("color_discrete_map")
+    )
+    # The dashboard's colours for the colour column, so a category is drawn on
+    # the map in the colour every other tile gives it. A locked map already
+    # carries them from the render that locked it.
+    dashboard_map = {} if locked_map else _dashboard_column_colors(category_colors, color_column)
+    if (
+        (dashboard_map or not color_discrete_map)
+        and color_column
+        and color_column in pandas_df.columns
+    ):
         unique_vals = sorted(pandas_df[color_column].dropna().unique().tolist(), key=str)
         palette = px.colors.qualitative.Plotly
-        color_discrete_map = {str(v): palette[i % len(palette)] for i, v in enumerate(unique_vals)}
+        auto_map = {str(v): palette[i % len(palette)] for i, v in enumerate(unique_vals)}
+        if dashboard_map:
+            from depictio.api.v1.services.figure.figure_builder import merge_category_colors
+
+            # Under the component's own map, value by value, as figures get
+            # them; a value neither names keeps its palette slot.
+            color_discrete_map = merge_category_colors(
+                {color_column: {**auto_map, **dashboard_map}},
+                {"color": color_column, "color_discrete_map": color_discrete_map},
+            )["color_discrete_map"]
+            # Left in, the component's own map would replace the merged one
+            # when ``extra_kwargs`` is laid over the Plotly kwargs.
+            extra_kwargs = {k: v for k, v in extra_kwargs.items() if k != "color_discrete_map"}
+        else:
+            color_discrete_map = auto_map
 
     # Build kwargs common to all map types
     # NOTE: opacity is NOT passed here — px.scatter_map opacity interacts with
@@ -352,6 +395,7 @@ def render_map(
                 range_color=range_color,
                 opacity=opacity,
                 extra_kwargs=extra_kwargs,
+                color_discrete_map=color_discrete_map if dashboard_map else None,
                 **common_kwargs,
             )
         else:
@@ -550,6 +594,7 @@ def _render_choropleth_map(
     range_color: list[float] | None,
     opacity: float,
     extra_kwargs: dict,
+    color_discrete_map: dict[str, str] | None = None,
     **common_kwargs: Any,
 ) -> Any:
     """Render a choropleth_map figure with colored polygon regions.
@@ -592,6 +637,10 @@ def _render_choropleth_map(
 
     if color_column and color_column in plot_df.columns:
         kwargs["color"] = color_column
+        # Only consulted by Plotly when the column is categorical; a numeric
+        # (or aggregated) one keeps its continuous scale.
+        if color_discrete_map:
+            kwargs["color_discrete_map"] = color_discrete_map
     if color_continuous_scale:
         kwargs["color_continuous_scale"] = color_continuous_scale
     if range_color and len(range_color) == 2:

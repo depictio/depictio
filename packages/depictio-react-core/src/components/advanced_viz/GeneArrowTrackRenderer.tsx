@@ -7,6 +7,7 @@ import {
   StoredMetadata,
   fetchAdvancedVizData,
 } from '../../api';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import AdvancedVizPlot from './AdvancedVizPlot';
 import {
@@ -173,6 +174,8 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   const theme = useMantineTheme();
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
+  // A feature class wears the dashboard's colour for it.
+  const classPinned = usePinnedCategoryColors(config.class_col);
 
   const [showLabels, setShowLabels] = usePersistedVizControl<boolean>(metadata, 'show_labels', true);
   const [arrowHeight, setArrowHeight] = usePersistedVizControl<number>(metadata, 'arrow_height', 0.5);
@@ -493,6 +496,11 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
       if (NEUTRAL_CLASSES.has(name.toLowerCase())) classColor.set(name, neutralColor);
       else classColor.set(name, palette[hue++ % palette.length]);
     });
+    // Over the palette, after it: a pinned class must not shift the others' hues.
+    for (const name of classNames) {
+      const pinned = classPinned?.[name];
+      if (pinned) classColor.set(name, pinned);
+    }
 
     // ---- backbone: the contig line each lane's arrows sit on ---------------
     const backboneX: Array<number | null> = [];
@@ -674,6 +682,7 @@ const GeneArrowTrackRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
   }, [
     lanes,
     palette,
+    classPinned,
     neutralColor,
     isDark,
     theme,

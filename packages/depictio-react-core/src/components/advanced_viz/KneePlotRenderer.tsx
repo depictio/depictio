@@ -4,6 +4,7 @@ import Plot from 'react-plotly.js';
 
 import { AdvancedVizKind, fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { VizSwitch } from './controls/VizControls';
 import { logSpacedRankThin } from './kneeThinning';
@@ -116,6 +117,8 @@ const KneePlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
   const theme = useMantineTheme();
   const palette = resolveCategoricalPalette(theme, PALETTE);
   const config = (metadata.config || {}) as KneePlotConfig;
+  // A sample wears the dashboard's colour for it.
+  const samplePinned = usePinnedCategoryColors(config.sample_col);
   const isDark = colorScheme === 'dark';
 
   const [logX, setLogX] = usePersistedVizControl<boolean>(metadata, 'log_x', config.log_x ?? true);
@@ -206,7 +209,7 @@ const KneePlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
     const names = Array.from(bySample.keys()).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
     for (const name of names) bySample.get(name)!.sort((a, b) => a.rank - b.rank);
 
-    const colours = stableColorMap(names, palette, null);
+    const colours = stableColorMap(names, palette, samplePinned);
     const { textColor, gridColor, zeroLineColor } = plotlyThemeColors(isDark, theme);
 
     const traces: any[] = [];
@@ -291,7 +294,7 @@ const KneePlotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
         autosize: true,
       },
     };
-  }, [rows, config, palette, isDark, theme, logX, logY, showCutoff]);
+  }, [rows, config, palette, samplePinned, isDark, theme, logX, logY, showCutoff]);
 
   // Encoding tier: the two axis scales are the whole reading of a knee plot  -
   // a linear rank axis hides the knee entirely.

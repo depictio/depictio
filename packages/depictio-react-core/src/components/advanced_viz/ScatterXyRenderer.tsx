@@ -14,6 +14,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
   advancedVizSelectionFilter,
@@ -181,6 +182,8 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
   const config = (metadata.config || {}) as ScatterXyConfig;
   const isDark = colorScheme === 'dark';
   const themeColors = plotlyThemeColors(isDark, theme);
+  // A category of `color_col` wears the dashboard's colour for it.
+  const pinnedColours = usePinnedCategoryColors(config.color_col);
   // Quadrant labels are furniture, so they sit a step back from the body text
   // colour without dropping under the contrast the scheme's background gives.
   const quadrantLabelColor = theme.colors.gray[isDark ? 6 : 7];
@@ -446,7 +449,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
         else groups.set(k, [p]);
       }
       const names = Array.from(groups.keys()).sort();
-      const colourMap = stableColorMap(names, palette);
+      const colourMap = stableColorMap(names, palette, pinnedColours);
       for (const name of names) {
         const group = groups.get(name) as typeof points;
         data.push({
@@ -654,6 +657,7 @@ const ScatterXyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, on
     isDark,
     theme,
     palette,
+    pinnedColours,
     quadrantLabelColor,
     themeColors.zeroLineColor,
   ]);

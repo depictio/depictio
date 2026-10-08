@@ -15,7 +15,9 @@ import {
   StoredMetadata,
 } from '../../api';
 import { isStaleFetch } from '../../fetchQueue';
+import { columnCategoryColors } from '../../categoryColors';
 import { resolveCategoricalPalette, stableColorMap } from '../../colors';
+import { useCategoryColorSource } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
@@ -109,6 +111,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as StackedTaxonomyConfig;
   const palette = resolveCategoricalPalette(theme, PALETTE);
+  const categorySource = useCategoryColorSource();
 
   const [rank, setRank] = usePersistedVizControl<string | null>(metadata, 'default_rank', null);
   const [topN, setTopN] = usePersistedVizControl<number>(metadata, 'top_n', 20);
@@ -306,11 +309,14 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     // the top-N colours. Universe = all taxa in the DC; fallback = the filtered
     // top-N set ordered as they appear in tracesByTaxon.
     const taxaForPalette = Array.from(tracesByTaxon.keys()).filter((t) => t !== 'Other');
-    const colourSource = stableColorMap(
-      taxonUniverse ?? taxaForPalette,
-      palette,
-      config.taxon_palette ?? null,
-    );
+    // A taxon wears the dashboard's colour for it: under the rank shown (a
+    // Phylum pinned in `category_colors.Phylum`), else under the taxon column,
+    // the component's own `taxon_palette` winning value by value.
+    const taxonPinned = columnCategoryColors(categorySource, config.taxon_col, {
+      ...(columnCategoryColors(categorySource, activeRank) ?? {}),
+      ...(config.taxon_palette ?? {}),
+    });
+    const colourSource = stableColorMap(taxonUniverse ?? taxaForPalette, palette, taxonPinned);
     const data = Array.from(tracesByTaxon.entries())
       .filter(([, arr]) => arr.some((v) => v > 0))
       .map(([t, arr]) => ({
@@ -354,9 +360,14 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
           }
         }
         const values = orderedSamples.map((s) => sampleToValue.get(s) ?? '—');
-        // Stable category→colour for THIS strip's categories.
+        // Stable category→colour for THIS strip's categories: the dashboard's
+        // colours for its column, the strip's own `palette` winning per value.
         const categories = Array.from(new Set(values)).sort();
-        const stripPalette = stableColorMap(categories, palette, strip.palette ?? null);
+        const stripPalette = stableColorMap(
+          categories,
+          palette,
+          columnCategoryColors(categorySource, strip.column, strip.palette),
+        );
         const n = categories.length;
         // Category i gets z = i; zmin/zmax at ±0.5 put each category in its own
         // [i/n, (i+1)/n] band of the colorscale, a step function.
@@ -511,7 +522,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       },
       allRanks,
     };
-  }, [rows, config, rank, topN, normalise, sampleSort, showLegend, logY, isDark, theme, taxonUniverse]);
+  }, [rows, config, rank, topN, normalise, sampleSort, showLegend, logY, isDark, theme, taxonUniverse, categorySource]);
 
   // Memoised so AdvancedVizFrame's `extras` useMemo stays stable — an unmemoised
   // element re-fires the frame's publish effect and loops it against

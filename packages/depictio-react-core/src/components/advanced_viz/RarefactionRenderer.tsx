@@ -11,6 +11,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import type { PlotGraphHandlers } from '../annotations/usePlotAnnotationLayer';
@@ -155,6 +156,9 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
       cancelled = true;
     };
   }, [metadata.dc_id, groupBy]);
+  // A group wears the dashboard's colour for it, the component's own
+  // `category_palette` winning value by value.
+  const pinnedColours = usePinnedCategoryColors(groupBy, config.category_palette);
 
   const schemaMetricCols = useMemo(() => {
     if (!dcSchema) return [] as string[];
@@ -292,7 +296,7 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
     const colourSource = stableColorMap(
       groupUniverse ?? uniqGroups,
       palette,
-      config.category_palette ?? null,
+      pinnedColours,
     );
     const colourForGroup = new Map<string, string>(
       uniqGroups.map((g) => [g, colourSource.get(g)]),
@@ -391,7 +395,7 @@ const RarefactionRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, 
         dragmode: 'zoom',
       },
     };
-  }, [rows, config, isDark, theme, showCI, topN, groupBy, activeMetric, metadata.dc_id]);
+  }, [rows, config, isDark, theme, showCI, topN, groupBy, groupUniverse, activeMetric, metadata.dc_id, pinnedColours]);
 
   // Available metric columns. Prefer the config allowlist; merge in schema-
   // discovered numeric columns so a stale dashboard JSON (config.metric_options

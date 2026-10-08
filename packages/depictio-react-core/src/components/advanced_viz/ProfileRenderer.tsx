@@ -10,6 +10,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
   advancedVizSelectionFilter,
@@ -259,6 +260,8 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       cancelled = true;
     };
   }, [metadata.dc_id, config.series_col]);
+  // A series wears the dashboard's colour for its value of `series_col`.
+  const pinnedColours = usePinnedCategoryColors(config.series_col);
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -356,7 +359,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       bySeries.get(name)!.sort((a, b) => a.x - b.x);
     }
 
-    const colours = stableColorMap(seriesUniverse ?? names, palette, null);
+    const colours = stableColorMap(seriesUniverse ?? names, palette, pinnedColours);
     const dimming = selectedSeries.size > 0;
 
     const xLabel = config.x_title || config.x_col || 'x';
@@ -617,6 +620,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     isDark,
     theme,
     palette,
+    pinnedColours,
     seriesUniverse,
     selectedSeries,
     logX,

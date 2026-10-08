@@ -65,6 +65,13 @@ export function dashboardColorway(
   return inherited && inherited.length ? inherited : null;
 }
 
+/**
+ * The key a template uses for "every other value, coloured from the data"
+ * (`{"*": "auto"}`). The API resolves it at import, so a stored dashboard never
+ * holds it; one that slips through must not read as a value named "*".
+ */
+const AUTO_KEY = '*';
+
 /** The colour pinned for this value, if any: own map first, then inherited. */
 export function pinnedCategoryColor(
   source: CategoryColorSource | null | undefined,
@@ -73,11 +80,41 @@ export function pinnedCategoryColor(
 ): string | null {
   if (!source || !column || value === null || value === undefined) return null;
   const key = String(value);
+  if (key === AUTO_KEY) return null;
   return (
     source.category_colors?.[column]?.[key] ||
     source.inherited_category_colors?.[column]?.[key] ||
     null
   );
+}
+
+/**
+ * Every colour pinned for one column, most specific last: the main tab's
+ * (`inherited_category_colors`), the tab's own (`category_colors`), then
+ * `overrides`, the component's own palette for that column, which wins value
+ * by value. Null when none of them names a value.
+ *
+ * What a renderer hands `stableColorMap` as its overrides, so a value the
+ * dashboard pins keeps that colour on the tile and every other value keeps the
+ * renderer's palette.
+ */
+export function columnCategoryColors(
+  source: CategoryColorSource | null | undefined,
+  column: string | null | undefined,
+  overrides?: Record<string, string> | null,
+): Record<string, string> | null {
+  const merged: Record<string, string> = {};
+  const layers = column
+    ? [source?.inherited_category_colors?.[column], source?.category_colors?.[column], overrides]
+    : [overrides];
+  for (const layer of layers) {
+    if (!layer || typeof layer !== 'object') continue;
+    for (const [value, colour] of Object.entries(layer)) {
+      if (value === AUTO_KEY || typeof colour !== 'string' || !colour) continue;
+      merged[value] = colour;
+    }
+  }
+  return Object.keys(merged).length ? merged : null;
 }
 
 /**
@@ -126,11 +163,7 @@ export function hasPinnedColors(
   column: string | null | undefined,
 ): boolean {
   if (!source || !column) return false;
-  const own = source.category_colors?.[column];
-  const inherited = source.inherited_category_colors?.[column];
-  return Boolean(
-    (own && Object.keys(own).length) || (inherited && Object.keys(inherited).length),
-  );
+  return columnCategoryColors(source, column) !== null;
 }
 
 /**

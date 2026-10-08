@@ -5,6 +5,7 @@ import {
   categoryColor,
   categoryColorMap,
   chipCategoryDots,
+  columnCategoryColors,
   dashboardColorway,
   hasPinnedColors,
   pinnedCategoryColor,
@@ -52,6 +53,47 @@ describe('pinnedCategoryColor', () => {
     expect(pinnedCategoryColor(dashboard, 'depth', 'Soil')).toBeNull();
     expect(pinnedCategoryColor(null, 'habitat', 'Soil')).toBeNull();
     expect(pinnedCategoryColor(dashboard, undefined, 'Soil')).toBeNull();
+  });
+});
+
+describe('the auto key', () => {
+  // `{"*": "auto"}` is resolved at import; a stray one must not read as a value.
+  const stray: CategoryColorSource = {
+    category_colors: { condition: { '*': 'auto', control: '#868e96' }, batch: { '*': 'auto' } },
+  };
+
+  it('is never a value’s colour', () => {
+    expect(pinnedCategoryColor(stray, 'condition', '*')).toBeNull();
+    expect(pinnedCategoryColor(stray, 'condition', 'control')).toBe('#868e96');
+  });
+
+  it('does not make a column count as pinned', () => {
+    expect(hasPinnedColors(stray, 'batch')).toBe(false);
+    expect(hasPinnedColors(stray, 'condition')).toBe(true);
+    expect(pinnedCategoryDots(stray, 'batch', ['b1', 'b2'])).toBeNull();
+  });
+});
+
+describe('columnCategoryColors', () => {
+  it('layers the main tab, the tab, then the component, most specific last', () => {
+    expect(columnCategoryColors(dashboard, 'habitat', { Sediment: '#123456' })).toEqual({
+      Soil: '#f0a04b',
+      Sediment: '#123456',
+    });
+    expect(columnCategoryColors(dashboard, 'city')).toEqual({ Athens: '#1c7ed6' });
+  });
+
+  it('drops the auto key and empty colours', () => {
+    const source: CategoryColorSource = {
+      category_colors: { condition: { '*': 'auto', control: '#868e96', treated: '' } },
+    };
+    expect(columnCategoryColors(source, 'condition', { '*': 'auto' })).toEqual({ control: '#868e96' });
+  });
+
+  it('is null when nothing names a value, and only the component’s without a column', () => {
+    expect(columnCategoryColors(dashboard, 'depth')).toBeNull();
+    expect(columnCategoryColors(null, 'habitat')).toBeNull();
+    expect(columnCategoryColors(dashboard, null, { a: '#000000' })).toEqual({ a: '#000000' });
   });
 });
 

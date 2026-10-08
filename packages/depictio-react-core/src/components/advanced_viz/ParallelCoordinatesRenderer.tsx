@@ -17,6 +17,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { mantineCategoricalPalette, resolveCategoricalPalette, stableColorMap } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { COLOUR_SCALES, looksContinuous } from './colourScales';
 import {
@@ -168,6 +169,8 @@ const ParallelCoordinatesRenderer: React.FC<Props> = ({
 
   const [scaleMode, setScaleMode] = usePersistedVizControl<AxisScaleMode>(metadata, 'scale', 'minmax');
   const [groupCol, setGroupCol] = usePersistedVizControl<string | null>(metadata, 'group_col', null);
+  // A group wears the dashboard's colour for it.
+  const pinnedColours = usePinnedCategoryColors(groupCol);
   const [colourScale, setColourScale] = usePersistedVizControl<string>(metadata, 'colour_scale', 'Viridis');
   const [lineOpacity, setLineOpacity] = usePersistedVizControl<number>(metadata, 'line_opacity', 0.6);
 
@@ -460,7 +463,7 @@ const ParallelCoordinatesRenderer: React.FC<Props> = ({
       };
     } else if (colourValues) {
       const categories = distinctCategories(colourValues);
-      const colourMap = stableColorMap(categories, palette);
+      const colourMap = stableColorMap(categories, palette, pinnedColours);
       const stepped = steppedColourScale(
         categories.map((category) => withAlpha(colourMap.get(category), lineOpacity)),
       );
@@ -510,6 +513,7 @@ const ParallelCoordinatesRenderer: React.FC<Props> = ({
     groupCol,
     lineOpacity,
     palette,
+    pinnedColours,
     isDark,
     theme,
     themeColors.textColor,

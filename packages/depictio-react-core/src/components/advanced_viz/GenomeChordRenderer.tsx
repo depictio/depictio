@@ -21,6 +21,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { mantineCategoricalPalette, resolveCategoricalPalette, stableColorMap } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
   advancedVizSelectionFilter,
@@ -148,6 +149,10 @@ const GenomeChordRenderer: React.FC<Props> = ({
     metadata,
     'colour_by',
     'category',
+  );
+  // The colour-by column's values wear the dashboard's colours for it.
+  const pinnedColours = usePinnedCategoryColors(
+    colourBy === 'category' ? config.category_col : colourBy === 'chrom_a' ? config.chrom_a_col : null,
   );
   const [showLabels, setShowLabels] = usePersistedVizControl<boolean>(metadata, 'show_labels', true);
   const [intraChrom, setIntraChrom] = usePersistedVizControl<boolean>(
@@ -317,8 +322,8 @@ const GenomeChordRenderer: React.FC<Props> = ({
         : colourBy === 'chrom_a'
           ? allLinks.map((l) => l.chromA)
           : [];
-    return stableColorMap(values, palette);
-  }, [allLinks, colourBy, palette]);
+    return stableColorMap(values, palette, pinnedColours);
+  }, [allLinks, colourBy, palette, pinnedColours]);
 
   const neutralChordColour = isDark ? theme.colors.gray[5] : theme.colors.gray[6];
   const colourOf = useCallback(

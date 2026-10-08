@@ -76,6 +76,10 @@ export interface GenomeSpyThemeColors {
   ruleColor: string;
   /** Categorical hues, one per chromosome or category, cycled. */
   palette: readonly string[];
+  /** Colours the dashboard pins, by column then value (see
+   *  `columnCategoryColors`): a value they name keeps that colour, the others
+   *  cycle the palette. */
+  pinned?: Record<string, Record<string, string>> | null;
 }
 
 /** One gene of the bundled annotation asset, already decoded. */
@@ -357,6 +361,7 @@ function colourEncoding(
   field: string,
   domain: string[],
   palette: readonly string[],
+  pinned?: Record<string, string> | null,
 ): Record<string, unknown> {
   return {
     field,
@@ -364,7 +369,7 @@ function colourEncoding(
     legend: null,
     scale: {
       domain,
-      range: domain.map((_, i) => palette[i % palette.length]),
+      range: domain.map((value, i) => pinned?.[value] ?? palette[i % palette.length]),
     },
   };
 }
@@ -405,7 +410,7 @@ function buildDataLane(
       title: config.score_title ?? config.score_col,
       axis: { grid: true },
     },
-    color: colourEncoding(colourField, colourDomain, colors.palette),
+    color: colourEncoding(colourField, colourDomain, colors.palette, colors.pinned?.[colourField]),
     opacity: {
       value: config.opacity ?? 0.85,
       // A picked mark is drawn fully opaque, so the click has visible feedback

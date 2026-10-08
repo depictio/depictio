@@ -20,6 +20,7 @@ import {
   pollCoverageTrack,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 import { splitFigureByGroups } from './groupSplit';
@@ -390,6 +391,10 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     ],
     [theme.colors],
   );
+  /** The dashboard's colours for a sample and for a region category: a value
+   *  it pins is drawn in that colour, every other one takes the palette. */
+  const samplePinned = usePinnedCategoryColors(config.sample_col);
+  const categoryPinned = usePinnedCategoryColors(config.category_col);
 
   /** Resolve a genome annotation — explicit ``annotation_id`` in the config
    *  wins, otherwise fall back to chromosome-name auto-detection against the
@@ -480,13 +485,13 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     const samples = data.summary.samples.length ? data.summary.samples : ['(all)'];
     const sampleColor: Record<string, string> = {};
     samples.forEach((s, i) => {
-      sampleColor[s] = palette[i % palette.length];
+      sampleColor[s] = samplePinned?.[s] ?? palette[i % palette.length];
     });
 
     const categories = categoriesArr ? Array.from(new Set(categoriesArr)).sort() : [];
     const categoryColor: Record<string, string> = {};
     categories.forEach((c, i) => {
-      categoryColor[c] = palette[i % palette.length];
+      categoryColor[c] = categoryPinned?.[c] ?? palette[i % palette.length];
     });
 
     // Group row indices by sample so we can emit per-sample slices.
@@ -822,6 +827,8 @@ const CoverageTrackRenderer: React.FC<Props> = ({
     data,
     config,
     palette,
+    samplePinned,
+    categoryPinned,
     isDark,
     yScale,
     colorBy,

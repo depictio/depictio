@@ -15,6 +15,7 @@ import {
   type ComputeEmbeddingResult,
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
   advancedVizSelectionFilter,
@@ -206,6 +207,10 @@ const EmbeddingRenderer: React.FC<Props> = ({
       cancelled = true;
     };
   }, [metadata.dc_id, colorBy]);
+  // The colour-by column's values wear the dashboard's colours for it (a site
+  // keeps its colour from every other tile), the component's own
+  // `category_palette` winning value by value, the palette for the rest.
+  const pinnedColours = usePinnedCategoryColors(colorBy, config.category_palette);
 
   // ---- Live-compute mode state -------------------------------------------
   const liveMode = Boolean(config.compute_method);
@@ -506,7 +511,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
         ? stableColorMap(
             colorUniverse ?? categories,
             resolveCategoricalPalette(theme, TAB10_PALETTE),
-            config.category_palette ?? null,
+            pinnedColours,
           )
         : null;
     // One trace per group only while the group count stays sane, see
@@ -833,6 +838,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
     pointSize,
     colorBy,
     colorUniverse,
+    pinnedColours,
     showDensity,
     showCentroids,
     markerOutline,

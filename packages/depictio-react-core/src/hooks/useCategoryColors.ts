@@ -5,6 +5,7 @@ import { brandColorway } from '../colors';
 import {
   categoryColorMap,
   chipCategoryDots,
+  columnCategoryColors,
   dashboardColorway,
   type CategoryColorSource,
 } from '../categoryColors';
@@ -42,6 +43,24 @@ export function useCategoryColorMap(
   return useMemo(
     () => categoryColorMap(source, column, universe, palette),
     [source, column, universe, palette],
+  );
+}
+
+/**
+ * The colours the dashboard pins for one column, with the component's own
+ * palette for it (`overrides`) laid over them value by value
+ * (`columnCategoryColors`), bound to the provider. Null when nothing is
+ * pinned. Pass it to `stableColorMap` as its overrides: the renderer keeps its
+ * own palette for every value the dashboard does not name.
+ */
+export function usePinnedCategoryColors(
+  column: string | null | undefined,
+  overrides?: Record<string, string> | null,
+): Record<string, string> | null {
+  const source = useCategoryColorSource();
+  return useMemo(
+    () => columnCategoryColors(source, column, overrides),
+    [source, column, overrides],
   );
 }
 

@@ -12,6 +12,7 @@ import {
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { resolveCategoricalPalette, stableColorMap } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { groupIndices, largestGroup, sortCurveIndices, trapezoidArea } from './prCurves';
@@ -76,6 +77,10 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as PrBenchmarkConfig;
+  // A callset (`group_col`) or a category (`category_col`) wears the
+  // dashboard's colour for it.
+  const groupPinned = usePinnedCategoryColors(config.group_col);
+  const categoryPinned = usePinnedCategoryColors(config.category_col);
 
   const [view, setView] = usePersistedVizControl<View>(metadata, 'view', 'pr');
   const [showIso, setShowIso] = useState<boolean>(config.show_iso_f1 ?? true);
@@ -205,6 +210,7 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
     const groupColours = stableColorMap(
       Array.from(curveGroups.keys()),
       resolveCategoricalPalette(theme),
+      groupPinned,
     );
     const groupOf = config.group_col
       ? ((rows[config.group_col] || []) as (string | number)[])
@@ -308,7 +314,11 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
       if (drawCurves && groupOf) {
         markerColorArr = groupOf.map((v) => groupColours.get(String(v ?? '')));
       } else if (category) {
-        const swatches = stableColorMap(category.map((v) => String(v ?? '')), palette);
+        const swatches = stableColorMap(
+          category.map((v) => String(v ?? '')),
+          palette,
+          categoryPinned,
+        );
         markerColorArr = category.map((v) => swatches.get(String(v ?? '')));
       } else if (f1) {
         markerColorArr = f1;
@@ -433,6 +443,8 @@ const PrBenchmarkRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }
     config,
     activeView,
     curveGroups,
+    groupPinned,
+    categoryPinned,
     showIso,
     showDiag,
     showLabels,

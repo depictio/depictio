@@ -214,6 +214,19 @@ describe('buildGenomeSpySpec', () => {
     expect(track.encoding.color.scale.range).toEqual(['c0', 'c1', 'c2', 'c0']);
   });
 
+  it('keeps the colours the dashboard pins and cycles the palette for the rest', () => {
+    const { spec } = buildGenomeSpySpec({
+      rows: { ...rows, cls: ['x', 'y', 'x', 'z', 'y', 'z'] },
+      config: { ...base, category_col: 'cls' },
+      colors: { ...colors, pinned: { cls: { y: '#123456' } } },
+    });
+    expect(marks(spec).encoding.color.field).toBe('cls');
+    expect(marks(spec).encoding.color.scale).toEqual({
+      domain: ['x', 'y', 'z'],
+      range: ['c0', '#123456', 'c2'],
+    });
+  });
+
   it('declares the region brush once, on the vconcat root', () => {
     const { spec } = buildGenomeSpySpec({ rows, config: base, colors });
     expect((spec as any).params.map((p: any) => p.name)).toEqual([BRUSH_PARAM]);
