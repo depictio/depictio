@@ -323,6 +323,24 @@ def _workflow_root(workflow: dict, root: DataRoot) -> DataRoot:
     return LocalDataRoot(location, root.CLI_config)
 
 
+def _scan_root(dc_config: dict, workflow_root: DataRoot, root: DataRoot) -> DataRoot:
+    """The root a scanning collection's location is judged against.
+
+    A ``single`` or ``url`` collection names its own location: a bind that
+    moved its workflow's walk did not move it, so a location the workflow
+    root does not hold is judged against the data root, where a file that is
+    gone is still reported missing. Every other scan walks the workflow root.
+    """
+    scan = dc_config.get("scan") or {}
+    if workflow_root is root or str(scan.get("mode") or "").lower() not in ("single", "url"):
+        return workflow_root
+    parameters = scan.get("scan_parameters") or {}
+    location = parameters.get("filename") or parameters.get("url") or ""
+    if location and workflow_root.relative_of(location) is None:
+        return root
+    return workflow_root
+
+
 def preview_data_collections(
     config: dict, root: DataRoot
 ) -> tuple[list[DataCollectionPreview], list[str]]:
@@ -361,7 +379,8 @@ def preview_data_collections(
                 recipe_slots.append((len(rows), tag, dc_config, optional, workflow_root))
                 rows.append(_preview_recipe_dc(tag, dc_config, workflow_root, optional))
             else:
-                rows.append(_preview_scan_dc(tag, dc_config, workflow_root, runs, optional))
+                scan_root = _scan_root(dc_config, workflow_root, root)
+                rows.append(_preview_scan_dc(tag, dc_config, scan_root, runs, optional))
 
     # Recipes chain through dc_ref (a canonical reads the table another recipe
     # writes), so recipe rows are re-evaluated until no further collection
