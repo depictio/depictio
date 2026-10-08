@@ -123,6 +123,28 @@ def test_tilde_is_the_servers_home(tree):
     assert policy.confine("~") == os.path.realpath(home)
 
 
+def test_allows_judges_a_tilde_path_as_written(tree):
+    """``open("~/x")`` reads a cwd-relative ``~/x``, never the home: judging the
+    expanded path would allow one file and let the read open another."""
+    home, _outside = tree
+    policy = _policy(home)
+    assert not policy.allows("~/results/run42")
+    assert not policy.allows_read("~/results/run42/table.csv")
+    assert not policy.allows("~")
+    # Spelled out, the same folder is allowed, and confine still expands it:
+    # the real path it returns is what the caller then reads.
+    assert policy.allows(str(home / "results" / "run42"))
+    assert policy.allows_read(policy.confine("~/results/run42/table.csv", want="file"))
+
+
+def test_a_tilde_refusal_names_the_path_as_written(tree):
+    home, _outside = tree
+    refused = _refusal(_policy(home), "~/.ssh", want="any")
+    assert refused.code == "local_path_hidden"
+    assert "'~/.ssh'" in str(refused)
+    assert str(home) not in str(refused)
+
+
 def test_tilde_user_is_not_expanded(tree):
     home, _outside = tree
     assert _refusal(_policy(home), "~root/results").code == "local_path_not_absolute"

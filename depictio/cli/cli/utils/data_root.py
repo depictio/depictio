@@ -233,8 +233,29 @@ def _glob_to_regex(pattern: str) -> re.Pattern[str]:
 
 
 def _normalize_relative(rel: str) -> str:
-    """A root-relative path in the one spelling the implementations agree on."""
+    """A root-relative path in the one spelling the implementations agree on.
+
+    Only for a path already known to be relative to the root: on an absolute
+    path it would strip the leading ``/`` and re-root it under the root. A
+    location a caller was handed goes through :func:`relative_to_root` first.
+    """
     return rel.strip("/")
+
+
+def relative_to_root(root: DataRoot, location: str) -> str | None:
+    """``location`` as a path relative to ``root``, or None when it lies outside it.
+
+    Only an absolute path or a URL can lie outside the root, and
+    :meth:`DataRoot.relative_of` judges those: one under the root comes back
+    relative to it, one anywhere else is None, to be read as it is rather than
+    re-rooted (a ``--var SAMPLESHEET_FILE=/elsewhere/sheet.csv`` is that file,
+    not ``<root>/elsewhere/sheet.csv``). Any other location is relative to the
+    root by definition and comes back unchanged, so a ``..`` or a symlink below
+    the root stays the root's to answer for, through the reads that confine it.
+    """
+    if "://" in location or os.path.isabs(location):
+        return root.relative_of(location)
+    return location
 
 
 # ── the protocol ─────────────────────────────────────────────────────────────
@@ -253,6 +274,10 @@ class DataRoot(Protocol):
 
     truncated: bool
     """Whether the root's view of the location is partial (a capped listing)."""
+
+    CLI_config: object | None
+    """The configuration the root was built with, or None. A URL a template
+    points outside the root is read with it too, as the root itself is."""
 
     def exists(self, rel: str) -> bool:
         """Whether ``rel`` names a file or a directory under the root."""
@@ -325,8 +350,9 @@ class LocalDataRoot:
     # root never has a partial view of itself.
     truncated = False
 
-    def __init__(self, location: str):
+    def __init__(self, location: str, CLI_config=None):
         self.location = location
+        self.CLI_config = CLI_config
         self._root = Path(location)
         self.name = self._root.name
 
@@ -378,7 +404,7 @@ class LocalDataRoot:
 
     def scoped(self, sub: str) -> LocalDataRoot:
         """A sub-directory is just another directory, so it is another root."""
-        return LocalDataRoot(self.url(sub)) if _normalize_relative(sub) else self
+        return LocalDataRoot(self.url(sub), self.CLI_config) if _normalize_relative(sub) else self
 
     def url(self, rel: str) -> str:
         return os.path.abspath(str(self._child(rel)))
@@ -438,6 +464,7 @@ class S3DataRoot:
 
     def __init__(self, location: str, CLI_config=None, max_keys: int = DEFAULT_MAX_KEYS):
         self.location = location
+        self.CLI_config = CLI_config
 
         bucket, key_prefix = split_s3_prefix(location)
         self._bucket = bucket
@@ -619,7 +646,7 @@ def data_root_for(location: str, CLI_config=None) -> DataRoot:
                 "Supported data roots are a local directory path and an s3:// prefix."
             )
         return S3DataRoot(location, CLI_config)
-    return LocalDataRoot(location)
+    return LocalDataRoot(location, CLI_config)
 
 
 def as_data_root(value: str | Path | DataRoot | None, CLI_config=None) -> DataRoot | None:

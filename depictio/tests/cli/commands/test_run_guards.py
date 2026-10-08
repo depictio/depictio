@@ -456,3 +456,105 @@ def test_a_local_dry_run_previews_the_same_way(tmp_path, stub_cli_config, wide_c
     assert _flat(f"Data root: {base}") in flat
     assert "multiqc_data" in flat
     assert _flat("alpha_rarefaction: qiime2/alpha-rarefaction/faith_pd.csv") in flat
+
+
+def test_a_dry_run_previews_the_configuration_after_bind(tmp_path, monkeypatch, stub_cli_config):
+    """The preview is what the run would ingest: a bound collection shows where
+    --bind sent it, not where the template pointed it before the bind."""
+    base = write_tree(tmp_path / "results", MEGATEST_TREE)
+    shown: list[RunPreview] = []
+    monkeypatch.setattr(run_module, "_render_run_preview", shown.append)
+    url = "https://data.example.org/sheet.csv"
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--template",
+            TEMPLATE,
+            "--data-root",
+            str(base),
+            "--bind",
+            f"samplesheet={url}",
+            "--dry-run",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    (preview,) = shown
+    row = next(dc for dc in preview.data_collections if dc.tag == "samplesheet")
+    assert (row.mode, row.location, row.status) == ("url", url, "ok")
+
+
+def test_a_dry_run_counts_a_recursive_bind_in_the_folder_it_names(
+    tmp_path, monkeypatch, stub_cli_config
+):
+    """A local recursive --bind moves its workflow's walk, so the preview counts
+    the files of the bound folder, not those of DATA_DIR."""
+    from depictio.cli.cli.utils import templates as templates_module
+
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "CLI")
+    data_dir = tmp_path / "results"
+    data_dir.mkdir()
+    (data_dir / "unrelated.txt").write_text("x\n")
+    bound = tmp_path / "tables"
+    bound.mkdir()
+    (bound / "a.csv").write_text("id\n1\n")
+    (bound / "b.csv").write_text("id\n2\n")
+
+    def resolve(**kwargs):
+        config = {
+            "name": "stub-project",
+            "workflows": [
+                {
+                    "name": "wf",
+                    "data_location": {"structure": "flat", "locations": [str(data_dir)]},
+                    "data_collections": [
+                        {
+                            "data_collection_tag": "tables",
+                            "config": {
+                                "type": "Table",
+                                "scan": {
+                                    "mode": "recursive",
+                                    "scan_parameters": {"regex_config": {"pattern": r".*\.csv"}},
+                                },
+                            },
+                        }
+                    ],
+                }
+            ],
+        }
+        return (
+            config,
+            SimpleNamespace(template_id="stub/template/1"),
+            SimpleNamespace(
+                template_id="stub/template/1",
+                template_version="1",
+                data_root=str(data_dir),
+                expected_data_collections=[],
+            ),
+            [],
+            {},
+        )
+
+    shown: list[RunPreview] = []
+    monkeypatch.setattr(templates_module, "resolve_template", resolve)
+    monkeypatch.setattr(run_module, "_render_run_preview", shown.append)
+
+    runner.invoke(
+        app,
+        [
+            "run",
+            "--template",
+            "stub/template/1",
+            "--data-root",
+            str(data_dir),
+            "--bind",
+            f"tables={bound}",
+            "--dry-run",
+        ],
+    )
+
+    (preview,) = shown
+    (row,) = preview.data_collections
+    assert (row.tag, row.mode, row.matched, row.status) == ("tables", "recursive", 2, "ok")

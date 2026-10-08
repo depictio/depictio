@@ -219,9 +219,20 @@ def _read_source_file(
     if remote and storage_options is not None:
         kwargs["storage_options"] = storage_options
 
-    # (lazy reader, eager reader, kwargs the format itself implies). Looked up
-    # per call rather than built once at import, so the readers stay the
-    # attributes of ``pl`` at the time of the read.
+    scan, read, format_kwargs = _format_readers(source)
+    if remote:
+        df = scan(location, **format_kwargs, **kwargs).collect()
+    else:
+        df = read(location, **format_kwargs, **kwargs)
+    return _with_source_path(df, source, location, rel_path)
+
+
+def _format_readers(source: RecipeSource) -> tuple[Any, Any, dict]:
+    """``(lazy reader, eager reader, kwargs the format itself implies)`` for ``source``.
+
+    Looked up per call rather than built once at import, so the readers stay
+    the attributes of ``pl`` at the time of the read.
+    """
     readers = {
         "csv": (pl.scan_csv, pl.read_csv, {}),
         "tsv": (pl.scan_csv, pl.read_csv, {"separator": "\t"}),
@@ -229,22 +240,65 @@ def _read_source_file(
     }
     if source.format not in readers:
         raise RecipeError(f"Unsupported format: {source.format}")
+    return readers[source.format]
 
-    scan, read, format_kwargs = readers[source.format]
-    if remote:
-        df = scan(location, **format_kwargs, **kwargs).collect()
-    else:
-        df = read(location, **format_kwargs, **kwargs)
 
-    if source.source_path:
-        if source.source_path in df.columns:
-            raise RecipeError(
-                f"Source '{source.ref}': source_path column '{source.source_path}' "
-                f"already exists in {location}"
-            )
-        label = rel_path if rel_path is not None else str(location)
-        df = df.with_columns(pl.lit(label, dtype=pl.Utf8).alias(source.source_path))
-    return df
+def _with_source_path(
+    df: pl.DataFrame, source: RecipeSource, location: str | Path, rel_path: str | None
+) -> pl.DataFrame:
+    """``df`` with the ``source_path`` column ``source`` declares, if it declares one."""
+    if not source.source_path:
+        return df
+    if source.source_path in df.columns:
+        raise RecipeError(
+            f"Source '{source.ref}': source_path column '{source.source_path}' "
+            f"already exists in {location}"
+        )
+    label = rel_path if rel_path is not None else str(location)
+    return df.with_columns(pl.lit(label, dtype=pl.Utf8).alias(source.source_path))
+
+
+def _read_source_outside_root(
+    location: str, source: RecipeSource, root: DataRoot
+) -> pl.DataFrame | None:
+    """Read a source a template pointed outside the data root, as it is.
+
+    ``location`` is an absolute path or a URL the root does not hold, such as
+    a ``--var SAMPLESHEET_FILE=...`` override. A URL is read by the reader
+    every ``url`` collection is read with (``deltatables._read_remote_file_lazy``):
+    an ``s3://`` one through the read target resolved for that very URL, with
+    the configuration the root was built with, an ``http(s)://`` one through
+    the fetch gateway in server context. A local path follows the rule every
+    location outside the root follows (``templates._local_fallback_allowed``):
+    the CLI reads its own disk, a server only what its local-data policy
+    allows, and refuses anything else before looking at its disk at all.
+
+    Returns None for an optional local source that is absent.
+    """
+    if _is_remote_location(location):
+        from depictio.cli.cli.utils.deltatables import _read_remote_file_lazy
+
+        _scan, _read, format_kwargs = _format_readers(source)
+        kwargs = {**format_kwargs, **(source.read_kwargs or {})}
+        if source.format == "csv":
+            # The format the recipe declared, as on every other read of it: the
+            # remote reader would otherwise pick tabs for a ``.tsv`` name.
+            kwargs.setdefault("separator", ",")
+        frame = _read_remote_file_lazy(location, source.format, kwargs, root.CLI_config)
+        return _with_source_path(frame.collect(), source, location, None)
+
+    from depictio.cli.cli.utils.templates import _local_fallback_allowed
+
+    if not _local_fallback_allowed(root, location):
+        raise RecipeError(
+            f"Source '{source.ref}': '{location}' is outside the data root "
+            f"{root.location}, and not in a folder this server may read."
+        )
+    if not Path(location).is_file():
+        if source.optional:
+            return None
+        raise RecipeError(f"Source '{source.ref}': file not found: {location}")
+    return _read_source_file(location, source)
 
 
 def _resolve_glob_source(
@@ -299,11 +353,16 @@ def resolve_sources(
             (``str`` or ``Path``) or a :class:`DataRoot`, which is how a recipe
             gets pointed at an ``s3://`` prefix instead of a local directory.
         overrides: Optional dict mapping source ref -> override path (file sources)
-            or glob pattern (glob sources).
+            or glob pattern (glob sources). A path is relative to the root, or
+            an absolute path or URL: one under the root is read through it, one
+            outside it as it is (see ``_read_source_outside_root``).
 
     Returns:
         Dict mapping source ref names to DataFrames.
     """
+    # Lazily, for the same reason as in ``_as_data_root``.
+    from depictio.cli.cli.utils.data_root import relative_to_root
+
     root = _as_data_root(data_dir)
     storage_options = root.storage_options()
     sources: dict[str, pl.DataFrame] = {}
@@ -322,28 +381,39 @@ def resolve_sources(
             continue
 
         # Determine file path (apply override if present)
-        rel_path = source.path
+        location = source.path
         if overrides and source.ref in overrides:
-            rel_path = overrides[source.ref]
+            location = overrides[source.ref]
 
-        if rel_path is None:
+        if location is None:
             raise RecipeError(f"Source '{source.ref}' has no path and no dc_ref")
 
-        # The absolute location, so a failure names s3://bucket/prefix/file.csv
-        # rather than the bare fragment the recipe declared.
-        file_location = root.url(rel_path)
-        if not root.exists(rel_path):
-            # `optional` has always meant "pass None to transform() when this
-            # source cannot be resolved"; until now only dc_ref sources honoured
-            # it, so an optional *file* source still hard-failed the whole recipe.
-            # A recipe that can read either of two pipeline outputs (they vary by
-            # classifier / route) has no way to express that otherwise.
-            if source.optional:
+        rel_path = relative_to_root(root, location)
+        if rel_path is None:
+            # An absolute path or a URL outside the root, which a template
+            # variable can set (``{SAMPLESHEET_FILE}``): read as it is, never
+            # re-rooted under the root.
+            file_location = location
+            df = _read_source_outside_root(location, source, root)
+            if df is None:
                 sources[source.ref] = None  # type: ignore[assignment]
                 continue
-            raise RecipeError(f"Source '{source.ref}': file not found: {file_location}")
+        else:
+            # The absolute location, so a failure names s3://bucket/prefix/file.csv
+            # rather than the bare fragment the recipe declared.
+            file_location = root.url(rel_path)
+            if not root.exists(rel_path):
+                # `optional` has always meant "pass None to transform() when this
+                # source cannot be resolved"; until now only dc_ref sources honoured
+                # it, so an optional *file* source still hard-failed the whole recipe.
+                # A recipe that can read either of two pipeline outputs (they vary by
+                # classifier / route) has no way to express that otherwise.
+                if source.optional:
+                    sources[source.ref] = None  # type: ignore[assignment]
+                    continue
+                raise RecipeError(f"Source '{source.ref}': file not found: {file_location}")
+            df = _read_source_file(file_location, source, storage_options, rel_path=rel_path)
 
-        df = _read_source_file(file_location, source, storage_options, rel_path=rel_path)
         if df.is_empty():
             raise RecipeError(f"Source '{source.ref}' loaded 0 rows from {file_location}")
 

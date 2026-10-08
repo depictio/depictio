@@ -117,8 +117,12 @@ class LocalDataPolicy:
 
         ``want`` is what it has to be: a folder, a file, or anything that
         exists. Raises :class:`LocalPathRefused` otherwise.
+
+        The one method that expands a leading ``~``, for a path a user typed
+        (``~/results/run42``): the real path it returns is what the caller
+        stores and reads, so the expansion is never lost on the way to a read.
         """
-        real = self._place(path, self.roots)
+        real = self._place(path, self.roots, expand_home=True)
         if not os.path.exists(real):
             raise LocalPathRefused(f"'{path}' does not exist.", "local_path_missing")
         if want == "dir" and not os.path.isdir(real):
@@ -129,7 +133,12 @@ class LocalDataPolicy:
 
     def allows(self, path: str) -> bool:
         """Whether ``path`` lies where data may be read: below a root, not denied
-        nor hidden. Says nothing about whether it exists."""
+        nor hidden. Says nothing about whether it exists.
+
+        Judged on ``path`` exactly as the caller will open it: a leading ``~`` is
+        not expanded, since ``open("~/x")`` does not expand it either, so such a
+        path is not absolute and is refused. Expand it with :meth:`confine`.
+        """
         try:
             self._place(path, self.roots)
         except LocalPathRefused:
@@ -138,18 +147,24 @@ class LocalDataPolicy:
 
     def allows_read(self, path: str) -> bool:
         """:meth:`allows`, widened to the server's own folders: the test every
-        file read on this server passes, whoever registered the file."""
+        file read on this server passes, whoever registered the file. Judged
+        on the literal path, as :meth:`allows` is."""
         try:
             self._place(path, self.roots + self.server_dirs)
         except LocalPathRefused:
             return False
         return True
 
-    def _place(self, path: str, bases: tuple[str, ...]) -> str:
-        """The real path of ``path`` once it is known to lie where it may be read."""
+    def _place(self, path: str, bases: tuple[str, ...], *, expand_home: bool = False) -> str:
+        """The real path of ``path`` once it is known to lie where it may be read.
+
+        ``expand_home`` expands a leading ``~`` first; only :meth:`confine`
+        asks for it, since only its caller reads the real path returned here
+        rather than ``path`` itself.
+        """
         if not isinstance(path, str) or not path.strip() or "\x00" in path:
             raise LocalPathRefused("That is not a folder path.", "local_path_invalid")
-        expanded = self.expand(path)
+        expanded = self.expand(path) if expand_home else path
         if not os.path.isabs(expanded):
             raise LocalPathRefused(
                 f"'{path}' is not an absolute path: give the full path of a folder, "

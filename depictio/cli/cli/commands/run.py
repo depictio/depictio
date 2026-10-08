@@ -1714,6 +1714,16 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                         data_root=template_root,
                         variables=extra_vars or None,
                         CLI_config=CLI_config,
+                        # The configuration the run will use, --bind and the
+                        # pruning above applied, not the template resolved
+                        # afresh as if nothing had been bound.
+                        resolution=(
+                            template_resolved_config,
+                            template_metadata,
+                            template_origin,
+                            template_dashboard_paths,
+                            template_variables,
+                        ),
                     )
                 )
 
