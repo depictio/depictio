@@ -10,6 +10,7 @@ deployments bypass the private-range rejection).
 import ipaddress
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -17,13 +18,17 @@ from pydantic import ValidationError
 from depictio.api.v1 import remote_fetch
 from depictio.api.v1.configs.settings_models import RemoteConfig
 from depictio.api.v1.remote_fetch import (
+    AWS_DEFAULT_REGION,
     RemoteFetchFailed,
     RemoteURLRejected,
     bounded_download,
     fetch_validated_text,
+    is_public_s3_location,
     is_server_context,
     open_validated_stream,
     probe_remote_url,
+    public_s3_region,
+    public_s3_storage_options,
     remote_policy,
     validate_remote_url,
 )
@@ -523,3 +528,158 @@ class TestFetchValidatedText:
     def test_http_error_status_sanitized(self, loopback_env, http_server):
         with pytest.raises(RemoteFetchFailed, match="Could not fetch"):
             fetch_validated_text(f"{http_server}/missing", timeout=5)
+
+
+class TestPublicS3Allowlist:
+    """Unsigned reads are opt-in and decided from configuration alone.
+
+    Probing to find out whether a bucket is public would leak whether it exists
+    and where it lives, through the error the attempt returns, so the answer has
+    to come from the allowlist before any request goes out.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clear_allowlist(self, monkeypatch):
+        monkeypatch.delenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", raising=False)
+
+    def test_nothing_is_public_by_default(self):
+        assert is_public_s3_location("s3://any-bucket/key.csv") is False
+        assert public_s3_storage_options("s3://any-bucket/key.csv") is None
+
+    def test_a_whole_bucket_entry_matches_every_key(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "ngi-igenomes")
+
+        assert is_public_s3_location("s3://ngi-igenomes/deep/nested/file.csv") is True
+
+    def test_an_unlisted_bucket_is_refused(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "ngi-igenomes")
+
+        assert is_public_s3_location("s3://someone-elses-bucket/file.csv") is False
+
+    def test_a_prefix_entry_confines_to_that_subtree(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "megatests/ampliseq")
+
+        assert is_public_s3_location("s3://megatests/ampliseq/results/x.tsv") is True
+        assert is_public_s3_location("s3://megatests/ampliseq") is True
+        assert is_public_s3_location("s3://megatests/viralrecon/x.tsv") is False
+
+    def test_a_prefix_only_matches_on_a_path_boundary(self, monkeypatch):
+        """Otherwise allowlisting 'data' would silently open 'database'."""
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "bucket/data")
+
+        assert is_public_s3_location("s3://bucket/data/x.csv") is True
+        assert is_public_s3_location("s3://bucket/database/secrets.csv") is False
+
+    def test_entries_are_comma_separated_and_tolerate_slashes(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", " first , second/runs/ , /third/ ")
+
+        assert is_public_s3_location("s3://first/a") is True
+        assert is_public_s3_location("s3://second/runs/a") is True
+        assert is_public_s3_location("s3://third/a") is True
+
+    def test_bucket_names_stay_case_sensitive(self, monkeypatch):
+        """S3 bucket names are case sensitive, unlike the host allowlists."""
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "MyBucket")
+
+        assert is_public_s3_location("s3://MyBucket/a") is True
+        assert is_public_s3_location("s3://mybucket/a") is False
+
+    def test_an_https_url_is_never_a_public_s3_location(self, monkeypatch):
+        """The allowlist governs object-store reads, not the HTTP gateway, which
+        has its own host allowlist and private-address rejection."""
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "example.com")
+
+        assert is_public_s3_location("https://example.com/a.csv") is False
+
+    def test_storage_options_disable_signing_only_for_a_listed_location(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
+        monkeypatch.setattr(remote_fetch, "public_s3_region", lambda bucket: "eu-west-1")
+
+        options = public_s3_storage_options("s3://open-data/x.parquet")
+
+        assert options == {"aws_skip_signature": "true", "aws_region": "eu-west-1"}
+        assert public_s3_storage_options("s3://closed-data/x.parquet") is None
+
+
+class TestPublicBucketRegion:
+    """object-store does not follow S3's cross-region redirect, so the region
+    has to be the bucket's own before the read starts. It is asked for
+    unsigned, and only ever for a bucket the allowlist already accepted."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_cache(self):
+        remote_fetch._public_bucket_regions.clear()
+        yield
+        remote_fetch._public_bucket_regions.clear()
+
+    @staticmethod
+    def _stub_head_bucket(monkeypatch, head):
+        """Every boto3 client answers ``head_bucket`` with ``head``."""
+        import boto3
+
+        monkeypatch.setattr(boto3, "client", lambda *_a, **_k: SimpleNamespace(head_bucket=head))
+
+    def test_the_region_comes_from_the_head_bucket_header(self, monkeypatch):
+        self._stub_head_bucket(
+            monkeypatch,
+            lambda Bucket: {
+                "ResponseMetadata": {"HTTPHeaders": {"x-amz-bucket-region": "eu-west-1"}}
+            },
+        )
+
+        assert public_s3_region("nf-core-awsmegatests") == "eu-west-1"
+
+    def test_a_denied_head_still_carries_the_region(self, monkeypatch):
+        """A bucket that forbids listing answers 403, and a bucket in another
+        region answers 301. Both still name the region in the header."""
+        from botocore.exceptions import ClientError
+
+        def _denied(Bucket):
+            raise ClientError(
+                {
+                    "Error": {"Code": "403"},
+                    "ResponseMetadata": {"HTTPHeaders": {"x-amz-bucket-region": "us-west-2"}},
+                },
+                "HeadBucket",
+            )
+
+        self._stub_head_bucket(monkeypatch, _denied)
+
+        assert public_s3_region("listing-closed") == "us-west-2"
+
+    def test_an_unreachable_bucket_falls_back_to_the_default(self, monkeypatch):
+        def _boom(Bucket):
+            raise OSError("no network")
+
+        self._stub_head_bucket(monkeypatch, _boom)
+
+        assert public_s3_region("offline") == AWS_DEFAULT_REGION
+
+    def test_a_bucket_is_looked_up_once(self, monkeypatch):
+        calls: list[str] = []
+
+        def _head(Bucket):
+            calls.append(Bucket)
+            return {"ResponseMetadata": {"HTTPHeaders": {"x-amz-bucket-region": "ap-south-1"}}}
+
+        self._stub_head_bucket(monkeypatch, _head)
+
+        assert public_s3_region("stable") == "ap-south-1"
+        assert public_s3_region("stable") == "ap-south-1"
+        assert calls == ["stable"]
+
+    def test_a_failed_lookup_is_retried(self, monkeypatch):
+        """Caching the fallback would pin the bucket to the wrong region for the
+        life of the process after one transient failure."""
+        answers: list = [OSError("no network"), "eu-west-1"]
+
+        def _head(Bucket):
+            answer = answers.pop(0)
+            if isinstance(answer, Exception):
+                raise answer
+            return {"ResponseMetadata": {"HTTPHeaders": {"x-amz-bucket-region": answer}}}
+
+        self._stub_head_bucket(monkeypatch, _head)
+
+        assert public_s3_region("flaky") == AWS_DEFAULT_REGION
+        assert public_s3_region("flaky") == "eu-west-1"
