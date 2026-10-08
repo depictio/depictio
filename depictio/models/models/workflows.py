@@ -17,6 +17,11 @@ class WorkflowDataLocation(MongoModel):
     structure: str
     locations: list[str]
     runs_regex: str | None = None
+    # The locations `ingest --attach-run` added: a refresh keeps them next to the
+    # ones it is given, and drops any other. Left out of the payload while empty,
+    # because a server older than this field rejects it (extra="forbid") and a
+    # project without attached runs must still sync to one.
+    attached_locations: list[str] = Field(default_factory=list, exclude_if=lambda value: not value)
 
     @field_validator("structure", mode="before")
     def validate_mode(cls, value):

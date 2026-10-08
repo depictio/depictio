@@ -157,7 +157,7 @@ def merge_existing_ids(existing_entry: dict, project_config: dict) -> dict:
 
     # Check if the project exists and is owned by the same user
     if existing_entry:
-        logger.info(f"Project : {project_config}")
+        logger.debug(f"Project : {project_config}")
         user_id = project_config["permissions"]["owners"][0]["id"]
         logger.info(f"Existing entry user ID: {existing_entry['permissions']['owners'][0]['id']}")
         if existing_entry["permissions"]["owners"][0]["id"] != user_id:
@@ -221,15 +221,17 @@ def local_validate_project_config(CLI_config: CLIConfig, project_yaml_config_pat
         response = api_get_project_from_name(project_config["name"], CLI_config)
         if response.status_code == 200:
             remote_project = response.json()
-            logger.info(f"Remote project : {remote_project}")
-            logger.info(f"Validated config : {validated_config}")
-            logger.info(f"Validated config : {validated_config}")
+            logger.debug(f"Remote project : {remote_project}")
+            logger.debug(f"Validated config : {validated_config}")
             validated_config = merge_existing_ids(
                 remote_project, convert_objectid_to_str(validated_config.model_dump())
             )
             validated_config = Project.from_mongo(validated_config)
 
-        logger.info(f"Pipeline configuration validated: {validated_config}")
+        # The name only at INFO: the configuration holds the values substituted from
+        # the environment, which -v must not print.
+        logger.info(f"Pipeline configuration validated: {validated_config.name}")
+        logger.debug(f"Validated configuration: {validated_config}")
 
         return {
             "success": True,
@@ -304,7 +306,8 @@ def validate_template_project_config(
             # Re-resolve link tags now that we have real DC IDs
             _resolve_link_tags_after_id_assignment(validated_config)
 
-        logger.info(f"Template project configuration validated: {validated_config}")
+        logger.info(f"Template project configuration validated: {validated_config.name}")
+        logger.debug(f"Validated configuration: {validated_config}")
         return CLI_config, {
             "success": True,
             "config": validated_config,

@@ -23,6 +23,7 @@ from depictio.cli.cli.local_stack import (
     LocalStackError,
     Paths,
     load_secrets,
+    lock_for_startup,
     package_root,
     running_status,
     stop_all,
@@ -199,10 +200,17 @@ def export_compose(paths: Paths, out: Path, log=print) -> None:
     The data is copied, not shared: MongoDB must never run twice on one data
     directory, and the local server stays usable. A running local server is
     stopped first, so the copy is consistent; everything that can fail before
-    the copy, ``out`` included, is checked before that.
+    the copy, ``out`` included, is checked before that. The home is locked
+    throughout, as `up` locks it, so a server cannot start meanwhile.
     """
     if not any((paths.home / "mongo").glob("*")):
         raise LocalStackError(f"No local server data under {paths.home}")
+    # Never waited for, so this and an `up` cannot deadlock: the second one fails at once.
+    with lock_for_startup(paths, "export"):
+        _export_locked(paths, out, log)
+
+
+def _export_locked(paths: Paths, out: Path, log) -> None:
     if out.exists() and not out.is_dir():
         raise LocalStackError(f"{out} is a file: --out names the folder to create")
     try:

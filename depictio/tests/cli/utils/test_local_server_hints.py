@@ -278,3 +278,69 @@ def test_nothing_configured_still_fails_with_both_ways_out(running, printed):
     ((mode, line),) = printed()
     assert mode == "error"
     assert line.startswith("No server configured")
+
+
+class TestMigrateWithTheLocalServerOnOneSide:
+    """migrate's other server is the local one: "add --server local" would name it twice."""
+
+    @pytest.fixture
+    def remote_target(self, tmp_path):
+        return _write(
+            tmp_path / "remote.yaml", yaml.safe_dump(_config("https://other.example.org"))
+        )
+
+    @staticmethod
+    def _migrate(*args: str, **login) -> tuple[int, str]:
+        from typer.testing import CliRunner
+
+        from depictio.cli.cli.commands.migrate import app
+
+        with patch("depictio.cli.cli.commands.migrate.api_login", **login):
+            result = CliRunner().invoke(app, ["--project", "p", *args])
+        return result.exit_code, " ".join(result.output.split())
+
+    def test_no_warning_on_a_default_source_when_the_target_is_local(
+        self, home_config, local_config, running
+    ):
+        code, out = self._migrate(
+            "--to-server", "local", return_value={"success": True, "is_admin": False}
+        )
+
+        assert code == 1  # the mocked source login is not an admin
+        assert f"Source server: {REMOTE_URL}" in out
+        assert f"Target server: {LOCAL_URL}" in out
+        assert "add --server local" not in out
+
+    def test_no_hint_on_an_unreachable_source_when_the_target_is_local(
+        self, home_config, local_config, running
+    ):
+        code, out = self._migrate("--to-server", "local", side_effect=httpx.ConnectError("refused"))
+
+        assert code == 1
+        assert "Source: cannot reach the server: refused" in out
+        assert "add --server local" not in out
+
+    def test_no_hint_on_an_unreachable_target_when_the_source_is_local(
+        self, local_config, running, remote_target
+    ):
+        code, out = self._migrate(
+            "--server",
+            "local",
+            "--to-server",
+            str(remote_target),
+            side_effect=[{"success": True, "is_admin": True}, httpx.ConnectError("refused")],
+        )
+
+        assert code == 1
+        assert "Target: cannot reach the server: refused" in out
+        assert "add --to-server local" not in out
+
+    def test_the_warning_stays_when_neither_side_is_local(
+        self, home_config, local_config, running, remote_target
+    ):
+        code, out = self._migrate(
+            "--to-server", str(remote_target), return_value={"success": True, "is_admin": False}
+        )
+
+        assert code == 1
+        assert WARNING in out

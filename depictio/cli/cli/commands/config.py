@@ -12,6 +12,7 @@ from depictio.cli.cli.utils.api_calls import (
 from depictio.cli.cli.utils.common import (
     describe_api_target,
     load_depictio_config,
+    report_login_failure,
     report_unreachable,
     say_local_server_running,
 )
@@ -341,14 +342,10 @@ def check(
 
     # Project-config validation mode (folds the former validate-project-config).
     if project_config_path:
+        # A configuration it cannot validate ends the command there, said why.
         _, response = validate_project_config_and_check_S3_storage(
             CLI_config_path=config_path, project_config_path=project_config_path
         )
-        if not response["success"]:
-            rich_print_checked_statement(
-                "Pipeline configuration invalid, use --verbose for more details.", "error"
-            )
-            raise typer.Exit(code=1)
         rich_print_checked_statement("Depictio Project configuration validated", "success")
         project_config = convert_model_to_dict(response["project_config"])
         rich_print_json("Validated Depictio Project Configuration: ", project_config)
@@ -364,17 +361,18 @@ def check(
         # load_depictio_config said what is wrong with the configuration, and the S3
         # check reads the same file: nothing else to report.
         raise
-    except Exception as e:
+    except httpx.HTTPError as e:
         # This is the command the docs tell you to run before trusting a long
         # pipeline to the trigger, so a bare "Connection refused" is the one
         # answer it must not give: it says nothing about which instance was
         # tried, which is the thing that is usually wrong.
-        if isinstance(e, httpx.HTTPError):
-            report_unreachable(config_path, e)
-        else:
-            rich_print_checked_statement(f"Unable to access server - {e}", "error")
-            rich_print_checked_statement(f"Tried {describe_api_target(config_path)}", "info")
-            say_local_server_running(config_path)
+        report_unreachable(config_path, e)
+        failed = True
+    except Exception as e:
+        # Any other failure names the instance tried too.
+        rich_print_checked_statement(f"Unable to access server - {e}", "error")
+        rich_print_checked_statement(f"Tried {describe_api_target(config_path)}", "info")
+        say_local_server_running(config_path)
         failed = True
     else:
         # The verdict only: the result embeds the configuration, access token included.
@@ -388,10 +386,7 @@ def check(
             suffix = f" - {', '.join(user_info)}" if user_info else ""
             rich_print_checked_statement(f"Server accessible{suffix}", "success")
         else:
-            rich_print_checked_statement(
-                "Server check failed - Invalid credentials or token expired", "error"
-            )
-            rich_print_checked_statement(f"Tried {describe_api_target(config_path)}", "info")
+            report_login_failure(config_path, login_result, "Server check failed")
             failed = True
 
     try:
@@ -411,6 +406,29 @@ def check(
 
     if failed:
         raise typer.Exit(code=1)
+
+
+def _keep_attached_runs(CLI_config: CLIConfig, project_config) -> None:
+    """Keep, in ``project_config``, the run locations added with ``depictio ingest
+    --attach-run``, as a refresh does.
+
+    The server records them in ``attached_locations``. Pushing the file's locations
+    as they are would erase that record, and the next refresh would then remove the
+    runs of those locations.
+    """
+    # Imported here: the ingest command module is large, and only --update needs it.
+    from depictio.cli.cli.commands.run import refresh_run_locations
+
+    remote = api_get_project_from_name(str(project_config.name), CLI_config)
+    if remote.status_code != 200:
+        return
+    report = refresh_run_locations(project_config, remote.json())
+    attached = sum(len(locations) for locations in report["attached"].values())
+    if attached:
+        rich_print_checked_statement(
+            f"Keeps {attached} run location(s) added with `depictio ingest --attach-run`",
+            "info",
+        )
 
 
 @app.command()
@@ -434,18 +452,16 @@ def sync(
     config_path = resolve_server(server, CLI_config_path)
     if not project_config_path:
         ctx.fail("config sync needs --project-config-path: the project configuration to sync.")
+    # A configuration it cannot validate ends the command there, said why.
     CLI_config, validation_response = validate_project_config_and_check_S3_storage(
         CLI_config_path=config_path,
         project_config_path=project_config_path,
     )
-    if not validation_response["success"]:
-        rich_print_checked_statement(
-            "Pipeline configuration invalid, use --verbose for more details.", "error"
-        )
-        raise typer.Exit(code=1)
     rich_print_checked_statement("Pipeline configuration validated", "success")
-    project_config = convert_model_to_dict(validation_response["project_config"])
     try:
+        if update:
+            _keep_attached_runs(CLI_config, validation_response["project_config"])
+        project_config = convert_model_to_dict(validation_response["project_config"])
         sync_verdict = api_sync_project_config_to_server(
             CLI_config=CLI_config, ProjectConfig=project_config, update=update
         )

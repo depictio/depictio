@@ -275,3 +275,26 @@ class TestS3Utils:
             # Try calling with an invalid type
             with pytest.raises(ValidationError):
                 turn_S3_config_into_polars_storage_options("not_a_config")  # type: ignore[invalid-argument-type]
+
+
+class TestPolarsStorageOptionsKeepsTheSecretOutOfLogs:
+    """`depictio -vv` logs these options with an f-string: the secret must not show."""
+
+    @pytest.fixture
+    def options(self):
+        return PolarsStorageOptions(
+            endpoint_url="http://localhost:9000",
+            aws_access_key_id="depictio-key",
+            aws_secret_access_key="s3-secret-value",
+        )
+
+    @pytest.mark.parametrize("render", [repr, str, lambda o: f"Storage options: {o}"])
+    def test_not_in_its_text(self, options, render):
+        text = render(options)
+
+        assert "s3-secret-value" not in text
+        assert "depictio-key" in text
+
+    def test_still_a_plain_str_for_its_users(self, options):
+        assert options.aws_secret_access_key == "s3-secret-value"
+        assert options.model_dump()["aws_secret_access_key"] == "s3-secret-value"

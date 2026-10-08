@@ -112,22 +112,18 @@ def validate_schema_online(
 
     # Fetch project document
     project_label = project_id or lite.project_tag
+    if project_id:
+        project_url = f"{api_url}/depictio/api/v1/projects/get/from_id"
+        params = {"project_id": project_id}
+    else:
+        # Quoted: a '#' or '?' in the name would otherwise end the path.
+        project_url = (
+            f"{api_url}/depictio/api/v1/projects/get/from_name/"
+            f"{quote(str(lite.project_tag), safe='')}"
+        )
+        params = None
     try:
-        if project_id:
-            resp = httpx.get(
-                f"{api_url}/depictio/api/v1/projects/get/from_id",
-                params={"project_id": project_id},
-                headers=headers,
-                timeout=15,
-            )
-        else:
-            # Quoted: a '#' or '?' in the name would otherwise end the path.
-            resp = httpx.get(
-                f"{api_url}/depictio/api/v1/projects/get/from_name/"
-                f"{quote(str(lite.project_tag), safe='')}",
-                headers=headers,
-                timeout=15,
-            )
+        resp = httpx.get(project_url, params=params, headers=headers, timeout=15)
         if resp.status_code != 200:
             return [
                 {
@@ -455,17 +451,15 @@ def validate(
 
             yaml_content = yaml_file.read_text(encoding="utf-8")
             lite = DashboardDataLite.from_yaml(yaml_content)
-            if not lite.project_tag:
-                online_errors = None
+            online_errors = (
+                validate_schema_online(lite, server_url, headers) if lite.project_tag else None
+            )
+
+            if online_errors is None:
                 console.print(
                     "  [yellow]⚠ Server schema check skipped: the YAML has no project_tag "
                     "to look its data collections up in[/yellow]"
                 )
-            else:
-                online_errors = validate_schema_online(lite, server_url, headers)
-
-            if online_errors is None:
-                pass
             elif not online_errors:
                 console.print("  [green]✓ Server schema OK[/green]")
             elif _is_unreachable(online_errors):

@@ -16,6 +16,7 @@ import yaml
 
 from depictio.cli.cli.utils import templates as templates_module
 from depictio.cli.cli.utils.templates import (
+    dashboard_outcome,
     dashboard_source_key,
     import_dashboards_from_template,
     template_family,
@@ -63,14 +64,38 @@ class TestDashboardSourceKey:
 
         assert key == "file:dashboards/main.yaml"
 
-    def test_override_outside_the_template_is_a_file_key(self, tmp_path: Path) -> None:
+    def test_override_outside_the_template_is_keyed_by_its_absolute_path(
+        self, tmp_path: Path
+    ) -> None:
+        template_dir = tmp_path / "template"
+        path = tmp_path / "mine" / "custom.yaml"
+
+        key = dashboard_source_key(path, "nf-core/rnaseq/3.26.0", template_dir)
+
+        assert key == f"file:{path.resolve().as_posix()}"
+
+    def test_file_outside_the_project_config_directory_is_keyed_by_its_absolute_path(
+        self, tmp_path: Path
+    ) -> None:
+        path = tmp_path / "elsewhere" / "main.yaml"
+
+        key = dashboard_source_key(path, base_dir=tmp_path / "project")
+
+        assert key == f"file:{path.resolve().as_posix()}"
+
+    def test_files_with_the_same_name_next_to_a_template_get_two_keys(self, tmp_path: Path) -> None:
+        """`ingest --template X --dashboard qc/dashboard.yaml --dashboard
+        expr/dashboard.yaml`: one key filed them as one dashboard."""
         template_dir = tmp_path / "template"
 
-        key = dashboard_source_key(
-            tmp_path / "mine" / "custom.yaml", "nf-core/rnaseq/3.26.0", template_dir
-        )
+        keys = {
+            dashboard_source_key(
+                tmp_path / folder / "dashboard.yaml", "nf-core/rnaseq/3.26.0", template_dir
+            )
+            for folder in ("qc", "expr")
+        }
 
-        assert key == "file:custom.yaml"
+        assert len(keys) == 2
 
 
 @pytest.fixture
@@ -110,7 +135,6 @@ class TestImportDashboards:
 
         ((params, _),) = _sent(post)
         assert params["source_key"] == "nf-core/rnaseq:dashboards/base.yaml"
-        assert params["overwrite"] is True
 
     def test_project_config_dashboards_are_keyed_by_their_path(
         self, tmp_path: Path, post: MagicMock
@@ -246,11 +270,60 @@ class TestImportDashboards:
         (kept, _), (reset, _) = _sent(post)
         assert kept["existing"] == "keep"
         assert reset["existing"] == "replace"
-        # overwrite too, which a server from before `existing` reads instead: it then
-        # refreshes them as it used to, titles kept.
+        # A server from before `existing` reads overwrite instead: sent with keep,
+        # it replaced the dashboards a refresh is meant to keep.
+        assert "overwrite" not in kept
+        assert reset["overwrite"] is True
         for params in (kept, reset):
-            assert params["overwrite"] is True
             assert params["keep_titles"] is True
+
+    @pytest.mark.parametrize(
+        ("doc", "title"),
+        [
+            ({"title": "Main"}, "Main"),
+            ({"main_dashboard": {"title": "Main"}, "tabs": [{"title": "QC"}]}, "Main"),
+        ],
+    )
+    def test_a_conflict_from_a_server_before_existing_is_a_kept_dashboard(
+        self, tmp_path: Path, post: MagicMock, doc: dict, title: str
+    ) -> None:
+        post.return_value = MagicMock(status_code=409, text="exists")
+        post.return_value.json.return_value = {
+            "detail": "Dashboard 'Main' already exists in this project. "
+            "Use --overwrite to update it."
+        }
+
+        (result,) = import_dashboards_from_template(
+            [_write(tmp_path / "main.yaml", doc)], "http://api", {}
+        )
+
+        assert (result["success"], result["status"], result["title"]) == (True, "kept", title)
+        assert "error" not in result
+
+    def test_a_conflict_on_reset_is_a_failure(self, tmp_path: Path, post: MagicMock) -> None:
+        post.return_value = MagicMock(status_code=409, text="exists")
+        post.return_value.json.return_value = {"detail": "Conflict"}
+
+        (result,) = import_dashboards_from_template(
+            [_write(tmp_path / "main.yaml", {"title": "Main"})], "http://api", {}, reset=True
+        )
+
+        assert result["success"] is False
+        assert result["error"] == "HTTP 409: Conflict"
+
+    def test_dashboard_files_with_the_same_name_are_sent_with_two_keys(
+        self, tmp_path: Path, post: MagicMock
+    ) -> None:
+        """--template with two --dashboard files, no --project-config-path."""
+        paths = [
+            _write(tmp_path / "qc" / "dashboard.yaml", {"title": "QC"}),
+            _write(tmp_path / "expr" / "dashboard.yaml", {"title": "Expression"}),
+        ]
+
+        import_dashboards_from_template(paths, "http://api", {})
+
+        keys = [params["source_key"] for params, _ in _sent(post)]
+        assert keys == [f"file:{path.resolve().as_posix()}" for path in paths]
 
     @pytest.mark.parametrize(
         ("response", "status"),
@@ -273,6 +346,40 @@ class TestImportDashboards:
 
         assert result["success"] is True
         assert result["status"] == status
+
+    def test_a_kept_family_that_gained_tabs_says_how_many(
+        self, tmp_path: Path, post: MagicMock
+    ) -> None:
+        post.return_value.json.return_value = {
+            "dashboard_id": "x",
+            "title": "t",
+            "updated": False,
+            "status": "kept",
+            "tabs_added": 2,
+        }
+
+        (result,) = import_dashboards_from_template(
+            [_write(tmp_path / "main.yaml", {"main_dashboard": {"title": "M"}, "tabs": []})],
+            "http://api",
+            {},
+        )
+
+        assert (result["status"], result["tabs_added"]) == ("kept", 2)
+        assert dashboard_outcome(result) == "kept (2 tabs added)"
+
+
+@pytest.mark.parametrize(
+    ("result", "line"),
+    [
+        ({"status": "created"}, "created"),
+        ({"status": "kept"}, "kept"),
+        ({"status": "kept", "tabs_added": 0}, "kept"),
+        ({"status": "kept", "tabs_added": 1}, "kept (1 tab added)"),
+        ({"status": "kept", "tabs_added": 3}, "kept (3 tabs added)"),
+    ],
+)
+def test_dashboard_outcome(result: dict, line: str) -> None:
+    assert dashboard_outcome(result) == line
 
     def test_failure_is_returned_not_logged_as_an_error(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, post: MagicMock

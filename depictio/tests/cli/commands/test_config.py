@@ -5,6 +5,7 @@ Tests for CLI commands in the config module.
 from unittest.mock import MagicMock, patch
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from depictio.cli.cli.commands.config import app
@@ -95,8 +96,8 @@ class TestConfigCommands:
 
     @pytest.fixture
     def negative_validation_response(self):
-        """Fixture for a failed validation response"""
-        return (MagicMock(), {"success": False})
+        """A failed validation: it says why and ends the command itself."""
+        return typer.Exit(code=1)
 
     # Test classes for each command
 
@@ -181,8 +182,19 @@ class TestConfigCommands:
             with patch("depictio.cli.cli.commands.config.S3_storage_checks") as s3:
                 result = command.run("check", cli_config=cli_config_path)
             assert result.exit_code == 1
-            assert "Invalid credentials or token expired" in result.output
+            assert "invalid or expired" in " ".join(result.output.split())
             s3.assert_called_once()
+
+        def test_another_answer_is_not_blamed_on_the_token(self, command, cli_config_path, login):
+            """A viewer host's 404: the check names the status, not the token."""
+            login.return_value = {"success": False, "status_code": 404}
+            with patch("depictio.cli.cli.commands.config.S3_storage_checks"):
+                result = command.run("check", cli_config=cli_config_path)
+            assert result.exit_code == 1
+            out = " ".join(result.output.split())
+            assert "Server check failed: the server answered HTTP 404" in out
+            assert "Tried " in out
+            assert "invalid or expired" not in out
 
         def test_an_unreachable_server_fails_the_command(self, command, cli_config_path, login):
             import httpx
@@ -207,14 +219,22 @@ class TestConfigCommands:
     class TestSync:
         """Tests for the `config sync` command"""
 
-        def test_invalid_config(self, command, cli_config_path, base_patches):
-            """A failed validation reports the error and fails the command."""
-            with patch(
-                "depictio.cli.cli.commands.config.validate_project_config_and_check_S3_storage",
-                return_value=(MagicMock(), {"success": False}),
+        def test_invalid_config(
+            self, command, cli_config_path, base_patches, negative_validation_response
+        ):
+            """A failed validation fails the command, before any sync."""
+            with (
+                patch(
+                    "depictio.cli.cli.commands.config.validate_project_config_and_check_S3_storage",
+                    side_effect=negative_validation_response,
+                ),
+                patch("depictio.cli.cli.commands.config.api_sync_project_config_to_server") as sync,
             ):
                 result = command.run("sync", cli_config=cli_config_path, project_config="p.yaml")
-                assert result.exit_code == 1
+            assert result.exit_code == 1
+            assert "validated" not in result.output
+            assert "--verbose" not in result.output
+            sync.assert_not_called()
 
         def test_no_project_config_path_says_it_is_needed(self, runner, cli_config_path):
             with patch(
@@ -267,6 +287,59 @@ class TestConfigCommands:
             normalized = " ".join(result.output.split())
             assert "already exists on this server" in normalized
             assert "--update" in normalized
+
+        def test_update_keeps_the_runs_added_with_attach_run(
+            self, runner, cli_config_path, tmp_path
+        ):
+            """The file lists its own locations only: pushed as they are, they erased the
+            server's record of attached runs, and the next refresh removed those runs."""
+            from types import SimpleNamespace
+
+            ours, attached, other = (str(tmp_path / name) for name in ("a", "b", "c"))
+            workflow = SimpleNamespace(
+                workflow_tag="wf",
+                data_location=SimpleNamespace(locations=[ours], attached_locations=[]),
+            )
+            project = SimpleNamespace(name="p", workflows=[workflow])
+            remote = MagicMock(status_code=200)
+            remote.json.return_value = {
+                "workflows": [
+                    {
+                        "workflow_tag": "wf",
+                        "data_location": {
+                            "locations": [ours, attached, other],
+                            "attached_locations": [attached],
+                        },
+                    }
+                ]
+            }
+            with (
+                patch(
+                    "depictio.cli.cli.commands.config.validate_project_config_and_check_S3_storage",
+                    return_value=(MagicMock(), {"success": True, "project_config": project}),
+                ),
+                patch(
+                    "depictio.cli.cli.commands.config.api_get_project_from_name",
+                    return_value=remote,
+                ),
+                patch(
+                    "depictio.cli.cli.commands.config.convert_model_to_dict",
+                    return_value={"name": "p"},
+                ),
+                patch(
+                    "depictio.cli.cli.commands.config.api_sync_project_config_to_server",
+                    return_value={"action": "update"},
+                ),
+            ):
+                result = runner.invoke(
+                    app,
+                    ["sync", "--server", cli_config_path, "--project-config-path", "p.yaml"]
+                    + ["--update"],
+                )
+            assert result.exit_code == 0, result.output
+            assert workflow.data_location.locations == [ours, attached]
+            assert workflow.data_location.attached_locations == [attached]
+            assert "Keeps 1 run location(s) added with" in " ".join(result.output.split())
 
         def test_created_project_succeeds_quietly(self, runner, cli_config_path, validated):
             with (
@@ -352,7 +425,7 @@ class TestServerOption:
     def test_sync_passes_the_server_to_validation(self):
         with patch(
             "depictio.cli.cli.commands.config.validate_project_config_and_check_S3_storage",
-            return_value=(MagicMock(), {"success": False}),
+            side_effect=typer.Exit(code=1),
         ) as validate:
             result = self.runner.invoke(
                 app, ["sync", "--server", "s.yaml", "--project-config-path", "p.yaml"]

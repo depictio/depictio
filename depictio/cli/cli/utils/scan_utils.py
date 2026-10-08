@@ -1,13 +1,14 @@
 import collections
 import hashlib
+import os
 import re
 from functools import lru_cache
-from typing import Any, DefaultDict
+from typing import Any, DefaultDict, NamedTuple
 
 from depictio.cli.cli_logging import logger
 from depictio.models.models.data_collections import Regex
 from depictio.models.models.files import File
-from depictio.models.models.workflows import WorkflowRun
+from depictio.models.models.workflows import Workflow, WorkflowRun
 
 
 @lru_cache(maxsize=512)
@@ -63,6 +64,41 @@ def construct_full_regex(regex: Regex) -> str:
         logger.debug(f"Files Regex: {files_regex}")
 
     return files_regex
+
+
+def data_collection_full_regex(data_collection) -> str | None:
+    """The regex a recursive scan matches this data collection's files against.
+
+    ``None`` when the data collection has no regex to match with: a derived
+    collection with no scan at all, or a single-file/MultiQC one whose scan
+    parameters carry a filename instead of a regex.
+    """
+    scan = data_collection.config.scan
+    if scan is None or not hasattr(scan.scan_parameters, "regex_config"):
+        return None
+    regex_config = scan.scan_parameters.regex_config
+    return (
+        construct_full_regex(regex=regex_config)
+        if getattr(regex_config, "wildcards", False)
+        else regex_config.pattern
+    )
+
+
+def file_matches_data_collection(file_location: str, run_location: str, full_regex: str) -> bool:
+    """Whether a file inside a run belongs to a data collection.
+
+    The basename is tried first. Only a pattern that contains a path separator
+    (e.g. ``variants/bowtie2/...``) falls back to the run-relative path, so a
+    plain filename pattern cannot accidentally match through a directory name.
+
+    Shared with the dry-run preview on purpose: a preview that counted files by
+    its own rules would eventually disagree with the scan it claims to predict.
+    """
+    if regex_match(os.path.basename(file_location), full_regex)[0]:
+        return True
+    if "/" not in full_regex:
+        return False
+    return regex_match(os.path.relpath(file_location, run_location), full_regex)[0]
 
 
 def generate_file_hash(
@@ -182,3 +218,184 @@ def check_run_differences(
 
         return differences
     return {}
+
+
+# A scan finding nothing used to print "success" in green: the ingest block is
+# guarded by `if valid_runs:` and the summary line reports the number of runs
+# without ever asking whether that number is zero. The usual cause is a
+# `--data-root` pointing one directory above or below the run layout the
+# template expects, and the user's only clue was an empty dashboard much later.
+# The two describe_* helpers below turn that silence into a message.
+
+# Long enough to recognise the layout, short enough to read in a terminal.
+_MAX_LISTED_ENTRIES = 10
+
+
+def describe_unmatched_run_scan(
+    location: str,
+    runs_regex: str,
+    subdirectories: list[str],
+) -> str:
+    """Explain why a ``sequencing-runs`` scan matched no run directory.
+
+    Names the three things needed to fix it: where we looked, what we looked
+    for, and what was actually there. The listing is what turns "0 runs" into
+    "you are one level too high".
+    """
+    where = f"No run directory under '{location}' matched the pattern '{runs_regex}'."
+    if not subdirectories:
+        return f"{where} That directory contains no subdirectories at all."
+
+    shown = ", ".join(subdirectories[:_MAX_LISTED_ENTRIES])
+    remaining = len(subdirectories) - _MAX_LISTED_ENTRIES
+    if remaining > 0:
+        shown += f", and {remaining} more"
+    noun = "subdirectory" if len(subdirectories) == 1 else "subdirectories"
+    return (
+        f"{where} It contains {len(subdirectories)} {noun}: {shown}. "
+        "Check that --data-root points at the parent of the run directories."
+    )
+
+
+def describe_empty_scan_outcome(
+    runs_scanned: int,
+    files_found: int,
+    runs_skipped_as_existing: int = 0,
+) -> str | None:
+    """Warning to print when a scan completed but ingested nothing.
+
+    ``None`` means the scan needs no warning, which includes the common
+    legitimate no-op: every run in the directory was recognised and skipped
+    because it is already ingested. Only a scan that recognised *nothing* has
+    a data-root problem worth shouting about.
+
+    The two failing shapes are kept apart because their causes differ: no run
+    at all points at the directory level, while runs without files points at
+    the data collections' patterns.
+    """
+    if runs_scanned == 0 and runs_skipped_as_existing == 0:
+        return (
+            "No run was scanned, so nothing will be ingested. "
+            "This usually means --data-root points at the wrong directory level."
+        )
+    if runs_scanned > 0 and files_found == 0:
+        return (
+            f"{runs_scanned} run(s) were scanned but no file matched any data collection. "
+            "This usually means the data collections' patterns do not match this run's layout."
+        )
+    return None
+
+
+class RunCandidates(NamedTuple):
+    """What a location holds, from a scan's point of view.
+
+    ``subdirectories`` is every directory entry, matching or not, which is what
+    turns "0 runs" into a message the user can act on. ``matched`` is the
+    ``(run_tag, run_location)`` pairs a scan would actually visit.
+    """
+
+    subdirectories: list[str]
+    matched: list[tuple[str, str]]
+
+
+def collect_run_candidates(
+    location: str,
+    structure: str,
+    runs_regex: str | None = None,
+) -> RunCandidates:
+    """Enumerate the runs a scan would find under ``location``.
+
+    A ``flat`` location is itself one run. A ``sequencing-runs`` location holds
+    one run per subdirectory whose name matches ``runs_regex``. Shared between
+    the scanner and the dry-run preview so both agree on what counts as a run.
+    """
+    if structure == "flat":
+        return RunCandidates([], [(os.path.basename(os.path.normpath(location)), location)])
+
+    subdirectories: list[str] = []
+    matched: list[tuple[str, str]] = []
+    for entry in sorted(os.listdir(location)):
+        entry_path = os.path.join(location, entry)
+        if not os.path.isdir(entry_path):
+            continue
+        subdirectories.append(entry)
+        if runs_regex and re.match(runs_regex, entry):
+            matched.append((entry, entry_path))
+    return RunCandidates(subdirectories, matched)
+
+
+class ResolvedRuns(NamedTuple):
+    """Run directories a scan would walk, and why any location yielded none."""
+
+    locations: list[str]
+    warnings: list[str]
+
+
+def resolve_run_locations(workflow: Workflow) -> ResolvedRuns:
+    """Run directories a scan of ``workflow`` would walk, best-effort.
+
+    A location that does not exist, or that matches no run, becomes a warning
+    rather than an exception: this feeds a preview, and one bad path must not
+    hide every other data collection's count behind a traceback.
+    """
+    structure = workflow.data_location.structure
+    runs_regex = workflow.data_location.runs_regex
+    run_locations: list[str] = []
+    warnings: list[str] = []
+    for location in workflow.data_location.locations:
+        if not os.path.isdir(location):
+            warnings.append(f"Configured location '{location}' does not exist.")
+            continue
+        candidates = collect_run_candidates(location, structure, runs_regex)
+        if not candidates.matched and structure != "flat":
+            warnings.append(
+                describe_unmatched_run_scan(location, runs_regex or "", candidates.subdirectories)
+            )
+        run_locations.extend(run_location for _, run_location in candidates.matched)
+    return ResolvedRuns(run_locations, warnings)
+
+
+def count_data_collection_matches(data_collections, run_locations: list[str]) -> list[int | None]:
+    """How many local files a scan would match, one count per data collection.
+
+    ``None`` means there is nothing to count: a derived collection carries no
+    scan config, and a preview must show that as unknown rather than as a
+    misleading zero that sends the user hunting for a data-root problem.
+
+    ``mode`` is lowercased like the scanner does, so a config spelling it
+    ``Recursive`` is previewed the way it will be scanned.
+
+    Every run directory is walked once and each pattern tested against that one
+    listing, the way the scanner does it. Counting one collection at a time
+    would re-walk the whole data root once per collection, which on a project
+    with twenty collections is twenty times the I/O for the same answer.
+    """
+    counts: list[int | None] = []
+    regexes: list[str | None] = []
+    for data_collection in data_collections:
+        scan = data_collection.config.scan
+        mode = scan.mode.lower() if scan else None
+
+        if mode == "single":
+            filename = getattr(scan.scan_parameters, "filename", None)
+            counts.append(int(bool(filename) and os.path.isfile(filename)))
+            regexes.append(None)
+            continue
+
+        full_regex = data_collection_full_regex(data_collection) if mode == "recursive" else None
+        counts.append(0 if full_regex else None)
+        regexes.append(full_regex)
+
+    if not any(regexes):
+        return counts
+
+    for run_location in run_locations:
+        for root, _, files in os.walk(run_location):
+            for name in files:
+                file_location = os.path.join(root, name)
+                for index, full_regex in enumerate(regexes):
+                    if full_regex and file_matches_data_collection(
+                        file_location, run_location, full_regex
+                    ):
+                        counts[index] += 1  # type: ignore[operator]
+    return counts

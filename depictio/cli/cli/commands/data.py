@@ -69,76 +69,71 @@ def scan(
         project_config_path=project_config_path,
     )
 
-    if response["success"]:
-        rich_print_checked_statement("Depictio Project configuration validated", "success")
+    rich_print_checked_statement("Depictio Project configuration validated", "success")
 
-        # Get the validated project configuration
-        project_config = response["project_config"]
+    # Get the validated project configuration
+    project_config = response["project_config"]
 
-        # Get remote project configuration
-        # remote_project_config = api_get_project_from_id(
-        #     str(project_config.id), CLI_config
-        # )
-        remote_project_config = api_get_project_from_name(str(project_config.name), CLI_config)
+    # Get remote project configuration
+    # remote_project_config = api_get_project_from_id(
+    #     str(project_config.id), CLI_config
+    # )
+    remote_project_config = api_get_project_from_name(str(project_config.name), CLI_config)
 
-        if remote_project_config.status_code == 200:
-            logger.info("Remote project configuration fetched successfully.")
+    if remote_project_config.status_code == 200:
+        logger.info("Remote project configuration fetched successfully.")
+        rich_print_checked_statement(
+            "Remote project configuration fetched successfully.", "success"
+        )
+
+        # project_config = project_config.mongo()
+
+        # Compare hashes
+        local_hash = project_config.hash
+        remote_hash = remote_project_config.json().get("hash", None)
+        logger.info(f"Local & Remote hashes: {local_hash} & {remote_hash}")
+        comparison_result = local_hash == remote_hash
+
+        if comparison_result:
             rich_print_checked_statement(
-                "Remote project configuration fetched successfully.", "success"
+                "Local and remote project configurations match.", "success"
             )
 
-            # project_config = project_config.mongo()
+            rich_print_section_separator("Scanning files")
 
-            # Compare hashes
-            local_hash = project_config.hash
-            remote_hash = remote_project_config.json().get("hash", None)
-            logger.info(f"Local & Remote hashes: {local_hash} & {remote_hash}")
-            comparison_result = local_hash == remote_hash
+            command_parameters = {
+                "rescan_folders": rescan_folders,
+                "sync_files": sync_files,
+                "rich_tables": rich_tables,
+            }
 
-            if comparison_result:
-                rich_print_checked_statement(
-                    "Local and remote project configurations match.", "success"
+            # Process project. The scan raises a plain Exception for an unknown
+            # workflow or data collection tag, a message for the user.
+            try:
+                process_project_helper(
+                    CLI_config=CLI_config,
+                    project_config=project_config,
+                    workflow_name=workflow_name,
+                    data_collection_tag=data_collection_tag,
+                    command_parameters=command_parameters,
+                    mode="scan",
                 )
+            except typer.Exit:
+                raise
+            except Exception as exc:
+                rich_print_checked_statement(f"Scan failed: {escape(str(exc))}", "error")
+                raise typer.Exit(code=1) from exc
 
-                rich_print_section_separator("Scanning files")
-
-                command_parameters = {
-                    "rescan_folders": rescan_folders,
-                    "sync_files": sync_files,
-                    "rich_tables": rich_tables,
-                }
-
-                # Process project. The scan raises a plain Exception for an unknown
-                # workflow or data collection tag, a message for the user.
-                try:
-                    process_project_helper(
-                        CLI_config=CLI_config,
-                        project_config=project_config,
-                        workflow_name=workflow_name,
-                        data_collection_tag=data_collection_tag,
-                        command_parameters=command_parameters,
-                        mode="scan",
-                    )
-                except typer.Exit:
-                    raise
-                except Exception as exc:
-                    rich_print_checked_statement(f"Scan failed: {escape(str(exc))}", "error")
-                    raise typer.Exit(code=1) from exc
-
-            else:
-                rich_print_checked_statement(
-                    "Local and remote project configurations do not match.", "error"
-                )
-                raise typer.Exit(code=1)
         else:
             rich_print_checked_statement(
-                "Error fetching remote project configuration. Please create the project first if it does not exist.",
-                "error",
+                "Local and remote project configurations do not match.", "error"
             )
             raise typer.Exit(code=1)
-
     else:
-        rich_print_checked_statement("Depictio Project configuration validation failed", "error")
+        rich_print_checked_statement(
+            "Error fetching remote project configuration. Please create the project first if it does not exist.",
+            "error",
+        )
         raise typer.Exit(code=1)
 
     # Step 2: Process project
@@ -180,65 +175,61 @@ def process(
         project_config_path=project_config_path,
     )
 
-    if response["success"]:
-        rich_print_checked_statement("Depictio Project configuration validated", "success")
+    rich_print_checked_statement("Depictio Project configuration validated", "success")
 
-        # Get the validated project configuration
-        project_config = response["project_config"]
+    # Get the validated project configuration
+    project_config = response["project_config"]
 
-        # Get remote project configuration
-        remote_project_config = api_get_project_from_id(project_config.id, CLI_config)
+    # Get remote project configuration
+    remote_project_config = api_get_project_from_id(project_config.id, CLI_config)
 
-        if remote_project_config.status_code == 200:
-            logger.info("Remote project configuration fetched successfully.")
+    if remote_project_config.status_code == 200:
+        logger.info("Remote project configuration fetched successfully.")
+        rich_print_checked_statement(
+            "Remote project configuration fetched successfully.", "success"
+        )
+
+        # project_config = project_config.mongo()
+
+        # Compare hashes
+        local_hash = project_config.hash
+        remote_hash = remote_project_config.json().get("hash", None)
+        logger.info(f"Local & Remote hashes: {local_hash} & {remote_hash}")
+        comparison_result = local_hash == remote_hash
+
+        if comparison_result:
             rich_print_checked_statement(
-                "Remote project configuration fetched successfully.", "success"
+                "Local and remote project configurations match.", "success"
             )
 
-            # project_config = project_config.mongo()
+            command_parameters = {
+                "overwrite": overwrite,
+                "rich_tables": rich_tables,
+                "preview_recipes": preview_recipes,
+            }
 
-            # Compare hashes
-            local_hash = project_config.hash
-            remote_hash = remote_project_config.json().get("hash", None)
-            logger.info(f"Local & Remote hashes: {local_hash} & {remote_hash}")
-            comparison_result = local_hash == remote_hash
-
-            if comparison_result:
-                rich_print_checked_statement(
-                    "Local and remote project configurations match.", "success"
-                )
-
-                command_parameters = {
-                    "overwrite": overwrite,
-                    "rich_tables": rich_tables,
-                    "preview_recipes": preview_recipes,
-                }
-
-                rich_print_section_separator("Processing files")
-                logger.info("Processing files")
-                logger.info(f"Command parameters: {command_parameters}")
-                result = process_project_helper(
-                    CLI_config=CLI_config,
-                    project_config=project_config,
-                    mode="process",
-                    command_parameters=command_parameters,
-                )
-                # A data collection that failed fails the command, as it fails `ingest`.
-                if result and result.get("result") != "success":
-                    raise typer.Exit(code=1)
-            else:
-                rich_print_checked_statement(
-                    "Local and remote project configurations do not match.", "error"
-                )
+            rich_print_section_separator("Processing files")
+            logger.info("Processing files")
+            logger.info(f"Command parameters: {command_parameters}")
+            result = process_project_helper(
+                CLI_config=CLI_config,
+                project_config=project_config,
+                mode="process",
+                command_parameters=command_parameters,
+            )
+            # A data collection that failed fails the command, as it fails `ingest`.
+            if result and result.get("result") != "success":
                 raise typer.Exit(code=1)
         else:
             rich_print_checked_statement(
-                "Error fetching remote project configuration. Please create the project first if it does not exist.",
-                "error",
+                "Local and remote project configurations do not match.", "error"
             )
             raise typer.Exit(code=1)
     else:
-        rich_print_checked_statement("Depictio Project configuration validation failed", "error")
+        rich_print_checked_statement(
+            "Error fetching remote project configuration. Please create the project first if it does not exist.",
+            "error",
+        )
         raise typer.Exit(code=1)
 
 
@@ -295,10 +286,6 @@ def join(
         CLI_config_path=resolve_server(server, CLI_config_path),
         project_config_path=project_config_path,
     )
-
-    if not response["success"]:
-        rich_print_checked_statement("Depictio Project configuration validation failed", "error")
-        raise typer.Exit(code=1)
 
     rich_print_checked_statement("Depictio Project configuration validated", "success")
 
@@ -594,10 +581,6 @@ def link_list(
         project_config_path=project_config_path,
     )
 
-    if not response["success"]:
-        rich_print_checked_statement("Depictio Project configuration validation failed", "error")
-        raise typer.Exit(code=1)
-
     project_config = response["project_config"]
     project_id = str(project_config.id)
 
@@ -731,10 +714,6 @@ def link_create(
         project_config_path=project_config_path,
     )
 
-    if not response["success"]:
-        rich_print_checked_statement("Depictio Project configuration validation failed", "error")
-        raise typer.Exit(code=1)
-
     project_config = response["project_config"]
     project_id = str(project_config.id)
 
@@ -839,10 +818,6 @@ def link_resolve(
         project_config_path=project_config_path,
     )
 
-    if not response["success"]:
-        rich_print_checked_statement("Depictio Project configuration validation failed", "error")
-        raise typer.Exit(code=1)
-
     project_config = response["project_config"]
     project_id = str(project_config.id)
 
@@ -935,10 +910,6 @@ def link_delete(
         CLI_config_path=resolve_server(server, CLI_config_path),
         project_config_path=project_config_path,
     )
-
-    if not response["success"]:
-        rich_print_checked_statement("Depictio Project configuration validation failed", "error")
-        raise typer.Exit(code=1)
 
     project_config = response["project_config"]
     project_id = str(project_config.id)

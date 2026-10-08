@@ -1,6 +1,6 @@
 [project]
 name = "depictio-cli"
-version = "1.13.0"
+version = "1.13.2"
 description = "Alias of the depictio package: installs the depictio CLI under its former name"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -8,7 +8,7 @@ license = "MIT"
 # Everything lives in `depictio` (the root pyproject.toml), dependencies included. This
 # package pins the same version, so `pip install depictio-cli` keeps installing the CLI,
 # and keeps the `depictio-cli` command that the Nextflow hook and existing scripts call.
-dependencies = ["depictio==1.13.0"]
+dependencies = ["depictio==1.13.2"]
 authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
 urls = { Homepage = "https://github.com/depictio/depictio" }
 classifiers = [
@@ -17,7 +17,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-multiqc = ["depictio[multiqc]==1.13.0"]
+multiqc = ["depictio[multiqc]==1.13.2"]
 
 # Declared here as well as in depictio: `uv tool install depictio-cli` and pipx only
 # expose the commands of the package they were asked for.

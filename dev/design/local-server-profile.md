@@ -10,7 +10,7 @@ becomes a real deployment, the same data moves to Docker Compose.
 # the only prerequisite: uv  (curl -LsSf https://astral.sh/uv/install.sh | sh)
 uv tool install "depictio[local]"     # puts `depictio` on PATH
 depictio local up                      # iris and penguins examples
-depictio ingest --server local --template nf-core/rnaseq/latest --data-root results/ \
+depictio ingest results/ --server local --template nf-core/rnaseq/latest \
     --var SAMPLESHEET_FILE=samplesheet.csv
 
 depictio local open | status | down | wipe

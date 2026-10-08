@@ -5662,12 +5662,18 @@ def _tab_meets_minimum(
     return has_filter and _tab_has_visualization_components(dashboard_dict, dc_meta)
 
 
+# The dashboards an imported main dashboard, or a child tab's parent, is looked up
+# among: a tab of another family with the same title is not the one it refreshes.
+_MAIN_DASHBOARDS: dict[str, Any] = {"is_main_tab": {"$ne": False}}
+
+
 def _existing_import_target(
     project_id: PyObjectId,
     title: str,
     source_key: str | None,
     overwrite: bool,
-    parent_dashboard_id: Any = None,
+    within: dict[str, Any] | None = None,
+    key_within: dict[str, Any] | None = None,
 ) -> dict | None:
     """The dashboard an import replaces, or None when it inserts a new one.
 
@@ -5675,21 +5681,32 @@ def _existing_import_target(
     comes first, so a dashboard renamed since (in the viewer, or by
     `--dashboard-name`) is refreshed instead of joined by a second copy. The title
     is the fallback, which is also how a dashboard imported before keys existed
-    gets one. Without overwrite, either match is a 409.
+    gets one: with a `source_key`, only a dashboard without a key is taken by its
+    title. One keyed to another source is that file's, and the two files would
+    overwrite it in turn. Without overwrite, either match is a 409.
+
+    `within` narrows the title lookup to the dashboards this one can be: the main
+    dashboards for a main one, the tabs of its parent for a tab. `key_within`
+    narrows the key lookup, for a family tab's `<key>#<tab>`, which is only its
+    own under that family.
     """
     in_project: dict[str, Any] = {"project_id": ObjectId(project_id)}
     by_key = (
-        dashboards_collection.find_one({**in_project, "source_key": source_key})
+        dashboards_collection.find_one(
+            {**in_project, **(key_within or {}), "source_key": source_key}
+        )
         if source_key
         else None
     )
-    title_query = {**in_project, "title": title}
-    if parent_dashboard_id is not None:
-        title_query["parent_dashboard_id"] = parent_dashboard_id
-    by_title = dashboards_collection.find_one(title_query)
+    title_query = {**in_project, **(within or {}), "title": title}
 
     if overwrite:
-        return by_key or by_title
+        if by_key:
+            return by_key
+        if source_key:
+            title_query["source_key"] = None
+        return dashboards_collection.find_one(title_query)
+    by_title = dashboards_collection.find_one(title_query)
     if by_title:
         raise HTTPException(
             status_code=409,
@@ -5729,13 +5746,15 @@ def _keep_existing_dashboard(
     project_id: PyObjectId,
     source_key: str | None,
     title: str | None,
-    with_tabs: bool = False,
+    tabs_added: int | None = None,
 ) -> dict[str, Any]:
     """The response of an import that leaves a dashboard the project has as it is.
 
     Its layout and components stay as edited in the viewer. Only `title`
     (`main_title`) renames it, and a dashboard imported before keys existed takes
-    `source_key`, so that later imports still find it once renamed.
+    `source_key`, so that later imports still find it once renamed. `tabs_added`,
+    for a multi-tab main: the tabs it gained, which the response lists with the
+    ones it had.
     """
     changes: dict[str, Any] = {}
     if title and title != existing.get("title"):
@@ -5745,19 +5764,21 @@ def _keep_existing_dashboard(
     if changes:
         dashboards_collection.update_one({"_id": existing["_id"]}, {"$set": changes})
     kept = {**existing, **changes}
+    message = "Dashboard kept as it is" + (", renamed" if "title" in changes else "")
+    if tabs_added:
+        message += f", {tabs_added} tab{'s' if tabs_added > 1 else ''} added"
     response: dict[str, Any] = {
         "success": True,
         "updated": False,
         "status": "kept",
-        "message": "Dashboard kept as it is" + (", renamed" if "title" in changes else ""),
+        "message": message,
         "dashboard_id": str(kept["dashboard_id"]),
         "title": kept.get("title"),
         "project_id": str(project_id),
         "dash_url": settings.viewer.external_url,
     }
-    if with_tabs:
-        # The tabs it has now. One the YAML has and the family lacks is not added:
-        # it may be a tab removed in the viewer.
+    if tabs_added is not None:
+        response["tabs_added"] = tabs_added
         tabs = dashboards_collection.find(
             {"parent_dashboard_id": kept["dashboard_id"]}, {"title": 1, "dashboard_id": 1}
         ).sort("tab_order", 1)
@@ -5793,8 +5814,8 @@ def _import_multi_tab_dashboard(
         main_title: Title of the main dashboard, over the YAML's and over
             keep_titles; the tabs are not affected
         keep_existing: A main dashboard the project has (same source_key, else
-            same title) is left as it is, tabs included; main_title still
-            renames it
+            same title) is left as it is, its tabs too, and gains the tabs of
+            the YAML it lacks; main_title still renames it
 
     Returns:
         Import result with main dashboard ID and child tab IDs
@@ -5812,11 +5833,25 @@ def _import_multi_tab_dashboard(
     main_lite = DashboardDataLite.from_yaml(main_yaml)
 
     existing_main = _existing_import_target(
-        project_id, main_lite.title, source_key, overwrite or keep_existing
+        project_id, main_lite.title, source_key, overwrite or keep_existing, _MAIN_DASHBOARDS
     )
+    # Visibility is project-driven; `to_full()` defaults to private, which
+    # would also reset an existing public dashboard on --overwrite.
+    project_is_public = get_project_visibility(project_id)
+    family_filter = _family_fans_out_a_filter([main_dashboard_data, *(tabs_data or [])])
     if keep_existing and existing_main is not None:
+        added = _import_family_tabs(
+            tabs_data,
+            existing_main["dashboard_id"],
+            project_id,
+            current_user,
+            source_key,
+            project_is_public,
+            family_filter,
+            keep=True,
+        )
         return _keep_existing_dashboard(
-            existing_main, project_id, source_key, main_title, with_tabs=True
+            existing_main, project_id, source_key, main_title, tabs_added=len(added)
         )
 
     main_dashboard_dict = main_lite.to_full()
@@ -5825,9 +5860,6 @@ def _import_multi_tab_dashboard(
     )
     main_dashboard_dict["source_key"] = source_key or (existing_main or {}).get("source_key")
     main_dashboard_dict["is_main_tab"] = True  # Ensure it's marked as main tab
-    # Visibility is project-driven; `to_full()` defaults to private, which
-    # would also reset an existing public dashboard on --overwrite.
-    project_is_public = get_project_visibility(project_id)
     main_dashboard_dict["is_public"] = project_is_public
 
     # Set dashboard ID and project
@@ -5883,12 +5915,67 @@ def _import_multi_tab_dashboard(
         if not result.inserted_id:
             raise HTTPException(status_code=500, detail="Failed to import main dashboard.")
 
-    # Import child tabs
+    imported_tabs = _import_family_tabs(
+        tabs_data,
+        main_dashboard_id,
+        project_id,
+        current_user,
+        source_key,
+        project_is_public,
+        family_filter,
+        overwrite=overwrite,
+        keep_titles=keep_titles,
+    )
+
+    action = "Updated" if is_update else "Imported"
+    logger.info(
+        f"{action} multi-tab dashboard: {main_dashboard.title} (ID: {main_dashboard_id}) "
+        f"with {len(imported_tabs)} tabs by user {current_user.email}"
+    )
+
+    return {
+        "success": True,
+        "updated": is_update,
+        "status": "replaced" if is_update else "created",
+        "message": f"Multi-tab dashboard {'updated' if is_update else 'imported'} successfully",
+        "dashboard_id": str(main_dashboard_id),
+        "title": main_dashboard.title,
+        "project_id": str(project_id),
+        "tabs": imported_tabs,
+        "dash_url": settings.viewer.external_url,
+    }
+
+
+def _import_family_tabs(
+    tabs_data: list,
+    main_dashboard_id: Any,
+    project_id: PyObjectId,
+    current_user: User,
+    source_key: str | None,
+    project_is_public: bool,
+    family_filter: bool,
+    overwrite: bool = False,
+    keep_titles: bool = False,
+    keep: bool = False,
+) -> list[dict[str, str]]:
+    """Import the tabs of a multi-tab YAML under its main dashboard.
+
+    With `overwrite`, a tab replaces the one of this family imported from the same
+    tab of the YAML (`<source_key>#<title>`), else the one with its title. With
+    `keep`, for a main dashboard kept as it is, a tab the family has is kept too
+    and one it lacks is added after its last tab: a tab pruned at an earlier
+    import, its data absent then, comes in once a later run brings the data. A tab
+    removed in the viewer comes back the same way, as a single-file tab does.
+
+    Returns the tabs written, as {title, dashboard_id}.
+    """
     imported_tabs = []
     dc_meta = _build_dc_meta(project_id)
-    family_filter = _family_fans_out_a_filter(
-        [main_dashboard_data, *(tabs_data or [])],
-    )
+    family = {"parent_dashboard_id": main_dashboard_id}
+    next_order = 1  # The main tab is 0.
+    if keep:
+        orders = dashboards_collection.find(family, {"tab_order": 1})
+        next_order = max((tab.get("tab_order") or 0 for tab in orders), default=0) + 1
     for idx, tab_data in enumerate(tabs_data):
         tab_yaml = yaml.dump(
             tab_data, default_flow_style=False, allow_unicode=True, sort_keys=False
@@ -5899,16 +5986,22 @@ def _import_multi_tab_dashboard(
         # a tab renamed in the viewer is still the one this tab refreshes.
         tab_source_key = f"{source_key}#{tab_lite.title}" if source_key else None
 
-        # Check for existing tab if overwrite is requested
         existing_tab = None
-        if overwrite:
+        if overwrite or keep:
             existing_tab = _existing_import_target(
-                project_id,
-                tab_lite.title,
-                tab_source_key,
-                overwrite,
-                parent_dashboard_id=main_dashboard_id,
+                project_id, tab_lite.title, tab_source_key, True, family, family
             )
+        if keep:
+            if existing_tab is not None:
+                # Left as it is; one imported before keys existed takes its key.
+                if tab_source_key and not existing_tab.get("source_key"):
+                    dashboards_collection.update_one(
+                        {"_id": existing_tab["_id"]}, {"$set": {"source_key": tab_source_key}}
+                    )
+                continue
+            tab_order = next_order
+        else:
+            tab_order = idx + 1
 
         tab_dashboard_dict = tab_lite.to_full()
         tab_dashboard_dict["title"] = _import_title(tab_lite.title, existing_tab, keep_titles)
@@ -5916,7 +6009,7 @@ def _import_multi_tab_dashboard(
         tab_dashboard_dict["is_public"] = project_is_public
         tab_dashboard_dict["is_main_tab"] = False
         tab_dashboard_dict["parent_dashboard_id"] = main_dashboard_id
-        tab_dashboard_dict["tab_order"] = idx + 1  # Start from 1 (main tab is 0)
+        tab_dashboard_dict["tab_order"] = tab_order
 
         # Set dashboard ID and project
         tab_dashboard_id = existing_tab["dashboard_id"] if existing_tab else ObjectId()
@@ -5997,25 +6090,47 @@ def _import_multi_tab_dashboard(
                 logger.error(f"Failed to import tab '{tab_lite.title}'")
                 continue
 
+        next_order = tab_order + 1
         imported_tabs.append({"title": tab_dashboard.title, "dashboard_id": str(tab_dashboard_id)})
 
-    action = "Updated" if is_update else "Imported"
-    logger.info(
-        f"{action} multi-tab dashboard: {main_dashboard.title} (ID: {main_dashboard_id}) "
-        f"with {len(imported_tabs)} tabs by user {current_user.email}"
-    )
+    return imported_tabs
 
-    return {
-        "success": True,
-        "updated": is_update,
-        "status": "replaced" if is_update else "created",
-        "message": f"Multi-tab dashboard {'updated' if is_update else 'imported'} successfully",
-        "dashboard_id": str(main_dashboard_id),
-        "title": main_dashboard.title,
-        "project_id": str(project_id),
-        "tabs": imported_tabs,
-        "dash_url": settings.viewer.external_url,
-    }
+
+def _import_parent(
+    project_id: PyObjectId,
+    parent_title: str,
+    parent_source_key: str | None,
+    source_key: str | None,
+) -> dict:
+    """The main dashboard a single-format child tab is imported under.
+
+    By its key first: renamed in the viewer, it kept its key but not the title the
+    YAML names it by. Last, the current parent of the tab imported from the same
+    `source_key`, for a client that sends no parent key. A 400 without one.
+    """
+    in_project: dict[str, Any] = {"project_id": ObjectId(project_id)}
+    current_tab = (
+        dashboards_collection.find_one(
+            {**in_project, "source_key": source_key}, {"parent_dashboard_id": 1}
+        )
+        if source_key
+        else None
+    )
+    current_parent = (current_tab or {}).get("parent_dashboard_id")
+    lookups = [
+        {"source_key": parent_source_key} if parent_source_key else None,
+        {"title": parent_title},
+        {"dashboard_id": current_parent} if current_parent else None,
+    ]
+    for lookup in filter(None, lookups):
+        parent = dashboards_collection.find_one({**in_project, **_MAIN_DASHBOARDS, **lookup})
+        if parent:
+            return parent
+    raise HTTPException(
+        status_code=400,
+        detail=f"Parent dashboard '{parent_title}' not found in this project. "
+        "Import the main dashboard first, then import child tabs.",
+    )
 
 
 @dashboards_endpoint_router.post("/import/yaml")
@@ -6041,7 +6156,9 @@ async def import_dashboard_from_yaml(
 
     If `overwrite=True`, the dashboard imported earlier from the same `source_key`
     is updated instead of creating a new one, whatever its title is now; without
-    one, a dashboard with the same title in the project is. Either kind of match
+    one, a dashboard with the same title is, if it has no `source_key` yet (one
+    keyed to another source is left alone). A main dashboard is only matched
+    with a main one, and a tab with the tabs of its parent. Either kind of match
     is a 409 without `overwrite`.
 
     `existing` says what becomes of a dashboard so matched, over `overwrite`:
@@ -6049,8 +6166,10 @@ async def import_dashboard_from_yaml(
     - `keep`: it is left as it is, its layout and components as edited in the
       viewer, and the response says `"status": "kept"` with its id. `main_title`
       still renames a kept main dashboard, which changes nothing else. A kept
-      multi-tab main keeps its tabs as they are: a tab the YAML adds is not
-      imported. A dashboard with no match is created as usual.
+      multi-tab main keeps the tabs it has as they are and gains those of the
+      YAML it lacks, after its last one; `tabs_added` says how many. A tab
+      removed in the viewer so comes back. A dashboard with no match is created
+      as usual.
     Every response says what happened in `status`: `created`, `replaced` or `kept`.
 
     Titles: a dashboard takes the title in the YAML, unless
@@ -6064,7 +6183,8 @@ async def import_dashboard_from_yaml(
     A single-format child tab names its parent by title (`parent_dashboard_tag`).
     `parent_source_key`, the `source_key` the parent was imported under, finds
     the parent first, so a parent renamed in the viewer keeps its tabs. Without a
-    match by key or by title, a refreshed child tab stays under its current parent.
+    match by key or by title, the tab imported from the same `source_key` stays
+    under its current parent.
 
     Project identification:
     - If `project_id` is provided, uses that project directly (404 if it does not exist)
@@ -6197,8 +6317,18 @@ async def import_dashboard_from_yaml(
             detail="You don't have permission to create dashboards in this project.",
         )
 
+    # A child tab's parent first: the dashboard this import replaces is then one
+    # of the parent's tabs, as a main one is a main dashboard.
+    parent_dashboard = None
+    within: dict[str, Any] | None = _MAIN_DASHBOARDS if lite.is_main_tab else None
+    if not lite.is_main_tab and lite.parent_dashboard_tag:
+        parent_dashboard = _import_parent(
+            project_id, lite.parent_dashboard_tag, parent_source_key, source_key
+        )
+        within = {"parent_dashboard_id": parent_dashboard["dashboard_id"]}
+
     existing_dashboard = _existing_import_target(
-        project_id, lite.title, source_key, overwrite or keep_existing
+        project_id, lite.title, source_key, overwrite or keep_existing, within
     )
     if keep_existing and existing_dashboard is not None:
         return _keep_existing_dashboard(existing_dashboard, project_id, source_key, main_title)
@@ -6215,30 +6345,7 @@ async def import_dashboard_from_yaml(
     # would also reset an existing public dashboard on --overwrite.
     dashboard_dict["is_public"] = get_project_visibility(project_id)
 
-    # Handle tab relationships for child tabs
-    if not lite.is_main_tab and lite.parent_dashboard_tag:
-        # The parent by its key first: renamed in the viewer, it kept its key but
-        # not the title the YAML names it by. Last, the current parent of the tab
-        # this import replaces, for a client that sends no parent key.
-        current_parent = (existing_dashboard or {}).get("parent_dashboard_id")
-        lookups = [
-            {"source_key": parent_source_key} if parent_source_key else None,
-            {"title": lite.parent_dashboard_tag},
-            {"dashboard_id": current_parent} if current_parent else None,
-        ]
-        parent_dashboard = None
-        for lookup in filter(None, lookups):
-            parent_dashboard = dashboards_collection.find_one(
-                {"project_id": ObjectId(project_id), "is_main_tab": {"$ne": False}, **lookup}
-            )
-            if parent_dashboard:
-                break
-        if not parent_dashboard:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Parent dashboard '{lite.parent_dashboard_tag}' not found in this project. "
-                "Import the main dashboard first, then import child tabs.",
-            )
+    if parent_dashboard is not None:
         dashboard_dict["parent_dashboard_id"] = parent_dashboard["dashboard_id"]
         dashboard_dict["is_main_tab"] = False
 
