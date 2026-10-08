@@ -1,104 +1,260 @@
 version: 1
+# nf-core/variantbenchmarking 1.4.0 dashboard, to the family rules of
+# depictio/projects/nf-core/RULES.md (ampliseq is the reference).
+#
+# A run benchmarks one variant type, so it writes one family of tables:
+# germline small variants (rtg-tools vcfeval + hap.py), somatic SNVs or indels
+# (som.py + rtg-tools vcfeval) or structural variants (Truvari, SVanalyzer,
+# Wittyer). Every data collection is optional, and a tab whose collections are
+# all absent is dropped at import. No MultiQC report and no sample sheet: no
+# MultiQC tab, no Data & QC group, no persistent sample filters.
+#
+# Route blocks on the Overview: each route has its own Key figures cards,
+# filter-bar filters and highlights, on slots of their own rather than shared
+# ones. A single-route run drops the other blocks and the import re-packs the
+# section, so it reads as one row of cards and two rows of highlights. A data
+# root holding two routes (the AWS megatest has germline and somatic) keeps
+# both blocks stacked instead of drawing them on top of each other.
 main_dashboard:
   title: nf-core/variantbenchmarking
   subtitle: Which callset recovers its truth set best, on precision, recall and F1
   project_tag: Variant Benchmarking Analysis
   main_tab_name: Overview
-  tab_icon: mdi:chart-box-outline
-  tab_icon_color: indigo
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
-  advanced_viz_controls: header
-  # Persistent: the germline sample and somatic caller pickers render in every
-  # tab's filter panel and the values picked in them survive tab switches. They
-  # are declared here rather than on the Germline / Somatic tabs so a run that
-  # lacks one category (and therefore drops that tab) keeps the other picker.
-  filter_sections:
-  - name: Callsets
-    icon: mdi:dna
-    color: indigo
-    description: Applies to the Germline and Somatic tabs
-    persistent: true
-    pin: top
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  category_colors:
+    caller: auto
+    variant_type:
+      '*': auto
+      SNP: '#1c7ed6'
+      INDEL: '#7048e8'
+    filter:
+      ALL: '#868e96'
+      PASS: '#2f9e44'
+    stats_type:
+      Event: '#1098ad'
+      Base: '#f08c00'
   grid_sections:
-  - name: Germline at a glance
-    icon: mdi:dna
-    color: indigo
-    description: Germline callsets against the run's truth set
-  - name: Somatic at a glance
-    icon: mdi:stethoscope
-    color: pink
-    description: Somatic callers against the run's truth set
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
   components:
-  # ---------------------------------------------------------------- germline
-  - component_type: text
-    tag: text-overview-intro
-    section: Germline at a glance
-    title: Germline callsets against the truth set
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Each point is one benchmarked callset on the precision-recall plane, top
-      right is best, and the Germline tab adds its errors and strata. The recall
-      card passes at 0.9 and warns below 0.8, defaults you can edit in the card.
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Callsets).
+  # Key figures bar: caller, then callset, once per route.
+  - component_type: interactive
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display:
+      icon_name: mdi:tools
+      custom_color: indigo
+      strip_label: Caller
+    section: Key figures
+    tag: vb-ov-kf-caller-germline
+    index: ov-kf-caller-germline
+    title: Caller
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_vcfeval_summary
+    interactive_component_type: MultiSelect
+    column_name: label
+    column_type: object
+    display:
+      icon_name: mdi:flask
+      custom_color: teal
+      strip_label: Callset
+    section: Key figures
+    tag: vb-ov-kf-callset-germline
+    index: ov-kf-callset-germline
+    title: Callset
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_summary
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display:
+      icon_name: mdi:tools
+      custom_color: indigo
+      strip_label: Caller
+    section: Key figures
+    tag: vb-ov-kf-caller-somatic
+    index: ov-kf-caller-somatic
+    title: Caller
+    layout: {x: 0, y: 1, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_summary
+    interactive_component_type: MultiSelect
+    column_name: label
+    column_type: object
+    display:
+      icon_name: mdi:flask
+      custom_color: teal
+      strip_label: Callset
+    section: Key figures
+    tag: vb-ov-kf-callset-somatic
+    index: ov-kf-callset-somatic
+    title: Callset
+    layout: {x: 2, y: 1, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sv_truvari_summary
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display:
+      icon_name: mdi:tools
+      custom_color: indigo
+      strip_label: Caller
+    section: Key figures
+    tag: vb-ov-kf-caller-sv
+    index: ov-kf-caller-sv
+    title: Caller
+    layout: {x: 0, y: 2, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sv_truvari_summary
+    interactive_component_type: MultiSelect
+    column_name: label
+    column_type: object
+    display:
+      icon_name: mdi:flask
+      custom_color: teal
+      strip_label: Callset
+    section: Key figures
+    tag: vb-ov-kf-callset-sv
+    index: ov-kf-callset-sv
+    title: Callset
+    layout: {x: 2, y: 2, w: 2, h: 1}
+  - component_type: text
+    title: nf-core/variantbenchmarking
+    order: 1
+    body: >
+      Variant callers scored against a truth set: precision, recall and F1 for every callset,
+      split by variant type, allele fraction or scoring level. [Run parameters](params:)
+    tag: vb-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/variantbenchmarking compares the calls of one or more callers with a truth set and scores each callset on precision, recall and F1. A run benchmarks one variant type (germline small variants, somatic SNVs or indels, or structural variants), so only the tab of that type appears.
+
+      Each tab keeps its own filters in the left panel. A bar above a section narrows that section only.
+    tag: vb-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash. One callset line per route, each pruned with its data.
+  - component_type: text
+    surface: card
+    values:
+      n_germ: {dc: germline_vcfeval_summary, column: label, aggregation: nunique, format: integer}
+      n_som: {dc: somatic_sompy_summary, column: label, aggregation: nunique, format: integer}
+      n_sv: {dc: sv_truvari_summary, column: label, aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:shape-outline) **Variants** {{param:analysis}} · {{param:variant_type}}
+      - ![](icon:mdi:check-all) **Truth set** {{param:truth_id}}
+      - ![](icon:mdi:tools) **Methods** {{param:method}}
+      - ![](icon:mdi:map-marker-outline) **Genome** {{param:genome}}
+      - ![](icon:mdi:flask) **Callsets** {{n_germ}} germline
+      - ![](icon:mdi:flask) **Callsets** {{n_som}} somatic
+      - ![](icon:mdi:flask) **Callsets** {{n_sv}} structural
+    tag: vb-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  - component_type: text
+    surface: card
+    accent: indigo
+    body: |
+      ### One run, one variant type
+      The calls are prepared once, then scored on the route of the run's variant type; each route opens its tab.
+
+      ::: steps
+      1. ![](icon:mdi:tune) **Prepare** Normalise and deduplicate the calls · [Settings](params:preprocess) · [Truth set](params:truth)
+      2. ![](icon:mdi:dna) **Germline** hap.py and rtg-tools vcfeval · [Settings](params:method) · [Germline](tab:Germline)
+      3. ![](icon:mdi:target) **Somatic** som.py and rtg-tools vcfeval · [Settings](params:method) · [Somatic](tab:Somatic)
+      4. ![](icon:mdi:chart-scatter-plot) **Structural** Truvari, SVanalyzer, Wittyer · [Settings](params:method) · [Structural](tab:Structural & CNV)
+      :::
+    tag: vb-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one row of four cards per route, each opening its route's tab.
+  # ------------------------------------------------------------ germline row
   - component_type: card
-    tag: card-overview-germline-callsets
-    section: Germline at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
     use: rtgtools/vcfeval_summary
-    aggregation: nunique
+    aggregation: count
     column_name: label
     column_type: object
-    secondary_layout: donut
+    secondary_layout: composition
     breakdown_col: caller
-    top_n_count: 3
-    display: {icon_name: 'mdi:flask', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Germline callsets
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    display:
+      icon_name: mdi:flask
+      icon_color: blue
+      caption: germline callsets, by caller
+      link: tab:Germline
+    section: Key figures
+    tag: vb-ov-kf-germline-callsets
+    index: ov-kf-germline-callsets
+    title: Callsets
+    description: Germline callsets scored against the truth set. The bar splits them by caller.
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: card-overview-germline-f1
-    section: Germline at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
     use: rtgtools/vcfeval_summary
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
     column_name: f1
     column_type: float64
-    display: {icon_name: 'mdi:trophy', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Germline F1
-    layout: {x: 2, y: 2, w: 2, h: 2}
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:trophy
+      icon_color: grape
+      caption: median per callset, with its spread
+      link: tab:Germline
+      decimals: 3
+    section: Key figures
+    tag: vb-ov-kf-germline-f1
+    index: ov-kf-germline-f1
+    title: F1
+    description: Median F1 of the germline callsets (rtg-tools vcfeval). The box shows how it spreads.
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: card-overview-germline-prec
-    section: Germline at a glance
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_vcfeval_summary
-    use: rtgtools/vcfeval_summary
-    aggregation: average
-    column_name: precision
-    column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
-    display: {icon_name: 'mdi:bullseye-arrow', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Germline precision
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: card-overview-germline-recall
-    section: Germline at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
     use: rtgtools/vcfeval_summary
@@ -109,92 +265,103 @@ main_dashboard:
     threshold_value: 0.9
     threshold_direction: min
     threshold_warn: 0.8
-    display: {icon_name: 'mdi:magnet', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Germline recall
-    layout: {x: 6, y: 2, w: 2, h: 2}
-  - component_type: advanced_viz
-    tag: av-overview-germline-pr
-    section: Germline at a glance
+    display:
+      icon_name: mdi:magnet
+      icon_color: orange
+      caption: median per callset, floor 0.9
+      link: tab:Germline
+      decimals: 3
+    section: Key figures
+    tag: vb-ov-kf-germline-recall
+    index: ov-kf-germline-recall
+    title: Recall
+    description: Median share of the truth variants a germline callset recovers. It passes at 0.9 and warns below 0.8.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: variantbenchmarking
     data_collection_tag: germline_vcfeval_summary
-    use: rtgtools/pr_scatter
-    config: {support_col: tp_comp}
-    title: Germline precision-recall benchmark (rtg-tools vcfeval)
-    description: Each point is a germline callset; size is its true positives, colour its F1. Top right is best.
-    title_size: h3
-    layout: {x: 0, y: 4, w: 8, h: 6}
-
-  # ----------------------------------------------------------------- somatic
-  - component_type: text
-    tag: text-overview-somatic
-    section: Somatic at a glance
-    title: Somatic callers against the truth set
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Each point is one somatic callset scored by
-      [som.py](https://github.com/Illumina/hap.py), and the Somatic tab adds
-      over-calling, allele-fraction strata and confidence intervals. The
-      precision card passes at 0.5 and warns below 0.25, defaults you can edit
-      in the card.
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    use: rtgtools/vcfeval_summary
+    aggregation: median
+    column_name: precision
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:bullseye-arrow
+      icon_color: teal
+      caption: median per callset, with its spread
+      link: tab:Germline
+      decimals: 3
+    section: Key figures
+    tag: vb-ov-kf-germline-precision
+    index: ov-kf-germline-precision
+    title: Precision
+    description: Median share of a germline callset's calls that are in the truth set.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # ------------------------------------------------------------- somatic row
   - component_type: card
-    tag: card-overview-somatic-callers
-    section: Somatic at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
     use: sompy/summary
-    aggregation: nunique
-    aggregations: [count]
-    column_name: caller
+    aggregation: count
+    column_name: label
     column_type: object
-    secondary_layout: compact
-    display: {icon_name: 'mdi:tools', icon_color: '#E91E63', title_color: '#E91E63', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Somatic callers
+    secondary_layout: composition
+    breakdown_col: caller
+    display:
+      icon_name: mdi:flask
+      icon_color: blue
+      caption: somatic callsets, by caller
+      link: tab:Somatic
+    section: Key figures
+    tag: vb-ov-kf-somatic-callsets
+    index: ov-kf-somatic-callsets
+    title: Callsets
+    description: Somatic callsets scored against the truth set. The bar splits them by caller.
     layout: {x: 0, y: 2, w: 2, h: 2}
   - component_type: card
-    tag: card-overview-somatic-f1
-    section: Somatic at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
     use: sompy/summary
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
     column_name: f1
     column_type: float64
-    display: {icon_name: 'mdi:trophy', icon_color: '#E91E63', title_color: '#E91E63', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Somatic F1
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:trophy
+      icon_color: grape
+      caption: median per callset, with its spread
+      link: tab:Somatic
+      decimals: 3
+    section: Key figures
+    tag: vb-ov-kf-somatic-f1
+    index: ov-kf-somatic-f1
+    title: F1
+    description: Median F1 of the somatic callsets (som.py). The box shows how it spreads.
     layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
-    tag: card-overview-somatic-recall
-    section: Somatic at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
     use: sompy/summary
-    aggregation: average
+    aggregation: median
     column_name: recall
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
-    display: {icon_name: 'mdi:magnet', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Somatic recall
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:magnet
+      icon_color: orange
+      caption: median per callset, with its spread
+      link: tab:Somatic
+      decimals: 3
+    section: Key figures
+    tag: vb-ov-kf-somatic-recall
+    index: ov-kf-somatic-recall
+    title: Recall
+    description: Median share of the truth variants a somatic callset recovers.
     layout: {x: 4, y: 2, w: 2, h: 2}
   - component_type: card
-    tag: card-overview-somatic-prec
-    section: Somatic at a glance
     workflow_tag: variantbenchmarking
     data_collection_tag: somatic_sompy_summary
     use: sompy/summary
@@ -205,874 +372,61 @@ main_dashboard:
     threshold_value: 0.5
     threshold_direction: min
     threshold_warn: 0.25
-    display: {icon_name: 'mdi:bullseye-arrow', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Somatic precision
-    layout: {x: 6, y: 2, w: 2, h: 2}
-  - component_type: advanced_viz
-    tag: av-overview-somatic-pr
-    section: Somatic at a glance
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    use: sompy/pr_scatter
-    config: {support_col: tp}
-    title: Somatic precision-recall benchmark (som.py)
-    description: Each point is a somatic callset; size is its true positives, colour its F1. Top right is best.
-    title_size: h3
-    layout: {x: 0, y: 4, w: 8, h: 6}
-
-  # -------------------------------------------------------------- left panel
-  - component_type: interactive
-    tag: interactive-germline-sample
-    index: germline-sample-filter
-    section: Callsets
-    group: Germline
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_vcfeval_summary
-    interactive_component_type: MultiSelect
-    column_name: label
-    column_type: object
-    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:flask'}
-    placement: left
-    title: Germline callset
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: interactive-somatic-caller
-    index: somatic-caller-filter
-    section: Callsets
-    group: Somatic
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    interactive_component_type: MultiSelect
-    column_name: caller
-    column_type: object
-    display: {title_size: md, custom_color: '#E91E63', icon_name: 'mdi:tools'}
-    placement: left
-    title: Somatic caller
-    layout: {x: 0, y: 3, w: 1, h: 3}
-
-tabs:
-# =============================================================================
-# Germline (small variants)
-# =============================================================================
-- title: Germline (small variants)
-  subtitle: SNP and indel benchmarking with hap.py and rtg-tools vcfeval
-  tab_order: 1
-  tab_icon: mdi:dna
-  tab_icon_color: indigo
-  icon: /assets/images/workflows/nf-core.png
-  icon_color: green
-  workflow_system: nf-core
-  advanced_viz_controls: header
-  # The persistent `Callsets` section from the Overview lands above these.
-  filter_sections:
-  - name: Score ranges
-    icon: mdi:tune
-    color: indigo
-    description: Keep only the germline callsets inside an accuracy band
-  - name: hap.py scope
-    icon: mdi:filter-variant
-    color: teal
-    description: Variant type and filter for the hap.py panels
-  grid_sections:
-  - name: Germline counts
-    icon: mdi:counter
-    color: indigo
-    description: True positives, errors and the F1 spread across the germline callsets
-  - name: Error profile
-    icon: mdi:alert-outline
-    color: orange
-    description: Where the calls go wrong, false positives and misses per callset
-  - name: hap.py stratification
-    icon: mdi:chart-line
-    color: teal
-    description: SNP vs INDEL accuracy and the quality-threshold sweep
-  - name: Reference tables
-    icon: mdi:table
-    color: gray
-    description: The vcfeval and hap.py rows behind every tile
-    collapsed: true
-  components:
-  # -------------------------------------------------------------- counts
-  - component_type: text
-    tag: text-germline-intro
-    section: Germline counts
-    title: Germline small-variant benchmarking
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The cards total the true positives and errors of the selected callsets,
-      and the confusion matrix places every count per callset. Below it,
-      [hap.py](https://github.com/Illumina/hap.py) splits the score by variant
-      type and quality threshold.
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_vcfeval_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: card
-    tag: card-germline-tp
-    section: Germline counts
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_vcfeval_summary
-    use: rtgtools/vcfeval_summary
-    aggregation: sum
-    aggregations: [min, max]
-    secondary_layout: compact
-    column_name: tp_comp
-    column_type: int64
-    display: {icon_name: 'mdi:check-decagram', icon_color: '#7E57C2', title_color: '#7E57C2', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: True positive calls
-    layout: {x: 0, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: card-germline-fp
-    section: Germline counts
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_vcfeval_summary
-    use: rtgtools/vcfeval_summary
-    aggregation: sum
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: fp
-    column_type: int64
-    display: {icon_name: 'mdi:alert-outline', icon_color: '#E53935', title_color: '#E53935', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: False positives
-    layout: {x: 2, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: card-germline-fn
-    section: Germline counts
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_vcfeval_summary
-    use: rtgtools/vcfeval_summary
-    aggregation: sum
-    column_name: fn
-    column_type: int64
-    secondary_layout: histogram
-    display: {icon_name: 'mdi:magnet', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: False negatives
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: card-germline-truth
-    section: Germline counts
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_vcfeval_summary
-    use: rtgtools/vcfeval_summary
-    aggregation: sum
-    aggregations: [min, max]
-    secondary_layout: compact
-    column_name: tp_base
-    column_type: int64
-    display: {icon_name: 'mdi:check-all', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Truth variants recovered
-    layout: {x: 6, y: 2, w: 2, h: 2}
-
-  # ------------------------------------------------------------- error profile
-  - component_type: text
-    tag: text-germline-errors
-    section: Error profile
-    title: Where the calls go wrong
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The confusion matrix shades each cell by its share of the callset's calls
-      and labels it with the raw count. False positives are calls absent from
-      the truth set, false negatives truth variants the callset missed.
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_vcfeval_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: av-germline-confusion
-    section: Error profile
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_vcfeval_summary
-    use: rtgtools/confusion
-    title: Confusion matrix
-    description: TP, FP and FN per callset; the shade is the share of that callset's calls, the label the raw count.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 4}
-
-  # ------------------------------------------------------ hap.py stratification
-  - component_type: text
-    tag: text-germline-happy
-    section: hap.py stratification
-    title: hap.py splits the score by variant type and quality threshold
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      hap.py pools the samples and scores SNPs and INDELs separately, once for
-      all calls and once for PASS calls only. The threshold sweep traces
-      precision against recall as the quality cut-off rises; the panel settings
-      switch it to a per-threshold view.
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_happy_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: figure
-    tag: fig-germline-happy-type
-    section: hap.py stratification
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_happy_summary
-    use: happy/summary
-    visu_type: bar
-    dict_kwargs: {x: variant_type, y: f1, color: filter, barmode: group}
-    title: F1 by variant type
-    description: "SNP vs INDEL, pooled across samples. ALL and PASS coincide when no variant was hard-filtered."
-    title_size: h3
-    layout: {x: 0, y: 2, w: 4, h: 5}
-  - component_type: advanced_viz
-    tag: av-germline-happy-roc
-    section: hap.py stratification
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_happy_roc
-    use: happy/pr_curve
-    config: {threshold_col: quality}
-    title: Quality-threshold sweep
-    description: Precision-recall curve with AUC across hap.py quality thresholds (germline SNP, PASS).
-    title_size: h3
-    layout: {x: 4, y: 2, w: 4, h: 5}
-
-  # ---------------------------------------------------------- reference tables
-  - component_type: text
-    tag: text-germline-tables
-    section: Reference tables
-    title: The rows behind every tile
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The [rtg-tools](https://github.com/RealTimeGenomics/rtg-tools) vcfeval and
-      hap.py summary rows every panel above is computed from. Filters picked in
-      the left panel narrow these tables too.
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_vcfeval_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: table
-    tag: table-germline-vcfeval
-    section: Reference tables
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_vcfeval_summary
-    use: rtgtools/vcfeval_summary
-    row_selection_enabled: true
-    row_selection_column: label
-    title: rtg-tools vcfeval summary
-    description: TP, FP, FN, precision, recall and F1 per callset, with its caller and truth set.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 4}
-  - component_type: table
-    tag: table-germline-happy
-    section: Reference tables
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_happy_summary
-    use: happy/summary
-    row_selection_enabled: false
-    title: hap.py pooled summary
-    description: One row per variant type and filter, pooled across callsets.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 6, w: 8, h: 3}
-  - component_type: table
-    tag: table-germline-happy-roc
-    section: Reference tables
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_happy_roc
-    use: happy/roc
-    row_selection_enabled: false
-    title: hap.py threshold sweep
-    description: Precision, recall and F1 per quality threshold.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 9, w: 8, h: 3}
-
-  # -------------------------------------------------------------- left panel
-  - component_type: interactive
-    tag: interactive-germline-f1
-    index: germline-f1-range
-    section: Score ranges
-    group: Accuracy
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_vcfeval_summary
-    interactive_component_type: RangeSlider
-    column_name: f1
-    column_type: float64
-    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:trophy'}
-    placement: left
-    title: F1
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: interactive-germline-precision
-    index: germline-precision-range
-    section: Score ranges
-    group: Accuracy
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_vcfeval_summary
-    interactive_component_type: RangeSlider
-    column_name: precision
-    column_type: float64
-    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:bullseye-arrow'}
-    placement: left
+    display:
+      icon_name: mdi:bullseye-arrow
+      icon_color: teal
+      caption: median per callset, floor 0.5
+      link: tab:Somatic
+      decimals: 3
+    section: Key figures
+    tag: vb-ov-kf-somatic-precision
+    index: ov-kf-somatic-precision
     title: Precision
-    layout: {x: 0, y: 4, w: 1, h: 3}
-  - component_type: interactive
-    tag: interactive-germline-recall
-    index: germline-recall-range
-    section: Score ranges
-    group: Accuracy
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_vcfeval_summary
-    interactive_component_type: RangeSlider
-    column_name: recall
-    column_type: float64
-    display: {title_size: md, custom_color: '#F2A93B', icon_name: 'mdi:magnet'}
-    placement: left
-    title: Recall
-    layout: {x: 0, y: 7, w: 1, h: 3}
-  - component_type: interactive
-    tag: interactive-germline-happy-filter
-    index: germline-happy-filter
-    section: hap.py scope
-    group: hap.py
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_happy_summary
-    interactive_component_type: SegmentedControl
-    column_name: filter
-    column_type: object
-    display: {title_size: md, custom_color: '#26A69A', icon_name: 'mdi:filter-variant'}
-    placement: left
-    title: Filter
-    layout: {x: 0, y: 0, w: 1, h: 2}
-  - component_type: interactive
-    tag: interactive-germline-happy-type
-    index: germline-happy-type-filter
-    section: hap.py scope
-    group: hap.py
-    workflow_tag: variantbenchmarking
-    data_collection_tag: germline_happy_summary
-    interactive_component_type: MultiSelect
-    column_name: variant_type
-    column_type: object
-    display: {title_size: md, custom_color: '#26A69A', icon_name: 'mdi:dna'}
-    placement: left
-    title: Variant type
-    layout: {x: 0, y: 3, w: 1, h: 3}
-
-# =============================================================================
-# Somatic (small variants)
-# =============================================================================
-- title: Somatic (small variants)
-  subtitle: Somatic SNV and indel benchmarking with som.py and rtg-tools vcfeval
-  tab_order: 2
-  tab_icon: mdi:target
-  tab_icon_color: pink
-  icon: /assets/images/workflows/nf-core.png
-  icon_color: green
-  workflow_system: nf-core
-  advanced_viz_controls: header
-  # The persistent `Callsets` section from the Overview lands above these. The
-  # caller picked there also narrows the allele-fraction strata and the
-  # rtg-tools cross-check through the template's `links`.
-  filter_sections:
-  - name: Score ranges
-    icon: mdi:tune
-    color: pink
-    description: Keep only the somatic callers inside an accuracy band
-  - name: Allele fraction
-    icon: mdi:chart-bell-curve
-    color: grape
-    description: Strata of the som.py regions table
-  grid_sections:
-  - name: Somatic counts
-    icon: mdi:counter
-    color: pink
-    description: True positives, errors and the F1 spread across the somatic callers
-  - name: Error profile
-    icon: mdi:alert-outline
-    color: orange
-    description: Where the calls go wrong, over-calling and misses per caller
-  - name: Allele-fraction strata
-    icon: mdi:chart-bell-curve
-    color: grape
-    description: Accuracy per allele-fraction bin, where low-AF variants are the hardest
-  - name: Confidence intervals
-    icon: mdi:scale-balance
-    color: pink
-    description: som.py's binomial 95% intervals around precision and recall
-  - name: rtg-tools cross-check
-    icon: mdi:check-decagram
-    color: teal
-    description: The same callers scored by rtg-tools vcfeval
-    collapsed: true
-  - name: Reference tables
-    icon: mdi:table
-    color: gray
-    description: The som.py and rtg-tools rows behind every tile
-    collapsed: true
-  components:
-  # -------------------------------------------------------------- counts
-  - component_type: text
-    tag: text-somatic-intro
-    section: Somatic counts
-    title: Somatic small-variant benchmarking
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The cards total the true positives and errors of the selected callers, and
-      the confusion matrix exposes over-calling. The strata and interval plots
-      below show where each caller's accuracy comes from and how sure it is.
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: card
-    tag: card-somatic-tp
-    section: Somatic counts
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    use: sompy/summary
-    aggregation: sum
-    aggregations: [min, max]
-    secondary_layout: compact
-    column_name: tp
-    column_type: int64
-    display: {icon_name: 'mdi:check-decagram', icon_color: '#7E57C2', title_color: '#7E57C2', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: True positive calls
-    layout: {x: 0, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: card-somatic-fp
-    section: Somatic counts
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    use: sompy/summary
-    aggregation: sum
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: fp
-    column_type: int64
-    display: {icon_name: 'mdi:alert-outline', icon_color: '#E53935', title_color: '#E53935', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: False positives
-    layout: {x: 2, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: card-somatic-fn
-    section: Somatic counts
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    use: sompy/summary
-    aggregation: sum
-    column_name: fn
-    column_type: int64
-    secondary_layout: histogram
-    display: {icon_name: 'mdi:magnet', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: False negatives
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: card-somatic-truth
-    section: Somatic counts
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    use: sompy/summary
-    aggregation: max
-    aggregations: [min, max]
-    secondary_layout: compact
-    column_name: tp_base
-    column_type: int64
-    display: {icon_name: 'mdi:check-all', icon_color: '#E91E63', title_color: '#E91E63', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Truth-set variants
+    description: Median share of a somatic callset's calls that are in the truth set. It passes at 0.5 and warns below 0.25.
     layout: {x: 6, y: 2, w: 2, h: 2}
-
-  # ------------------------------------------------------------- error profile
-  - component_type: text
-    tag: text-somatic-errors
-    section: Error profile
-    title: Where the calls go wrong
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The confusion matrix shades each cell by its share of the caller's calls
-      and labels it with the raw count. False positives are on a log axis: an
-      over-calling caller can emit thousands of them against a handful from the
-      others.
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: av-somatic-confusion
-    section: Error profile
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    use: sompy/confusion
-    title: Confusion matrix
-    description: TP, FP and FN per caller; an over-calling caller dominates the FP row.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 4}
-  - component_type: figure
-    tag: fig-somatic-fp
-    section: Error profile
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    use: sompy/summary
-    visu_type: bar
-    dict_kwargs: {x: caller, y: fp, log_y: true}
-    title: False positives per caller, log scale
-    description: Calls absent from the truth set. The log axis keeps an over-calling caller and a conservative one readable on the same plot.
-    title_size: h3
-    layout: {x: 0, y: 6, w: 8, h: 4}
-
-  # ---------------------------------------------------- allele-fraction strata
-  - component_type: text
-    tag: text-somatic-af
-    section: Allele-fraction strata
-    title: Accuracy across allele-fraction bins
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [som.py](https://github.com/Illumina/hap.py) re-scores each caller inside
-      allele-fraction bins. Low-AF somatic variants are the hardest to recover,
-      so recall usually climbs from left to right; a caller that stays flat is
-      missing the subclonal fraction.
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_regions
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: figure
-    tag: fig-somatic-afbars-f1
-    section: Allele-fraction strata
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_regions
-    use: sompy/regions
-    visu_type: bar
-    dict_kwargs: {x: af_bin, y: f1, color: caller, barmode: group}
-    title: F1 across allele-fraction bins
-    description: F1 per bin, one bar per caller.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 4, h: 5}
-  - component_type: figure
-    tag: fig-somatic-afbars
-    section: Allele-fraction strata
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_regions
-    use: sompy/regions
-    visu_type: bar
-    dict_kwargs: {x: af_bin, y: recall, color: caller, barmode: group}
-    title: Recall across allele-fraction bins
-    description: Recall per bin, one bar per caller.
-    title_size: h3
-    layout: {x: 4, y: 2, w: 4, h: 5}
-
-  # ------------------------------------------------------ confidence intervals
-  - component_type: text
-    tag: text-somatic-ci
-    section: Confidence intervals
-    title: How certain are the precision and recall estimates
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      som.py reports a binomial 95% interval around every precision and recall
-      value. Whiskers that overlap mean two callers cannot be told apart on this
-      truth set; a wide whisker means the estimate rests on few variants.
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: av-somatic-precision-ci
-    section: Confidence intervals
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    use: sompy/precision_ci
-    config: {metric_name: Precision}
-    title: Precision with its 95% interval
-    description: Point estimate and binomial 95% interval per caller, from som.py.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 4, h: 5}
-  - component_type: advanced_viz
-    tag: av-somatic-recall-ci
-    section: Confidence intervals
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    use: sompy/recall_ci
-    config: {metric_name: Recall}
-    title: Recall with its 95% interval
-    description: Point estimate and binomial 95% interval per caller, from som.py.
-    title_size: h3
-    layout: {x: 4, y: 2, w: 4, h: 5}
-
-  # ------------------------------------------------------ rtg-tools cross-check
-  - component_type: text
-    tag: text-somatic-vcfeval
-    section: rtg-tools cross-check
-    title: The same callers, scored by rtg-tools vcfeval
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [rtg-tools](https://github.com/RealTimeGenomics/rtg-tools) vcfeval
-      matches haplotypes rather than sites, so its precision and recall differ
-      slightly from som.py's. A caller that moves rank between the two views
-      deserves a closer look.
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_vcfeval_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: av-somatic-vcfeval-pr
-    section: rtg-tools cross-check
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_vcfeval_summary
-    use: rtgtools/pr_scatter
-    config: {support_col: tp_comp}
-    title: Precision-recall benchmark (rtg-tools vcfeval)
-    description: Each point is a callset; size is its true positives, colour its F1.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 6}
-  - component_type: table
-    tag: table-somatic-vcfeval
-    section: rtg-tools cross-check
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_vcfeval_summary
-    use: rtgtools/vcfeval_summary
-    row_selection_enabled: true
-    row_selection_column: caller
-    title: rtg-tools vcfeval summary
-    description: TP, FP, FN, precision, recall and F1 per callset, with its caller and truth set.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 8, w: 8, h: 6}
-
-  # ---------------------------------------------------------- reference tables
-  - component_type: text
-    tag: text-somatic-tables
-    section: Reference tables
-    title: The rows behind every tile
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The som.py summary and allele-fraction rows every panel above is computed
-      from. Filters picked in the left panel narrow these tables too.
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: table
-    tag: table-somatic-sompy
-    section: Reference tables
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    use: sompy/summary
-    row_selection_enabled: true
-    row_selection_column: caller
-    title: som.py summary
-    description: TP, FP, FN, precision, recall and F1 per callset, with 95% confidence intervals.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 4}
-  - component_type: table
-    tag: table-somatic-regions
-    section: Reference tables
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_regions
-    use: sompy/regions
-    row_selection_enabled: true
-    row_selection_column: caller
-    title: som.py allele-fraction strata
-    description: One row per caller and allele-fraction bin, with TP, FP and FN per bin.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 6, w: 8, h: 4}
-
-  # -------------------------------------------------------------- left panel
-  - component_type: interactive
-    tag: interactive-somatic-f1
-    index: somatic-f1-range
-    section: Score ranges
-    group: Accuracy
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    interactive_component_type: RangeSlider
-    column_name: f1
-    column_type: float64
-    display: {title_size: md, custom_color: '#E91E63', icon_name: 'mdi:trophy'}
-    placement: left
-    title: F1
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: interactive-somatic-precision
-    index: somatic-precision-range
-    section: Score ranges
-    group: Accuracy
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    interactive_component_type: RangeSlider
-    column_name: precision
-    column_type: float64
-    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:bullseye-arrow'}
-    placement: left
-    title: Precision
-    layout: {x: 0, y: 4, w: 1, h: 3}
-  - component_type: interactive
-    tag: interactive-somatic-recall
-    index: somatic-recall-range
-    section: Score ranges
-    group: Accuracy
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_summary
-    interactive_component_type: RangeSlider
-    column_name: recall
-    column_type: float64
-    display: {title_size: md, custom_color: '#F2A93B', icon_name: 'mdi:magnet'}
-    placement: left
-    title: Recall
-    layout: {x: 0, y: 7, w: 1, h: 3}
-  - component_type: interactive
-    tag: interactive-somatic-afbin
-    index: somatic-afbin-filter
-    section: Allele fraction
-    group: Strata
-    workflow_tag: variantbenchmarking
-    data_collection_tag: somatic_sompy_regions
-    interactive_component_type: MultiSelect
-    column_name: af_bin
-    column_type: object
-    display: {title_size: md, custom_color: '#7E57C2', icon_name: 'mdi:chart-bell-curve'}
-    placement: left
-    title: Allele-fraction bin
-    layout: {x: 0, y: 0, w: 1, h: 3}
-
-# =============================================================================
-# Structural & CNV (optional profiles)
-# =============================================================================
-- title: Structural & CNV
-  subtitle: Structural-variant and copy-number benchmarking with Truvari, SVanalyzer and Wittyer
-  tab_order: 3
-  tab_icon: mdi:chart-scatter-plot
-  tab_icon_color: orange
-  icon: /assets/images/workflows/nf-core.png
-  icon_color: green
-  workflow_system: nf-core
-  advanced_viz_controls: header
-  # Every data collection on this tab is optional: the public megatest has no
-  # sv/ or cnv/ output, so on the reference dataset the importer hides the
-  # components and drops the tab. It comes back as soon as a run ships the
-  # Truvari / SVanalyzer / Wittyer summaries.
-  filter_sections:
-  - name: SV callsets
-    icon: mdi:dna
-    color: orange
-    description: Which structural-variant callsets to compare
-  - name: Wittyer scope
-    icon: mdi:shape-outline
-    color: orange
-    description: Which Wittyer level to read
-  grid_sections:
-  - name: SV benchmark
-    icon: mdi:chart-scatter-plot
-    color: orange
-    description: Truvari and SVanalyzer accuracy per structural-variant callset
-  - name: Wittyer, per event and per base
-    icon: mdi:shape-outline
-    color: orange
-    description: Wittyer accuracy per callset, scored per event and per base
-  - name: Reference tables
-    icon: mdi:table
-    color: gray
-    description: The Truvari, SVanalyzer and Wittyer rows behind every tile
-    collapsed: true
-  components:
-  # -------------------------------------------------------------- SV benchmark
-  - component_type: text
-    tag: text-svcnv-intro
-    section: SV benchmark
-    title: Structural-variant and CNV benchmarking
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [Truvari](https://github.com/ACEnglish/truvari) and
-      [SVanalyzer](https://github.com/nhansen/SVanalyzer) score each
-      structural-variant callset against the run's truth set, and the tab
-      appears only on a run that produced their tables. The recall card passes
-      at 0.8 and warns below 0.6, defaults you can edit in the card.
-    workflow_tag: variantbenchmarking
-    data_collection_tag: sv_truvari_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
+  # ---------------------------------------------------------- structural row
   - component_type: card
-    tag: card-sv-callsets
-    section: SV benchmark
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary
     use: truvari/summary
-    aggregation: nunique
-    aggregations: [count]
+    aggregation: count
     column_name: label
     column_type: object
-    secondary_layout: compact
-    display: {icon_name: 'mdi:flask', icon_color: '#FB8C00', title_color: '#FB8C00', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: SV callsets
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    secondary_layout: composition
+    breakdown_col: caller
+    display:
+      icon_name: mdi:flask
+      icon_color: blue
+      caption: structural callsets, by caller
+      link: tab:Structural & CNV
+    section: Key figures
+    tag: vb-ov-kf-sv-callsets
+    index: ov-kf-sv-callsets
+    title: Callsets
+    description: Structural-variant callsets scored by Truvari. The bar splits them by caller.
+    layout: {x: 0, y: 4, w: 2, h: 2}
   - component_type: card
-    tag: card-sv-f1
-    section: SV benchmark
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary
     use: truvari/summary
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
     column_name: f1
     column_type: float64
-    display: {icon_name: 'mdi:trophy', icon_color: '#FB8C00', title_color: '#FB8C00', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Truvari F1
-    layout: {x: 2, y: 2, w: 2, h: 2}
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:trophy
+      icon_color: grape
+      caption: median per callset, with its spread
+      link: tab:Structural & CNV
+      decimals: 3
+    section: Key figures
+    tag: vb-ov-kf-sv-f1
+    index: ov-kf-sv-f1
+    title: F1
+    description: Median Truvari F1 of the structural-variant callsets. The box shows how it spreads.
+    layout: {x: 2, y: 4, w: 2, h: 2}
   - component_type: card
-    tag: card-sv-prec
-    section: SV benchmark
-    workflow_tag: variantbenchmarking
-    data_collection_tag: sv_truvari_summary
-    use: truvari/summary
-    aggregation: average
-    column_name: precision
-    column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
-    display: {icon_name: 'mdi:bullseye-arrow', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Truvari precision
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: card-sv-recall
-    section: SV benchmark
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary
     use: truvari/summary
@@ -1083,144 +437,1113 @@ tabs:
     threshold_value: 0.8
     threshold_direction: min
     threshold_warn: 0.6
-    display: {icon_name: 'mdi:magnet', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Truvari recall
-    layout: {x: 6, y: 2, w: 2, h: 2}
-  - component_type: advanced_viz
-    tag: av-sv-truvari-pr
-    section: SV benchmark
-    workflow_tag: variantbenchmarking
-    data_collection_tag: sv_truvari_summary
-    use: truvari/pr_scatter
-    title: SV precision-recall benchmark (Truvari)
-    description: Each point is a callset, coloured by F1. Top right is best.
-    title_size: h3
-    layout: {x: 0, y: 4, w: 4, h: 6}
-  - component_type: figure
-    tag: fig-sv-svbenchmark-f1
-    section: SV benchmark
-    workflow_tag: variantbenchmarking
-    data_collection_tag: sv_svbenchmark_summary
-    use: svanalyzer/svbenchmark
-    visu_type: bar
-    dict_kwargs: {x: label, y: f1, color: caller}
-    title: F1 by callset, SVanalyzer svbenchmark
-    description: SVanalyzer's F1 per callset, the second structural-variant benchmark the pipeline runs.
-    title_size: h3
-    layout: {x: 4, y: 4, w: 4, h: 6}
-
-  # ------------------------------------------------------------- CNV strata
-  - component_type: text
-    tag: text-cnv-intro
-    section: Wittyer, per event and per base
-    title: Wittyer scores each callset twice
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [Wittyer](https://github.com/Illumina/witty.er) scores each callset per
-      event and per base. A caller that finds events but misplaces their
-      breakpoints scores well per event and poorly per base.
-    workflow_tag: variantbenchmarking
-    data_collection_tag: cnv_wittyer_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: figure
-    tag: fig-cnv-wittyer-f1
-    section: Wittyer, per event and per base
-    workflow_tag: variantbenchmarking
-    data_collection_tag: cnv_wittyer_summary
-    use: wittyer/summary
-    visu_type: bar
-    dict_kwargs: {x: label, y: f1, color: stats_type, barmode: group}
-    title: Wittyer F1 per callset, per event and per base
-    description: Two bars per callset, the event-level and the base-level F1.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 5}
-
-  # ---------------------------------------------------------- reference tables
-  - component_type: text
-    tag: text-svcnv-tables
-    section: Reference tables
-    title: The rows behind every tile
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The Truvari, SVanalyzer and Wittyer summary rows every panel above is
-      computed from. Filters picked in the left panel narrow these tables too.
-    workflow_tag: variantbenchmarking
-    data_collection_tag: sv_truvari_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: table
-    tag: table-sv-truvari
-    section: Reference tables
+    display:
+      icon_name: mdi:magnet
+      icon_color: orange
+      caption: median per callset, floor 0.8
+      link: tab:Structural & CNV
+      decimals: 3
+    section: Key figures
+    tag: vb-ov-kf-sv-recall
+    index: ov-kf-sv-recall
+    title: Recall
+    description: Median share of the truth structural variants a callset recovers. It passes at 0.8 and warns below 0.6.
+    layout: {x: 4, y: 4, w: 2, h: 2}
+  - component_type: card
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary
     use: truvari/summary
-    row_selection_enabled: true
-    row_selection_column: label
-    title: Truvari summary
-    description: Precision, recall and F1 per callset.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 4}
-  - component_type: table
-    tag: table-sv-svbenchmark
-    section: Reference tables
-    workflow_tag: variantbenchmarking
-    data_collection_tag: sv_svbenchmark_summary
-    use: svanalyzer/svbenchmark
-    row_selection_enabled: true
-    row_selection_column: label
-    title: SVanalyzer svbenchmark summary
-    description: Precision, recall and F1 per callset.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 6, w: 8, h: 4}
-  - component_type: table
-    tag: table-cnv-wittyer
-    section: Reference tables
-    workflow_tag: variantbenchmarking
-    data_collection_tag: cnv_wittyer_summary
-    use: wittyer/summary
-    row_selection_enabled: true
-    row_selection_column: label
-    title: Wittyer summary
-    description: Precision, recall and F1 per callset and Wittyer level.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 10, w: 8, h: 4}
-
-  # -------------------------------------------------------------- left panel
+    aggregation: median
+    column_name: precision
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:bullseye-arrow
+      icon_color: teal
+      caption: median per callset, with its spread
+      link: tab:Structural & CNV
+      decimals: 3
+    section: Key figures
+    tag: vb-ov-kf-sv-precision
+    index: ov-kf-sv-precision
+    title: Precision
+    description: Median share of a structural callset's calls that are in the truth set.
+    layout: {x: 6, y: 4, w: 2, h: 2}
+  # Findings bar: caller, then callset, once per route.
   - component_type: interactive
-    tag: interactive-sv-callset
-    index: sv-callset-filter
-    section: SV callsets
-    group: Callset scope
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_vcfeval_summary
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display:
+      icon_name: mdi:tools
+      custom_color: indigo
+      strip_label: Caller
+    section: Findings
+    tag: vb-ov-findings-caller-germline
+    index: ov-fd-caller-germline
+    title: Caller
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_vcfeval_summary
+    interactive_component_type: MultiSelect
+    column_name: label
+    column_type: object
+    display:
+      icon_name: mdi:flask
+      custom_color: teal
+      strip_label: Callset
+    section: Findings
+    tag: vb-ov-findings-callset-germline
+    index: ov-fd-callset-germline
+    title: Callset
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_summary
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display:
+      icon_name: mdi:tools
+      custom_color: indigo
+      strip_label: Caller
+    section: Findings
+    tag: vb-ov-findings-caller-somatic
+    index: ov-fd-caller-somatic
+    title: Caller
+    layout: {x: 4, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_summary
+    interactive_component_type: MultiSelect
+    column_name: label
+    column_type: object
+    display:
+      icon_name: mdi:flask
+      custom_color: teal
+      strip_label: Callset
+    section: Findings
+    tag: vb-ov-findings-callset-somatic
+    index: ov-fd-callset-somatic
+    title: Callset
+    layout: {x: 6, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sv_truvari_summary
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display:
+      icon_name: mdi:tools
+      custom_color: indigo
+      strip_label: Caller
+    section: Findings
+    tag: vb-ov-findings-caller-sv
+    index: ov-fd-caller-sv
+    title: Caller
+    layout: {x: 0, y: 1, w: 2, h: 1}
+  - component_type: interactive
     workflow_tag: variantbenchmarking
     data_collection_tag: sv_truvari_summary
     interactive_component_type: MultiSelect
     column_name: label
     column_type: object
-    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:flask'}
-    placement: left
+    display:
+      icon_name: mdi:flask
+      custom_color: teal
+      strip_label: Callset
+    section: Findings
+    tag: vb-ov-findings-callset-sv
+    index: ov-fd-callset-sv
+    title: Callset
+    layout: {x: 2, y: 1, w: 2, h: 1}
+  # One result row per finding, each citing one data collection, so the import
+  # keeps only the rows of the run's route.
+  - component_type: text
+    surface: card
+    values:
+      g_best: {dc: germline_vcfeval_summary, column: f1, aggregation: max, format: 'decimals:3'}
+      g_top: {dc: germline_vcfeval_summary, column: caller, aggregation: top, weight: f1}
+      h_snp: {dc: germline_happy_summary, column: f1, aggregation: max, filter_expr: "(col('variant_type') == 'SNP') & (col('filter') == 'PASS')",
+        format: 'decimals:3'}
+      h_indel: {dc: germline_happy_summary, column: f1, aggregation: max, filter_expr: "(col('variant_type') == 'INDEL') & (col('filter') == 'PASS')",
+        format: 'decimals:3'}
+      s_best: {dc: somatic_sompy_summary, column: f1, aggregation: max, format: 'decimals:3'}
+      s_top: {dc: somatic_sompy_summary, column: caller, aggregation: top, weight: f1}
+      t_best: {dc: sv_truvari_summary, column: f1, aggregation: max, format: 'decimals:3'}
+      t_top: {dc: sv_truvari_summary, column: caller, aggregation: top, weight: f1}
+      w_event: {dc: cnv_wittyer_summary, column: f1, aggregation: median, filter_expr: "col('stats_type') == 'Event'",
+        format: 'decimals:3'}
+      w_base: {dc: cnv_wittyer_summary, column: f1, aggregation: median, filter_expr: "col('stats_type') == 'Base'",
+        format: 'decimals:3'}
+    body: |
+      - **{{g_best}}** best germline F1, from {{g_top}} – rtg-tools vcfeval, one value per callset [Germline](tab:Germline)
+      - **{{h_snp}}** SNP F1 of the PASS calls, {{h_indel}} for indels – hap.py, pooled over samples [Germline](tab:Germline)
+      - **{{s_best}}** best somatic F1, from {{s_top}} – som.py, one value per callset [Somatic](tab:Somatic)
+      - **{{t_best}}** best structural F1, from {{t_top}} – Truvari, one value per callset [Structural](tab:Structural & CNV)
+      - **{{w_event}}** median F1 per event, {{w_base}} per base – Wittyer, over the callsets [Structural](tab:Structural & CNV)
+    section: Findings
+    tag: vb-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Four highlights per route, in two rows that each fill the width. A route
+  # the run did not take drops its four and the import re-packs the rest.
+  # ------------------------------------------------------------- germline
+  - component_type: highlight
+    section: Findings
+    source_tab: Germline
+    source_component: gl-pr-scatter
+    caption: One point per callset, coloured by caller; top right is best, the curves are F1 contours.
+    tag: vb-ov-hl-germline-pr
+    index: ov-hl-germline-pr
+    layout: {x: 0, y: 2, w: 5, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Germline
+    source_component: gl-happy-f1
+    caption: hap.py F1 for SNPs and indels, all calls against PASS calls only.
+    tag: vb-ov-hl-germline-happy
+    index: ov-hl-germline-happy
+    layout: {x: 5, y: 2, w: 3, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Germline
+    source_component: gl-happy-roc
+    caption: Precision against recall as the quality cut-off rises (SNP, PASS).
+    tag: vb-ov-hl-germline-roc
+    index: ov-hl-germline-roc
+    layout: {x: 0, y: 7, w: 3, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Germline
+    source_component: gl-confusion
+    caption: True positives, false positives and misses per callset; the shade is the share of its calls.
+    tag: vb-ov-hl-germline-confusion
+    index: ov-hl-germline-confusion
+    layout: {x: 3, y: 7, w: 5, h: 5}
+  # -------------------------------------------------------------- somatic
+  - component_type: highlight
+    section: Findings
+    source_tab: Somatic
+    source_component: so-pr-scatter
+    caption: One point per callset, coloured by caller; top right is best, the curves are F1 contours.
+    tag: vb-ov-hl-somatic-pr
+    index: ov-hl-somatic-pr
+    layout: {x: 0, y: 12, w: 5, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Somatic
+    source_component: so-recall-ci
+    caption: Recall per caller with its binomial 95% interval; overlapping whiskers cannot be told apart.
+    tag: vb-ov-hl-somatic-ci
+    index: ov-hl-somatic-ci
+    layout: {x: 5, y: 12, w: 3, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Somatic
+    source_component: so-confusion
+    caption: True positives, false positives and misses per caller; an over-calling caller fills the FP row.
+    tag: vb-ov-hl-somatic-confusion
+    index: ov-hl-somatic-confusion
+    layout: {x: 0, y: 17, w: 3, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Somatic
+    source_component: so-af-recall
+    caption: Recall per allele-fraction bin, one bar per caller; low fractions are the hardest.
+    tag: vb-ov-hl-somatic-af
+    index: ov-hl-somatic-af
+    layout: {x: 3, y: 17, w: 5, h: 5}
+  # ----------------------------------------------------------- structural
+  - component_type: highlight
+    section: Findings
+    source_tab: Structural & CNV
+    source_component: sv-truvari-pr
+    caption: One point per callset, coloured by caller; top right is best, the curves are F1 contours.
+    tag: vb-ov-hl-sv-pr
+    index: ov-hl-sv-pr
+    layout: {x: 0, y: 22, w: 5, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Structural & CNV
+    source_component: sv-svbench-f1
+    hide_legend: true
+    caption: SVanalyzer F1 per callset, the bar coloured by its caller.
+    tag: vb-ov-hl-sv-svbench
+    index: ov-hl-sv-svbench
+    layout: {x: 5, y: 22, w: 3, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Structural & CNV
+    source_component: sv-truvari-confusion
+    caption: Truvari true positives, false positives and misses per callset.
+    tag: vb-ov-hl-sv-confusion
+    index: ov-hl-sv-confusion
+    layout: {x: 0, y: 27, w: 3, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Structural & CNV
+    source_component: sv-wittyer-f1
+    caption: Wittyer F1 per callset, scored per event and per base; a gap means misplaced breakpoints.
+    tag: vb-ov-hl-sv-wittyer
+    index: ov-hl-sv-wittyer
+    layout: {x: 3, y: 27, w: 5, h: 5}
+  # Link-only tab tiles: a tab the run does not have is left out, and a
+  # heading whose tabs are all missing is hidden.
+  - component_type: text
+    body: |
+      ### Small variants
+      - [Germline](tab:Germline)
+      - [Somatic](tab:Somatic)
+
+      ### Structural
+      - [Structural & CNV](tab:Structural & CNV)
+    section: How to read this dashboard
+    tag: vb-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+tabs:
+# ============================================================================
+# Small variants
+# ============================================================================
+- title: Germline
+  subtitle: How well does each germline callset recover the truth set?
+  tab_group: Small variants
+  tab_order: 1
+  tab_icon: mdi:dna
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Germline filters
+    icon: mdi:filter-variant
+    color: indigo
+    description: The callers and callsets in view, and the hap.py variant type and calls
+  grid_sections:
+  - name: Germline at a glance
+    icon: mdi:counter
+    color: indigo
+    description: F1, recall and the errors over the germline callsets in view
+  - name: Precision and recall
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Each callset on the precision-recall plane, beside its error counts
+  - name: hap.py by variant type
+    icon: mdi:chart-bar
+    color: indigo
+    description: SNP and indel F1, and precision against recall over the quality cut-off
+  - name: Germline tables
+    icon: mdi:table
+    color: gray
+    description: The vcfeval, hap.py and quality-sweep rows behind every tile
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [rtg-tools vcfeval](https://github.com/RealTimeGenomics/rtg-tools) matches each
+      callset's haplotypes to the truth set, and [hap.py](https://github.com/Illumina/hap.py)
+      scores SNPs and indels apart, for all calls and PASS calls. Top right on the
+      precision-recall plane is best; the confusion matrix beside it shows where each callset
+      errs.
+    tag: vb-gl-intro
+    index: gl-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_vcfeval_summary
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display:
+      icon_name: mdi:tools
+      custom_color: indigo
+    section: Germline filters
+    tag: vb-gl-filter-caller
+    index: gl-caller-filter
+    title: Caller
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_vcfeval_summary
+    interactive_component_type: MultiSelect
+    column_name: label
+    column_type: object
+    display:
+      icon_name: mdi:flask
+      custom_color: teal
+    section: Germline filters
+    tag: vb-gl-filter-callset
+    index: gl-callset-filter
+    title: Callset
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_happy_summary
+    interactive_component_type: MultiSelect
+    column_name: variant_type
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: green
+    section: Germline filters
+    tag: vb-gl-filter-happy-type
+    index: gl-happy-type-filter
+    title: hap.py variant type
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_happy_summary
+    interactive_component_type: SegmentedControl
+    column_name: filter
+    column_type: object
+    display:
+      icon_name: mdi:filter-variant
+      custom_color: lime
+    section: Germline filters
+    tag: vb-gl-filter-happy-filter
+    index: gl-happy-filter
+    title: hap.py calls
+    layout: {x: 0, y: 9, w: 1, h: 2}
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
+    aggregation: median
+    column_name: f1
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:trophy
+      icon_color: grape
+      caption: median per callset, with its spread
+      decimals: 3
+    section: Germline at a glance
+    tag: vb-gl-card-f1
+    index: gl-card-f1
+    title: F1
+    description: Median F1 of the germline callsets in view.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
+    aggregation: median
+    column_name: recall
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.9
+    threshold_direction: min
+    threshold_warn: 0.8
+    display:
+      icon_name: mdi:magnet
+      icon_color: orange
+      caption: median per callset, floor 0.9
+      decimals: 3
+    section: Germline at a glance
+    tag: vb-gl-card-recall
+    index: gl-card-recall
+    title: Recall
+    description: Median share of the truth variants a callset recovers. It passes at 0.9 and warns below 0.8.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
+    aggregation: sum
+    column_name: fp
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    display:
+      icon_name: mdi:alert-outline
+      icon_color: red
+      caption: calls absent from the truth set, by caller
+      decimals: 0
+    section: Germline at a glance
+    tag: vb-gl-card-fp
+    index: gl-card-fp
+    title: False positives
+    description: Calls absent from the truth set, summed over the callsets in view and ranked by caller.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
+    aggregation: sum
+    column_name: tp_comp
+    column_type: int64
+    secondary_layout: composition
+    breakdown_col: caller
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: teal
+      caption: calls confirmed by the truth set, by caller
+      decimals: 0
+    section: Germline at a glance
+    tag: vb-gl-card-tp
+    index: gl-card-tp
+    title: True positives
+    description: Calls the truth set confirms, summed over the callsets in view and split by caller.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/pr_scatter
+    config:
+      support_col: tp_comp
+      category_col: caller
+      show_labels: false
+    section: Precision and recall
+    tag: vb-gl-av-pr
+    index: gl-pr-scatter
+    title: Precision against recall
+    description: One point per callset, sized by its true positives and coloured by caller.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/confusion
+    section: Precision and recall
+    tag: vb-gl-av-confusion
+    index: gl-confusion
+    title: Errors per callset
+    description: TP, FP and FN per callset; the shade is the share of its calls, the label the count.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: figure
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_happy_summary
+    use: happy/summary
+    visu_type: bar
+    dict_kwargs:
+      x: variant_type
+      y: f1
+      color: filter
+      barmode: group
+      labels: {variant_type: '', f1: F1, filter: Calls}
+    section: hap.py by variant type
+    tag: vb-gl-fig-happy
+    index: gl-happy-f1
+    title: F1 by variant type
+    description: Pooled over samples; ALL and PASS coincide when no call was hard-filtered.
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_happy_roc
+    use: happy/pr_curve
+    config:
+      threshold_col: quality
+    section: hap.py by variant type
+    tag: vb-gl-av-roc
+    index: gl-happy-roc
+    title: Quality-threshold sweep
+    description: Precision against recall as the quality cut-off rises, with its AUC (SNP, PASS).
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  - component_type: table
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_vcfeval_summary
+    use: rtgtools/vcfeval_summary
+    row_selection_enabled: true
+    row_selection_column: label
+    section: Germline tables
+    tag: vb-gl-table-vcfeval
+    index: gl-table-vcfeval
+    title: rtg-tools vcfeval summary
+    description: TP, FP, FN, precision, recall and F1 per callset, with its caller and truth set.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_happy_summary
+    use: happy/summary
+    row_selection_enabled: false
+    section: Germline tables
+    tag: vb-gl-table-happy
+    index: gl-table-happy
+    title: hap.py pooled summary
+    description: One row per variant type and filter, pooled over samples.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: variantbenchmarking
+    data_collection_tag: germline_happy_roc
+    use: happy/roc
+    row_selection_enabled: false
+    section: Germline tables
+    tag: vb-gl-table-roc
+    index: gl-table-roc
+    title: hap.py threshold sweep
+    description: Precision, recall and F1 per quality threshold.
+    layout: {x: 0, y: 12, w: 8, h: 6}
+- title: Somatic
+  subtitle: How well does each somatic caller recover the truth set?
+  tab_group: Small variants
+  tab_order: 2
+  tab_icon: mdi:target
+  tab_icon_color: pink
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  # The caller narrows the allele-fraction strata and the rtg-tools cross-check
+  # too, through the template's links.
+  filter_sections:
+  - name: Somatic filters
+    icon: mdi:filter-variant
+    color: pink
+    description: The callers in view, and the allele-fraction bins of the strata
+  grid_sections:
+  - name: Somatic at a glance
+    icon: mdi:counter
+    color: pink
+    description: F1, precision and the errors over the somatic callers in view
+  - name: Precision and recall
+    icon: mdi:chart-scatter-plot
+    color: pink
+    description: Each callset on the precision-recall plane, beside its error counts
+  - name: Confidence intervals
+    icon: mdi:scale-balance
+    color: pink
+    description: som.py's binomial 95% intervals around precision and recall
+  - name: Allele-fraction strata
+    icon: mdi:chart-bell-curve
+    color: pink
+    description: F1 and recall per allele-fraction bin, where low fractions are hardest
+  - name: rtg-tools cross-check
+    icon: mdi:check-decagram
+    color: gray
+    description: The same callers scored by rtg-tools vcfeval
+    collapsed: true
+  - name: Somatic tables
+    icon: mdi:table
+    color: gray
+    description: The som.py summary and allele-fraction rows behind every tile
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [som.py](https://github.com/Illumina/hap.py) scores each somatic caller against the
+      truth set, with binomial 95% intervals and per allele-fraction bin;
+      [rtg-tools vcfeval](https://github.com/RealTimeGenomics/rtg-tools) cross-checks it on
+      haplotypes. Low-fraction variants are the hardest: a caller whose recall stays flat
+      across the bins misses the subclonal ones.
+    tag: vb-so-intro
+    index: so-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_summary
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display:
+      icon_name: mdi:tools
+      custom_color: indigo
+    section: Somatic filters
+    tag: vb-so-filter-caller
+    index: so-caller-filter
+    title: Caller
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_regions
+    interactive_component_type: MultiSelect
+    column_name: af_bin
+    column_type: object
+    display:
+      icon_name: mdi:chart-bell-curve
+      custom_color: grape
+    section: Somatic filters
+    tag: vb-so-filter-afbin
+    index: so-afbin-filter
+    title: Allele-fraction bin
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
+    aggregation: median
+    column_name: f1
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:trophy
+      icon_color: grape
+      caption: median per callset, with its spread
+      decimals: 3
+    section: Somatic at a glance
+    tag: vb-so-card-f1
+    index: so-card-f1
+    title: F1
+    description: Median F1 of the somatic callsets in view.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
+    aggregation: median
+    column_name: precision
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.5
+    threshold_direction: min
+    threshold_warn: 0.25
+    display:
+      icon_name: mdi:bullseye-arrow
+      icon_color: teal
+      caption: median per callset, floor 0.5
+      decimals: 3
+    section: Somatic at a glance
+    tag: vb-so-card-precision
+    index: so-card-precision
+    title: Precision
+    description: Median share of a callset's calls in the truth set. It passes at 0.5 and warns below 0.25.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
+    aggregation: sum
+    column_name: fp
+    column_type: int64
+    secondary_layout: top_n
+    breakdown_col: caller
+    top_n_count: 3
+    display:
+      icon_name: mdi:alert-outline
+      icon_color: red
+      caption: calls absent from the truth set, by caller
+      decimals: 0
+    section: Somatic at a glance
+    tag: vb-so-card-fp
+    index: so-card-fp
+    title: False positives
+    description: Calls absent from the truth set, summed over the callers in view and ranked by caller.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
+    aggregation: sum
+    column_name: fn
+    column_type: int64
+    secondary_layout: composition
+    breakdown_col: caller
+    display:
+      icon_name: mdi:magnet
+      icon_color: orange
+      caption: truth variants missed, by caller
+      decimals: 0
+    section: Somatic at a glance
+    tag: vb-so-card-fn
+    index: so-card-fn
+    title: Missed variants
+    description: Truth variants a caller did not call, summed over the callers in view and split by caller.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_summary
+    use: sompy/pr_scatter
+    config:
+      support_col: tp
+      category_col: caller
+      show_labels: false
+    section: Precision and recall
+    tag: vb-so-av-pr
+    index: so-pr-scatter
+    title: Precision against recall
+    description: One point per callset, sized by its true positives and coloured by caller.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_summary
+    use: sompy/confusion
+    section: Precision and recall
+    tag: vb-so-av-confusion
+    index: so-confusion
+    title: Errors per caller
+    description: TP, FP and FN per caller; an over-calling caller dominates the FP row.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_summary
+    use: sompy/precision_ci
+    config:
+      metric_name: Precision
+    section: Confidence intervals
+    tag: vb-so-av-precision-ci
+    index: so-precision-ci
+    title: Precision with its 95% interval
+    description: Point estimate and binomial interval per caller; a wide whisker rests on few calls.
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_summary
+    use: sompy/recall_ci
+    config:
+      metric_name: Recall
+    section: Confidence intervals
+    tag: vb-so-av-recall-ci
+    index: so-recall-ci
+    title: Recall with its 95% interval
+    description: Point estimate and binomial interval per caller; overlapping whiskers tie.
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  - component_type: figure
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_regions
+    use: sompy/regions
+    visu_type: bar
+    dict_kwargs:
+      x: af_bin
+      y: f1
+      color: caller
+      barmode: group
+      labels: {af_bin: Allele-fraction bin, f1: F1, caller: Caller}
+    section: Allele-fraction strata
+    tag: vb-so-fig-af-f1
+    index: so-af-f1
+    title: F1 per allele-fraction bin
+    description: One bar per caller and bin.
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: figure
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_regions
+    use: sompy/regions
+    visu_type: bar
+    dict_kwargs:
+      x: af_bin
+      y: recall
+      color: caller
+      barmode: group
+      labels: {af_bin: Allele-fraction bin, recall: Recall, caller: Caller}
+    section: Allele-fraction strata
+    tag: vb-so-fig-af-recall
+    index: so-af-recall
+    title: Recall per allele-fraction bin
+    description: One bar per caller and bin; recall usually climbs with the allele fraction.
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: advanced_viz
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_vcfeval_summary
+    use: rtgtools/pr_scatter
+    config:
+      support_col: tp_comp
+      category_col: caller
+      show_labels: false
+    section: rtg-tools cross-check
+    tag: vb-so-av-vcfeval-pr
+    index: so-vcfeval-pr
+    title: Precision against recall, rtg-tools vcfeval
+    description: vcfeval matches haplotypes, not sites; a caller that moves rank deserves a look.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_vcfeval_summary
+    use: rtgtools/vcfeval_summary
+    row_selection_enabled: true
+    row_selection_column: caller
+    section: rtg-tools cross-check
+    tag: vb-so-table-vcfeval
+    index: so-table-vcfeval
+    title: rtg-tools vcfeval summary
+    description: TP, FP, FN, precision, recall and F1 per callset, with its caller and truth set.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_summary
+    use: sompy/summary
+    row_selection_enabled: true
+    row_selection_column: caller
+    section: Somatic tables
+    tag: vb-so-table-sompy
+    index: so-table-sompy
+    title: som.py summary
+    description: TP, FP, FN, precision, recall and F1 per callset, with 95% intervals.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: variantbenchmarking
+    data_collection_tag: somatic_sompy_regions
+    use: sompy/regions
+    row_selection_enabled: true
+    row_selection_column: caller
+    section: Somatic tables
+    tag: vb-so-table-regions
+    index: so-table-regions
+    title: som.py allele-fraction strata
+    description: One row per caller and allele-fraction bin, with TP, FP and FN per bin.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+# ============================================================================
+# Structural
+# ============================================================================
+- title: Structural & CNV
+  subtitle: How well do the structural callsets match the truth set?
+  tab_group: Structural
+  tab_order: 3
+  tab_icon: mdi:chart-scatter-plot
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Structural filters
+    icon: mdi:filter-variant
+    color: orange
+    description: The callsets and callers in view, and the Wittyer scoring level
+  grid_sections:
+  - name: Structural at a glance
+    icon: mdi:counter
+    color: orange
+    description: Callsets, F1, recall and precision over the Truvari callsets in view
+  - name: Precision and recall
+    icon: mdi:chart-scatter-plot
+    color: orange
+    description: Each callset on the precision-recall plane, beside its error counts
+  - name: SVanalyzer and Wittyer
+    icon: mdi:chart-bar
+    color: orange
+    description: The same callsets scored by SVanalyzer, and by Wittyer per event and per base
+  - name: Structural tables
+    icon: mdi:table
+    color: gray
+    description: The Truvari, SVanalyzer and Wittyer rows behind every tile
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [Truvari](https://github.com/ACEnglish/truvari) and
+      [SVanalyzer](https://github.com/nhansen/SVanalyzer) score each structural-variant
+      callset against the truth set; [Wittyer](https://github.com/Illumina/witty.er) scores it
+      per event and per base. A caller that finds events but misplaces their breakpoints
+      scores well per event and poorly per base.
+    tag: vb-sv-intro
+    index: sv-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sv_truvari_summary
+    interactive_component_type: MultiSelect
+    column_name: label
+    column_type: object
+    display:
+      icon_name: mdi:flask
+      custom_color: teal
+    section: Structural filters
+    tag: vb-sv-filter-callset
+    index: sv-callset-filter
     title: Callset
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
-    tag: interactive-cnv-stats-type
-    index: cnv-stats-type-filter
-    section: Wittyer scope
-    group: Wittyer
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sv_truvari_summary
+    interactive_component_type: MultiSelect
+    column_name: caller
+    column_type: object
+    display:
+      icon_name: mdi:tools
+      custom_color: indigo
+    section: Structural filters
+    tag: vb-sv-filter-caller
+    index: sv-caller-filter
+    title: Caller
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
     workflow_tag: variantbenchmarking
     data_collection_tag: cnv_wittyer_summary
     interactive_component_type: MultiSelect
     column_name: stats_type
     column_type: object
-    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:shape-outline'}
-    placement: left
+    display:
+      icon_name: mdi:ruler
+      custom_color: cyan
+    section: Structural filters
+    tag: vb-sv-filter-level
+    index: sv-level-filter
     title: Wittyer level
-    layout: {x: 0, y: 0, w: 1, h: 3}
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sv_truvari_summary
+    use: truvari/summary
+    aggregation: count
+    column_name: label
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: caller
+    display:
+      icon_name: mdi:flask
+      icon_color: blue
+      caption: callsets, by caller
+      decimals: 0
+    section: Structural at a glance
+    tag: vb-sv-card-callsets
+    index: sv-card-callsets
+    title: Callsets
+    description: Structural-variant callsets Truvari scored, split by caller.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sv_truvari_summary
+    use: truvari/summary
+    aggregation: median
+    column_name: f1
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:trophy
+      icon_color: grape
+      caption: median per callset, with its spread
+      decimals: 3
+    section: Structural at a glance
+    tag: vb-sv-card-f1
+    index: sv-card-f1
+    title: F1
+    description: Median Truvari F1 of the callsets in view.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sv_truvari_summary
+    use: truvari/summary
+    aggregation: median
+    column_name: recall
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.8
+    threshold_direction: min
+    threshold_warn: 0.6
+    display:
+      icon_name: mdi:magnet
+      icon_color: orange
+      caption: median per callset, floor 0.8
+      decimals: 3
+    section: Structural at a glance
+    tag: vb-sv-card-recall
+    index: sv-card-recall
+    title: Recall
+    description: Median share of the truth variants a callset recovers. It passes at 0.8 and warns below 0.6.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sv_truvari_summary
+    use: truvari/summary
+    aggregation: median
+    column_name: precision
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:bullseye-arrow
+      icon_color: teal
+      caption: median per callset, with its distribution
+      decimals: 3
+    section: Structural at a glance
+    tag: vb-sv-card-precision
+    index: sv-card-precision
+    title: Precision
+    description: Median share of a callset's calls that are in the truth set.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sv_truvari_summary
+    use: truvari/pr_scatter
+    config:
+      support_col: tp_comp
+      category_col: caller
+      show_labels: false
+    section: Precision and recall
+    tag: vb-sv-av-pr
+    index: sv-truvari-pr
+    title: Precision against recall, Truvari
+    description: One point per callset, sized by its true positives and coloured by caller.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sv_truvari_summary
+    viz_kind: confusion_matrix
+    config:
+      viz_kind: confusion_matrix
+      label_col: label
+      tp_col: tp_comp
+      fp_col: fp
+      fn_col: fn
+    section: Precision and recall
+    tag: vb-sv-av-confusion
+    index: sv-truvari-confusion
+    title: Errors per callset, Truvari
+    description: TP, FP and FN per callset; the shade is the share of its calls, the label the count.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: figure
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sv_svbenchmark_summary
+    use: svanalyzer/svbenchmark
+    visu_type: bar
+    dict_kwargs:
+      x: label
+      y: f1
+      color: caller
+      labels: {label: Callset, f1: F1, caller: Caller}
+    section: SVanalyzer and Wittyer
+    tag: vb-sv-fig-svbench
+    index: sv-svbench-f1
+    title: F1 per callset, SVanalyzer
+    description: SVanalyzer's F1 per callset, the second structural benchmark the pipeline runs.
+    layout: {x: 0, y: 0, w: 4, h: 5}
+  - component_type: figure
+    workflow_tag: variantbenchmarking
+    data_collection_tag: cnv_wittyer_summary
+    use: wittyer/summary
+    visu_type: bar
+    dict_kwargs:
+      x: label
+      y: f1
+      color: stats_type
+      barmode: group
+      labels: {label: Callset, f1: F1, stats_type: Scored per}
+    section: SVanalyzer and Wittyer
+    tag: vb-sv-fig-wittyer
+    index: sv-wittyer-f1
+    title: F1 per callset, Wittyer
+    description: Two bars per callset, scored per event and per base.
+    layout: {x: 4, y: 0, w: 4, h: 5}
+  - component_type: table
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sv_truvari_summary
+    use: truvari/summary
+    row_selection_enabled: true
+    row_selection_column: label
+    section: Structural tables
+    tag: vb-sv-table-truvari
+    index: sv-table-truvari
+    title: Truvari summary
+    description: TP, FP, FN, precision, recall and F1 per callset.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: variantbenchmarking
+    data_collection_tag: sv_svbenchmark_summary
+    use: svanalyzer/svbenchmark
+    row_selection_enabled: true
+    row_selection_column: label
+    section: Structural tables
+    tag: vb-sv-table-svbench
+    index: sv-table-svbench
+    title: SVanalyzer svbenchmark summary
+    description: Precision, recall and F1 per callset.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: variantbenchmarking
+    data_collection_tag: cnv_wittyer_summary
+    use: wittyer/summary
+    row_selection_enabled: true
+    row_selection_column: label
+    section: Structural tables
+    tag: vb-sv-table-wittyer
+    index: sv-table-wittyer
+    title: Wittyer summary
+    description: Precision, recall and F1 per callset and Wittyer level.
+    layout: {x: 0, y: 12, w: 8, h: 6}
