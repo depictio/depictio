@@ -269,41 +269,19 @@ def _preview_recipe_dc(
     return row
 
 
-def preview_data_root(
-    template_id: str,
-    data_root: str,
-    variables: dict[str, str] | None = None,
-    CLI_config=None,
-) -> RunPreview:
-    """What a template would resolve to against a data root, without creating anything.
+def preview_data_collections(
+    config: dict, root: DataRoot
+) -> tuple[list[DataCollectionPreview], list[str]]:
+    """One row per data collection of ``config`` under ``root``, and the run directories found.
 
-    Answers the question a user actually has before running an ingestion: given
-    this directory or this ``s3://`` prefix, which data collections will find
-    their data, which will come up empty, and which variables did the run's own
-    parameters decide. It resolves the template exactly as ``depictio run``
-    would - same auto-detection, same conditionals, same pruning - and then
-    counts each surviving DC's matches with the rule its scan will use.
+    ``config`` is anything with the project shape (``workflows``, each with
+    its ``data_collections``): a template ``resolve_template`` just resolved,
+    or a project stored from one, whose collections are the resolved ones.
+    So the same folder gets the same rows whichever of the two is asked, which
+    is what lets a refresh decide exactly as the creation did.
 
-    Every question is asked of the same :class:`DataRoot`, so a remote prefix
-    costs one listing for the whole preview.
-
-    Args:
-        template_id: Template identifier, or a path to a template bundle.
-        data_root: The directory or ``s3://`` prefix to preview.
-        variables: ``--var`` values, exactly as ``resolve_template`` takes them.
-        CLI_config: Used to build a remote root's S3 client.
+    Pruned collections are not in ``config`` at all, so they have no row here.
     """
-    root = as_data_root(data_root, CLI_config)
-    if root is None:
-        raise ValueError("preview_data_root needs a data root; got None")
-
-    config, template_metadata, template_origin, dashboard_paths, resolved = resolve_template(
-        template_id=template_id,
-        data_root=root,
-        extra_vars=dict(variables) if variables else None,
-        CLI_config=CLI_config,
-    )
-
     rows: list[DataCollectionPreview] = []
     detected_runs: list[str] = []
     recipe_slots: list[tuple[int, str, dict, bool]] = []
@@ -339,6 +317,45 @@ def preview_data_root(
         if now_settled == settled:
             break
         settled = now_settled
+    return rows, detected_runs
+
+
+def preview_data_root(
+    template_id: str,
+    data_root: str,
+    variables: dict[str, str] | None = None,
+    CLI_config=None,
+) -> RunPreview:
+    """What a template would resolve to against a data root, without creating anything.
+
+    Answers the question a user actually has before running an ingestion: given
+    this directory or this ``s3://`` prefix, which data collections will find
+    their data, which will come up empty, and which variables did the run's own
+    parameters decide. It resolves the template exactly as ``depictio run``
+    would - same auto-detection, same conditionals, same pruning - and then
+    counts each surviving DC's matches with the rule its scan will use.
+
+    Every question is asked of the same :class:`DataRoot`, so a remote prefix
+    costs one listing for the whole preview.
+
+    Args:
+        template_id: Template identifier, or a path to a template bundle.
+        data_root: The directory or ``s3://`` prefix to preview.
+        variables: ``--var`` values, exactly as ``resolve_template`` takes them.
+        CLI_config: Used to build a remote root's S3 client.
+    """
+    root = as_data_root(data_root, CLI_config)
+    if root is None:
+        raise ValueError("preview_data_root needs a data root; got None")
+
+    config, template_metadata, template_origin, dashboard_paths, resolved = resolve_template(
+        template_id=template_id,
+        data_root=root,
+        extra_vars=dict(variables) if variables else None,
+        CLI_config=CLI_config,
+    )
+
+    rows, detected_runs = preview_data_collections(config, root)
 
     pruned = [
         entry.data_collection_tag

@@ -682,10 +682,22 @@ def _refresh_manifest_in_project(
     any row of a DC's type marks that DC failed *without* running the scan, so
     a refresh never silently empties a data collection.
 
-    In ``async_run`` mode those pre-flight failures are also seeded into the
-    ingestion-run document as failed steps, so a caller that only polls
-    ``GET /projects/refresh_manifest/{run_id}`` sees them and the run can
-    never close as "success" around a DC that was skipped.
+    A project made from a run folder (``template_origin.data_root``) gets the
+    pre-flight its creation had, taken again against that folder
+    (``from_run._refresh_preflight``), so the same folder gets the same
+    verdicts: an optional collection whose source is absent is skipped, a
+    required one that only misses such collections is skipped, a required one
+    missing a source of its own fails, and none of them is dispatched, so a
+    collection ingested before keeps its table as it was. Decided over the
+    whole project, then narrowed to ``data_collection_tag``, so refreshing one
+    collection answers what refreshing all of them would for it. A
+    manifest-driven project has no data root, so only its manifest pre-flight
+    runs, as before.
+
+    In ``async_run`` mode those pre-flight verdicts are also seeded into the
+    ingestion-run document as failed or skipped steps, so a caller that only
+    polls ``GET /projects/refresh_manifest/{run_id}`` sees them and the run
+    can never close as "success" around a DC that failed pre-flight.
 
     Synchronous on purpose (sync httpx callbacks in the CLI helpers) — callers
     must dispatch via ``asyncio.to_thread``.
@@ -743,12 +755,28 @@ def _refresh_manifest_in_project(
 
         remote_options = project_storage_for(project_oid)
 
+    # The run folder's own verdicts, before anything is dispatched: an
+    # S3AccessError here is the read every worker would have failed on.
+    from depictio.api.v1.endpoints.projects_endpoints.from_run import _refresh_preflight
+
+    folder_preflight = _refresh_preflight(project_dict)
+    data_root: str | None = None
+    folder_failed: dict[str, str] = {}
+    folder_skipped: dict[str, str] = {}
+    folder_matched: dict[str, int] = {}
+    if folder_preflight is not None:
+        data_root, split = folder_preflight
+        folder_failed = {tag: message for tag, _dc_id, message in split.failed}
+        folder_skipped = {tag: message for tag, _dc_id, message in split.skipped}
+        folder_matched = {tag: matched for tag, _dc_id, _wf_i, matched in split.to_dispatch}
+
     # Each DC carries its own manifest URL + field map; fetch each distinct
     # combination once. Failures are per-DC, not global — one dead manifest
     # must not block refreshing DCs backed by a different one.
     manifests: dict[tuple, DataManifest | str] = {}  # key -> manifest or error text
     to_dispatch: list[tuple[str, str, int, int]] = []  # (tag, dc_id, wf_i, entries)
     preflight_failed: list[tuple[str, str, str]] = []  # (tag, dc_id, message), async only
+    preflight_skipped: list[tuple[str, str, str]] = []  # same, async only
     all_ok = True
 
     def _fail_preflight(tag: str, dc_id: str, message: str) -> None:
@@ -766,13 +794,30 @@ def _refresh_manifest_in_project(
         if async_run and not dry_run:
             preflight_failed.append((tag, dc_id, message))
 
+    def _skip_preflight(tag: str, dc_id: str, message: str) -> None:
+        # A skip leaves the refresh successful. In async mode the dispatch
+        # seeds its step and reports it back, so it is reported here otherwise.
+        if async_run and not dry_run:
+            preflight_skipped.append((tag, dc_id, message))
+            return
+        report.refreshed.append(
+            ManifestIngestDCResult(
+                data_collection_tag=tag,
+                data_collection_id=dc_id,
+                entries=0,
+                status="skipped",
+                message=message,
+            )
+        )
+
     for tag, (wf_i, dc_i, scan_params, mode) in refreshable_index.items():
         dc_dict = workflows[wf_i]["data_collections"][dc_i]
         dc_id = str(dc_dict.get("_id") or dc_dict.get("id") or "")
 
-        # Only manifest mode has a pre-flight. Every other mode discovers its
-        # own files during the scan, so there is nothing to check up front and
-        # no entry count to report before running.
+        # A manifest DC is checked against its manifest, every other one
+        # against the run folder when the project has one. Without either, a
+        # mode discovers its own files during the scan, with no entry count to
+        # report before running.
         entry_count = 0
         if mode == "manifest":
             preflight = _manifest_preflight_entries(tag, scan_params, manifests)
@@ -780,6 +825,14 @@ def _refresh_manifest_in_project(
                 _fail_preflight(tag, dc_id, preflight)
                 continue
             entry_count = preflight
+        elif tag in folder_failed:
+            _fail_preflight(tag, dc_id, folder_failed[tag])
+            continue
+        elif tag in folder_skipped:
+            _skip_preflight(tag, dc_id, folder_skipped[tag])
+            continue
+        else:
+            entry_count = folder_matched.get(tag, 0)
 
         if dry_run:
             report.refreshed.append(
@@ -821,10 +874,10 @@ def _refresh_manifest_in_project(
             )
         )
 
-    # Both lists are only ever filled in async (non-dry) mode. A run document
-    # is created even when every DC failed pre-flight, so the caller always
-    # gets a run_id and the poll endpoint shows the failures.
-    if to_dispatch or preflight_failed:
+    # These lists are only ever filled in async (non-dry) mode. A run document
+    # is created even when no DC got past pre-flight, so the caller always
+    # gets a run_id and the poll endpoint shows why.
+    if to_dispatch or preflight_failed or preflight_skipped:
         # The run's own record of each DC's mode: "recipe" for the one
         # scan-less mode ("") the dispatcher would otherwise default to
         # "manifest" for, same label from_run.py already uses.
@@ -837,7 +890,9 @@ def _refresh_manifest_in_project(
             to_dispatch=to_dispatch,
             current_user=current_user,
             preflight_failed=preflight_failed,
+            preflight_skipped=preflight_skipped,
             scan_modes=scan_modes,
+            data_root=data_root,
         )
         report.run_id = run_id
         report.refreshed.extend(dispatched)
@@ -988,7 +1043,6 @@ def _dispatch_refresh_tasks(
     current_user,
     preflight_failed: list[tuple[str, str, str]],
     preflight_skipped: list[tuple[str, str, str]] | None = None,
-    missing_collections: dict[str, list[str]] | None = None,
     command: str = "refresh_manifest",
     scan_modes: dict[str, str] | None = None,
     data_root: str | None = None,
@@ -1007,13 +1061,11 @@ def _dispatch_refresh_tasks(
     out would let the run close as "success" with the skipped DC silently
     absent from the poll report. ``preflight_skipped`` is the same idea for a
     collection whose absence is nominal (an optional template collection this
-    run folder never produces), seeded "skipped" rather than "failed" so the
-    run can still close "success" around it (see
-    ``_finalize_manifest_refresh_run``). So is a failure that only misses such
-    a collection, as ``missing_collections`` ({failed tag: [collection tag,
-    ...]}, for a failure that misses those and nothing else) says: see
-    ``_skip_dependants_of_absent_collections``. All three default to empty, so
-    the manifest refresh flow, which never has one, is unaffected.
+    run folder never produces, or one that only reads such a collection: see
+    ``from_run._preflight_split``, which decides both lists for a run
+    folder), seeded "skipped" rather than "failed" so the run can still close
+    "success" around it (see ``_finalize_manifest_refresh_run``). It defaults
+    to empty, so a manifest refresh, which never has one, is unaffected.
 
     A recipe DC's payload carries ``depends_on`` (see ``_recipe_dependencies``)
     for every dc_ref that still has a step *in this run* (``seeded_tags``
@@ -1037,8 +1089,8 @@ def _dispatch_refresh_tasks(
     differ only in bookkeeping, which is what the keyword arguments carry —
     ``command`` labels the run (and is what ``_get_refresh_run_report`` accepts),
     ``scan_modes`` records each DC's real mode instead of assuming "manifest",
-    and ``data_root`` notes the prefix a from_run ingested from. Their defaults
-    are the manifest refresh's own values.
+    and ``data_root`` notes the run folder a from_run, or a refresh of its
+    project, read from. Their defaults are the manifest refresh's own values.
 
     Returns ``(run_id, all_dispatched, results)``; the caller owns its report
     shape and attaches these itself.
@@ -1052,9 +1104,7 @@ def _dispatch_refresh_tasks(
         IngestionStep,
     )
 
-    preflight_failed, skipped = _skip_dependants_of_absent_collections(
-        preflight_failed, preflight_skipped or [], missing_collections or {}
-    )
+    skipped = preflight_skipped or []
     modes = scan_modes or {}
     run_id = uuid4().hex
     # Pre-flight failures first, then pre-flight skips, then the DCs a worker

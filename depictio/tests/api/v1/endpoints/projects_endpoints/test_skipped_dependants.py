@@ -9,10 +9,10 @@ optional, absent collection cannot be built for that reason alone, so
 missing. One that misses a file of its own, or reads a collection that failed,
 stays failed.
 
-The decision is structural: from_run hands the dispatch the collections each
-failure misses, from the preview rows' ``missing_collections``
-(``from_run._missing_collections_only``). The step details are display only,
-so rewording them changes nothing.
+The decision is structural: the split a creation and a refresh share
+(``from_run._preflight_split``) reads the collections each failure misses from
+the preview rows' ``missing_collections`` (``from_run._missing_collections_only``).
+The step details are display only, so rewording them changes nothing.
 """
 
 from types import SimpleNamespace
@@ -68,7 +68,7 @@ def db():
 
 
 def _dispatch(db, *rows: DataCollectionPreview, dispatched=()):
-    """Seed the missing ``rows`` as from_run does and dispatch; returns the run's steps."""
+    """Split on the missing ``rows`` as from_run does and dispatch; returns the run's steps."""
     user = UserBase(id=ObjectId(), email="owner@example.com", is_admin=False)
     tags = [*(row.tag for row in rows), *dispatched]
     ids = {tag: str(ObjectId()) for tag in tags}
@@ -81,19 +81,13 @@ def _dispatch(db, *rows: DataCollectionPreview, dispatched=()):
         ],
     }
     db["projects"].insert_one(project)
+    preflight = from_run._preflight_split(project, rows)
     run_id, _all_dispatched, results = manifest_ingest._dispatch_refresh_tasks(
         project_dict=project,
-        to_dispatch=[(tag, ids[tag], 0, 1) for tag in dispatched],
+        to_dispatch=preflight.to_dispatch,
         current_user=user,
-        preflight_failed=[
-            (row.tag, ids[row.tag], from_run._skip_reason(row)) for row in rows if not row.optional
-        ],
-        preflight_skipped=[
-            (row.tag, ids[row.tag], f"{OPTIONAL_PREFIX}{from_run._skip_reason(row)}")
-            for row in rows
-            if row.optional
-        ],
-        missing_collections=from_run._missing_collections_only(rows),
+        preflight_failed=preflight.failed,
+        preflight_skipped=preflight.skipped,
         command="from_run",
     )
     run_doc = db["ingestion_runs"].find_one({"run_id": run_id})
