@@ -268,7 +268,7 @@ names a location and the scan mode is inferred from its shape
 | `https://host/data.csv`, or a bare `s3://bucket/key` | `url` |
 | an `s3://` prefix or glob (`s3://bucket/run42/*.csv`) | `s3_prefix` |
 
-![One --bind flag, five location shapes, and the scan mode inferred from each](../images/data_binding_matrix.png)
+![Five things you can point at: a folder, a file, a web URL, an s3 prefix and a manifest, each with what you type and how it is read](../images/data_binding_matrix.png)
 
 `--bind` satisfies the same requirement as `DATA_DIR` or `--manifest`, so a
 template can run with neither. Manifests stay explicit (`--manifest`): a local
