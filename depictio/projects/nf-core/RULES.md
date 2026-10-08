@@ -17,7 +17,10 @@ text tile accepts is `packages/depictio-react-core/src/components/markdownCheats
 - Before committing a template, run:
   - `python -m depictio.cli dashboard validate <yaml> --offline`
   - `pytest depictio/tests/models/test_template_conventions.py depictio/tests/models/test_shipped_dashboard_yamls.py -k <pipeline>`
-- Then import it on a running stack and look at every tab (section 14).
+- Then import it on a running stack and look at every tab (section 15).
+- In `template.yaml`, declare a transformed collection after every collection its recipe reads
+  through `dc_ref`. Ingest builds them in that order, and an optional reference declared later
+  reads as absent (`test_template_dc_order.py`).
 
 ## 2. The family of tabs
 
@@ -185,6 +188,15 @@ A KPI strip is four different readings, not four numbers in one style:
 - A fraction between 0 and 1 under `coverage` or `gauge` prints "7% of 1". Give it a
   `threshold` at the floor the method publishes (FRiP 0.2, for instance), or use the
   table's percentage column where it has one.
+- A `top_n` of ids (samples, genes, fusions, intervals) cuts each label to about 7 characters
+  in a w2 card. Rank by a short category (condition, caller, event type), or show the spread
+  with `box_plot` or `histogram`.
+- A secondary with one value says nothing: one bar, one segment at 100%, a ring of one. Split
+  by a column that has several values on every run, not only on the one you test with.
+- A median over both directions of a fold change cancels to about 0. Restrict the card to one
+  direction ("usage gain") or count calls by direction.
+- Key figures read collections that every route writes. A card on an optional collection
+  needs an alternate in the same slot, or a route leaves 3 cards on a 4-slot row.
 
 ## 6. Filters
 
@@ -253,6 +265,9 @@ A KPI strip is four different readings, not four numbers in one style:
   Never `w <= 2`.
 - A heatmap labelled with library ids on both axes (a sample correlation matrix) takes `w: 8`:
   at `w: 4` the labels leave the plot no room and it renders blank.
+- Axes carry words, not column names: `effect_label` and `significance_label` on a volcano,
+  `axis_prefix: PC` on a PCA, `labels:` on a figure. Leave `show_centroids` off when a group
+  has two or three points: the labels cover them.
 - Minimal tiles and highlights on the Overview keep their controls behind the icon, by design.
 
 ## 9. Live values in text
