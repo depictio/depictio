@@ -779,13 +779,15 @@ async def ingest_manifest(
 @projects_endpoint_router.post("/refresh_manifest", response_model=ManifestRefreshReport)
 async def refresh_manifest(
     payload: RefreshManifestRequest,
+    request: Request,
     current_user=Depends(get_user_or_anonymous),
 ):
     """Re-scan and re-ingest a project's data collections in place.
 
     Covers every data collection the server can read again: any remote
-    source (manifest, url, s3_prefix), and a local one whose path is visible
-    from the server. Overwrite-with-report semantics: File records sync to
+    source (manifest, url, s3_prefix), and, under ``depictio local`` only, a
+    local one below a root of the local-data policy (for a loopback caller
+    who is an admin, as every local read). Overwrite-with-report semantics: File records sync to
     the source's current files (``sync_files`` beats the identity-hash skip)
     and each Delta table is rebuilt from the resulting file set. A manifest
     DC whose manifest no longer lists its type is reported failed and left
@@ -803,6 +805,7 @@ async def refresh_manifest(
         data_collection_tag=payload.data_collection_tag,
         dry_run=payload.dry_run,
         async_run=payload.async_run,
+        request=request,
     )
 
 

@@ -16,6 +16,7 @@ import mongomock
 import pytest
 from bson import ObjectId
 from fastapi import HTTPException
+from starlette.requests import Request
 
 from depictio.api.v1.endpoints.datacollections_endpoints import utils as dc_utils
 from depictio.api.v1.endpoints.projects_endpoints import manifest_ingest, storage_config
@@ -241,7 +242,7 @@ def test_under_depictio_local_only_a_dc_inside_a_root_is_offered(
     monkeypatch.setenv("DEPICTIO_AUTH_SINGLE_USER_MODE", "true")
     home, outside = tmp_path / "home", tmp_path / "outside"
     monkeypatch.setenv("DEPICTIO_LOCAL_DATA_ROOTS", str(home))
-    user = _user()
+    user = _user(is_admin=True)
 
     def _project_in(folder) -> str:
         folder.mkdir()
@@ -252,10 +253,18 @@ def test_under_depictio_local_only_a_dc_inside_a_root_is_offered(
         return str(doc["_id"])
 
     inside_id, outside_id = _project_in(home), _project_in(outside)
+    # The local caller the guards of a local read accept: an admin on loopback.
+    request = Request({"type": "http", "headers": [(b"host", b"localhost:8165")]})
+
+    def _refresh(project_id: str):
+        return manifest_ingest._refresh_manifest_in_project(
+            project_id=project_id, current_user=user, request=request
+        )
+
     with patch.object(manifest_ingest, "_run_dc_ingest", return_value=(True, None)) as ingest:
-        report = _call(project_id=inside_id, user=user)
+        report = _refresh(inside_id)
         with pytest.raises(HTTPException) as exc:
-            _call(project_id=outside_id, user=user)
+            _refresh(outside_id)
     assert [r.status for r in report.refreshed] == ["ingested"]
     assert ingest.call_count == 1
     assert exc.value.status_code == 422

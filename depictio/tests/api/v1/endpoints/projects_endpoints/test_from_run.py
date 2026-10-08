@@ -627,7 +627,7 @@ def _refresh(mock_db, project_id: str, user):
         patch("depictio.api.v1.celery_tasks.manifest_refresh_dc_task") as task,
     ):
         report = manifest_ingest._refresh_manifest_in_project(
-            project_id=project_id, current_user=user, async_run=True
+            project_id=project_id, current_user=user, async_run=True, request=_request()
         )
     return report, task
 
@@ -918,6 +918,31 @@ def test_a_local_refresh_decides_as_the_creation_did(mock_db, local_home, monkey
     monkeypatch.delenv("DEPICTIO_LOCAL_DATA_ROOTS")
     stored = mock_db["projects"].find_one({"_id": ObjectId(created.project_id)})
     assert from_run._refresh_preflight(stored) is None
+
+
+@pytest.mark.parametrize(
+    ("request_", "code"),
+    [(_request("attacker.example:8058"), "non_loopback_host"), (None, "non_loopback_host")],
+)
+def test_a_refresh_under_local_folders_takes_the_local_read_guards(
+    mock_db, local_home, request_, code
+):
+    """With local folders on, a refresh may read this disk, so it is refused,
+    before the project is even loaded, to a caller a DNS-rebinding page could
+    be (a foreign Host), and to one that came without a request at all."""
+    with pytest.raises(CodedHTTPException) as exc:
+        manifest_ingest._refresh_manifest_in_project(
+            project_id=str(ObjectId()), current_user=_user(is_admin=True), request=request_
+        )
+    assert (exc.value.status_code, exc.value.code) == (403, code)
+
+
+def test_a_refresh_under_local_folders_is_for_an_admin(mock_db, local_home):
+    with pytest.raises(CodedHTTPException) as exc:
+        manifest_ingest._refresh_manifest_in_project(
+            project_id=str(ObjectId()), current_user=_user(), request=_request()
+        )
+    assert (exc.value.status_code, exc.value.code) == (403, "local_admin_only")
 
 
 # ── template detection ───────────────────────────────────────────────────────
