@@ -90,3 +90,15 @@ def test_tab_titles_match_the_template_family(committed: dict) -> None:
     ref_titles = [committed["main_dashboard"]["title"], *[t["title"] for t in committed["tabs"]]]
     assert ref_titles[: len(base_titles)] == base_titles
     assert ref_titles[len(base_titles) :] == ["Sampling Campaign", "Environment (CTD)"]
+
+
+def test_substitute_also_rewrites_keys_and_merges_collisions() -> None:
+    """`category_colors: {"{GROUP_COL}": auto}` must come out under the real column,
+    merged with a static entry for the same column (static values win, `*` kept),
+    as the CLI's `substitute_template_variables` does."""
+    substitute = _load_generator().substitute
+    node = {"{GROUP_COL}": "auto", "habitat": {"soil": "#868e96"}, "x": "{GROUP_COL}"}
+    assert substitute(node, {"GROUP_COL": "habitat"}) == {
+        "habitat": {"*": "auto", "soil": "#868e96"},
+        "x": "habitat",
+    }

@@ -264,7 +264,7 @@ main_dashboard:
     title: What the run was told about each sample
     title_size: sm
     title_align: left
-    order: 0
+    order: 1
     alignment: left
     body: >
       Every column of the pipeline's --input sheet, with the DESeq2 size

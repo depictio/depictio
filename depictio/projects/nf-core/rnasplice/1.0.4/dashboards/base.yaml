@@ -138,7 +138,7 @@ main_dashboard:
     title: What the run compared
     title_size: sm
     title_align: left
-    order: 0
+    order: 1
     alignment: left
     body: >
       One row per sample with its condition, plus the design table's factors

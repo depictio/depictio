@@ -86,8 +86,36 @@ def load_reference_vars() -> dict[str, str]:
 
 
 def substitute(node: Any, variables: dict[str, str]) -> Any:
+    # Keys too (`category_colors: {"{GROUP_COL}": auto}`), as the CLI's
+    # `substitute_template_variables` does. A substituted key landing on one
+    # written as is merges into it, the one written as is winning value by
+    # value; a bare `auto` meets a map as `{"*": "auto"}`.
+    def merge(kept: Any, other: Any) -> Any:
+        if isinstance(kept, dict) and other == "auto":
+            other = {"*": "auto"}
+        if isinstance(other, dict) and kept == "auto":
+            kept = {"*": "auto"}
+        if isinstance(kept, dict) and isinstance(other, dict):
+            merged = dict(other)
+            for k, v in kept.items():
+                merged[k] = merge(v, merged[k]) if k in merged else v
+            return merged
+        return kept
+
     if isinstance(node, dict):
-        return {k: substitute(v, variables) for k, v in node.items()}
+        out: dict[Any, Any] = {}
+        static: set[Any] = set()
+        for key, value in node.items():
+            new_key, new_value = substitute(key, variables), substitute(value, variables)
+            if new_key not in out:
+                out[new_key] = new_value
+            elif new_key == key and new_key not in static:
+                out[new_key] = merge(new_value, out[new_key])
+            else:
+                out[new_key] = merge(out[new_key], new_value)
+            if new_key == key:
+                static.add(new_key)
+        return out
     if isinstance(node, list):
         return [substitute(v, variables) for v in node]
     if isinstance(node, str):

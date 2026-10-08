@@ -16,6 +16,7 @@ Index vs Tag:
     Users write `tag` in YAML, system manages `index` as UUID internally.
 """
 
+import re
 import uuid
 from typing import Any, Literal
 
@@ -579,6 +580,21 @@ class CardLiteComponent(BaseLiteComponent):
             validate_filter_expr(self.filter_expr)
         return self
 
+    @model_validator(mode="after")
+    def validate_no_category_aggregation(self) -> "CardLiteComponent":
+        """`top` / `top_share` name a category, which a card has nowhere to show.
+
+        They exist for a text tile's live values (``TextValueSpec``); checked here
+        too because, without a ``column_type``, nothing else would stop them.
+        """
+        for agg in [self.aggregation, *(self.aggregations or [])]:
+            if agg in TEXT_ONLY_AGGREGATIONS:
+                raise ValueError(
+                    f"aggregation '{agg}' is only available to a text tile's `values`, "
+                    "not to a card"
+                )
+        return self
+
 
 # Controls whose initial state is a ``[low, high]`` pair.
 _RANGE_DEFAULT_TYPES: tuple[str, ...] = ("RangeSlider", "DateRangePicker", "DatePicker")
@@ -822,6 +838,103 @@ class InteractiveLiteComponent(BaseLiteComponent):
         return self
 
 
+# ---------------------------------------------------------------------------
+# Live values in a text tile
+# ---------------------------------------------------------------------------
+
+# Aggregations that name a category rather than reduce to a number. A text
+# value can print one in a sentence; a card has no place for it.
+TEXT_ONLY_AGGREGATIONS: tuple[str, ...] = ("top", "top_share")
+
+# Every card aggregation that reduces to one scalar, plus the category ones.
+# `box_plot_stats` is a ten-field payload, nothing a sentence can print.
+TEXT_VALUE_AGGREGATIONS: tuple[str, ...] = (
+    *sorted(
+        {agg for aggs in AGGREGATION_COMPATIBILITY.values() for agg in aggs} - {"box_plot_stats"}
+    ),
+    *TEXT_ONLY_AGGREGATIONS,
+)
+
+# The two placeholder forms, as the viewer reads them (textValues.ts): the
+# content between `{{` and `}}`, with no space anywhere.
+TEXT_VALUE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,11}$")
+TEXT_PARAM_PLACEHOLDER = re.compile(r"^param:[A-Za-z0-9_.-]+$")
+TEXT_VALUE_FORMAT = re.compile(r"^(percent|integer|si|decimals:[0-6])$")
+# Anything between double braces is meant as a placeholder. The viewer prints
+# one of neither form as is, braces included, so validation refuses it.
+TEXT_PLACEHOLDER = re.compile(r"\{\{([^{}]*)\}\}")
+
+
+def text_placeholders(*texts: str | None) -> list[str]:
+    """The contents of every ``{{...}}`` in ``texts``, in order."""
+    return [m.group(1) for text in texts if text for m in TEXT_PLACEHOLDER.finditer(text)]
+
+
+class TextValueSpec(BaseModel):
+    """One live value a text tile prints, computed like a card.
+
+    Example YAML (under a text tile's ``values``):
+        top: {dc: taxonomy_rel_abundance, column: Phylum, aggregation: top, weight: rel_abundance}
+        shannon: {dc: alpha_diversity, column: shannon, aggregation: median, format: "decimals:2"}
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    dc: str = Field(..., min_length=1, description="data_collection_tag the value is computed on")
+    column: str = Field(..., min_length=1, description="Column to aggregate")
+    aggregation: str = Field(
+        ...,
+        description="A card aggregation (count, nunique, sum, average, median, min, max, ...), "
+        "or `top` (the category with the largest summed `weight`, row count without one) or "
+        "`top_share` (that category's share of the total, a fraction).",
+    )
+    weight: str | None = Field(
+        default=None, description="Column summed per category by `top` / `top_share` only"
+    )
+    filter_expr: str | None = Field(
+        default=None,
+        description="Polars filter expression applied before aggregating, as on a card",
+    )
+    format: str | None = Field(
+        default=None,
+        description="`percent`, `integer`, `si` or `decimals:N` (N from 0 to 6). Unset: "
+        "numbers as a card prints them, text as is.",
+    )
+
+    @model_validator(mode="after")
+    def validate_value(self) -> "TextValueSpec":
+        if self.aggregation not in TEXT_VALUE_AGGREGATIONS:
+            raise ValueError(
+                f"aggregation '{self.aggregation}' is not one of: "
+                f"{', '.join(TEXT_VALUE_AGGREGATIONS)}"
+            )
+        if self.weight is not None and self.aggregation not in TEXT_ONLY_AGGREGATIONS:
+            raise ValueError(
+                f"`weight` only applies to {' / '.join(TEXT_ONLY_AGGREGATIONS)}, "
+                f"not to '{self.aggregation}'"
+            )
+        if self.format is not None and not TEXT_VALUE_FORMAT.match(self.format):
+            raise ValueError(
+                f"format '{self.format}' is not one of: percent, integer, si, decimals:N (0-6)"
+            )
+        if self.filter_expr is not None:
+            from depictio.models.components.filter_expr import validate_filter_expr
+
+            validate_filter_expr(self.filter_expr)
+        return self
+
+
+class TextValueRuntimeSpec(TextValueSpec):
+    """A stored live value: the YAML spec plus the ids its `dc` resolved to at import.
+
+    `None` when the tag did not resolve; the value then computes to null. Never
+    written back to YAML.
+    """
+
+    dc_id: str | None = Field(default=None, description="Resolved data collection id")
+    wf_id: str | None = Field(default=None, description="Workflow holding that collection")
+
+
 class TextLiteComponent(BaseLiteComponent):
     """Lite text component for narrative section headers + body paragraphs.
 
@@ -839,6 +952,18 @@ class TextLiteComponent(BaseLiteComponent):
           body: |
             Shannon, observed features, and Faith's PD measure
             within-sample richness and evenness.
+
+    Live values: ``{{name}}`` in the title or body prints a value declared
+    under ``values`` (see ``TextValueSpec``), computed with the dashboard's
+    filters as a card is; ``{{param:KEY}}`` prints one of the run's pipeline
+    parameters and needs no declaration.
+
+        - component_type: text
+          values:
+            shannon: {dc: alpha_diversity, column: shannon, aggregation: median}
+          body: |
+            - Median Shannon diversity: **{{shannon}}**
+            - Classified with {{param:dada_ref_taxonomy}}
     """
 
     component_type: Literal["text"] = "text"
@@ -863,6 +988,13 @@ class TextLiteComponent(BaseLiteComponent):
         default="center",
         description="Vertical placement of the text block within its tile",
     )
+    # Ahead of the body that prints them, which is also where an export writes them.
+    values: dict[str, TextValueSpec] | None = Field(
+        default=None,
+        description="Live values the title and body print as `{{name}}`, keyed by name "
+        "(lower case, digits and `_`, at most 12 characters).",
+    )
+
     body: str = Field(default="", description="Optional paragraph below the heading")
     # A tile on a landing page is a card of its own (a finding, a fact box);
     # one in a tab's flow is prose between figures. `surface` says which.
@@ -881,6 +1013,37 @@ class TextLiteComponent(BaseLiteComponent):
     # Text tiles don't bind to a data source — keep these optional/empty.
     workflow_tag: str = Field(default="", description="Unused for text components")
     data_collection_tag: str = Field(default="", description="Unused for text components")
+
+    @model_validator(mode="after")
+    def validate_values(self) -> "TextLiteComponent":
+        """Every placeholder names something, and every value is printed."""
+        declared = set(self.values or {})
+        bad_names = sorted(n for n in declared if not TEXT_VALUE_NAME.match(n))
+        if bad_names:
+            raise ValueError(
+                f"value name(s) {bad_names} must match {TEXT_VALUE_NAME.pattern} "
+                "(lower case, digits and `_`, at most 12 characters)"
+            )
+        used: set[str] = set()
+        for content in text_placeholders(self.title, self.body):
+            if TEXT_PARAM_PLACEHOLDER.match(content):
+                continue
+            if not TEXT_VALUE_NAME.match(content):
+                raise ValueError(
+                    f"{{{{{content}}}}} is not a placeholder the viewer prints: write "
+                    "{{name}} (a declared value) or {{param:KEY}} (a run parameter, KEY "
+                    "of letters, digits, `_`, `.`, `-`), with no space inside the braces"
+                )
+            if content not in declared:
+                raise ValueError(
+                    f"{{{{{content}}}}} is not a declared value: declare it under `values`, "
+                    "or use {{param:KEY}} for a run parameter"
+                )
+            used.add(content)
+        unused = sorted(declared - used)
+        if unused:
+            raise ValueError(f"value(s) {unused} are declared but not used in the title or body")
+        return self
 
 
 class HighlightLiteComponent(BaseLiteComponent):

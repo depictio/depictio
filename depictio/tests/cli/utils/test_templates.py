@@ -113,6 +113,35 @@ class TestSubstituteTemplateVariables:
         result = substitute_template_variables("{MISSING_VAR}/file.tsv", {})
         assert "{MISSING_VAR}" in result
 
+    def test_keys_are_substituted(self) -> None:
+        config = {"category_colors": {"{GROUP_COL}": "auto", "Kingdom": {"B": "#1098ad"}}}
+        result = substitute_template_variables(config, {"GROUP_COL": "habitat"})
+        assert result == {"category_colors": {"habitat": "auto", "Kingdom": {"B": "#1098ad"}}}
+
+    def test_non_string_keys_are_left_alone(self) -> None:
+        result = substitute_template_variables({1: "{A}", None: "x"}, {"A": "a"})
+        assert result == {1: "a", None: "x"}
+
+    @pytest.mark.parametrize("templated_first", [True, False])
+    def test_a_colliding_key_merges_static_values_win(self, templated_first: bool) -> None:
+        templated = ("{GROUP_COL}", {"control": "#111111", "treated": "#222222"})
+        static = ("condition", {"control": "#868e96"})
+        items = [templated, static] if templated_first else [static, templated]
+        result = substitute_template_variables(dict(items), {"GROUP_COL": "condition"})
+        assert result == {"condition": {"control": "#868e96", "treated": "#222222"}}
+
+    @pytest.mark.parametrize("templated_first", [True, False])
+    def test_a_colliding_auto_keeps_the_star(self, templated_first: bool) -> None:
+        templated = ("{GROUP_COL}", "auto")
+        static = ("condition", {"control": "#868e96"})
+        items = [templated, static] if templated_first else [static, templated]
+        result = substitute_template_variables(dict(items), {"GROUP_COL": "condition"})
+        assert result == {"condition": {"*": "auto", "control": "#868e96"}}
+
+    def test_two_scalars_colliding_keep_the_static_one(self) -> None:
+        result = substitute_template_variables({"{COL}": "templated", "x": "static"}, {"COL": "x"})
+        assert result == {"x": "static"}
+
 
 class TestStripIds:
     def test_strip_top_level_id(self) -> None:
