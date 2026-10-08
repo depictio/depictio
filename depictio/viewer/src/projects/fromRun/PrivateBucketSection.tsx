@@ -4,7 +4,9 @@
  * read it on its own.
  *
  * It opens by itself when reading the folder is refused, or on purpose with
- * the "This bucket needs credentials" switch. "Test connection" tries the
+ * the "This bucket needs credentials" switch. The access key and its secret
+ * are required: a bucket read without credentials is one the server's
+ * administrator lists, never one named here. "Test connection" tries the
  * settings against the bucket (nothing is stored) and fills the region in
  * from the answer. The settings stay in the run tab's state: they are sent
  * with every read of a folder in this bucket, and stored as the project's
@@ -26,7 +28,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { runStorageFieldsBlank, runStorageFromFields, testRunStorage } from 'depictio-react-core';
+import { runStorageFromFields, testRunStorage } from 'depictio-react-core';
 import type {
   ProjectStorageTestResult,
   RunStorageFieldErrors,
@@ -111,9 +113,11 @@ export const PrivateBucketSection: React.FC<PrivateBucketSectionProps> = ({
   disabledReason,
 }) => {
   const [test, setTest] = useState<TestState>({ status: 'idle' });
-  /** Pairing errors (a key without its secret) wait for a first test: they
-   *  would nag while the reader is still between the two fields. */
-  const [showPairing, setShowPairing] = useState(false);
+  /** A missing key or secret is marked on its field only after a first
+   *  test: on an untouched form, or while the reader is between the two
+   *  fields, it would nag. Until then the reason under the button says what
+   *  is missing. */
+  const [showKeyErrors, setShowKeyErrors] = useState(false);
   /** Bumped by every edit and folder change: a test answering after it no
    *  longer describes the settings shown. */
   const testRun = useRef(0);
@@ -135,19 +139,16 @@ export const PrivateBucketSection: React.FC<PrivateBucketSectionProps> = ({
   const errorFor = (name: keyof RunStorageFields): string | undefined => {
     const error = fieldErrors[name];
     if (!error) return undefined;
-    const pairing = name === 'accessKeyId' || name === 'secretAccessKey';
-    return pairing && !showPairing ? undefined : error;
+    const keyField = name === 'accessKeyId' || name === 'secretAccessKey';
+    return keyField && !showKeyErrors ? undefined : error;
   };
 
+  /** What the settings lack, the access key and its secret included. */
   const firstError = Object.values(fieldErrors)[0] ?? null;
-  const shownError =
-    (Object.keys(fieldErrors) as Array<keyof RunStorageFields>).map(errorFor).find(Boolean) ?? null;
-  const testReason =
-    disabledReason ??
-    (runStorageFieldsBlank(fields) ? 'Fill in the connection details first.' : shownError);
+  const testReason = disabledReason ?? firstError;
 
   const handleTest = async () => {
-    setShowPairing(true);
+    setShowKeyErrors(true);
     const storage = runStorageFromFields(fields);
     if (disabled || !storage || firstError) return;
     testRun.current += 1;
@@ -193,10 +194,10 @@ export const PrivateBucketSection: React.FC<PrivateBucketSectionProps> = ({
                 </Group>
                 <Text size="sm" c="dimmed" lh={1.4} data-testid="run-private-bucket-explanation">
                   {refused
-                    ? 'This bucket is not public, so give its connection details.'
-                    : 'Give the connection details of this bucket if it is not public.'}{' '}
-                  They become this project&apos;s storage settings, which you can change later in
-                  Project settings, Storage.
+                    ? 'This bucket is not public, so give its access key and secret.'
+                    : 'Give the access key and secret of this bucket if it is not public.'}{' '}
+                  These details become this project&apos;s storage settings, which you can change
+                  later in Project settings, Storage.
                 </Text>
               </Stack>
             </Group>
@@ -228,6 +229,7 @@ export const PrivateBucketSection: React.FC<PrivateBucketSectionProps> = ({
               />
               <TextInput
                 label="Access key"
+                withAsterisk
                 placeholder="AKIA..."
                 value={fields.accessKeyId}
                 onChange={(e) => change('accessKeyId', e.currentTarget.value)}
@@ -239,6 +241,7 @@ export const PrivateBucketSection: React.FC<PrivateBucketSectionProps> = ({
               />
               <PasswordInput
                 label="Secret"
+                withAsterisk
                 placeholder="Secret access key"
                 value={fields.secretAccessKey}
                 onChange={(e) => change('secretAccessKey', e.currentTarget.value)}
