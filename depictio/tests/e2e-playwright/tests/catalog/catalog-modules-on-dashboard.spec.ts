@@ -24,6 +24,11 @@
  *   CATALOG_E2E_LANES=N        split this shard across N parallel tests
  *   CATALOG_E2E_CHUNKS=N       split each lane into N tests run one after the
  *                              other (default 8, see CHUNKS below)
+ *   CATALOG_E2E_SELECT=representative
+ *                              one render per distinct shape instead of all
+ *                              (default all, see SELECT below)
+ *   CATALOG_E2E_TOOLS=a,b      with representative: these tool_ids are still
+ *                              walked in full
  */
 import { APIRequestContext, Page, expect as pwExpect } from "@playwright/test";
 import { test, expect, apiLogin } from "../../fixtures/auth";
@@ -45,6 +50,37 @@ const BATCH = Number(process.env.CATALOG_E2E_BATCH ?? 6);
 const FIRST_RENDER_ONLY = process.env.CATALOG_E2E_RENDERS === "first";
 // Smoke-run cap: exercise the first N renders of each project instead of all.
 const LIMIT = Number(process.env.CATALOG_E2E_LIMIT ?? 0);
+
+/**
+ * Which renders to walk: all of them, or one per distinct shape.
+ *
+ * The catalog holds around 1550 renders but only about sixty shapes — what a
+ * render is built from (component, chart kind, control, card layout); the rest
+ * is which tool's columns it is pointed at. Over 700 of them are cards. The
+ * full walk takes most of an hour a leg, so CI runs it on main, nightly and on
+ * demand, and a PR walks the representative slice instead: the first render of
+ * each shape, in the same stable order the sharding relies on, plus every
+ * render of the tools named in CATALOG_E2E_TOOLS (the ones the PR changed).
+ *
+ * Defaults to all, so a local run and any job that does not set it keep full
+ * coverage.
+ */
+const SELECT = process.env.CATALOG_E2E_SELECT ?? "all";
+if (SELECT !== "all" && SELECT !== "representative") {
+  throw new Error(`bad CATALOG_E2E_SELECT=${SELECT}`);
+}
+const ALWAYS_WALKED_TOOLS = new Set(
+  (process.env.CATALOG_E2E_TOOLS ?? "")
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean),
+);
+
+/** What a render is built from, as opposed to which data it is pointed at. */
+function renderShape(offer: RenderOffer): string {
+  const { component, kind, visu_type, interactive_type, secondary_layout } = offer.render;
+  return [component, kind ?? visu_type, interactive_type, secondary_layout].join("|");
+}
 
 /**
  * Which slice of the catalog this job owns.
@@ -440,6 +476,9 @@ test.describe("catalog modules are usable on a dashboard", () => {
     let seq = 0;
     let laneSeq = 0;
     let chunkSeq = 0;
+    // Across projects too: a shape the first project already offers is not
+    // walked again on the next one.
+    const seenShapes = new Set<string>();
 
     const work = projects.map((project) => {
       let offers = flattenOffers(project.modules)
@@ -449,6 +488,17 @@ test.describe("catalog modules are usable on a dashboard", () => {
         .sort((a, b) => a.label.localeCompare(b.label));
       if (FIRST_RENDER_ONLY) offers = offers.filter((o) => o.renderIndex === 0);
       if (LIMIT > 0) offers = offers.slice(0, LIMIT);
+      // Before the shard split, so every leg agrees on the slice and their
+      // union is still that slice, walked once.
+      if (SELECT === "representative") {
+        offers = offers.filter((o) => {
+          if (ALWAYS_WALKED_TOOLS.has(o.toolId)) return true;
+          const shape = renderShape(o);
+          if (seenShapes.has(shape)) return false;
+          seenShapes.add(shape);
+          return true;
+        });
+      }
       // Round-robin rather than a contiguous slice: renders come grouped by
       // tool and by type, so a contiguous third would hand one leg all the
       // cheap cards and another all the MultiQC cold builds. A no-op at 1 of 1.
@@ -562,8 +612,13 @@ test.describe("catalog modules are usable on a dashboard", () => {
     const laneScope =
       (LANES > 1 ? ` lane ${lane + 1} of ${LANES}` : "") +
       (CHUNKS > 1 ? ` chunk ${chunk + 1} of ${CHUNKS}` : "");
+    const selection =
+      SELECT === "representative"
+        ? `, representative: ${seenShapes.size} shape(s)` +
+          (ALWAYS_WALKED_TOOLS.size ? ` + all of ${[...ALWAYS_WALKED_TOOLS].join(", ")}` : "")
+        : "";
     console.log(
-      `added ${added} catalog renders across ${projects.length} project(s)${scope}${laneScope}`,
+      `added ${added} catalog renders across ${projects.length} project(s)${scope}${laneScope}${selection}`,
     );
     expect(added, "no catalog render was added at all").toBeGreaterThan(0);
     expect(problems, `\n${problems.join("\n")}\n`).toEqual([]);
