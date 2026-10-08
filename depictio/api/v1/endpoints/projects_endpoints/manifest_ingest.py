@@ -23,6 +23,7 @@ after the other; a refresh can instead fan them out to Celery workers
 import copy
 import os
 import tempfile
+from collections.abc import Callable
 from urllib.parse import urlparse
 
 from bson import ObjectId
@@ -337,6 +338,34 @@ def _revert_dc_ingest(
     _restore_dc_files(_dc_id(dc_dict), files_before)
 
 
+def _registers_runs(workflow_dict: dict, dc_dict: dict) -> bool:
+    """Whether a data collection's scan writes the workflow's ``WorkflowRun`` documents.
+
+    Two scans do. The ``recursive`` walk (``scan_files_for_workflow``) registers
+    one run per run folder. An ``s3_prefix`` scan of a ``sequencing-runs``
+    workflow (``scan_s3_prefix_for_data_collection``), which is what a recursive
+    collection becomes under an ``s3://`` data root, registers one run per run
+    directory under its prefix. Every other scan (single, url, manifest, a flat
+    s3_prefix) registers files only: the run its files name is never written.
+    """
+    mode = str(((dc_dict.get("config") or {}).get("scan") or {}).get("mode") or "").lower()
+    if mode == "recursive":
+        return True
+    location = workflow_dict.get("data_location") or {}
+    return (
+        mode == "s3_prefix"
+        and location.get("structure") == "sequencing-runs"
+        and bool(location.get("runs_regex"))
+    )
+
+
+def _scan_failure(scan_result: dict | None) -> str | None:
+    """The message a scan that did not succeed fails its collection with, else None."""
+    if (scan_result or {}).get("result") == "success":
+        return None
+    return f"Scan failed: {(scan_result or {}).get('message', 'unknown error')}"
+
+
 def _run_dc_ingest(
     workflow_dict: dict,
     dc_id: str,
@@ -346,15 +375,25 @@ def _run_dc_ingest(
     *,
     scan: bool = True,
     scan_dc_ids: list[str] | None = None,
+    on_scanned: Callable[[str, str | None], None] | None = None,
 ) -> tuple[bool, str | None]:
     """Scan + process one DC through the CLI helpers. Returns (ok, error_message).
 
     A ``recursive`` collection is scanned the way the CLI scans it, by
     ``scan_files_for_workflow``: one walk of the workflow's run folders that
-    registers the runs and the files of every collection named in
+    registers the runs and the files of every recursive collection named in
     ``scan_dc_ids`` (this one alone when None). Collections of one workflow
     share its runs, so in a fan-out one task scans for all of them and the
-    others pass ``scan=False`` and only process (see ``_scan_leaders``).
+    others pass ``scan=False`` and only process (see ``_scan_leaders``). A
+    collection of ``scan_dc_ids`` that is not walked (an ``s3_prefix`` one
+    that registers runs) is scanned here on its own, after the walk, so the
+    runs are still written by one task at a time.
+
+    A scan leader scans for every collection of ``scan_dc_ids`` whatever the
+    outcome of the others, and reports each outcome to ``on_scanned`` as
+    ``(dc_id, error message or None)`` as soon as it is known: that is what a
+    follower is ingested or failed on, never the leader's own processing. A
+    follower's scan that raises is that follower's failure, not the leader's.
 
     Synchronous on purpose: the helpers use a sync httpx client back into
     this same FastAPI process (see ``_push_workflow_and_ingest``).
@@ -391,37 +430,79 @@ def _run_dc_ingest(
         current_user, remote_storage_options=remote_storage_options
     )
 
-    target = next((dc for dc in workflow.data_collections if str(dc.id) == dc_id), None)
-    mode = target.config.scan.mode.lower() if target and target.config.scan else ""
-    if mode == "recursive":
-        if scan:
-            from depictio.cli.cli.utils.scan import scan_files_for_workflow
+    def _mode(dc) -> str:
+        return dc.config.scan.mode.lower() if dc.config.scan else ""
 
-            wanted = set(scan_dc_ids or []) | {dc_id}
-            scan_result = scan_files_for_workflow(
-                workflow=workflow,
-                data_collections=[dc for dc in workflow.data_collections if str(dc.id) in wanted],
-                CLI_config=cli_config,
-                # A refresh re-walks the runs already registered, as it
-                # re-reads every other source: overwrite-with-report.
-                command_parameters={
-                    "sync_files": sync_files,
-                    "rescan_folders": True,
-                    "rich_tables": False,
-                },
-            )
-            if (scan_result or {}).get("result") != "success":
-                return False, f"Scan failed: {(scan_result or {}).get('message', 'unknown error')}"
-    elif target is None or target.config.scan is not None:
-        scan_result = process_data_collection_helper(
-            CLI_config=cli_config,
-            wf=workflow,
-            dc_id=dc_id,
-            mode="scan",
-            command_parameters={"sync_files": True} if sync_files else {},
+    target = next((dc for dc in workflow.data_collections if str(dc.id) == dc_id), None)
+    if scan:
+        wanted = set(scan_dc_ids or []) | {dc_id}
+        walked = [
+            dc
+            for dc in workflow.data_collections
+            if str(dc.id) in wanted and _mode(dc) == "recursive"
+        ]
+        # Every other collection with a scan block is scanned on its own; one
+        # with none (a recipe) has nothing to scan. An unknown target is
+        # scanned too, so the helper says it is not found.
+        listed = [
+            str(dc.id)
+            for dc in workflow.data_collections
+            if str(dc.id) in wanted and _mode(dc) not in ("", "recursive")
+        ]
+        if target is None:
+            listed.append(dc_id)
+
+        # (collection ids, whether they are the one walk), the walk first.
+        units: list[tuple[list[str], bool]] = (
+            [([str(dc.id) for dc in walked], True)] if walked else []
         )
-        if (scan_result or {}).get("result") != "success":
-            return False, f"Scan failed: {(scan_result or {}).get('message', 'unknown error')}"
+        units += [([scanned_id], False) for scanned_id in listed]
+        own_error: str | None = None
+        own_exc: Exception | None = None
+        for unit, is_walk in units:
+            try:
+                if is_walk:
+                    from depictio.cli.cli.utils.scan import scan_files_for_workflow
+
+                    scan_result = scan_files_for_workflow(
+                        workflow=workflow,
+                        data_collections=walked,
+                        CLI_config=cli_config,
+                        # A refresh re-walks the runs already registered, as it
+                        # re-reads every other source: overwrite-with-report.
+                        command_parameters={
+                            "sync_files": sync_files,
+                            "rescan_folders": True,
+                            "rich_tables": False,
+                        },
+                    )
+                else:
+                    scan_result = process_data_collection_helper(
+                        CLI_config=cli_config,
+                        wf=workflow,
+                        dc_id=unit[0],
+                        mode="scan",
+                        command_parameters={"sync_files": True} if sync_files else {},
+                    )
+                error = _scan_failure(scan_result)
+            except Exception as exc:
+                # The other collections are still scanned: a follower is
+                # failed by its own scan, never by another one's. This one's
+                # own exception is raised once they are, as it always was.
+                error = f"Scan failed: {getattr(exc, 'detail', None) or exc}"
+                if dc_id in unit:
+                    own_exc = exc
+                else:
+                    logger.error(f"Scan of data collection(s) {', '.join(unit)} failed: {error}")
+            if on_scanned is not None:
+                for scanned_id in unit:
+                    on_scanned(scanned_id, error)
+            if dc_id in unit:
+                own_error = error
+        if own_exc is not None:
+            raise own_exc
+        if own_error is not None:
+            return False, own_error
 
     process_result = process_data_collection_helper(
         CLI_config=cli_config,
@@ -1008,13 +1089,17 @@ def _recipe_dependencies(project_dict: dict) -> dict[str, list[str]]:
 def _scan_leaders(
     project_dict: dict, to_dispatch: list[tuple[str, str, int, int]]
 ) -> tuple[dict[str, list[str]], dict[str, str]]:
-    """Who scans for the ``recursive`` collections of each workflow in a fan-out.
+    """Who scans for the run-registering collections of each workflow in a fan-out.
 
-    A recursive scan walks the workflow's run folders once and registers one
-    ``WorkflowRun`` per run, which every recursive collection of the workflow
-    shares. One task per collection, each scanning for itself, would race to
-    create the same runs. So the first of them to be dispatched is the scan
-    leader and scans for all of them; the others wait for its step
+    Those are the collections whose scan writes the workflow's ``WorkflowRun``
+    documents (``_registers_runs``): the recursive ones, whose walk of the run
+    folders registers one run per folder, and the ``s3_prefix`` ones of a
+    ``sequencing-runs`` workflow, which register one per run directory under
+    the prefix. Every one of them shares the workflow's runs. One task per
+    collection, each scanning for itself, would race to create the same runs
+    (two documents for one run, or files naming a run that is never written).
+    So the first of them to be dispatched is the scan leader and scans for all
+    of them, one after the other; the others wait for its step
     (``depends_on``) and only process.
 
     Returns ``({leader_tag: [dc_id, ...]}, {follower_tag: leader_tag})``.
@@ -1022,10 +1107,9 @@ def _scan_leaders(
     workflows = project_dict.get("workflows") or []
     members: dict[int, list[tuple[str, str]]] = {}
     for tag, dc_id, wf_i, _entries in to_dispatch:
-        wf_dcs = (workflows[wf_i].get("data_collections") or []) if wf_i < len(workflows) else []
-        dc = next((d for d in wf_dcs if _dc_id(d) == dc_id), {})
-        scan = (dc.get("config") or {}).get("scan") or {}
-        if str(scan.get("mode") or "").lower() == "recursive":
+        workflow = workflows[wf_i] if wf_i < len(workflows) else {}
+        dc = next((d for d in workflow.get("data_collections") or [] if _dc_id(d) == dc_id), {})
+        if _registers_runs(workflow, dc):
             members.setdefault(wf_i, []).append((tag, dc_id))
 
     leaders: dict[str, list[str]] = {}
@@ -1138,10 +1222,10 @@ def _dispatch_refresh_tasks(
     until each one's wait budget in ``manifest_refresh_dc_task`` runs out, and
     each would then fail naming what it was still waiting for.
 
-    Recursive collections of one workflow get a scan leader (see
-    ``_scan_leaders``): its payload carries ``scan_dc_ids``, the collections
-    it scans for, and each of the others ``scan_leader``, its tag, which is
-    also added to ``depends_on``.
+    The collections of one workflow that register its runs get a scan leader
+    (see ``_scan_leaders``): its payload carries ``scan_dc_ids``, the
+    collections it scans for, and each of the others ``scan_leader``, its tag,
+    which is also added to ``depends_on``.
 
     Shared with ``POST /projects/from_run``, which needs exactly this: a
     durable run whose steps a worker updates and a caller polls. The two flows

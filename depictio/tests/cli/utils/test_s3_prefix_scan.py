@@ -192,6 +192,51 @@ class TestListS3Prefix:
         assert len(found) == 2
         assert any(level == "warning" and "truncated" in msg for level, msg in messages)
 
+    @staticmethod
+    def _warnings(monkeypatch) -> list[str]:
+        captured: list[str] = []
+        monkeypatch.setattr(
+            scan_module,
+            "rich_print_checked_statement",
+            lambda msg, level="info": captured.append(msg) if level == "warning" else None,
+        )
+        return captured
+
+    def test_listing_stops_once_max_files_match(self, stub_s3, monkeypatch):
+        """No page is asked for past the one that fills the cap, rather than
+        paging on to the key budget for matches that would be dropped."""
+        client = stub_s3([f"run42/sample_{i}.csv" for i in range(10)], page_size=2)
+        warnings = self._warnings(monkeypatch)
+
+        found = scan_module.list_s3_prefix("s3://b/run42/", "*.csv", 2, None)
+
+        assert [o["relative"] for o in found] == ["sample_0.csv", "sample_1.csv"]
+        assert client.pages_served == 1
+        assert len(warnings) == 1
+        assert "max_files cap (2)" in warnings[0]
+        assert "results may be truncated" in warnings[0]
+
+    def test_a_further_match_on_that_page_says_the_results_are_truncated(
+        self, stub_s3, monkeypatch
+    ):
+        client = stub_s3([f"run42/sample_{i}.csv" for i in range(10)], page_size=3)
+        warnings = self._warnings(monkeypatch)
+
+        found = scan_module.list_s3_prefix("s3://b/run42/", "*.csv", 2, None)
+
+        assert len(found) == 2
+        assert client.pages_served == 1
+        assert "results are truncated" in warnings[0]
+
+    def test_a_listing_that_ends_with_the_cap_is_complete(self, stub_s3, monkeypatch):
+        stub_s3(["run42/sample_0.csv", "run42/sample_1.csv"], page_size=2, is_truncated=False)
+        warnings = self._warnings(monkeypatch)
+
+        found = scan_module.list_s3_prefix("s3://b/run42/", "*.csv", 2, None)
+
+        assert len(found) == 2
+        assert warnings == []
+
     def test_non_s3_prefix_rejected(self, stub_s3):
         stub_s3(KEYS)
         with pytest.raises(ValueError, match="s3:// prefix"):
@@ -446,6 +491,29 @@ class TestListS3PrefixKeyBudget:
         assert "s3://b/run42/" in warning
         assert "budget of 10 keys" in warning
         assert "partial" in warning
+
+    def test_the_budget_warning_counts_every_key_listed(self, monkeypatch, stub_s3):
+        """Folder markers are listed, and paid for, like any key: the count the
+        warning gives is the one the budget was reached with."""
+        keys = (
+            [f"run42/dir_{i}/" for i in range(5)]
+            + [f"run42/noise_{i}.txt" for i in range(10)]
+            + ["run42/late.csv"]
+        )
+        client = stub_s3(keys, page_size=5)
+        messages = []
+        monkeypatch.setattr(
+            scan_module,
+            "rich_print_checked_statement",
+            lambda msg, level="info": messages.append((level, msg)),
+        )
+
+        assert scan_module.list_s3_prefix("s3://b/run42/", "*.csv", 1, None) == []
+
+        assert client.pages_served == 2
+        warning = next(msg for level, msg in messages if level == "warning")
+        assert "listed 10 keys" in warning
+        assert "budget of 10 keys" in warning
 
     def test_listing_ending_exactly_at_the_budget_is_complete(self, monkeypatch, stub_s3):
         # Ten keys, budget ten: the last page says IsTruncated=False, so this
