@@ -76,8 +76,8 @@ The landing page, at compact width with the filter panel collapsed:
   PSMs against the FDR threshold beside the observed against predicted retention time, then
   the length profile beside the source proteins. The FDR curves, the length profile and the
   protein scatter draw one series or colour per raw file or sample, so their highlights hide
-  the legend; the protein scatter labels only the five proteins that give the most
-  peptides. The bar of this section filters by condition and peptide length.
+  the legend; the protein scatter labels only the three proteins that give the most
+  peptides, so the labels stay apart at w5. The bar of this section filters by condition and peptide length.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
 The persistent `Sample filters` (condition, sample, raw file) sit in the collapsed left
@@ -119,17 +119,20 @@ hydropathy and precursor m/z over the gradient by charge. Collapsed: the fragmen
 (mass error, matched ions) and table, absent on a run without `--annotate_ions`. Filters:
 precursor charge and a retention-time range.
 
-**MHC signature.** Strip: the 9-mer share and the median length per sample, and the distinct
+**MHC signature.** Strip: the 9-mer share per sample, the median peptide length (its spread
+over the peptides, since every sample of a class I run has the same median), and the distinct
 sequences ranked by their P2 and C-terminal residues, the two class I anchors. Then the
 length profile with the class I (8 to 12) and class II (13 to 25) ranges shaded, the
 composition per sample by length (switchable to charge and modification; the eight largest
 categories), and the positional amino-acid heatmap per sample and length for reading
-anchor motifs. Collapsed: the length table. Filters: peptide length and modification, which
+anchor motifs, bound to the twenty residue columns only (the matrix's `peptides` count
+would flatten the frequency scale). Collapsed: the length table. Filters: peptide length and modification, which
 also narrow the length profile and the motif heatmap through the project links.
 
 **Peptides and proteins.** Strip: the distinct sequences split by condition sharing,
 peptides per source protein (its distribution), the protein intensity (its spread) and the
-source proteins per peptide. Then the UpSet of the conditions each sequence was identified
+source proteins per peptide (the precursors mapping to one protein against the shared
+ones). Then the UpSet of the conditions each sequence was identified
 in, and the source proteins by the peptides they give against their intensity (a click
 selects the protein). Collapsed: the peptide table with its record card, and the protein
 table with its record card; each card opens on the selected row. Filters: condition sharing

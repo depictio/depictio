@@ -320,9 +320,9 @@ main_dashboard:
       pep_prot: {dc: mhcquant_source_proteins, column: peptides, aggregation: median, format: 'decimals:0'}
     body: |
       - **{{n_pep}}** distinct peptide sequences pass the FDR filter – after rescoring [Identification](tab:Identification)
-      - **{{rt_err}}** min median gap to the predicted retention time – per sample [Physico-chemical](tab:Physico-chemical checks)
+      - **{{rt_err}}** minutes, the median gap to the predicted retention time – per sample [Physico-chemical](tab:Physico-chemical checks)
       - **{{len_share}}** of the peptides are {{top_len}}s – the most common length [MHC signature](tab:MHC signature)
-      - **{{n_prot}}** source proteins, a median {{pep_prot}} peptides each – per sample [Peptides](tab:Peptides and proteins)
+      - **{{n_prot}}** source proteins give the peptides – median peptides per protein: {{pep_prot}} [Peptides](tab:Peptides and proteins)
     section: Findings
     tag: mq-ov-findings
     index: ov-findings
@@ -1082,7 +1082,7 @@ tabs:
     display:
       icon_name: mdi:clock-outline
       icon_color: lime
-      caption: median min per sample, with its spread
+      caption: median minutes per sample, with its spread
       decimals: 2
     section: Accuracy at a glance
     tag: mq-phys-card-rt-error
@@ -1381,22 +1381,23 @@ tabs:
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: mhcquant
-    data_collection_tag: mhcquant_sample_summary
-    use: mhcquant/sample_summary
+    data_collection_tag: mhcquant_peptides
+    use: mhcquant/peptides
     aggregation: median
-    column_name: median_length
-    column_type: float64
-    secondary_layout: histogram
+    column_name: length
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:ruler
       icon_color: blue
-      caption: residues per sample, distribution
+      caption: residues per peptide, with their spread
       decimals: 0
     section: Signature at a glance
     tag: mq-sig-card-median-length
     index: sig-card-median-length
     title: Median length
-    description: Median peptide length of each sample, in residues.
+    description: Median length of the identified peptides, in residues.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: mhcquant
@@ -1477,6 +1478,9 @@ tabs:
     use: mhcquant/motif_heatmap
     config:
       index_column: row_id
+      # The residues only: the matrix also carries `peptides`, a count in the
+      # thousands that would push every frequency to the bottom of the scale.
+      value_columns: [A, C, D, E, F, G, H, I, K, L, M, N, P, Q, R, S, T, V, W, Y]
       row_annotation_cols: [length_class]
       cluster_rows: false
       cluster_cols: true
@@ -1642,12 +1646,13 @@ tabs:
     aggregation: median
     column_name: n_proteins
     column_type: int64
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    secondary_layout: threshold
+    threshold_value: 1
+    threshold_direction: max
     display:
       icon_name: mdi:relation-many-to-many
       icon_color: cyan
-      caption: median per precursor, with its spread
+      caption: median per precursor, one protein passes
       decimals: 0
     section: Peptides at a glance
     tag: mq-pep-card-multimapping
@@ -1682,7 +1687,7 @@ tabs:
       x_title: Distinct peptides from the protein
       y_title: log10 summed peptide intensity
       log_x: true
-      top_n_labels: 5
+      top_n_labels: 3
       density_threshold: 8000
       legend_pos: bottom
       selection_enabled: true

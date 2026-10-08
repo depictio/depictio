@@ -809,20 +809,22 @@ tabs:
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: eager
-    data_collection_tag: samples
-    aggregation: sum
-    column_name: n_lanes
+    data_collection_tag: eager_lane_stats
+    aggregation: median
+    column_name: total_reads
     column_type: int64
-    secondary_layout: histogram
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:layers-outline
       icon_color: blue
-      caption: lanes per library, distribution
+      caption: median per lane, with its spread
+      decimals: 0
     section: Libraries at a glance
     tag: ea-lib-card-lanes
     index: lib-card-lanes
-    title: Lanes merged
-    description: Sequencing lanes eager trimmed one by one and merged into their library before mapping.
+    title: Reads per lane
+    description: Reads each sequencing lane gave before trimming; eager merges the lanes into their library before mapping.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: eager
@@ -870,12 +872,12 @@ tabs:
       sample_col: sample
       group_col: sample
       scale: minmax
+      # Seven axes: the axis titles are the column names and pile on each
+      # other past that at w8.
       metric_cols:
       - endogenous_dna
-      - endogenous_dna_post
       - clonality_pct
       - mean_coverage
-      - mean_mapping_quality
       - error_rate_pct
       - gc_percentage
       - ct_5p_first_pct
@@ -884,7 +886,7 @@ tabs:
     tag: ea-hub-av-pcoords
     index: lib-pcoords
     title: Per-library QC profile
-    description: One line per library across nine metrics from four tools; read the ticks before a gap.
+    description: One line per library across seven metrics from four tools; read the ticks before a gap.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: eager
@@ -1101,7 +1103,9 @@ tabs:
       value_label: reads
       value_format: count
       sort_mode: total_flow
-      color_mode: source
+      # Every flow starts at one node, so colouring by source paints it all
+      # one colour; by target, each fate keeps its own.
+      color_mode: target
       link_opacity: 0.55
       show_node_labels: true
     section: Read fate
@@ -1770,7 +1774,7 @@ tabs:
       icon_name: mdi:ruler
       icon_color: orange
       caption: bp per library, with its spread
-      decimals: 0
+      decimals: 1
     section: Damage at a glance
     tag: ea-auth-card-length
     index: auth-card-length
@@ -1789,7 +1793,7 @@ tabs:
       icon_name: mdi:content-cut
       icon_color: violet
       caption: share per library, distribution
-      decimals: 2
+      decimals: 3
     section: Damage at a glance
     tag: ea-auth-card-short
     index: auth-card-short
@@ -2019,41 +2023,47 @@ tabs:
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: eager
+    data_collection_tag: qualimap_genome_fraction_coverage
+    use: qualimap/genome_fraction_coverage
+    aggregation: median
+    column_name: genome_fraction_pct
+    column_type: float64
+    filter_expr: col('min_coverage') == 2
+    secondary_layout: coverage
+    coverage_max: 100
+    display:
+      icon_name: mdi:layers-triple-outline
+      icon_color: teal
+      caption: median % of the reference at 2X
+      decimals: 1
+    section: Coverage at a glance
+    tag: ea-cov-card-2x
+    index: cov-card-2x
+    title: Genome at 2X
+    description: Share of the reference each library covers at least twice; how fast it falls from 1X shows how thin the coverage is.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  # Chromosome-scale sequences only: an organelle sits tens of times above 1
+  # and unplaced scaffolds scatter near 0, which leaves one bar of the
+  # histogram for everything else.
+  - component_type: card
+    workflow_tag: eager
     data_collection_tag: qualimap_coverage_per_contig
     use: qualimap/coverage_per_contig
     aggregation: median
     column_name: relative_coverage
     column_type: float64
+    filter_expr: col('length') >= 1000000
     secondary_layout: histogram
     display:
       icon_name: mdi:scale-balance
       icon_color: cyan
-      caption: per contig and library, distribution
+      caption: sequences of 1 Mb or more, distribution
       decimals: 2
     section: Coverage at a glance
     tag: ea-sex-card-relative
     index: cov-card-relative
     title: Relative depth
-    description: Depth of each contig over its library's mean; an even library sits on 1.
-    layout: {x: 4, y: 0, w: 2, h: 2}
-  - component_type: card
-    workflow_tag: eager
-    data_collection_tag: qualimap_coverage_per_contig
-    use: qualimap/coverage_per_contig
-    aggregation: sum
-    column_name: mapped_bases
-    column_type: int64
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    display:
-      icon_name: mdi:counter
-      icon_color: teal
-      caption: per contig and library, with their spread
-    section: Coverage at a glance
-    tag: ea-sex-card-bases
-    index: cov-card-bases
-    title: Mapped bases
-    description: Bases placed on the reference sequences in view.
+    description: Depth of each sequence of 1 Mb or more over its library's mean; an even library sits on 1, a sex chromosome near 0.5.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Contig ids label nothing a reader looks up at this density.
   - component_type: advanced_viz
@@ -2076,23 +2086,6 @@ tabs:
     title: Relative depth against contig length
     description: Long chromosomes cluster on 1; short contigs scatter, an organelle sits far above.
     layout: {x: 0, y: 0, w: 8, h: 6}
-  - component_type: figure
-    workflow_tag: eager
-    data_collection_tag: qualimap_coverage_per_contig
-    use: qualimap/coverage_per_contig
-    visu_type: bar
-    dict_kwargs:
-      x: chromosome
-      y: relative_coverage
-      color: sample
-      barmode: group
-      labels: {chromosome: '', relative_coverage: Depth relative to the library mean, sample: Library}
-    section: Per-contig depth
-    tag: ea-sex-fig-relative
-    index: cov-relative-bar
-    title: Depth per contig, relative to the library mean
-    description: Use the contig length filter to drop unplaced scaffolds and keep the chromosomes.
-    layout: {x: 0, y: 6, w: 8, h: 4}
   - component_type: advanced_viz
     workflow_tag: eager
     data_collection_tag: qualimap_coverage_histogram
@@ -2114,6 +2107,9 @@ tabs:
     config:
       x_title: Depth threshold (X)
       y_title: Genome covered (%)
+      # The curve falls to 0 within a few X on a shallow library; a log axis
+      # keeps that drop from filling a tenth of the plot.
+      log_x: true
       selection_enabled: true
       selection_column: sample
     section: Depth distribution
@@ -2166,8 +2162,9 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   # No position or chromosome control: the navigator's brush and locus field
-  # own the region filter on the depth windows. No histogram on the window
-  # depth: an organelle window puts every nuclear window in the first bin.
+  # own the region filter on the depth windows, and the four cards follow it.
+  # No histogram on the window depth: an organelle window puts every nuclear
+  # window in the first bin.
   filter_sections:
   - name: Locus filters
     icon: mdi:filter-variant
@@ -2177,7 +2174,7 @@ tabs:
   - name: Region at a glance
     icon: mdi:counter
     color: cyan
-    description: Depth and mapping quality of the windows in the navigator's region
+    description: The windows in view, the whole reference or the navigator's region once picked
   - name: Depth along the reference
     icon: mdi:waves
     color: cyan
@@ -2227,6 +2224,7 @@ tabs:
       icon_color: cyan
       caption: median X per window, with its spread
       decimals: 2
+    follow_region_filter: true
     section: Region at a glance
     tag: ea-cov-card-mean
     index: locus-card-depth
@@ -2237,20 +2235,23 @@ tabs:
     workflow_tag: eager
     data_collection_tag: qualimap_coverage_across_reference
     use: qualimap/coverage_across_reference
-    aggregation: max
+    aggregation: count
     column_name: coverage
     column_type: float64
-    secondary_layout: histogram
+    secondary_layout: threshold
+    threshold_value: 1
+    threshold_direction: min
+    follow_region_filter: true
     display:
       icon_name: mdi:chart-line
       icon_color: violet
-      caption: deepest window, distribution of all
-      decimals: 1
+      caption: windows in view, 1X or deeper passes
+      decimals: 0
     section: Region at a glance
     tag: ea-cov-card-peak
     index: locus-card-peak
-    title: Deepest window
-    description: The deepest window of the region; a lone spike is a repeat or an organelle insert.
+    title: Windows
+    description: Depth windows per library in view, and how many reach a mean depth of 1X.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: eager
@@ -2266,6 +2267,7 @@ tabs:
       icon_color: blue
       caption: median per window, with its spread
       decimals: 2
+    follow_region_filter: true
     section: Region at a glance
     tag: ea-cov-card-std
     index: locus-card-std
@@ -2284,6 +2286,7 @@ tabs:
       icon_color: teal
       caption: median per window, distribution
       decimals: 1
+    follow_region_filter: true
     section: Region at a glance
     tag: ea-cov-card-mapq
     index: locus-card-mapq
@@ -2294,9 +2297,8 @@ tabs:
   # the MAPQ track under it reads a second collection, reached by the region
   # link in template.yaml. A non-model reference has no GenomeSpy built-in
   # assembly, so `assembly` stays null and the contig list comes from the data.
-  # The default region opens the first chromosome of the reference the
-  # template was validated on; another reference opens on the whole-reference
-  # overview.
+  # No default region: the navigator opens on the whole reference, whatever
+  # it is, and a typed or brushed region narrows the tab.
   - component_type: advanced_viz
     workflow_tag: eager
     data_collection_tag: qualimap_coverage_across_reference
@@ -2307,7 +2309,6 @@ tabs:
       point_size: 4
       facet_by_sample: true
       region_filter_enabled: true
-      default_region: NC_044048.1:1-30,875,876
     section: Depth along the reference
     tag: ea-cov-av-genomeview
     index: locus-genome-view
@@ -2366,7 +2367,7 @@ tabs:
   - name: Calls at a glance
     icon: mdi:counter
     color: pink
-    description: Variant records, indels, the Ts to Tv ratio and multiallelic sites
+    description: SNPs, indels, the Ts to Tv ratio and multiallelic sites
   - name: Calls per sample
     icon: mdi:chart-bar
     color: pink
@@ -2407,19 +2408,19 @@ tabs:
     data_collection_tag: bcftools_stats_summary
     use: bcftools/stats_summary
     aggregation: sum
-    column_name: n_records
+    column_name: n_snps
     column_type: int64
-    secondary_layout: attrition
-    attrition_cols: [n_snps]
+    secondary_layout: composition
+    breakdown_col: sample
     display:
       icon_name: mdi:file-document-outline
       icon_color: pink
-      caption: records, then SNPs among them
+      caption: SNPs, by biological sample
     section: Calls at a glance
     tag: ea-geno-card-snps
-    index: geno-card-records
-    title: Variant records
-    description: Records in the genotyping VCFs, and the SNPs among them.
+    index: geno-card-snps
+    title: SNPs called
+    description: SNPs in the genotyping VCFs, split by the sample they were called in.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: eager

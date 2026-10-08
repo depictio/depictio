@@ -97,17 +97,17 @@ AdapterRemoval collapsed-read length, then per-base quality and GC content. Coll
 adapter content and duplication levels, and the four bcftools panels (substitution types,
 quality, indel lengths, depths). Filter: the report's own sample.
 
-**Libraries.** Strip: libraries (split by sample), lanes merged (their distribution), reads
+**Libraries.** Strip: libraries (split by sample), reads per lane (their spread), reads
 sequenced (a funnel to the reads AdapterRemoval kept) and the mapping quality (its
 spread). Then the per-library QC profile: the pipeline-local `eager/library_qc.py` recipe
 joins the tidied endorS.py, Picard, Qualimap and DamageProfiler collections on the library
-id, and a `parallel_coordinates` tile draws one line per library across nine axes, each
-rescaled to its range. Collapsed: the pooled table with the library record beside it, and
+id, and a `parallel_coordinates` tile draws one line per library across seven axes, each
+rescaled to its range (past seven, the column-name axis titles overlap at full width). Collapsed: the pooled table with the library record beside it, and
 the per-lane AdapterRemoval table. Filters: clonality range and lane.
 
 **Read fate.** Strip: reads sequenced (split by trimming outcome), the same reads by final
 fate (a ring), the collapse rate and the discard rate per lane. Then one sankey, five
-stages, and the reads that fall out at each: the pipeline-local `eager/read_fate.py` recipe
+stages, and the reads that fall out at each, its flows coloured by where they end: the pipeline-local `eager/read_fate.py` recipe
 chains AdapterRemoval, samtools flagstat and Picard MarkDuplicates, and the accounting is
 exact rather than apportioned (AdapterRemoval's identity `2 x total_read_pairs = retained
 + collapsed + discarded` holds per lane, and a library's `retained_reads` equals its
@@ -142,29 +142,33 @@ DamageProfiler 0.4.9 writes no length-binned damage table, so the profile is not
 length.
 
 **Coverage.** Strip: the mean coverage per library (its spread), the share of the reference
-covered at 1X (a share of 100%), the depth per contig relative to the library mean (its
-distribution) and the mapped bases. Then the relative depth against contig length and per
-contig (the quantity a sex call and an organelle ratio are made from), and side by side the
-depth histogram and the share of the reference covered at least X deep. Collapsed: the
+covered at 1X and at 2X (each a share of 100%), and the depth of the sequences of 1 Mb or
+more relative to the library mean (their distribution; organelles and unplaced scaffolds
+would leave one bar). Then the relative depth against contig length (the quantity a sex
+call and an organelle ratio are made from), and side by side the depth histogram and the
+share of the reference covered at least X deep, on a log depth axis. There is no per-contig
+bar: on a reference with hundreds of scaffolds its axis cannot be read. Collapsed: the
 Sex.DetERRmine table (when the run enabled it) and the per-contig and genome fraction
 tables. Filters: relative depth and contig length. There is no depth-threshold filter: the
-1X card would print a dash once it excluded 1X.
+1X and 2X cards would print a dash once it excluded their threshold.
 
-**Locus.** Strip: window depth (its spread), the deepest window, the depth spread within
-a window and the mapping quality, all over the navigator's region. Then the locus
+**Locus.** Strip: window depth (its spread), the windows in view (those at 1X or deeper
+against the rest), the depth spread within a window and the mapping quality. The four
+cards set `follow_region_filter`, so they read the whole reference until a region is
+picked, then that region. Then the locus
 navigator, a `genome_view` on Qualimap's windows mapped back onto their contigs, and a
 `coverage_track` of mean mapping quality under it, from the pipeline-local
 `eager/mapq_across_reference.py`. A `region` link carries the navigator's chromosome and
 position onto that collection, so a brush or a typed locus moves both tracks and the strip
 together. Collapsed: the window table. Filter: window depth; the navigator owns the region.
 
-**Genotypes.** Strip: variant records (a funnel to the SNPs among them), indels, the Ts to
-Tv ratio and multiallelic sites. Then SNPs and the Ts to Tv ratio per sample, one bar per
+**Genotypes.** Strip: SNPs called (split by sample), indels, the Ts to Tv ratio and
+multiallelic sites. The VCF record count is not a card: a VCF that emits reference sites
+counts them as records too. Then SNPs and the Ts to Tv ratio per sample, one bar per
 caller. Collapsed: the bcftools summary and TSTV tables. Filter: variant caller.
 
-The locus navigator's `default_region` opens on the first chromosome of the megatest
-reference; on a reference without that contig the navigator falls back to the
-whole-reference overview. A non-model reference has no GenomeSpy built-in assembly, so the
+The locus navigator sets no `default_region`: it opens on the whole reference, since no
+contig name holds across references. A non-model reference has no GenomeSpy built-in assembly, so the
 contig list comes from the data and there is no gene lane.
 
 ## Routes and pruning
