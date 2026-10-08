@@ -546,6 +546,11 @@ export interface DashboardPreviewInfo {
   pinned?: boolean;
   created_at?: string | null;
   author_email?: string | null;
+  /** How many of the version's data collections were stamped with each kind
+   *  of data version (same shape as `DashboardVersionSummary`). Lets the
+   *  banner say how much of the preview's data is pinned; absent from servers
+   *  that do not send it. */
+  data_version_kinds?: Record<string, number>;
 }
 
 /** Fetch dashboard including stored_metadata.
@@ -1078,6 +1083,10 @@ export async function bulkComputeCards(
   componentIds?: string[],
   options?: BulkComputeOptions,
   signal?: AbortSignal,
+  /** Data time travel: `as_of_version` / `data_versions` /
+   *  `component_overrides`, from `dataVersionBody`. Last so existing callers
+   *  keep their positions. */
+  dataVersions?: Record<string, unknown>,
 ): Promise<BulkComputeResponse> {
   // Group state rides in the body only when the comparison is actually on, so
   // requests without the feature stay byte-identical.
@@ -1092,7 +1101,12 @@ export async function bulkComputeCards(
     `${API_BASE}/dashboards/bulk_compute_cards/${dashboardId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, component_ids: componentIds, ...groupBody }),
+      body: JSON.stringify({
+        filters,
+        component_ids: componentIds,
+        ...groupBody,
+        ...(dataVersions ?? {}),
+      }),
       signal,
     },
   );
@@ -1166,6 +1180,8 @@ export async function renderFigure(
   fullLoad = false,
   signal?: AbortSignal,
   options?: RenderFigureOptions,
+  /** Data time travel pins + definition overrides; see `bulkComputeCards`. */
+  dataVersions?: Record<string, unknown>,
 ): Promise<FigureResponse> {
   // Grouping state rides in the body only when coloring is actually requested,
   // so every request without the feature stays byte-identical to what it was
@@ -1189,7 +1205,13 @@ export async function renderFigure(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme, full_load: fullLoad, ...groupBody }),
+      body: JSON.stringify({
+        filters,
+        theme,
+        full_load: fullLoad,
+        ...groupBody,
+        ...(dataVersions ?? {}),
+      }),
       signal,
     },
   );
@@ -1950,6 +1972,8 @@ export async function renderTable(
   sortBy?: string | null,
   sortDir: 'asc' | 'desc' = 'desc',
   signal?: AbortSignal,
+  /** Data time travel pins + definition overrides; see `bulkComputeCards`. */
+  dataVersions?: Record<string, unknown>,
 ): Promise<TableResponse> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_table/${dashboardId}/${componentId}`,
@@ -1961,6 +1985,7 @@ export async function renderTable(
         limit,
         sort_by: sortBy ?? null,
         sort_dir: sortDir,
+        ...(dataVersions ?? {}),
       }),
       signal,
     },
@@ -2000,12 +2025,19 @@ export async function fetchImagePaths(
   filters: InteractiveFilter[] = [],
   sortBy?: string | null,
   sortDir: 'asc' | 'desc' = 'desc',
+  dataVersions?: Record<string, unknown>,
 ): Promise<ImageGridResponse> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_image_paths/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, max, sort_by: sortBy ?? null, sort_dir: sortDir }),
+      body: JSON.stringify({
+        filters,
+        max,
+        sort_by: sortBy ?? null,
+        sort_dir: sortDir,
+        ...(dataVersions ?? {}),
+      }),
     },
   );
   if (!res.ok) throw new Error(`Failed to fetch image paths: ${res.status}`);
@@ -2018,12 +2050,13 @@ export async function renderMap(
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
+  dataVersions?: Record<string, unknown>,
 ): Promise<FigureResponse> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_map/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters, theme, ...(dataVersions ?? {}) }),
     },
   );
   if (!res.ok) throw new Error(`Failed to render map: ${res.status}`);
@@ -6093,4 +6126,44 @@ export async function fetchVersionCompatibility(
   );
   if (!res.ok) await throwHttpDetailError(res, 'Failed to check version compatibility');
   return (await res.json()) as CompatibilityReport;
+}
+
+export interface RestoreComponentResult {
+  restored_from: string;
+  restored_from_seq: number | null;
+  component_index: string;
+  /** True when the component had been deleted and was put back. */
+  readded: boolean;
+  layout_restored: boolean;
+  new_version_id: string | null;
+}
+
+/**
+ * Put one component back, leaving the rest of the dashboard alone.
+ *
+ * The narrow counterpart to `restoreDashboardVersion`. Recovering a single
+ * chart by restoring its whole version also reverts every other component and
+ * any work done since, which is rarely what was meant.
+ *
+ * `restoreLayout` is opt-in: the usual request is "give me back what this
+ * showed", and moving neighbours to reinstate an old grid position is a
+ * second, unasked-for change.
+ */
+export async function restoreComponentFromVersion(
+  versionId: string,
+  componentIndex: string,
+  restoreLayout = false,
+): Promise<RestoreComponentResult> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/versions/${versionId}/restore_component`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        component_index: componentIndex,
+        restore_layout: restoreLayout,
+      }),
+    },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to restore component');
+  return (await res.json()) as RestoreComponentResult;
 }

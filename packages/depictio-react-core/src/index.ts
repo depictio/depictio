@@ -457,6 +457,7 @@ export {
   restoreDashboardVersion,
   fetchVersionCompatibility,
   fetchDeltaHistory,
+  restoreComponentFromVersion,
   previewFigure,
   previewMultiQC,
   fetchMultiQCBuilderOptions,
@@ -729,6 +730,17 @@ export type { FunnelComponentState } from './availableValues';
 export { default as FunnelView } from './components/interactive/FunnelView';
 export type { FunnelViewProps } from './components/interactive/FunnelView';
 
+// Data time travel: which Delta commit each collection is read at. Set by the
+// viewer, consumed by every renderer's fetch.
+export {
+  DataVersionProvider,
+  useDataVersions,
+  useDataVersionRequest,
+  dataVersionBody,
+} from './dataVersions';
+export { renderDefinitionKey } from './renderKey';
+export type { DataVersionPins, DataVersionState } from './dataVersions';
+
 // Real-time event subscription (WebSocket /events/ws)
 export { useDataCollectionUpdates, useMonitoringEvents, ADMIN_MONITORING_CHANNEL } from './realtime';
 export type {
@@ -841,6 +853,7 @@ export type {
   CompatibilityReport,
   DeltaVersionEntry,
   DeltaHistoryResponse,
+  RestoreComponentResult,
   FigurePreviewRequest,
   MultiQCPreviewRequest,
   MultiQCBuilderOptions,

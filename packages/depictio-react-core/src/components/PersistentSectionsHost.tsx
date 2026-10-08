@@ -12,6 +12,7 @@ import type {
 } from '../api';
 import type { GroupRenderState } from '../selectionGroups';
 import { bulkComputeCards } from '../api';
+import { useDataVersionRequest } from '../dataVersions';
 import { hasLiveValues } from './textValues';
 import { countActiveFilters } from '../activeFilters';
 import { useCollapseState } from '../hooks/useCollapseState';
@@ -177,6 +178,10 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   >({});
   const [cardsLoading, setCardsLoading] = useState(false);
   const cardFetchId = useRef(0);
+  // Data time travel: the fanned-out cards compute against the same pins as
+  // the tab's own (a `?version=` preview, an editor pin). The tables and
+  // figures in these sections already read them through their renderers.
+  const { body: versionBody, key: versionKey } = useDataVersionRequest();
 
   // Card ids per owning tab, each with the scope its section filters in.
   // Deliberately NOT gated on the lazy-mount set: a folded section's header
@@ -221,7 +226,14 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
     Promise.all(
       [...cardsByOwner.entries()].flatMap(([owner, cards]) =>
         planScopedRequests(cards, filters, filterScopes).map((req) =>
-          bulkComputeCards(owner, req.filters, req.ids, bulkOptions).catch((err) => {
+          bulkComputeCards(
+            owner,
+            req.filters,
+            req.ids,
+            bulkOptions,
+            undefined,
+            versionBody,
+          ).catch((err) => {
             console.warn('[PersistentSectionsHost] bulk-compute failed:', err);
             return null;
           }),
@@ -244,7 +256,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
         if (fetchId === cardFetchId.current) setCardsLoading(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cardIdsKey, JSON.stringify(filters), filterScopes, refreshTick]);
+  }, [cardIdsKey, JSON.stringify(filters), filterScopes, refreshTick, versionKey]);
 
   // The same cards without filters: the denominator of the folded header's
   // "14 / 85". Fetched only while filters are active, and once per data
@@ -256,7 +268,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
     let cancelled = false;
     Promise.all(
       [...cardIdsByOwner.entries()].map(([owner, ids]) =>
-        bulkComputeCards(owner, [], ids).catch(() => null),
+        bulkComputeCards(owner, [], ids, undefined, undefined, versionBody).catch(() => null),
       ),
     ).then((results) => {
       if (cancelled) return;
@@ -269,7 +281,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, cardIdsKey, baseValues]);
-  useEffect(() => setBaseValues(null), [cardIdsKey, refreshTick]);
+  useEffect(() => setBaseValues(null), [cardIdsKey, refreshTick, versionKey]);
 
   // Measure our own wrapper; the accordion box chrome is accounted for with a
   // probe, mirroring DashboardGrid's `sectionInset`.

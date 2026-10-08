@@ -16,6 +16,8 @@ import {
 import Plot from 'react-plotly.js';
 
 import { renderMap, InteractiveFilter, StoredMetadata } from '../api';
+import { useDataVersionRequest } from '../dataVersions';
+import { renderDefinitionKey } from '../renderKey';
 import {
   extractScatterSelection,
   filtersExcludingOwn,
@@ -110,6 +112,14 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   const [error, setError] = useState<string | null>(null);
   const { colorScheme } = useMantineColorScheme();
   const mantineTheme = useMantineTheme();
+  // Data time travel: `body` merges into the request, `key` goes in the fetch
+  // effect's deps so a pin change actually refetches instead of relabelling
+  // stale data.
+  const { body: versionBody, key: versionKey } = useDataVersionRequest();
+  // `metadata.index` is identity and never moves, so a component whose
+  // *definition* was swapped underneath a mounted renderer (a restore, an
+  // in-place edit) would keep showing the old chart until a page reload.
+  const definitionKey = renderDefinitionKey(metadata);
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
 
   const selectionEnabled = isMapSelectionEnabled(metadata, !!onFilterChange);
@@ -144,7 +154,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    renderMap(dashboardId, metadata.index, filtersForFetch, theme)
+    renderMap(dashboardId, metadata.index, filtersForFetch, theme, versionBody)
       .then((res) => {
         if (cancelled) return;
         // Keep the previous map mounted while the next response is in
@@ -164,7 +174,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, refreshTick]);
+  }, [dashboardId, metadata.index, JSON.stringify(filtersForFetch), theme, refreshTick, versionKey, definitionKey]);
 
   // Fold the basemap credit down to its ⓘ once the plot has a container to
   // look in. Deliberately an effect and not one of Plotly's `onInitialized` /

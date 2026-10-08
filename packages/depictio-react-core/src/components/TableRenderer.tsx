@@ -23,6 +23,8 @@ import type {
 import type { RowClickedEvent } from 'ag-grid-community';
 
 import { renderTable, InteractiveFilter, StoredMetadata } from '../api';
+import { useDataVersionRequest } from '../dataVersions';
+import { renderDefinitionKey } from '../renderKey';
 import { LoadAllState } from './chrome/LoadAllButton';
 import { extractRowSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
@@ -138,6 +140,13 @@ const TableRenderer: React.FC<TableRendererProps> = ({
 
   const pageSize = clampPageSize(metadata.page_size);
   const { colorScheme } = useMantineColorScheme();
+  // Data time travel: `body` merges into the request, `key` goes in the fetch
+  // effect's deps so a pin change actually refetches instead of relabelling
+  // stale data.
+  const { body: versionBody, key: versionKey } = useDataVersionRequest();
+  // See FigureRenderer: identity does not move when a definition is
+  // replaced in place, so both the column and row fetches follow this.
+  const definitionKey = renderDefinitionKey(metadata);
   const isDark = colorScheme === 'dark';
   // Annotation row colours from Mantine's default palette, so a brand theme
   // that remaps palettes onto data colours cannot blend them into the data.
@@ -222,6 +231,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           undefined,
           'desc',
           ctrl.signal,
+          versionBody,
         ),
       metadata.layout?.y ?? 0,
     )
@@ -383,7 +393,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, inView, ready]);
+  }, [dashboardId, metadata.index, inView, ready, versionKey, definitionKey]);
 
   const showInitialLoader = !inView || (!ready && loading);
   const showRefetchOverlay = ready && loading;
@@ -435,6 +445,8 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           chunk,
           sortRef.current.sortBy,
           sortRef.current.sortDir,
+          undefined,
+          versionBody,
         );
         rows.push(...(res.rows as Record<string, unknown>[]));
         if (typeof res.total === 'number') setTotal(res.total);
@@ -486,6 +498,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       undefined,
       'desc',
       ctrl.signal,
+      versionBody,
     )
       .then((res) => {
         if (cancelled) return;
@@ -504,7 +517,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, ready, rowIdColumn, JSON.stringify(filtersForFetch), refreshTick]);
+  }, [dashboardId, metadata.index, ready, rowIdColumn, JSON.stringify(filtersForFetch), refreshTick, versionKey, definitionKey]);
 
   const newRowIds = useNewItemIds(snapshotIds, refreshTick);
   const highlightDurationMs =
@@ -695,6 +708,8 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               limit,
               sortRef.current.sortBy,
               sortRef.current.sortDir,
+              undefined,
+              versionBody,
             ),
           start,
         )
@@ -734,7 +749,11 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           });
       },
     }),
-    [dashboardId, metadata.index],
+    // `versionBody` is captured in the closure above, so the datasource has to
+    // be rebuilt when the pin changes — otherwise the grid keeps calling the
+    // old one and pages in rows from the previous Delta commit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dashboardId, metadata.index, versionKey],
   );
 
   // When the user clicks a header to sort (or clears a sort), capture the
