@@ -18,8 +18,8 @@ interface DataVersionBannerProps {
   /** Set when the pin came from "as of" a stored dashboard version. */
   asOfLabel?: string | null;
   /** Collections the chosen version recorded no data version for. They are
-   *  showing *current* data while everything around them shows the past —
-   *  the one state in this feature that is genuinely mixed, so it has to be
+   *  showing their latest data while everything around them shows the past
+   *  (the one state in this feature that is genuinely mixed), so it has to be
    *  said out loud rather than left to look uniform. */
   unresolved?: string[];
   onClear: () => void;
@@ -39,6 +39,8 @@ const DataVersionBanner: React.FC<DataVersionBannerProps> = ({
       variant="light"
       radius={0}
       icon={<Icon icon="mdi:database-clock" width={20} />}
+      role="status"
+      aria-label="Historical data in use"
       data-testid="data-version-banner"
     >
       <Group gap="xs" wrap="wrap">
@@ -62,7 +64,7 @@ const DataVersionBanner: React.FC<DataVersionBannerProps> = ({
       <Text size="xs" c="dimmed" mt={4}>
         {unresolved.length === 0
           ? 'Every value on this dashboard is computed from the pinned dataset version, not from the latest ingestion.'
-          : `Values are computed from the pinned dataset version, except ${unresolved.length} collection${unresolved.length === 1 ? '' : 's'} with no recorded version (${unresolved.join(', ')}), which still read current data.`}
+          : `Values are computed from the pinned dataset version, except ${unresolved.length} collection${unresolved.length === 1 ? '' : 's'} with no recorded version (${unresolved.join(', ')}), which still show their latest data.`}
       </Text>
     </Alert>
   );

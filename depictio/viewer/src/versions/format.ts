@@ -83,7 +83,7 @@ export function groupByDay(
   return groups;
 }
 
-/** "12 saves over 4 min" — only meaningful once saves have folded together. */
+/** "12 saves over 4 min", only meaningful once saves have folded together. */
 export function saveSpanLabel(version: DashboardVersionSummary): string | null {
   if (!version.save_count || version.save_count <= 1) return null;
   const start = parseTs(version.created_at);
@@ -122,15 +122,15 @@ export function dataCoverage(kinds: Record<string, number>): { pinned: number; t
 /**
  * One-line summary of how reproducible a version's data is.
  *
- * Coverage is genuinely heterogeneous — a dashboard can pin a Delta version
- * for one collection while another has no provenance at all — so this states
+ * Coverage is genuinely heterogeneous: a dashboard can pin a Delta version
+ * for one collection while another has no provenance at all, so this states
  * the split rather than implying uniform fidelity.
  */
 export function dataCoverageLabel(kinds: Record<string, number>): string | null {
   const { pinned, total } = dataCoverage(kinds);
   if (!total) return null;
 
-  if (pinned === 0) return `${total} data collection${total === 1 ? '' : 's'} · live data`;
+  if (pinned === 0) return `${total} data collection${total === 1 ? '' : 's'} · latest data only`;
   if (pinned === total) return `${total} data collection${total === 1 ? '' : 's'} pinned`;
   return `${pinned} of ${total} data collections pinned`;
 }
