@@ -248,6 +248,54 @@ def test_s3_parquet_dispatches_lazily():
     assert isinstance(lf, pl.LazyFrame)
 
 
+class TestPublicBucketReads:
+    """Which storage options a remote read ends up using.
+
+    Asserted on the options handed to polars rather than on a real read: there
+    is no object store here, and the decision is the whole behaviour.
+    """
+
+    @pytest.fixture
+    def captured_scan(self, monkeypatch):
+        captured: dict = {}
+
+        def fake_scan_parquet(url, storage_options=None, **kwargs):
+            captured["url"] = url
+            captured["storage_options"] = storage_options
+            return pl.LazyFrame()
+
+        monkeypatch.setattr(pl, "scan_parquet", fake_scan_parquet)
+        return captured
+
+    def test_an_allowlisted_bucket_is_read_unsigned(self, captured_scan, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
+
+        _read_remote_file_lazy(
+            "s3://open-data/x.parquet", "parquet", {}, {"aws_access_key_id": "k"}
+        )
+
+        assert captured_scan["storage_options"]["aws_skip_signature"] == "true"
+        assert "aws_access_key_id" not in captured_scan["storage_options"]
+
+    def test_an_unlisted_bucket_keeps_the_configured_credentials(self, captured_scan, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
+
+        _read_remote_file_lazy(
+            "s3://private-data/x.parquet", "parquet", {}, {"aws_access_key_id": "k"}
+        )
+
+        assert captured_scan["storage_options"] == {"aws_access_key_id": "k"}
+
+    def test_a_prefix_entry_does_not_open_the_whole_bucket(self, captured_scan, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "shared/public")
+
+        _read_remote_file_lazy(
+            "s3://shared/private/x.parquet", "parquet", {}, {"aws_access_key_id": "k"}
+        )
+
+        assert captured_scan["storage_options"] == {"aws_access_key_id": "k"}
+
+
 class TestProbeUrlMetadata:
     """HEAD probe feeding the url-mode identity hash."""
 
