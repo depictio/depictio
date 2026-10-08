@@ -262,6 +262,100 @@ def test_remote_data_root_clears_the_preflight_guard(monkeypatch, stub_cli_confi
     assert S3_ROOT in _flat(result.output)
 
 
+def test_remote_dry_run_prints_one_preview_and_no_local_path_warning(
+    monkeypatch, stub_cli_config, wide_console
+):
+    """The remote preview is the answer; the step 5 summary would repeat it and
+    call the s3:// location a missing directory."""
+    install_megatest_listing(monkeypatch)
+    result = runner.invoke(
+        app, ["run", "--template", TEMPLATE, "--data-root", S3_ROOT, "--dry-run"]
+    )
+    assert result.exit_code == 0, result.output
+    flat = _flat(result.output)
+    assert flat.count(_flat("Dry run: what this data root would ingest")) == 1
+    assert "does not exist" not in flat
+
+
+def test_indexed_file_collection_needs_a_local_data_dir(monkeypatch, stub_cli_config):
+    install_megatest_listing(monkeypatch)
+    from depictio.cli.cli.utils import templates as templates_module
+
+    def resolve(**kwargs):
+        config, *rest = _fake_resolve_template(**kwargs)
+        config["workflows"] = [
+            {
+                "data_collections": [
+                    {"data_collection_tag": "tables", "config": {"type": "Table"}},
+                    {"data_collection_tag": "vcfs", "config": {"type": "indexed_file"}},
+                ]
+            }
+        ]
+        return (config, *rest)
+
+    monkeypatch.setattr(templates_module, "resolve_template", resolve)
+    result = runner.invoke(
+        app, ["run", "--template", "stub/template/1", "--data-root", S3_ROOT, "--dry-run"]
+    )
+    assert result.exit_code == 1
+    assert _flat(
+        "Indexed-file data collections (vcfs) need a local DATA_DIR; "
+        "they cannot be read from s3:// yet."
+    ) in _flat(result.output)
+
+
+def _indexed_config(*dcs: dict, locations: list[str] | None = None) -> dict:
+    return {
+        "workflows": [
+            {
+                "data_location": {"locations": locations or []},
+                "data_collections": [
+                    {"data_collection_tag": "tables", "config": {"type": "Table"}},
+                    *dcs,
+                ],
+            }
+        ],
+        "links": [{"source_dc_tag": "tables", "target_dc_tag": "vcfs"}],
+    }
+
+
+def test_an_optional_remote_indexed_file_collection_is_skipped():
+    """sarek's optional VCFs must not block an s3:// ingest of everything else."""
+    from depictio.cli.cli.commands.run import _drop_remote_indexed_file_dcs
+
+    config = _indexed_config(
+        {"data_collection_tag": "vcfs", "optional": True, "config": {"type": "indexed_file"}},
+        locations=["s3://bucket/run42/"],
+    )
+    _drop_remote_indexed_file_dcs(config)
+    tags = [dc["data_collection_tag"] for dc in config["workflows"][0]["data_collections"]]
+    assert tags == ["tables"]
+    assert config["links"] == []
+
+
+def test_an_indexed_file_collection_bound_to_a_local_folder_is_kept(tmp_path):
+    from depictio.cli.cli.commands.run import _drop_remote_indexed_file_dcs
+
+    vcfs = {
+        "data_collection_tag": "vcfs",
+        "config": {"type": "indexed_file", "scan": {"mode": "recursive"}},
+    }
+    config = _indexed_config(vcfs, locations=[str(tmp_path)])
+    _drop_remote_indexed_file_dcs(config)
+    assert len(config["workflows"][0]["data_collections"]) == 2
+
+
+def test_a_required_remote_indexed_file_collection_is_refused():
+    from depictio.cli.cli.commands.run import _drop_remote_indexed_file_dcs
+
+    vcfs = {
+        "data_collection_tag": "vcfs",
+        "config": {"type": "indexed_file", "scan": {"mode": "recursive"}},
+    }
+    with pytest.raises(ValueError, match=r"Indexed-file data collections \(vcfs\)"):
+        _drop_remote_indexed_file_dcs(_indexed_config(vcfs, locations=["s3://bucket/run42/"]))
+
+
 def test_local_data_root_that_does_not_exist_still_fails(stub_cli_config):
     """The typo'd local path keeps failing, with main's DATA_DIR wording."""
     result = runner.invoke(

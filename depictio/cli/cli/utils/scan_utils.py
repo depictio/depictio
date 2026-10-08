@@ -331,6 +331,9 @@ class ResolvedRuns(NamedTuple):
     warnings: list[str]
 
 
+_REMOTE_LOCATION = re.compile(r"^(s3|https?)://", re.IGNORECASE)
+
+
 def resolve_run_locations(workflow: Workflow) -> ResolvedRuns:
     """Run directories a scan of ``workflow`` would walk, best-effort.
 
@@ -345,7 +348,9 @@ def resolve_run_locations(workflow: Workflow) -> ResolvedRuns:
     run_locations: list[str] = []
     warnings: list[str] = []
     for location in workflow.data_location.locations:
-        if "://" in location or os.path.isfile(location):
+        if _REMOTE_LOCATION.match(location) or os.path.isfile(location):
+            # Nothing to stat on this host; a remote location is previewed from
+            # its own listing (template_preview), not from the local filesystem.
             continue
         if not os.path.isdir(location):
             warnings.append(f"Configured location '{location}' does not exist.")

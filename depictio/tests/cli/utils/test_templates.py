@@ -861,7 +861,7 @@ class TestLocalResolutionIsUnchanged:
 
 
 class TestPreviewDataRoot:
-    """What `--data-root` would yield, before anything is created."""
+    """What DATA_DIR would yield, before anything is created."""
 
     def _preview(self, monkeypatch, tree=None, **kwargs):
         install_megatest_listing(monkeypatch, tree)
