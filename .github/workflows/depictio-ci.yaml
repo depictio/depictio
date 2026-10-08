@@ -17,13 +17,15 @@ on:
         type: boolean
         default: true
 
-# A new push to a PR supersedes the run in flight: without this every push
-# stacked another 14 jobs, three of them an hour long, on a runner pool shared
-# by every open PR. Runs on main are grouped per commit, so they never cancel
-# each other and every merge keeps its own full result.
+# A new push supersedes the run in flight: without this every push stacked
+# another 14 jobs on a runner pool shared by every open PR. Main too: each push
+# there walks the whole catalog, three legs of about an hour, so a merge
+# followed by its version bump held six runners for an hour and left PR jobs
+# queued behind them. The newest commit's run covers everything before it.
+# Nightly and manual runs keep a group of their own and are never cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.event_name == 'push' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 jobs:
   # Smart caching for quality checks - skip tests if code hasn't changed

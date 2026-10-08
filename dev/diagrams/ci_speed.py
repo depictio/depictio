@@ -476,7 +476,7 @@ def build_critical_path() -> Sketch:
     s.text(
         bx,
         top + 204,
-        "an hour long; runs on main are never cancelled",
+        "an hour long; main too, the newest push wins",
         size=14,
         colour=DIM,
         anchor="start",

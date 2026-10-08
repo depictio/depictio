@@ -1948,7 +1948,7 @@
   <path d="M899.7,961.6 C899.8,952.4 901.3,945.5 899.7,935.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <text x="995.0" y="954.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#1e1e1e" text-anchor="middle" font-weight="normal">the run that counts</text>
   <text x="690.0" y="996.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">a PR used to stack 14 jobs per push, three of them</text>
-  <text x="690.0" y="1016.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">an hour long; runs on main are never cancelled</text>
+  <text x="690.0" y="1016.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="start" font-weight="normal">an hour long; main too, the newest push wins</text>
   <text x="1200.0" y="820.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="19" fill="#1e1e1e" text-anchor="start" font-weight="bold">docs only: nothing to build</text>
   <path d="M1210.0,846.0 L1260.4,846.0 L1280.0,865.6 L1280.0,938.0 L1210.0,938.0 Z" fill="#ffffff" stroke="none"/>
   <path d="M1209.5,845.8 C1227.3,846.9 1245.0,844.7 1261.1,845.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
