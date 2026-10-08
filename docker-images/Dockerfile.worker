@@ -70,7 +70,13 @@ RUN groupadd -g ${GID} depictio && \
 # needs when DEPICTIO_DEV_MODE=true. Every sync below passes it, since a sync
 # without it would uninstall watchdog again.
 COPY --chown=depictio:depictio pyproject.toml uv.lock* ./
-COPY --chown=depictio:depictio packages ./packages/
+# Only the two Python packages [tool.uv.sources] installs from the checkout.
+# The rest of packages/ is the JS workspace (depictio-react-core and co.),
+# edited by most front-end changes: copied here, it re-ran this whole layer
+# (and the browser download below it) for a change no Python dep can see.
+# It lands with the source in the project layer instead.
+COPY --chown=depictio:depictio packages/plotly-complexheatmap ./packages/plotly-complexheatmap/
+COPY --chown=depictio:depictio packages/plotly-upset ./packages/plotly-upset/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev --extra server --group worker-reload \
     || uv sync --no-install-project --no-dev --extra server --group worker-reload
@@ -102,6 +108,7 @@ RUN --mount=type=cache,target=/var/cache/playwright,sharing=locked \
 # ---- Project layer (source + VERSION last) ----
 COPY --chown=depictio:depictio VERSION ./
 COPY --chown=depictio:depictio depictio ./depictio/
+COPY --chown=depictio:depictio packages ./packages/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra server --group worker-reload \
     || uv sync --no-dev --extra server --group worker-reload

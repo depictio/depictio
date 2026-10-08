@@ -5,17 +5,46 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Nightly full run: a PR walks only a representative slice of the catalog
+  # (see e2e-playwright), and a docs-only push to main skips the e2e entirely,
+  # so this is what guarantees the whole catalog is walked at least once a day.
+  schedule:
+    - cron: "17 2 * * *"
   workflow_dispatch:
+    inputs:
+      full_catalog:
+        description: "Walk every catalog render in the e2e (false: the representative slice a PR gets)"
+        type: boolean
+        default: true
+
+# A new push to a PR supersedes the run in flight: without this every push
+# stacked another 14 jobs, three of them an hour long, on a runner pool shared
+# by every open PR. Runs on main are grouped per commit, so they never cancel
+# each other and every merge keeps its own full result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Smart caching for quality checks - skip tests if code hasn't changed
   # Hashes all Python files, config files, and test files to detect changes
   # If hash matches a previous successful run, quality job is skipped
+  #
+  # Also the one place that looks at what this run changed (it already has the
+  # full history), and names this commit's images, so the jobs below can decide
+  # what to run and the docker-build matrix legs agree on the tags.
   check-quality-cache:
     runs-on: ubuntu-22.04
     outputs:
       cache-hit: ${{ steps.cache-quality.outputs.cache-hit }}
       code-hash: ${{ steps.hash.outputs.hash }}
+      docs-only: ${{ steps.changes.outputs.docs-only }}
+      pixi: ${{ steps.changes.outputs.pixi }}
+      catalog-tools: ${{ steps.changes.outputs.catalog-tools }}
+      full-catalog: ${{ steps.changes.outputs.full-catalog }}
+      api-image: ${{ steps.image-info.outputs.api-image }}
+      worker-image: ${{ steps.image-info.outputs.worker-image }}
+      viewer-image: ${{ steps.image-info.outputs.viewer-image }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -55,9 +84,180 @@ jobs:
             echo "🔍 No cache found - quality checks will run"
           fi
 
-  quality:
+      - name: Detect what changed
+        id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          FULL_CATALOG_LABEL: ${{ contains(github.event.pull_request.labels.*.name, 'ci:full-catalog') }}
+          DISPATCH_FULL_CATALOG: ${{ inputs.full_catalog }}
+        run: |
+          case "$EVENT_NAME" in
+            pull_request)
+              # A PR is checked out on its merge commit, whose first parent is
+              # the base branch tip: this is exactly what merging would change.
+              # Should that ever not hold, treat everything as changed.
+              CHANGED=$(git diff --name-only HEAD^1 HEAD) || CHANGED=$(git ls-files) ;;
+            push)
+              if [[ "$PUSH_BEFORE" =~ ^[0-9a-f]{40}$ && ! "$PUSH_BEFORE" =~ ^0+$ ]] \
+                  && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+                CHANGED=$(git diff --name-only "$PUSH_BEFORE" HEAD)
+              else
+                CHANGED=$(git ls-files)
+              fi ;;
+            *)
+              # schedule / workflow_dispatch: no diff to speak of, run it all.
+              CHANGED=$(git ls-files) ;;
+          esac
+          echo "📝 $(grep -c . <<<"$CHANGED") changed file(s)"
+
+          # Docs-only: nothing that ships in an image changed, so the images,
+          # and every job that needs them, are skipped. An empty diff runs all.
+          DOCS_ONLY=false
+          if [ -n "$CHANGED" ] && ! grep -qvE '(\.md$|^docs/|^LICENSE|^\.github/ISSUE_TEMPLATE/)' <<<"$CHANGED"; then
+            DOCS_ONLY=true
+          fi
+
+          # pixi-install-test only proves the pixi environment still solves.
+          PIXI=false
+          if [ "$EVENT_NAME" != pull_request ] \
+              || grep -qE '^(pixi\.toml|pixi\.lock|pyproject\.toml|uv\.lock|\.github/workflows/depictio-ci\.yaml)$' <<<"$CHANGED"; then
+            PIXI=true
+          fi
+
+          # Catalog tools this PR touches: their directory name is their
+          # tool_id. A PR walks these in full on top of the representative slice.
+          CATALOG_TOOLS=
+          if [ "$EVENT_NAME" = pull_request ]; then
+            CATALOG_TOOLS=$(grep -oE '^depictio/catalog/[^/_][^/]*/' <<<"$CHANGED" | cut -d/ -f3 | sort -u | paste -sd, -)
+          fi
+
+          # The whole catalog is walked off PRs, on a PR labelled ci:full-catalog
+          # (read from the event, so it applies from the next push), and when the
+          # code every render goes through changes: the catalog loader, its
+          # schemas and index, and the compose endpoint.
+          FULL_CATALOG=false
+          case "$EVENT_NAME" in
+            pull_request)
+              if [ "$FULL_CATALOG_LABEL" = true ] \
+                  || grep -qE '^(depictio/catalog/[^/]+\.(py|json)$|depictio/catalog/_index/|depictio/api/v1/endpoints/catalog_endpoints/)' <<<"$CHANGED"; then
+                FULL_CATALOG=true
+              fi ;;
+            workflow_dispatch)
+              [ "$DISPATCH_FULL_CATALOG" = false ] || FULL_CATALOG=true ;;
+            *)
+              FULL_CATALOG=true ;;
+          esac
+
+          {
+            echo "docs-only=$DOCS_ONLY"
+            echo "pixi=$PIXI"
+            echo "catalog-tools=$CATALOG_TOOLS"
+            echo "full-catalog=$FULL_CATALOG"
+          } | tee -a "$GITHUB_OUTPUT"
+
+      - name: Generate image info
+        id: image-info
+        run: |
+          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+
+          # Single shared content hash covering all three images. The api/worker
+          # share Python sources; the viewer adds the JS / nginx config. Hashing
+          # everything together over-rebuilds slightly (a viewer-only change
+          # will also retag the api+worker images), but it keeps this job ~50
+          # lines shorter than maintaining two parallel hashes. The build-push
+          # action's GHA cache absorbs the cost when sources are unchanged.
+          DOCKER_HASH=$(find depictio packages -type f \
+              \( -name "*.py" -o -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.css" -o -name "*.html" \) \
+              ! -path "depictio/tests/*" 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -c1-12)
+          CONFIG_HASH=$(cat \
+              pyproject.toml uv.lock \
+              pnpm-lock.yaml pnpm-workspace.yaml \
+              docker-images/Dockerfile.api \
+              docker-images/Dockerfile.worker \
+              docker-images/Dockerfile.viewer \
+              docker-images/nginx.conf \
+              .dockerignore 2>/dev/null | sha256sum | cut -c1-12)
+          CONTENT_HASH="${DOCKER_HASH}-${CONFIG_HASH}"
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            TAG="pr-${{ github.event.number }}-${CONTENT_HASH}"
+          else
+            TAG="main-${CONTENT_HASH}"
+          fi
+
+          API_IMAGE="ghcr.io/${OWNER_LOWER}/depictio-api:${TAG}"
+          WORKER_IMAGE="ghcr.io/${OWNER_LOWER}/depictio-worker:${TAG}"
+          VIEWER_IMAGE="ghcr.io/${OWNER_LOWER}/depictio-viewer:${TAG}"
+
+          echo "api-image=${API_IMAGE}" >> $GITHUB_OUTPUT
+          echo "worker-image=${WORKER_IMAGE}" >> $GITHUB_OUTPUT
+          echo "viewer-image=${VIEWER_IMAGE}" >> $GITHUB_OUTPUT
+          echo "📦 Content hash: ${CONTENT_HASH}"
+          echo "🏷️ Tag: ${TAG}"
+          echo "   api:    ${API_IMAGE}"
+          echo "   worker: ${WORKER_IMAGE}"
+          echo "   viewer: ${VIEWER_IMAGE}"
+
+  # Formatting, lint and the ty gate: the checks a red PR most often fails, and
+  # the only part of quality the image build waits for. About a minute against
+  # six for the test suite, so a formatting slip fails fast and stops the images
+  # and every e2e leg before they start.
+  lint:
     runs-on: ubuntu-22.04
     needs: check-quality-cache
+    if: needs.check-quality-cache.outputs.cache-hit != 'true'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: "Set up Python"
+        uses: actions/setup-python@v7
+        with:
+          python-version-file: "pyproject.toml"
+          cache-dependency-path: "pyproject.toml"
+
+      - name: Install Dependencies
+        run: |
+          uv venv --python 3.12.9 venv
+          source venv/bin/activate
+          uv pip install -e ".[dev]"
+
+      - name: Run Ruff formatting check
+        run: |
+          source venv/bin/activate
+          ruff format --check depictio
+
+      - name: Run Ruff linting
+        run: |
+          source venv/bin/activate
+          ruff check depictio
+
+      - name: Run ty type checker (must pass)
+        run: |
+          source venv/bin/activate
+          ty version
+          # Scoped to depictio/models/ to match the pre-commit ty hook after the
+          # Phase A tooling bump (ty 0.0.1-alpha.12 -> 0.0.44). The new ty surfaces
+          # ~280 diagnostics in api/ and cli/ that are deferred to a dedicated
+          # type-debt cleanup (Phase B); gating those here would be red.
+          ty check depictio/models/
+
+      # - name: Run pre-commit hooks
+      #   run: |
+      #     source venv/bin/activate
+      #     pre-commit run --all-files
+
+  # The Python test suite. Runs after lint, so the cache marker below still
+  # means "lint and tests both passed on this code", but nothing downstream
+  # waits for it: the images and the e2e legs start as soon as lint is green.
+  quality:
+    runs-on: ubuntu-22.04
+    needs: [check-quality-cache, lint]
     if: needs.check-quality-cache.outputs.cache-hit != 'true'
     steps:
       - uses: actions/checkout@v7
@@ -94,31 +294,6 @@ jobs:
           echo "✅ Verifying polars installation..."
           uv pip list | grep -i polars
           python -c "import polars; assert '1.33' in polars.__version__, f'Wrong version: {polars.__version__}'; print(f'✅ Polars {polars.__version__} verified')"
-
-      - name: Run Ruff formatting check
-        run: |
-          source venv/bin/activate
-          ruff format --check depictio
-
-      - name: Run Ruff linting
-        run: |
-          source venv/bin/activate
-          ruff check depictio
-
-      - name: Run ty type checker (must pass)
-        run: |
-          source venv/bin/activate
-          ty version
-          # Scoped to depictio/models/ to match the pre-commit ty hook after the
-          # Phase A tooling bump (ty 0.0.1-alpha.12 -> 0.0.44). The new ty surfaces
-          # ~280 diagnostics in api/ and cli/ that are deferred to a dedicated
-          # type-debt cleanup (Phase B); gating those here would be red.
-          ty check depictio/models/
-
-      # - name: Run pre-commit hooks
-      #   run: |
-      #     source venv/bin/activate
-      #     pre-commit run --all-files
 
       - name: Run tests
         run: |
@@ -163,10 +338,16 @@ jobs:
       - name: Run unit tests
         run: pnpm --filter depictio-react-core test
 
-  # Test pixi installation and basic functionality (no Docker required)
+  # Test pixi installation and basic functionality (no Docker required).
+  # Only when the dependency set can have moved (and off PRs): what this proves
+  # is that the pixi environment still solves and imports depictio. It used to
+  # also run the whole pytest suite serially with failures ignored (`|| echo`),
+  # ten minutes of runner time that could never turn the job red; the suite
+  # itself runs in `quality`.
   pixi-install-test:
     runs-on: ubuntu-22.04
     needs: check-quality-cache
+    if: needs.check-quality-cache.outputs.pixi == 'true'
     steps:
       - uses: actions/checkout@v7
 
@@ -215,11 +396,6 @@ jobs:
           pixi run python --version
           pixi run python -c 'import depictio; print("depictio package loaded successfully")'
 
-      - name: Run quick tests (no infrastructure)
-        run: |
-          echo "🧪 Running quick tests without infrastructure..."
-          pixi run test-fast || echo "⚠️ Some tests may require infrastructure - this is expected"
-
       - name: Verify infrastructure commands exist
         run: |
           echo "🔍 Verifying infrastructure commands are available..."
@@ -229,57 +405,47 @@ jobs:
           echo "✅ All infrastructure binaries available via pixi"
 
   docker-build:
-    needs: [check-quality-cache, quality]
+    name: docker-build (${{ matrix.image }})
+    needs: [check-quality-cache, lint]
     # Skip for pull requests from forks — repository secrets (GHCR_PAT) are not
     # exposed to fork PRs, so docker login + push to ghcr.io would fail. The
     # downstream jobs that depend on the pushed images (docker-system-init,
     # e2e-tests*, cli-comprehensive-test, backup-s3-strategies-comprehensive-tests)
     # auto-skip via their `needs.docker-build.result == 'success'` guard.
-    # Run if quality passed OR if it was skipped due to cache hit.
+    # Run if lint passed OR if it was skipped due to cache hit. Waits for lint
+    # only, not the test suite: the images and the e2e legs used to start six
+    # minutes in, behind pytest, and now run alongside it. A docs-only change
+    # ships nothing, so it builds nothing.
     #
     # After the Dash → React migration the monolithic depictio image was split
-    # into three per-service images (api / worker / viewer). This job now
-    # builds all three and exposes them as separate outputs; downstream jobs
-    # consume them via the three `DEPICTIO_*_VERSION` env vars that
-    # docker-compose.dev.yaml expects.
+    # into three per-service images (api / worker / viewer), built here as one
+    # matrix leg each, in parallel. Their tags are named in check-quality-cache,
+    # and downstream jobs read them from there (a matrix job's outputs would only
+    # keep one leg's values); they hand them to the three `DEPICTIO_*_VERSION`
+    # env vars that docker-compose.dev.yaml expects. Nothing is pulled here: the
+    # jobs that run the stack pull on their own runners.
     if: |
       always() &&
+      needs.check-quality-cache.outputs.docs-only != 'true' &&
       (github.event_name != 'pull_request' ||
        github.event.pull_request.head.repo.full_name == github.repository) &&
-      (needs.quality.result == 'success' ||
-       (needs.quality.result == 'skipped' && needs.check-quality-cache.outputs.cache-hit == 'true'))
+      (needs.lint.result == 'success' ||
+       (needs.lint.result == 'skipped' && needs.check-quality-cache.outputs.cache-hit == 'true'))
     runs-on: ubuntu-22.04
-    # Builds and pushes images, ~8min observed; a stalled registry push would
+    # Builds and pushes one image, a few minutes; a stalled registry push would
     # otherwise sit here for six hours.
     timeout-minutes: 30
     permissions:
       contents: read
       packages: write
       id-token: write
-    outputs:
-      image-tag: ${{ steps.image-info.outputs.tag }}
-      rebuild-needed: ${{ steps.check-rebuild.outputs.rebuild }}
-      api-image: ${{ steps.image-info.outputs.api-image }}
-      worker-image: ${{ steps.image-info.outputs.worker-image }}
-      viewer-image: ${{ steps.image-info.outputs.viewer-image }}
+    strategy:
+      matrix:
+        image: [api, worker, viewer]
+    env:
+      IMAGE: ${{ needs.check-quality-cache.outputs[format('{0}-image', matrix.image)] }}
     steps:
       - uses: actions/checkout@v7
-
-      - name: Configure Docker Permissions
-        run: |
-          sudo usermod -aG docker $USER || true
-          sudo chmod 666 /var/run/docker.sock
-
-      - name: Export UID and GID
-        run: |
-          echo "UID=$(id -u)" >> $GITHUB_ENV
-          echo "GID=$(id -g)" >> $GITHUB_ENV
-
-      - name: Setup directories
-        run: |
-          cp .env.example .env
-          mkdir -p data/depictioDB data/seaweedfs_data
-          chmod 777 data data/depictioDB data/seaweedfs_data
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -292,84 +458,45 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: Generate image info
-        id: image-info
-        run: |
-          OWNER_LOWER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-
-          # Single shared content hash covering all three images. The api/worker
-          # share Python sources; the viewer adds the JS / nginx config. Hashing
-          # everything together over-rebuilds slightly (a viewer-only change
-          # will also retag the api+worker images), but it keeps this job ~50
-          # lines shorter than maintaining two parallel hashes. The build-push
-          # action's GHA cache absorbs the cost when sources are unchanged.
-          DOCKER_HASH=$(find depictio packages -type f \
-              \( -name "*.py" -o -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.css" -o -name "*.html" \) \
-              ! -path "depictio/tests/*" 2>/dev/null | sort | xargs cat 2>/dev/null | sha256sum | cut -c1-12)
-          CONFIG_HASH=$(cat \
-              pyproject.toml uv.lock \
-              pnpm-lock.yaml pnpm-workspace.yaml \
-              docker-images/Dockerfile.api \
-              docker-images/Dockerfile.worker \
-              docker-images/Dockerfile.viewer \
-              docker-images/nginx.conf \
-              .dockerignore 2>/dev/null | sha256sum | cut -c1-12)
-          CONTENT_HASH="${DOCKER_HASH}-${CONFIG_HASH}"
-
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            TAG="pr-${{ github.event.number }}-${CONTENT_HASH}"
-          else
-            TAG="main-${CONTENT_HASH}"
-          fi
-
-          API_IMAGE="ghcr.io/${OWNER_LOWER}/depictio-api:${TAG}"
-          WORKER_IMAGE="ghcr.io/${OWNER_LOWER}/depictio-worker:${TAG}"
-          VIEWER_IMAGE="ghcr.io/${OWNER_LOWER}/depictio-viewer:${TAG}"
-
-          echo "tag=${TAG}" >> $GITHUB_OUTPUT
-          echo "owner=${OWNER_LOWER}" >> $GITHUB_OUTPUT
-          echo "api-image=${API_IMAGE}" >> $GITHUB_OUTPUT
-          echo "worker-image=${WORKER_IMAGE}" >> $GITHUB_OUTPUT
-          echo "viewer-image=${VIEWER_IMAGE}" >> $GITHUB_OUTPUT
-          echo "📦 Content hash: ${CONTENT_HASH}"
-          echo "🏷️ Tag: ${TAG}"
-          echo "   api:    ${API_IMAGE}"
-          echo "   worker: ${WORKER_IMAGE}"
-          echo "   viewer: ${VIEWER_IMAGE}"
-
       - name: Check if rebuild needed
         id: check-rebuild
         run: |
-          API_IMAGE="${{ steps.image-info.outputs.api-image }}"
-          WORKER_IMAGE="${{ steps.image-info.outputs.worker-image }}"
-          VIEWER_IMAGE="${{ steps.image-info.outputs.viewer-image }}"
-          # Rebuild if any of the three images is missing — we always need a
-          # complete set to bring the compose stack up.
-          REBUILD=false
-          for img in "$API_IMAGE" "$WORKER_IMAGE" "$VIEWER_IMAGE"; do
-            if ! docker manifest inspect "$img" > /dev/null 2>&1; then
-              echo "🔨 Missing: $img"
-              REBUILD=true
-            else
-              echo "✅ Exists: $img"
-            fi
-          done
-          echo "rebuild=${REBUILD}" >> $GITHUB_OUTPUT
+          # Tags are content hashes: an image already pushed for this content
+          # is reused as is (a re-run, or a PR push that only touched tests).
+          if docker manifest inspect "$IMAGE" > /dev/null 2>&1; then
+            echo "✅ Exists: $IMAGE"
+            echo "rebuild=false" >> $GITHUB_OUTPUT
+          else
+            echo "🔨 Missing: $IMAGE"
+            echo "rebuild=true" >> $GITHUB_OUTPUT
+          fi
 
-      # Detect if running with act and set cache type accordingly
+      # Detect if running with act and set cache type accordingly. Separate
+      # cache scopes per image so the api/worker (uv + Python base) layers don't
+      # poison the viewer (node + nginx base) cache and vice versa. A branch
+      # falls back on main's scope, which main's own runs write as
+      # `main-<image>` (ref_name), not `refs/heads/main-<image>`: the fallback
+      # used to name the latter, which nothing ever wrote, so a PR's first build
+      # always started cold.
       - name: Set cache strategy
         id: cache-strategy
+        env:
+          SCOPE: ${{ github.ref_name }}
+          IMAGE_NAME: ${{ matrix.image }}
         run: |
           if [ "${ACT:-false}" = "true" ]; then
             echo "Running with act - using local cache"
             echo "cache_from=type=local,src=/tmp/buildx-cache" >> $GITHUB_OUTPUT
             echo "cache_to=type=local,dest=/tmp/buildx-cache-new,mode=max" >> $GITHUB_OUTPUT
-            echo "cache_enabled=local" >> $GITHUB_OUTPUT
           else
             echo "Running on GitHub Actions - using GHA cache"
-            echo "cache_from=type=gha,scope=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-            echo "cache_to=type=gha,mode=max,scope=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-            echo "cache_enabled=gha" >> $GITHUB_OUTPUT
+            {
+              echo "cache_from<<EOF"
+              echo "type=gha,scope=${SCOPE}-${IMAGE_NAME}"
+              echo "type=gha,scope=main-${IMAGE_NAME}"
+              echo "EOF"
+              echo "cache_to=type=gha,mode=max,scope=${SCOPE}-${IMAGE_NAME}"
+            } >> $GITHUB_OUTPUT
           fi
 
       # Create cache directory for act
@@ -379,53 +506,18 @@ jobs:
           mkdir -p /tmp/buildx-cache
           echo "Created local cache directory for act"
 
-      # Per-service build steps. Separate cache scopes per image so the
-      # api/worker (uv + Python base) layers don't poison the viewer
-      # (node + nginx base) cache and vice versa.
-      - name: Build and push depictio-api
+      - name: Build and push depictio-${{ matrix.image }}
         if: steps.check-rebuild.outputs.rebuild == 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: docker-images/Dockerfile.api
+          file: docker-images/Dockerfile.${{ matrix.image }}
           platforms: linux/amd64
           push: ${{ env.ACT != 'true' }}
           load: ${{ env.ACT == 'true' }}
-          tags: ${{ steps.image-info.outputs.api-image }}
-          cache-from: |
-            ${{ steps.cache-strategy.outputs.cache_from }}-api
-            ${{ env.ACT != 'true' && 'type=gha,scope=refs/heads/main-api' || '' }}
-          cache-to: ${{ steps.cache-strategy.outputs.cache_to }}-api
-
-      - name: Build and push depictio-worker
-        if: steps.check-rebuild.outputs.rebuild == 'true'
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker-images/Dockerfile.worker
-          platforms: linux/amd64
-          push: ${{ env.ACT != 'true' }}
-          load: ${{ env.ACT == 'true' }}
-          tags: ${{ steps.image-info.outputs.worker-image }}
-          cache-from: |
-            ${{ steps.cache-strategy.outputs.cache_from }}-worker
-            ${{ env.ACT != 'true' && 'type=gha,scope=refs/heads/main-worker' || '' }}
-          cache-to: ${{ steps.cache-strategy.outputs.cache_to }}-worker
-
-      - name: Build and push depictio-viewer
-        if: steps.check-rebuild.outputs.rebuild == 'true'
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker-images/Dockerfile.viewer
-          platforms: linux/amd64
-          push: ${{ env.ACT != 'true' }}
-          load: ${{ env.ACT == 'true' }}
-          tags: ${{ steps.image-info.outputs.viewer-image }}
-          cache-from: |
-            ${{ steps.cache-strategy.outputs.cache_from }}-viewer
-            ${{ env.ACT != 'true' && 'type=gha,scope=refs/heads/main-viewer' || '' }}
-          cache-to: ${{ steps.cache-strategy.outputs.cache_to }}-viewer
+          tags: ${{ env.IMAGE }}
+          cache-from: ${{ steps.cache-strategy.outputs.cache_from }}
+          cache-to: ${{ steps.cache-strategy.outputs.cache_to }}
 
       # Move cache for next run (act only)
       - name: Move cache (act only)
@@ -434,34 +526,17 @@ jobs:
           rm -rf /tmp/buildx-cache
           mv /tmp/buildx-cache-new /tmp/buildx-cache || true
 
-      - name: Pull existing images (GitHub Actions only)
-        if: env.ACT != 'true' && steps.check-rebuild.outputs.rebuild == 'false'
-        run: |
-          echo "📥 All three images already exist in registry, pulling..."
-          docker pull "${{ steps.image-info.outputs.api-image }}"
-          docker pull "${{ steps.image-info.outputs.worker-image }}"
-          docker pull "${{ steps.image-info.outputs.viewer-image }}"
-
-      - name: Pull newly built images (GitHub Actions only)
-        if: env.ACT != 'true' && steps.check-rebuild.outputs.rebuild == 'true'
-        run: |
-          docker pull "${{ steps.image-info.outputs.api-image }}"
-          docker pull "${{ steps.image-info.outputs.worker-image }}"
-          docker pull "${{ steps.image-info.outputs.viewer-image }}"
-
-      - name: Tag images for local use (act only)
+      - name: Tag image for local use (act only)
         if: env.ACT == 'true' || runner.os == 'act'
         run: |
-          docker tag "${{ steps.image-info.outputs.api-image }}" depictio-api:local || true
-          docker tag "${{ steps.image-info.outputs.worker-image }}" depictio-worker:local || true
-          docker tag "${{ steps.image-info.outputs.viewer-image }}" depictio-viewer:local || true
-          echo "Tagged images for local use"
+          docker tag "$IMAGE" "depictio-${{ matrix.image }}:local" || true
+          echo "Tagged image for local use"
 
   # A stack started with `depictio local up` hands over to Docker Compose: same
   # dashboards, same table data in S3, and the CLI token still valid (same keys).
   # Runs on this commit's images: the export is only meant for the same release.
   local-to-compose:
-    needs: docker-build
+    needs: [check-quality-cache, docker-build]
     if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
@@ -504,9 +579,9 @@ jobs:
       - name: docker compose up on the exported data
         working-directory: ${{ runner.temp }}/export
         env:
-          API_IMAGE: ${{ needs.docker-build.outputs.api-image }}
-          WORKER_IMAGE: ${{ needs.docker-build.outputs.worker-image }}
-          VIEWER_IMAGE: ${{ needs.docker-build.outputs.viewer-image }}
+          API_IMAGE: ${{ needs.check-quality-cache.outputs.api-image }}
+          WORKER_IMAGE: ${{ needs.check-quality-cache.outputs.worker-image }}
+          VIEWER_IMAGE: ${{ needs.check-quality-cache.outputs.viewer-image }}
         run: |
           # Swap the release images for this commit's; the export is unchanged.
           cat > ci-images.yaml <<YAML
@@ -538,7 +613,7 @@ jobs:
             -f ci-images.yaml logs --no-color --tail 200
 
   docker-system-init:
-    needs: docker-build
+    needs: [check-quality-cache, docker-build]
     if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     # Boots containers and can hang on a health loop (stack boot + init, ~3min observed).
@@ -570,9 +645,9 @@ jobs:
 
       - name: Start services
         run: |
-          export DEPICTIO_VERSION="${{ needs.docker-build.outputs.api-image }}"
-          export DEPICTIO_WORKER_VERSION="${{ needs.docker-build.outputs.worker-image }}"
-          export DEPICTIO_VIEWER_VERSION="${{ needs.docker-build.outputs.viewer-image }}"
+          export DEPICTIO_VERSION="${{ needs.check-quality-cache.outputs.api-image }}"
+          export DEPICTIO_WORKER_VERSION="${{ needs.check-quality-cache.outputs.worker-image }}"
+          export DEPICTIO_VIEWER_VERSION="${{ needs.check-quality-cache.outputs.viewer-image }}"
           docker pull "${DEPICTIO_VERSION}"
           docker pull "${DEPICTIO_WORKER_VERSION}"
           docker pull "${DEPICTIO_VIEWER_VERSION}"
@@ -992,7 +1067,7 @@ jobs:
           docker compose ps
 
   cli-comprehensive-test:
-    needs: [docker-build]
+    needs: [check-quality-cache, docker-build]
     if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     # Boots containers and can hang on a health loop (~4min observed).
@@ -1101,9 +1176,9 @@ jobs:
       - name: Log in and start services
         run: |
           echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-          export DEPICTIO_VERSION="${{ needs.docker-build.outputs.api-image }}"
-          export DEPICTIO_WORKER_VERSION="${{ needs.docker-build.outputs.worker-image }}"
-          export DEPICTIO_VIEWER_VERSION="${{ needs.docker-build.outputs.viewer-image }}"
+          export DEPICTIO_VERSION="${{ needs.check-quality-cache.outputs.api-image }}"
+          export DEPICTIO_WORKER_VERSION="${{ needs.check-quality-cache.outputs.worker-image }}"
+          export DEPICTIO_VIEWER_VERSION="${{ needs.check-quality-cache.outputs.viewer-image }}"
           docker pull "${DEPICTIO_VERSION}"
           docker pull "${DEPICTIO_WORKER_VERSION}"
           docker pull "${DEPICTIO_VIEWER_VERSION}"
@@ -1822,7 +1897,7 @@ jobs:
           retention-days: 7
 
   backup-s3-strategies-comprehensive-tests:
-    needs: [docker-build]
+    needs: [check-quality-cache, docker-build]
     if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     # Boots containers and can hang on a health loop (~3min observed).
@@ -1924,9 +1999,9 @@ jobs:
           echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
 
           echo "🐳 Setting up Docker images (api / worker / viewer)..."
-          export DEPICTIO_VERSION="${{ needs.docker-build.outputs.api-image }}"
-          export DEPICTIO_WORKER_VERSION="${{ needs.docker-build.outputs.worker-image }}"
-          export DEPICTIO_VIEWER_VERSION="${{ needs.docker-build.outputs.viewer-image }}"
+          export DEPICTIO_VERSION="${{ needs.check-quality-cache.outputs.api-image }}"
+          export DEPICTIO_WORKER_VERSION="${{ needs.check-quality-cache.outputs.worker-image }}"
+          export DEPICTIO_VIEWER_VERSION="${{ needs.check-quality-cache.outputs.viewer-image }}"
           echo "Using api image:    $DEPICTIO_VERSION"
           echo "Using worker image: $DEPICTIO_WORKER_VERSION"
           echo "Using viewer image: $DEPICTIO_VIEWER_VERSION"
@@ -2783,18 +2858,18 @@ jobs:
   # ──────────────────────────────────────────────────────────────────────────
   e2e-playwright:
     name: e2e-playwright (${{ matrix.auth_mode }})
-    needs: [docker-build]
-    # `quality` upstream may be skipped on cache hits, which makes the default
+    needs: [check-quality-cache, docker-build]
+    # `lint` upstream may be skipped on cache hits, which makes the default
     # success() condition skip this job too — same guard as the other
     # docker-build consumers in this workflow.
     if: always() && needs.docker-build.result == 'success'
     runs-on: ubuntu-22.04
     # No job in this workflow had one, so the only backstop was GitHub's 6h
-    # default — and a leg of this job has run for 3h. A green leg is ~60min
-    # today; tighten this once the catalog walk is sharded across the legs.
-    # Two walk attempts at 30 minutes, plus setup, plus the rest of the suite.
-    # Sized so Playwright always reaches its own end-of-run summary: a job the
-    # runner kills here skips every `if: always()` step, report included.
+    # default — and a leg of this job has run for 3h. Sized for the full catalog
+    # walk (main, nightly, ci:full-catalog), ~60min a leg with ~550 renders each;
+    # a PR's representative walk finishes a leg in ~10. Sized so Playwright
+    # always reaches its own end-of-run summary: a job the runner kills here
+    # skips every `if: always()` step, report included.
     timeout-minutes: 120
     permissions:
       contents: read
@@ -2856,9 +2931,9 @@ jobs:
       - name: Log in and start services
         run: |
           echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
-          export DEPICTIO_VERSION="${{ needs.docker-build.outputs.api-image }}"
-          export DEPICTIO_WORKER_VERSION="${{ needs.docker-build.outputs.worker-image }}"
-          export DEPICTIO_VIEWER_VERSION="${{ needs.docker-build.outputs.viewer-image }}"
+          export DEPICTIO_VERSION="${{ needs.check-quality-cache.outputs.api-image }}"
+          export DEPICTIO_WORKER_VERSION="${{ needs.check-quality-cache.outputs.worker-image }}"
+          export DEPICTIO_VIEWER_VERSION="${{ needs.check-quality-cache.outputs.viewer-image }}"
           docker pull "${DEPICTIO_VERSION}" &
           docker pull "${DEPICTIO_WORKER_VERSION}" &
           docker pull "${DEPICTIO_VIEWER_VERSION}" &
@@ -2966,9 +3041,22 @@ jobs:
       # and two of the three legs failed on nothing else. One walker per leg is
       # the only shape a full walk has ever finished clean in. Raise it when the
       # backend has room, not before.
+      #
+      # CATALOG_E2E_SELECT: the full walk (~1650 renders, ~55 min a leg) runs on
+      # main, nightly, on a PR labelled ci:full-catalog and on a PR touching the
+      # code every render goes through (see check-quality-cache). Any other PR
+      # walks one render per distinct shape (component, kind, control, layout),
+      # around sixty, plus every render of the catalog tools it changed — the
+      # same picker -> editor -> viewer path at a few minutes a leg. One chunk
+      # is enough for that slice: chunks exist to bound a long walk's retry.
       - name: Run Playwright tests (${{ matrix.auth_mode }})
+        env:
+          CATALOG_E2E_SELECT: ${{ needs.check-quality-cache.outputs.full-catalog == 'true' && 'all' || 'representative' }}
+          CATALOG_E2E_TOOLS: ${{ needs.check-quality-cache.outputs.catalog-tools }}
+          CATALOG_E2E_CHUNKS: ${{ needs.check-quality-cache.outputs.full-catalog == 'true' && '8' || '1' }}
         run: |
           cd depictio/tests/e2e-playwright
+          echo "Catalog walk: ${CATALOG_E2E_SELECT}${CATALOG_E2E_TOOLS:+ (tools walked in full: ${CATALOG_E2E_TOOLS})}"
           CATALOG_CONFORMANCE_REQUIRED=1 \
           CATALOG_E2E_SHARD=${{ matrix.catalog_shard }} \
           CATALOG_E2E_SHARDS=3 \
@@ -3005,3 +3093,35 @@ jobs:
           name: e2e-services-logs-${{ matrix.auth_mode }}
           path: e2e-${{ matrix.auth_mode }}-services.log
           retention-days: 7
+
+  # The one check to require in branch protection. A job skipped on purpose
+  # (docs-only change, quality cache hit, pixi untouched, fork PR) counts as
+  # passing here; required per-job checks would not survive that, because a
+  # matrix job skipped before it expands never reports under its leg names, so
+  # an "e2e-playwright (standard)" requirement would wait forever.
+  ci-ok:
+    if: always()
+    needs:
+      - check-quality-cache
+      - lint
+      - quality
+      - js-unit
+      - pixi-install-test
+      - docker-build
+      - local-to-compose
+      - docker-system-init
+      - cli-comprehensive-test
+      - backup-s3-strategies-comprehensive-tests
+      - e2e-playwright
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Fail if any job failed or was cancelled
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.value.result)\t\(.key)"'
+          if echo "$RESULTS" | jq -e '[.[].result] | any(. == "failure" or . == "cancelled")' > /dev/null; then
+            echo "❌ At least one job failed or was cancelled"
+            exit 1
+          fi
+          echo "✅ Every job passed or was skipped on purpose"
