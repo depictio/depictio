@@ -37,8 +37,9 @@ from depictio.models.local_access import LocalPathRefused
 from depictio.models.s3_access import (
     S3AccessFailed,
     S3Target,
-    client_error_code,
     ensure_region,
+    folder_prefix,
+    is_missing_object,
     iter_object_pages,
 )
 
@@ -441,9 +442,8 @@ class S3DataRoot:
         bucket, key_prefix = split_s3_prefix(location)
         self._bucket = bucket
         # Normalised to a directory-shaped prefix so the root behaves like a
-        # directory: without the trailing slash S3 would also hand us the keys
-        # of a *sibling* prefix sharing the same leading characters.
-        self._prefix = f"{key_prefix.strip('/')}/" if key_prefix.strip("/") else ""
+        # directory, never reaching into a sibling prefix.
+        self._prefix = folder_prefix(key_prefix)
         self.name = self._prefix.strip("/").rsplit("/", 1)[-1] if self._prefix else bucket
 
         # Refused here (``S3AccessRefused``) when the configuration does not
@@ -587,10 +587,8 @@ class S3DataRoot:
         except Exception as exc:
             from botocore.exceptions import ClientError
 
-            if isinstance(exc, ClientError):
-                code, status = client_error_code(exc)
-                if code == "NoSuchKey" or (status == 404 and code != "NoSuchBucket"):
-                    raise FileNotFoundError(f"No such object under the data root: {url}") from exc
+            if isinstance(exc, ClientError) and is_missing_object(exc):
+                raise FileNotFoundError(f"No such object under the data root: {url}") from exc
             # Coded and sanitized: the API answers with it as it is.
             raise S3AccessFailed.from_exception(exc, self._target.with_key(key)) from exc
 

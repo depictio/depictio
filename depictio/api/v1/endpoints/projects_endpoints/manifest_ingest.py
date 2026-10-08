@@ -368,10 +368,10 @@ def _run_dc_ingest(
     recipe collection) is processed without being scanned: it registers no
     files, its inputs are read from the workflow's data root by the recipe
     layer at process time, and the per-DC scan only speaks
-    single/url/s3_prefix/manifest so it would raise on one. Unreachable from
-    the refresh flow — ``_refreshable_dc_index`` never selects a collection
-    without a scan mode — and from the manifest flows, which only ever pass
-    manifest-mode collections; it is the from_run fan-out that needs it.
+    single/url/s3_prefix/manifest so it would raise on one. The from_run
+    fan-out passes such collections, and so does a refresh when the
+    workflow's data root is readable from here (see ``_server_can_reread``);
+    the manifest flows only ever pass manifest-mode collections.
     """
     from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
         _build_cli_config_for_user,
@@ -995,7 +995,7 @@ def _scan_leaders(
     members: dict[int, list[tuple[str, str]]] = {}
     for tag, dc_id, wf_i, _entries in to_dispatch:
         wf_dcs = (workflows[wf_i].get("data_collections") or []) if wf_i < len(workflows) else []
-        dc = next((d for d in wf_dcs if str(d.get("_id") or d.get("id") or "") == dc_id), {})
+        dc = next((d for d in wf_dcs if _dc_id(d) == dc_id), {})
         scan = (dc.get("config") or {}).get("scan") or {}
         if str(scan.get("mode") or "").lower() == "recursive":
             members.setdefault(wf_i, []).append((tag, dc_id))
@@ -1103,13 +1103,12 @@ def _dispatch_refresh_tasks(
     for every dc_ref that still has a step *in this run* (``seeded_tags``
     below), and ``manifest_refresh_dc_task`` waits for those steps to go
     terminal before it actually ingests. Waiting on direct dependencies only
-    is enough:
-    a dependency's own dependencies already had to go terminal before it could,
-    so by the time a step stops being pending/running, everything upstream of
-    it has already settled. A dependency cycle (there are none in the catalog
-    today) would simply hold every step in it pending until each one's wait
-    budget in ``manifest_refresh_dc_task`` runs out, and each would then fail
-    naming what it was still waiting for.
+    is enough: a dependency's own dependencies already had to go terminal
+    before it could, so by the time a step stops being pending/running,
+    everything upstream of it has already settled. A dependency cycle (there
+    are none in the catalog today) would simply hold every step in it pending
+    until each one's wait budget in ``manifest_refresh_dc_task`` runs out, and
+    each would then fail naming what it was still waiting for.
 
     Recursive collections of one workflow get a scan leader (see
     ``_scan_leaders``): its payload carries ``scan_dc_ids``, the collections
@@ -1118,7 +1117,7 @@ def _dispatch_refresh_tasks(
 
     Shared with ``POST /projects/from_run``, which needs exactly this: a
     durable run whose steps a worker updates and a caller polls. The two flows
-    differ only in bookkeeping, which is what the keyword arguments carry —
+    differ only in bookkeeping, which is what the keyword arguments carry:
     ``command`` labels the run (and is what ``_get_refresh_run_report`` accepts),
     ``scan_modes`` records each DC's real mode instead of assuming "manifest",
     and ``data_root`` notes the run folder a from_run, or a refresh of its
@@ -1139,38 +1138,22 @@ def _dispatch_refresh_tasks(
     skipped = preflight_skipped or []
     modes = scan_modes or {}
     run_id = uuid4().hex
-    # Pre-flight failures first, then pre-flight skips, then the DCs a worker
+    # One step per DC, as (tag, step status, step detail, file count):
+    # pre-flight failures first, then pre-flight skips, then the DCs a worker
     # will actually run.
-    data_collections = (
-        [
-            IngestionDataCollection(tag=tag, scan_mode=modes.get(tag, "manifest"), file_count=0)
-            for tag, _dc_id, _message in preflight_failed
-        ]
-        + [
-            IngestionDataCollection(tag=tag, scan_mode=modes.get(tag, "manifest"), file_count=0)
-            for tag, _dc_id, _message in skipped
-        ]
-        + [
-            IngestionDataCollection(
-                tag=tag, scan_mode=modes.get(tag, "manifest"), file_count=entries
-            )
-            for tag, _dc_id, _wf_i, entries in to_dispatch
-        ]
+    seeds: list[tuple[str, str, str | None, int]] = (
+        [(tag, "failed", message, 0) for tag, _dc_id, message in preflight_failed]
+        + [(tag, "skipped", message, 0) for tag, _dc_id, message in skipped]
+        + [(tag, "pending", None, entries) for tag, _dc_id, _wf_i, entries in to_dispatch]
     )
-    steps = (
-        [
-            IngestionStep(name=tag, status="failed", detail=message)
-            for tag, _dc_id, message in preflight_failed
-        ]
-        + [
-            IngestionStep(name=tag, status="skipped", detail=message)
-            for tag, _dc_id, message in skipped
-        ]
-        + [
-            IngestionStep(name=tag, status="pending")
-            for tag, _dc_id, _wf_i, _entries in to_dispatch
-        ]
-    )
+    data_collections = [
+        IngestionDataCollection(tag=tag, scan_mode=modes.get(tag, "manifest"), file_count=count)
+        for tag, _status, _detail, count in seeds
+    ]
+    steps = [
+        IngestionStep(name=tag, status=status, detail=detail)
+        for tag, status, detail, _count in seeds
+    ]
     store.create_ingestion_run(
         IngestionRun(
             run_id=run_id,
@@ -1194,11 +1177,7 @@ def _dispatch_refresh_tasks(
 
     # Every tag that has a step in this run: a dependency pruned at
     # resolution, or simply not part of this run, is not waited for.
-    seeded_tags = (
-        {tag for tag, _dc_id, _message in preflight_failed}
-        | {tag for tag, _dc_id, _message in skipped}
-        | {tag for tag, _dc_id, _wf_i, _entries in to_dispatch}
-    )
+    seeded_tags = {tag for tag, _status, _detail, _count in seeds}
     dependencies = _recipe_dependencies(project_dict)
     scan_leaders, scan_followers = _scan_leaders(project_dict, to_dispatch)
 
@@ -1269,7 +1248,7 @@ def _dispatch_refresh_tasks(
 
 
 # Every command whose run document this poll route serves. Both flows write the
-# run with the same shape — pre-seeded steps a worker updates — so one route
+# run with the same shape (pre-seeded steps a worker updates), so one route
 # answers for both; a run from any other command (a CLI ``run``, a UI upload)
 # belongs to another report and is not found here.
 _POLLABLE_RUN_COMMANDS = frozenset({"refresh_manifest", "from_run"})
@@ -1287,7 +1266,7 @@ def _get_refresh_run_report(run_id: str, current_user) -> ManifestRefreshReport:
     """Aggregate an async ingestion run into the same report shape as sync mode.
 
     Serves both the async manifest refresh and the background ingestion a
-    ``POST /projects/from_run`` opens — see ``_POLLABLE_RUN_COMMANDS``.
+    ``POST /projects/from_run`` opens (see ``_POLLABLE_RUN_COMMANDS``).
     """
     from depictio.api.v1.monitoring import store
 

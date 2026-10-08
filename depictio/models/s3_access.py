@@ -342,6 +342,21 @@ def _unreachable_hint(target: S3Target) -> str:
 # ── Locations and bucket lists ──────────────────────────────────────────────
 
 
+def is_s3_url(location: str) -> bool:
+    """Whether ``location`` is spelled as an ``s3://`` URL, in any letter case."""
+    return location[:5].lower() == "s3://"
+
+
+def folder_prefix(key: str) -> str:
+    """``key`` as a folder prefix: ``""`` for the bucket itself, else ending in one ``/``.
+
+    Without the trailing slash a listing would also return the keys of a
+    sibling prefix sharing the same leading characters.
+    """
+    key = key.strip("/")
+    return f"{key}/" if key else ""
+
+
 def split_s3_url(url: str) -> tuple[str, str]:
     """``(bucket, key)`` out of ``s3://bucket/key``. Refuses anything else.
 
@@ -775,6 +790,12 @@ def is_missing_prefix(exc: Exception) -> bool:
     if code == "NoSuchBucket":
         return False
     return code in _MISSING_PREFIX_CODES or (status == 404 and not code)
+
+
+def is_missing_object(exc: Exception) -> bool:
+    """Whether a GetObject ``ClientError`` means the key is absent, not the bucket."""
+    code, status = client_error_code(exc)
+    return code == "NoSuchKey" or (status == 404 and code != "NoSuchBucket")
 
 
 def iter_object_pages(

@@ -1804,6 +1804,21 @@ def scan_s3_prefix_for_data_collection(
     workflow_config_id = (
         PyObjectId(workflow.config.id) if workflow.config and workflow.config.id else PyObjectId()
     )
+
+    def _new_run(run_tag: str, run_location: str, run_id: str | None = None) -> WorkflowRun:
+        return WorkflowRun(
+            id=PyObjectId(run_id) if run_id else PyObjectId(),
+            workflow_id=PyObjectId(workflow.id),
+            run_tag=run_tag,
+            files_id=[],
+            workflow_config_id=workflow_config_id,
+            run_location=run_location,
+            creation_time=now_iso,
+            last_modification_time=now_iso,
+            run_hash="",
+            permissions=permissions,
+        )
+
     if per_run:
         # One run per matched run directory, keyed by its segment. Re-using the
         # id of a run already registered under this workflow matters: the upsert
@@ -1820,35 +1835,14 @@ def scan_s3_prefix_for_data_collection(
             logger.warning(f"Failed to retrieve existing runs for workflow {workflow.id}.")
 
         runs_by_tag = {
-            tag: WorkflowRun(
-                id=PyObjectId(existing_run_ids[tag]) if tag in existing_run_ids else PyObjectId(),
-                workflow_id=PyObjectId(workflow.id),
-                run_tag=tag,
-                files_id=[],
-                workflow_config_id=workflow_config_id,
-                run_location=f"{prefix.rstrip('/')}/{tag}",
-                creation_time=now_iso,
-                last_modification_time=now_iso,
-                run_hash="",
-                permissions=permissions,
-            )
+            tag: _new_run(tag, f"{prefix.rstrip('/')}/{tag}", existing_run_ids.get(tag))
             for tag in sorted({obj["relative"].partition("/")[0] for obj in objects})
         }
     else:
         # A flat prefix has no run dimension: one synthetic run, keyed by "" so
         # the loop below can look it up the same way it looks up a real one.
         runs_by_tag = {
-            "": WorkflowRun(
-                workflow_id=PyObjectId(workflow.id),
-                run_tag=f"{data_collection.data_collection_tag}-s3-prefix-scan",
-                files_id=[],
-                workflow_config_id=workflow_config_id,
-                run_location=prefix,
-                creation_time=now_iso,
-                last_modification_time=now_iso,
-                run_hash="",
-                permissions=permissions,
-            )
+            "": _new_run(f"{data_collection.data_collection_tag}-s3-prefix-scan", prefix)
         }
 
     to_add: list[File] = []

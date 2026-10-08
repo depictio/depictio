@@ -58,13 +58,13 @@ def read_run_info_for_root(root: DataRoot) -> WorkflowRunInfo | None:
     """The provenance of the run in ``root``, or None when no connector recognises it.
 
     A local root is read in place, unless the server confines its own disk
-    (``settings_models.local_data_policy``): then it is staged like a remote one,
-    through ``LocalDataRoot``, which hides and refuses what leaves the allowed
-    folders, so a symlinked ``pipeline_info`` cannot be read through. Any other root
-    is staged: the entries the
-    connectors declare are fetched into a temporary directory named like the
-    root (a connector may name the pipeline after its folder), and the paths in
-    the answer are mapped back to locations under the root.
+    (``settings_models.local_data_policy``): then it is staged like a remote
+    one, through ``LocalDataRoot``, which hides and refuses what leaves the
+    allowed folders, so a symlinked ``pipeline_info`` cannot be read through.
+    Any other root is staged: the entries the connectors declare are fetched
+    into a temporary directory named like the root (a connector may name the
+    pipeline after its folder), and the paths in the answer are mapped back to
+    locations under the root.
 
     An ``S3AccessError`` from a read propagates unchanged. A file the listing
     named but the store no longer has is left out, like any other absent file.
@@ -92,8 +92,7 @@ def _file_sizes(root: DataRoot) -> dict[str, int]:
     Read from the listing the root already holds, so staging asks the store for
     nothing but the files it copies.
     """
-    objects = getattr(root, "objects", None)
-    if objects is None and isinstance(root, LocalDataRoot):
+    if isinstance(root, LocalDataRoot):
         # No listing to read sizes from: stat what the connectors would stage,
         # as the (confined) root lists it.
         sizes: dict[str, int] = {}
@@ -104,6 +103,7 @@ def _file_sizes(root: DataRoot) -> dict[str, int]:
                     if path.is_file():
                         sizes[rel] = path.stat().st_size
         return sizes
+    objects = getattr(root, "objects", None)
     if objects is None:
         raise TypeError(f"{type(root).__name__} holds no listing to stage a run folder from")
     return {obj.relative: obj.size for obj in objects}

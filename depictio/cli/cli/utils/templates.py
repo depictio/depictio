@@ -688,7 +688,7 @@ def materialize_recipe_seeds(
             # make every seeded recipe DC invisible to the catalog picker.
             dc_config["transform"]["materialized"] = True
             # A seed under a remote root is one known object, so it takes the
-            # remote spelling of "one known file" — ScanSingle would reject an
+            # remote spelling of "one known file": ScanSingle would reject an
             # s3:// filename outright (it stats the path in CLI context).
             dc_config["scan"] = (
                 {"mode": "url", "scan_parameters": {"url": seed_path}}

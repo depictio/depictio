@@ -168,6 +168,31 @@ def infer_scan(location: str, existing_scan: dict | None = None) -> tuple[dict, 
     return {"mode": "single", "scan_parameters": {"filename": str(path.resolve())}}, None
 
 
+# Scan modes that name their location on the data collection itself, and the
+# scan parameter that holds it. ``manifest`` is absent on purpose: its URL names
+# a document fetched at ingest time through the fetch gateway (that mode's own
+# control), not a place the data is read from.
+_SCAN_LOCATION_FIELDS = {"single": "filename", "url": "url", "s3_prefix": "prefix"}
+
+
+def scan_locations(workflow: dict, dc: dict) -> list[str]:
+    """Every location a resolved data collection would read from.
+
+    A ``recursive`` walk names its bases on the workflow, not on the DC. A
+    recipe collection has no scan block and names none: its sources are
+    resolved through the data root by the recipe layer.
+    """
+    scan = (dc.get("config") or {}).get("scan") or {}
+    mode = str(scan.get("mode") or "").lower()
+    field = _SCAN_LOCATION_FIELDS.get(mode)
+    if field:
+        value = (scan.get("scan_parameters") or {}).get(field)
+        return [str(value)] if value else []
+    if mode == "recursive":
+        return [str(loc) for loc in (workflow.get("data_location") or {}).get("locations") or []]
+    return []
+
+
 def remote_scan_for_dc(dc_config: dict, root: DataRoot) -> dict | None:
     """The ``scan`` block a data collection needs when its data root is remote.
 
