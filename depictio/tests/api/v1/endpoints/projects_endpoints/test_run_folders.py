@@ -29,6 +29,7 @@ from depictio.tests.cli.s3_stubs import (
     FailingS3Client,
     install_s3_client,
     install_s3_listing,
+    s3_client_error,
     write_tree,
 )
 
@@ -176,11 +177,15 @@ def test_a_listed_prefix_lists_its_sub_folders_from_one_page(monkeypatch, listed
     ]
     # Unknown without a request per entry: every entry may be opened.
     assert all(e.has_children and not e.looks_like_run for e in listing.entries)
-    # The listed location itself holds multiqc/.
-    assert listing.looks_like_run is True
+    # The listed location holds a multiqc/, but no MultiQC output in it: one
+    # more page, of the keys below multiqc/, says so.
+    assert listing.looks_like_run is False
     assert listing.truncated is False
-    assert client.listings == [{"Bucket": PUBLIC, "Prefix": "runs/", "Delimiter": "/"}]
-    assert client.pages_served == 1
+    assert client.listings == [
+        {"Bucket": PUBLIC, "Prefix": "runs/", "Delimiter": "/"},
+        {"Bucket": PUBLIC, "Prefix": "runs/multiqc/", "Delimiter": None},
+    ]
+    assert client.pages_served == 2
 
 
 def test_below_the_listed_prefix_parent_goes_up_one_level(monkeypatch, listed):
@@ -194,7 +199,14 @@ def test_below_the_listed_prefix_parent_goes_up_one_level(monkeypatch, listed):
 
 
 def test_a_whole_listed_bucket_is_its_own_root(monkeypatch, listed):
-    _serve(monkeypatch, {"exp1/run1/pipeline_info/p.json": b"{}", "notes.txt": b"x"})
+    client = _serve(
+        monkeypatch,
+        {
+            "exp1/run1/pipeline_info/p.json": b"{}",
+            "exp1/run1/multiqc/multiqc_report.html": b"<html>",
+            "notes.txt": b"x",
+        },
+    )
     top = run_folders.list_s3_dirs(f"s3://{LAB}")
     assert (top.path, top.root, top.parent) == (f"s3://{LAB}/", f"s3://{LAB}/", None)
     assert [e.name for e in top.entries] == ["exp1"]
@@ -203,6 +215,43 @@ def test_a_whole_listed_bucket_is_its_own_root(monkeypatch, listed):
     deeper = run_folders.list_s3_dirs(f"s3://{LAB}/exp1/run1/")
     assert deeper.parent == f"s3://{LAB}/exp1/"
     assert deeper.looks_like_run is True
+    # pipeline_info/ settles it: no page is asked for below multiqc/.
+    assert [listing["Prefix"] for listing in client.listings] == ["", "exp1/run1/"]
+
+
+@pytest.mark.parametrize(
+    ("keys", "is_run"),
+    [
+        ({"runs/rna/multiqc/star_salmon/multiqc_report.html": b"<html>"}, True),
+        ({"runs/rna/multiqc/multiqc.parquet": b"PAR1"}, True),
+        ({"runs/rna/multiqc/fastqc.yaml": b"x", "runs/rna/multiqc/bowtie2/r.yaml": b"x"}, False),
+        ({"runs/rna/multiqc/a/b/multiqc_report.html": b"<html>"}, False),
+    ],
+)
+def test_an_s3_multiqc_folder_is_a_marker_only_with_multiqc_output(
+    monkeypatch, listed, keys, is_run
+):
+    _serve(monkeypatch, {**keys, "runs/rna/star_salmon/x.bam": b"x"})
+    assert run_folders.list_s3_dirs(f"s3://{PUBLIC}/runs/rna/").looks_like_run is is_run
+    inspection = _inspect(f"s3://{PUBLIC}/runs/rna/", detect=False)
+    assert inspection.markers == (["multiqc"] if is_run else [])
+    assert inspection.folders.names == ["multiqc", "star_salmon"]
+
+
+def test_a_multiqc_folder_that_cannot_be_listed_is_no_marker(monkeypatch, listed):
+    client = _serve(monkeypatch, {"runs/r/multiqc/multiqc_data/multiqc.parquet": b"PAR1"})
+    paginator = client.get_paginator("list_objects_v2")
+
+    class _DeniedBelowMultiqc:
+        def paginate(self, **params):
+            if params["Prefix"].endswith("multiqc/"):
+                raise s3_client_error("AccessDenied", 403)
+            return paginator.paginate(**params)
+
+    monkeypatch.setattr(client, "get_paginator", lambda _name: _DeniedBelowMultiqc())
+    listing = run_folders.list_s3_dirs(f"s3://{PUBLIC}/runs/r/")
+    assert [e.name for e in listing.entries] == ["multiqc"]
+    assert listing.looks_like_run is False
 
 
 def test_the_root_is_the_outermost_listed_location(monkeypatch):
@@ -449,11 +498,14 @@ def test_inspect_an_s3_run_folder(monkeypatch, listed):
     )
 
 
-def test_inspect_s3_without_detection_lists_one_page(monkeypatch, listed):
+def test_inspect_s3_without_detection_lists_one_page_and_one_below_multiqc(monkeypatch, listed):
     client = _serve(monkeypatch, _under("runs/r/", _run_tree()))
     inspection = _inspect(f"s3://{PUBLIC}/runs/r/", detect=False)
     assert inspection.detected is None
-    assert client.listings == [{"Bucket": PUBLIC, "Prefix": "runs/r/", "Delimiter": "/"}]
+    assert client.listings == [
+        {"Bucket": PUBLIC, "Prefix": "runs/r/", "Delimiter": "/"},
+        {"Bucket": PUBLIC, "Prefix": "runs/r/multiqc/", "Delimiter": None},
+    ]
 
 
 def test_inspect_s3_truncated_page(monkeypatch, listed):
@@ -475,8 +527,8 @@ def tree(home, tmp_path):
     """Runs at several depths, with the entries a search must not go into."""
     base = home / "projects"
     write_tree(base / "a" / "run1", _run_tree())
-    write_tree(base / "a" / "run1" / "sub" / "nested", {"multiqc/r.html": b"x"})
-    write_tree(base / "run0", {"multiqc/r.html": b"x"})
+    write_tree(base / "a" / "run1" / "sub" / "nested", {"multiqc/multiqc_report.html": b"x"})
+    write_tree(base / "run0", {"multiqc/multiqc_report.html": b"x"})
     # Six levels down is searched, seven is not.
     write_tree(base / "b" / "c" / "d" / "e" / "f" / "run6", {"pipeline_info/p.json": b"{}"})
     write_tree(base / "b" / "c" / "d" / "e" / "f" / "g" / "run7", {"pipeline_info/p.json": b"{}"})
@@ -555,6 +607,50 @@ def test_find_runs_stops_at_the_run_cap(tree, monkeypatch):
     assert found.truncated is True
 
 
+def test_find_runs_skips_lookalikes_noise_and_nextflow_work(home):
+    base = home / "search"
+    write_tree(base / "catalog", {"multiqc/fastqc.yaml": b"x", "multiqc/bowtie2/recipe.yaml": b"x"})
+    write_tree(base / "rnaseq", {"multiqc/star_salmon/multiqc_report.html": b"<html>"})
+    write_tree(
+        base / "work",
+        {
+            "3f/a1b2c3/multiqc/multiqc_data/multiqc.parquet": b"PAR1",
+            "ab/d4e5f6/pipeline_info/p.json": b"{}",
+            "stage-0b1c/x/pipeline_info/p.json": b"{}",
+        },
+    )
+    write_tree(base / "node_modules" / "pkg", {"pipeline_info/p.json": b"{}"})
+    write_tree(base / "__pycache__" / "x", {"pipeline_info/p.json": b"{}"})
+    # A folder named work that is not Nextflow's is searched like any other.
+    write_tree(base / "mine" / "work", {"notes/pipeline_info/p.json": b"{}"})
+
+    found = _find(str(base))
+    assert [(run.relative, run.markers) for run in found.runs] == [
+        ("mine/work/notes", ["pipeline_info"]),
+        ("rnaseq", ["multiqc"]),
+    ]
+    assert found.truncated is False
+    # search, catalog, mine, rnaseq, work (opened, not searched below),
+    # catalog/multiqc, mine/work, catalog/multiqc/bowtie2 and mine/work/notes.
+    assert found.scanned == 9
+
+
+@pytest.mark.parametrize(
+    ("name", "folder_names", "is_work"),
+    [
+        ("work", ["3f", "a0"], True),
+        ("work", ["3f", "stage-1a2b", "conda", "singularity"], True),
+        ("work", ["3f", "notes"], False),
+        ("work", ["3F"], False),
+        ("work", ["stage-1a2b"], False),
+        ("work", [], False),
+        ("results", ["3f", "a0"], False),
+    ],
+)
+def test_is_nextflow_work(name, folder_names, is_work):
+    assert run_folders._is_nextflow_work(name, folder_names) is is_work
+
+
 def test_find_runs_lists_nothing_in_an_unreadable_folder(tree, monkeypatch):
     def _denied(_path):
         raise PermissionError("no")
@@ -571,10 +667,12 @@ FIND_KEYS = {
     "runs/a/run1/pipeline_info/params.json": b"{}",
     "runs/a/run1/multiqc/multiqc_data/x.parquet": b"PAR1",
     "runs/a/run1/sub/pipeline_info/p.json": b"{}",
-    "runs/b/multiqc/report.html": b"<html>",
+    "runs/b/multiqc/star_salmon/multiqc_report.html": b"<html>",
     "runs/c/data.csv": b"x",
+    "runs/catalog/multiqc/fastqc.yaml": b"x",
     "runs/multiqc": b"a file, not a folder",
     "runs/d/e/f/pipeline_info/": b"",
+    "runs/work/3f/a1b2c3/pipeline_info/p.json": b"{}",
 }
 
 
@@ -591,6 +689,39 @@ def test_find_runs_below_an_s3_prefix(monkeypatch, listed):
     assert (found.scanned, found.truncated) == (len(FIND_KEYS), False)
     # One listing, of keys: no delimiter.
     assert client.listings == [{"Bucket": PUBLIC, "Prefix": "runs/", "Delimiter": None}]
+
+
+@pytest.mark.parametrize(
+    ("key", "run"),
+    [
+        ("r/pipeline_info/params.json", ("r", "pipeline_info")),
+        ("a/b/pipeline_info/", ("a/b", "pipeline_info")),
+        ("r/multiqc/multiqc_data/multiqc.parquet", ("r", "multiqc")),
+        ("r/multiqc/multiqc_data/", ("r", "multiqc")),
+        ("r/multiqc/multiqc.parquet", ("r", "multiqc")),
+        ("r/multiqc/multiqc_report.html", ("r", "multiqc")),
+        ("r/multiqc/Project_42_multiqc_report.html", ("r", "multiqc")),
+        ("r/multiqc/star_salmon/multiqc_report.html", ("r", "multiqc")),
+        ("r/multiqc/star_salmon/multiqc_report_data/multiqc.parquet", ("r", "multiqc")),
+        ("multiqc/fastqc/multiqc_data/x.txt", ("", "multiqc")),
+        # Not MultiQC output: recipes, a deeper report, a lookalike, a file.
+        ("catalog/multiqc/fastqc.yaml", None),
+        ("catalog/multiqc/bowtie2/recipe.yaml", None),
+        ("r/multiqc/a/b/multiqc_report.html", None),
+        ("r/multiqc/report.html", None),
+        ("r/multiqc/multiqc_data", None),
+        ("r/multiqc/", None),
+        ("r/pipeline_info", None),
+        # Below a Nextflow task folder: no run's.
+        ("work/3f/a1b2c3/multiqc/multiqc_data/multiqc.parquet", None),
+        ("launch/work/ab/c3d4/pipeline_info/p.json", None),
+        ("work/3f/", None),
+        # A work folder whose next segment is no task folder is read as any other.
+        ("work/notes/pipeline_info/p.json", ("work/notes", "pipeline_info")),
+    ],
+)
+def test_run_of(key, run):
+    assert run_folders._run_of(key) == run
 
 
 def test_find_runs_on_an_s3_run_is_that_run(monkeypatch, listed):

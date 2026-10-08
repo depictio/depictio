@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
@@ -33,8 +33,20 @@ from depictio.models.logging import logger
 # More sub-directories than this and the listing says ``truncated``.
 MAX_ENTRIES = 500
 
-# A folder holding one of these is very likely one pipeline run's output.
-RUN_MARKERS = ("pipeline_info", "multiqc")
+# A folder holding one of these is very likely one pipeline run's output:
+# ``pipeline_info/`` on its own, ``multiqc/`` only when it holds MultiQC's own
+# output (see :func:`holds_multiqc_output`), since a folder of that name can
+# hold anything else too (the catalog's MultiQC recipes, say).
+PIPELINE_INFO = "pipeline_info"
+MULTIQC = "multiqc"
+RUN_MARKERS = (PIPELINE_INFO, MULTIQC)
+# How many sub-folders of a ``multiqc/`` folder are looked into for its output
+# (``multiqc/star_salmon/multiqc_report.html``), one level down at most.
+MULTIQC_MAX_SUB_FOLDERS = 10
+
+# Never listed, never searched: caches and archive debris, not data. Dot-names
+# are left out as well (see :func:`is_hidden_name`).
+NOISE_DIRS = frozenset({"__pycache__", "node_modules", "__MACOSX"})
 
 LOCAL_FOLDERS_OFF = "Local folders are not enabled on this server."
 NON_LOOPBACK_HOST = (
@@ -130,22 +142,100 @@ def active_local_policy() -> LocalDataPolicy:
     return policy
 
 
-def looks_like_run(folder: str) -> bool:
-    """Whether ``folder`` holds ``pipeline_info/`` or ``multiqc/``."""
-    return any(os.path.isdir(os.path.join(folder, marker)) for marker in RUN_MARKERS)
+def is_hidden_name(name: str) -> bool:
+    """Whether a sub-directory named ``name`` is left out of every listing and
+    search: a dot-name, or one of :data:`NOISE_DIRS`."""
+    return name.startswith(".") or name in NOISE_DIRS
+
+
+def is_multiqc_output(name: str, *, is_dir: bool) -> bool:
+    """Whether an entry named ``name`` is MultiQC's own output: its data folder
+    (``multiqc_data``, ``<title>_multiqc_report_data``), its parquet, or its
+    HTML report (``multiqc_report.html``, ``<title>_multiqc_report.html``)."""
+    if is_dir:
+        return name == "multiqc_data" or name.endswith("multiqc_report_data")
+    return name == "multiqc.parquet" or name.endswith("multiqc_report.html")
+
+
+def _scan_multiqc_folder(folder: str) -> tuple[bool, list[str]]:
+    """``(holds output, plain sub-folders)`` of one listing of ``folder``.
+
+    Stops at the first output entry. The sub-folders are those a deeper look
+    may open: no hidden name, no symlink, at most :data:`MULTIQC_MAX_SUB_FOLDERS`
+    in name order. A folder the server may not read holds nothing.
+    """
+    sub_folders: list[str] = []
+    try:
+        with os.scandir(folder) as scan:
+            for entry in scan:
+                if is_hidden_name(entry.name):
+                    continue
+                is_dir = is_directory(entry)
+                if (is_dir or entry.is_file()) and is_multiqc_output(entry.name, is_dir=is_dir):
+                    return True, []
+                if is_dir and not entry.is_symlink():
+                    sub_folders.append(entry.path)
+    except OSError:
+        return False, []
+    return False, sorted(sub_folders)[:MULTIQC_MAX_SUB_FOLDERS]
+
+
+def holds_multiqc_output(folder: str) -> bool:
+    """Whether real folder ``folder`` (a ``multiqc/``) holds MultiQC output, in
+    it or in one of its sub-folders (nf-core's ``multiqc/star_salmon/``).
+
+    At most ``1 + MULTIQC_MAX_SUB_FOLDERS`` listings, and none below that.
+    """
+    found, sub_folders = _scan_multiqc_folder(folder)
+    return found or any(_scan_multiqc_folder(sub)[0] for sub in sub_folders)
+
+
+def _is_marker(folder: str, marker: str, policy: LocalDataPolicy | None) -> bool:
+    """Whether sub-directory ``marker`` of real folder ``folder`` counts as a run marker.
+
+    Not when ``policy`` would refuse to open it; ``multiqc/`` only when it
+    holds MultiQC output.
+    """
+    path = os.path.join(folder, marker)
+    if policy is not None and not policy.allows(path):
+        return False
+    return marker != MULTIQC or holds_multiqc_output(path)
+
+
+def run_markers(
+    folder: str, folder_names: Collection[str], policy: LocalDataPolicy | None = None
+) -> list[str]:
+    """The run markers real folder ``folder`` holds, in name order, given the
+    names of its sub-directories (see :data:`RUN_MARKERS`)."""
+    return sorted(
+        marker
+        for marker in RUN_MARKERS
+        if marker in folder_names and _is_marker(folder, marker, policy)
+    )
+
+
+def looks_like_run(folder: str, policy: LocalDataPolicy | None = None) -> bool:
+    """Whether real folder ``folder`` holds ``pipeline_info/``, or a ``multiqc/``
+    holding MultiQC output. ``pipeline_info/`` is looked for first, so a run
+    that has one never pays for a look inside ``multiqc/``."""
+    return any(
+        os.path.isdir(os.path.join(folder, marker)) and _is_marker(folder, marker, policy)
+        for marker in RUN_MARKERS
+    )
 
 
 def _entry(policy: LocalDataPolicy, name: str, real: str) -> LocalDirEntry:
     return LocalDirEntry(
         name=name,
         path=real,
-        looks_like_run=looks_like_run(real),
+        looks_like_run=looks_like_run(real, policy),
         has_children=has_visible_sub_directory(policy, real),
     )
 
 
 def sub_directory_names(folder: str) -> list[str] | None:
-    """The sorted names of the sub-directories of ``folder``, dot-names left out.
+    """The sorted names of the sub-directories of ``folder``, hidden ones left
+    out (see :func:`is_hidden_name`).
 
     None when the server may not read it (a permission error, a folder gone
     since it was listed): the callers treat that as empty, never as a failure.
@@ -155,7 +245,7 @@ def sub_directory_names(folder: str) -> list[str] | None:
             return sorted(
                 entry.name
                 for entry in scan
-                if not entry.name.startswith(".") and is_directory(entry)
+                if not is_hidden_name(entry.name) and is_directory(entry)
             )
     except PermissionError:
         return None
@@ -176,9 +266,9 @@ def visible_sub_directories(policy: LocalDataPolicy, folder: str) -> Iterator[tu
     """``(name, real path)`` of each sub-directory of real folder ``folder`` the
     policy would list, in name order, lazily.
 
-    Hidden: dot-names, and anything the policy would refuse to open (a symlink
-    that leaves the roots, a folder Depictio keeps for itself). A folder the
-    server may not read yields nothing.
+    Hidden: dot-names, the noise folders of :data:`NOISE_DIRS`, and anything
+    the policy would refuse to open (a symlink that leaves the roots, a folder
+    Depictio keeps for itself). A folder the server may not read yields nothing.
     """
     for name in sub_directory_names(folder) or ():
         try:
@@ -239,7 +329,7 @@ def list_local_dirs(path: str | None, *, request, current_user) -> LocalDirListi
         path=real,
         root=root,
         parent=None if real == root else os.path.dirname(real),
-        looks_like_run=looks_like_run(real),
+        looks_like_run=looks_like_run(real, policy),
         entries=entries,
         truncated=truncated,
     )

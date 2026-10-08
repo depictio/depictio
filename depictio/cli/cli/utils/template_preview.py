@@ -62,6 +62,9 @@ class DataCollectionPreview:
     location: str  # what it looked at, human readable
     matched: int  # files found
     missing_sources: list[str] = field(default_factory=list)  # unresolvable recipe sources
+    # The tags of the other collections among ``missing_sources`` (a required
+    # dc_ref that did not settle), so a caller never reads them back from text.
+    missing_collections: list[str] = field(default_factory=list)
     optional: bool = False
     status: PreviewStatus = "ok"
 
@@ -244,6 +247,7 @@ def _preview_recipe_dc(
                 row.matched += 1
             elif not source.optional:
                 row.missing_sources.append(f"collection '{source.dc_ref}'")
+                row.missing_collections.append(source.dc_ref)
             continue
         override = overrides.get(source.ref)
         glob_pattern = _override_binding(override, "glob_pattern")

@@ -42,7 +42,7 @@ def home(tmp_path, monkeypatch):
     """An allowed root holding runs, a hidden folder, a denied local home and links."""
     root = tmp_path / "home"
     (root / "results" / "run42" / "pipeline_info").mkdir(parents=True)
-    (root / "results" / "run43" / "multiqc").mkdir(parents=True)
+    (root / "results" / "run43" / "multiqc" / "multiqc_data").mkdir(parents=True)
     (root / "results" / "notes").mkdir()
     (root / "results" / "README.txt").write_text("not a folder")
     (root / "results" / ".snapshots").mkdir()
@@ -154,6 +154,108 @@ def test_the_listing_says_whether_the_folder_is_a_run(home):
     assert _list(str(home / "results" / "run42")).looks_like_run is True
     assert _list(str(home / "results")).looks_like_run is False
     assert _list().looks_like_run is False
+
+
+def _make(base, paths: list[str]):
+    """Each path under ``base``: a folder when it ends in ``/``, else a file."""
+    for rel in paths:
+        path = base / rel
+        if rel.endswith("/"):
+            path.mkdir(parents=True, exist_ok=True)
+        else:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("x")
+    return base
+
+
+@pytest.mark.parametrize(
+    "paths",
+    [
+        ["multiqc/multiqc_data/"],
+        ["multiqc/multiqc.parquet"],
+        ["multiqc/multiqc_report.html"],
+        ["multiqc/Project_42_multiqc_report.html"],
+        # nf-core layouts, one folder down.
+        ["multiqc/star_salmon/multiqc_report.html", "multiqc/star_salmon/multiqc_report_data/"],
+        ["multiqc/star_salmon/multiqc_report_data/"],
+        ["multiqc/fastqc/multiqc_data/"],
+        ["multiqc/aggregate/multiqc.parquet"],
+    ],
+)
+def test_a_multiqc_folder_holding_multiqc_output_is_a_run(home, paths):
+    run = _make(home / "results" / "candidate", paths)
+    assert _list(str(run)).looks_like_run is True
+    by_name = {e.name: e for e in _list(str(home / "results")).entries}
+    assert by_name["candidate"].looks_like_run is True
+
+
+@pytest.mark.parametrize(
+    "paths",
+    [
+        # The catalog's own multiqc/: recipes, not a report.
+        ["multiqc/fastqc.yaml", "multiqc/bowtie2.yaml", "multiqc/CLAUDE.md"],
+        ["multiqc/fastqc/recipe.yaml"],
+        ["multiqc/"],
+        ["multiqc/report.html"],
+        # A file named like the data folder, a report two folders down.
+        ["multiqc/multiqc_data"],
+        ["multiqc/a/b/multiqc_report.html"],
+        ["multiqc/__pycache__/multiqc_report.html"],
+    ],
+)
+def test_a_multiqc_folder_without_multiqc_output_is_not_a_run(home, paths):
+    folder = _make(home / "results" / "lookalike", paths)
+    assert _list(str(folder)).looks_like_run is False
+    by_name = {e.name: e for e in _list(str(home / "results")).entries}
+    assert by_name["lookalike"].looks_like_run is False
+
+
+def test_only_the_first_sub_folders_of_multiqc_are_looked_into(home, monkeypatch):
+    monkeypatch.setattr(local_dirs, "MULTIQC_MAX_SUB_FOLDERS", 2)
+    folder = _make(
+        home / "results" / "wide", ["multiqc/a/", "multiqc/b/", "multiqc/c/multiqc_data/"]
+    )
+    listed = []
+    real_scandir = os.scandir
+
+    def counting(path):
+        listed.append(os.path.relpath(path, folder))
+        return real_scandir(path)
+
+    monkeypatch.setattr(local_dirs.os, "scandir", counting)
+    assert local_dirs.looks_like_run(str(folder)) is False
+    assert listed == ["multiqc", os.path.join("multiqc", "a"), os.path.join("multiqc", "b")]
+
+
+@pytest.mark.parametrize("error", [PermissionError("no"), OSError("gone")])
+def test_an_unreadable_multiqc_folder_is_not_a_marker(home, monkeypatch, error):
+    folder = _make(home / "results" / "locked", ["multiqc/multiqc_data/"])
+    real_scandir = os.scandir
+
+    def scandir(path):
+        if os.path.basename(path) == "multiqc":
+            raise error
+        return real_scandir(path)
+
+    monkeypatch.setattr(local_dirs.os, "scandir", scandir)
+    assert _list(str(folder)).looks_like_run is False
+
+
+def test_a_marker_the_policy_refuses_does_not_count(home, tmp_path):
+    _make(tmp_path / "outside", ["multiqc_data/"])
+    folder = home / "results" / "linked"
+    folder.mkdir()
+    (folder / "pipeline_info").symlink_to(tmp_path / "outside")
+    (folder / "multiqc").symlink_to(tmp_path / "outside")
+    assert _list(str(folder)).looks_like_run is False
+
+
+def test_noise_folders_are_not_listed_and_are_no_children(home):
+    notes = home / "results" / "notes"
+    _make(notes, ["__pycache__/", "node_modules/pkg/", "__MACOSX/"])
+    assert _list(str(notes)).entries == []
+    by_name = {e.name: e for e in _list(str(home / "results")).entries}
+    assert by_name["notes"].has_children is False
 
 
 def test_a_denied_folder_is_not_listed(home):
