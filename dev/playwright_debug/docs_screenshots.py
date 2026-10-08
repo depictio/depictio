@@ -426,54 +426,66 @@ async def _open_editor(ctx: ShotContext, wait_ms: int = 5_000) -> None:
     await dismiss_notifications(ctx.page)
 
 
-async def _open_version_drawer(ctx: ShotContext) -> None:
-    """Editor → Settings → Version history.
+async def _open_settings_section(ctx: ShotContext, section: str, panel_test_id: str) -> None:
+    """Editor → Settings → one section of the settings rail.
 
-    Two drawers deep on purpose: the entry point is inside Settings rather than
-    the header, so a shot that jumped straight to the drawer would document a
-    path that does not exist.
+    Version history and data time travel are sections of the editor's settings
+    rather than header buttons, so a shot that jumped straight to them would
+    document a path that does not exist. `section` is the section key: the rail
+    item is `settings-nav-{section}`.
     """
     await _open_editor(ctx)
     await ctx.page.get_by_role("button", name="Settings").click()
-    await ctx.page.get_by_test_id("open-version-history").click()
-    # Wait on the drawer *panel*, not the element carrying the test id: Mantine
-    # puts `data-testid` on the Drawer root, which stays `visibility: hidden`
-    # for the whole transition and never satisfies `state="visible"`.
-    await ctx.page.locator(".mantine-Drawer-content").last.wait_for(state="visible", timeout=15_000)
-    # The timeline fetch resolves after the drawer mounts; without this the shot
-    # is a drawer with a loader in it.
-    await ctx.page.wait_for_timeout(1_600)
+    await ctx.page.get_by_test_id(f"settings-nav-{section}").click()
+    # Wait on the section's own body, not the modal: Mantine puts `data-testid`
+    # on the Modal root, which stays `visibility: hidden` for the whole
+    # transition and never satisfies `state="visible"`.
+    await ctx.page.get_by_test_id(panel_test_id).wait_for(state="visible", timeout=15_000)
+
+
+async def _open_version_history(ctx: ShotContext) -> None:
+    """Editor → Settings → History, with the timeline loaded."""
+    await _open_settings_section(ctx, "history", "version-history-panel")
+    # The list is loaded with the editor, but a fresh stack may still be
+    # answering; without this the shot can be a section with a loader in it.
+    try:
+        await ctx.page.get_by_test_id("version-row").first.wait_for(state="visible", timeout=10_000)
+    except Exception:
+        typer.echo("  ! no version rows — dashboard has no recorded versions", err=True)
+    await ctx.page.wait_for_timeout(600)
 
 
 @register("version_timeline")
 async def _version_timeline(ctx: ShotContext) -> None:
-    """Version history drawer: date-grouped timeline, pins, per-row actions."""
-    await _open_version_drawer(ctx)
+    """Settings → History: date-grouped versions, bookmarks, per-row actions."""
+    await _open_version_history(ctx)
     await _page_shot_current(ctx, _rb(f"version_timeline_{ctx.theme}"))
 
 
 @register("version_row_actions")
 async def _version_row_actions(ctx: ShotContext) -> None:
-    """A timeline row's action menu — preview, use this data, pin, restore."""
-    await _open_version_drawer(ctx)
+    """A version row's actions (preview, restore, bookmark, delete), Restore's tooltip up."""
+    await _open_version_history(ctx)
     # Deliberately not the first row. The newest entry *is* the current state,
-    # so Restore is disabled there and the shot would document a dead action.
-    menus = ctx.page.get_by_test_id("version-actions")
-    await menus.nth(1 if await menus.count() > 1 else 0).click()
-    await ctx.page.locator(".mantine-Menu-dropdown").first.wait_for(state="visible", timeout=10_000)
-    await ctx.page.wait_for_timeout(500)
+    # so Restore is unavailable there and the shot would document a dead action.
+    rows = ctx.page.get_by_test_id("version-row")
+    row = rows.nth(1 if await rows.count() > 1 else 0)
+    await row.get_by_test_id("version-restore").hover()
+    await ctx.page.locator(".mantine-Tooltip-tooltip").first.wait_for(
+        state="visible", timeout=10_000
+    )
+    await ctx.page.wait_for_timeout(300)
     await _page_shot_current(ctx, _rb(f"version_row_actions_{ctx.theme}"))
 
 
 @register("version_dataset_picker")
 async def _version_dataset_picker(ctx: ShotContext) -> None:
-    """Dataset version picker expanded: per-collection Delta commit selection.
+    """Settings → Data version: as-of-a-version select and per-collection commits.
 
-    Collapsed by default, and opening it is what triggers the Delta history
-    fetches — hence the settle after the click rather than before it.
+    The section mounts its picker on open, and mounting is what triggers the
+    Delta history fetches, hence the settle after opening it.
     """
-    await _open_version_drawer(ctx)
-    await ctx.page.get_by_test_id("dataset-versions-toggle").click()
+    await _open_settings_section(ctx, "data-version", "data-version-panel")
     await ctx.page.wait_for_timeout(2_200)
     # Open the commit list. Closed, the picker reads as a single inert field and
     # says nothing about what time travel offers; open, it shows the actual
@@ -529,8 +541,7 @@ async def _open_component_history(ctx: ShotContext) -> None:
         await ctx.page.wait_for_timeout(2_500)
     # Park the cursor off the figure: hovering a Plotly plot pops its modebar
     # into the corner of every shot.
-    await ctx.page.mouse.move(60, 860)
-    await ctx.page.wait_for_timeout(600)
+    await _park_cursor(ctx)
 
 
 @register("component_history")
@@ -559,8 +570,7 @@ async def _component_history_compare(ctx: ShotContext) -> None:
     """Compare mode: the stored version beside current, each with its own data axis."""
     await _open_component_history(ctx)
     await _enable_compare(ctx)
-    await ctx.page.mouse.move(60, 860)
-    await ctx.page.wait_for_timeout(600)
+    await _park_cursor(ctx)
     await _page_shot_current(ctx, _rb(f"component_history_compare_{ctx.theme}"))
 
 

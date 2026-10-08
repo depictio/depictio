@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Does Restore work from the drawer, in a browser, on the real stack?
+"""Does Restore work from Settings → History, in a browser, on the real stack?
 
 Everything else here is checked through the API. Restore is the operation the
 whole feature exists for, and it is the one that only happens through the UI: a
-click on a timeline row's menu, a confirmation, and a grid that has to redraw
+click on a version row's Restore, a confirmation, and a grid that has to redraw
 into a different shape.
 
 That last part is the reason this is a browser check rather than another API
@@ -29,7 +29,7 @@ import sys
 from pathlib import Path
 
 import yaml
-from playwright.async_api import Page, async_playwright
+from playwright.async_api import Locator, Page, async_playwright
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO_ROOT))
@@ -62,26 +62,31 @@ def token_payload() -> str:
     return json.dumps({k: v for k, v in payload.items() if v is not None})
 
 
-async def open_drawer(page: Page, viewer: str, dashboard: str) -> None:
+async def open_history(page: Page, viewer: str, dashboard: str) -> None:
+    """Load the editor, then open Settings on its History section."""
     await page.goto(f"{viewer}/dashboard-edit/{dashboard}", wait_until="domcontentloaded")
     await page.wait_for_timeout(6_000)
     await page.get_by_role("button", name="Settings").click()
-    await page.get_by_test_id("open-version-history").click()
-    # `data-testid` sits on the Drawer root, which stays visibility:hidden.
-    await page.locator(".mantine-Drawer-content").last.wait_for(state="visible", timeout=15_000)
-    await page.wait_for_timeout(1_800)
+    await page.get_by_test_id("settings-nav-history").click()
+    # Wait on the section body: `data-testid="settings-modal"` sits on the
+    # Modal root, which stays visibility:hidden.
+    await page.get_by_test_id("version-history-panel").wait_for(state="visible", timeout=15_000)
+    await page.get_by_test_id("version-row").first.wait_for(state="visible", timeout=15_000)
+
+
+async def restore_row(page: Page, row: Locator) -> None:
+    """Click a version row's Restore, then confirm it."""
+    await row.get_by_test_id("version-restore").click()
+    # A second, explicit confirmation: History never restores on one click.
+    await page.get_by_test_id("version-restore-confirm").click(timeout=15_000)
+    await page.wait_for_timeout(9_000)
 
 
 async def restore_labelled(page: Page, label: str) -> None:
-    """Open the menu on the row carrying `label` and confirm its Restore."""
-    row = page.get_by_test_id("version-timeline-item").filter(has_text=label).first
+    """Restore the version row carrying `label`."""
+    row = page.get_by_test_id("version-row").filter(has_text=label).first
     await row.wait_for(state="visible", timeout=15_000)
-    await row.get_by_test_id("version-actions").click()
-    await page.locator(".mantine-Menu-dropdown").first.wait_for(state="visible", timeout=10_000)
-    await page.get_by_test_id("version-restore").click()
-    # A second, explicit confirmation — the drawer never restores on one click.
-    await page.get_by_test_id("version-restore-confirm").click(timeout=15_000)
-    await page.wait_for_timeout(9_000)
+    await restore_row(page, row)
 
 
 async def grid_count(page: Page) -> int:
@@ -96,7 +101,7 @@ async def run(viewer: str, dashboard: str, headless: bool) -> int:
         await context.add_init_script(build_localstorage_init_script(token_payload(), "light"))
         page = await context.new_page()
 
-        await open_drawer(page, viewer, dashboard)
+        await open_history(page, viewer, dashboard)
         before = await grid_count(page)
         print(f"grid before restore: {before} components")
         if before == TARGET_COMPONENTS:
@@ -120,20 +125,14 @@ async def run(viewer: str, dashboard: str, headless: bool) -> int:
 
         # Undo it. Only possible because a restore captures the pre-restore state
         # first, so this is that guarantee exercised rather than asserted.
-        await open_drawer(page, viewer, dashboard)
-        rows = page.get_by_test_id("version-timeline-item")
+        await open_history(page, viewer, dashboard)
+        rows = page.get_by_test_id("version-row")
         restored_back = False
         for index in range(await rows.count()):
             row = rows.nth(index)
             text = await row.inner_text()
             if f"{before} components" in text:
-                await row.get_by_test_id("version-actions").click()
-                await page.locator(".mantine-Menu-dropdown").first.wait_for(
-                    state="visible", timeout=10_000
-                )
-                await page.get_by_test_id("version-restore").click()
-                await page.get_by_test_id("version-restore-confirm").click(timeout=15_000)
-                await page.wait_for_timeout(9_000)
+                await restore_row(page, row)
                 restored_back = True
                 break
 

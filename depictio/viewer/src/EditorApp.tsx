@@ -156,8 +156,9 @@ import type { SectionKind, SectionOp } from './components/sections/sectionMutati
 import { Header, Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal } from './chrome';
 import type { TabDefaults, TabModalSubmitPayload } from './chrome';
 import { useTabGroupActions } from './chrome/useTabGroupActions';
-import VersionHistoryDrawer from './versions/VersionHistoryDrawer';
 import ComponentVersionModal from './versions/ComponentVersionModal';
+import DataVersionPanel from './versions/DataVersionPanel';
+import VersionHistoryPanel from './versions/VersionHistoryPanel';
 import { useVersionHistory } from './versions/useVersionHistory';
 import DataVersionBanner from './versions/DataVersionBanner';
 import { collectDataCollections } from './versions/useDatasetHistories';
@@ -308,7 +309,6 @@ const EditorApp: React.FC = () => {
   // component chrome and no inspect action is rendered anywhere.
   const { control: inspectorControl, aside: inspectorAside } =
     useInspectorChrome(inspectorEnabled);
-  const [versionsOpened, { open: openVersions, close: closeVersions }] = useDisclosure(false);
   // Tab modal state — `mode` decides between create vs edit. `target` is the
   // tab being edited (or null for create). `submitting` blocks Save while a
   // request is in flight.
@@ -378,23 +378,39 @@ const EditorApp: React.FC = () => {
     if (!isNarrow) closeFilterDrawer();
   }, [isNarrow, closeFilterDrawer]);
 
-  // Component-level history. Loaded once here rather than per modal open, so
-  // the per-cell action can hide itself on a dashboard with no versions
-  // instead of opening onto an empty pane.
+  // The family's version list: one instance for the whole editor. The tile
+  // menu's History entry, the component history modal and the settings'
+  // History and Data version sections all read it, so it is loaded on mount
+  // (the tile entry hides itself on a dashboard with no versions rather than
+  // opening onto an empty pane) and reloaded after every write that can record
+  // or change a version.
   const [historyComponent, setHistoryComponent] = useState<StoredMetadata | null>(null);
-  const { versions: familyVersions, loading: versionsLoading } = useVersionHistory(
-    dashboardId,
-    Boolean(dashboardId),
-  );
+  const versionHistory = useVersionHistory(dashboardId, Boolean(dashboardId));
+  const {
+    versions: familyVersions,
+    loading: versionsLoading,
+    reload: reloadVersions,
+  } = versionHistory;
+  // Every save records a version or folds into the newest one, so the list
+  // follows the save status rather than each of the dozen call sites. Tab
+  // writes go through `refreshTabList`, restores through `handleRestored`.
+  useEffect(() => {
+    if (saveStatus === 'saved') void reloadVersions();
+  }, [saveStatus, reloadVersions]);
 
   const bulkCtrl = useRef<AbortController | null>(null);
 
   // Data time travel: view-state only, never persisted, cleared by a reload.
   // The viewer only ever pins a `?version=` preview; choosing data is here.
   const [dataPins, setDataPins] = useState<DataVersionPins>({});
-  const [asOfVersionId, setAsOfVersionId] = useState<string | null>(null);
-  const [asOfLabel, setAsOfLabel] = useState<string | null>(null);
-  const [asOfUnresolved, setAsOfUnresolved] = useState<string[]>([]);
+  // The stored version whose data stamps drive the view: its id, its name for
+  // the banner, and the collections it recorded no data version for.
+  const [asOf, setAsOf] = useState<{
+    versionId: string;
+    label: string;
+    unresolved: string[];
+  } | null>(null);
+  const asOfVersionId = asOf?.versionId ?? null;
   const versionBody = useMemo(
     () => dataVersionBody({ asOfVersionId, pins: dataPins }),
     [asOfVersionId, dataPins],
@@ -414,9 +430,17 @@ const EditorApp: React.FC = () => {
   }, [dataPins, dashboard?.stored_metadata]);
   const clearDataVersions = useCallback(() => {
     setDataPins({});
-    setAsOfVersionId(null);
-    setAsOfUnresolved([]);
+    setAsOf(null);
   }, []);
+  const handleAsOfChange = useCallback(
+    (versionId: string, label: string, unresolved: string[]) => {
+      setAsOf({ versionId, label, unresolved });
+      // A version's stamps replace per-collection pins rather than mixing
+      // with pins chosen against another baseline.
+      setDataPins({});
+    },
+    [],
+  );
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Latest dashboard ref so the debounced save uses fresh state. We update
   // it synchronously alongside setDashboard via `applyDashboard` — relying on
@@ -1820,15 +1844,18 @@ const EditorApp: React.FC = () => {
   }, [dashboardId]);
 
   /** Refetch the global dashboard list so tab edits show up in the sidebar
-   *  without a full page reload. */
+   *  without a full page reload. Called after every tab write (edit, delete,
+   *  reorder, regroup), each of which also records a version of the family on
+   *  the server, so the version list follows along. */
   const refreshTabList = useCallback(async () => {
+    void reloadVersions();
     try {
       const all = await fetchAllDashboards();
       setAllDashboards(all);
     } catch (err) {
       console.warn('[EditorApp] refresh tab list failed:', err);
     }
-  }, []);
+  }, [reloadVersions]);
 
   const openCreateTabModal = useCallback((group?: string | null) => {
     setTabModalState({
@@ -2161,6 +2188,10 @@ const EditorApp: React.FC = () => {
    * moment after the success notification, which reads as "restore did not
    * work". The layout listeners also fire on remount with the new layout,
    * which `layoutsEqual` then correctly treats as a no-op.
+   *
+   * Also reloads the version list, which now starts with the `restore` row
+   * (and the pre-restore state it captured first): the settings stay open on
+   * History and show it, and the tile menu's History entry sees it too.
    */
   const handleRestored = useCallback(() => {
     if (!dashboardId) return;
@@ -2169,10 +2200,14 @@ const EditorApp: React.FC = () => {
       saveTimer.current = null;
     }
     setSaveStatus('idle');
+    // A restore can rename, recreate or delete tabs, so the sidebar and the
+    // header breadcrumb need the family again, not just this tab. This also
+    // reloads the version list.
+    void refreshTabList();
     void fetchDashboard(dashboardId)
-      .then(applyDashboard)
+      .then(applyServerDashboard)
       .catch(() => undefined);
-  }, [dashboardId, applyDashboard]);
+  }, [dashboardId, applyServerDashboard, refreshTabList]);
 
   /** Force-save: cancel any pending debounce and POST current state now.
    *  Mirrors depictio/dash/layouts/save.py:save_dashboard_minimal — uses
@@ -2251,10 +2286,13 @@ const EditorApp: React.FC = () => {
             analysisAvailable: Boolean(dashboard),
             inspector: Boolean(inspectorControl),
             mode: 'edit',
+            // The tile menu offers History only once a version exists.
+            hasVersions: familyVersions.length > 0,
           })
         : null,
     [
       guide.open,
+      familyVersions.length,
       dashboard,
       tabSiblings,
       dashboardId,
@@ -2436,19 +2474,6 @@ const EditorApp: React.FC = () => {
                   {groupsSection}
                 </GroupingHeaderControl>
               )}
-              <Tooltip label="Version history" withArrow>
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  size="md"
-                  onClick={openVersions}
-                  aria-label="Version history"
-                  data-testid="version-history-button"
-                  data-tour-id="editor-version-history"
-                >
-                  <Icon icon="mdi:history" width={18} />
-                </ActionIcon>
-              </Tooltip>
               {realtimeEnabled && (
                 <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
                   <RealtimeIndicator
@@ -2527,8 +2552,8 @@ const EditorApp: React.FC = () => {
         {timeTravelling && (
           <DataVersionBanner
             pinned={pinnedLabels}
-            asOfLabel={asOfLabel}
-            unresolved={asOfUnresolved}
+            asOfLabel={asOf?.label}
+            unresolved={asOf?.unresolved}
             onClear={clearDataVersions}
           />
         )}
@@ -2834,6 +2859,41 @@ const EditorApp: React.FC = () => {
           settings: { show_guide: guideSettings.enabled, guide_intro: guideSettings.intro },
           onChange: handleGuideSettingsChange,
         }}
+        // Version history and data time travel are edit-mode only: all of it
+        // writes or re-points the dashboard at data it was not saved with.
+        // Anyone who can edit sees both; deleting a version is owner-only, as
+        // on the server. The bodies are built here rather than in the
+        // settings, so the viewer never imports them.
+        historyPanel={
+          dashboardId ? (
+            <VersionHistoryPanel
+              dashboardId={dashboardId}
+              history={versionHistory}
+              canDelete={isOwner}
+              dataVersionId={asOfVersionId}
+              onRestored={handleRestored}
+            />
+          ) : undefined
+        }
+        dataVersionPanel={
+          dashboardId ? (
+            // Re-pointing at older data only changes what is *displayed* (a
+            // save writes layout and component config, never data), and the
+            // banner over the grid says so while it lasts.
+            <DataVersionPanel
+              metadata={dashboard?.stored_metadata}
+              history={versionHistory}
+              pins={dataPins}
+              pinnedLabels={pinnedLabels}
+              onPinsChange={setDataPins}
+              asOfVersionId={asOfVersionId}
+              asOfLabel={asOf?.label ?? null}
+              onAsOfChange={handleAsOfChange}
+              onClear={clearDataVersions}
+              onDone={closeSettings}
+            />
+          ) : undefined
+        }
         initialSection={settingsSection}
       />
       {/* Opens on a dashboard's `params:` links. */}
@@ -2854,39 +2914,12 @@ const EditorApp: React.FC = () => {
       />
 
       {tabGroupActions.modals}
-      {/* Restoring refetches rather than patching local state: a restore can
-          add or remove whole tabs, so the editor's in-memory copy of the
-          family is no longer trustworthy afterwards. */}
-      <VersionHistoryDrawer
-        opened={versionsOpened}
-        onClose={closeVersions}
-        dashboardId={dashboardId ?? null}
-        canEdit={isOwner}
-        canDelete={isOwner}
-        onRestored={handleRestored}
-        // The dataset picker lives here and not in the viewer: re-pointing a
-        // dashboard at older data is an editing act. It only changes what is
-        // *displayed* (a save writes layout and component config, never
-        // data), but a banner still says so, because editing a chart against
-        // data you did not realise was historical is the mistake worth
-        // preventing.
-        dashboardMetadata={dashboard?.stored_metadata}
-        dataPins={dataPins}
-        onDataPinsChange={setDataPins}
-        asOfVersionId={asOfVersionId}
-        onAsOfChange={(versionId, label, unresolved) => {
-          setAsOfVersionId(versionId);
-          setAsOfLabel(label);
-          setAsOfUnresolved(unresolved ?? []);
-          if (versionId) setDataPins({});
-        }}
-      />
 
       <ComponentVersionModal
         opened={historyComponent !== null}
         onClose={() => setHistoryComponent(null)}
         metadata={historyComponent}
-        dashboardId={dashboardId ?? null}
+        dashboardId={dashboardId}
         versions={familyVersions}
         loadingVersions={versionsLoading}
         // Restoring one component writes, so it is offered only here and only

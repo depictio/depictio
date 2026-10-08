@@ -683,6 +683,8 @@ type SectionKey =
   | 'filtering'
   | 'guide'
   | 'branding'
+  | 'history'
+  | 'data-version'
   | 'feedback';
 /** A settings section, for opening the settings on it (`initialSection`). */
 export type SettingsSectionKey = SectionKey;
@@ -997,6 +999,14 @@ interface SettingsDrawerProps {
     settings: GuideAuthorSettings;
     onChange: (patch: Partial<GuideAuthorSettings>) => void;
   };
+  /** Editor only: the History section's body, the dashboard's version
+   *  timeline. Built by the editor and handed in, like `dataVersionPanel`, so
+   *  the viewer never imports version history at all: everything in it writes
+   *  or re-points the dashboard (see `check_served_bundle.py`). */
+  historyPanel?: React.ReactNode;
+  /** Editor only: the Data version section's body, which points the editor at
+   *  the data of a past dashboard version or pins one collection. */
+  dataVersionPanel?: React.ReactNode;
   /** The section to open on, instead of the one last visited. */
   initialSection?: SettingsSectionKey;
 }
@@ -1016,13 +1026,17 @@ interface SettingsDrawerProps {
  *    Guide (editor): whether readers are offered the Guide, and its intro.
  * 5. Branding (editor): the dashboard's brand override (#397 — logo, colors,
  *    surfaces and figure palette, inheriting the main tab or instance).
- * 6. Feedback: the deployment's feedback link, when one is configured.
+ * 6. History (editor): the version timeline, to preview, restore, bookmark
+ *    or delete a past version.
+ *    Data version (editor): draw the editor from a past version's data, or
+ *    pin one collection.
+ * 7. Feedback: the deployment's feedback link, when one is configured.
  *
- * Editor sections render only when their callback is given. Two layouts draw
- * the same sections (see `SettingsLayout`): by default a wide modal with a
- * section rail, remembering the last section per browser (viewer and editor
- * apart); or the earlier drawer of collapsible sections, remembering which
- * are open.
+ * Editor sections render only when their callback (or body) is given. Two
+ * layouts draw the same sections (see `SettingsLayout`): by default a wide
+ * modal with a section rail, remembering the last section per browser
+ * (viewer and editor apart); or the earlier drawer of collapsible sections,
+ * remembering which are open.
  *
  * Both are portaled to <body>, outside the dashboard's BrandScope wrapper, so
  * the root carries the scope's attributes to stay in the dashboard's brand.
@@ -1039,6 +1053,8 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   onUploadLogo,
   onChangeTabDefaults,
   guide,
+  historyPanel,
+  dataVersionPanel,
   initialSection,
 }) => {
   const surface: Surface =
@@ -1046,7 +1062,9 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
     onToggleFunnelFiltering ||
     onChangeTabDefaults ||
     onToggleAutofit ||
-    onChangeAdvancedVizControls
+    onChangeAdvancedVizControls ||
+    historyPanel ||
+    dataVersionPanel
       ? 'editor'
       : 'viewer';
   const brandScope = useBrandScopeAttributes();
@@ -1143,6 +1161,24 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
           opened={opened}
         />
       ),
+    });
+  }
+  if (historyPanel) {
+    sections.push({
+      key: 'history',
+      icon: 'mdi:history',
+      title: 'History',
+      subtitle: 'Every saved version of this dashboard: preview, restore or bookmark one',
+      body: historyPanel,
+    });
+  }
+  if (dataVersionPanel) {
+    sections.push({
+      key: 'data-version',
+      icon: 'mdi:database-clock-outline',
+      title: 'Data version',
+      subtitle: 'Draw this dashboard from earlier data, for you only, until you reload',
+      body: dataVersionPanel,
     });
   }
   if (feedback) {

@@ -53,6 +53,14 @@ export function absDateTime(iso?: string | null): string {
   });
 }
 
+/** The same instant for a `<time dateTime>`: ISO 8601 in UTC. The API's naive
+ *  timestamps carry no offset, so passed through as-is they would read as
+ *  local time. */
+export function isoDateTime(iso?: string | null): string | undefined {
+  const ms = parseTs(iso);
+  return Number.isNaN(ms) ? undefined : new Date(ms).toISOString();
+}
+
 /** Day bucket label: "Today" / "Yesterday" / "3 Mar 2026". */
 export function dayLabel(iso?: string | null): string {
   const ms = parseTs(iso);

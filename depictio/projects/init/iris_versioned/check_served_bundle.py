@@ -56,7 +56,12 @@ REQUIRED = {
         "definitionKey",
     ],
     f"{PKG}/dataVersions.tsx": ["component_overrides", "data_versions"],
-    "/src/EditorApp.tsx": ["DataVersionProvider", "ComponentVersionModal"],
+    "/src/EditorApp.tsx": [
+        "DataVersionProvider",
+        "ComponentVersionModal",
+        "VersionHistoryPanel",
+        "DataVersionPanel",
+    ],
     # The viewer must NOT offer to re-point live data; that is edit-mode only.
     # Asserted as an absence below.
     # `componentOverrides` is required, not optional: a `?version=` preview that
@@ -71,14 +76,23 @@ REQUIRED = {
 #: module path -> markers that must be ABSENT. Time travel controls belong to
 #: the editor, and a stale bundle could keep serving a removed one.
 FORBIDDEN = {
-    # Version history in full: the drawer itself, the per-component modal, and
-    # the dataset picker's callback. All of it either writes or re-points the
-    # dashboard at data it was not saved with, so all of it is edit-mode.
+    # Version history in full: the History and Data version settings sections,
+    # the per-component modal, and the dataset picker's callback. All of it
+    # either writes or re-points the dashboard at data it was not saved with,
+    # so all of it is edit-mode.
     "/src/App.tsx": [
-        "VersionHistoryDrawer",
+        "VersionHistoryPanel",
+        "DataVersionPanel",
         "ComponentVersionModal",
         "onDataPinsChange",
         "onOpenVersionHistory",
+    ],
+    # The viewer imports the settings modal too; the sections reach it only as
+    # props from the editor, never as imports of its own.
+    "/src/chrome/SettingsDrawer.tsx": [
+        "VersionHistoryPanel",
+        "DataVersionPanel",
+        "DatasetVersionPicker",
     ],
 }
 
