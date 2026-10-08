@@ -34,6 +34,11 @@ VIOLET = "#f3f0ff"
 ORANGE = "#ffe8cc"
 PINK = "#ffe3e3"
 WHITE = "#ffffff"
+# Stronger inks for marks that must read on top of the pastel fills.
+GOLD = "#ffd43b"
+BLUE_INK = "#4dabf7"
+RED_INK = "#ff8787"
+GREEN_INK = "#69db7c"
 
 FONT = "Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive"
 MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace"
@@ -240,6 +245,336 @@ class Sketch:
         if subtitle:
             self.text(x, y + 26, subtitle, size=15, colour=DIM, anchor="start")
 
+    # -- drawn figures ------------------------------------------------------
+    #
+    # Helpers that draw the *thing* instead of a box naming it: axes with
+    # ticks, a dashboard as its tile grid, a ledger as a line of dots. Lifted
+    # from the dataset-time-travel schemas and generalised so any generator can
+    # use them. None of them touch the primitives above, so a diagram that does
+    # not call them is byte-identical to what it was before.
+
+    def frame(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        *,
+        fill: str = WHITE,
+        colour: str = INK,
+        dashed: bool = False,
+    ) -> None:
+        """A plain sketched panel with no title: a place to draw inside."""
+        self.rect(Box(x, y, w, h, fill, ""), colour=colour, dashed=dashed)
+
+    def text_rotated(
+        self,
+        x: float,
+        y: float,
+        content: str,
+        *,
+        rotate: float,
+        size: float = 12,
+        colour: str = DIM,
+        anchor: str = "middle",
+    ) -> None:
+        """Text turned about its anchor, for a y-axis title."""
+        self._parts.append(
+            f'<text x="{x:.1f}" y="{y:.1f}" font-family="{FONT}" font-size="{size}" '
+            f'fill="{colour}" text-anchor="{anchor}" '
+            f'transform="rotate({rotate:.0f} {x:.1f} {y:.1f})">{_spans(content, size)}</text>'
+        )
+
+    def tick(
+        self,
+        x: float,
+        y: float,
+        length: float = 8,
+        *,
+        vertical: bool = True,
+        colour: str = INK,
+        width: float = 1.3,
+    ) -> None:
+        """One short mark. Vertical ticks stand on (x, y) and rise; horizontal ones reach left."""
+        if vertical:
+            self.line(x, y, x, y - length, amount=0.4, width=width, colour=colour, passes=1)
+        else:
+            self.line(x - length, y, x, y, amount=0.4, width=width, colour=colour, passes=1)
+
+    def axes(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        *,
+        x_ticks: tuple[tuple[float, str], ...] = (),
+        y_ticks: tuple[tuple[float, str], ...] = (),
+        x_title: str = "",
+        y_title: str = "",
+    ) -> None:
+        """Plot axes: left spine, baseline and the ticks that make them axes.
+
+        Ticks are (pixel, label) pairs, already mapped through the caller's
+        scale: a spine with no ticks is a pair of lines and leaves the reader to
+        take the scale on trust instead of reading it off.
+        """
+        self.line(x, y, x, y + h, amount=1.2, width=1.4)
+        self.line(x, y + h, x + w, y + h, amount=1.2, width=1.4)
+        for ty, label in y_ticks:
+            self.tick(x, ty, 6, vertical=False, width=1.2)
+            self.text(x - 10, ty + 4, label, size=11, colour=DIM, anchor="end")
+        for tx, label in x_ticks:
+            self.tick(tx, y + h + 6, 6, width=1.2)
+            self.text(tx, y + h + 22, label, size=11, colour=DIM)
+        if y_title:
+            self.text_rotated(x - 40, y + h / 2, y_title, rotate=-90, size=11.5)
+        if x_title:
+            self.text(x + w / 2, y + h + 40, x_title, size=11.5, colour=DIM)
+
+    def time_axis(
+        self,
+        x0: float,
+        x1: float,
+        y: float,
+        *,
+        ticks: tuple[tuple[float, str], ...],
+        size: float = 13,
+    ) -> None:
+        """A horizontal time axis with an arrowhead and labelled ticks below it."""
+        self.arrow(x0 - 10, y, x1 + 14, y, colour=INK)
+        for tx, label in ticks:
+            self.line(tx, y - 6, tx, y + 6, amount=0.4, width=1.3, passes=1)
+            if label:
+                self.text(tx, y + 25, label, size=size, colour=DIM)
+
+    def shade(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        *,
+        fill: str,
+        opacity: float = 0.6,
+        colour: str | None = None,
+        dashed: bool = False,
+    ) -> None:
+        """A translucent band, optionally outlined, for a span of time or a zone.
+
+        Translucent so the marks underneath (ticks, dots, gridlines) stay
+        readable, and so two bands can overlap without one hiding the other.
+        """
+        self._parts.append(
+            f'<rect x="{x:.1f}" y="{y:.1f}" width="{w:.1f}" height="{h:.1f}" rx="4" '
+            f'fill="{fill}" fill-opacity="{opacity}"/>'
+        )
+        if colour:
+            for x1, y1, x2, y2 in (
+                (x, y, x + w, y),
+                (x + w, y, x + w, y + h),
+                (x + w, y + h, x, y + h),
+                (x, y + h, x, y),
+            ):
+                self.line(
+                    x1, y1, x2, y2, amount=1.0, width=1.3, colour=colour, passes=1, dashed=dashed
+                )
+
+    def dot(
+        self,
+        cx: float,
+        cy: float,
+        r: float = 5,
+        *,
+        fill: str = WHITE,
+        colour: str = INK,
+        width: float = 1.4,
+        dashed: bool = False,
+        ring: bool = False,
+    ) -> None:
+        """A marker. ``ring`` adds the dashed halo that means "this one is chosen"."""
+        dash = ' stroke-dasharray="3 3"' if dashed else ""
+        self._parts.append(
+            f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r:g}" fill="{fill}" '
+            f'stroke="{colour}" stroke-width="{width}"{dash}/>'
+        )
+        if ring:
+            self._parts.append(
+                f'<circle cx="{cx:.1f}" cy="{cy:.1f}" r="{r + 7:g}" fill="none" '
+                f'stroke="{colour}" stroke-width="1.3" stroke-dasharray="3 3"/>'
+            )
+
+    def diamond(
+        self, cx: float, cy: float, r: float = 8, *, fill: str = GOLD, colour: str = INK
+    ) -> None:
+        """A square marker turned on its corner: the deliberate, one-off event."""
+        pts = [(cx, cy - r), (cx + r, cy), (cx, cy + r), (cx - r, cy)]
+        d = "M" + " L".join(f"{px:.1f},{py:.1f}" for px, py in pts) + " Z"
+        self._parts.append(
+            f'<path d="{d}" fill="{fill}" stroke="{colour}" stroke-width="1.5" '
+            f'stroke-linejoin="round"/>'
+        )
+
+    def lock(self, cx: float, cy: float, size: float = 11, *, fill: str = VIOLET) -> None:
+        """A padlock: sealed, kept, not to be touched."""
+        w, h = size * 1.5, size * 1.1
+        top = cy - h / 2 + size * 0.25
+        r = w * 0.32
+        self._parts.append(
+            f'<path d="M{cx - r:.1f},{top:.1f} V{top - size * 0.45:.1f} '
+            f'a{r:.1f},{r:.1f} 0 0 1 {2 * r:.1f},0 V{top:.1f}" fill="none" '
+            f'stroke="{INK}" stroke-width="1.6" stroke-linecap="round"/>'
+        )
+        self._parts.append(
+            f'<rect x="{cx - w / 2:.1f}" y="{top:.1f}" width="{w:.1f}" height="{h:.1f}" rx="2.5" '
+            f'fill="{fill}" stroke="{INK}" stroke-width="1.5"/>'
+        )
+        self._parts.append(f'<circle cx="{cx:.1f}" cy="{top + h / 2:.1f}" r="1.6" fill="{INK}"/>')
+
+    def arc(
+        self,
+        x1: float,
+        y1: float,
+        x2: float,
+        y2: float,
+        *,
+        lift: float = -40,
+        colour: str = INK,
+        dashed: bool = False,
+        head: bool = True,
+    ) -> None:
+        """A bowed arrow, for a relation that must hop over what lies between.
+
+        ``lift`` is the sideways bulge of the middle, in pixels; negative bows
+        upwards for a left-to-right arc.
+        """
+        mx, my = (x1 + x2) / 2, (y1 + y2) / 2
+        dx, dy = x2 - x1, y2 - y1
+        norm = math.hypot(dx, dy) or 1.0
+        qx, qy = mx + lift * (-dy / norm), my + lift * (dx / norm)
+        n = 24
+        pts = [
+            (
+                (1 - t) ** 2 * x1 + 2 * (1 - t) * t * qx + t**2 * x2,
+                (1 - t) ** 2 * y1 + 2 * (1 - t) * t * qy + t**2 * y2,
+            )
+            for t in (i / n for i in range(n + 1))
+        ]
+        dash = ' stroke-dasharray="9 7"' if dashed else ""
+        for _ in range(2):
+            d = " ".join(
+                f"{'M' if i == 0 else 'L'}{px + self._jitter(1.1):.1f},{py + self._jitter(1.1):.1f}"
+                for i, (px, py) in enumerate(pts)
+            )
+            self._parts.append(
+                f'<path d="{d}" fill="none" stroke="{colour}" stroke-width="1.7" '
+                f'stroke-linecap="round" stroke-linejoin="round"{dash}/>'
+            )
+        if head:
+            (ax, ay), (bx, by) = pts[-3], pts[-1]
+            angle = math.atan2(by - ay, bx - ax)
+            for sign in (1, -1):
+                h = angle + sign * math.radians(28)
+                self.line(
+                    bx,
+                    by,
+                    bx - 14 * math.cos(h),
+                    by - 14 * math.sin(h),
+                    amount=1.0,
+                    colour=colour,
+                    passes=1,
+                )
+
+    def thumbnail(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        *,
+        tiles: tuple[tuple[float, float, float, float], ...],
+        fill: str,
+        absent: bool = False,
+    ) -> None:
+        """A dashboard as its grid: an outer frame with tiles laid inside.
+
+        ``tiles`` are fractions of the frame, so one layout can be redrawn at any
+        size and two layouts compared by shape alone. ``absent`` draws the empty
+        dashed slot a tab leaves when it does not exist in that state.
+        """
+        if absent:
+            self.frame(x, y, w, h, colour=GREY, dashed=True)
+            return
+        self.frame(x, y, w, h)
+        for fx, fy, fw, fh in tiles:
+            tx, ty = x + fx * w, y + fy * h
+            tw, th = fw * w, fh * h
+            self._parts.append(
+                f'<rect x="{tx:.1f}" y="{ty:.1f}" width="{tw:.1f}" height="{th:.1f}" '
+                f'rx="3" fill="{fill}" opacity="0.75"/>'
+            )
+            self.line(tx, ty, tx + tw, ty, amount=0.8, width=1.2, passes=1)
+            self.line(tx + tw, ty, tx + tw, ty + th, amount=0.8, width=1.2, passes=1)
+            self.line(tx + tw, ty + th, tx, ty + th, amount=0.8, width=1.2, passes=1)
+            self.line(tx, ty + th, tx, ty, amount=0.8, width=1.2, passes=1)
+
+    def commit_strip(
+        self,
+        x: float,
+        y: float,
+        *,
+        labels: tuple[str, ...],
+        spacing: float,
+        selected: int | None = None,
+    ) -> None:
+        """A log as a line of commits, one optionally ringed as chosen."""
+        end = x + (len(labels) - 1) * spacing
+        self.line(x - 16, y, end + 16, y, colour=DIM, amount=1.2, width=1.4)
+        for i, label in enumerate(labels):
+            cx = x + i * spacing
+            chosen = i == selected
+            self.dot(cx, y, 7 if chosen else 5, fill=GOLD if chosen else WHITE, ring=chosen)
+            self.text(cx, y + 30, label, size=13, colour=DIM)
+
+    def ledger_strip(
+        self,
+        x: float,
+        y: float,
+        entries: tuple[tuple[str, str, str], ...],
+        *,
+        spacing: float,
+    ) -> list[float]:
+        """A version ledger as a line of dots, one per entry, returning their x.
+
+        Each entry is ``(label, caption, style)``. Styles: ``auto`` (open dot),
+        ``explicit`` (gold diamond), ``restore`` (green dot), ``pinned`` (open dot
+        under a padlock), ``chosen`` (gold dot, haloed) and ``ghost`` (dashed,
+        not yet created). The kind is drawn as well as written, so the strip
+        can be read without the captions.
+        """
+        end = x + (len(entries) - 1) * spacing
+        self.line(x - 22, y, end + 22, y, colour=DIM, amount=1.2, width=1.4)
+        xs: list[float] = []
+        for i, (label, caption, style) in enumerate(entries):
+            cx = x + i * spacing
+            xs.append(cx)
+            ghost = style == "ghost"
+            if style == "explicit":
+                self.diamond(cx, y, 9)
+            elif style == "restore":
+                self.dot(cx, y, 7, fill=GREEN_INK)
+            elif style == "chosen":
+                self.dot(cx, y, 7, fill=GOLD, ring=True)
+            elif ghost:
+                self.dot(cx, y, 6, colour=GREY, dashed=True)
+            else:
+                self.dot(cx, y, 6)
+            if style == "pinned":
+                self.lock(cx, y - 24, 9)
+            self.text(cx, y + 30, label, size=15, colour=GREY if ghost else INK, weight="bold")
+            self.text(cx, y + 50, caption, size=12.5, colour=GREY if ghost else DIM)
+        return xs
+
     def svg(self) -> str:
         body = "\n  ".join(self._parts)
         return (
@@ -250,21 +585,120 @@ class Sketch:
         )
 
 
+#: Virgil ships in the repo for the viewer, so the PNG can use the real
+#: Excalidraw hand instead of whatever cursive the rendering host has (on a clean
+#: container, a serif, which undoes the whole hand-drawn look). Override the
+#: location with ``DEPICTIO_VIRGIL_TTF`` when the script runs outside the repo.
+_VIRGIL_REL = Path("depictio/viewer/src/assets/fonts/Virgil.ttf")
+
+
+def _virgil_ttf() -> Path | None:
+    import os
+
+    override = os.environ.get("DEPICTIO_VIRGIL_TTF")
+    candidates = [Path(override)] if override else []
+    candidates += [Path(__file__).resolve().parents[2] / _VIRGIL_REL, _VIRGIL_REL]
+    return next((c for c in candidates if c.is_file()), None)
+
+
+def _font_face_css() -> str:
+    """A base64 ``@font-face`` for Virgil, or '' when the file is missing.
+
+    Injected into the rasterising page rather than into the SVG: the committed
+    SVG stays small and names the font, while the PNG always gets the real hand.
+    """
+    import base64
+
+    ttf = _virgil_ttf()
+    if ttf is None:
+        return ""
+    encoded = base64.b64encode(ttf.read_bytes()).decode("ascii")
+    return (
+        "@font-face{font-family:'Virgil';font-style:normal;font-weight:400;"
+        f"src:url(data:font/ttf;base64,{encoded}) format('truetype');}}"
+    )
+
+
+def _chromium_executable() -> str | None:
+    """An explicit Chromium path when the bundled build is not the one on disk.
+
+    CI images and dev containers often ship a pinned Chromium under
+    ``PLAYWRIGHT_BROWSERS_PATH`` whose build number differs from the one the
+    installed ``playwright`` expects, which makes ``launch()`` ask for
+    ``playwright install`` although a perfectly good browser is present.
+    """
+    import os
+
+    root = Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", ""))
+    if not root.is_dir():
+        return None
+    for candidate in sorted(root.glob("chromium-*/chrome-linux/chrome")):
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
 async def _render_png(svg_path: Path, png_path: Path, width: float, height: float) -> None:
     from playwright.async_api import async_playwright
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch()
-        page = await browser.new_page(
-            viewport={"width": int(width), "height": int(height)}, device_scale_factor=2
-        )
-        await page.goto(svg_path.resolve().as_uri())
-        await page.wait_for_timeout(400)  # let the handwriting font load
-        await page.screenshot(path=str(png_path))
-        await browser.close()
+    # The SVG is inlined in a page that carries the font: a file:// SVG cannot
+    # pull in a sibling font, and without it the hand-drawn look collapses.
+    page_html = (
+        "<!doctype html><meta charset='utf-8'>"
+        f"<style>{_font_face_css()}"
+        "html,body{margin:0;padding:0;background:#fff}</style>"
+        f"{svg_path.read_text(encoding='utf-8')}"
+    )
+    html_path = svg_path.with_suffix(".render.html")
+    html_path.write_text(page_html, encoding="utf-8")
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(executable_path=_chromium_executable())
+            page = await browser.new_page(
+                viewport={"width": int(width), "height": int(height)}, device_scale_factor=2
+            )
+            await page.goto(html_path.resolve().as_uri())
+            await page.evaluate("document.fonts.ready")
+            await page.wait_for_timeout(300)
+            await page.screenshot(path=str(png_path))
+            await browser.close()
+    finally:
+        html_path.unlink(missing_ok=True)
 
 
-def write(sketch: Sketch, out: Path, name: str, *, png: bool = True) -> Path:
+def _quantize(png_path: Path) -> None:
+    """Shrink a PNG with ImageMagick (256 colours, no metadata); a no-op without it.
+
+    Flat pastel fills and ink strokes lose nothing visible at 256 colours, and a
+    2x capture of a busy diagram is otherwise several hundred KB.
+    """
+    import shutil
+    import subprocess
+
+    magick = shutil.which("magick")
+    if magick is None:
+        print(f"! magick not found, left {png_path} unquantized")
+        return
+    tmp = png_path.with_suffix(".q.png")
+    subprocess.run(
+        [
+            magick,
+            str(png_path),
+            "-strip",
+            "-colors",
+            "256",
+            "-define",
+            "png:compression-level=9",
+            str(tmp),
+        ],
+        check=True,
+    )
+    tmp.replace(png_path)
+
+
+def write(
+    sketch: Sketch, out: Path, name: str, *, png: bool = True, quantize: bool = False
+) -> Path:
     """Write ``<out>_<name>.svg`` (and its PNG), returning the SVG path."""
     svg_path = out.with_name(f"{out.name}_{name}.svg")
     svg_path.parent.mkdir(parents=True, exist_ok=True)
@@ -273,5 +707,7 @@ def write(sketch: Sketch, out: Path, name: str, *, png: bool = True) -> Path:
     if png:
         png_path = svg_path.with_suffix(".png")
         asyncio.run(_render_png(svg_path, png_path, sketch.width, sketch.height))
+        if quantize:
+            _quantize(png_path)
         print(f"→ {png_path}")
     return svg_path
