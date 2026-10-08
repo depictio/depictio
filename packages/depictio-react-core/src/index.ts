@@ -85,6 +85,8 @@ export type {
   MarkdownExampleGroup,
   MarkdownRendering,
 } from './components/markdownCheatsheet';
+export { formatTextValue, hasLiveValues, splitPlaceholders } from './components/textValues';
+export type { TextSegment } from './components/textValues';
 export { default as JBrowseRenderer } from './components/JBrowseRenderer';
 export { default as MultiQCRenderer } from './components/MultiQCRenderer';
 
@@ -788,6 +790,7 @@ export {
 
 export type {
   StoredMetadata,
+  TextValueSpec,
   DashboardData,
   FilterSectionSpec,
   CategoryColors,
@@ -973,6 +976,7 @@ export {
   analysisSelectableFigureRank,
   analysisTableRank,
   demoSectionsOf,
+  excludedOnTab,
   familyOrder,
   figureDrawsGroups,
   foldableSectionsOf,
@@ -980,7 +984,9 @@ export {
   hasCards,
   pickFilterDemo,
   pickFromFamily,
+  pinnedDemoSections,
   selectionColumnOf,
+  siblingDemoSections,
   takesSelection,
 } from './guide/demoSources';
 export type {
@@ -988,6 +994,8 @@ export type {
   GuideFamilyDoc,
   GuideFamilyPick,
   GuideFilterDemoPick,
+  GuideSiblingSectionsPick,
+  PinnedDemoSections,
 } from './guide/demoSources';
 // Tiles drawn a second time elsewhere on the page (the Guide) measure under a
 // scope of their own, so the canvas grid never takes their heights.

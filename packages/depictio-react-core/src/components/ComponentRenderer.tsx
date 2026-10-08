@@ -390,11 +390,17 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'text') {
+    // A text tile with live values is computed with the cards: its entry in
+    // the bulk-compute response is the map of its values, by name.
+    const liveValues =
+      cardValue && typeof cardValue === 'object' && !Array.isArray(cardValue)
+        ? (cardValue as Record<string, unknown>)
+        : null;
     return wrapWithChrome(
       'text',
       metadata,
       undefined,
-      <TextRenderer metadata={metadata} />,
+      <TextRenderer metadata={metadata} liveValues={liveValues} liveLoading={cardLoading} />,
       { extraActions, showDragHandle },
     );
   }

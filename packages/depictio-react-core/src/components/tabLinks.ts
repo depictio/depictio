@@ -63,6 +63,19 @@ export function parseTabTile(item: string): TabTileItem | null {
 }
 
 /**
+ * Whether a list is tab tiles of which not one is on this dashboard: every
+ * item reads as a tile and no tile's tab resolves. Such a list draws nothing
+ * (see TabTiles), and neither should the heading that announces it.
+ */
+export function tabTilesAllMissing(items: string[], resolveTab: TabLinkResolver): boolean {
+  const tiles = items.map(parseTabTile);
+  return (
+    tiles.length > 0 &&
+    tiles.every((tile) => tile !== null && resolveTab(tile.tab) === null)
+  );
+}
+
+/**
  * How many columns a row of `count` tiles takes in `width` pixels: as many as
  * fit at `minPx`, then evened out so the last row is never one tile on its
  * own (five tiles where four fit go three and two, not four and one).

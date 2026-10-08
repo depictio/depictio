@@ -1,7 +1,7 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Anchor, Divider, List, Stack, Table, Text, Title } from '@mantine/core';
 
-import { StoredMetadata } from '../api';
+import { StoredMetadata, TextValueSpec } from '../api';
 import { useAutofitHeight } from './autofit';
 import {
   Block,
@@ -21,13 +21,91 @@ import { parseInlineMarkdown } from './inlineMarkdown';
 import { openRunParameters } from '../utils/runParameters';
 import StepFlow from './StepFlow';
 import TabTiles from './TabTiles';
-import { parseTabTile, TabLinkResolver, TabTileItem, useTabLinkResolver } from './tabLinks';
+import {
+  parseTabTile,
+  TabLinkResolver,
+  TabTileItem,
+  tabTilesAllMissing,
+  useTabLinkResolver,
+} from './tabLinks';
+import { formatTextValue, splitPlaceholders, withStandIns } from './textValues';
 
 interface TextRendererProps {
   metadata: StoredMetadata;
   /** When true (editor preview), show a dimmed placeholder if title is empty.
    *  Renderers in the viewer pass `false` so empty titles render as nothing. */
   placeholder?: boolean;
+  /** This tile's computed live values, keyed `name` / `param:KEY` (the
+   *  bulk-compute response's entry for it); undefined before the first one. */
+  liveValues?: Record<string, unknown> | null;
+  /** True while the values are being (re)computed. */
+  liveLoading?: boolean;
+  /** Draw each placeholder as its name instead of a value: the builder's
+   *  preview, which computes nothing. */
+  valueChips?: boolean;
+}
+
+/** Draws a run of plain text, its live values filled in (see textValues.ts). */
+type Fill = (text: string) => React.ReactNode;
+const plainFill: Fill = (text) => text;
+
+/**
+ * One live value in the prose. While the values are recomputed the last one
+ * stays, dimmed the way a refreshing card dims; before the first arrives, an
+ * ellipsis of fixed width holds its place.
+ */
+const LiveValue: React.FC<{ text: string | null; loading: boolean }> = ({ text, loading }) =>
+  text === null ? (
+    <span
+      aria-label="Loading"
+      style={{ display: 'inline-block', minWidth: '2ch', textAlign: 'center', opacity: 0.6 }}
+    >
+      …
+    </span>
+  ) : (
+    <span style={{ opacity: loading ? 0.6 : 1, transition: 'opacity 120ms ease-out' }}>{text}</span>
+  );
+
+/** A placeholder in the builder's preview: its name, muted, in a dashed chip. */
+const ValueChip: React.FC<{ name: string }> = ({ name }) => (
+  <span
+    title="Live value, computed on the dashboard"
+    style={{
+      display: 'inline-block',
+      padding: '0 5px',
+      border: '1px dashed var(--mantine-color-default-border)',
+      borderRadius: 4,
+      color: 'var(--mantine-color-dimmed)',
+      fontSize: '0.85em',
+      fontWeight: 500,
+      lineHeight: 1.35,
+      whiteSpace: 'nowrap',
+    }}
+  >
+    {name}
+  </span>
+);
+
+function makeFill(
+  specs: Record<string, TextValueSpec> | null | undefined,
+  live: Record<string, unknown> | null | undefined,
+  loading: boolean,
+  chips: boolean,
+): Fill {
+  return (text) => {
+    if (!text.includes('{{')) return text;
+    const parts = splitPlaceholders(text);
+    if (!parts.some((p) => p.type === 'value')) return text;
+    return parts.map((part, i) => {
+      if (part.type === 'text') return <React.Fragment key={i}>{part.value}</React.Fragment>;
+      if (chips) return <ValueChip key={i} name={part.key} />;
+      // No values for this tile yet: still on its way while loading, else
+      // never coming (a host that computes nothing), which reads as missing.
+      const shown =
+        !live && loading ? null : formatTextValue(live?.[part.key], specs?.[part.key]?.format);
+      return <LiveValue key={i} text={shown} loading={loading} />;
+    });
+  };
 }
 
 /**
@@ -37,13 +115,14 @@ interface TextRendererProps {
 const renderInlineMarkdown = (
   input: string,
   resolveTab: TabLinkResolver | null = null,
+  fill: Fill = plainFill,
 ): React.ReactNode[] =>
   parseInlineMarkdown(input).map((token, idx) => {
     switch (token.type) {
       case 'bold':
-        return <strong key={idx}>{token.value}</strong>;
+        return <strong key={idx}>{fill(token.value)}</strong>;
       case 'italic':
-        return <em key={idx}>{token.value}</em>;
+        return <em key={idx}>{fill(token.value)}</em>;
       case 'icon':
         return (
           <Glyph
@@ -97,7 +176,7 @@ const renderInlineMarkdown = (
           // family, like the editor preview), it stays plain text: a dead
           // anchor would be worse than none.
           const target = resolveTab?.(token.href.slice(4)) ?? null;
-          if (!target) return <React.Fragment key={idx}>{token.value}</React.Fragment>;
+          if (!target) return <React.Fragment key={idx}>{fill(token.value)}</React.Fragment>;
           return (
             <Anchor
               key={idx}
@@ -109,7 +188,7 @@ const renderInlineMarkdown = (
               style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'bottom' }}
             >
               {target.icon ? <Glyph icon={target.icon} color={target.color} size={16} /> : null}
-              {token.value}
+              {fill(token.value)}
             </Anchor>
           );
         }
@@ -128,7 +207,7 @@ const renderInlineMarkdown = (
               style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'bottom' }}
             >
               <Glyph icon="mdi:tune-variant" color="currentColor" size={16} />
-              {token.value}
+              {fill(token.value)}
             </Anchor>
           );
         }
@@ -142,11 +221,11 @@ const renderInlineMarkdown = (
             rel={token.external ? 'noopener noreferrer' : undefined}
             inherit
           >
-            {token.value}
+            {fill(token.value)}
           </Anchor>
         );
       default:
-        return <React.Fragment key={idx}>{token.value}</React.Fragment>;
+        return <React.Fragment key={idx}>{fill(token.value)}</React.Fragment>;
     }
   });
 
@@ -267,7 +346,8 @@ function proseWidth(alignment: 'left' | 'center' | 'right'): React.CSSProperties
 const FactLine: React.FC<{
   facts: Fact[];
   inline: (text: string) => React.ReactNode[];
-}> = ({ facts, inline }) => (
+  fill: Fill;
+}> = ({ facts, inline, fill }) => (
   <div
     style={{
       display: 'flex',
@@ -287,7 +367,7 @@ const FactLine: React.FC<{
         {fact.icon ? (
           <Glyph icon={fact.icon} color="var(--mantine-color-dimmed)" size={15} />
         ) : null}
-        <span style={{ color: 'var(--mantine-color-dimmed)' }}>{fact.label}</span>
+        <span style={{ color: 'var(--mantine-color-dimmed)' }}>{fill(fact.label)}</span>
         <span style={{ fontWeight: 600 }}>{inline(fact.value)}</span>
       </span>
     ))}
@@ -302,7 +382,8 @@ const FactLine: React.FC<{
 const FactTable: React.FC<{
   facts: Fact[];
   inline: (text: string) => React.ReactNode[];
-}> = ({ facts, inline }) => (
+  fill: Fill;
+}> = ({ facts, inline, fill }) => (
   <div
     style={{
       display: 'grid',
@@ -332,7 +413,7 @@ const FactTable: React.FC<{
             {fact.icon ? (
               <Glyph icon={fact.icon} color="var(--mantine-color-dimmed)" size={15} />
             ) : null}
-            {fact.label}
+            {fill(fact.label)}
           </span>
           <span style={{ ...cell, fontWeight: 600, minWidth: 0 }}>{inline(fact.value)}</span>
         </React.Fragment>
@@ -353,7 +434,8 @@ const StatList: React.FC<{
   rows: StatRow[];
   inline: (text: string) => React.ReactNode[];
   resolveTab: TabLinkResolver | null;
-}> = ({ rows, inline, resolveTab }) => (
+  fill: Fill;
+}> = ({ rows, inline, resolveTab, fill }) => (
   <div style={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
     {rows.map((row, i) => {
       const tabName = row.link ? /\]\(tab:(.+)\)$/.exec(row.link)?.[1] ?? null : null;
@@ -383,7 +465,7 @@ const StatList: React.FC<{
               color: color ? glyphColorVar(color) : undefined,
             }}
           >
-            {row.stat}
+            {fill(row.stat)}
           </span>
           <span style={{ flex: '1 1 260px', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             <Text size="sm" fw={700} lh={1.35}>
@@ -418,7 +500,8 @@ const LinkLine: React.FC<{
   alignment: 'left' | 'center' | 'right';
   inline: (text: string) => React.ReactNode[];
   resolveTab: TabLinkResolver | null;
-}> = ({ row, alignment, inline, resolveTab }) => {
+  fill: Fill;
+}> = ({ row, alignment, inline, resolveTab, fill }) => {
   const links = row.links.filter((link) => {
     const tab = /\]\(tab:(.+)\)$/.exec(link)?.[1];
     return !tab || !resolveTab || resolveTab(tab) !== null;
@@ -438,7 +521,9 @@ const LinkLine: React.FC<{
       }}
     >
       {row.label ? (
-        <span style={{ color: 'var(--mantine-color-dimmed)', fontWeight: 600 }}>{row.label}</span>
+        <span style={{ color: 'var(--mantine-color-dimmed)', fontWeight: 600 }}>
+          {fill(row.label)}
+        </span>
       ) : null}
       {links.map((link, i) => (
         <span key={i} style={{ whiteSpace: 'nowrap' }}>
@@ -449,9 +534,11 @@ const LinkLine: React.FC<{
   );
 };
 
-/** A short heading carrying a number: `41%`, `7.08`, `×3`, `n = 85`. */
+/** A short heading carrying a number: `41%`, `7.08`, `×3`, `n = 85`, or a
+ *  live value (`{{share}}`), read as the number it will show. */
 function isFigure(text: string): boolean {
-  return /\d/.test(text) && text.trim().length <= 12;
+  const figure = withStandIns(text);
+  return /\d/.test(figure) && figure.trim().length <= 12;
 }
 
 /**
@@ -470,9 +557,29 @@ const MarkdownBody: React.FC<{
   framed?: boolean;
   /** Inside `::: steps`: every list is drawn as steps. */
   listsAs?: 'steps' | null;
-}> = ({ blocks, alignment, accentColor = null, framed = false, listsAs = null }) => {
+  /** The tile's live values, filled in at every leaf of the body. */
+  fill?: Fill;
+}> = ({
+  blocks,
+  alignment,
+  accentColor = null,
+  framed = false,
+  listsAs = null,
+  fill = plainFill,
+}) => {
   const resolveTab = useTabLinkResolver();
-  const inline = (text: string) => renderInlineMarkdown(text, resolveTab);
+  const inline = (text: string) => renderInlineMarkdown(text, resolveTab, fill);
+  // A heading over tab tiles not one of which this dashboard has goes with
+  // them: the tiles draw nothing, and a heading over nothing reads as broken.
+  const overMissingTiles = (idx: number) => {
+    const next = blocks[idx + 1];
+    return (
+      resolveTab !== null &&
+      listsAs !== 'steps' &&
+      next?.type === 'list' &&
+      tabTilesAllMissing(next.items, resolveTab)
+    );
+  };
   // A framed tile opening on a figure (`# 41%`) sets it as a headline number;
   // a framed tile opening on a word (`### Study`) keeps it a heading.
   const first = blocks[0];
@@ -482,6 +589,7 @@ const MarkdownBody: React.FC<{
       {blocks.map((block, idx) => {
         switch (block.type) {
           case 'heading':
+            if (overMissingTiles(idx)) return null;
             if (figureHead && idx === 0) {
               // A finding card opens on its number ("# 41%"), set as a
               // headline metric card sets its value.
@@ -521,6 +629,7 @@ const MarkdownBody: React.FC<{
                   key={idx}
                   steps={block.items.map(parseStep)}
                   inline={inline}
+                  fill={fill}
                   accentColor={accentColor}
                 />
               );
@@ -533,6 +642,7 @@ const MarkdownBody: React.FC<{
                   rows={stats as StatRow[]}
                   inline={inline}
                   resolveTab={resolveTab}
+                  fill={fill}
                 />
               );
             }
@@ -541,9 +651,9 @@ const MarkdownBody: React.FC<{
             // steps are asked for with `::: steps`.
             if (!block.ordered && facts.length && facts.every(Boolean)) {
               return framed ? (
-                <FactTable key={idx} facts={facts as Fact[]} inline={inline} />
+                <FactTable key={idx} facts={facts as Fact[]} inline={inline} fill={fill} />
               ) : (
-                <FactLine key={idx} facts={facts as Fact[]} inline={inline} />
+                <FactLine key={idx} facts={facts as Fact[]} inline={inline} fill={fill} />
               );
             }
             const tiles = resolveTab ? block.items.map(parseTabTile) : [];
@@ -554,6 +664,7 @@ const MarkdownBody: React.FC<{
                   items={tiles as TabTileItem[]}
                   ordered={block.ordered}
                   resolveTab={resolveTab as TabLinkResolver}
+                  fill={fill}
                 />
               );
             }
@@ -617,6 +728,7 @@ const MarkdownBody: React.FC<{
                 alignment={alignment}
                 accentColor={accentColor}
                 listsAs={block.name === 'steps' ? 'steps' : listsAs}
+                fill={fill}
               />
             );
           default: {
@@ -629,6 +741,7 @@ const MarkdownBody: React.FC<{
                   alignment={alignment}
                   inline={inline}
                   resolveTab={resolveTab}
+                  fill={fill}
                 />
               );
             }
@@ -672,11 +785,19 @@ const MarkdownBody: React.FC<{
  *   - vertical_alignment ('top' | 'center' | 'bottom'; default 'center')
  *   - body (optional paragraph)
  *   - surface ('none' | 'card' | 'tinted'; default 'none') and accent
+ *   - values: the live values `{{name}}` cites, computed by the host with the
+ *     cards and handed in as `liveValues` (see textValues.ts)
  *
  * No data fetching, no editing UI. Same shape in viewer and editor — the
  * editor injects its own action chrome (incl. the Edit menu) around it.
  */
-const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = false }) => {
+const TextRenderer: React.FC<TextRendererProps> = ({
+  metadata,
+  placeholder = false,
+  liveValues,
+  liveLoading = false,
+  valueChips = false,
+}) => {
   const rawTitle = typeof metadata.title === 'string' ? metadata.title : '';
   const rawOrder = Number(metadata.order);
   const order = (Number.isFinite(rawOrder)
@@ -696,6 +817,10 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
   const body = typeof metadata.body === 'string' ? metadata.body : '';
 
   const hasTitle = rawTitle.trim().length > 0;
+  const fill = useMemo(
+    () => makeFill(metadata.values, liveValues, liveLoading, valueChips),
+    [metadata.values, liveValues, liveLoading, valueChips],
+  );
 
   const resolveTab = useTabLinkResolver();
   const surface =
@@ -783,7 +908,7 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
           ta={alignment}
           style={{ wordBreak: 'break-word', margin: 0, lineHeight: 1.15 }}
         >
-          {rawTitle}
+          {fill(rawTitle)}
         </Title>
       ) : placeholder ? (
         <Title
@@ -802,12 +927,13 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
           alignment={alignment}
           accentColor={surface !== 'none' ? accentColor : null}
           framed={surface !== 'none'}
+          fill={fill}
         />
       ) : null}
       </div>
       {footer ? (
         <div ref={footerRef} style={{ marginTop: 'auto', paddingTop: 12 }}>
-          <MarkdownBody blocks={[footer]} alignment={alignment} />
+          <MarkdownBody blocks={[footer]} alignment={alignment} fill={fill} />
         </div>
       ) : null}
     </Stack>

@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { balancedColumns, parseTabTile, tabLinkKey } from './tabLinks';
+import {
+  balancedColumns,
+  parseTabTile,
+  tabLinkKey,
+  tabTilesAllMissing,
+  type TabLinkResolver,
+} from './tabLinks';
 
 describe('parseTabTile', () => {
   it('reads a bare tab link', () => {
@@ -27,6 +33,25 @@ describe('parseTabTile', () => {
   it('refuses prose that only mentions a tab', () => {
     expect(parseTabTile('see [Alpha](tab:Alpha Diversity) for more')).toBeNull();
     expect(parseTabTile('[docs](https://example.org)')).toBeNull();
+  });
+});
+
+describe('tabTilesAllMissing', () => {
+  const resolve: TabLinkResolver = (name) =>
+    name === 'Alpha Diversity' ? { href: '/dashboard/a', label: name } : null;
+
+  it('holds when no tile of the list is on this dashboard', () => {
+    expect(tabTilesAllMissing(['[Beta](tab:Beta)', '[QC](tab:QC): did it work'], resolve)).toBe(
+      true,
+    );
+  });
+
+  it('does not hold while one tab is there, or for a list that is not tiles', () => {
+    expect(tabTilesAllMissing(['[Beta](tab:Beta)', '[Alpha](tab:Alpha Diversity)'], resolve)).toBe(
+      false,
+    );
+    expect(tabTilesAllMissing(['see [Beta](tab:Beta) for more'], resolve)).toBe(false);
+    expect(tabTilesAllMissing([], resolve)).toBe(false);
   });
 });
 

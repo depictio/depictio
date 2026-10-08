@@ -12,6 +12,7 @@ import type {
 } from '../api';
 import type { GroupRenderState } from '../selectionGroups';
 import { bulkComputeCards } from '../api';
+import { hasLiveValues } from './textValues';
 import { countActiveFilters } from '../activeFilters';
 import { useCollapseState } from '../hooks/useCollapseState';
 import { useRevealComponent } from '../reveal';
@@ -182,13 +183,14 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   // shows summary chips built from these values (see the `trailing` below), so
   // the cards are fetched even while the section has never been opened. Cards
   // are one cheap bulk call — the lazy-mount rule still spares the heavy
-  // members (tables, figures).
+  // members (tables, figures). Text tiles with live values ride in the same
+  // call (see textValues.ts).
   const cardsByOwner = useMemo(() => {
     const byOwner = new Map<string, { id: string; scope: string | null }[]>();
     for (const { section, members } of renderable) {
       const scope = hostScopeOf(section);
       for (const m of members) {
-        if (m.metadata.component_type !== 'card') continue;
+        if (m.metadata.component_type !== 'card' && !hasLiveValues(m.metadata)) continue;
         const list = byOwner.get(m.dashboard_id) ?? [];
         list.push({ id: m.metadata.index, scope });
         byOwner.set(m.dashboard_id, list);

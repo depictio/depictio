@@ -20,6 +20,7 @@ import {
   fetchDashboard,
   fetchAllDashboards,
   bulkComputeCards,
+  hasLiveValues,
   AvailableFilterValuesProvider,
   DashboardGrid,
   FilterPanel,
@@ -451,8 +452,9 @@ const App: React.FC = () => {
   // request it always was.
   useEffect(() => {
     if (!dashboard || !dashboardId) return;
+    // Text tiles with live values (`{{name}}`, `{{param:KEY}}`) ride along.
     const cards = (dashboard.stored_metadata || [])
-      .filter((m) => m.component_type === 'card')
+      .filter((m) => m.component_type === 'card' || hasLiveValues(m))
       .map((m) => ({ id: m.index, scope: typeof m.section === 'string' ? m.section : null }));
     if (cards.length === 0) return;
 

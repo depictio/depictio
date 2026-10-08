@@ -29,7 +29,9 @@ const TabTiles: React.FC<{
   items: TabTileItem[];
   ordered: boolean;
   resolveTab: TabLinkResolver;
-}> = ({ items, ordered, resolveTab }) => {
+  /** Draws the author's line, filling its live values (see textValues.ts). */
+  fill?: (text: string) => React.ReactNode;
+}> = ({ items, ordered, resolveTab, fill }) => {
   const present = items.flatMap((item) => {
     const target = resolveTab(item.tab);
     return target ? [{ item, target }] : [];
@@ -53,7 +55,8 @@ const TabTiles: React.FC<{
     >
       {present.map(({ item, target }, i) => {
         const color = glyphColorVar(target.color ?? 'gray');
-        const line = item.text ?? target.description ?? null;
+        const line =
+          item.text === null ? target.description ?? null : fill ? fill(item.text) : item.text;
         const icon = target.icon ? (
           // The tab's mark at rest, as on a headline metric card.
           <span className="depictio-tab-tile-icon" aria-hidden>

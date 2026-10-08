@@ -6,6 +6,7 @@
  */
 import React, { useMemo } from 'react';
 import {
+  Code,
   ColorSwatch,
   Group,
   SegmentedControl,
@@ -17,7 +18,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { glyphColorVar, tabDisplayName } from 'depictio-react-core';
-import type { DashboardSummary } from 'depictio-react-core';
+import type { DashboardSummary, TextValueSpec } from 'depictio-react-core';
 import { useBuilderStore } from '../store/useBuilderStore';
 import DesignShell from '../shared/DesignShell';
 import { BuilderSection, BuilderSections, Field } from '../shared/BuilderSections';
@@ -77,6 +78,33 @@ function accentOptions(tabs: DashboardSummary[], current: string | undefined) {
   return groups;
 }
 
+/**
+ * The tile's live values (`values:`), listed read-only: they are declared in
+ * the dashboard YAML, and the form keeps them as they are on save.
+ */
+const LiveValuesNote: React.FC<{ values: Record<string, TextValueSpec> }> = ({ values }) => (
+  <Field
+    label="Live values"
+    description={
+      <>
+        Declared in the dashboard YAML under <Code>values:</Code> and computed under the
+        dashboard's filters. Cite one in the title or body as <Code>{'{{name}}'}</Code>.
+      </>
+    }
+  >
+    <Stack gap={4}>
+      {Object.entries(values).map(([name, spec]) => (
+        <Group key={name} gap={8} wrap="nowrap">
+          <Code>{`{{${name}}}`}</Code>
+          <Text size="xs" c="dimmed" truncate>
+            {spec?.dc}.{spec?.column} · {spec?.aggregation}
+          </Text>
+        </Group>
+      ))}
+    </Stack>
+  </Field>
+);
+
 const TextBuilder: React.FC = () => {
   const config = useBuilderStore((s) => s.config) as {
     title?: string;
@@ -86,6 +114,7 @@ const TextBuilder: React.FC = () => {
     body?: string;
     surface?: string;
     accent?: string;
+    values?: Record<string, TextValueSpec> | null;
   };
   const patchConfig = useBuilderStore((s) => s.patchConfig);
   const tabs = useTabFamily();
@@ -126,6 +155,10 @@ const TextBuilder: React.FC = () => {
             />
             <MarkdownHelp />
           </Stack>
+
+          {config.values && Object.keys(config.values).length > 0 ? (
+            <LiveValuesNote values={config.values} />
+          ) : null}
         </Stack>
       </BuilderSection>
 

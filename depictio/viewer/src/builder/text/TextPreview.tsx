@@ -46,7 +46,9 @@ const TextPreview: React.FC<{ tabs: DashboardSummary[] }> = ({ tabs }) => {
       {/* With the tab family, `tab:` accents, tab links and tab tiles render
           as they will on the dashboard instead of as plain text. */}
       <PreviewTabLinks tabs={tabs}>
-        <TextRenderer metadata={fakeMetadata} placeholder />
+        {/* Live values are computed on the dashboard, not here: each one shows
+            as its name. */}
+        <TextRenderer metadata={fakeMetadata} placeholder valueChips />
       </PreviewTabLinks>
     </PreviewPanel>
   );

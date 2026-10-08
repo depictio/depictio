@@ -67,6 +67,7 @@ import {
   fetchDashboard,
   fetchAllDashboards,
   bulkComputeCards,
+  hasLiveValues,
   canCopyToTab,
   canHighlight,
   copyComponentToTab,
@@ -451,8 +452,9 @@ const EditorApp: React.FC = () => {
   // per distinct filter set so a section bar narrows its own cards only).
   useEffect(() => {
     if (!dashboard || !dashboardId) return;
+    // Text tiles with live values (`{{name}}`, `{{param:KEY}}`) ride along.
     const cards = (dashboard.stored_metadata || [])
-      .filter((m) => m.component_type === 'card')
+      .filter((m) => m.component_type === 'card' || hasLiveValues(m))
       .map((m) => ({ id: m.index, scope: typeof m.section === 'string' ? m.section : null }));
     if (cards.length === 0) return;
 

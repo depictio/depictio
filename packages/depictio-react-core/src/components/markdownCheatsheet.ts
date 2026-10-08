@@ -25,7 +25,9 @@ export type MarkdownRendering =
   | 'results'
   | 'tab-tiles'
   | 'link-row'
-  | 'figure';
+  | 'figure'
+  | 'live-value'
+  | 'values-yaml';
 
 export interface MarkdownExample {
   label: string;
@@ -151,6 +153,30 @@ export const MARKDOWN_CHEATSHEET: MarkdownExampleGroup[] = [
         example: '# 41%\nof reads are Bacteria',
         note: 'With a frame, a leading heading holding a number is set as a key figure and the line under it as its caption.',
         renders: 'figure',
+      },
+    ],
+  },
+  {
+    group: 'Live values',
+    examples: [
+      {
+        label: 'Computed value',
+        example: '- **{{share}}** of reads are {{top}} [Community](tab:Community)',
+        note: '`{{name}}` shows a value the tile declares under `values:`, computed under the filters. In bold at the head of an item, it makes a result row.',
+        renders: 'results',
+      },
+      {
+        label: 'Run parameter',
+        example: 'Classified against {{param:dada_ref_taxonomy}}',
+        note: "`{{param:KEY}}` shows one of the run's parameters; nothing to declare.",
+        renders: 'live-value',
+      },
+      {
+        label: 'Declaring values (YAML)',
+        example:
+          'values:\n  share: {dc: taxonomy, column: Phylum, aggregation: top_share, weight: abundance, format: percent}\n  top: {dc: taxonomy, column: Phylum, aggregation: top, weight: abundance}',
+        note: 'Beside `body` in the dashboard YAML, not in the body. `aggregation`: a card aggregation, `top` or `top_share`; `format`: `percent`, `integer`, `si` or `decimals:N`.',
+        renders: 'values-yaml',
       },
     ],
   },
