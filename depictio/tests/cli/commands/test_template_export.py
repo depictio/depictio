@@ -85,7 +85,7 @@ def _export(output_dir: Path, bundle: bytes):
                 "6824cb3b89d2b72169309737",
                 "--template-id",
                 "lab/tool/1",
-                "--config",
+                "--server",
                 "cfg.yaml",
                 "-o",
                 str(output_dir),
@@ -146,7 +146,7 @@ def test_corrupt_bundle_is_reported_not_traced(tmp_path):
 # ── Request shape and failure paths ─────────────────────────────────────────
 
 PROJECT_ID = "6824cb3b89d2b72169309737"
-BASE_ARGS = ["-t", "lab/tool/1", "-c", "cfg.yaml"]
+BASE_ARGS = ["-t", "lab/tool/1", "--server", "cfg.yaml"]
 
 
 class _RecordingClient(_FakeClient):
@@ -215,7 +215,7 @@ def test_request_carries_every_option_to_the_export_endpoint(tmp_path):
             "2.1.0",
             "--description",
             "Exported for review",
-            "--data-root",
+            "--data-dir",
             "/data/run42",
         ],
         client,
@@ -272,7 +272,7 @@ def test_config_error_exits_with_a_hint_before_any_request(tmp_path):
 
     assert result.exit_code == 1
     assert "Error loading CLI config" in result.output
-    assert "depictio config" in result.output
+    assert "--server" in result.output
     assert client.calls == []
     assert list(tmp_path.iterdir()) == []
 

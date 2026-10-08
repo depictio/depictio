@@ -59,9 +59,9 @@ the auto-filled "Manifest Overview" dashboard.
 **CLI**:
 
 ```bash
-depictio run --template generic/manifest-tables/1 \
+depictio ingest --template generic/manifest-tables/1 \
   --manifest http://host.docker.internal:8099/manifest.json \
-  --config admin_config.yaml
+  --server admin_config.yaml
 ```
 
 ## 4. What to check
@@ -100,5 +100,5 @@ depictio run --template generic/manifest-tables/1 \
   overwrite-with-report semantics: dropping a whole `type` from the manifest
   marks that DC `failed` instead of silently emptying it.
 - Export the project back to a template: project page, *Export as template*
-  (or `depictio template export <project_id> -t my-lab/demo/1 -c admin_config.yaml`)
+  (or `depictio template export <project_id> -t my-lab/demo/1 --server admin_config.yaml`)
   and diff the bundle against `depictio/projects/generic/manifest-tables/1/`.

@@ -4,7 +4,7 @@
 # remote JSON/CSV index of {id, type, url[, run]} entries where `type` maps
 # onto the data collection tags below. Use with:
 #
-#   depictio-cli run --template generic/manifest-tables/1 \
+#   depictio ingest --template generic/manifest-tables/1 \
 #     --manifest https://data.example.org/run42/manifest.json
 #
 # or server-side via POST /projects/from_manifest. No local data root is

@@ -1,4 +1,4 @@
-"""Guard-rail tests for `depictio run` option combinations (manifest mode).
+"""Guard-rail tests for `depictio ingest` option combinations (manifest mode).
 
 The full run pipeline needs a live stack; these only prove the CLI rejects
 inconsistent flag combinations before doing any work.
@@ -12,7 +12,7 @@ runner = CliRunner()
 
 
 def test_manifest_requires_template():
-    result = runner.invoke(app, ["run", "--manifest", "https://example.org/m.json"])
+    result = runner.invoke(app, ["ingest", "--manifest", "https://example.org/m.json"])
     assert result.exit_code == 1
     assert "--manifest needs --template" in result.output
 
@@ -21,12 +21,11 @@ def test_manifest_and_data_root_are_exclusive(tmp_path):
     result = runner.invoke(
         app,
         [
-            "run",
+            "ingest",
             "--template",
             "generic/manifest-tables/1",
             "--manifest",
             "https://example.org/m.json",
-            "--data-root",
             str(tmp_path),
         ],
     )
@@ -35,18 +34,18 @@ def test_manifest_and_data_root_are_exclusive(tmp_path):
 
 
 def test_template_requires_data_root_or_manifest():
-    result = runner.invoke(app, ["run", "--template", "generic/manifest-tables/1"])
+    result = runner.invoke(app, ["ingest", "--template", "generic/manifest-tables/1"])
     assert result.exit_code == 1
     assert "(or --manifest, or --bind)" in result.output
 
 
 def test_template_accepts_bind_instead_of_data_root():
     """--bind names each DC's location itself, so it satisfies the same
-    requirement as --data-root / --manifest and must clear this guard."""
+    requirement as DATA_DIR / --manifest and must clear this guard."""
     result = runner.invoke(
         app,
         [
-            "run",
+            "ingest",
             "--template",
             "generic/manifest-tables/1",
             "--bind",
@@ -133,7 +132,7 @@ def test_local_manifest_must_exist():
     result = runner.invoke(
         app,
         [
-            "run",
+            "ingest",
             "--template",
             "generic/manifest-tables/1",
             "--manifest",

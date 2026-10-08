@@ -211,7 +211,7 @@ def from_table(
         console.print(
             "[yellow]If the data is already on S3 under a common prefix, you may not need a "
             "manifest at all: point the DC straight at it with "
-            "`depictio run --bind TAG=s3://bucket/prefix/*.csv`.[/yellow]"
+            "`depictio ingest --bind TAG=s3://bucket/prefix/*.csv`.[/yellow]"
         )
         raise typer.Exit(1)
 
