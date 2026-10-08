@@ -16,7 +16,8 @@ import { RunMadeBy, TemplateUsed } from './RunIdentity';
 export type DetectionState =
   | { status: 'idle' }
   | { status: 'loading'; location: string }
-  | { status: 'error'; location: string; error: string }
+  /** `code` is the server's reason (`s3_access_denied`, ...), when it sent one. */
+  | { status: 'error'; location: string; error: string; code?: string | null }
   | { status: 'ready'; location: string; result: FolderInspection };
 
 interface DetectionCardProps {
@@ -28,6 +29,9 @@ interface DetectionCardProps {
   match: RunTemplateMatch | null;
   /** Offered when a template other than the detected one is chosen. */
   onUseDetected?: () => void;
+  /** What to do about an unreadable folder, when the tab knows better than
+   *  "pick the pipeline" (a private bucket). */
+  errorHint?: string | null;
 }
 
 const Line: React.FC<{ icon: string; color: string; children: React.ReactNode }> = ({
@@ -51,6 +55,7 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
   templateTitle,
   match,
   onUseDetected,
+  errorHint,
 }) => {
   if (state.status === 'idle') return null;
 
@@ -73,8 +78,8 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
         <Text size="sm" c="dimmed" data-testid="run-detection-error">
           {state.error}
         </Text>
-        <Text size="xs" c="dimmed">
-          You can still pick the pipeline below and preview the folder.
+        <Text size="xs" c="dimmed" data-testid="run-detection-error-hint">
+          {errorHint || 'You can still pick the pipeline below and preview the folder.'}
         </Text>
       </Line>
     );

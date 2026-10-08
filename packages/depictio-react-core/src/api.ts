@@ -4133,6 +4133,24 @@ export interface FromRunRequest {
   projectName?: string | null;
   variables?: Record<string, string>;
   dryRun?: boolean;
+  /** Connection settings of the private bucket `dataRoot` is in. The run
+   *  folder is then read with them alone; a real creation stores them as the
+   *  project's storage settings (`FromRunReport.storage_saved`), a dry run
+   *  stores nothing. */
+  storage?: RunStorageIn | null;
+}
+
+/** Connection settings typed in for a private bucket, before the project
+ *  they are for exists (`RunStorageIn` server-side). There is no bucket
+ *  field: the bucket is the one the `s3://` location names. An empty
+ *  `endpoint_url` means Amazon S3, an empty `region` the default one. The
+ *  secret only ever travels in a request body, never in a URL, and is never
+ *  echoed back. */
+export interface RunStorageIn {
+  endpoint_url: string | null;
+  region: string | null;
+  access_key_id: string | null;
+  secret_access_key: string | null;
 }
 
 /** How the template chosen for a run relates to the run's own version:
@@ -4186,6 +4204,10 @@ export interface FromRunReport {
   run_id: string | null;
   dry_run: boolean;
   success: boolean;
+  /** The request's `storage` was stored as the new project's storage
+   *  settings. False on a dry run and without `storage`; older backends
+   *  omit it. */
+  storage_saved?: boolean;
 }
 
 /** Create (or, with `dryRun`, plan) a project from a pipeline run folder.
@@ -4204,6 +4226,7 @@ export async function createProjectFromRun(
       project_name: input.projectName ?? null,
       variables: input.variables ?? {},
       dry_run: Boolean(input.dryRun),
+      ...(input.storage ? { storage: input.storage } : {}),
     }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to create project from run folder');
@@ -4250,6 +4273,25 @@ export type S3DirListing = LocalDirListing;
 export interface FolderRequestOptions {
   /** Cancels the request (a newer selection or keystroke supersedes it). */
   signal?: AbortSignal;
+  /** Connection settings of the private bucket an `s3://` location is in.
+   *  With them the call goes to the route's POST twin, the settings in the
+   *  body (never in the URL), and the location is read with them alone: the
+   *  bucket itself is then the browse root. Nothing is stored. */
+  storage?: RunStorageIn | null;
+}
+
+/** POST one of the folder routes' twins: the GET query fields and the
+ *  storage settings in a JSON body. */
+function postFolderRoute(
+  route: string,
+  body: Record<string, unknown>,
+  options: FolderRequestOptions,
+): Promise<Response> {
+  return authFetch(`${API_BASE}/projects/${route}`, {
+    method: 'POST',
+    body: JSON.stringify({ ...body, storage: options.storage }),
+    signal: options.signal,
+  });
 }
 
 /** List the sub-folders of `path` on the server's disk, or the allowed root
@@ -4271,16 +4313,20 @@ export async function listLocalDirs(
 
 /** List the sub-folders (common prefixes) of an `s3://` location the server
  *  may browse, or the allowed locations themselves when `url` is omitted.
- *  Only useful when `remote_browse_enabled`. A location outside every allowed
- *  one is refused with an S3 code (`s3_refused`, `s3_access_denied`, ...). */
+ *  Only useful when `remote_browse_enabled`, or with `options.storage` for a
+ *  private bucket. A location outside every allowed one is refused with an
+ *  S3 code (`s3_refused`, `s3_access_denied`, ...). */
 export async function listS3Dirs(
   url?: string | null,
   options: FolderRequestOptions = {},
 ): Promise<S3DirListing> {
   const query = url ? `?url=${encodeURIComponent(url)}` : '';
-  const res = await authFetch(`${API_BASE}/projects/s3_dirs${query}`, {
-    signal: options.signal,
-  });
+  const res =
+    url && options.storage
+      ? await postFolderRoute('s3_dirs', { url }, options)
+      : await authFetch(`${API_BASE}/projects/s3_dirs${query}`, {
+          signal: options.signal,
+        });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to list S3 folders');
   return (await res.json()) as S3DirListing;
 }
@@ -4318,11 +4364,20 @@ export async function inspectFolder(
   location: string,
   options: FolderRequestOptions & { detect?: boolean } = {},
 ): Promise<FolderInspection> {
-  const params = new URLSearchParams({ location });
-  if (options.detect === false) params.set('detect', 'false');
-  const res = await authFetch(`${API_BASE}/projects/folder_inspect?${params.toString()}`, {
-    signal: options.signal,
-  });
+  let res: Response;
+  if (options.storage) {
+    res = await postFolderRoute(
+      'folder_inspect',
+      { location, detect: options.detect !== false },
+      options,
+    );
+  } else {
+    const params = new URLSearchParams({ location });
+    if (options.detect === false) params.set('detect', 'false');
+    res = await authFetch(`${API_BASE}/projects/folder_inspect?${params.toString()}`, {
+      signal: options.signal,
+    });
+  }
   if (!res.ok) await throwHttpDetailError(res, 'Failed to inspect the folder');
   return (await res.json()) as FolderInspection;
 }
@@ -4359,11 +4414,35 @@ export async function findRunFolders(
   options: FolderRequestOptions = {},
 ): Promise<FindRunsResult> {
   const params = new URLSearchParams({ location });
-  const res = await authFetch(`${API_BASE}/projects/find_runs?${params.toString()}`, {
-    signal: options.signal,
-  });
+  const res = options.storage
+    ? await postFolderRoute('find_runs', { location }, options)
+    : await authFetch(`${API_BASE}/projects/find_runs?${params.toString()}`, {
+        signal: options.signal,
+      });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to search for run folders');
   return (await res.json()) as FindRunsResult;
+}
+
+/** Try storage settings typed in for a private bucket before its project
+ *  exists (`POST /projects/storage_test`): the bucket of `location` is
+ *  reached, its region detected and one key listed under the location's
+ *  prefix. Nothing is stored, the detected region included: put it in the
+ *  region field. Settings no read could use, and a failed connection, come
+ *  back as `{success: false, message}`; a location that is not `s3://` (422
+ *  `s3_refused`) and a refusal to the caller (403) throw an
+ *  `ApiDetailError` carrying the server's `detail`. */
+export async function testRunStorage(
+  location: string,
+  storage: RunStorageIn,
+  options: Pick<FolderRequestOptions, 'signal'> = {},
+): Promise<ProjectStorageTestResult> {
+  const res = await authFetch(`${API_BASE}/projects/storage_test`, {
+    method: 'POST',
+    body: JSON.stringify({ location, storage }),
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'The connection test did not run');
+  return (await res.json()) as ProjectStorageTestResult;
 }
 
 /** Per-DC status of a manifest refresh. A synchronous refresh reports

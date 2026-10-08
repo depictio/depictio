@@ -523,6 +523,7 @@ export {
   listS3Dirs,
   inspectFolder,
   findRunFolders,
+  testRunStorage,
   ApiDetailError,
   apiErrorCode,
   refreshManifest,
@@ -933,6 +934,7 @@ export type {
   LocalDirListing,
   S3DirListing,
   FolderRequestOptions,
+  RunStorageIn,
   FolderContents,
   FolderInspection,
   FoundRunFolder,
@@ -1103,6 +1105,20 @@ export {
   runFoundNothing,
 } from './runFolderReport';
 export type { RunCollectionEntry, RunCollectionSection } from './runFolderReport';
+export {
+  EMPTY_RUN_STORAGE_FIELDS,
+  isPrivateBucketRefusal,
+  runStorageFieldErrors,
+  runStorageFieldsBlank,
+  runStorageFromFields,
+  s3BucketOf,
+  storageForLocation,
+} from './runFolderStorage';
+export type {
+  RunStorageBinding,
+  RunStorageFieldErrors,
+  RunStorageFields,
+} from './runFolderStorage';
 export {
   asEnum,
   asList,

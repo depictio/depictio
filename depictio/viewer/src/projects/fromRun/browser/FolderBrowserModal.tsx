@@ -8,6 +8,9 @@
  * above it. Right, the selected folder in detail. On top, an editable path
  * bar with suggestions. Keyboard: arrows move and expand, Enter selects.
  *
+ * With a private bucket's connection details, that bucket is listed under
+ * "S3" too and everything in it is read with them.
+ *
  * Rendered inside the create dialog's `Modal.Stack`, so it opens above that
  * dialog and Escape closes only this one.
  */
@@ -32,8 +35,19 @@ import {
 import type { RenderTreeNodePayload } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { folderSource, shortenFolder, Z_LAYERS } from 'depictio-react-core';
-import type { FolderInspection, FolderSource, TemplateInfo } from 'depictio-react-core';
+import {
+  folderSource,
+  s3BucketOf,
+  shortenFolder,
+  storageForLocation,
+  Z_LAYERS,
+} from 'depictio-react-core';
+import type {
+  FolderInspection,
+  FolderSource,
+  RunStorageBinding,
+  TemplateInfo,
+} from 'depictio-react-core';
 
 import { DisabledReason, GatedButton } from '../../../components/settings/SettingsSections';
 import { FlowBadge } from '../FlowBadge';
@@ -61,7 +75,11 @@ interface FolderBrowserModalProps {
   /** Id inside the enclosing `Modal.Stack`. */
   stackId?: string;
   localEnabled: boolean;
+  /** The server may browse the S3 locations it lists. */
   s3Enabled: boolean;
+  /** A private bucket and its connection details: listed under "S3" and
+   *  read with them. */
+  privateBucket?: RunStorageBinding | null;
   /** For the names of the templates recognised in folders. */
   templates: TemplateInfo[];
 }
@@ -74,9 +92,11 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
   stackId,
   localEnabled,
   s3Enabled,
+  privateBucket = null,
   templates,
 }) => {
-  const folderTree = useFolderTree({ opened, localEnabled, s3Enabled });
+  const folderTree = useFolderTree({ opened, localEnabled, s3Enabled, privateBucket });
+  const s3Shown = s3Enabled || Boolean(privateBucket);
   const tree = useTree({
     initialExpandedState: { [GROUP_KEY.local]: true, [GROUP_KEY.s3]: true },
   });
@@ -138,7 +158,7 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
     const start = (initialLocation ?? '').trim();
     if (start) {
       const source = folderSource(start);
-      if ((source === 's3' && s3Enabled) || (source === 'local' && localEnabled)) {
+      if ((source === 's3' && s3Shown) || (source === 'local' && localEnabled)) {
         setPathInput(start);
         void goTo(start, true);
       }
@@ -190,9 +210,14 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
     onSelect(selected);
   };
 
+  // Recent S3 folders the server can browse: any when it lists locations,
+  // else only those in the private bucket.
+  const recentS3 = s3Enabled
+    ? recent.s3
+    : recent.s3.filter((path) => privateBucket && s3BucketOf(path) === privateBucket.bucket);
   const recentEntries = [
     ...(localEnabled ? recent.local.map((path) => ({ path, source: 'local' as const })) : []),
-    ...(s3Enabled ? recent.s3.map((path) => ({ path, source: 's3' as const })) : []),
+    ...recentS3.map((path) => ({ path, source: 's3' as const })),
   ];
 
   const renderNode = ({ node, expanded, hasChildren, elementProps, tree: controller }: RenderTreeNodePayload) => {
@@ -417,6 +442,7 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
                   templateTitles={templateTitles}
                   onReveal={(location) => void goTo(location)}
                   onInspected={handleInspected}
+                  storageFor={(location) => storageForLocation(location, privateBucket)}
                 />
               </ScrollArea>
             </Paper>

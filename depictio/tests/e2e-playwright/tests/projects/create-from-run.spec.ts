@@ -21,6 +21,7 @@ import {
   openRunTab,
   setRunFolderFlags,
   stubByParam,
+  stubFolderRoute,
 } from "@fixtures/runFolder";
 
 const TEMPLATE_ID = "nf-core/ampliseq/2.16.0";
@@ -95,21 +96,44 @@ const MATCHED_COLLECTIONS = [
   }),
 ];
 
+/** A run folder in a bucket the server cannot read without its own
+ *  connection details. */
+const PRIVATE_ROOT = "s3://private-runs/ampliseq/run-7";
+const PRIVATE_ENDPOINT = "https://s3.example.org";
+const PRIVATE_KEY = "AKIAE2EPRIVATEKEY";
+const PRIVATE_SECRET = "e2e-private-secret-value";
+const PRIVATE_DENIED = {
+  status: 403,
+  json: {
+    detail: "Access to s3://private-runs/ampliseq/run-7/ was denied by the storage.",
+    code: "s3_access_denied",
+  },
+};
+const PRIVATE_RUN = inspection(PRIVATE_ROOT, {
+  looks_like_run: true,
+  markers: ["pipeline_info", "multiqc"],
+  folders: { count: 4, names: ["input", "multiqc", "pipeline_info", "qiime2"] },
+  detected: detected(),
+});
+
+type FromRunBody = {
+  template_id?: string | null;
+  dry_run?: boolean;
+  storage?: Record<string, unknown> | null;
+};
+
 /** Stub `/projects/from_run`, answering every call with `answer(body)`.
  *  Returns the request bodies, in order. */
 async function stubFromRun(
   page: Page,
-  answer: (body: { template_id?: string | null; dry_run?: boolean }) => {
+  answer: (body: FromRunBody) => {
     status?: number;
     json: unknown;
   },
-): Promise<Array<{ template_id?: string | null; dry_run?: boolean }>> {
-  const bodies: Array<{ template_id?: string | null; dry_run?: boolean }> = [];
+): Promise<FromRunBody[]> {
+  const bodies: FromRunBody[] = [];
   await page.route("**/api/v1/projects/from_run", (route: Route) => {
-    const body = (route.request().postDataJSON() ?? {}) as {
-      template_id?: string | null;
-      dry_run?: boolean;
-    };
+    const body = (route.request().postDataJSON() ?? {}) as FromRunBody;
     bodies.push(body);
     const { status, json } = answer(body);
     return route.fulfill({ status: status ?? 200, json });
@@ -775,5 +799,210 @@ test.describe("Create project from a run folder", () => {
 
     // The imported dashboard is reachable once the user chooses to go there.
     await expect(modal.locator("[data-testid='run-created-open-dashboard']")).toBeEnabled();
+  });
+
+  test("a private bucket asks for its connection details, and every read then carries them", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    const RUN_ID = "run-private-7";
+    // Any request URL the page sends, to check no setting ever lands in one.
+    const urls: string[] = [];
+    page.on("request", (request) => urls.push(request.url()));
+
+    // Without the bucket's details the folder cannot be read; with them it is
+    // an ampliseq run.
+    const inspects = await stubFolderRoute(
+      page,
+      "**/api/v1/projects/folder_inspect**",
+      "location",
+      (location, storage) =>
+        storage ? { json: { ...PRIVATE_RUN, location } } : PRIVATE_DENIED,
+    );
+    const tests: Array<{ location?: string; storage?: Record<string, unknown> }> = [];
+    await page.route("**/api/v1/projects/storage_test", (route: Route) => {
+      tests.push(route.request().postDataJSON());
+      return route.fulfill({
+        json: {
+          success: true,
+          message: "Bucket 'private-runs' is reachable. Its region is eu-west-1.",
+          detected_region: "eu-west-1",
+        },
+      });
+    });
+    const bodies = await stubFromRun(page, (body) => {
+      if (!body.storage) return PRIVATE_DENIED;
+      return body.dry_run
+        ? { json: report({ data_root: PRIVATE_ROOT, data_collections: MATCHED_COLLECTIONS }) }
+        : {
+            json: report({
+              project_id: "665f0f3c1e4a2d7f8e5b8cb1",
+              data_root: PRIVATE_ROOT,
+              data_collections: MATCHED_COLLECTIONS,
+              run_id: RUN_ID,
+              dry_run: false,
+              storage_saved: true,
+            }),
+          };
+    });
+    await page.route(`**/api/v1/projects/refresh_manifest/${RUN_ID}`, (route: Route) =>
+      route.fulfill({
+        json: {
+          project_id: "665f0f3c1e4a2d7f8e5b8cb1",
+          refreshed: [],
+          run_id: RUN_ID,
+          dry_run: false,
+          success: true,
+        },
+      }),
+    );
+
+    await loginAsAdmin();
+    await openWithFolder(page, PRIVATE_ROOT);
+
+    // The refusal opens the section, which says what the details are for.
+    const card = page.locator("[data-testid='run-detection-card']");
+    await expect(card).toHaveAttribute("data-state", "error", { timeout: 20_000 });
+    await expect(card.locator("[data-testid='run-detection-error']")).toHaveText(
+      PRIVATE_DENIED.json.detail,
+    );
+    await expect(card.locator("[data-testid='run-detection-error-hint']")).toContainText(
+      "give its connection details above",
+    );
+    const section = page.locator("[data-testid='run-private-bucket-section']");
+    await expect(section).toBeVisible();
+    await expect(page.locator("[data-testid='run-private-bucket-toggle']")).toBeChecked();
+    await expect(section.locator("[data-testid='run-private-bucket-name']")).toHaveText(
+      "private-runs",
+    );
+    const explanation = section.locator("[data-testid='run-private-bucket-explanation']");
+    await expect(explanation).toContainText("This bucket is not public");
+    await expect(explanation).toContainText("Project settings, Storage");
+    expect(inspects[0]).toMatchObject({ method: "GET", value: PRIVATE_ROOT, storage: null });
+
+    // A key without its secret cannot go on.
+    const submit = page.locator("[data-testid='create-from-run-submit']");
+    await section.locator("[data-testid='run-private-bucket-endpoint']").fill(PRIVATE_ENDPOINT);
+    await section.locator("[data-testid='run-private-bucket-access-key']").fill(PRIVATE_KEY);
+    await expect(page.locator("[data-testid='run-submit-disabled-reason']")).toContainText(
+      "Enter the secret that goes with this access key.",
+    );
+    await expect(submit).toBeDisabled();
+    await section.locator("[data-testid='run-private-bucket-secret']").fill(PRIVATE_SECRET);
+
+    // The test reaches the bucket and fills the region in.
+    const region = section.locator("[data-testid='run-private-bucket-region']");
+    await expect(region).toHaveValue("");
+    await section.locator("[data-testid='run-private-bucket-test']").click();
+    const result = section.locator("[data-testid='run-private-bucket-test-result']");
+    await expect(result).toHaveAttribute("data-success", "true");
+    await expect(result).toContainText("Bucket 'private-runs' is reachable.");
+    await expect(region).toHaveValue("eu-west-1");
+    expect(tests).toEqual([
+      {
+        location: PRIVATE_ROOT,
+        storage: {
+          endpoint_url: PRIVATE_ENDPOINT,
+          region: null,
+          access_key_id: PRIVATE_KEY,
+          secret_access_key: PRIVATE_SECRET,
+        },
+      },
+    ]);
+
+    // Detection runs again, with the details and the region found.
+    const withRegion = {
+      endpoint_url: PRIVATE_ENDPOINT,
+      region: "eu-west-1",
+      access_key_id: PRIVATE_KEY,
+      secret_access_key: PRIVATE_SECRET,
+    };
+    await expect(card).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
+    await expect(card.locator("[data-testid='run-detected-pipeline']")).toHaveText(
+      "nf-core/ampliseq",
+    );
+    const lastInspect = inspects[inspects.length - 1];
+    expect(lastInspect).toMatchObject({ method: "POST", value: PRIVATE_ROOT, storage: withRegion });
+    expect(lastInspect.url).toMatch(/\/projects\/folder_inspect$/);
+
+    // The preview and the creation carry them too.
+    await expect(submit).toBeEnabled();
+    await submit.click();
+    await expect(page.locator("[data-testid='run-preview-report']")).toBeVisible({
+      timeout: 20_000,
+    });
+    await submit.click();
+    await expect(page.locator("[data-testid='run-create-storage-note']")).toContainText(
+      "saved as this project's storage settings",
+    );
+    await submit.click();
+
+    const modal = page.locator("[data-testid='run-created-modal']");
+    await expect(modal).toBeVisible({ timeout: 20_000 });
+    expect(bodies.map((body) => body.dry_run)).toEqual([true, false]);
+    for (const body of bodies) expect(body.storage).toEqual(withRegion);
+    await expect(modal.locator("[data-testid='run-created-storage-saved']")).toContainText(
+      "Storage settings saved for this project",
+    );
+
+    // Nothing typed in the section ever went into a URL.
+    const leaked = urls.filter(
+      (url) =>
+        url.includes(PRIVATE_SECRET) || url.includes(PRIVATE_KEY) || url.includes("storage="),
+    );
+    expect(leaked).toEqual([]);
+  });
+
+  test("the section can be opened on purpose, and another bucket drops what was typed", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    const OTHER_ROOT = "s3://other-runs/ampliseq/run-9";
+    const inspects = await stubFolderRoute(
+      page,
+      "**/api/v1/projects/folder_inspect**",
+      "location",
+      (location) => ({ json: { ...PRIVATE_RUN, location } }),
+    );
+
+    await loginAsAdmin();
+    await openWithFolder(page, PRIVATE_ROOT);
+    const card = page.locator("[data-testid='run-detection-card']");
+    await expect(card).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
+
+    // A readable folder: the switch is there, the section is not.
+    const toggle = page.locator("[data-testid='run-private-bucket-toggle']");
+    const section = page.locator("[data-testid='run-private-bucket-section']");
+    await expect(toggle).not.toBeChecked();
+    await expect(section).toHaveCount(0);
+
+    await page.getByText("This bucket needs credentials", { exact: true }).click();
+    await expect(section).toBeVisible();
+    await expect(section.locator("[data-testid='run-private-bucket-explanation']")).toContainText(
+      "if it is not public",
+    );
+    await expect(section.locator("[data-testid='run-private-bucket-test']")).toBeDisabled();
+    await section.locator("[data-testid='run-private-bucket-access-key']").fill(PRIVATE_KEY);
+    await section.locator("[data-testid='run-private-bucket-secret']").fill(PRIVATE_SECRET);
+    await expect(section.locator("[data-testid='run-private-bucket-test']")).toBeEnabled();
+
+    // Another bucket: the details are forgotten and never sent to it.
+    await page.locator("[data-testid='run-data-root-input']").fill(OTHER_ROOT);
+    await expect(section).toHaveCount(0);
+    await expect(toggle).not.toBeChecked();
+    await expect
+      .poll(() => inspects.some((call) => call.value === OTHER_ROOT), { timeout: 20_000 })
+      .toBe(true);
+    expect(inspects.filter((call) => call.value === OTHER_ROOT)).toEqual([
+      expect.objectContaining({ method: "GET", storage: null }),
+    ]);
+
+    // Opening it again starts empty.
+    await page.getByText("This bucket needs credentials", { exact: true }).click();
+    await expect(section.locator("[data-testid='run-private-bucket-name']")).toHaveText(
+      "other-runs",
+    );
+    await expect(section.locator("[data-testid='run-private-bucket-access-key']")).toHaveValue("");
+    await expect(section.locator("[data-testid='run-private-bucket-secret']")).toHaveValue("");
   });
 });

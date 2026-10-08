@@ -8,6 +8,10 @@
  * its chevron works. `reveal` opens the tree on any location: it lists the
  * location itself (which also says which allowed root it sits under) and then
  * every folder between that root and it.
+ *
+ * With a private bucket's connection details, the S3 group also lists that
+ * bucket as a root, and every listing inside it is read with them (the POST
+ * twin of `s3_dirs`), even where the server lists no S3 location itself.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TreeNodeData } from '@mantine/core';
@@ -21,8 +25,9 @@ import {
   listS3Dirs,
   normalizeFolder,
   shortenHome,
+  storageForLocation,
 } from 'depictio-react-core';
-import type { FolderSource, LocalDirListing } from 'depictio-react-core';
+import type { FolderSource, LocalDirListing, RunStorageBinding } from 'depictio-react-core';
 
 /** Tree values of the two top-level groups. Never a folder path: those start
  *  with `/`, `~` or `s3://`. */
@@ -65,10 +70,36 @@ export interface TreeNodeProps {
   parent?: string;
 }
 
-function fetchListing(key: string): Promise<LocalDirListing> {
+const NO_LISTING: LocalDirListing = { path: null, root: null, parent: null, entries: [], truncated: false };
+
+/** The S3 roots: the locations the server lists (when it may browse S3) and
+ *  the private bucket, first, when its connection details were given. */
+async function listS3Roots(
+  listed: boolean,
+  privateBucket: RunStorageBinding | null,
+): Promise<LocalDirListing> {
+  const listing = listed ? await listS3Dirs(null) : NO_LISTING;
+  if (!privateBucket) return listing;
+  const path = `s3://${privateBucket.bucket}/`;
+  return {
+    ...listing,
+    entries: [
+      { name: privateBucket.bucket, path, looks_like_run: false, has_children: true },
+      ...listing.entries,
+    ],
+  };
+}
+
+function fetchListing(
+  key: string,
+  s3Listed: boolean,
+  privateBucket: RunStorageBinding | null,
+): Promise<LocalDirListing> {
   if (key === GROUP_KEY.local) return listLocalDirs(null);
-  if (key === GROUP_KEY.s3) return listS3Dirs(null);
-  return isS3Location(key) ? listS3Dirs(key) : listLocalDirs(key);
+  if (key === GROUP_KEY.s3) return listS3Roots(s3Listed, privateBucket);
+  return isS3Location(key)
+    ? listS3Dirs(key, { storage: storageForLocation(key, privateBucket) })
+    : listLocalDirs(key);
 }
 
 function placeholder(parent: string, kind: PlaceholderKind, label = ''): TreeNodeData {
@@ -80,11 +111,22 @@ export function useFolderTree({
   opened,
   localEnabled,
   s3Enabled,
+  privateBucket = null,
 }: {
   opened: boolean;
   localEnabled: boolean;
+  /** The server may browse the S3 locations it lists. */
   s3Enabled: boolean;
+  /** A private bucket and its connection details, browsed with them. */
+  privateBucket?: RunStorageBinding | null;
 }) {
+  /** The S3 group is shown for the listed locations, a private bucket, or both. */
+  const s3Shown = s3Enabled || Boolean(privateBucket);
+  /** Read at request time, so `load` stays the same function: the details
+   *  cannot change while the browser is open (it sits above the form). */
+  const privateRef = useRef(privateBucket);
+  privateRef.current = privateBucket;
+  const privateKey = privateBucket?.bucket ?? null;
   const [nodes, setNodes] = useState<Record<string, FolderNode>>({});
   const [children, setChildren] = useState<Record<string, ChildrenState>>({});
   /** Mirrors `children` synchronously, so a load can tell "already listed"
@@ -155,7 +197,7 @@ export function useFolderTree({
       if (pending) return pending;
       const run = epoch.current;
       setChildState(key, { status: 'loading', paths: [], truncated: false, error: null });
-      const promise = fetchListing(key)
+      const promise = fetchListing(key, s3Enabled, privateRef.current)
         .then((listing) => {
           if (run !== epoch.current) return false;
           register(key, listing);
@@ -177,7 +219,7 @@ export function useFolderTree({
       inflight.current.set(key, promise);
       return promise;
     },
-    [register, setChildState],
+    [register, setChildState, s3Enabled],
   );
 
   /** Forget a failed listing and try it again. */
@@ -197,12 +239,12 @@ export function useFolderTree({
     setChildren({});
     setNodes({});
     if (localEnabled) void load(GROUP_KEY.local);
-    if (s3Enabled) void load(GROUP_KEY.s3);
+    if (s3Shown) void load(GROUP_KEY.s3);
     return () => {
       epoch.current += 1;
       inflight.current.clear();
     };
-  }, [opened, localEnabled, s3Enabled, load]);
+  }, [opened, localEnabled, s3Shown, privateKey, load]);
 
   /** Record what an inspection learnt about a folder's run markers. */
   const markRun = useCallback((path: string, looksLikeRun: boolean) => {
@@ -218,7 +260,7 @@ export function useFolderTree({
       const target = normalizeFolder(location);
       if (!target) return { ok: false, error: 'Type a folder path first.' };
       const source = folderSource(target);
-      if (source === 's3' && !s3Enabled) {
+      if (source === 's3' && !s3Shown) {
         return { ok: false, error: 'Browsing S3 is not available on this server.' };
       }
       if (source === 'local') {
@@ -239,7 +281,7 @@ export function useFolderTree({
       await load(GROUP_KEY[source]);
       let listing: LocalDirListing;
       try {
-        listing = await fetchListing(target);
+        listing = await fetchListing(target, s3Enabled, privateRef.current);
       } catch (err) {
         if (run !== epoch.current) return { ok: false, error: '' };
         return { ok: false, error: (err as Error).message || 'This folder could not be opened.' };
@@ -274,7 +316,7 @@ export function useFolderTree({
       if (listing.entries.length > 0) expand.push(resolved);
       return { ok: true, path: resolved, expand };
     },
-    [load, register, localEnabled, s3Enabled],
+    [load, register, localEnabled, s3Enabled, s3Shown],
   );
 
   const treeData = useMemo<TreeNodeData[]>(() => {
@@ -300,7 +342,7 @@ export function useFolderTree({
 
     const groups: TreeNodeData[] = [];
     for (const source of ['local', 's3'] as const) {
-      if (source === 'local' ? !localEnabled : !s3Enabled) continue;
+      if (source === 'local' ? !localEnabled : !s3Shown) continue;
       const key = GROUP_KEY[source];
       const state = children[key];
       let kids: TreeNodeData[];
@@ -317,7 +359,7 @@ export function useFolderTree({
       });
     }
     return groups;
-  }, [nodes, children, localEnabled, s3Enabled]);
+  }, [nodes, children, localEnabled, s3Shown]);
 
   /** The allowed roots listed so far, local then S3. */
   const roots = useMemo(

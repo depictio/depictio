@@ -71,6 +71,9 @@ interface CreateProjectModalProps {
   /** The server may browse allowed S3 locations: the folder browser then
    *  offers an S3 side. */
   remoteBrowseEnabled?: boolean;
+  /** Why the run tab may not take a private bucket's connection details
+   *  (public mode, non-admin); null when it may. */
+  privateBucketDisabledReason?: string | null;
 }
 
 const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
@@ -83,6 +86,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   onCreateFromRun,
   localDataRootsEnabled = false,
   remoteBrowseEnabled = false,
+  privateBucketDisabledReason = null,
 }) => {
   const accent = useBrandAccents();
   const [tab, setTab] = useState<Tab>('create');
@@ -757,6 +761,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               templatesError={templatesError}
               localDataRootsEnabled={localDataRootsEnabled}
               remoteBrowseEnabled={remoteBrowseEnabled}
+              privateBucketDisabledReason={privateBucketDisabledReason}
               onCreateFromRun={onCreateFromRun}
               submitting={submitting}
               setSubmitting={setSubmitting}

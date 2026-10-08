@@ -371,6 +371,13 @@ const ProjectsApp: React.FC = () => {
         onCreateFromRun={handleCreateFromRun}
         localDataRootsEnabled={localDataRootsEnabled}
         remoteBrowseEnabled={remoteBrowseEnabled}
+        // Mirrored server-side: a call carrying a private bucket's details
+        // is refused to non-admins in public mode.
+        privateBucketDisabledReason={
+          createDisabled
+            ? 'Private buckets are disabled in public/demo mode for non-admin users.'
+            : null
+        }
       />
       <ManifestCreatedModal report={createdReport} onClose={() => setCreatedReport(null)} />
       <RunCreatedModal
