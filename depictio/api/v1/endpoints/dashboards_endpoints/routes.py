@@ -65,9 +65,19 @@ from depictio.api.v1.services.figure.figure_builder import (
     merge_dashboard_brand_theme,
 )
 from depictio.api.v1.services.figure.style_presets import figure_style_payload
+from depictio.models.components.category_palette import assign_category_colors
+from depictio.models.components.lite import (
+    TEXT_ONLY_AGGREGATIONS,
+    TEXT_PARAM_PLACEHOLDER,
+    text_placeholders,
+)
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.branding import BrandTheme
-from depictio.models.models.dashboards import DashboardData, DashboardDataLite
+from depictio.models.models.dashboards import (
+    AUTO_CATEGORY_KEY,
+    DashboardData,
+    DashboardDataLite,
+)
 from depictio.models.models.multiqc_reports import general_stats_available
 from depictio.models.models.users import User
 from depictio.models.timestamps import preserved_creation_time, utc_now_str
@@ -1508,6 +1518,10 @@ _PRECOMPUTE_PARITY_AGGS = {
     "percentile": "quantile",
 }
 
+# Aggregations naming a category (a text tile's live values only, see
+# ``_top_category_expr``): computed over the frame, never from the specs.
+_TOP_AGGREGATIONS = frozenset(TEXT_ONLY_AGGREGATIONS)
+
 # Aggregation names that address the same precomputed spec entry. Specs are
 # stored under the ``agg_functions`` card-method name (e.g. numeric columns
 # record ``unique``), while the models and the compute path below speak the
@@ -1563,7 +1577,37 @@ def _filter_expr_columns(filter_expr: str | None) -> set[str]:
     return set(re.findall(r"col\(\s*['\"]([^'\"]+)['\"]\s*\)", filter_expr))
 
 
-def _agg_expr(column: str, aggregation: str) -> Any:
+def _top_category_expr(column: str, weight: str | None, share: bool) -> Any:
+    """``top`` / ``top_share``: the category of ``column`` holding the most weight.
+
+    The weight of a category is the sum of ``weight`` over its rows (a missing
+    weight counts as 0), or its row count without a ``weight``. Rows whose
+    category is null never win; ties go to the alphabetically first category.
+    ``top_share`` is that category's weight over the total weight of every row,
+    null categories included, so "62% of reads are Firmicutes" stays true of
+    all the reads. Null when no row has a category, or the total is 0.
+
+    One expression, so it runs in the scan-level pushdown beside the card
+    aggregations and gives the same answer on a collected frame.
+    """
+    import polars as _pl
+
+    col = _pl.col(column)
+    if weight:
+        w = _pl.col(weight).cast(_pl.Float64, strict=False).fill_null(0.0)
+        group_total, total = w.sum().over(column), w.sum()
+    else:
+        group_total = _pl.len().over(column).cast(_pl.Float64)
+        total = _pl.len().cast(_pl.Float64)
+    order = [col.is_null(), group_total, col.cast(_pl.Utf8)]
+    descending = [False, True, False]
+    if not share:
+        return col.sort_by(order, descending=descending).first()
+    top_total = group_total.sort_by(order, descending=descending).first()
+    return _pl.when(col.is_not_null().any() & (total > 0)).then(top_total / total).otherwise(None)
+
+
+def _agg_expr(column: str, aggregation: str, weight: str | None = None) -> Any:
     """Polars *expression* form of :func:`_agg_value`, or ``None`` if there isn't one.
 
     ``_agg_value`` reduces an already-materialised Series; this returns the same
@@ -1579,11 +1623,17 @@ def _agg_expr(column: str, aggregation: str) -> Any:
     Keep in sync with ``_agg_value``: an aggregation present here but computing
     something different there would make a card's value depend on whether a
     sibling card happened to force a full load.
+
+    ``top`` / ``top_share`` (a text tile's live values only; see
+    :func:`_top_category_expr`) read a second column, ``weight``. They have no
+    ``_agg_value`` form: the collected-frame path evaluates this same expression.
     """
     import polars as _pl
 
     agg = (aggregation or "").lower()
     col = _pl.col(column)
+    if agg in _TOP_AGGREGATIONS:
+        return _top_category_expr(column, weight, share=agg == "top_share")
     if agg == "count":
         return col.drop_nulls().len()
     if agg in ("average", "mean"):
@@ -1629,6 +1679,8 @@ def _coerce_agg_result(value: Any, aggregation: str) -> Any:
     if value is None:
         return None
     agg = (aggregation or "").lower()
+    if agg == "top":
+        return str(value)
     if agg in ("count", "nunique", "unique"):
         return int(value)
     if agg in ("min", "max", "mode"):
@@ -2109,6 +2161,85 @@ def _component_context(
     )
 
 
+def _text_params(text: dict) -> list[str]:
+    """The run-parameter keys a text tile prints (``{{param:KEY}}``), in order."""
+    return [
+        content.split(":", 1)[1]
+        for content in text_placeholders(text.get("title"), text.get("body"))
+        if TEXT_PARAM_PLACEHOLDER.match(content)
+    ]
+
+
+def _text_has_live_values(text: dict) -> bool:
+    """Whether a text tile asks the server for anything: values, or run parameters."""
+    return bool(text.get("values")) or bool(_text_params(text))
+
+
+def _text_value_cards(text: dict) -> list[dict]:
+    """A text tile's live values as cards, one per value, indexed ``<text index>::<name>``.
+
+    Shaped like a stored card so ``bulk_compute_cards`` computes them on its
+    card path: same filters, link resolution, ``filter_expr``, caches and
+    pushdown. ``text_value`` keeps them out of what only a card draws (group
+    comparison). An unresolved value (no ``dc_id``) computes to null.
+    """
+    text_idx = str(text.get("index"))
+    cards: list[dict] = []
+    for name, spec in (text.get("values") or {}).items():
+        if not isinstance(spec, dict):
+            continue
+        cards.append(
+            {
+                "index": f"{text_idx}::{name}",
+                "component_type": "card",
+                "text_value": True,
+                "wf_id": spec.get("wf_id"),
+                "dc_id": spec.get("dc_id"),
+                "column_name": spec.get("column"),
+                "aggregation": spec.get("aggregation"),
+                "weight": spec.get("weight"),
+                "filter_expr": spec.get("filter_expr"),
+            }
+        )
+    return cards
+
+
+def _project_run_params(project_id: Any) -> dict[str, str | None]:
+    """The run's parameters by key, from the project's recorded run provenance.
+
+    Pipeline parameters (provenance source ``params``) come first; a key from
+    another source (software versions, a user file) answers only when no
+    parameter has that name. A parameter left unset (stored as ``"null"``)
+    reads as None, which the viewer prints as a dash.
+    """
+    try:
+        project = projects_collection.find_one(
+            {"_id": ObjectId(str(project_id))}, {"template_origin.run_provenance": 1}
+        )
+    except Exception as exc:
+        logger.warning(f"text values: run provenance lookup failed for {project_id}: {exc}")
+        return {}
+    entries = ((project or {}).get("template_origin") or {}).get("run_provenance") or []
+    params: dict[str, str | None] = {}
+    for entry in sorted(entries, key=lambda e: e.get("source") != "params"):
+        key = entry.get("key")
+        if not key or key in params:
+            continue
+        value = entry.get("value")
+        params[str(key)] = None if value in (None, "", "null") else str(value)
+    return params
+
+
+def _frame_top_value(df: Any, column: str, aggregation: str, weight: str | None) -> Any:
+    """``top`` / ``top_share`` over a collected frame: the pushdown's expression, run eagerly."""
+    try:
+        raw = df.select(_agg_expr(column, aggregation, weight).alias("v")).item()
+    except Exception as e:
+        logger.warning(f"bulk_compute_cards: {aggregation} on {column!r} failed: {e}")
+        return None
+    return _coerce_agg_result(raw, aggregation)
+
+
 @dashboards_endpoint_router.post("/bulk_compute_cards/{dashboard_id}")
 def bulk_compute_cards(
     dashboard_id: PyObjectId,
@@ -2147,6 +2278,12 @@ def bulk_compute_cards(
 
         ``secondary_values`` and ``aggregations`` are only populated for cards
         that declare ``aggregations`` in YAML (multi-metrics card).
+
+        A text tile with live values (``values:``, or a ``{{param:KEY}}`` in its
+        title or body) is computed too, and answers under its own index with
+        one entry per value: ``values["<text index>"] = {"<name>": <number,
+        string or null>, "param:<KEY>": <string or null>}``. Numbers are raw;
+        the viewer formats them.
 
     Notes:
         - Uses load_deltatable_lite with the same metadata format as Dash so
@@ -2194,15 +2331,31 @@ def bulk_compute_cards(
         if m.get("component_type") == "card"
         and (requested is None or str(m.get("index")) in requested)
     ]
+    # A text tile's live values ride along as cards of their own (see
+    # `_text_value_cards`), so they get the cards' filters, link resolution,
+    # `filter_expr`, caches and pushdown without a path of their own. Folded
+    # back under the tile's index at the end.
+    texts = [
+        m
+        for m in stored_metadata
+        if m.get("component_type") == "text"
+        and _text_has_live_values(m)
+        and (requested is None or str(m.get("index")) in requested)
+    ]
+    cards = cards + [vc for text in texts for vc in _text_value_cards(text)]
 
-    if not cards:
+    if not cards and not texts:
         return {"values": {}, "filter_applied": bool(filters), "filter_count": len(filters)}
 
     # Build init_data mapping for load_deltatable_lite to avoid per-card API calls
     init_data: dict[str, dict] = {}
     for m in cards:
+        # An unresolved collection (a text value whose `dc` the import did not
+        # find) has no table to locate; it computes to null below.
+        if not m.get("dc_id"):
+            continue
         dc_id = str(m.get("dc_id"))
-        if not dc_id or dc_id in init_data:
+        if dc_id in init_data:
             continue
         dc_config = m.get("dc_config") or {}
         delta_loc = dc_config.get("delta_location")
@@ -2361,6 +2514,9 @@ def bulk_compute_cards(
         )
         key_cols.add(column)
         key_cols |= _card_payload_columns(card)
+        # `top` / `top_share` sum a second column per category.
+        if card.get("weight"):
+            key_cols.add(str(card["weight"]))
         # The expression is applied to the projected frame, so its columns have
         # to survive the projection even when no card displays them.
         key_cols |= _filter_expr_columns(card_filter_expr)
@@ -2419,7 +2575,7 @@ def bulk_compute_cards(
                 cidx = str(card.get("index"))
                 if (cidx, agg) in dict.fromkeys(aliases):
                     continue
-                expr = _agg_expr(str(column), str(agg))
+                expr = _agg_expr(str(column), str(agg), card.get("weight"))
                 if expr is None:
                     continue
                 alias = f"c{len(aliases)}"
@@ -2467,9 +2623,12 @@ def bulk_compute_cards(
         card_filter_expr = card.get("filter_expr")
         if secondary_aggs:
             aggregations_per_card[idx] = secondary_aggs
+        # A text tile's value prints one number: no group comparison strip.
+        card_compare = compare_groups and not card.get("text_value")
 
         if not (wf_id and dc_id and column and aggregation):
-            logger.warning(
+            # A text value whose collection this run lacks is expected, not a fault.
+            (logger.debug if card.get("text_value") else logger.warning)(
                 f"bulk_compute_cards: skipping {idx}: wf_id={wf_id} dc_id={dc_id} "
                 f"column={column} aggregation={aggregation}"
             )
@@ -2485,7 +2644,9 @@ def bulk_compute_cards(
         # answer for it. Skip straight to a path that can apply the expression.
         card_follows = follows_region(card)
         card_has_filters = has_filters if card_follows else has_region_free_filters
-        if not card_has_filters and not card_filter_expr:
+        # `top` / `top_share` are never in the specs: a spec that happens to be
+        # called `top` (a describe()'s most frequent value) ignores the weight.
+        if not card_has_filters and not card_filter_expr and aggregation not in _TOP_AGGREGATIONS:
             specs = _get_specs(str(dc_id))
             col_specs = specs.get(column) or {}
             specs_value = _spec_value(col_specs, aggregation)
@@ -2513,12 +2674,12 @@ def bulk_compute_cards(
                             all_specs_present = False
                             break
                         sec[sa] = float(sv) if isinstance(sv, (int, float)) else sv
-                    if all_specs_present and not needs_breakdown and not compare_groups:
+                    if all_specs_present and not needs_breakdown and not card_compare:
                         secondary_values[idx] = sec
                         continue
                     # Fall through to slow path to compute secondary values
                     # and/or the breakdown / group-compare payload.
-                elif not needs_breakdown and not compare_groups:
+                elif not needs_breakdown and not card_compare:
                     continue
                 # else: fall through to slow path so the breakdown gets
                 # computed even though the hero value came from specs.
@@ -2544,7 +2705,7 @@ def bulk_compute_cards(
         # scalar-only pushdown short-circuit like a breakdown payload does.
         fully_pushed = (
             not needs_breakdown_payload
-            and not compare_groups
+            and not card_compare
             and all((idx, a) in pushdown_values for a in wanted_aggs)
         )
         if fully_pushed:
@@ -2598,7 +2759,10 @@ def bulk_compute_cards(
             values.setdefault(idx, None)
             continue
 
-        values[idx] = _agg_value(df[column], aggregation)
+        if aggregation in _TOP_AGGREGATIONS:
+            values[idx] = _frame_top_value(df, str(column), aggregation, card.get("weight"))
+        else:
+            values[idx] = _agg_value(df[column], aggregation)
         logger.debug(f"bulk_compute_cards: {idx} ({aggregation}/{column}) = {values[idx]}")
 
         sec_results: dict[str, Any] = {}
@@ -2649,7 +2813,7 @@ def bulk_compute_cards(
         # sub-payload shape the card's own secondary layout uses, computed over
         # that group's partition, so the client can draw one mini-rendering per
         # group in the group's color.
-        if compare_groups:
+        if card_compare:
             # Recorded before the comparison is attempted, so a card whose
             # payload computation then fails still reports which groups could
             # reach its data collection and which could not.
@@ -2745,6 +2909,18 @@ def bulk_compute_cards(
 
         if sec_results:
             secondary_values[idx] = sec_results
+
+    # Each text tile's values back under its own index, with the run
+    # parameters its placeholders name.
+    run_params = _project_run_params(project_id) if any(map(_text_params, texts)) else {}
+    for text in texts:
+        text_idx = str(text.get("index"))
+        folded: dict[str, Any] = {
+            name: values.pop(f"{text_idx}::{name}", None) for name in (text.get("values") or {})
+        }
+        for key in _text_params(text):
+            folded[f"param:{key}"] = run_params.get(key)
+        values[text_idx] = folded
 
     return {
         "values": values,
@@ -3629,6 +3805,13 @@ def render_map_endpoint(
         access_token=access_token,
     )
     component = ctx.component
+    # The family's category colours, so the map draws a category in the colour
+    # every other tile gives it (as render_figure_endpoint does).
+    dashboard_doc = dashboards_collection.find_one(
+        {"dashboard_id": dashboard_id},
+        {"category_colors": 1, "parent_dashboard_id": 1},
+    )
+    category_colors = effective_category_colors(dashboard_doc or {})
 
     try:
         df = load_deltatable_lite(
@@ -3655,6 +3838,7 @@ def render_map_endpoint(
             theme=theme,
             existing_metadata=None,
             access_token=access_token,
+            category_colors=category_colors,
         )
 
         if hasattr(fig, "to_json"):
@@ -5176,6 +5360,115 @@ def _resolve_workflow_tags(component: dict, project_id: PyObjectId | None = None
             return
 
 
+def _resolve_text_value_tags(component: dict, project_id: PyObjectId | None) -> None:
+    """Resolve a text tile's live values' `dc` tags to `dc_id` / `wf_id`, in place.
+
+    A value is looked for in the tile's own `workflow_tag` workflow first, if it
+    names one, then in every workflow of the project. A tag found nowhere gets
+    `dc_id: None`: the value computes to null, and `_prune_unresolved_text_values`
+    takes out the lines that cite it.
+    """
+    values = component.get("values")
+    if component.get("component_type") != "text" or not isinstance(values, dict) or not values:
+        return
+    project = (
+        projects_collection.find_one({"_id": ObjectId(project_id)}, {"workflows": 1})
+        if project_id
+        else None
+    )
+    workflows = (project or {}).get("workflows") or []
+    wf_tag = component.get("workflow_tag") or ""
+    wf_name = wf_tag.split("/", 1)[1] if "/" in wf_tag else wf_tag
+    own = [w for w in workflows if wf_name and wf_name in (w.get("name"), w.get("workflow_tag"))]
+    ordered = own + [w for w in workflows if w not in own]
+    for name, spec in values.items():
+        if not isinstance(spec, dict) or spec.get("dc_id"):
+            continue
+        found = next(
+            (
+                (wf, dc)
+                for wf in ordered
+                for dc in wf.get("data_collections", [])
+                if dc.get("data_collection_tag") == spec.get("dc")
+            ),
+            None,
+        )
+        spec["wf_id"] = str(found[0]["_id"]) if found else None
+        spec["dc_id"] = str(found[1]["_id"]) if found else None
+        if not found:
+            logger.info(
+                f"Text value '{name}' (index '{component.get('index')}'): data collection "
+                f"'{spec.get('dc')}' not in this project"
+            )
+
+
+# A markdown list item, and the lines that only structure a body (a heading, a
+# rule): what is left of a text tile once its cited values are gone.
+_LIST_ITEM_LINE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
+_STRUCTURE_LINE = re.compile(r"^\s*(?:#{1,6}(?:\s|$)|(?:[-*_]\s*){3,}$)")
+
+
+def _prune_unresolved_text_values(component: dict, dc_meta: dict[str, dict]) -> bool:
+    """Take out a text tile's list items citing a value this run cannot compute.
+
+    A value cannot be computed when its `dc` did not resolve, or names an
+    optional collection left unpopulated (the rule `_component_has_data`
+    applies to a card). Each list item citing one, its continuation lines
+    included, is removed; values no longer cited anywhere leave `values`, so an
+    export stays valid. Lines that are not list items are kept, and print a
+    dash for the value.
+
+    Returns False when the tile has nothing left to say (only headings, rules
+    or blank lines) after a removal, so the caller drops it.
+    """
+    values = component.get("values")
+    if component.get("component_type") != "text" or not isinstance(values, dict) or not values:
+        return True
+    unresolved: set[str] = set()
+    for name, spec in values.items():
+        if not isinstance(spec, dict):
+            continue
+        probe = {"data_collection_tag": spec.get("dc"), "dc_id": spec.get("dc_id")}
+        if not _component_has_data(probe, dc_meta):
+            spec["dc_id"] = spec["wf_id"] = None
+            unresolved.add(name)
+    if not unresolved:
+        return True
+
+    # Group the body into blocks: a list item with its indented continuation
+    # lines, or a single other line.
+    blocks: list[list[str]] = []
+    for line in (component.get("body") or "").split("\n"):
+        continuation = (
+            blocks
+            and _LIST_ITEM_LINE.match(blocks[-1][0])
+            and line.strip()
+            and line[:1].isspace()
+            and not _LIST_ITEM_LINE.match(line)
+        )
+        if continuation:
+            blocks[-1].append(line)
+        else:
+            blocks.append([line])
+    kept_blocks = [
+        block
+        for block in blocks
+        if not (_LIST_ITEM_LINE.match(block[0]) and unresolved & set(text_placeholders(*block)))
+    ]
+    if len(kept_blocks) == len(blocks):
+        return True
+
+    lines = [line for block in kept_blocks for line in block]
+    component["body"] = "\n".join(lines)
+    cited = set(text_placeholders(component.get("title"), component["body"]))
+    component["values"] = {n: s for n, s in values.items() if n in cited} or None
+    logger.info(
+        f"Text tile '{component.get('index')}': removed {len(blocks) - len(kept_blocks)} "
+        f"line(s) citing {sorted(unresolved)}, absent from this run"
+    )
+    return any(line.strip() and not _STRUCTURE_LINE.match(line) for line in lines)
+
+
 def _project_dc_properties(dc_id: Any, project_id: PyObjectId | None) -> dict:
     """The `dc_specific_properties` a project stores for one of its data collections.
 
@@ -5515,6 +5808,10 @@ def _filter_unresolved_components(
     `data_collection_tag`, so `_component_has_data` always keeps them) or, for a
     filter section, nothing at all.
 
+    A text tile's live values follow the same rule: the list items citing one
+    the run cannot compute go, and the tile with them when nothing else is left
+    (see `_prune_unresolved_text_values`).
+
     After pruning, the main grid (`right_panel_layout_data`) is re-compacted so a
     dropped component never leaves a half-width card alone on a row.
     """
@@ -5524,7 +5821,13 @@ def _filter_unresolved_components(
     dc_meta = _build_dc_meta(project_id)
     kept, dropped = [], []
     for component in components:
-        if _component_has_data(component, dc_meta):
+        if not _prune_unresolved_text_values(component, dc_meta):
+            dropped.append(component.get("index"))
+            logger.info(
+                f"Hiding text tile (index='{component.get('index')}'): every line citing a "
+                "live value was removed, nothing else is left"
+            )
+        elif _component_has_data(component, dc_meta):
             kept.append(component)
         else:
             dropped.append(component.get("index"))
@@ -5565,6 +5868,15 @@ def _filter_unresolved_components(
                 spec for spec in specs if (kind, spec.get("name")) not in orphaned
             ]
 
+    _remove_components(dashboard_dict, kept, dropped)
+
+
+def _remove_components(dashboard_dict: dict, kept: list[dict], dropped: list[Any]) -> None:
+    """Keep only `kept` in a dashboard, drop the layout items of `dropped`, re-pack the grid.
+
+    `dropped` holds the removed components' indices. Every key written is one
+    `dashboard_dict` already had, so the dict can be used as a `$set` document.
+    """
     dashboard_dict["stored_metadata"] = kept
     drop_keys = {f"box-{idx}" for idx in dropped}
     for layout_key in ("left_panel_layout_data", "right_panel_layout_data", "stored_layout_data"):
@@ -5582,6 +5894,229 @@ def _filter_unresolved_components(
         dashboard_dict["right_panel_layout_data"] = _recompact_main_grid(
             dashboard_dict["right_panel_layout_data"], sections_by_box
         )
+
+
+# What a highlight can show (mirrors `canHighlight` in highlightTile.ts).
+_HIGHLIGHTABLE_TYPES = frozenset({"figure", "advanced_viz"})
+
+
+def _tab_key(name: Any) -> str:
+    """A tab or title as the viewer compares it (`tabLinkKey`): trimmed, lower case,
+    runs of whitespace as one space."""
+    return " ".join(str(name).split()).lower()
+
+
+def _tab_keys(doc: dict) -> set[str]:
+    """Every name a tab answers to: its sidebar label, its title and its id."""
+    label = doc.get("title") if doc.get("parent_dashboard_id") else None
+    label = label or doc.get("main_tab_name") or doc.get("title")
+    return {_tab_key(n) for n in (label, doc.get("title"), doc.get("dashboard_id")) if n}
+
+
+def _highlight_source(components: list[dict], ref: Any) -> dict | None:
+    """The component a highlight's `source_component` names: by index, else by title
+    (case and spacing ignored, a highlightable one first). Mirrors `findHighlightSource`."""
+    wanted = str(ref or "").strip()
+    if not wanted:
+        return None
+    by_index = next((c for c in components if str(c.get("index")) == wanted), None)
+    if by_index is not None:
+        return by_index
+    titled = [c for c in components if c.get("title") and _tab_key(c["title"]) == _tab_key(wanted)]
+    return next(
+        (c for c in titled if c.get("component_type") in _HIGHLIGHTABLE_TYPES),
+        titled[0] if titled else None,
+    )
+
+
+def _highlight_is_orphan(highlight: dict, family: list[dict], drop_missing_tabs: bool) -> bool:
+    """Whether a highlight would draw nothing: its source tab or component is gone.
+
+    The tab is looked up as the viewer does, by `source_dashboard_id`, else by
+    `source_tab` against every name a family tab answers to. A tab found
+    nowhere makes the highlight an orphan only under `drop_missing_tabs` (the
+    whole family has been imported). A component bound to a data collection
+    that did not resolve counts as gone.
+    """
+    by_id = {str(d.get("dashboard_id")): d for d in family}
+    tab = by_id.get(str(highlight.get("source_dashboard_id") or "").strip())
+    if tab is None and highlight.get("source_tab"):
+        key = _tab_key(highlight["source_tab"])
+        tab = next((d for d in family if key in _tab_keys(d)), None)
+    if tab is None:
+        return drop_missing_tabs
+    source = _highlight_source(tab.get("stored_metadata") or [], highlight.get("source_component"))
+    if source is None:
+        return True
+    return bool(source.get("data_collection_tag")) and not source.get("dc_id")
+
+
+def _prune_family_highlights(
+    main_dashboard_id: Any, written_ids: set[str], drop_missing_tabs: bool = True
+) -> None:
+    """Drop, from the tabs an import just wrote, the highlights whose source is gone.
+
+    Runs once the family is in the database, so a highlight on the main tab can
+    be checked against a child tab imported after it: a tab the import pruned
+    (its data absent for this run), or a figure pruned on its tab, would
+    otherwise leave a tile saying the figure is not found. A single-file import
+    passes `drop_missing_tabs=False`, its sibling tabs possibly still to come.
+    Each tab that lost a highlight is re-compacted and saved again.
+    """
+    family = list(
+        dashboards_collection.find(
+            {
+                "$or": [
+                    {"dashboard_id": main_dashboard_id},
+                    {"parent_dashboard_id": main_dashboard_id},
+                ]
+            }
+        )
+    )
+    for doc in family:
+        if str(doc.get("dashboard_id")) not in written_ids:
+            continue
+        components = doc.get("stored_metadata") or []
+        orphans = [
+            c
+            for c in components
+            if c.get("component_type") == "highlight"
+            and _highlight_is_orphan(c, family, drop_missing_tabs)
+        ]
+        if not orphans:
+            continue
+        for c in orphans:
+            logger.info(
+                f"Hiding highlight (index='{c.get('index')}', source_tab='{c.get('source_tab')}', "
+                f"source_component='{c.get('source_component')}'): its source was not imported"
+            )
+        update = {
+            key: doc[key]
+            for key in (
+                "stored_metadata",
+                "left_panel_layout_data",
+                "right_panel_layout_data",
+                "stored_layout_data",
+            )
+            if key in doc
+        }
+        _remove_components(
+            update, [c for c in components if c not in orphans], [c.get("index") for c in orphans]
+        )
+        dashboards_collection.update_one({"_id": doc["_id"]}, {"$set": update})
+        doc.update(update)
+
+
+def _category_column_dc(column: str, dashboard_dict: dict, project_id: Any) -> str | None:
+    """The data collection whose values `category_colors.<column>: auto` colours.
+
+    An interactive component of the dashboard filtering on the column names it
+    first, since that is where a reader picks the values. Else the first table
+    of the project holding the column, sample sheets and metadata tables before
+    the others.
+    """
+    for comp in dashboard_dict.get("stored_metadata") or []:
+        if (
+            comp.get("component_type") == "interactive"
+            and comp.get("column_name") == column
+            and comp.get("dc_id")
+        ):
+            return str(comp["dc_id"])
+    if not project_id:
+        return None
+    project = projects_collection.find_one({"_id": ObjectId(project_id)}, {"workflows": 1})
+    tables: list[tuple[bool, str]] = []
+    for wf in (project or {}).get("workflows") or []:
+        for dc in wf.get("data_collections") or []:
+            config = dc.get("config") or {}
+            if (config.get("type") or "").lower() != "table" or not dc.get("_id"):
+                continue
+            tag = (dc.get("data_collection_tag") or "").lower()
+            preferred = "metadata" in tag or "samplesheet" in tag
+            preferred = preferred or (config.get("metatype") or "").lower() == "metadata"
+            tables.append((not preferred, str(dc["_id"])))
+    for _, dc_id in sorted(tables, key=lambda t: t[0]):
+        if column in (_dc_column_names(dc_id) or set()):
+            return dc_id
+    return None
+
+
+def _distinct_column_values(dc_id: str, column: str) -> list[str] | None:
+    """The distinct non-null values of a table column, as strings; None when unreadable."""
+    import polars as pl
+
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import _create_delta_scan
+
+    try:
+        dt = deltatables_collection.find_one(
+            {"data_collection_id": ObjectId(dc_id)}, {"delta_table_location": 1}
+        )
+        location = (dt or {}).get("delta_table_location")
+        if not location:
+            return None
+        frame = (
+            _create_delta_scan(location)
+            .select(pl.col(column).cast(pl.Utf8))
+            .drop_nulls()
+            .unique()
+            .collect()
+        )
+    except Exception as exc:
+        logger.warning(f"category_colors: reading {column!r} of {dc_id} failed: {exc}")
+        return None
+    return frame[column].to_list()
+
+
+def _resolve_auto_category_colors(
+    dashboard_dict: dict, project_id: Any, previous: dict | None = None
+) -> None:
+    """Replace `category_colors`' `"*": "auto"` by a colour per value of the data, in place.
+
+    For each column so marked, the values are read from the collection
+    `_category_column_dc` finds, and coloured by `assign_category_colors`:
+    `previous` (the column's colours on the dashboard this import replaces)
+    first, the template's pins next, palette slots for the rest. A column no
+    collection of the project holds is dropped, pins included: nothing on the
+    dashboard can be drawn by it. The stored map never keeps a `"*"`.
+    """
+    colors = dashboard_dict.get("category_colors")
+    if not isinstance(colors, dict):
+        return
+    resolved: dict[str, dict[str, str]] = {}
+    for column, mapping in colors.items():
+        if mapping == "auto":
+            mapping = {AUTO_CATEGORY_KEY: "auto"}
+        if not isinstance(mapping, dict):
+            continue
+        pinned = {k: v for k, v in mapping.items() if k != AUTO_CATEGORY_KEY}
+        if mapping.get(AUTO_CATEGORY_KEY) != "auto":
+            if pinned:
+                resolved[column] = pinned
+            continue
+        dc_id = _category_column_dc(column, dashboard_dict, project_id)
+        if dc_id is None:
+            logger.info(f"category_colors.{column}: auto, but no table of the project has it")
+            continue
+        before = (previous or {}).get(column)
+        colours = assign_category_colors(
+            _distinct_column_values(dc_id, column) or [],
+            pinned,
+            before if isinstance(before, dict) else None,
+        )
+        if colours:
+            resolved[column] = colours
+    dashboard_dict["category_colors"] = resolved or None
+
+
+def _layered_category_colors(*layers: dict | None) -> dict[str, dict[str, str]]:
+    """Category colour maps merged value by value, a later layer over an earlier one."""
+    merged: dict[str, dict[str, str]] = {}
+    for layer in layers:
+        for column, mapping in (layer or {}).items():
+            if isinstance(mapping, dict):
+                merged[column] = {**merged.get(column, {}), **mapping}
+    return merged
 
 
 def _tab_has_visualization_components(
@@ -5850,6 +6385,9 @@ def _import_multi_tab_dashboard(
             family_filter,
             keep=True,
         )
+        _prune_family_highlights(
+            existing_main["dashboard_id"], {tab["dashboard_id"] for tab in added}
+        )
         return _keep_existing_dashboard(
             existing_main, project_id, source_key, main_title, tabs_added=len(added)
         )
@@ -5892,10 +6430,15 @@ def _import_multi_tab_dashboard(
     # Resolve tags and regenerate fields for main dashboard components
     for component in main_dashboard_dict.get("stored_metadata", []):
         _resolve_workflow_tags(component, project_id=project_id)
+        _resolve_text_value_tags(component, project_id)
         _regenerate_component_fields(component, project_id=project_id)
     # Hide components whose DC is absent/unpopulated (self-adapting dashboard)
     _filter_unresolved_components(main_dashboard_dict, project_id=project_id)
     _regenerate_component_indices(main_dashboard_dict)
+    # Colours of the dashboard this one replaces win, so a refresh keeps them.
+    _resolve_auto_category_colors(
+        main_dashboard_dict, project_id, (existing_main or {}).get("category_colors")
+    )
 
     # Validate and insert/update main dashboard
     try:
@@ -5925,6 +6468,11 @@ def _import_multi_tab_dashboard(
         family_filter,
         overwrite=overwrite,
         keep_titles=keep_titles,
+    )
+    # Now that every tab is in: a highlight whose tab or figure did not make it.
+    _prune_family_highlights(
+        main_dashboard_id,
+        {str(main_dashboard_id), *(tab["dashboard_id"] for tab in imported_tabs)},
     )
 
     action = "Updated" if is_update else "Imported"
@@ -5972,6 +6520,12 @@ def _import_family_tabs(
     imported_tabs = []
     dc_meta = _build_dc_meta(project_id)
     family = {"parent_dashboard_id": main_dashboard_id}
+    # A tab's `auto` colours start from the main tab's, so a value is the same
+    # colour on every tab of the family.
+    main_colors = (
+        dashboards_collection.find_one({"dashboard_id": main_dashboard_id}, {"category_colors": 1})
+        or {}
+    ).get("category_colors")
     next_order = 1  # The main tab is 0.
     if keep:
         orders = dashboards_collection.find(family, {"tab_order": 1})
@@ -6039,6 +6593,7 @@ def _import_family_tabs(
         # Resolve tags and regenerate fields for tab components
         for component in tab_dashboard_dict.get("stored_metadata", []):
             _resolve_workflow_tags(component, project_id=project_id)
+            _resolve_text_value_tags(component, project_id)
             _regenerate_component_fields(component, project_id=project_id)
         before_filtering = len(tab_dashboard_dict.get("stored_metadata") or [])
         _filter_unresolved_components(tab_dashboard_dict, project_id=project_id)
@@ -6068,6 +6623,12 @@ def _import_family_tabs(
                 dashboards_collection.delete_one({"_id": existing_tab["_id"]})
                 delete_threads_for_dashboards([existing_tab["dashboard_id"]])
             continue
+
+        _resolve_auto_category_colors(
+            tab_dashboard_dict,
+            project_id,
+            _layered_category_colors(main_colors, (existing_tab or {}).get("category_colors")),
+        )
 
         # Validate and insert/update tab
         try:
@@ -6376,10 +6937,19 @@ async def import_dashboard_from_yaml(
     # Resolve tags to MongoDB IDs, regenerate fields from DC config, and regenerate component indices
     for component in dashboard_dict.get("stored_metadata", []):
         _resolve_workflow_tags(component, project_id=project_id)
+        _resolve_text_value_tags(component, project_id)
         # Regenerate s3_base_folder, etc. after dc_config is populated
         _regenerate_component_fields(component, project_id=project_id)
     _filter_unresolved_components(dashboard_dict, project_id=project_id)
     _regenerate_component_indices(dashboard_dict)
+    _resolve_auto_category_colors(
+        dashboard_dict,
+        project_id,
+        _layered_category_colors(
+            (parent_dashboard or {}).get("category_colors"),
+            (existing_dashboard or {}).get("category_colors"),
+        ),
+    )
 
     try:
         dashboard = DashboardData.from_mongo(dashboard_dict)
@@ -6399,6 +6969,13 @@ async def import_dashboard_from_yaml(
         result = dashboards_collection.insert_one(dashboard.mongo())
         if not result.inserted_id:
             raise HTTPException(status_code=500, detail="Failed to import dashboard.")
+    # Sibling tabs may still be on their way, so only a source gone from a tab
+    # that is there drops a highlight.
+    _prune_family_highlights(
+        parent_dashboard["dashboard_id"] if parent_dashboard else new_dashboard_id,
+        {str(new_dashboard_id)},
+        drop_missing_tabs=False,
+    )
 
     action = "Updated" if is_update else "Imported"
     logger.info(
