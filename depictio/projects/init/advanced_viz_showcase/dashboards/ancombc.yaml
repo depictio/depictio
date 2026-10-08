@@ -1,12 +1,12 @@
-# Differential abundance (with filters & cards) — one tab of the advanced-visualisation showcase.
+# Differentially abundant taxa: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Differential abundance (with filters & cards)'
-subtitle: 'Signed-LFC horizontal bars of differentially-abundant taxa from an ANCOM-BC-style output. Use the contrast filter on the left or switch tabs in-viz to pick a contrast (or ''All'' for faceted side-by-side).'
+title: 'Differentially abundant taxa'
+subtitle: 'ANCOM-BC log fold changes of the top taxa, one panel per habitat contrast'
 icon: 'mdi:chart-bar'
 icon_color: 'red'
 icon_variant: filled
@@ -44,11 +44,12 @@ components:
     vertical_alignment: top
     section: 'Differential calls'
     body: >
-      Compositionally corrected differential abundance, one row per feature and contrast.
-      The bars are signed by direction and ordered by effect, so the two ends of the chart
-      are the two directions of the comparison. Pick a contrast on the left first: every bar
-      is conditional on it.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      ANCOM-BC results for three habitat contrasts, one panel per contrast: bars are the bias-
+      corrected log fold change of the top taxa, signed by direction and greyed when the
+      q-value misses the threshold. Top-N and the significance threshold sit in the tile
+      header; the tabs inside the tile drill into one contrast. This is the differential
+      abundance output of nf-core/ampliseq (ANCOM-BC through QIIME2).
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-ancombc
     index: 'bc-bar'
@@ -56,7 +57,7 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'ancombc_demo'
     title: 'Differential abundance (ANCOM-BC demo)'
-    description: 'Top-N taxa by |lfc| per contrast. Bars are coloured by direction (blue = up, red = down). Bars with q > threshold are greyed out. Switch tabs to drill into a single contrast or use the ''All'' tab for faceted side-by-side comparison.'
+    description: 'Top taxa by absolute log fold change per contrast, signed by direction, greyed above the q-value threshold. The tabs inside the tile drill into one contrast.'
     section: 'Differential calls'
     viz_kind: 'da_barplot'
     config:
@@ -69,7 +70,8 @@ components:
       significance_threshold: 0.05
       top_n: 15
       contrast_view: "all"
-    layout: { x: 0, y: 1, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-ancombc-contrast
     index: bc-f-contrast
@@ -101,6 +103,7 @@ components:
     placement: left
     section: 'Contrast scope'
     group: 'Call filters'
+    show_histogram: true
     display:
       title_size: md
       custom_color: '#F68B33'

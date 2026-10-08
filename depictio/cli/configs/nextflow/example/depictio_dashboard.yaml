@@ -90,7 +90,7 @@ components:
     alignment: left
     body: >
       Everything below arrived without anyone running the CLI by hand: the
-      pipeline's `workflow.onComplete` handler called `depictio run` on its
+      pipeline's `workflow.onComplete` handler called `depictio ingest` on its
       output directory. Each card below uses a different secondary layout,
       because the question each column answers is different: a funnel for the
       read stages, a QC cut-off for quality, a five-number summary for the

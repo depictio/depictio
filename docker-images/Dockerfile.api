@@ -22,7 +22,7 @@ WORKDIR /build
 RUN corepack enable && corepack prepare pnpm@10 --activate
 
 # ---- Dependency layer (cached across viewer source changes) ----
-COPY pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/depictio-components/package.json ./packages/depictio-components/
 COPY packages/depictio-react-core/package.json ./packages/depictio-react-core/
 COPY depictio/viewer/package.json ./depictio/viewer/
@@ -70,8 +70,8 @@ RUN groupadd -g ${GID} depictio && \
 COPY --chown=depictio:depictio pyproject.toml uv.lock* ./
 COPY --chown=depictio:depictio packages ./packages/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev \
-    || uv sync --no-install-project --no-dev
+    uv sync --frozen --no-install-project --no-dev --extra server \
+    || uv sync --no-install-project --no-dev --extra server
 
 # ---- Project layer (source + VERSION last) ----
 # Install the depictio project on top of the cached deps; cheap because every
@@ -80,7 +80,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 COPY --chown=depictio:depictio VERSION ./
 COPY --chown=depictio:depictio depictio ./depictio/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev || uv sync --no-dev
+    uv sync --frozen --no-dev --extra server || uv sync --no-dev --extra server
 
 # Prebuilt catalog-preview bundle (one self-contained ~7 MB HTML). Copied after
 # the source layer so it lands on top of depictio/viewer/, and last-but-one so a

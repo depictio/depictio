@@ -1,13 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  NumberInput,
-  Select,
-  Stack,
-  Switch,
-  Text,
-  useMantineColorScheme,
-  useMantineTheme,
-} from '@mantine/core';
+import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import {
@@ -17,6 +9,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { VizFullRow, VizNumberInput, VizSelect, VizSwitch } from './controls/VizControls';
 import { COLOUR_SCALES, type ColourScale } from './colourScales';
 import {
   applyDataTheme,
@@ -634,22 +627,14 @@ const SignalMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
     theme,
   ]);
 
-  const controls = useMemo(
+  // Encoding tier: the row order and the binning decide which regions are a
+  // row at all, which is what a metagene heatmap is read for. The colour scale
+  // and the mean profile ride on top of that matrix.
+  const primaryControls = useMemo(
     () => (
-      <Stack gap="xs">
-        <Select
-          size="xs"
-          label="Colour scale"
-          value={colourScale}
-          onChange={(v) => v && setColourScale(v as ColourScale)}
-          data={COLOUR_SCALES as unknown as string[]}
-          allowDeselect={false}
-          comboboxProps={{ withinPortal: true }}
-        />
-        <Select
-          size="xs"
+      <>
+        <VizSelect
           label="Row order"
-          description="Columns are positions and are never reordered"
           value={sortBy}
           onChange={(v) => v && setSortBy(v as SortBy)}
           data={[
@@ -657,12 +642,9 @@ const SignalMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
             { value: 'none', label: 'As delivered' },
           ]}
           allowDeselect={false}
-          comboboxProps={{ withinPortal: true }}
         />
-        <NumberInput
-          size="xs"
+        <VizNumberInput
           label="Max rows"
-          description="Regions are averaged into this many bins, never truncated"
           value={maxRows}
           onChange={(v) => {
             const next = typeof v === 'number' ? v : Number(v);
@@ -673,39 +655,51 @@ const SignalMatrixRenderer: React.FC<Props> = ({ metadata, filters, refreshTick 
           step={100}
           clampBehavior="strict"
         />
-        <Stack gap={4}>
-          <Text size="xs" fw={500}>
-            Profile
-          </Text>
-          <Switch
-            size="xs"
-            checked={showProfile}
-            onChange={(e) => setShowProfile(e.currentTarget.checked)}
-            label="Mean profile above the matrix"
-          />
-        </Stack>
-        {matrix ? (
-          <Text size="xs" c="dimmed">
-            {matrix.drawnRows} row{matrix.drawnRows === 1 ? '' : 's'} drawn from{' '}
-            {matrix.totalRegions} region{matrix.totalRegions === 1 ? '' : 's'} ×{' '}
-            {matrix.positions.length} positions
-            {matrix.drawnRows < matrix.totalRegions ? ' (binned by averaging)' : ''}
-            {matrix.droppedGroups > 0
-              ? ` · ${matrix.droppedGroups} further group${
-                  matrix.droppedGroups === 1 ? '' : 's'
-                } not drawn`
-              : ''}
-          </Text>
-        ) : null}
-      </Stack>
+      </>
     ),
-    [colourScale, sortBy, maxRows, showProfile, matrix],
+    [sortBy, maxRows],
+  );
+
+  const controls = useMemo(
+    () => (
+      <>
+        <VizSelect
+          label="Colour scale"
+          value={colourScale}
+          onChange={(v) => v && setColourScale(v as ColourScale)}
+          data={COLOUR_SCALES as unknown as string[]}
+          allowDeselect={false}
+        />
+        <VizSwitch
+          checked={showProfile}
+          onChange={(e) => setShowProfile(e.currentTarget.checked)}
+          label="Mean profile above the matrix"
+        />
+        {matrix ? (
+          <VizFullRow>
+            <Text size="xs" c="dimmed">
+              {matrix.drawnRows} row{matrix.drawnRows === 1 ? '' : 's'} drawn from{' '}
+              {matrix.totalRegions} region{matrix.totalRegions === 1 ? '' : 's'} ×{' '}
+              {matrix.positions.length} positions
+              {matrix.drawnRows < matrix.totalRegions ? ' (binned by averaging)' : ''}
+              {matrix.droppedGroups > 0
+                ? ` · ${matrix.droppedGroups} further group${
+                    matrix.droppedGroups === 1 ? '' : 's'
+                  } not drawn`
+                : ''}
+            </Text>
+          </VizFullRow>
+        ) : null}
+      </>
+    ),
+    [colourScale, showProfile, matrix],
   );
 
   return (
     <AdvancedVizFrame
       title={metadata.title || 'Signal matrix'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
+      primaryControls={primaryControls}
       controls={controls}
       loading={loading}
       error={error}

@@ -154,7 +154,7 @@ def locate_template(template_id: str) -> Path:
 def detect_template_from_run_dir(run_dir: str | Path) -> tuple[str | None, Any]:
     """Identify the pipeline that produced ``run_dir`` and pick a bundled template.
 
-    Powers ``depictio-cli run --data-root <dir>`` with no ``--template``: the
+    Powers ``depictio ingest <results dir>`` with no ``--template``: the
     results directory itself says which pipeline and release made it, so the
     user should not have to.
 
@@ -299,6 +299,21 @@ def substitute_template_variables(config: Any, variables: dict[str, str]) -> Any
         return result
     else:
         return config
+
+
+def apply_variable_defaults(
+    variables: dict[str, str], template_metadata: TemplateMetadata
+) -> dict[str, str]:
+    """Fill every declared variable that has a ``default`` and no value yet.
+
+    Explicit values (``--var``, params.json introspection, metadata auto-detect)
+    always win. Mutates and returns ``variables``. Shared by the CLI resolver and
+    the boot-time reference resolver so a template variable such as ``GENOME``
+    resolves to the same value on both paths.
+    """
+    for name, default in template_metadata.get_variable_defaults().items():
+        variables.setdefault(name, default.replace("{DATA_ROOT}", variables.get("DATA_ROOT", "")))
+    return variables
 
 
 def _prune_missing_optional_single_file_dcs(
@@ -1109,6 +1124,7 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
         ``--ancombc``), so qiime2/ancombc/ is absent
       - ``IS_METAGENOMIC`` — viralrecon metagenomic (non-amplicon) runs
       - ``IS_NANOPORE``    — viralrecon nanopore/artic runs
+      - ``IS_BCLCONVERT``: demultiplex runs using BCL Convert instead of bcl2fastq
       - ``IS_MULTIREGION`` — ampliseq multiregion/SIDLE runs (per-region ASVs
         reconstructed into one cross-region feature table under ``sidle/``)
       - ``PPLACE_TREE_FILE``: ampliseq phylogenetic-placement runs (``pplace_tree``
@@ -1176,6 +1192,8 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
         variables.setdefault("IS_NANOPORE", "true")
     if (params.get("protocol") or "").lower() == "metagenomic":
         variables.setdefault("IS_METAGENOMIC", "true")
+    if (params.get("demultiplexer") or "").lower() == "bclconvert":
+        variables.setdefault("IS_BCLCONVERT", "true")
     if flag("skip_qiime"):
         variables.setdefault("SKIP_QIIME", "true")
     # ampliseq output-suppressing skip flags: each removes a subtree of qiime2/
@@ -1360,6 +1378,15 @@ def resolve_template(
                 variables["SAMPLESHEET_FILE"] = str(candidates[0])
                 logger.info(f"Samplesheet auto-detected: {candidates[0]}")
 
+    # 3d. Declared defaults (e.g. GENOME: hg38, GROUP_COL: Condition) fill whatever
+    # the run left unset. They run BEFORE the generic sentinels below so a template's
+    # own default wins over them, and they are excluded from `provided_vars`: a
+    # default must not fire an `if_var_present` conditional, it only resolves
+    # `{NAME}` placeholders in template.yaml and the dashboard YAMLs.
+    _before_defaults = set(variables)
+    apply_variable_defaults(variables, template_metadata)
+    defaulted_vars = set(variables) - _before_defaults
+
     # Metadata ID column defaults to "sample" (megatest convention) when no
     # metadata file is present; the metadata→* links are pruned in that case, so
     # the placeholder simply resolves harmlessly.
@@ -1374,7 +1401,7 @@ def resolve_template(
     variables.setdefault("GROUP_COL", "__no_group__")
     variables.setdefault("GROUP_COL_DISPLAY", "Group")
 
-    provided_vars: set[str] = set(variables.keys())
+    provided_vars: set[str] = set(variables.keys()) - defaulted_vars
 
     # 4. Validate required variables; warn about unknown extras
     required_vars = template_metadata.get_required_variable_names()
@@ -1385,8 +1412,10 @@ def resolve_template(
             f"Provided: {', '.join(variables.keys())}"
         )
 
+    # Only what --var passed: the defaults filled in above (GROUP_COL,
+    # METADATA_ID_COL, the params.json flags) are not the user's to explain.
     declared_var_names = {var.name for var in template_metadata.variables}
-    for v in variables:
+    for v in extra_vars or {}:
         if v not in declared_var_names and v != "DATA_ROOT":
             logger.warning(f"Variable '{v}' provided via --var but not declared in template")
 
@@ -1488,19 +1517,99 @@ def resolve_template(
     return resolved_config, template_metadata, template_origin, dashboard_paths, variables
 
 
+def template_family(template_id: str) -> str:
+    """A template id without its version: ``nf-core/rnaseq`` for ``nf-core/rnaseq/3.26.0``."""
+    return "/".join(
+        part
+        for part in template_id.split("/")
+        if part and part != "latest" and not _VERSION_DIR_RE.match(part)
+    )
+
+
+def dashboard_source_key(
+    path: Path,
+    template_id: str | None = None,
+    template_dir: Path | None = None,
+    base_dir: Path | None = None,
+) -> str:
+    """The stable origin the server files an imported dashboard under.
+
+    A re-import with overwrite updates the dashboard with the same key, so the
+    key must not change when the dashboard is renamed, and should not change
+    when nothing about where it came from did:
+
+    - a template's own dashboard: ``<template id without version>:<path in the
+      template>``, e.g. ``nf-core/rnaseq:dashboards/base.yaml``. Without the
+      version, moving a project to a newer template refreshes the same dashboards;
+    - another file under ``base_dir`` (the directory of --project-config-path):
+      ``file:<path relative to it>``, e.g. ``file:dashboards/main.yaml``, so two
+      files with the same name in different folders stay apart;
+    - anything else: ``file:<file name>``.
+    """
+    resolved = path.resolve()
+    if template_id and template_dir is not None:
+        root = template_dir.resolve()
+        if resolved.is_relative_to(root):
+            return f"{template_family(template_id)}:{resolved.relative_to(root).as_posix()}"
+    if base_dir is not None:
+        root = base_dir.resolve()
+        if resolved.is_relative_to(root):
+            return f"file:{resolved.relative_to(root).as_posix()}"
+    return f"file:{resolved.name}"
+
+
+def _main_dashboard_of(document: Any) -> dict | None:
+    """The main dashboard a dashboard file holds: a multi-tab file's
+    ``main_dashboard``, or the file itself unless it is a child tab."""
+    if not isinstance(document, dict):
+        return None
+    if isinstance(document.get("main_dashboard"), dict):
+        return document["main_dashboard"]
+    if document.get("parent_dashboard_tag") or document.get("is_main_tab") is False:
+        return None
+    return document
+
+
+def _rename_main_dashboard(documents: list[Any], dashboard_name: str) -> Any:
+    """Title the first main dashboard ``dashboard_name`` and keep its tabs attached.
+
+    A child-tab file names its parent by title (``parent_dashboard_tag``), so the
+    files that named the old title follow the rename; they keep their own titles.
+    Returns the document that holds the renamed main dashboard, None without one.
+    """
+    renamed = next((doc for doc in documents if _main_dashboard_of(doc) is not None), None)
+    main = _main_dashboard_of(renamed)
+    if main is None:
+        return None
+    old_title = main.get("title")
+    main["title"] = dashboard_name
+    if old_title is not None:
+        for doc in documents:
+            if isinstance(doc, dict) and doc.get("parent_dashboard_tag") == old_title:
+                doc["parent_dashboard_tag"] = dashboard_name
+    return renamed
+
+
 def import_dashboards_from_template(
     dashboard_paths: list[Path],
     api_url: str,
     headers: dict[str, str],
     project_id: str | None = None,
-    overwrite: bool = True,
+    reset: bool = False,
     variables: dict[str, str] | None = None,
     dashboard_name: str | None = None,
+    template_id: str | None = None,
+    base_dir: Path | None = None,
 ) -> list[dict[str, Any]]:
     """Import dashboard YAML files from a template into the server.
 
-    Called after project sync during ``depictio run --template`` to automatically
-    create the template's default dashboards.
+    Called after project sync during ``depictio ingest`` to create the template's
+    default dashboards, or the ``--dashboard`` files.
+
+    A dashboard the project already has (imported from the same file, found by
+    ``dashboard_source_key``, else by title) is kept as it is, edits made in the
+    viewer included; only ``dashboard_name`` renames the main one. With ``reset``
+    it is replaced by the file's, keeping its current title.
 
     Args:
         dashboard_paths: Absolute paths to dashboard YAML files.
@@ -1508,43 +1617,94 @@ def import_dashboards_from_template(
         headers: Auth headers (from ``generate_api_headers``).
         project_id: Project ObjectId string. When provided, overrides
             ``project_tag`` inside the YAML.
-        overwrite: If True, update existing dashboards with the same title.
+        reset: Replace the dashboards the project already has, instead of
+            keeping them.
         variables: Template variables to substitute in dashboard YAML
             (e.g., ``{GROUP_COL}`` placeholders).
-        dashboard_name: When provided, overrides the main dashboard's title
-            (child tabs keep their own titles).
+        dashboard_name: When provided, titles the main dashboard, on a refresh
+            too (child tabs keep their own titles and stay attached to it).
+        template_id: The resolved template's id, for the source keys of the
+            template's own dashboards.
+        base_dir: Directory of the --project-config-path file, for the source
+            keys of the dashboards under it.
 
     Returns:
         List of result dicts, one per dashboard file.  Each contains
-        ``path``, ``success``, and either ``dashboard_id``/``title`` or ``error``.
+        ``path``, ``success``, and either ``dashboard_id``/``title``/``status``
+        (``created``, ``kept`` or ``replaced``) or ``error``.
     """
     results: list[dict[str, Any]] = []
     url = f"{api_url}/depictio/api/v1/dashboards/import/yaml"
 
+    template_dir = None
+    if template_id:
+        try:
+            template_dir = locate_template(template_id).parent
+        except FileNotFoundError:
+            logger.debug(f"Template {template_id} not found: dashboards keyed by file name")
+
+    # Read every file first: --dashboard-name has to know which file holds the
+    # main dashboard before it can re-point the child-tab files that name it, and
+    # a child tab is sent with the key of the file that holds its parent.
+    edited = bool(variables or dashboard_name)
+    keys = [
+        dashboard_source_key(path, template_id, template_dir, base_dir) for path in dashboard_paths
+    ]
+    loaded: list[tuple[str, Any] | Exception] = []
     for path in dashboard_paths:
+        try:
+            text = path.read_text(encoding="utf-8")
+            parsed = yaml.safe_load(text)
+            if variables:
+                parsed = substitute_template_variables(parsed, variables)
+            loaded.append((text, parsed))
+        except Exception as exc:
+            loaded.append(exc)
+    renamed = None
+    if dashboard_name:
+        renamed = _rename_main_dashboard(
+            [item[1] for item in loaded if isinstance(item, tuple)], dashboard_name
+        )
+    main_keys: dict[str, str] = {}
+    for key, item in zip(keys, loaded, strict=True):
+        main = _main_dashboard_of(item[1]) if isinstance(item, tuple) else None
+        if main is not None and isinstance(main.get("title"), str):
+            main_keys.setdefault(main["title"], key)
+
+    for path, key, item in zip(dashboard_paths, keys, loaded, strict=True):
         entry: dict[str, Any] = {"path": str(path), "success": False}
         try:
-            yaml_content = path.read_text(encoding="utf-8")
+            if isinstance(item, Exception):
+                raise item
+            text, parsed = item
+            # Substituted and/or renamed: send the edited document, else the file as is.
+            # sort_keys=False: PyYAML sorts mapping keys by default, which re-ordered
+            # every dict-shaped config on import (record_card sections came out
+            # alphabetical).
+            yaml_content = (
+                yaml.dump(parsed, default_flow_style=False, allow_unicode=True, sort_keys=False)
+                if edited
+                else text
+            )
 
-            # Substitute template variables and/or override the dashboard title.
-            if variables or dashboard_name:
-                parsed = yaml.safe_load(yaml_content)
-                if variables:
-                    parsed = substitute_template_variables(parsed, variables)
-                if dashboard_name and isinstance(parsed, dict):
-                    # Override only the main dashboard's title; child-tab files
-                    # (which carry their own top-level `title`) keep theirs.
-                    if isinstance(parsed.get("main_dashboard"), dict):
-                        parsed["main_dashboard"]["title"] = dashboard_name
-                    elif "title" in parsed:
-                        parsed["title"] = dashboard_name
-                yaml_content = yaml.dump(parsed, default_flow_style=False, allow_unicode=True)
-
-            params: dict[str, str | bool] = {}
+            # A dashboard the project has is kept, or replaced under its current
+            # title (renamed in the viewer, say); --dashboard-name still titles the
+            # main one. overwrite too, for a server from before `existing`: it
+            # replaces them, titles kept, as a refresh used to. The parent is
+            # found by its key, as its title may be one the YAML does not know.
+            params: dict[str, str | bool] = {
+                "source_key": key,
+                "keep_titles": True,
+                "overwrite": True,
+                "existing": "replace" if reset else "keep",
+            }
+            if dashboard_name and renamed is not None and parsed is renamed:
+                params["main_title"] = dashboard_name
+            parent_tag = parsed.get("parent_dashboard_tag") if isinstance(parsed, dict) else None
+            if parent_tag in main_keys:
+                params["parent_source_key"] = main_keys[parent_tag]
             if project_id:
                 params["project_id"] = project_id
-            if overwrite:
-                params["overwrite"] = True
 
             response = httpx.post(
                 url,
@@ -1556,14 +1716,17 @@ def import_dashboards_from_template(
 
             if response.status_code == 200:
                 data = response.json()
+                updated = data.get("updated", False)
                 entry.update(
                     success=True,
                     dashboard_id=data.get("dashboard_id"),
                     title=data.get("title"),
-                    updated=data.get("updated", False),
+                    updated=updated,
+                    # A server from before `existing` reports `updated` only.
+                    status=data.get("status") or ("replaced" if updated else "created"),
                     dash_url=data.get("dash_url"),
                 )
-                logger.info(f"Dashboard imported: {data.get('title')} ({path.name})")
+                logger.info(f"Dashboard {entry['status']}: {data.get('title')} ({path.name})")
             else:
                 detail = response.text
                 try:
@@ -1571,11 +1734,12 @@ def import_dashboards_from_template(
                 except Exception:
                     pass
                 entry["error"] = f"HTTP {response.status_code}: {detail}"
-                logger.error(f"Dashboard import failed for {path.name}: {entry['error']}")
+                # Debug, not error: the caller prints this as its ✗ line.
+                logger.debug(f"Dashboard import failed for {path.name}: {entry['error']}")
 
         except Exception as exc:
             entry["error"] = str(exc)
-            logger.error(f"Dashboard import failed for {path.name}: {exc}")
+            logger.debug(f"Dashboard import failed for {path.name}: {exc}")
 
         results.append(entry)
 

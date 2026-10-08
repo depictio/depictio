@@ -26,6 +26,7 @@ import {
   FunnelView,
   TopPanel,
   mergeFiltersBySource,
+  withInteractiveDefaults,
   enrichFilterWithDcId,
   useDataCollectionUpdates,
   RealtimeIndicator,
@@ -67,6 +68,7 @@ import {
   mergeFilterScopes,
   planScopedRequests,
   sectionFilterScopes,
+  AdvancedVizPlacementDefaultProvider,
 } from 'depictio-react-core';
 import type {
   DashboardData,
@@ -80,6 +82,7 @@ import type {
   RealtimeJournalEntry,
   IngestionSummary,
   StoredMetadata,
+  CommentViewState,
 } from 'depictio-react-core';
 import { parseTemplateOrigin } from './projects/template';
 
@@ -110,6 +113,7 @@ import GroupingHeaderControl, {
 import Inspector from './chrome/inspector/Inspector';
 import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
 import InspectorProviders from './chrome/inspector/InspectorProviders';
+import { CommentsHeaderButton, CommentsProvider } from './components/comments';
 import NotesFooter from './components/NotesFooter';
 import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
@@ -354,6 +358,10 @@ const App: React.FC = () => {
     Promise.all([fetchDashboard(dashboardId), fetchAllDashboards()])
       .then(([dash, all]) => {
         setDashboard(dash);
+        // Declared filter defaults (`default_value` / `default_range`) land in
+        // the same batch as the dashboard, so the first render is already
+        // filtered. Values hydrated from storage keep precedence.
+        setFilters((prev) => withInteractiveDefaults(prev, dash.stored_metadata));
         setAllDashboards(all);
       })
       .catch((err) => {
@@ -640,11 +648,21 @@ const App: React.FC = () => {
     [summaryMetadata],
   );
 
-  // A bar's "Reset": its own controls' values go, everything else stays.
-  const handleResetFilterIndices = useCallback((indices: string[]) => {
-    const drop = new Set(indices);
-    setFilters((prev) => prev.filter((f) => !(drop.has(f.index) && f.source === undefined)));
-  }, []);
+  // A bar's "Reset": its own controls go back to their declared defaults, as
+  // "Reset all" does for the whole tab; everything else stays.
+  const handleResetFilterIndices = useCallback(
+    (indices: string[]) => {
+      const drop = new Set(indices);
+      const barMetadata = summaryMetadata.filter((m) => drop.has(m.index));
+      setFilters((prev) =>
+        withInteractiveDefaults(
+          prev.filter((f) => !(drop.has(f.index) && f.source === undefined)),
+          barMetadata,
+        ),
+      );
+    },
+    [summaryMetadata],
+  );
   // What filters the tab as a whole: everything but the section bars'. For the
   // components that sit in no section — the floating and docked maps, the
   // funnel overview.
@@ -657,13 +675,41 @@ const App: React.FC = () => {
     [deferredFilters, filterScopes],
   );
 
+  /**
+   * Restore the view a comment was written against: its filters replace the
+   * current ones, each through the same dc_id enrichment and (index, source)
+   * dedupe as a live filter change. The attached selection's raw filters are
+   * merged too, so a thread that only kept its selection still restores it.
+   */
+  const handleApplyViewState = useCallback(
+    (viewState: CommentViewState) => {
+      const incoming = [
+        ...(viewState.filters ?? []),
+        ...((viewState.selection?.filters as InteractiveFilter[] | undefined) ?? []),
+      ];
+      setFilters(
+        incoming.reduce<InteractiveFilter[]>(
+          (acc, f) => mergeFiltersBySource(acc, enrichFilterWithDcId(f, summaryMetadata)),
+          [],
+        ),
+      );
+      // Group filters narrow the dashboard outside the filter list, and a
+      // thread's view does not record them: release them, as "Reset all"
+      // does, so the restored view matches what the author saw.
+      groupsApi.deactivateAllGroupFilters();
+    },
+    [summaryMetadata, groupsApi.deactivateAllGroupFilters],
+  );
+
   const handleResetAllFilters = useCallback(() => {
-    setFilters([]);
+    // "Reset all" returns to the author's initial view: declared defaults
+    // come back, everything else is cleared.
+    setFilters(withInteractiveDefaults([], dashboard?.stored_metadata));
     // Group filters live outside the filter list but narrow the dashboard all
     // the same — "Reset all" must release them too or the data stays filtered
     // with no visible chip explaining why.
     groupsApi.deactivateAllGroupFilters();
-  }, [groupsApi.deactivateAllGroupFilters]);
+  }, [groupsApi.deactivateAllGroupFilters, dashboard?.stored_metadata]);
 
   // The dashboard-wide map panel: the tab family's floating maps, its own
   // hidden/floating/docked state, shared by the header control and the panel
@@ -922,6 +968,7 @@ const App: React.FC = () => {
           bulkOptions={groupsApi.bulkOptions}
           onResetFilters={handleResetAllFilters}
           onResetBarFilters={handleResetFilterIndices}
+          autofit={dashboard?.autofit !== false}
         />
       </div>
     ) : null;
@@ -1124,6 +1171,10 @@ const App: React.FC = () => {
     >
       <DashboardLoadingProvider>
       <InspectorProviders control={inspectorControl}>
+      {/* Dashboard-wide default for where advanced-viz tiles draw their
+          controls. No config sink in the viewer: a reader can still pin a
+          tile's controls open, and it stays local to their session. */}
+      <AdvancedVizPlacementDefaultProvider value={dashboard?.advanced_viz_controls}>
       <SaveGroupContext.Provider value={saveGroupApi}>
       {/* A dashboard that overrides the instance branding retints its own page
           and nothing else — /dashboards and /admin stay on the instance look. */}
@@ -1132,6 +1183,15 @@ const App: React.FC = () => {
           colours a category: one value, one colour, on every surface. */}
       <CategoryColorsContext.Provider value={dashboard}>
       <TabLinkProvider tabs={tabSiblings}>
+      {/* Editors and owners only: for anyone else the provider renders its
+          children alone, so no comment badge, button or drawer appears. */}
+      <CommentsProvider
+        dashboardId={dashboardId}
+        metadata={summaryMetadata}
+        filters={filters}
+        onApplyViewState={handleApplyViewState}
+        currentUser={currentUser}
+      >
       <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -1171,6 +1231,7 @@ const App: React.FC = () => {
           rightExtras={
             dashboard || realtimeEnabled ? (
             <>
+              {dashboard && <CommentsHeaderButton />}
               {dashboard && (
                 <GroupingHeaderControl
                   groupCount={groupsApi.groups.length}
@@ -1519,6 +1580,7 @@ const App: React.FC = () => {
                     isDraggable={false}
                     isResizable={false}
                     editMode={false}
+                    autofit={dashboard?.autofit !== false}
                   />
                 )}
               </Box>
@@ -1537,6 +1599,7 @@ const App: React.FC = () => {
                     groupRender={groupRender}
                     bulkOptions={groupsApi.bulkOptions}
                     onResetFilters={handleResetAllFilters}
+                    autofit={dashboard?.autofit !== false}
                   />
                 </div>
               )}
@@ -1676,10 +1739,12 @@ const App: React.FC = () => {
         onBeforeFocus={uncoverForSearch}
       />
     </AppShell>
+      </CommentsProvider>
       </TabLinkProvider>
       </CategoryColorsContext.Provider>
       </BrandScope>
       </SaveGroupContext.Provider>
+      </AdvancedVizPlacementDefaultProvider>
       </InspectorProviders>
       </DashboardLoadingProvider>
     </AvailableFilterValuesProvider>

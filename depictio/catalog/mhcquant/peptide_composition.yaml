@@ -1,0 +1,16 @@
+id: mhcquant_peptide_composition
+name: Peptide composition
+mode: immunopeptidomics/composition
+description: >-
+  Each sample's distinct peptidoforms split three ways, by length, by precursor
+  charge and by modification state, as a long table a stacked composition bar
+  switches between.
+find: { path_glob: "*.tsv" }
+recipe: mhcquant/peptide_composition.py
+fixture: peptide_composition.tsv
+renders_as:
+  - id: composition_bars
+    component: advanced_viz
+    kind: stacked_taxonomy
+    roles: { sample_id: sample, taxon: category, rank: rank, abundance: peptides }
+  - { component: table }

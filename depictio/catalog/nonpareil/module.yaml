@@ -1,0 +1,6 @@
+id: nonpareil
+name: Nonpareil
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/nonpareil/set
+homepage: https://nonpareil.readthedocs.io
+description: Estimate average coverage and create curves for metagenomic datasets.
+biotools_url: https://bio.tools/nonpareil

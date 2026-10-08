@@ -1,0 +1,16 @@
+sample_id	gene	mutation_type	n_variants
+NA12878_200M / deepvariant	AC118281.1	HIGH	23
+NA12878_200M / freebayes	AC118281.1	HIGH	16
+NA12878_200M / haplotypecaller	AC118281.1	HIGH	7
+NA12878_200M / strelka	AC118281.1	HIGH	21
+NA12878_75M / deepvariant	AC118281.1	HIGH	19
+NA12878_75M / freebayes	AC118281.1	HIGH	14
+NA12878_75M / haplotypecaller	AC118281.1	HIGH	4
+NA12878_75M / strelka	AC118281.1	HIGH	21
+NA12878_200M / deepvariant	CELA1	HIGH	9
+NA12878_200M / freebayes	CELA1	HIGH	5
+NA12878_200M / haplotypecaller	CELA1	HIGH	8
+NA12878_200M / strelka	CELA1	HIGH	6
+NA12878_75M / deepvariant	CELA1	HIGH	9
+NA12878_75M / freebayes	CELA1	HIGH	5
+NA12878_75M / haplotypecaller	CELA1	HIGH	8

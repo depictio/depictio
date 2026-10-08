@@ -146,12 +146,21 @@ const action = (key: TileActionStyleKey, when?: string, meaning = MEANING[key]):
 /**
  * The hover row of a tile of `type`, left to right as `ComponentChrome` draws
  * it, with the conditions under which each action is there.
+ *
+ * `inspector: false` leaves out the inspect action: it exists only where the
+ * server has the inspector on, and the Guide describes the dashboard it is
+ * read on, where the chrome then never draws it. Without, every action is
+ * listed, each with when it shows.
  */
-export function rowActionsFor(type: GuideTileType): GuideRowAction[] {
+export function rowActionsFor(
+  type: GuideTileType,
+  opts: { inspector?: boolean } = {},
+): GuideRowAction[] {
+  const { inspector = true } = opts;
   const selection = SELECTION_WHEN[type];
   const out: GuideRowAction[] = [];
   if (selection) out.push(action('group', `With Analysis on · ${selection.toLowerCase()}`));
-  out.push(action('inspect', 'With the inspector on'));
+  if (inspector) out.push(action('inspect', 'With the inspector on'));
   out.push(action('catalog', 'Tiles added from the tools catalog'));
   // An advanced view prints its description under its title; only the minimal
   // style's header, which shows the short subtitle there, leaves it to the icon.

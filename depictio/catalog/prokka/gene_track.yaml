@@ -1,0 +1,26 @@
+id: prokka_gene_track
+name: Bin locus map
+mode: gene-track
+description: >-
+  Where the genes sit along a bin's contigs, as an arrow per coding sequence,
+  transfer RNA and ribosomal RNA. Pick one bin and one contig and the tile
+  becomes a locus map: operon structure, strand switches, and the ribosomal RNA
+  operon whose presence decides the bin's MIMAG tier.
+find:
+  path_glob: "**/Prokka/**/*.gff"
+  path_glob_alt:
+    - "**/prokka/**/*.gff"
+recipe: prokka/gene_track.py
+fixture: gene_track.tsv
+renders_as:
+  - { id: locus_map, component: advanced_viz, kind: gene_arrow_track,
+      roles: {contig: contig, feature_id: feature_id, start: start, end: end,
+              strand: strand, class: ftype, label: gene} }
+  - { component: figure, visu_type: histogram, dict_kwargs: {x: length_bp, color: ftype, title: Feature length by class} }
+  - { component: card, column: feature_id, aggregation: nunique,
+      secondary_layout: donut, breakdown_col: ftype }
+  - { component: card, column: length_bp, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: product, aggregation: nunique,
+      secondary_layout: top_n, breakdown_col: binner, top_n_count: 4 }
+  - { component: table }

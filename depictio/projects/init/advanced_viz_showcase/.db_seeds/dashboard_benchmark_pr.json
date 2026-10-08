@@ -1,0 +1,421 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d62"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d62"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "pr-text",
+      "component_type": "text",
+      "title": "Variant calling benchmark",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Variant calling benchmark",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Left, each caller at its default operating point in precision against recall, with dotted equal-F1 contours: top right is best. Right, the same callers with their quality threshold swept, as a ROC curve by default; the header switch shows the PR curve or both, with the area under each curve in the legend. The inputs are hap.py or RTG vcfeval summaries such as nf-core/variantbenchmarking and nf-core/sarek produce.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "pr-points",
+      "component_type": "advanced_viz",
+      "title": "Operating points",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "benchmark_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One point per caller at its default threshold, sized by true positives, against equal-F1 contours.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Variant calling benchmark",
+      "viz_kind": "pr_benchmark",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "pr_benchmark",
+        "label_col": "tool",
+        "recall_col": "recall",
+        "precision_col": "precision",
+        "f1_col": "f1",
+        "support_col": "tp",
+        "category_col": null,
+        "show_iso_f1": true,
+        "show_diagonal": true,
+        "show_labels": true,
+        "colorscale": "Tealgrn",
+        "fpr_col": null,
+        "threshold_col": null,
+        "group_col": null,
+        "show_auc": true,
+        "fill": false,
+        "view": "pr",
+        "views": [
+          "pr"
+        ]
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "pr-sweep",
+      "component_type": "advanced_viz",
+      "title": "Threshold sweep",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "roc_curve_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d61"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic threshold sweep (3 tools \u00d7 ~13 quality thresholds) for the PR/ROC curve",
+        "data_collection_tag": "roc_curve_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d61"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One curve per caller along its quality threshold, as ROC, PR or both, with the area under each curve.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Variant calling benchmark",
+      "viz_kind": "pr_benchmark",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "pr_benchmark",
+        "label_col": "tool",
+        "recall_col": "recall",
+        "precision_col": "precision",
+        "f1_col": "f1",
+        "support_col": null,
+        "category_col": null,
+        "show_iso_f1": true,
+        "show_diagonal": true,
+        "show_labels": false,
+        "colorscale": "Tealgrn",
+        "fpr_col": "fpr",
+        "threshold_col": "quality",
+        "group_col": "tool",
+        "show_auc": true,
+        "fill": false,
+        "view": "roc",
+        "views": [
+          "pr",
+          "roc",
+          "both"
+        ]
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "pr-f-tool",
+      "component_type": "interactive",
+      "title": "Caller (operating points)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "benchmark_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic per-caller benchmark summary (precision/recall/F1 + counts + CIs)",
+        "data_collection_tag": "benchmark_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d60"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Caller scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "tool",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Caller filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "pr-f-sweep-tool",
+      "component_type": "interactive",
+      "title": "Caller (sweep)",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "roc_curve_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d61"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic threshold sweep (3 tools \u00d7 ~13 quality thresholds) for the PR/ROC curve",
+        "data_collection_tag": "roc_curve_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d61"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Caller scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "tool",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Caller filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "pr-f-quality",
+      "component_type": "interactive",
+      "title": "Quality threshold",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "roc_curve_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d61"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Synthetic threshold sweep (3 tools \u00d7 ~13 quality thresholds) for the PR/ROC curve",
+        "data_collection_tag": "roc_curve_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d61"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_align": "left",
+      "section": "Caller scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "quality",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Caller filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": true,
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-pr-f-tool",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-pr-f-sweep-tool",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-pr-f-quality",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-pr-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-pr-points",
+      "x": 0,
+      "y": 2,
+      "w": 4,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-pr-sweep",
+      "x": 4,
+      "y": 2,
+      "w": 4,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Variant calling benchmark",
+  "subtitle": "Callers against a truth set: operating points, and the curves their quality threshold sweeps",
+  "icon": "mdi:check-decagram",
+  "icon_color": "indigo",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 24,
+  "main_tab_name": null,
+  "tab_icon": "mdi:check-decagram",
+  "tab_icon_color": "indigo",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Caller scope",
+      "icon": "mdi:filter-variant",
+      "color": "indigo",
+      "description": "Restricts which callers are drawn, in each of the two collections",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Variant calling benchmark",
+      "icon": "mdi:check-decagram",
+      "color": "indigo",
+      "description": "Precision and recall of each caller against the truth set",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

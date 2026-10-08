@@ -37,6 +37,7 @@ import {
   SectionAccordionItem,
   SectionHeader,
 } from '../SectionAccordion';
+import { resolveSectionColor } from '../SectionIcon';
 import {
   gridLayoutToMemberLayout,
   groupsToGridLayout,
@@ -583,7 +584,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
         name={section.sectionName}
         badge={
           count > 0 ? (
-            <Badge size="sm" variant="light" circle color={section.spec?.color || undefined}>
+            <Badge size="sm" variant="light" circle color={resolveSectionColor(section.spec?.color, section.sectionName) || undefined}>
               {count}
             </Badge>
           ) : undefined
@@ -630,7 +631,7 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
               <SectionAccordionItem
                 key={s.key}
                 value={s.key}
-                color={s.spec?.color}
+                color={resolveSectionColor(s.spec?.color, s.sectionName)}
                 actions={renderSectionActions?.(s.sectionName ?? null)}
               >
                 <Accordion.Control>{renderSectionHeader(s)}</Accordion.Control>

@@ -51,6 +51,8 @@
       "group": "Sample scope",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#45B8AC",
       "icon_name": "mdi:flask",
       "wf_tag": "nextflow/viralrecon"
@@ -93,6 +95,8 @@
       "group": "Sample scope",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#E74C3C",
       "icon_name": "mdi:virus",
       "wf_tag": "nextflow/viralrecon"
@@ -135,6 +139,8 @@
       "group": "Coverage & yield",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#00BCD4",
       "icon_name": "mdi:chart-areaspline",
       "wf_tag": "nextflow/viralrecon"
@@ -177,6 +183,8 @@
       "group": "Coverage & yield",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#00BCD4",
       "icon_name": "mdi:chart-line",
       "wf_tag": "nextflow/viralrecon"
@@ -219,6 +227,8 @@
       "group": "Coverage & yield",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#00BCD4",
       "icon_name": "mdi:target",
       "wf_tag": "nextflow/viralrecon"
@@ -261,6 +271,8 @@
       "group": "Coverage & yield",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#00BCD4",
       "icon_name": "mdi:dna",
       "wf_tag": "nextflow/viralrecon"
@@ -303,38 +315,10 @@
       "group": null,
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#45B8AC",
       "icon_name": "mdi:flask",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "e5ac0ddb-169a-48c3-9a1a-2ba98ac6579d",
-      "component_type": "text",
-      "title": "Run at a glance",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "summary_metrics",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": null,
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
-        "data_collection_tag": "summary_metrics",
-        "dc_specific_properties": null,
-        "_id": null
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Run at a glance",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "Per-sample QC aggregated from every stage of the nf-core/viralrecon pipeline. The four cards read the summary table directly; the [MultiQC](https://multiqc.info) panels below are the reports they were derived from. The two filter sections on the left are persistent, so a sample or a coverage floor picked here narrows the coverage, typing, QC and variant tabs as well.",
       "wf_tag": "nextflow/viralrecon"
     },
     {
@@ -388,6 +372,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:flask",
       "icon_color": "#45B8AC",
       "title_color": "#45B8AC",
@@ -398,7 +383,7 @@
     {
       "index": "run-mapped",
       "component_type": "card",
-      "title": "Reads mapped (%)",
+      "title": "Reads mapped (median %)",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "summary_metrics",
       "wf_id": {
@@ -431,7 +416,7 @@
         "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
       },
       "section": "Run at a glance",
-      "aggregation": "average",
+      "aggregation": "median",
       "column_name": "pct_reads_mapped",
       "column_type": "float64",
       "value": null,
@@ -448,6 +433,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:target",
       "icon_color": "#1976D2",
       "title_color": "#1976D2",
@@ -458,7 +444,7 @@
     {
       "index": "run-covered-10x",
       "component_type": "card",
-      "title": "Genome at 10x",
+      "title": "Genome at 10x (median %)",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "summary_metrics",
       "wf_id": {
@@ -491,7 +477,7 @@
         "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
       },
       "section": "Run at a glance",
-      "aggregation": "average",
+      "aggregation": "median",
       "column_name": "pct_genome_covered_10x",
       "column_type": "float64",
       "value": null,
@@ -503,9 +489,10 @@
       "coverage_max": null,
       "threshold_value": 80,
       "threshold_direction": "min",
-      "threshold_warn": 90,
+      "threshold_warn": 70,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:chart-areaspline",
       "icon_color": "#2E7D32",
       "title_color": "#2E7D32",
@@ -564,6 +551,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:virus",
       "icon_color": "#E74C3C",
       "title_color": "#E74C3C",
@@ -572,9 +560,78 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
+      "index": "qcdx-metadata-header",
+      "component_type": "text",
+      "title": "Sample sheet",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Sample sheet",
+      "order": 2,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "The nf-core summary table, one row per sample; every project link starts from its sample column, which is why a filter set on it reaches the coverage, typing and variant tabs. It sits one collapse away at the top of every tab.",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "e06509e6-f7bd-468d-a958-573b7ba88fa6",
+      "component_type": "table",
+      "title": "Summary metrics",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "summary_metrics",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
+        "data_collection_tag": "summary_metrics",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Per-sample alignment, coverage and variant calling summary, the QC backbone of the other tabs.",
+      "title_size": "h3",
+      "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
+      "section": "Sample sheet",
+      "columns": [],
+      "page_size": 100,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": true,
+      "row_selection_column": "sample",
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
       "index": "main-qc-overview-header",
       "component_type": "text",
-      "title": "The six panels worth reading first",
+      "title": "The panels worth reading first",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "",
       "wf_id": {
@@ -591,11 +648,11 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "The nf-core summary tables, the list of samples that failed mapping, and one panel each for trimming, alignment and coverage. If a sample is going to be a problem, it shows up here. Everything else is folded into the two collapsed sections below, which is also what keeps the first paint cheap: a MultiQC tile only fetches once it scrolls into view, and a tile in a collapsed section never does.",
+      "body": "Per-sample QC from every stage of nf-core/viralrecon, as [MultiQC](https://multiqc.info) reported it: the general statistics, the samples that failed mapping, and one panel each for trimming, alignment and coverage. Everything else is folded into the two collapsed sections below.",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "7c3d80c4-43cc-46c5-9c37-111139ead354",
+      "index": "e1673293-1589-41d2-a559-54738ac459b5",
       "component_type": "multiqc",
       "title": "MultiQC general statistics",
       "workflow_tag": "viralrecon",
@@ -670,7 +727,7 @@
         "use": "multiqc/summary_metrics",
         "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
       },
-      "section": "QC overview",
+      "section": "Variant & assembly details",
       "selected_module": "summary_variants_metrics",
       "selected_plot": "summary_variants_metrics-section",
       "wf_tag": "nextflow/viralrecon"
@@ -708,7 +765,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "f56fc0ab-4bb0-46f5-ad96-f09edc396345",
+      "index": "418ee37c-79a1-497d-9c49-d53ae419c0c3",
       "component_type": "multiqc",
       "title": "fastp - filtered reads",
       "workflow_tag": "viralrecon",
@@ -749,7 +806,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "ae40fe72-972e-47a3-99ff-5616ff0e2c50",
+      "index": "b8d45f73-9a19-410d-9dd8-8cb4312b44be",
       "component_type": "multiqc",
       "title": "bowtie2 - paired-end alignment",
       "workflow_tag": "viralrecon",
@@ -790,7 +847,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "33772208-2c30-4ffc-b32e-0bc60df0431f",
+      "index": "5ccaa3e4-ecd7-4704-b0ef-0ce028ee578c",
       "component_type": "multiqc",
       "title": "mosdepth - cumulative coverage",
       "workflow_tag": "viralrecon",
@@ -814,7 +871,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Genome fraction covered at >= X depth, per sample.",
+      "description": "Genome fraction covered at or above each depth, per sample.",
       "title_size": "h3",
       "title_align": "left",
       "use": "multiqc/mosdepth",
@@ -854,7 +911,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "cc6f0bba-4e5c-4896-bed5-c4b75712755b",
+      "index": "60266551-068e-4406-9e8d-238795601324",
       "component_type": "multiqc",
       "title": "FastQC - sequence quality histograms",
       "workflow_tag": "viralrecon",
@@ -895,7 +952,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "dbaed628-ae21-4659-979c-f24ccaf30de7",
+      "index": "d6a6fc7d-771f-41f3-a28e-a5d13d10cbaa",
       "component_type": "multiqc",
       "title": "FastQC - status checks",
       "workflow_tag": "viralrecon",
@@ -936,7 +993,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "63b3f894-cd3d-4fb9-acf9-704b1a166aeb",
+      "index": "c122740c-fe73-45fc-b188-7c1d94963f4b",
       "component_type": "multiqc",
       "title": "Kraken2 - top taxa",
       "workflow_tag": "viralrecon",
@@ -1116,11 +1173,11 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "The iVar calling summary, the [snpEff](https://pcingola.github.io/SnpEff/) effect and region breakdowns, the [bcftools](https://samtools.github.io/bcftools/) substitution spectrum, the [QUAST](https://github.com/ablab/quast) contig count and the nf-core assembly summary. Read together they say whether the consensus is trustworthy, which is the question the Variants tab then answers call by call.",
+      "body": "The iVar calling summary, the [snpEff](https://pcingola.github.io/SnpEff/) effect and region breakdowns, the [bcftools](https://samtools.github.io/bcftools/) substitution spectrum, the [QUAST](https://github.com/ablab/quast) contig count and the nf-core variant and assembly summaries. Read together they say whether the consensus is trustworthy.",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "3edff37a-f795-414d-b24d-f7e0e64d1385",
+      "index": "c71440ef-f0d8-4013-9876-bec536de01ee",
       "component_type": "multiqc",
       "title": "iVar - variant counts",
       "workflow_tag": "viralrecon",
@@ -1161,7 +1218,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "41794c33-e454-4a96-a2c7-aee81c14a6f9",
+      "index": "cfad8555-a0ba-46c5-aa1a-7c7f30d98847",
       "component_type": "multiqc",
       "title": "snpEff - effects by impact",
       "workflow_tag": "viralrecon",
@@ -1242,7 +1299,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "e25034bd-ba6b-4011-bc7b-f175a1688b31",
+      "index": "30fe9a67-037b-4312-a0a2-37077d325013",
       "component_type": "multiqc",
       "title": "bcftools - substitution types",
       "workflow_tag": "viralrecon",
@@ -1283,7 +1340,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "6092c0b9-56c8-4149-8326-1a15e74d8a1a",
+      "index": "f56f0f61-9f7a-46eb-8f46-f94043931c0e",
       "component_type": "multiqc",
       "title": "QUAST - number of contigs",
       "workflow_tag": "viralrecon",
@@ -1425,11 +1482,43 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-e5ac0ddb-169a-48c3-9a1a-2ba98ac6579d",
+      "i": "box-run-samples",
+      "x": 0,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-run-mapped",
+      "x": 2,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-run-covered-10x",
+      "x": 4,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-run-lineages",
+      "x": 6,
+      "y": 0,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-qcdx-metadata-header",
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -1440,36 +1529,19 @@
       ]
     },
     {
-      "i": "box-run-samples",
+      "i": "box-e06509e6-f7bd-468d-a958-573b7ba88fa6",
       "x": 0,
-      "y": 2,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-run-mapped",
-      "x": 2,
-      "y": 2,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-run-covered-10x",
-      "x": 4,
-      "y": 2,
-      "w": 2,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-run-lineages",
-      "x": 6,
-      "y": 2,
-      "w": 2,
-      "h": 2,
-      "static": true
+      "y": 1,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
     },
     {
       "i": "box-main-qc-overview-header",
@@ -1487,7 +1559,7 @@
       ]
     },
     {
-      "i": "box-7c3d80c4-43cc-46c5-9c37-111139ead354",
+      "i": "box-e1673293-1589-41d2-a559-54738ac459b5",
       "x": 0,
       "y": 2,
       "w": 8,
@@ -1504,7 +1576,7 @@
     {
       "i": "box-summary-variants-metrics",
       "x": 0,
-      "y": 6,
+      "y": 13,
       "w": 8,
       "h": 4,
       "static": false,
@@ -1519,7 +1591,7 @@
     {
       "i": "box-fail-mapped-samples",
       "x": 0,
-      "y": 10,
+      "y": 6,
       "w": 4,
       "h": 4,
       "static": false,
@@ -1532,9 +1604,9 @@
       ]
     },
     {
-      "i": "box-f56fc0ab-4bb0-46f5-ad96-f09edc396345",
+      "i": "box-418ee37c-79a1-497d-9c49-d53ae419c0c3",
       "x": 4,
-      "y": 10,
+      "y": 6,
       "w": 4,
       "h": 4,
       "static": false,
@@ -1547,9 +1619,9 @@
       ]
     },
     {
-      "i": "box-ae40fe72-972e-47a3-99ff-5616ff0e2c50",
+      "i": "box-b8d45f73-9a19-410d-9dd8-8cb4312b44be",
       "x": 0,
-      "y": 14,
+      "y": 10,
       "w": 4,
       "h": 4,
       "static": false,
@@ -1562,9 +1634,9 @@
       ]
     },
     {
-      "i": "box-33772208-2c30-4ffc-b32e-0bc60df0431f",
+      "i": "box-5ccaa3e4-ecd7-4704-b0ef-0ce028ee578c",
       "x": 4,
-      "y": 14,
+      "y": 10,
       "w": 4,
       "h": 4,
       "static": false,
@@ -1592,7 +1664,7 @@
       ]
     },
     {
-      "i": "box-cc6f0bba-4e5c-4896-bed5-c4b75712755b",
+      "i": "box-60266551-068e-4406-9e8d-238795601324",
       "x": 0,
       "y": 1,
       "w": 8,
@@ -1607,7 +1679,7 @@
       ]
     },
     {
-      "i": "box-dbaed628-ae21-4659-979c-f24ccaf30de7",
+      "i": "box-d6a6fc7d-771f-41f3-a28e-a5d13d10cbaa",
       "x": 0,
       "y": 6,
       "w": 8,
@@ -1622,7 +1694,7 @@
       ]
     },
     {
-      "i": "box-63b3f894-cd3d-4fb9-acf9-704b1a166aeb",
+      "i": "box-c122740c-fe73-45fc-b188-7c1d94963f4b",
       "x": 0,
       "y": 11,
       "w": 4,
@@ -1697,7 +1769,7 @@
       ]
     },
     {
-      "i": "box-3edff37a-f795-414d-b24d-f7e0e64d1385",
+      "i": "box-c71440ef-f0d8-4013-9876-bec536de01ee",
       "x": 0,
       "y": 1,
       "w": 4,
@@ -1712,7 +1784,7 @@
       ]
     },
     {
-      "i": "box-41794c33-e454-4a96-a2c7-aee81c14a6f9",
+      "i": "box-cfad8555-a0ba-46c5-aa1a-7c7f30d98847",
       "x": 4,
       "y": 1,
       "w": 4,
@@ -1742,7 +1814,7 @@
       ]
     },
     {
-      "i": "box-e25034bd-ba6b-4011-bc7b-f175a1688b31",
+      "i": "box-30fe9a67-037b-4312-a0a2-37077d325013",
       "x": 4,
       "y": 5,
       "w": 4,
@@ -1757,7 +1829,7 @@
       ]
     },
     {
-      "i": "box-6092c0b9-56c8-4149-8326-1a15e74d8a1a",
+      "i": "box-f56f0f61-9f7a-46eb-8f46-f94043931c0e",
       "x": 0,
       "y": 9,
       "w": 4,
@@ -1821,16 +1893,25 @@
       "name": "Run at a glance",
       "icon": "mdi:counter",
       "color": "blue",
-      "description": "What the run produced, per sample",
+      "description": "What the run is, in four numbers, on every tab",
       "collapsed": false,
-      "persistent": false,
+      "persistent": true,
+      "pin": "top"
+    },
+    {
+      "name": "Sample sheet",
+      "icon": "mdi:table-account",
+      "color": "teal",
+      "description": "The summary table every other tab is filtered through",
+      "collapsed": true,
+      "persistent": true,
       "pin": "top"
     },
     {
       "name": "QC overview",
       "icon": "mdi:chart-box-outline",
       "color": "teal",
-      "description": "The six panels worth reading first",
+      "description": "The panels worth reading first",
       "collapsed": false,
       "persistent": false,
       "pin": "top"
@@ -1855,6 +1936,8 @@
     }
   ],
   "funnel_filtering": true,
+  "advanced_viz_controls": "header",
+  "autofit": true,
   "brand_theme": null,
   "buttons_data": {
     "unified_edit_mode": true,
@@ -1893,7 +1976,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-09-05 04:48:08",
+  "creation_time": "2026-09-17 09:20:46",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"

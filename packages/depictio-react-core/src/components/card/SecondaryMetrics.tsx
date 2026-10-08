@@ -15,6 +15,7 @@ import TopNMetric from './metrics/TopN';
 import TrendMetric from './metrics/Trend';
 import UniquenessMetric from './metrics/Uniqueness';
 import {
+  breakdownHasShares,
   isBreakdownPayload,
   isNumericLayout,
   type AttritionPayload,
@@ -29,6 +30,7 @@ import {
 } from './metrics/types';
 
 export {
+  breakdownHasShares,
   BREAKDOWN_LAYOUTS,
   NUMERIC_LAYOUTS,
   STAT_LIST_LAYOUTS,
@@ -62,6 +64,9 @@ interface SecondaryMetricsProps {
   minimal?: boolean;
   /** The card's `decimals`, so numbers in the strip match its value. */
   decimals?: number;
+  /** The card's own column: tells a breakdown by that same column (row counts,
+   *  so shares) from a per-group value breakdown. */
+  heroColumn?: string | null;
 }
 
 /** Pull one server-computed payload out of the rows array. The strips dispatch
@@ -91,6 +96,7 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
   coverageMax,
   minimal = false,
   decimals,
+  heroColumn,
 }) => {
   // Categorical layouts — all four read the same ``__breakdown__`` payload and
   // differ only in how they draw it.
@@ -99,6 +105,11 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
   )?.value as BreakdownPayload | undefined;
   if (layout === 'top_n' || layout === 'concentration' || layout === 'composition' || layout === 'donut') {
     if (!breakdown) return null;
+    // Per-group values (max, average, ...) are not parts of a whole: only the
+    // ranked list can show them honestly, whatever share layout was asked for.
+    if (!breakdownHasShares(breakdown, heroColumn)) {
+      return <TopNMetric payload={breakdown} color={color} shares={false} />;
+    }
     if (layout === 'top_n') return <TopNMetric payload={breakdown} color={color} />;
     if (layout === 'concentration') {
       return <ConcentrationMetric payload={breakdown} color={color} />;

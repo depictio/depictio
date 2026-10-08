@@ -1,7 +1,7 @@
 # TEST 03 — Interactive component type × column_type cross-field validation
 #
 # Expected result: FAIL at validate (server schema check)
-#   depictio-cli dashboard validate test_03_interactive_type_mismatch.yaml --config <cfg>
+#   depictio-cli dashboard validate test_03_interactive_type_mismatch.yaml --server <cfg>
 #
 # Errors expected:
 #   [slider-category]      Slider not valid for column_type='category'

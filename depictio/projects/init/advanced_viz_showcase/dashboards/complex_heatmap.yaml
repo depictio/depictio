@@ -1,12 +1,12 @@
-# ComplexHeatmap — one tab of the advanced-visualisation showcase.
+# Clustered expression matrix: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'ComplexHeatmap'
-subtitle: 'Clustered heatmap with dendrograms + annotation track. Server-side compute via packages/plotly-complexheatmap; cached by (DC, normalize, cluster opts, filters).'
+title: 'Clustered expression matrix'
+subtitle: 'Clustered heatmap with dendrograms and a condition strip, computed on the server and cached per parameters and filters'
 icon: 'mdi:grid'
 icon_color: 'indigo'
 icon_variant: filled
@@ -15,7 +15,7 @@ dashboard_id: '646b0f3c1e4a2d7f8e5b8d27'
 is_main_tab: false
 tab_order: 14
 parent_dashboard_tag: volcano
-tab_icon: 'mdi:grid'
+tab_icon: 'mdi:chart-box-outline'
 tab_icon_color: 'indigo'
 
 # Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
@@ -44,10 +44,12 @@ components:
     vertical_alignment: top
     section: 'Clustered matrix'
     body: >
-      The feature matrix with rows and columns reordered by hierarchical clustering,
-      dendrograms on both axes. The clustering is recomputed on whatever the filters leave,
-      so narrowing to one cluster genuinely changes the tree rather than hiding branches.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      Ninety samples by thirty features, z-scored per feature, with rows and columns reordered
+      by hierarchical clustering and dendrograms on both axes; the strip names each sample's
+      condition. Normalisation and the clustering method are in the tile header, and filtering
+      to one condition recomputes the tree. Input: a normalised count matrix such as nf-
+      core/rnaseq or nf-core/differentialabundance produce.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-complex_heatmap
     index: 'ch-heatmap'
@@ -55,7 +57,7 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'embedding_features'
     title: 'Clustered heatmap (ComplexHeatmap)'
-    description: 'Server-side clustering via packages/plotly-complexheatmap. 90 samples × first 30 features of the synthetic matrix, z-scored per column with a cluster annotation strip on the right. Settings ⚙ tunes normalisation / cluster method / cluster axes; each change re-dispatches a Celery task (cached by params).'
+    description: 'Server-side clustering via packages/plotly-complexheatmap: 90 samples by the first 30 features, z-scored per feature, with a condition strip. Normalisation and clustering sit in the tile header; each change re-runs a cached Celery task.'
     section: 'Clustered matrix'
     viz_kind: 'complex_heatmap'
     config:
@@ -70,7 +72,8 @@ components:
       cluster_method: "ward"
       cluster_metric: "euclidean"
       normalize: "col_z"
-    layout: { x: 0, y: 2, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-complex_heatmap-cluster
     index: ch-f-cluster

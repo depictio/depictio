@@ -21,6 +21,7 @@ import {
   SectionAccordionItem,
   SectionHeader,
 } from './SectionAccordion';
+import { resolveSectionColor } from './SectionIcon';
 import ComponentRenderer from './ComponentRenderer';
 import { withSectionStyles } from './figureStyle';
 import { normalizeLayout, responsiveLayouts, SectionSummary } from './DashboardGrid';
@@ -75,6 +76,9 @@ export interface PersistentSectionsHostProps {
   filterScopes?: FilterScopes;
   /** Clears the given filters (by index): a bar's "Reset". */
   onResetBarFilters?: (indices: string[]) => void;
+  /** The viewing dashboard's autofit switch. False sizes every pinned tile from
+   *  its stored height alone, as the tab's own grid then does. */
+  autofit?: boolean;
 }
 
 /** The scope a fanned-out section's members filter in: its own bar's, if it
@@ -117,6 +121,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
   controlFilters,
   filterScopes,
   onResetBarFilters,
+  autofit = true,
 }) => {
   const renderable = useMemo(
     () =>
@@ -309,15 +314,16 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
       // Fitted here as in DashboardGrid: a pinned section is
       // still a grid of tiles, and a text tile that sizes
       // itself on the tab that declares it has to do the same
-      // on every tab that shows it. Always on — this host is
-      // read-only, so a measurement can never be persisted.
+      // on every tab that shows it. On unless the viewing
+      // dashboard turns autofit off; this host is read-only, so a
+      // measurement can never be persisted.
       // Rescaled for every breakpoint by the same helper the
       // main grid uses: passing `lg` alone let react-grid-layout
       // generate the others, and its clamp collided the second
       // half-width tile with the first, stacking a two-table row
       // below 1440px.
       layouts={responsiveLayouts(
-        fitLayoutHeights(metas, stored, autoHeights, true, SPLIT_ROW_PX),
+        fitLayoutHeights(metas, stored, autoHeights, autofit, SPLIT_ROW_PX),
       )}
       breakpoints={GRID_BREAKPOINTS}
       cols={GRID_COL_COUNTS}
@@ -428,11 +434,14 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
               // Read-only, so in half rows (gridConfig's ROW_SPLIT), as DashboardGrid.
               const metas = members.map((m) => withSectionStyles(m.metadata, section.spec));
               const gridWidth = Math.max(100, containerWidth - sectionInset);
+              // Every section has a colour: its own, else one from the default
+              // palette by name, as the tab's own grid draws it.
+              const sectionColor = resolveSectionColor(section.spec.color, section.spec.name);
               return (
                 <SectionAccordionItem
                   key={key}
                   value={key}
-                  color={section.spec.color}
+                  color={sectionColor}
                   actions={
                     sectionFiltered && onResetFilters ? (
                       <Group gap={6} wrap="nowrap">
@@ -458,7 +467,7 @@ const PersistentSectionsHost: React.FC<PersistentSectionsHostProps> = ({
                       name={section.spec.name}
                       badge={
                         sectionFiltered ? (
-                          <Badge size="xs" variant="light" color={section.spec.color || 'blue'}>
+                          <Badge size="xs" variant="light" color={sectionColor || 'blue'}>
                             Filtered
                           </Badge>
                         ) : undefined

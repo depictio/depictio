@@ -150,6 +150,38 @@ const renderInlineMarkdown = (
     }
   });
 
+type HeadingSize = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6';
+
+/**
+ * Visual size of the heading for a `title_size`, or null to fall back to the
+ * heading level.
+ *
+ * `order` stays the semantic level (the document outline a screen reader
+ * walks), and `title_size` only sets how big it looks, which is what an
+ * author writing `order: 2` next to `title_size: sm` asks for. Heading names
+ * pass straight through; the t-shirt sizes every component accepts map onto
+ * Mantine's heading scale, `sm` (the model's default) being the h4 step: a
+ * small title that still reads as a heading above its body text.
+ */
+const TITLE_SIZE_HEADING: Record<string, HeadingSize> = {
+  h1: 'h1',
+  h2: 'h2',
+  h3: 'h3',
+  h4: 'h4',
+  h5: 'h5',
+  h6: 'h6',
+  xl: 'h1',
+  lg: 'h2',
+  md: 'h3',
+  sm: 'h4',
+  xs: 'h5',
+};
+
+export function textTitleSize(titleSize: unknown): HeadingSize | null {
+  if (typeof titleSize !== 'string') return null;
+  return TITLE_SIZE_HEADING[titleSize.trim().toLowerCase()] ?? null;
+}
+
 /**
  * A tile's accent as CSS: a palette name, a literal colour, or `tab:<name>`
  * for the colour that tab wears in the sidebar. Null when unset or when the
@@ -634,7 +666,8 @@ const MarkdownBody: React.FC<{
  *
  * Fields read from metadata:
  *   - title (string)
- *   - order (1-6 → H1..H6; clamped)
+ *   - order (1-6 → H1..H6; clamped): the semantic heading level
+ *   - title_size ('h1'..'h6' or 'xs'..'xl'): the visual size, see `textTitleSize`
  *   - alignment ('left' | 'center' | 'right'; default 'left')
  *   - vertical_alignment ('top' | 'center' | 'bottom'; default 'center')
  *   - body (optional paragraph)
@@ -649,6 +682,7 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
   const order = (Number.isFinite(rawOrder)
     ? Math.min(6, Math.max(1, Math.trunc(rawOrder)))
     : 1) as 1 | 2 | 3 | 4 | 5 | 6;
+  const size = textTitleSize(metadata.title_size) ?? undefined;
   const alignmentRaw =
     typeof metadata.alignment === 'string' ? metadata.alignment : 'left';
   const alignment: 'left' | 'center' | 'right' =
@@ -696,7 +730,7 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
   useAutofitHeight(
     index,
     contentRef,
-    [rawTitle, body, order, alignment, surface, footerPx],
+    [rawTitle, body, order, size, alignment, surface, footerPx],
     // The frame's padding and borders, and a footer, sit outside the measured
     // prose.
     frame.extra || footerPx ? (h) => h + frame.extra + footerPx : undefined,
@@ -745,6 +779,7 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
       {hasTitle ? (
         <Title
           order={order}
+          size={size}
           ta={alignment}
           style={{ wordBreak: 'break-word', margin: 0, lineHeight: 1.15 }}
         >
@@ -753,6 +788,7 @@ const TextRenderer: React.FC<TextRendererProps> = ({ metadata, placeholder = fal
       ) : placeholder ? (
         <Title
           order={order}
+          size={size}
           ta={alignment}
           c="dimmed"
           style={{ fontStyle: 'italic', margin: 0, lineHeight: 1.15 }}

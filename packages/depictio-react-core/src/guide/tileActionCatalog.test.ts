@@ -57,6 +57,19 @@ describe('rowActionsFor', () => {
     );
   });
 
+  it('leaves the inspector out where it is off', () => {
+    for (const type of GUIDE_TILE_TYPES) {
+      const keys = rowActionsFor(type, { inspector: false }).map((a) => a.key);
+      expect(keys, type).not.toContain('inspect');
+      expect(keys, type).toEqual(
+        rowActionsFor(type)
+          .map((a) => a.key)
+          .filter((k) => k !== 'inspect'),
+      );
+    }
+    expect(rowActionsFor('card', { inspector: true }).map((a) => a.key)).toContain('inspect');
+  });
+
   it('says what each type draws inside the tile', () => {
     for (const type of GUIDE_TILE_TYPES) expect(ownControlsFor(type).length).toBeGreaterThan(0);
   });

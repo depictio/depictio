@@ -13,7 +13,7 @@
     {
       "index": "sigm-text",
       "component_type": "text",
-      "title": "Signal matrix",
+      "title": "Signal around peak summits",
       "workflow_tag": "",
       "data_collection_tag": "",
       "wf_id": {
@@ -30,7 +30,7 @@
       "order": 3,
       "alignment": "left",
       "vertical_alignment": "top",
-      "body": "One row per ATAC-seq peak, one column per 50 bp offset from the summit, cell colour is the normalised signal. Rows are ordered by total signal and split into a panel per peak class, so the banding is the reading: promoters give a narrow bright stripe with faint nucleosome shoulders either side, enhancers a broad low mound, background peaks almost nothing. Columns are positions and are never reordered; past the row budget rows are averaged into bins rather than truncated, so the weak half never disappears.\n",
+      "body": "One row per ATAC-seq peak, one column per 50 bp offset from the summit, colour the normalised signal, rows split into a panel per peak class with the mean profile on top. Promoters give a narrow bright stripe with nucleosome shoulders, enhancers a broad low mound, background peaks almost nothing. Row order and the colour scale are in the header; past the row budget rows are averaged, never dropped. Input: the deepTools computeMatrix output of nf-core/atacseq, chipseq or cutandrun, in long form.\n",
       "wf_tag": "python/advanced_viz_demo"
     },
     {
@@ -58,12 +58,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-05-12T00:00:00.000000",
-      "description": "300 peaks \u00d7 41 offsets (-1000 to +1000 bp, 50 bp bins), panelled on the peak class with the mean profile drawn above. Colour scale, row order, row budget and the profile toggle all live in the Settings \u2699 popover; the colour range is a robust 2nd-98th percentile so one saturated peak cannot flatten the rest.",
+      "description": "300 peaks by 41 offsets (-1000 to +1000 bp, 50 bp bins), panelled on the peak class with the mean profile drawn above. The colour range is the 2nd to 98th percentile, so one saturated peak cannot flatten the rest.",
       "title_size": "sm",
       "title_align": "left",
       "section": "Signal matrix",
       "viz_kind": "signal_matrix",
       "config": {
+        "controls_placement": "header",
         "viz_kind": "signal_matrix",
         "region_id_col": "region_id",
         "position_col": "position",
@@ -116,7 +117,7 @@
       "group": "Matrix filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#12B886",
+      "show_histogram": null,
       "icon_name": "mdi:form-select",
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -158,7 +159,7 @@
       "group": "Matrix filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#00BCD4",
+      "show_histogram": true,
       "icon_name": "mdi:chart-line",
       "wf_tag": "python/advanced_viz_demo"
     },
@@ -200,7 +201,7 @@
       "group": "Matrix filters",
       "timescale": null,
       "show_marks": null,
-      "custom_color": "#45B8AC",
+      "show_histogram": null,
       "icon_name": "mdi:map-marker-path",
       "wf_tag": "python/advanced_viz_demo"
     }
@@ -276,7 +277,7 @@
   "stored_add_button": {
     "count": 0
   },
-  "title": "Signal matrix",
+  "title": "Signal around peak summits",
   "subtitle": "The heatmap half of a metagene plot: one row per ATAC-seq peak, one column per 50 bp offset from the summit, panelled by peak class.",
   "icon": "mdi:grid",
   "icon_color": "teal",
@@ -339,5 +340,7 @@
     }
   ],
   "funnel_filtering": true,
-  "brand_theme": null
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
 }

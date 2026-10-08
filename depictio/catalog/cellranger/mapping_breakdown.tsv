@@ -1,0 +1,6 @@
+sample	region	fraction
+pbmc8k	antisense	0.1
+pbmc8k	exonic	0.615
+pbmc8k	intergenic	0.06
+pbmc8k	intronic	0.254
+pbmc8k	unmapped	0.04500000000000004

@@ -92,13 +92,17 @@ jobs:
       - name: Build wheels
         run: |
           uv build --wheel --out-dir "$RUNNER_TEMP/wheels" .
+          uv build --wheel --out-dir "$RUNNER_TEMP/alias" depictio/cli
           uv build --wheel --out-dir "$RUNNER_TEMP/wheels" packages/plotly-upset
           uv build --wheel --out-dir "$RUNNER_TEMP/wheels" packages/plotly-complexheatmap
           ls -la "$RUNNER_TEMP/wheels"
 
-      # Fail here, before the slow boot, if the wheel grows back or loses a file.
-      - name: Check the depictio wheel contents
-        run: python3 scripts/check_depictio_wheel.py "$(ls $RUNNER_TEMP/wheels/depictio-*.whl)"
+      # Fail here, before the slow boot, if the wheel grows back or loses a file, or if
+      # the depictio-cli alias stops being an exact subset of it.
+      - name: Check the depictio and depictio-cli wheel contents
+        run: |
+          python3 scripts/check_depictio_wheel.py \
+            "$(ls $RUNNER_TEMP/wheels/depictio-*.whl)" "$(ls $RUNNER_TEMP/alias/depictio_cli-*.whl)"
 
       - name: depictio local up (iris example, from the wheel, outside the checkout)
         id: up

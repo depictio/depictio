@@ -1,0 +1,147 @@
+/**
+ * Table annotations: rows marked by a "points" annotation keyed on the table's
+ * row-id column (see annotations/tableRows.ts). Colours come from Mantine's
+ * default palette, not the brand-remapped theme variables: TableRenderer sets
+ * ``--depictio-annot-<name>-*`` on the grid wrapper (annotationPaletteVars,
+ * light/dark aware). Each palette class only picks its three custom
+ * properties, the rules below do the painting.
+ *
+ * Same specificity trick as realtime-highlight.css: scope under both Alpine
+ * theme roots with the ``.ag-row`` qualifier + ``!important`` so the theme's
+ * odd-row stripe does not win. Selected rows keep AG Grid's selection tint so
+ * the dashboard selection stays visible in annotate mode; rows picked for a
+ * new annotation (``depictio-row-annotate-selected``) get a dashed outline on
+ * top, which is independent of that selection.
+ */
+
+.depictio-row-annotated-blue {
+  --depictio-annot-bg: var(--depictio-annot-blue-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-blue-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-blue-stripe);
+}
+
+.depictio-row-annotated-cyan {
+  --depictio-annot-bg: var(--depictio-annot-cyan-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-cyan-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-cyan-stripe);
+}
+
+.depictio-row-annotated-teal {
+  --depictio-annot-bg: var(--depictio-annot-teal-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-teal-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-teal-stripe);
+}
+
+.depictio-row-annotated-green {
+  --depictio-annot-bg: var(--depictio-annot-green-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-green-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-green-stripe);
+}
+
+.depictio-row-annotated-lime {
+  --depictio-annot-bg: var(--depictio-annot-lime-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-lime-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-lime-stripe);
+}
+
+.depictio-row-annotated-yellow {
+  --depictio-annot-bg: var(--depictio-annot-yellow-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-yellow-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-yellow-stripe);
+}
+
+.depictio-row-annotated-orange {
+  --depictio-annot-bg: var(--depictio-annot-orange-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-orange-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-orange-stripe);
+}
+
+.depictio-row-annotated-red {
+  --depictio-annot-bg: var(--depictio-annot-red-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-red-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-red-stripe);
+}
+
+.depictio-row-annotated-pink {
+  --depictio-annot-bg: var(--depictio-annot-pink-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-pink-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-pink-stripe);
+}
+
+.depictio-row-annotated-grape {
+  --depictio-annot-bg: var(--depictio-annot-grape-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-grape-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-grape-stripe);
+}
+
+.depictio-row-annotated-violet {
+  --depictio-annot-bg: var(--depictio-annot-violet-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-violet-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-violet-stripe);
+}
+
+.depictio-row-annotated-indigo {
+  --depictio-annot-bg: var(--depictio-annot-indigo-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-indigo-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-indigo-stripe);
+}
+
+.depictio-row-annotated-gray {
+  --depictio-annot-bg: var(--depictio-annot-gray-bg);
+  --depictio-annot-bg-strong: var(--depictio-annot-gray-bg-strong);
+  --depictio-annot-stripe: var(--depictio-annot-gray-stripe);
+}
+
+
+.ag-theme-alpine .ag-row.depictio-row-annotated:not(.ag-row-selected),
+.ag-theme-alpine-dark .ag-row.depictio-row-annotated:not(.ag-row-selected) {
+  background-color: var(--depictio-annot-bg) !important;
+}
+
+.ag-theme-alpine .ag-row.depictio-row-annotated-active:not(.ag-row-selected),
+.ag-theme-alpine-dark .ag-row.depictio-row-annotated-active:not(.ag-row-selected) {
+  background-color: var(--depictio-annot-bg-strong) !important;
+}
+
+/* The coloured stripe sits on the left edge of the pinned badge column, which
+ * is visible whenever the table has marked rows. Rows are split across the
+ * pinned and centre containers, so painting the row itself would draw a
+ * second stripe in the middle of the table. */
+.ag-theme-alpine .ag-pinned-left-cols-container .ag-row.depictio-row-annotated,
+.ag-theme-alpine-dark .ag-pinned-left-cols-container .ag-row.depictio-row-annotated {
+  box-shadow: inset 3px 0 0 var(--depictio-annot-stripe);
+}
+
+.ag-theme-alpine .ag-pinned-left-cols-container .ag-row.depictio-row-annotated-active,
+.ag-theme-alpine-dark .ag-pinned-left-cols-container .ag-row.depictio-row-annotated-active {
+  box-shadow: inset 5px 0 0 var(--depictio-annot-stripe);
+}
+
+.ag-theme-alpine .ag-row.depictio-row-annotated-active,
+.ag-theme-alpine-dark .ag-row.depictio-row-annotated-active {
+  font-weight: 600;
+}
+
+/* Badge column: circled numbers, centred, no cell padding to spare width. */
+.depictio-annot-badge-cell {
+  padding-left: 4px !important;
+  padding-right: 2px !important;
+  text-align: center;
+  color: var(--depictio-annot-stripe, var(--mantine-color-dimmed));
+  font-weight: 600;
+  letter-spacing: -0.05em;
+}
+
+/* A badge opens its thread when the app handles annotation clicks. */
+.depictio-annot-badges-clickable .depictio-annot-badge-cell {
+  cursor: pointer;
+}
+
+/* Annotate mode: rows picked for the next "Mark rows". Drawn as an outline so
+ * it combines with the dashboard selection tint and existing annotations. */
+.ag-theme-alpine .ag-row.depictio-row-annotate-selected,
+.ag-theme-alpine-dark .ag-row.depictio-row-annotate-selected {
+  outline: 2px dashed var(--mantine-primary-color-filled);
+  outline-offset: -2px;
+  background-color: var(--mantine-primary-color-light) !important;
+}

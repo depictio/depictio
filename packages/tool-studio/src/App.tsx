@@ -44,6 +44,8 @@ export default function App() {
       // satisfied — otherwise maxReachable stalls at 0 and blocks Next→Export.
       if (existing) return true;
       if (!(tool.id && tool.name && output.slug && output.path_glob)) return false;
+      // The catalog card shows both; `catalog validate` rejects a module without them.
+      if (!(tool.description && tool.homepage)) return false;
       // A new output must not reuse an existing output's slug (would overwrite its file).
       if (newOutputSlugClash(newOutputTarget, output.slug)) return false;
       return true;

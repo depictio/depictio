@@ -414,6 +414,28 @@ class DashboardDataLite(BaseModel):
         "from the main tab.",
     )
 
+    # Where advanced-viz tiles draw their controls, dashboard-wide. A default,
+    # not an override: a tile that states its own `controls_placement` keeps it.
+    # Ships as `popover`, i.e. exactly today's behaviour, so switching a whole
+    # dashboard to inline controls stays an explicit choice.
+    advanced_viz_controls: Literal["popover", "rail", "header"] = Field(
+        default="popover",
+        description="Default placement of advanced-viz controls on this dashboard: "
+        "popover keeps them behind the settings icon, header draws the encoding "
+        "controls under each tile title, rail draws every control beside the plot.",
+    )
+
+    # Content-aware tile heights, dashboard-wide. On by default: a tile that
+    # holds two bars should not spend five rows saying so. Switching it off
+    # sizes every tile from its stored height alone, which is what dashboards
+    # did before, so an author who laid a tab out by hand can keep it exactly.
+    autofit: bool = Field(
+        default=True,
+        description="Let tiles take the height their content needs, within per-type "
+        "bounds and levelled row by row. Components carrying `layout.fit: fixed`, and "
+        "tiles a user has resized by hand, keep their stored height either way.",
+    )
+
     # Left filter panel presentation (ordering + icons for named sections)
     filter_sections: list[FilterSectionSpec] = Field(
         default_factory=list,
@@ -543,6 +565,24 @@ class DashboardDataLite(BaseModel):
             )
         return self
 
+    @model_validator(mode="after")
+    def validate_linked_components(self) -> "DashboardDataLite":
+        """Refuse a record card whose `linked_component` names nothing here.
+
+        Checked at parse time rather than left to `to_full`: an unresolved link
+        would otherwise import as a card that never follows any selection, with
+        nothing on screen to say why.
+        """
+        from depictio.models.components.advanced_viz.record_link import (
+            resolve_linked_components,
+        )
+
+        resolve_linked_components(self._component_dicts())
+        return self
+
+    def _component_dicts(self) -> list[dict[str, Any]]:
+        return [c if isinstance(c, dict) else c.model_dump() for c in self.components]
+
     # Sentinel key names used to inject YAML comment separators between sections.
     # After yaml.dump(), these are replaced by comment lines via _apply_section_comments().
     SENTINEL_OPTIONAL: ClassVar[str] = "__section_optional__"
@@ -569,6 +609,8 @@ class DashboardDataLite(BaseModel):
         "show_tab_header",
         "show_guide",
         "guide_intro",
+        "advanced_viz_controls",
+        "autofit",
         "filter_sections",
         "grid_sections",
         "category_colors",
@@ -1157,6 +1199,13 @@ class DashboardDataLite(BaseModel):
             # Layout fields - read from stored_layout_data lookup (keyed by component index)
             comp_index_str = str(comp.get("index", ""))
             comp_layout = layout_lookup.get(comp_index_str, {"x": 0, "y": 0, "w": 6, "h": 4})
+            # `fit` travels inside the layout block, because that is the only
+            # thing it is about, and only when it was set: absent means the
+            # per-type default, and writing it on every component would say
+            # something the author never did.
+            comp_fit = comp.get("fit")
+            if comp_fit in ("auto", "fixed"):
+                comp_layout = {**comp_layout, "fit": comp_fit}
             lite_comp["layout"] = comp_layout
 
             # Placement & grouping — the mirror of what `to_full` writes, so an
@@ -1170,7 +1219,14 @@ class DashboardDataLite(BaseModel):
             # map is noise, and the map branch below would then have no way to
             # take it back out.
             default_placement = _DEFAULT_PLACEMENT.get(comp_type)
-            for field in ("placement", "group", "section", "timescale", "show_marks"):
+            for field in (
+                "placement",
+                "group",
+                "section",
+                "timescale",
+                "show_marks",
+                "show_histogram",
+            ):
                 val = comp.get(field)
                 if val is None:
                     continue
@@ -1220,6 +1276,8 @@ class DashboardDataLite(BaseModel):
                     lite_comp["aggregations"] = comp["aggregations"]
                 if comp.get("filter_expr"):
                     lite_comp["filter_expr"] = comp["filter_expr"]
+                if comp.get("follow_region_filter") is True:
+                    lite_comp["follow_region_filter"] = True
                 display = collect_display_fields(
                     comp,
                     [
@@ -1247,6 +1305,14 @@ class DashboardDataLite(BaseModel):
                 # Conditional data scoping
                 if comp.get("filter_expr"):
                     lite_comp["filter_expr"] = comp["filter_expr"]
+                if comp.get("slider_mode"):
+                    lite_comp["slider_mode"] = comp["slider_mode"]
+                # Declared initial state (mirror of `to_full`).
+                default_state = comp.get("default_state") or {}
+                if default_state.get("default_range") is not None:
+                    lite_comp["default_range"] = default_state["default_range"]
+                elif default_state.get("default_value") is not None:
+                    lite_comp["default_value"] = default_state["default_value"]
                 display = collect_display_fields(
                     comp, ["title_size", "custom_color", "icon_name", "strip_label"]
                 )
@@ -1403,6 +1469,8 @@ class DashboardDataLite(BaseModel):
             show_tab_header=dashboard_data.get("show_tab_header", True) is not False,
             show_guide=dashboard_data.get("show_guide", True) is not False,
             guide_intro=dashboard_data.get("guide_intro") or "",
+            advanced_viz_controls=dashboard_data.get("advanced_viz_controls") or "popover",
+            autofit=bool(dashboard_data.get("autofit", True)),
             brand_theme=cls._exportable_brand_theme(dashboard_data.get("brand_theme")),
             # Tab fields
             is_main_tab=dashboard_data.get("is_main_tab", True),
@@ -1538,6 +1606,8 @@ class DashboardDataLite(BaseModel):
             "show_tab_header": self.show_tab_header,
             "show_guide": self.show_guide,
             "guide_intro": self.guide_intro,
+            "advanced_viz_controls": self.advanced_viz_controls,
+            "autofit": self.autofit,
             "brand_theme": self.brand_theme.model_dump(exclude_none=True)
             if self.brand_theme
             else None,
@@ -1569,6 +1639,16 @@ class DashboardDataLite(BaseModel):
             # else. Written here rather than per-branch so a new component type
             # can't silently lose it.
             full_comp["section"] = comp_dict.get("section")
+
+            # Sizing intent, for the same reason and in the same place: it
+            # applies to every component type and the grid reads it off
+            # `stored_metadata`, never off the layout item, react-grid-layout
+            # drops keys it does not know on the first drag. Written only when
+            # the author set one, so the per-type default stays visible as the
+            # absence of a value.
+            comp_fit = comp_dict.get("fit")
+            if comp_fit in ("auto", "fixed"):
+                full_comp["fit"] = comp_fit
 
             if comp_type == "figure":
                 # Support figure_params (new YAML key) and dict_kwargs (legacy/internal)
@@ -1617,6 +1697,7 @@ class DashboardDataLite(BaseModel):
                         "threshold_warn": comp_dict.get("threshold_warn"),
                         "attrition_cols": comp_dict.get("attrition_cols") or [],
                         "trend_col": comp_dict.get("trend_col"),
+                        "follow_region_filter": bool(comp_dict.get("follow_region_filter")),
                     }
                 )
                 for f in [
@@ -1644,7 +1725,15 @@ class DashboardDataLite(BaseModel):
                         "column_name": comp_dict.get("column_name", ""),
                         "column_type": comp_dict.get("column_type", "object"),
                         "value": None,
-                        "default_state": None,
+                        # Declared defaults travel as ``default_state``, which the
+                        # viewer seeds its initial filter state from.
+                        "default_state": (
+                            {"default_range": list(comp_dict["default_range"])}
+                            if comp_dict.get("default_range") is not None
+                            else {"default_value": comp_dict["default_value"]}
+                            if comp_dict.get("default_value") is not None
+                            else None
+                        ),
                         "filter_expr": comp_dict.get("filter_expr"),
                         # Layout / grouping carried through from the lite model so
                         # the React viewer can bucket components into the top panel
@@ -1653,6 +1742,10 @@ class DashboardDataLite(BaseModel):
                         "group": comp_dict.get("group"),
                         "timescale": comp_dict.get("timescale"),
                         "show_marks": comp_dict.get("show_marks"),
+                        "show_histogram": comp_dict.get("show_histogram"),
+                        # Slider comparison (gte when absent); read by
+                        # deltatables_utils when the filter is applied.
+                        "slider_mode": comp_dict.get("slider_mode"),
                     }
                 )
                 for f in ["title_size", "custom_color", "icon_name", "strip_label"]:
@@ -1790,6 +1883,21 @@ class DashboardDataLite(BaseModel):
 
             full_components.append(full_comp)
 
+        # A record card's `linked_component` is written as a tag, but selection
+        # filters carry the emitting component's `index`, and a tag is not
+        # stored at all. Rewrite it to the index now that every component has
+        # one; `full_components` is positional with `self.components`.
+        from depictio.models.components.advanced_viz.record_link import (
+            resolve_linked_components,
+        )
+
+        for card_pos, source_pos in resolve_linked_components(self._component_dicts()).items():
+            card = full_components[card_pos]
+            card["config"] = {
+                **(card.get("config") or {}),
+                "linked_component": full_components[source_pos]["index"],
+            }
+
         full_dict["stored_metadata"] = full_components
 
         # Generate layout using split-panel system:
@@ -1908,6 +2016,15 @@ class DashboardData(MongoModel):
     # whole family; a child tab's own copy is ignored.
     show_guide: bool = True
     guide_intro: str = ""
+    # Dashboard-wide default for where advanced-viz tiles draw their controls.
+    # `popover` for every dashboard saved before this existed, which is what
+    # they already did; a tile's own `controls_placement` still wins.
+    advanced_viz_controls: Literal["popover", "rail", "header"] = "popover"
+    # Content-aware tile heights. True for every dashboard saved before this
+    # existed: the per-type defaults leave figures and MultiQC panels at their
+    # stored height, and the types that do fit only grow unless the reader can
+    # see them change. False pins every tile to its stored height.
+    autofit: bool = True
     # Dashboard-level brand override (logo, palette, surfaces, figure
     # defaults). None for dashboards saved before the feature existed — those
     # inherit the instance branding exactly as they did before.
@@ -1987,6 +2104,12 @@ class DashboardData(MongoModel):
     inherited_category_colors: Optional[dict] = (
         None  # Populated at runtime for a child tab: its main tab's category_colors
     )
+    # Stable origin of an imported dashboard (e.g. "nf-core/rnaseq:dashboards/base.yaml"),
+    # set by the YAML import so a refresh finds the dashboard it made even after a
+    # rename. Server-owned: DashboardDataLite does not have it, so YAML files and
+    # exports never carry it, and a save from the viewer cannot change it. None for
+    # dashboards built in the viewer and for those imported before it existed.
+    source_key: Optional[str] = None
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,

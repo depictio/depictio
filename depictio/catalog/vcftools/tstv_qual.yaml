@@ -1,0 +1,20 @@
+id: vcftools_tstv_qual
+name: Ts/Tv by quality threshold
+mode: quality-sweep
+description: >-
+  The transition/transversion ratio of the calls above each quality threshold,
+  one curve per sample and caller. Where a curve flattens is where that
+  caller's quality score stops separating real variants from noise, which
+  compares callers on calibration rather than on yield.
+find:
+  path_glob: "**/*.TsTv.qual"
+recipe: vcftools/tstv_qual.py
+fixture: tstv_qual.tsv
+renders_as:
+  - { id: tstv_quality_sweep, component: advanced_viz, kind: profile,
+      roles: {series: series, x: qual_threshold, y: ts_tv_above} }
+  - { component: figure, visu_type: line,
+      dict_kwargs: {x: qual_threshold, y: ts_tv_above, color: series} }
+  - { component: card, column: ts_tv_above, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

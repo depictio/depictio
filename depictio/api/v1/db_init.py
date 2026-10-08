@@ -359,7 +359,7 @@ async def create_initial_dashboards(
         # The two demo tabs the reference project adds on top of the nf-core
         # template (build_reference_dashboard.py). They bind the coordinates,
         # sampling date and CTD readings only this dataset's metadata carries,
-        # so a real `depictio run --template` never receives them.
+        # so a real `depictio ingest --template` never receives them.
         {
             "name": "ampliseq_sampling_campaign",
             "json_path": os.path.join(
@@ -407,13 +407,10 @@ async def create_initial_dashboards(
                 "rarefaction",
                 "ancombc",
                 "da_barplot",
-                "enrichment",
                 "complex_heatmap",
                 "upset",
-                "ma",
                 "dotplot",
                 "lollipop",
-                "qq",
                 "sunburst",
                 "oncoplot",
                 "coverage_track",
@@ -425,6 +422,20 @@ async def create_initial_dashboards(
                 "gsea_running_score",
                 "sashimi",
                 "scatter_xy",
+                "genome_view",
+                "contact_map",
+                "knee_plot",
+                "damage_profile",
+                "group_compare",
+                "transcript_structure",
+                "cnv_profile",
+                "genome_chord",
+                "record_card",
+                "parallel_coordinates",
+                "locus_section",
+                "benchmark_pr",
+                "benchmark_confusion",
+                "benchmark_ci",
             )
         ),
         # nf-core/viralrecon multi-tab dashboard. Seed JSONs are snapshotted

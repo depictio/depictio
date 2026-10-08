@@ -344,7 +344,7 @@ class NextflowRunInfoReader:
                     f"or version ({', '.join(extra['identities_seen'])}). Reporting "
                     f"{pipeline_name} {normalize_pipeline_version(raw_version)} from "
                     f"{pipeline_info.parent.name}, with the tools of all of them. Point "
-                    f"--data-root at one pipeline's runs if that is not what you meant."
+                    f"`depictio ingest` at one pipeline's runs if that is not what you meant."
                 )
 
         run_name = params.get("run_name")

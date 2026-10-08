@@ -51,6 +51,8 @@ async function reachVisualizations(page: Page) {
   await page.getByTestId('start').click();
   await page.getByLabel('Tool id').fill('demotool');
   await page.getByLabel('Tool name').fill('Demo Tool');
+  await page.getByLabel('Tool description').fill('A test tool.');
+  await page.getByLabel('Homepage').fill('https://example.org');
   await page.getByLabel('Output slug').fill('metrics');
   await page.getByLabel('Path glob').fill('**/demotool/*.csv');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -68,6 +70,12 @@ test('a multi-metric card previews its strip, with no backend call', async ({ pa
   await page.getByRole('option', { name: 'coverage (float64)' }).click();
   await selectByLabel(page, 'Select your aggregation method').click();
   await page.getByRole('option', { name: 'Average', exact: true }).click();
+
+  // The strip is optional, so its section starts collapsed.
+  await page
+    .getByTestId('builder-section-breakdown')
+    .getByRole('button', { name: /^Breakdown/ })
+    .click();
 
   // Each numeric layout is a `fetchCardMetric` call — the exact path that 404'd.
   for (const layout of [
@@ -126,10 +134,13 @@ test('advanced viz offers depictio\'s ranked kind picker and renders a bound kin
   await reachVisualizations(page);
   await openBuilder(page, 'Advanced viz');
 
-  // depictio's picker: every kind, described, scored, split into recommended
-  // and the rest. The Studio used to show a bare alphabetical Select.
-  // Ranked, not alphabetised: every kind carries a fit score.
-  await expect(page.getByText(/%\s*fit/i).first()).toBeVisible({ timeout: 15_000 });
+  // depictio's picker: every kind, described, ranked, split into recommended
+  // and the rest. The Studio used to show a bare alphabetical Select. The tiles
+  // no longer print a fit score (the badge names the kind of match, which the
+  // Studio's suggestions do not carry), so the split is what shows the ranking.
+  await expect(page.getByRole('button', { name: /Other visualisations/ })).toBeVisible({
+    timeout: 15_000,
+  });
 
   // The picker keeps its reference material collapsed: kinds scoring under the
   // recommendation threshold, and the bindings table once every required role
@@ -158,7 +169,12 @@ test('advanced viz offers depictio\'s ranked kind picker and renders a bound kin
   // an empty schema or the wrong dtype vocabulary would leave these blank.
   const binding = (role: string) => page.getByLabel(role).locator('xpath=self::input');
   await expect(binding('effect_size')).toHaveValue(/Float64/);
-  await expect(binding('significance')).toHaveValue(/Float64/);
+  // Each role takes its best candidate not already bound, so significance
+  // falls back to a castable numeric column instead of reusing effect_size's.
+  await expect(binding('significance')).toHaveValue(/(Float64|Int64)/);
+  expect(await binding('significance').inputValue()).not.toBe(
+    await binding('effect_size').inputValue(),
+  );
   await expect(binding('feature_id')).toHaveValue(/String/);
 
   // Rebind one by hand: the dropdown offers the fixture's columns with their

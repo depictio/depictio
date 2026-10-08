@@ -2,12 +2,14 @@
  * The Analysis part's demo: make a group from a selection and compare it, on
  * the dashboard's own components, in three steps.
  *
- * A figure a lasso can be drawn on, a table whose rows can be ticked and a
- * card, each the dashboard's own and drawn by the real renderers. The groups
- * go through the same path as on the canvas: a selection becomes a group
- * (`groupFromSelectionFilter`), the groups become the figure's render request
- * (`resolveGroupRender`, the `groupRender` the grid hands every figure) and
- * the card's per-group comparison (`compare_groups` on the bulk endpoint).
+ * A figure the groups are drawn on, overlaid or split, a table whose rows can
+ * be ticked and a card, each the dashboard's own and drawn by the real
+ * renderers; the figure takes a lasso too where it can (see
+ * `analysisFigureRank`). The groups go through the same path as on the
+ * canvas: a selection becomes a group (`groupFromSelectionFilter`), the groups
+ * become the figure's render request (`resolveGroupRender`, the `groupRender`
+ * the grid hands every figure) and the card's per-group comparison
+ * (`compare_groups` on the bulk endpoint).
  *
  * What differs is where the state lives: here. Analysis is on in the demo
  * only, its selection is the demo's own filter and its groups the demo's own
@@ -35,11 +37,15 @@ import {
   COLOR_BY_NONE,
   ComponentRenderer,
   defaultGroupName,
+  GROUP_DECLINED_REASONS,
+  GROUP_KIND_NOT_SPLIT_REASON,
+  groupDisplaysOf,
   groupFromSelectionFilter,
   groupsRenderPayload,
   nextGroupColor,
   resolveGroupRender,
   selectableSelectionFilters,
+  takesSelection,
   uniqueGroupName,
   useGroupingColor,
 } from 'depictio-react-core';
@@ -57,6 +63,9 @@ import type { AnalysisDemoSource, GuideComponentSource } from '../useGuideSource
 import { useDemoCards, useDemoFilters } from './demoState';
 
 const titleOf = (m: StoredMetadata) => String(m.title || m.column_name || 'it');
+
+/** A reason as a sentence: capitalised, with its full stop. */
+const sentence = (reason: string) => `${reason.charAt(0).toUpperCase()}${reason.slice(1)}.`;
 
 /** "a", "a and b", "a, b and c". */
 const listed = (items: readonly string[]) =>
@@ -107,6 +116,15 @@ const LiveAnalysis: React.FC<{ source: AnalysisDemoSource }> = ({ source }) => {
   const groupsRef = useRef(groups);
   groupsRef.current = groups;
 
+  // What the figure does with the groups, by the rules it is drawn by: Split
+  // only where it splits, and where it only splits, split from the start.
+  const displays = useMemo(
+    () => (figure ? groupDisplaysOf(figure.metadata) : { overlay: false, split: false }),
+    [figure],
+  );
+  const shown: GroupingDisplay =
+    displays.split && (display === 'facet' || !displays.overlay) ? 'facet' : 'color';
+
   // The groups as the canvas sends them: colouring for the figure, a
   // comparison for the card.
   const renderGroups = useMemo(() => groupsRenderPayload(groups), [groups]);
@@ -116,10 +134,10 @@ const LiveAnalysis: React.FC<{ source: AnalysisDemoSource }> = ({ source }) => {
         renderGroups.length > 0 ? { kind: 'groups' } : COLOR_BY_NONE,
         renderGroups,
         undefined,
-        display,
+        shown,
         true,
       ),
-    [renderGroups, display],
+    [renderGroups, shown],
   );
   const bulkOptions = useMemo<BulkComputeOptions | undefined>(
     () =>
@@ -165,18 +183,46 @@ const LiveAnalysis: React.FC<{ source: AnalysisDemoSource }> = ({ source }) => {
   // A selection made with groups already saved is the next group on its way:
   // step 2 again, not step 3.
   const step = selected > 0 ? 2 : groups.length > 0 ? 3 : 1;
-  // A figure can be split into a panel per group; an ordination only colours,
-  // its one shared space being the point of it.
-  const canSplit = figure?.metadata.component_type === 'figure';
   const groupingColor = useGroupingColor();
+  // Why the switch offers what it offers. An ordination, a Manhattan only
+  // colour: drawn again per group, their shared axes would no longer compare.
+  // A stacked bar only splits: overlaid, its bars are already sums.
+  const displayHint =
+    groups.length === 0
+      ? 'Save a group first'
+      : displays.overlay && displays.split
+        ? 'Overlay draws the groups in one panel; Split gives each group its own'
+        : displays.overlay
+          ? 'This view keeps one panel: drawn again per group, its axes would no longer compare'
+          : displays.split
+            ? 'Split gives each group its own panel; overlaid, this view draws no group'
+            : sentence(
+                figure?.metadata.component_type !== 'figure'
+                  ? GROUP_KIND_NOT_SPLIT_REASON
+                  : figure.metadata.mode === 'code'
+                    ? GROUP_DECLINED_REASONS.code
+                    : GROUP_DECLINED_REASONS.ui,
+              );
 
   const kinds = [figure && 'figure', table && 'table', card && 'card'].filter(Boolean) as string[];
   const selectHow = [
-    figure && `lasso points on “${titleOf(figure.metadata)}”`,
+    figure &&
+      takesSelection(figure.metadata) &&
+      `lasso points on “${titleOf(figure.metadata)}”`,
     table && `tick rows in “${titleOf(table.metadata)}”`,
   ]
     .filter(Boolean)
     .join(', or ');
+  // Step 3, as the figure answers it.
+  const compareHow = !figure
+    ? 'Groups are saved'
+    : displays.overlay && displays.split
+      ? 'The figure draws each group in its colour, overlaid or split'
+      : displays.overlay
+        ? 'The figure draws each group in its colour'
+        : displays.split
+          ? 'The figure is split into a panel per group'
+          : 'Groups are saved';
   const tabs = [...new Set([figure, table, card].filter(Boolean).map((s) => s!.tabLabel))];
 
   return (
@@ -240,9 +286,7 @@ const LiveAnalysis: React.FC<{ source: AnalysisDemoSource }> = ({ source }) => {
           </Step>
           <Step n={3} active={step === 3} done={false} color={groupingColor} title="Compare">
             <Text size="xs" c="dimmed" lh={1.4}>
-              {figure
-                ? 'The figure draws each group in its colour, overlaid or split'
-                : 'Groups are saved'}
+              {compareHow}
               {card ? '; the card reads each group.' : '.'}
             </Text>
           </Step>
@@ -307,25 +351,15 @@ const LiveAnalysis: React.FC<{ source: AnalysisDemoSource }> = ({ source }) => {
           {figure && (
             <Grid.Col span={{ base: 12, sm: card ? 8 : 12 }}>
               <Group justify="flex-end" mb={6}>
-                <Tooltip
-                  label={
-                    groups.length === 0
-                      ? 'Save a group first'
-                      : canSplit
-                        ? 'Overlay draws the groups in one panel; Split gives each group its own'
-                        : 'An ordination stays one panel: its shared space is what it compares'
-                  }
-                  withArrow
-                  openDelay={300}
-                >
+                <Tooltip label={displayHint} withArrow openDelay={300}>
                   <SegmentedControl
                     size="xs"
-                    value={canSplit ? display : 'color'}
+                    value={shown}
                     onChange={(v) => setDisplay(v as GroupingDisplay)}
-                    disabled={groups.length === 0 || !canSplit}
+                    disabled={groups.length === 0 || !(displays.overlay || displays.split)}
                     data={[
-                      { value: 'color', label: 'Overlay' },
-                      { value: 'facet', label: 'Split' },
+                      { value: 'color', label: 'Overlay', disabled: !displays.overlay },
+                      { value: 'facet', label: 'Split', disabled: !displays.split },
                     ]}
                     aria-label="Show the groups overlaid or split"
                     data-testid="guide-analysis-display"

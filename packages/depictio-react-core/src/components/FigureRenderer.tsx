@@ -1,12 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Paper,
-  Text,
-  Stack,
-  Badge,
-  Group,
-  useMantineColorScheme,
-} from '@mantine/core';
+import { Paper, Text, Stack, Badge, Group, useMantineColorScheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 
 import {
@@ -34,8 +27,8 @@ import { useTransientFlag } from '../hooks/useTransientFlag';
 import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../webglBudget';
-import { usePlotSelectionReset } from './usePlotSelectionReset';
 import { useUiScale } from '../uiScale';
+import { useContentDemand } from './autofit';
 import RefetchOverlay from './RefetchOverlay';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
@@ -44,6 +37,8 @@ import { CARD_FRAME } from './cardFrame';
 import FigureHeader from './FigureHeader';
 import { figurePlotConfig, resolveFigureStyle } from './figureStyle';
 import type { TabLinkTarget } from './tabLinks';
+import { stripOverlayPoints, supportsAnnotation } from '../annotations/layer';
+import { clearDrawnSelection, usePlotAnnotationLayer } from './annotations/usePlotAnnotationLayer';
 
 interface FigureRendererProps {
   dashboardId: string;
@@ -236,6 +231,14 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   const showInitialLoader = (!inView || (isInitialLoad && loading));
   const showRefetchOverlay = !isInitialLoad && loading;
 
+  // What this figure's content says it needs, in grid rows. Server-side,
+  // because a Plotly figure fills whatever box it is given: nothing in the DOM
+  // says two bars are two bars, only the builder that counted the categories
+  // does. Absent for the visu types where the count says nothing about the
+  // height a reader wants (scatter, line), and ignored altogether unless the
+  // component opts in with `layout: {fit: auto}`, figures default to `fixed`.
+  useContentDemand(metadata.index, renderMeta?.content_demand ?? null);
+
   // Report load status to the dashboard registry. Off-screen → pending (null);
   // once we have a figure it stays "ready" through any refetch overlay.
   useReportLoadStatus(
@@ -262,14 +265,14 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
 
   const handleSelected = (event: any) => {
     if (!selectionEnabled || !selectionColumn) return;
-    const values = extractScatterSelection(event, selectionColumnIndex);
+    const values = extractScatterSelection(stripOverlayPoints(event), selectionColumnIndex);
     emitSelection(values);
   };
 
   const handleClick = (event: any) => {
     if (!selectionEnabled || !selectionColumn) return;
     // Treat single-point click as a one-element selection — Dash does the same.
-    const values = extractScatterSelection(event, selectionColumnIndex);
+    const values = extractScatterSelection(stripOverlayPoints(event), selectionColumnIndex);
     emitSelection(values);
   };
 
@@ -278,9 +281,35 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     emitSelection([]);
   };
 
-  // The graph div, so the drawn lasso/box can be wiped when this figure's own
-  // selection is cleared from outside (the chrome's reset button).
-  const gdRef = usePlotSelectionReset(filters, metadata.index);
+  const hasOwnSelection = useMemo(() => {
+    return filters.some(
+      (f) =>
+        f.index === metadata.index &&
+        f.source === 'scatter_selection' &&
+        Array.isArray(f.value) &&
+        f.value.length > 0,
+    );
+  }, [filters, metadata.index]);
+
+  // Track whether THIS component had its own selection on the previous render
+  // so we only fire the clear effect on the true→false transition (someone
+  // pressed the chrome reset button or deselected externally). Without this
+  // gate the effect would also run on first mount before any selection ever
+  // existed.
+  const prevHadOwnSelection = useRef(false);
+
+  useEffect(() => {
+    const wasActive = prevHadOwnSelection.current;
+    prevHadOwnSelection.current = hasOwnSelection;
+    if (!wasActive || hasOwnSelection) return;
+
+    // relayout({selections: null}) wipes drawn selection shapes (lasso/box
+    // outline) and restyle({selectedpoints: null}) restores the un-dimmed
+    // look on every trace. The graph div is the annotation layer's, which
+    // tracks it through `plotProps`.
+    clearDrawnSelection(annotations.gdRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasOwnSelection]);
 
   // ── New-item highlight pipeline ───────────────────────────────────────────
   // Only wired for scatter visualisations — histograms / box / bar aggregate
@@ -387,7 +416,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     return overlayTrace ? [...base, overlayTrace] : base;
   }, [figure, overlayTrace, glGranted]);
 
-  const layout = useMemo<Record<string, unknown>>(() => {
+  const baseLayout = useMemo<Record<string, unknown>>(() => {
     const base: Record<string, unknown> = {
       ...((figure?.layout as Record<string, unknown>) || {}),
       autosize: true,
@@ -423,7 +452,27 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     // changes don't bump refreshTick, so zoom/pan still survive those.
     base.uirevision = `tick-${refreshTick ?? 0}`;
     return base;
+    // uirevision above stays tied to refreshTick only: entering or leaving
+    // annotate mode, or adding an annotation, must not reset the user's zoom.
   }, [figure, selectionEnabled, metadata.selection_mode, refreshTick, effectiveFontScale]);
+
+  // ── Annotation layer ──────────────────────────────────────────────────────
+  // Datawrapper-style annotations (ranges, reference lines, marked points,
+  // arrow notes) are drawn client-side on top of the server figure, and in
+  // annotate mode Plotly gestures draw new ones instead of filtering. Marked
+  // points match on the raw server traces (before the GL fallback and the
+  // new-items halo).
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAnnotation(metadata),
+    data: figureData,
+    layout: baseLayout,
+    sourceData: figure?.data,
+    pointIdIndex: selectionColumnIndex,
+    pointIdColumn: selectionColumn,
+  });
+
+  const missingPointsBadges = annotations.badges;
 
   // "N of M points" indicator. Passive/informational — the full-load toggle
   // itself lives in the component chrome (see the onLoadAllState effect below),
@@ -540,17 +589,18 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
           iconColor={iconColor || undefined}
           source={sourceLink}
           badges={
-            reductionBadge || groupedBadge ? (
+            reductionBadge || groupedBadge || missingPointsBadges.length > 0 ? (
               <>
                 {reductionBadge}
                 {groupedBadge}
+                {missingPointsBadges}
               </>
             ) : undefined
           }
         />
       ) : (
         !showcase &&
-        (metadata.title || reductionBadge || groupedBadge) && (
+        (metadata.title || reductionBadge || groupedBadge || missingPointsBadges.length > 0) && (
           <Group gap="xs" mb="xs" wrap="nowrap">
             {metadata.title && (
               <Text fw={600} size="sm">
@@ -559,6 +609,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
             )}
             {reductionBadge}
             {groupedBadge}
+            {missingPointsBadges}
           </Group>
         )
       )}
@@ -571,22 +622,21 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       {figure && (
         <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           <Plot
-            data={figureData as any[]}
-            layout={layout}
+            data={annotations.data as any[]}
+            layout={annotations.layout}
             revision={refreshTick ?? 0}
             config={figurePlotConfig(showcase ? 'minimal' : 'default')}
             style={{ width: '100%', height: '100%' }}
             useResizeHandler
-            onInitialized={(_fig, gd) => {
-              gdRef.current = gd as HTMLElement;
-            }}
-            onUpdate={(_fig, gd) => {
-              gdRef.current = gd as HTMLElement;
-            }}
-            onSelected={selectionEnabled ? handleSelected : undefined}
-            onClick={selectionEnabled ? handleClick : undefined}
-            onDeselect={selectionEnabled ? handleDeselect : undefined}
+            // In annotate mode the selection handlers are detached: gestures
+            // draw annotations and never filter the dashboard.
+            {...annotations.plotProps({
+              onSelected: selectionEnabled ? handleSelected : undefined,
+              onClick: selectionEnabled ? handleClick : undefined,
+              onDeselect: selectionEnabled ? handleDeselect : undefined,
+            })}
           />
+          {annotations.toolbar}
           <RefetchOverlay visible={showRefetchOverlay} />
         </div>
       )}

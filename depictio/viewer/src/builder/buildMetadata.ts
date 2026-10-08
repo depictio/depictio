@@ -261,6 +261,7 @@ function buildInteractive(
     show_marks?: boolean;
     strip_label?: string;
     strip_icon?: boolean;
+    show_histogram?: boolean;
   }>(state.config);
   // Mirror Dash design_interactive: the form surfaces only the basics, no
   // default value/range, marks, or scale. Those are derived at render time.
@@ -296,6 +297,11 @@ function buildInteractive(
     // (the title; the badge shown), so components outside a bar stay clean.
     strip_label: c.strip_label?.trim() || undefined,
     strip_icon: c.strip_icon === false ? false : undefined,
+    // Authored in YAML rather than in the form (`InteractiveComponent.
+    // show_histogram`), so the builder's job here is only to carry it through:
+    // `loadExisting` seeds the config bag from the stored metadata, and
+    // without this line saving an edit would silently drop the setting.
+    show_histogram: c.show_histogram,
   };
 }
 

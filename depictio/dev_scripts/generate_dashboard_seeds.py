@@ -3,13 +3,15 @@
 Covers the three shipped projects whose dashboards bind to already-materialised
 collections and so need no ingest to rebuild: ``advanced_viz_showcase``
 (23 tabs), ``nfcore_megatests_showcase`` (10) and ``catalog_conformance`` (1).
+``nfcore_megatests_showcase`` commits no seeds: its ``scripts/upload.sh``
+generates them into a temporary directory (``--out``) right before importing.
 All three used to keep their seeds as hand-written or Mongo-dumped JSON, which
 meant the shipped dashboards had no authorable source: adding a filter or a
 caption meant editing a MongoDB document.
 
 The nf-core reference projects are NOT here, and should not be: their YAML
 leans on ``use:`` catalog bindings that only the importer resolves, so their
-seeds stay derived from a real ``depictio run`` (see each project's
+seeds stay derived from a real ``depictio ingest`` (see each project's
 ``generate_seeds.sh``). None of the three below writes a single ``use:``.
 
 This is the offline half of the seed pipeline, deliberately so. The CLI import
@@ -32,6 +34,7 @@ Every id, description and DC binding is read from the project's own
 Usage:
     venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds
     venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
+    venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds --out DIR nfcore_megatests_showcase
 """
 
 from __future__ import annotations
@@ -307,7 +310,7 @@ def _ordered(doc: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def generate(project_key: str) -> int:
+def generate(project_key: str, out_dir: Path | None = None) -> int:
     spec = PROJECTS[project_key]
     project_dir = REPO_ROOT / spec["dir"]
     project = _load_project(project_dir, spec["config"])
@@ -342,25 +345,31 @@ def generate(project_key: str) -> int:
             dashboards,
         )
 
-    seeds_dir = project_dir / ".db_seeds"
+    seeds_dir = out_dir or project_dir / ".db_seeds"
     seeds_dir.mkdir(parents=True, exist_ok=True)
     for slug, raw in raws.items():
         doc = _build_seed(raw, project, dashboards, spec)
         path = seeds_dir / (spec.get("seed_names", {}).get(slug) or f"dashboard_{slug}.json")
         path.write_text(json_util.dumps(_ordered(doc), indent=2) + "\n")
-        print(f"  {path.relative_to(REPO_ROOT)} ({len(doc['stored_metadata'])} components)")
+        print(f"  {path} ({len(doc['stored_metadata'])} components)")
     return len(raws)
 
 
 def main(argv: list[str]) -> int:
-    keys = argv[1:] or list(PROJECTS)
+    args = argv[1:]
+    out_dir = None
+    if "--out" in args:
+        i = args.index("--out")
+        out_dir = Path(args[i + 1])
+        del args[i : i + 2]
+    keys = args or list(PROJECTS)
     unknown = [k for k in keys if k not in PROJECTS]
     if unknown:
         print(f"unknown project(s): {unknown}; known: {list(PROJECTS)}", file=sys.stderr)
         return 1
     for key in keys:
         print(f"{key}:")
-        total = generate(key)
+        total = generate(key, out_dir)
         print(f"  {total} dashboard(s)")
     return 0
 

@@ -231,6 +231,32 @@ export const GROUPING_MODE_BY_KIND: Readonly<Record<AdvancedVizKind, GroupingMod
   gene_arrow_track: 'none',
   gsea_running_score: 'none',
   sashimi: 'none',
+  // A binned matrix re-derived per group would rebuild its own bins and axes,
+  // same bucket as complex_heatmap. Neither renderer takes a `groupRender`
+  // prop (no selection/grouping wiring; see the kind's renderer docstring).
+  contact_map: 'none',
+  knee_plot: 'none',
+  damage_profile: 'none',
+  // Same genome-wide axis as the Manhattan, so splitting is out for the same
+  // reason; the genome view colours by chromosome or by its category column
+  // and does not take the dashboard's groups, so it is honest about doing
+  // neither.
+  genome_view: 'none',
+  // Computed on demand between two groups: the groups are the input, not a
+  // split to apply on top.
+  group_compare: 'none',
+  // One gene's lanes, a segment profile and a chord ring each read as one
+  // figure; per-group copies would not share an axis worth comparing.
+  transcript_structure: 'none',
+  cnv_profile: 'none',
+  genome_chord: 'none',
+  // One row read as text: there is no mark for a group to colour and no
+  // distribution for a panel to re-derive.
+  record_card: 'none',
+  // Every polyline already stands for one sample, and the axes are shared, so
+  // splitting would redraw the same axes beside each other; the kind colours by
+  // its own `group_col` rather than taking the dashboard's groups.
+  parallel_coordinates: 'none',
 };
 
 /** The policy for `vizKind`.
@@ -245,6 +271,39 @@ export function groupingModeForKind(vizKind: string): GroupingMode {
   return Object.prototype.hasOwnProperty.call(GROUPING_MODE_BY_KIND, kind)
     ? GROUPING_MODE_BY_KIND[kind as AdvancedVizKind]
     : 'split';
+}
+
+/** What the dashboard's Overlay / Split switch does to a component: whether
+ *  the groups show in colour in one panel, and whether it is dealt into a
+ *  panel per group. */
+export interface GroupDisplays {
+  overlay: boolean;
+  split: boolean;
+}
+
+/**
+ * Split kinds that also colour their marks by group when drawn whole, in the
+ * Overlay display. Their points are rows, matched to the groups by identity
+ * (`splitFigureByGroups`, reported through `useReportGroupColouring`). The
+ * other split kinds aggregate — a bar or a band is already a sum — and an
+ * overlay draws them as they were.
+ */
+const SPLIT_KINDS_COLOURED_WHOLE: ReadonlySet<string> = new Set<AdvancedVizKind>([
+  'qq',
+  'rarefaction',
+  'coverage_track',
+]);
+
+/**
+ * `groupingModeForKind` as the two displays see it: a 'colour' kind overlays
+ * and is never split, a 'split' kind is split and overlays only when its
+ * renderer colours by group, a 'none' kind does neither.
+ */
+export function groupDisplaysForKind(vizKind: string): GroupDisplays {
+  const mode = groupingModeForKind(vizKind);
+  if (mode === 'colour') return { overlay: true, split: false };
+  if (mode === 'split') return { overlay: SPLIT_KINDS_COLOURED_WHOLE.has(vizKind), split: true };
+  return { overlay: false, split: false };
 }
 
 /** Whether the dashboard is asking for this split, the kind takes it, and it

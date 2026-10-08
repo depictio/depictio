@@ -5,8 +5,10 @@ from datetime import datetime
 import polars as pl
 from deltalake.exceptions import TableNotFoundError
 from pydantic import validate_call
+from rich.markup import escape
 
 from depictio.cli.cli.utils.api_calls import (
+    api_create_files,
     api_get_files_by_dc_id,
     api_upsert_deltatable,
 )
@@ -17,6 +19,12 @@ from depictio.cli.cli_logging import logger
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
+from depictio.models.models.data_collections_types.indexed_file import (
+    DCIndexedFileConfig,
+    indexed_file_s3_key,
+    indexed_file_s3_prefix,
+    sample_from_path,
+)
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
 from depictio.models.models.files import File
 from depictio.models.models.s3 import PolarsStorageOptions
@@ -66,7 +74,7 @@ def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> list[File]:
     response = api_get_files_by_dc_id(dc_id, CLI_config)
     if response.status_code != 200:
         error_msg = f"Error fetching files for Data Collection {dc_id}: {response.text}"
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
 
     files_data = response.json()
@@ -89,7 +97,7 @@ def fetch_file_data(dc_id: str, CLI_config: CLIConfig) -> list[File]:
             logger.warning(f"Skipping stale file record (path does not exist): {loc}")
     if not valid_files_data:
         error_msg = f"No valid files found for Data Collection {dc_id} (all file paths are stale)."
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
     files_data = valid_files_data
 
@@ -131,7 +139,7 @@ def convert_to_file_objects(files_data: list) -> list:
         files = [File.from_mongo(file_dict) for file_dict in files_data]
     except Exception as e:
         error_msg = f"Error converting file dictionaries to File objects: {str(e)}"
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
     return files
 
@@ -185,7 +193,7 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
             lf = df.lazy()
         else:
             error_msg = f"Unsupported file format: {file_format}"
-            logger.error(error_msg)
+            logger.debug(error_msg)
             raise ValueError(error_msg)
 
         # Optionally, add a column from file_info if available (e.g., run_id)
@@ -195,7 +203,7 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
 
     except Exception as e:
         error_msg = f"Error scanning file {file_path}: {e}"
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
 
 
@@ -217,7 +225,7 @@ def read_files_lazy(files: list, file_format: str, polars_kwargs: dict) -> list:
         lazy_frames.append(lf)
     if not lazy_frames:
         error_msg = "No LazyFrames were generated from the files."
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
     return lazy_frames
 
@@ -303,7 +311,7 @@ def aggregate_lazy_dataframes(lazy_frames: list) -> pl.DataFrame:
 
     except Exception as e:
         error_msg = f"Error collecting concatenated LazyFrame: {e}"
-        logger.error(error_msg)
+        logger.debug(error_msg)
         raise Exception(error_msg)
 
 
@@ -311,7 +319,7 @@ def streaming_write_enabled(command_parameters: dict | None = None) -> bool:
     """Whether to stream the Delta write instead of materializing the frame.
 
     Opt-in (default off) because ``LazyFrame.sink_delta`` is marked unstable in
-    polars 1.41.x. Enabled by ``depictio run --streaming`` or by exporting
+    polars 1.41.x. Enabled by ``depictio ingest --streaming`` or by exporting
     ``DEPICTIO_INGEST_STREAMING_WRITE=true`` (the benchmark toggles the env var
     to measure both paths of the same cell).
     """
@@ -600,6 +608,11 @@ def client_aggregate_data(
     if data_collection.config.type.lower() == "phylogeny":
         return process_phylogeny_data_collection(data_collection, CLI_config, overwrite)
 
+    # indexed_file DCs have no delta table either; the files and their indexes are
+    # copied to S3 and read straight from the browser over HTTP range requests.
+    if data_collection.config.type.lower() == "indexed_file":
+        return process_indexed_file_data_collection(data_collection, CLI_config, overwrite)
+
     # Handle transformed (recipe-based) data collections. A `materialized`
     # transform keeps the recipe for lineage but ships a pre-computed seed file,
     # so it falls through to the file-scan path instead of re-running the recipe.
@@ -654,12 +667,7 @@ def client_aggregate_data(
     if destination_exists and not overwrite:
         logger.debug("Destination already exists, overwrite mode is disabled")
 
-        from depictio.cli.cli.utils.rich_utils import console
-
-        console.print("[yellow]⚠️  Destination already exists and overwrite is disabled[/yellow]")
-        console.print(f"   [dim]Destination: {destination_prefix}[/dim]")
-        console.print("   [cyan]💡 Tip: Use --overwrite flag to replace existing data[/cyan]")
-
+        # No output here: the caller reports this message, once per data collection.
         return {
             "result": "error",
             "message": f"Destination {destination_prefix} already exists and overwrite is disabled. Use --overwrite to replace.",
@@ -784,8 +792,8 @@ def client_aggregate_data(
             )
 
     record("delta_bytes", deltatable_size_bytes)
-    logger.info(f"🔍 DEBUG: Calculated deltatable_size_bytes = {deltatable_size_bytes}")
-    logger.info(f"🔍 DEBUG: Size in MB = {deltatable_size_bytes / (1024 * 1024):.2f} MB")
+    logger.debug(f"Calculated deltatable_size_bytes = {deltatable_size_bytes}")
+    logger.debug(f"Size in MB = {deltatable_size_bytes / (1024 * 1024):.2f} MB")
 
     # Rich summaries need a materialized frame — unavailable on the streaming path.
     if aggregated_df is not None:
@@ -803,7 +811,7 @@ def client_aggregate_data(
 
     # 6. Upsert object in the remote DB with size information
     logger.info(
-        f"🔍 DEBUG: About to call api_upsert_deltatable with deltatable_size_bytes={deltatable_size_bytes}"
+        f"About to call api_upsert_deltatable with deltatable_size_bytes={deltatable_size_bytes}"
     )
     with timed("upsert"):
         api_upsert_result = api_upsert_deltatable(
@@ -813,10 +821,10 @@ def client_aggregate_data(
             update=overwrite,
             deltatable_size_bytes=deltatable_size_bytes,
         )
-    logger.info(f"🔍 DEBUG: API upsert response status: {api_upsert_result.status_code}")
+    logger.debug(f"API upsert response status: {api_upsert_result.status_code}")
     if api_upsert_result.status_code != 200:
         error_msg = f"Error upserting Delta table metadata: {api_upsert_result.text}"
-        logger.error(error_msg)
+        logger.debug(error_msg)
         return {"result": "error", "message": error_msg}
     result = api_upsert_result.json()
 
@@ -947,7 +955,8 @@ def process_geojson_data_collection(
         return result
 
     rich_print_checked_statement(
-        f"GeoJSON data collection processed: {data_collection.data_collection_tag}", "success"
+        f"GeoJSON data collection processed: {escape(data_collection.data_collection_tag)}",
+        "success",
     )
 
     return {
@@ -1020,12 +1029,193 @@ def process_phylogeny_data_collection(
         s3_location = f"s3://{bucket}/{s3_key}"
 
     rich_print_checked_statement(
-        f"Phylogeny data collection processed: {data_collection.data_collection_tag}", "success"
+        f"Phylogeny data collection processed: {escape(data_collection.data_collection_tag)}",
+        "success",
     )
 
     return {
         "result": "success",
         "message": f"Phylogeny tree available at {s3_location}",
+    }
+
+
+def plan_indexed_file_uploads(
+    files: Iterable[File],
+    dc_id: str,
+    dc_config: DCIndexedFileConfig,
+) -> tuple[list[dict], list[str]]:
+    """Decide what an ``indexed_file`` DC uploads, without touching S3.
+
+    Pure so the CLI tests can cover the interesting parts (sample naming, the
+    index sidecar, the size cap, duplicate samples) with no network and no
+    bucket. Returns ``(uploads, skipped)`` where each upload is
+    ``{file, sample, key, index_path, index_key, index_size}``; ``file`` is the
+    original :class:`File` so the caller can stamp the keys back onto it.
+
+    A sample that appears twice keeps its first file: the DC's contract is one
+    object per sample, and silently overwriting would make which file wins
+    depend on scan order.
+    """
+    uploads: list[dict] = []
+    skipped: list[str] = []
+    seen_samples: set[str] = set()
+    index_suffix = dc_config.effective_index_suffix
+    size_cap_bytes = dc_config.max_file_size_mb * 1024 * 1024
+
+    for file_obj in files:
+        path = file_obj.file_location
+        if file_obj.filesize > size_cap_bytes:
+            skipped.append(
+                f"{path} ({file_obj.filesize / (1024 * 1024):.0f} MB above the "
+                f"{dc_config.max_file_size_mb} MB cap)"
+            )
+            continue
+
+        sample = sample_from_path(path, dc_config.sample_regex)
+        if sample in seen_samples:
+            skipped.append(f"{path} (sample {sample!r} already taken by an earlier file)")
+            continue
+        seen_samples.add(sample)
+
+        name = os.path.basename(path)
+        try:
+            key = indexed_file_s3_key(dc_id, sample, name)
+        except ValueError as exc:
+            skipped.append(f"{path} ({exc})")
+            continue
+
+        index_path: str | None = None
+        index_key: str | None = None
+        index_size: int | None = None
+        if index_suffix:
+            candidate = f"{path}{index_suffix}"
+            if os.path.exists(candidate):
+                index_path = candidate
+                index_key = indexed_file_s3_key(dc_id, sample, f"{name}{index_suffix}")
+                index_size = os.path.getsize(candidate)
+            else:
+                skipped.append(f"{path} (no {index_suffix} index beside it)")
+                seen_samples.discard(sample)
+                continue
+
+        uploads.append(
+            {
+                "file": file_obj,
+                "sample": sample,
+                "key": key,
+                "index_path": index_path,
+                "index_key": index_key,
+                "index_size": index_size,
+            }
+        )
+
+    return uploads, skipped
+
+
+def process_indexed_file_data_collection(
+    data_collection: DataCollection,
+    CLI_config: CLIConfig,
+    overwrite: bool = False,
+) -> dict[str, str]:
+    """Mirror an ``indexed_file`` DC's files and their indexes to S3.
+
+    No delta table: the browser reads the objects themselves over HTTP range
+    requests (GenomeSpy's lazy sources), so ingest is a copy plus a record of
+    where each sample's object landed. The keys are stamped back onto the file
+    documents, which is what ``GET /files/{dc_id}/{sample}/{name}`` signs.
+
+    Args:
+        data_collection: the ``indexed_file`` DataCollection.
+        CLI_config: CLI configuration with API URL, credentials and S3 storage.
+        overwrite: re-upload objects that already exist in the bucket.
+
+    Returns:
+        Result dict with success/error status.
+    """
+    logger.info(f"Processing indexed_file data collection: {data_collection.data_collection_tag}")
+
+    dc_id = str(data_collection.id)
+    dc_config = data_collection.config.dc_specific_properties
+    if not isinstance(dc_config, DCIndexedFileConfig):
+        return {
+            "result": "error",
+            "message": "indexed_file DC without an indexed_file configuration",
+        }
+
+    try:
+        files = fetch_file_data(dc_id, CLI_config)
+    except Exception as e:
+        return {"result": "error", "message": f"No files found for indexed_file DC: {e}"}
+
+    uploads, skipped = plan_indexed_file_uploads(files, dc_id, dc_config)
+    for reason in skipped:
+        logger.warning(f"indexed_file: skipping {reason}")
+
+    if not uploads:
+        return {
+            "result": "error",
+            "message": (
+                "No uploadable files for indexed_file data collection "
+                f"{data_collection.data_collection_tag}"
+            ),
+        }
+
+    bucket = CLI_config.s3_storage.bucket
+    client = _s3_client(CLI_config)
+
+    def _already_there(key: str) -> bool:
+        try:
+            client.head_object(Bucket=bucket, Key=key)
+            return True
+        except Exception:
+            return False
+
+    updated: list[File] = []
+    for upload in uploads:
+        file_obj: File = upload["file"]
+        for local_path, key in (
+            (file_obj.file_location, upload["key"]),
+            (upload["index_path"], upload["index_key"]),
+        ):
+            if not local_path or not key:
+                continue
+            if not overwrite and _already_there(key):
+                logger.debug(f"indexed_file: {key} already in the bucket, skipping upload")
+                continue
+            try:
+                logger.info(f"Uploading indexed file: {local_path} -> s3://{bucket}/{key}")
+                client.upload_file(local_path, bucket, key)
+            except Exception as e:
+                return {
+                    "result": "error",
+                    "message": f"Failed to upload {local_path} to s3://{bucket}/{key}: {e}",
+                }
+
+        file_obj.sample = upload["sample"]
+        file_obj.s3_key = upload["key"]
+        file_obj.index_s3_key = upload["index_key"]
+        file_obj.index_filesize = upload["index_size"]
+        updated.append(file_obj)
+
+    response = api_create_files(updated, CLI_config, update=True)
+    if response.status_code != 200:
+        return {
+            "result": "error",
+            "message": f"Failed to record indexed file locations: {response.text}",
+        }
+
+    rich_print_checked_statement(
+        f"indexed_file data collection processed: {data_collection.data_collection_tag} "
+        f"({len(updated)} sample(s), {len(skipped)} skipped)",
+        "success",
+    )
+
+    return {
+        "result": "success",
+        "message": (
+            f"{len(updated)} indexed file(s) available under "
+            f"s3://{bucket}/{indexed_file_s3_prefix(dc_id, '')}".rstrip("/")
+        ),
     }
 
 
@@ -1153,7 +1343,7 @@ def process_recipe_data_collection(
 
     recipe_name = transform_config.recipe
     pipeline_version: str | None = getattr(workflow, "version", None)
-    rich_print_checked_statement(f"Running recipe: {recipe_name}", "info")
+    rich_print_checked_statement(f"Running recipe: {escape(recipe_name)}", "info")
 
     # Build source overrides dict. A SourceOverride carries either a single-file
     # 'path' or a multi-file 'glob_pattern'; resolve_sources interprets the value
@@ -1187,14 +1377,15 @@ def process_recipe_data_collection(
                 if run_data_dirs:
                     data_dir = run_data_dirs[0]
                     rich_print_checked_statement(
-                        f"Recipe data dir: {base_location} ({len(run_data_dirs)} run(s))", "info"
+                        f"Recipe data dir: {escape(base_location)} ({len(run_data_dirs)} run(s))",
+                        "info",
                     )
                 else:
                     data_dir = base_location
-                    rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
+                    rich_print_checked_statement(f"Recipe data dir: {escape(data_dir)}", "info")
             else:
                 data_dir = base_location
-                rich_print_checked_statement(f"Recipe data dir: {data_dir}", "info")
+                rich_print_checked_statement(f"Recipe data dir: {escape(data_dir)}", "info")
 
     # Resolve dc_ref sources: load referenced DCs from their Delta tables
     extra_sources: dict[str, pl.DataFrame] | None = None
@@ -1251,8 +1442,10 @@ def process_recipe_data_collection(
             sources = _resolve_sources(recipe_module, data_dir, overrides)
             if extra_sources:
                 sources.update(extra_sources)
+            from depictio.recipes import call_transform
+
             _validate_sources(recipe_module, sources, recipe_name)
-            result_df = recipe_module.transform(sources)
+            result_df = call_transform(recipe_module, sources, transform_config.params)
             if not isinstance(result_df, pl.DataFrame):
                 return {"result": "error", "message": "transform() did not return a DataFrame"}
             _validate_schema(
@@ -1278,6 +1471,7 @@ def process_recipe_data_collection(
                         overrides,
                         extra_sources=extra_sources,
                         pipeline_version=pipeline_version,
+                        params=transform_config.params,
                     )
                     run_df = run_df.with_columns(pl.lit(run_tag).alias("depictio_run_id"))
                     all_dfs.append(run_df)
@@ -1293,6 +1487,7 @@ def process_recipe_data_collection(
                 overrides,
                 extra_sources=extra_sources,
                 pipeline_version=pipeline_version,
+                params=transform_config.params,
             )
     except RecipeError as e:
         return {"result": "error", "message": f"Recipe failed: {e}"}
@@ -1327,7 +1522,7 @@ def process_recipe_data_collection(
         return api_result
 
     rich_print_checked_statement(
-        f"Recipe '{recipe_name}' produced {result_df.height} rows, written to Delta Lake",
+        f"Recipe '{escape(recipe_name)}' produced {result_df.height} rows, written to Delta Lake",
         "success",
     )
 

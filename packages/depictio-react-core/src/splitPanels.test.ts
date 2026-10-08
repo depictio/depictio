@@ -5,6 +5,7 @@ import {
   GROUPING_MODE_BY_KIND,
   MAX_PANELS,
   crossPanels,
+  groupDisplaysForKind,
   groupingModeForKind,
   panelFilters,
   panelsForGrouping,
@@ -130,6 +131,16 @@ describe('splitPanels', () => {
       'gene_arrow_track',
       'gsea_running_score',
       'sashimi',
+      'contact_map',
+      'knee_plot',
+      'damage_profile',
+      'genome_view',
+      'group_compare',
+      'transcript_structure',
+      'cnv_profile',
+      'genome_chord',
+      'record_card',
+      'parallel_coordinates',
     ];
 
     it('places every model kind in its bucket, and no kind twice', () => {
@@ -160,6 +171,24 @@ describe('splitPanels', () => {
       for (const kind of COLOUR) expect(shouldSplitIntoPanels(panels, kind), kind).toBe(false);
       for (const kind of NONE) expect(shouldSplitIntoPanels(panels, kind), kind).toBe(false);
       expect(shouldSplitIntoPanels(panels, 'some_future_kind')).toBe(true);
+    });
+
+    it('overlays the colour kinds, and the split kinds whose marks are rows', () => {
+      for (const kind of COLOUR) {
+        expect(groupDisplaysForKind(kind), kind).toEqual({ overlay: true, split: false });
+      }
+      for (const kind of NONE) {
+        expect(groupDisplaysForKind(kind), kind).toEqual({ overlay: false, split: false });
+      }
+      // Curves and tracks per sample are recoloured whole; a stacked bar, a
+      // sunburst or a flow is already a sum, drawn overlaid as it was.
+      for (const kind of ['qq', 'rarefaction', 'coverage_track']) {
+        expect(groupDisplaysForKind(kind), kind).toEqual({ overlay: true, split: true });
+      }
+      for (const kind of ['stacked_taxonomy', 'sunburst', 'sankey', 'oncoplot', 'signal_matrix']) {
+        expect(groupDisplaysForKind(kind), kind).toEqual({ overlay: false, split: true });
+      }
+      expect(groupDisplaysForKind('some_future_kind')).toEqual({ overlay: false, split: true });
     });
   });
 

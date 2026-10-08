@@ -1,0 +1,28 @@
+id: quast_reference_report
+name: Assembly against a reference
+mode: reference-report
+description: >-
+  The reference-based half of QUAST's report, written only when the run gave
+  QUAST a reference: how much of the reference each assembly covers, how often
+  it breaks with it (misassemblies), its mismatch and indel rates, and NGA50,
+  the contiguity that is left once the assembly is cut at every misassembly. A
+  high N50 with a much lower NGA50 is contiguity bought with joins the reference
+  does not support.
+find:
+  path_glob: "**/QUAST/*/transposed_report.tsv"
+  path_glob_alt:
+    - "**/quast/*/transposed_report.tsv"
+    - "**/QUAST/transposed_report.tsv"
+recipe: quast/reference_report.py
+fixture: reference_report.tsv
+renders_as:
+  - { id: fraction_vs_misassemblies, component: advanced_viz, kind: scatter_xy,
+      roles: {x: genome_fraction, y: misassemblies, label: assembly_id, color: report_id, size: nga50} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: report_id, y: nga50, title: NGA50 per assembly} }
+  - { component: card, column: genome_fraction, aggregation: max,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: misassemblies, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: report_id, top_n_count: 4 }
+  - { component: card, column: mismatches_per_100kbp, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

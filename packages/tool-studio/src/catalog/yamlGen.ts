@@ -325,7 +325,13 @@ export function genModuleYaml(tool: ToolMeta): string {
   if (tool.source_url) lines.push(`source_url: ${flowScalar(tool.source_url)}`);
   if (tool.nf_core_url)
     lines.push(`nf_core_url: ${flowScalar(canonicalNfCoreUrl(tool.nf_core_url))}`);
-  if (tool.biotools_url) lines.push(`biotools_url: ${flowScalar(tool.biotools_url)}`);
+  // Always written: an explicit null records that bio.tools has no entry,
+  // which is what the catalog tests require of every module.yaml.
+  lines.push(
+    tool.biotools_url
+      ? `biotools_url: ${flowScalar(tool.biotools_url)}`
+      : 'biotools_url: null  # no bio.tools entry for this tool',
+  );
   return lines.join('\n') + '\n';
 }
 

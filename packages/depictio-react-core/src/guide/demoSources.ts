@@ -9,7 +9,9 @@
 import type { FilterSectionSpec, StoredMetadata } from '../api';
 import { isStripSection } from '../components/interactive/strip/stripLayout';
 import { advancedVizSelectionColumn, supportsSelectionGrouping } from '../selection';
+import { groupDisplaysForKind, type GroupDisplays } from '../splitPanels';
 import { sectionComponents } from '../utils/groupInteractive';
+import { readMultiqcSelection } from '../utils/multiqcSelection';
 
 /** A key figure and a filter whose values change it. */
 export interface GuideFilterDemoPick {
@@ -218,6 +220,12 @@ export function actionsTileRank(
       case 'interactive':
         if (!m.dc_id || !m.column_name) return null;
         return CATEGORICAL.has(String(m.interactive_component_type ?? '')) ? 0 : 1;
+      case 'multiqc':
+        // A plot of the report: its zoom, its camera, its legend. The General
+        // Statistics tile is a table with toggles of its own, the one tile of
+        // the kind that shows none of that, so it is shown only where the
+        // report has nothing else.
+        return readMultiqcSelection(m as Record<string, unknown>).isGeneralStats ? 1 : 0;
       default:
         return 0;
     }
@@ -253,40 +261,115 @@ export function selectionColumnOf(m: StoredMetadata): string | undefined {
   return undefined;
 }
 
-/** A figure points can be selected on and a group drawn from. */
-export function analysisFigureRank(m: StoredMetadata): number | null {
-  if (m.component_type === 'figure') {
-    if (!supportsSelectionGrouping(m, true) || !selectionColumnOf(m)) return null;
-    // The server recolours a figure built in the editor; a code figure only
-    // when its code spreads the groups. One that never does still takes a
-    // lasso, but would not show step 3.
-    return figureDrawsGroups(m) ? 0 : 2;
-  }
-  // An embedding takes a lasso and colours its points by group itself.
-  if (m.component_type === 'advanced_viz' && m.viz_kind === 'embedding') {
-    return supportsSelectionGrouping(m, true) ? 1 : null;
-  }
-  return null;
+/** A figure or view points can be selected on, a group drawn from: selection
+ *  on, and a column naming each point. */
+export function takesSelection(m: StoredMetadata): boolean {
+  if (m.component_type !== 'figure' && m.component_type !== 'advanced_viz') return false;
+  return supportsSelectionGrouping(m, true) && Boolean(selectionColumnOf(m));
 }
 
-/** Whether the server can colour this figure by the analysis groups. */
+/**
+ * How a figure or view draws the analysis groups, by the rules the app draws
+ * them by: a figure as the server renders it (`figureDrawsGroups`, which
+ * colours and splits it alike), a view by its kind (`groupDisplaysForKind`).
+ * Anything else draws none.
+ */
+export function groupDisplaysOf(m: StoredMetadata): GroupDisplays {
+  if (m.component_type === 'figure') {
+    const drawn = figureDrawsGroups(m);
+    return { overlay: drawn, split: drawn };
+  }
+  if (m.component_type === 'advanced_viz') {
+    return groupDisplaysForKind(typeof m.viz_kind === 'string' ? m.viz_kind : '');
+  }
+  return { overlay: false, split: false };
+}
+
+/**
+ * The figure the Analysis demo compares the groups on, best first:
+ *
+ *   0. one that draws them both overlaid and split, and takes a lasso;
+ *   1. one that draws them both ways, the groups made in a table;
+ *   2. one that takes a lasso and colours them, in one panel (an ordination);
+ *   3. one that takes a lasso but draws no group (a code figure whose code
+ *      does not spread them): the groups are still made, step 3 shows nothing.
+ *
+ * Its Overlay / Split switch is the point of step 3, so a figure that answers
+ * both beats a nearer one that answers one. A figure ranked 1 needs a table to
+ * make the groups; `analysisSelectableFigureRank` is the pick without one.
+ */
+export function analysisFigureRank(m: StoredMetadata): number | null {
+  const lasso = takesSelection(m);
+  const { overlay, split } = groupDisplaysOf(m);
+  if (overlay && split) return lasso ? 0 : 1;
+  if (!lasso) return null;
+  return overlay ? 2 : 3;
+}
+
+/** `analysisFigureRank` among the figures that take a lasso: for a dashboard
+ *  where no table can make the groups the best figure draws. */
+export function analysisSelectableFigureRank(m: StoredMetadata): number | null {
+  return takesSelection(m) ? analysisFigureRank(m) : null;
+}
+
+/** Plotly figures the server draws whole from its frame, columns it cannot
+ *  reason about, so it never colours or splits them by group: mirrors
+ *  `_WHOLE_FRAME_VISU` (depictio/api/v1/services/figure/figure_builder.py). */
+const WHOLE_FRAME_VISU = new Set([
+  'heatmap',
+  'scatter_matrix',
+  'parallel_coordinates',
+  'parallel_categories',
+  'imshow',
+  'scatter_geo',
+  'choropleth',
+]);
+
+/**
+ * Whether the server colours this figure by the analysis groups, and splits
+ * it into a panel per group: a figure built in the editor, unless drawn whole
+ * from its frame; a code figure only when its code spreads
+ * `depictio_group_kwargs`, the same kwargs, which carry the split too.
+ */
 export function figureDrawsGroups(m: StoredMetadata): boolean {
-  if (m.mode !== 'code') return true;
+  if (m.mode !== 'code') return !WHOLE_FRAME_VISU.has(String(m.visu_type ?? '').toLowerCase());
   const code = typeof m.code_content === 'string' ? m.code_content : '';
   return code.includes('depictio_group_kwargs');
 }
 
+/** The column a figure or view names its points by: its selection column, or
+ *  a view's sample column. What a table's ticked rows must be keyed on for a
+ *  group made there to find the figure's points. */
+function pointColumnOf(m: StoredMetadata): string | undefined {
+  const selection = selectionColumnOf(m);
+  if (selection) return selection;
+  const config = (m.config ?? {}) as Record<string, unknown>;
+  return typeof config.sample_id_col === 'string' && config.sample_id_col
+    ? config.sample_id_col
+    : undefined;
+}
+
 /**
  * A table whose rows can be ticked into a group: best one keying its rows on
- * the figure's column, so a group made on either colours the other.
+ * the column that names the figure's points, so a group made on either is
+ * drawn on the other, then one on the figure's data, then any.
+ *
+ * Not any, for a figure that takes no lasso: the table is then the only way
+ * to make the groups it draws, and one that cannot reach its points would
+ * leave step 3 empty. None of those is `null`, and the demo picks a figure
+ * that takes a lasso instead.
  */
 export function analysisTableRank(figure: StoredMetadata | null) {
-  const column = figure ? selectionColumnOf(figure) : undefined;
+  const column = figure ? pointColumnOf(figure) : undefined;
+  const dcId = figure?.dc_id;
+  const only = figure !== null && !takesSelection(figure);
   return (m: StoredMetadata): number | null => {
     if (m.component_type !== 'table' || !m.row_selection_enabled) return null;
     const own = selectionColumnOf(m);
     if (!own) return null;
-    return !column || own === column ? 0 : 1;
+    if (!figure || own === column) return 0;
+    if (dcId && m.dc_id === dcId) return 1;
+    return only ? null : 2;
   };
 }
 

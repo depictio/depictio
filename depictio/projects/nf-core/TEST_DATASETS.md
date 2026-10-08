@@ -4,9 +4,12 @@ Every shipped template was built against exactly one dataset: the AWS megatest r
 `megatest.yaml` pins. This table answers the other question - **which other datasets
 could exercise the same template**, using the `test*` profiles nf-core already ships.
 
-Scope: the 12 pipelines under `depictio/projects/nf-core/`, each at the release the
-template targets - 126 profiles over 123 rows (a few cloud aliases such as rnaseq's
-`test_full` / `test_full_aws` share a row).
+Scope: 25 templates ship under `depictio/projects/nf-core/` (25 pipeline directories). The
+per-profile survey covers the first 12 of them, each at the release the template targets - 126
+profiles over 123 rows (a few cloud aliases such as rnaseq's `test_full` / `test_full_aws`
+share a row). The 7 lot 2 pipelines (sarek, scrnaseq, mag, nanoseq, eager, methylseq, hic) are
+listed in section 1 and the 6 wave 3 pipelines in section 3, with the dataset each was validated
+on; their `test*` profiles are not surveyed yet.
 
 Survey date **2026-09-11**. Sources: `nf-co.re/pipelines.json` (latest releases, tag
 shas), `raw.githubusercontent.com/nf-core/<pipeline>/<tag>/` (`nextflow.config`,
@@ -16,6 +19,10 @@ the samplesheets themselves (row counts are recounted, not copied), and the loca
 
 Related: `MEGATEST_STATUS.md` (what each S3 bucket holds), `VALIDATION_SCENARIOS.md`
 (analytical scenarios per pipeline), `TEMPLATE_BOTTLENECKS.md` (platform gaps).
+
+The per-profile survey below predates lot 2 and wave 3. The lot 2 templates are listed in section 1
+and the six wave 3 templates in section 3, with the dataset each was validated on; their `test*`
+profiles are not surveyed yet (marked "not surveyed" in the tables).
 
 ## Verdicts
 
@@ -67,6 +74,13 @@ a result.
 | taxprofiler | 2.0.1 | 2.0.1 | no | `70ecc15e` | 1.34 | 9 | flat | 12 (7) |
 | variantbenchmarking | 1.4.0 (+ 3 categories) | 1.5.0 | **yes** | `8b21c017` ² | 1.32, absent from the megatest | 16 | flat | 9 (8) |
 | viralrecon | 3.0.0 | 3.0.0 | no | partial prefix ³ | 1.31 | 8 | **sequencing-runs** | 14 (12) |
+| sarek | 3.10.0 | 3.10.0 | no | `8ccac7ad` (`test_full_germline_ncbench_agilent/`) | 1.35 | not surveyed | flat | 37 (20) |
+| scrnaseq | 4.2.0 | 4.2.0 | no | `3fc17b4f` (`aligner_cellranger/`, plus simpleaf and kallisto routes) | 1.34 | not surveyed | flat | 56 (22) |
+| mag | 5.5.0 | 5.5.0 | no | `171cf369` (5.5.0 release candidate; the tagged run `56abab5b` crashed) | none published, reprocessed with 1.35 | not surveyed | flat | 21 (19) |
+| nanoseq | 3.0.0 | 3.1.0 | **yes** | `1e60482a` | **pre-parquet**, reprocessed with 1.35 | not surveyed | flat | 22 (3) |
+| eager | 2.4.5 | 2.5.3 | **yes** | `42c9d5f8` | **pre-parquet** (`multiqc_data.json` only), reprocessed with 1.35 | not surveyed | flat | 39 (5) |
+| methylseq | 2.3.0 | 4.2.0 | **yes** | `93bc5811` (`bismark/`) | **pre-parquet**, reprocessed with 1.35 | not surveyed | flat | 29 (2) |
+| hic | 2.0.0 | 2.1.0 | **yes** | `b4d89cfa` | **pre-parquet** (`mqc_*.txt`), reprocessed with 1.35 | not surveyed | flat | 19 (0) |
 
 ¹ ampliseq is at the latest release, but 2.15.0, 2.16.1 and 2.17.0 are nf-core releases
 with no template directory - running one of those exits 1.
@@ -336,6 +350,27 @@ all - even the "tiny" `test_nanopore` pulls its FAST5/summary from `ngi-igenomes
 
 ---
 
+## 3. Wave 3 templates (six pipelines)
+
+Built on 2026-09-23 against the AWS megatest of each pipeline's latest release. None of these
+pipelines publishes the design of its run, so each template reads it from a table vendored next
+to it under `input/` and passed as `METADATA_FILE`, with `METADATA_ID_COL` and `GROUP_COL` naming
+the id and design columns, the ampliseq convention. Validated offline only: recipes on the real
+files, template lint and a CLI dry run.
+
+| pipeline | template version | latest nf-core | `-r` needed | reference megatest | MultiQC written | structure | DCs (optional) | dataset and design |
+|---|---|---|---|---|---|---|---|---|
+| riboseq | 2.0.0 | 2.0.0 | no | `11d66a3b` | 1.33 | flat | 18 (14) | 12 libraries, 6 Ribo-seq and 6 RNA-seq, one contrast; samplesheet, contrasts and design table vendored under `input/` |
+| smrnaseq | 2.4.1 | 2.4.1 | no | `cb0af579` | 1.33 | flat | 17 (8) | 28 libraries, two crossed factors; design table vendored, built once from the test-datasets samplesheet |
+| genomeassembler | 2.0.0 | 2.0.0 | no | `a72d47d9` | none | flat | 24 (20) | 10 assembly strategies, half of them without assembly QC on this partial run; samplesheet vendored and read as the design table |
+| mhcquant | 3.2.0 | 3.2.0 | no | `6ec12c97` | 1.33 (custom content only) | flat | 15 (4) | `test_full`: PRIDE PXD011628, 2 samples x 3 raw replicates, one per condition; samplesheet vendored under `input/` |
+| demultiplex | 1.8.0 | 1.8.0 | no | `daade37c` | 1.35 | flat | 18 (13) | `test_full`: one flowcell, one lane, 18 libraries, bcl2fastq route; library design vendored in the template directory |
+| rnasplice | 1.0.4 | 1.0.4 | no | none usable: `1d0494ae` is truncated, so `results_sha` is null | 1.18 on the cluster run, no parquet, rebuilt with `multiqc_reprocess` | flat | 12 (6) | EMBL cluster `test_full` run: 6 samples, two conditions, two mirrored contrasts, GRCh37; design table vendored under `input/metadata.tsv` |
+
+With these, 25 templates ship (one directory per pipeline under `depictio/projects/nf-core/`).
+
+---
+
 ## Annex A - why the codes exist
 
 **`VER`** - `depictio.config` forwards `--pipeline-id <manifest.name>/<manifest.version>`
@@ -358,7 +393,7 @@ renaming the output file from `BETA-multiqc.parquet` to `multiqc.parquet`").
   one-line experiment rather than a documented path.
 - **1.28 and older** - no parquet at all. Only
   `python -m depictio.dev_scripts.multiqc_reprocess` produces one, and it is a maintainer
-  script the `run` command never invokes.
+  script the `ingest` command never invokes.
 
 `cli/utils/multiqc_processor.py` reads the parquet and nothing else, so a pipeline
 release pinning an older MultiQC cannot be ingested by the trigger on any profile, only
@@ -370,7 +405,9 @@ through the manual fetch-and-reprocess route.
 sheet under `pipeline_info/`, which their templates already read. Everywhere else the
 sheet exists only as the URL in `params.json`, which is why every `megatest.yaml`
 `post_fetch_help` curls it into `input/`. Workaround for a live run: copy the sheet into
-`<outdir>/input/` before the pipeline finishes.
+`<outdir>/input/` before the pipeline finishes. The wave 3 templates, and methylseq, chipseq and
+nanoseq since that wave, go one step further: the run's design table is vendored with the
+template and passed as `METADATA_FILE`.
 
 **`RUNS`** - `scan.py` walks only subdirectories matching `runs_regex` when
 `data_location.structure` is `sequencing-runs`. viralrecon is the only such template.
@@ -378,9 +415,10 @@ The trigger passes `--data-root params.outdir`, so it needs
 `params.depictio_data_root` set to a parent directory holding `run_*/`.
 
 **`SKIP`** - `_introspect_pipeline_params` derives route flags for ampliseq and
-viralrecon only (`IS_NANOPORE`, `IS_METAGENOMIC`, `SKIP_QIIME`, `SKIP_TAXONOMY`,
-`SKIP_ALPHA_RAREFACTION`, `SKIP_ANCOM`, `IS_MULTIREGION`, `METADATA_FILE`). airrflow's
-five, rnafusion's six, funcscan's four and rnaseq's three are not derived, and
+viralrecon (`IS_NANOPORE`, `IS_METAGENOMIC`, `SKIP_QIIME`, `SKIP_TAXONOMY`,
+`SKIP_ALPHA_RAREFACTION`, `SKIP_ANCOM`, `IS_MULTIREGION`, `METADATA_FILE`) and, since wave 3,
+demultiplex's `IS_BCLCONVERT`. airrflow's five, rnafusion's six, funcscan's four, rnaseq's
+three and mhcquant's two are not derived, and
 `depictio.config` has no parameter that forwards `--var`. A profile that cuts a branch
 therefore leaves a required collection with no source.
 
@@ -450,7 +488,7 @@ python -m depictio.dev_scripts.multiqc_reprocess \
   --dest ~/Data/depictio-nfcore/chipseq/1.2.0/test
 
 # 3. ingest by hand
-depictio-cli run --template nf-core/chipseq/1.2.0 \
+depictio-cli ingest --template nf-core/chipseq/1.2.0 \
   --data-root ~/Data/depictio-nfcore/chipseq/1.2.0/test
 ```
 
@@ -477,8 +515,8 @@ nothing about the blocker.
 What would change the picture is a new upstream release pinning MultiQC 1.29 or later.
 Until then all three stay on the manual route, which already works:
 `python scripts/nfcore_megatest.py fetch` → `python -m depictio.dev_scripts.multiqc_reprocess`
-→ `depictio-cli run --template …`. The cheap follow-up is not a re-pin but making that
-reprocess reachable from `depictio-cli run` itself, which would unblock these three and
+→ `depictio-cli ingest --template …`. The cheap follow-up is not a re-pin but making that
+reprocess reachable from `depictio-cli ingest` itself, which would unblock these three and
 every other pre-1.29 run a user brings.
 
 ---
@@ -519,7 +557,7 @@ carries a SLURM config, a shared Singularity cache and a DSL1-capable Nextflow.
 Separately, `scripts/nfcore_trigger_stub.py` answers the other half of the question.
 Whether a pipeline produces the files a template wants is a data question, answered by
 running it. Whether the 1.10.0 handler turns a completed run into the right
-`depictio-cli run` is not, and needs no pipeline at all: a ten-line workflow wearing the
+`depictio-cli ingest` is not, and needs no pipeline at all: a ten-line workflow wearing the
 right `manifest {}` exercises the whole path in seconds. Both modes pass on all fourteen
 template directories, and the must-fail cases below fail for the right reason.
 

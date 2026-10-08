@@ -3,3 +3,5 @@ id: rtgtools
 name: RTG Tools
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/rtgtools/vcfeval
 biotools_url: https://bio.tools/rtg-tools
+description: Real Time Genomics utilities for accurate VCF comparison and manipulation.
+homepage: https://www.realtimegenomics.com/products/rtg-tools

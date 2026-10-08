@@ -12,11 +12,11 @@ never transmits anything. That one answers "who used my instance". This one
 answers "how many Depictio instances exist", and only ever sends anonymous,
 aggregate, bucketed data to the project maintainers.
 
-Layout — this package holds only what both the API *and* the CLI need, because
-the CLI wheel ships an explicit package list (``depictio/cli/pyproject.toml``)
-that does not include ``depictio.api.v1.*`` beyond ``configs``. Server-only
-pieces (the MongoDB-backed instance identity, aggregate counts, the lifespan
-hook) live in ``depictio.api.v1.telemetry`` instead.
+Layout — this package holds only what both the API *and* the CLI need: the base
+install (the CLI) lacks the server dependencies that ``depictio.api.v1.*``
+imports beyond ``configs``. Server-only pieces (the MongoDB-backed instance
+identity, aggregate counts, the lifespan hook) live in
+``depictio.api.v1.telemetry`` instead.
 
 Two invariants hold everywhere in here:
 
