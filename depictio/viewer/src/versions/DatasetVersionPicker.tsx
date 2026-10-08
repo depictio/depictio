@@ -25,7 +25,6 @@ import React from 'react';
 import {
   Alert,
   Badge,
-  Box,
   Group,
   Loader,
   Paper,
@@ -34,46 +33,31 @@ import {
   Text,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import type { DataVersionPins, StoredMetadata } from 'depictio-react-core';
+import { Z_LAYERS, type DataVersionPins, type StoredMetadata } from 'depictio-react-core';
 
+import { buildDataVersionOptions, LIVE, withPin } from './dataVersionChoice';
 import { absDateTime } from './format';
-import { describeCommit, useDatasetHistories } from './useDatasetHistories';
+import { useDatasetHistories } from './useDatasetHistories';
 
 interface DatasetVersionPickerProps {
   metadata: StoredMetadata[] | undefined;
-  /** Fetching is gated on this so a closed drawer costs nothing. */
-  active: boolean;
   pins: DataVersionPins;
   onPinsChange: (pins: DataVersionPins) => void;
 }
 
-/** Sentinel for the "current data" option. Mantine's Select uses string
- *  values, and `null` would be indistinguishable from "nothing selected". */
-const LIVE = '__live__';
-
+/** Fetches every collection's history on mount. It lives in the settings'
+ *  Data version section, whose modal (or drawer) unmounts it while closed, so
+ *  closed settings cost nothing. */
 const DatasetVersionPicker: React.FC<DatasetVersionPickerProps> = ({
   metadata,
-  active,
   pins,
   onPinsChange,
 }) => {
-  const { histories, loading } = useDatasetHistories(metadata, active);
-
-  const setPin = (dcId: string, value: string | null) => {
-    const next = { ...pins };
-    if (!value || value === LIVE) {
-      delete next[dcId];
-    } else {
-      next[dcId] = Number(value);
-    }
-    onPinsChange(next);
-  };
-
-  if (!active) return null;
+  const { histories, loading } = useDatasetHistories(metadata, true);
 
   if (loading && histories.length === 0) {
     return (
-      <Group justify="center" py="sm">
+      <Group justify="center" py="sm" role="status" aria-label="Loading data versions">
         <Loader size="sm" />
       </Group>
     );
@@ -91,22 +75,14 @@ const DatasetVersionPicker: React.FC<DatasetVersionPickerProps> = ({
     <Stack gap="sm">
       {histories.map((history) => {
         const pinned = pins[history.dcId];
-        const options = [
-          {
-            value: LIVE,
-            label:
-              history.currentVersion !== null
-                ? `Current data (v${history.currentVersion})`
-                : 'Current data',
-          },
-          ...history.commits.map((commit) => {
-            const detail = describeCommit(commit);
-            return {
-              value: String(commit.version),
-              label: `v${commit.version}${detail ? ` — ${detail}` : ''}`,
-            };
-          }),
-        ];
+        const isPinned = typeof pinned === 'number';
+        const pinnedCommit = isPinned
+          ? history.commits.find((c) => c.version === pinned)
+          : undefined;
+        const options = buildDataVersionOptions({
+          commits: history.commits,
+          currentVersion: history.currentVersion,
+        });
 
         return (
           <Paper key={history.dcId} withBorder radius="md" p="sm">
@@ -115,9 +91,17 @@ const DatasetVersionPicker: React.FC<DatasetVersionPickerProps> = ({
                 <Text size="sm" fw={600} style={{ minWidth: 0 }} truncate>
                   {history.label}
                 </Text>
-                {typeof pinned === 'number' && (
-                  <Badge size="sm" color="yellow" variant="light" style={{ flexShrink: 0 }}>
-                    v{pinned}
+                {/* Says "pinned" in words: the badge's colour alone would be
+                    the only sign this collection is not on its latest data. */}
+                {isPinned && (
+                  <Badge
+                    size="sm"
+                    color="yellow"
+                    variant="light"
+                    leftSection={<Icon icon="mdi:pin" width={11} />}
+                    style={{ flexShrink: 0 }}
+                  >
+                    Pinned v{pinned}
                   </Badge>
                 )}
               </Group>
@@ -131,25 +115,24 @@ const DatasetVersionPicker: React.FC<DatasetVersionPickerProps> = ({
                   <Select
                     size="xs"
                     data={options}
-                    value={typeof pinned === 'number' ? String(pinned) : LIVE}
-                    onChange={(value) => setPin(history.dcId, value)}
-                    comboboxProps={{ withinPortal: true }}
+                    value={isPinned ? String(pinned) : LIVE}
+                    onChange={(value) => onPinsChange(withPin(pins, history.dcId, value))}
+                    // Rendered inside the Settings drawer or modal: the
+                    // dropdown has to clear that layer, not open behind it.
+                    comboboxProps={{ withinPortal: true, zIndex: Z_LAYERS.tooltip }}
                     allowDeselect={false}
+                    searchable={options.length > 8}
                     aria-label={`Data version for ${history.label}`}
                   />
-                  {typeof pinned === 'number' &&
-                    (() => {
-                      const commit = history.commits.find((c) => c.version === pinned);
-                      return commit?.timestamp ? (
-                        <Text size="xs" c="dimmed">
-                          written {absDateTime(commit.timestamp)}
-                          {commit.by_email ? ` by ${commit.by_email}` : ''}
-                        </Text>
-                      ) : null;
-                    })()}
+                  {pinnedCommit?.timestamp && (
+                    <Text size="xs" c="dimmed">
+                      written {absDateTime(pinnedCommit.timestamp)}
+                      {pinnedCommit.by_email ? ` by ${pinnedCommit.by_email}` : ''}
+                    </Text>
+                  )}
                   {history.degraded && (
                     <Text size="xs" c="orange">
-                      Partial history — the object store could not be reached.
+                      Partial history: the object store could not be reached.
                     </Text>
                   )}
                 </>

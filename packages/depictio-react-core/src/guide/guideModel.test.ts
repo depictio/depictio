@@ -200,6 +200,7 @@ describe('buildGuideModel: actions', () => {
     expect(model.editActions.map((a) => [a.key, a.count])).toEqual([
       ['drag', 6],
       ['edit', 6],
+      ['history', 6],
       ['duplicate', 3],
       ['move-section', 6],
       ['copy-tab', 6],
@@ -207,6 +208,11 @@ describe('buildGuideModel: actions', () => {
       ['font-size', 2],
       ['delete', 6],
     ]);
+  });
+
+  it('leaves History out of the tile menu until the dashboard has a saved version', () => {
+    const model = buildGuideModel({ ...base, mode: 'edit', hasVersions: false });
+    expect(model.editActions.some((a) => a.key === 'history')).toBe(false);
   });
 
   it('draws each action in the colour its control uses', () => {

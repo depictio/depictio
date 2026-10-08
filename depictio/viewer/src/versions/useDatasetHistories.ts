@@ -9,7 +9,7 @@
  * ingestion — i.e. exactly what someone needs to recognise a commit).
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   fetchDeltaHistory,
   type DeltaVersionEntry,
@@ -84,15 +84,12 @@ async function loadOne(dcId: string, label: string): Promise<DatasetHistory> {
 export function useDatasetHistories(
   metadata: StoredMetadata[] | undefined,
   enabled: boolean,
-): { histories: DatasetHistory[]; loading: boolean; reload: () => void } {
+): { histories: DatasetHistory[]; loading: boolean } {
   const collections = useMemo(() => collectDataCollections(metadata), [metadata]);
   const key = useMemo(() => collections.map((c) => c.dcId).join('|'), [collections]);
 
   const [histories, setHistories] = useState<DatasetHistory[]>([]);
   const [loading, setLoading] = useState(false);
-  const [nonce, setNonce] = useState(0);
-
-  const reload = useCallback(() => setNonce((n) => n + 1), []);
 
   useEffect(() => {
     if (!enabled || collections.length === 0) return;
@@ -109,19 +106,7 @@ export function useDatasetHistories(
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, enabled, nonce]);
+  }, [key, enabled]);
 
-  return { histories, loading, reload };
-}
-
-/** "150 rows · write" — enough to recognise a commit without reading ids. */
-export function describeCommit(commit: DeltaVersionEntry): string {
-  const parts: string[] = [];
-  if (typeof commit.rows_total === 'number') {
-    parts.push(`${commit.rows_total.toLocaleString()} rows`);
-  } else if (typeof commit.rows_added === 'number') {
-    parts.push(`+${commit.rows_added.toLocaleString()} rows`);
-  }
-  if (commit.operation) parts.push(commit.operation.toLowerCase());
-  return parts.join(' · ');
+  return { histories, loading };
 }

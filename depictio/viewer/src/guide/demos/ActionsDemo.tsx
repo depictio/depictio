@@ -732,6 +732,7 @@ const EditMenu: React.FC<{
       editMode
       componentType={type}
       onEdit={() => say('edit')}
+      onOpenHistory={() => say('history')}
       onDelete={() => say('delete')}
       onDuplicate={() => say('duplicate')}
       sections={sections}

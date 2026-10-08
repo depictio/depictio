@@ -22,15 +22,16 @@
  *   **Travel the data independently** — the version sets a default commit, but
  *   any commit can be chosen against any version's config. "Did the chart
  *   change or did the data?" is two questions; this is how they are separated.
- *   **Compare against current** — the past and present stacked vertically, so
- *   the difference is read rather than remembered across a click.
+ *   **Compare against current** — the past and the present side by side
+ *   (stacked on a narrow screen), so the difference is read rather than
+ *   remembered across a click.
  *   **Restore just this component** — without reverting the rest of the
  *   dashboard, which is what a full version restore would do.
  *
  * Restore is the only thing here that writes, and it confirms first.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActionIcon,
   Alert,
@@ -43,11 +44,13 @@ import {
   Modal,
   Paper,
   Select,
+  SimpleGrid,
   Stack,
   Switch,
   Text,
   Tooltip,
 } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import {
@@ -55,22 +58,28 @@ import {
   ComponentRenderer,
   DataVersionProvider,
   dataVersionBody,
+  EDIT_MENU_STYLE,
   fetchDashboardVersion,
   renderDefinitionKey,
   restoreComponentFromVersion,
+  useBrandScopeAttributes,
+  Z_LAYERS,
   type DashboardVersionDetail,
   type DashboardVersionSummary,
   type InteractiveFilter,
   type StoredMetadata,
 } from 'depictio-react-core';
 
-import { absDateTime, versionTitle } from './format';
-import { pinsForComponent, resolveDataVersion, type DataOverride } from './dataVersionChoice';
+import { absDateTime, kindMeta, versionTitle } from './format';
 import {
-  describeCommit,
-  useDatasetHistories,
-  type DatasetHistory,
-} from './useDatasetHistories';
+  buildDataVersionOptions,
+  dataOverrideToValue,
+  pinsForComponent,
+  resolveDataVersion,
+  valueToDataOverride,
+  type DataOverride,
+} from './dataVersionChoice';
+import { useDatasetHistories, type DatasetHistory } from './useDatasetHistories';
 
 interface ComponentVersionModalProps {
   opened: boolean;
@@ -89,11 +98,13 @@ interface ComponentVersionModalProps {
   onRestored?: () => void;
 }
 
-/** Sentinel for "the commit this version recorded". Mantine's Select needs a
- *  string, and an empty value is indistinguishable from nothing selected. */
-const VERSION_DEFAULT = '__version__';
-/** Sentinel for "today's data", overriding whatever the version recorded. */
-const LIVE = '__live__';
+/** Below this the modal takes the whole screen: two panes and their pickers
+ *  do not fit a phone-sized dialog with margins around it. */
+const NARROW_QUERY = '(max-width: 40em)';
+
+/** Dropdowns raised from inside the modal have to clear its layer, or they
+ *  open behind the dialog that raised them. */
+const COMBOBOX_PROPS = { withinPortal: true, zIndex: Z_LAYERS.tooltip } as const;
 
 /** The component's own id — the handle used to find it in each snapshot. */
 function componentIndex(metadata: StoredMetadata | null): string {
@@ -125,12 +136,11 @@ function pinnedVersionFor(
   version: DashboardVersionDetail,
   dcId: string,
 ): number | undefined {
-  for (const stamp of version.data_collections || []) {
-    if (String(stamp.dc_id) !== dcId) continue;
-    if (stamp.version_kind === 'delta' && typeof stamp.delta_version === 'number') {
-      return stamp.delta_version;
-    }
-    return undefined;
+  const stamp = (version.data_collections || []).find(
+    (candidate) => String(candidate.dc_id) === dcId,
+  );
+  if (stamp?.version_kind === 'delta' && typeof stamp.delta_version === 'number') {
+    return stamp.delta_version;
   }
   return undefined;
 }
@@ -233,63 +243,64 @@ const VersionedComponent: React.FC<{
   );
 };
 
+
 /**
- * Which commit one pane reads.
+ * Which commit one view of the component reads.
  *
- * Used by both compare columns so they offer the same choices and read the
- * same way. Pointing both at the same commit is the point: with the data held
- * constant, the only difference left between the two charts is the definition,
- * which is how you see what a config change actually did.
+ * The same control serves the single view and both compare panes, so they
+ * offer the same choices in the same words (`buildDataVersionOptions`).
+ * Pointing both panes at the same commit is the point: with the data held
+ * constant, the only difference left between the two charts is the
+ * definition, which is how you see what a config change actually did.
  */
 const PaneDataPicker: React.FC<{
   history: DatasetHistory | undefined;
-  /** Present only on the pane bound to a stored version. */
-  versionDataVersion?: number | undefined;
+  /** Set on a view bound to a stored version: offers that version's own data,
+   *  which is then the default. The live pane is bound to none. */
+  boundToVersion?: boolean;
+  /** The commit the bound version recorded, if any. */
+  versionDataVersion?: number;
   value: DataOverride;
   onChange: (value: DataOverride) => void;
+  /** Visible label; without one, `ariaLabel` names the control instead. */
+  label?: string;
+  ariaLabel: string;
   testId: string;
-}> = ({ history, versionDataVersion, value, onChange, testId }) => {
+}> = ({
+  history,
+  boundToVersion = false,
+  versionDataVersion,
+  value,
+  onChange,
+  label,
+  ariaLabel,
+  testId,
+}) => {
   if (!history || history.commits.length === 0) return null;
 
-  const options = [
-    ...(versionDataVersion !== undefined
-      ? [
-          {
-            value: VERSION_DEFAULT,
-            label: `This version's data (v${versionDataVersion})`,
-          },
-        ]
-      : []),
-    {
-      value: LIVE,
-      label:
-        history.currentVersion !== null
-          ? `Current data (v${history.currentVersion})`
-          : 'Current data',
-    },
-    ...history.commits.map((commit) => {
-      const detailText = describeCommit(commit);
-      return {
-        value: String(commit.version),
-        label: `v${commit.version}${detailText ? ` — ${detailText}` : ''}`,
-      };
-    }),
-  ];
+  const options = buildDataVersionOptions({
+    commits: history.commits,
+    currentVersion: history.currentVersion,
+    withVersionDefault: boundToVersion,
+    versionDataVersion,
+  });
 
   return (
     <Select
       size="xs"
+      label={label}
       data={options}
-      value={value === undefined ? VERSION_DEFAULT : value === null ? LIVE : String(value)}
+      value={dataOverrideToValue(value)}
       onChange={(next) => {
-        if (!next || next === VERSION_DEFAULT) onChange(undefined);
-        else if (next === LIVE) onChange(null);
-        else onChange(Number(next));
+        const choice = valueToDataOverride(next);
+        // An unbound pane has no "follow the version": its resting state is
+        // the latest data.
+        onChange(choice === undefined && !boundToVersion ? null : choice);
       }}
-      comboboxProps={{ withinPortal: true }}
+      comboboxProps={COMBOBOX_PROPS}
       allowDeselect={false}
-      searchable={history.commits.length > 8}
-      aria-label="Data version for this pane"
+      searchable={options.length > 8}
+      aria-label={label ? undefined : ariaLabel}
       data-testid={testId}
       style={{ minWidth: 0 }}
     />
@@ -311,6 +322,9 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
     ? String((metadata as Record<string, unknown>).dc_id ?? '')
     : '';
 
+  const brandScope = useBrandScopeAttributes();
+  const narrow = useMediaQuery(NARROW_QUERY, false, { getInitialValueInEffect: false });
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<DashboardVersionDetail | null>(null);
   const [loading, setLoading] = useState(false);
@@ -320,7 +334,8 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
   // the data?" is two questions, and this separates them.
   const [useHistoricalData, setUseHistoricalData] = useState(true);
   /** Explicit per-commit override, when the user picks one from the dataset
-   *  select. Null means "follow the version", which is the default. */
+   *  select. `undefined` follows the version (the default); `null` is the
+   *  latest data (see `DataOverride`). */
   const [dataOverride, setDataOverride] = useState<DataOverride>(undefined);
   const [compare, setCompare] = useState(false);
   /** The right-hand pane's data, independent of the left.
@@ -333,24 +348,15 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
   const [restoreLayout, setRestoreLayout] = useState(false);
   const [restoring, setRestoring] = useState(false);
   const [confirmRestore, setConfirmRestore] = useState(false);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
 
   // Mantine's modal animates in, and a figure that measures its container
   // during that animation gets a near-zero height and keeps it. Rendering is
-  // held until the transition has ended, which is what makes the component fit
-  // on *first* open rather than only after switching versions.
+  // held until the enter transition has ended (`onEnterTransitionEnd` below),
+  // which is what makes the component fit on *first* open rather than only
+  // after switching versions. Tied to the transition itself rather than a
+  // timer, so a reduced-motion setting (no transition) renders at once.
   const [ready, setReady] = useState(false);
-  const readyTimer = useRef<number | null>(null);
-  useEffect(() => {
-    if (!opened) {
-      setReady(false);
-      if (readyTimer.current) window.clearTimeout(readyTimer.current);
-      return;
-    }
-    readyTimer.current = window.setTimeout(() => setReady(true), 220);
-    return () => {
-      if (readyTimer.current) window.clearTimeout(readyTimer.current);
-    };
-  }, [opened]);
 
   // Default to the newest version so the modal opens on something rather than
   // an empty pane.
@@ -364,6 +370,7 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
   // selected would show the wrong thing for a moment on reopen.
   useEffect(() => {
     if (!opened) {
+      setReady(false);
       setSelectedId(null);
       setDetail(null);
       setError(null);
@@ -372,6 +379,7 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
       setCompareOverride(null);
       setRestoreLayout(false);
       setConfirmRestore(false);
+      setRestoreError(null);
     }
   }, [opened]);
 
@@ -443,6 +451,27 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
 
   const selected = versions.find((v) => v.version_id === selectedId) || null;
   const selectedIndex = versions.findIndex((v) => v.version_id === selectedId);
+  const selectedTitle = selected ? versionTitle(selected) : 'the selected version';
+  const selectedKind = selected ? kindMeta(selected.kind) : null;
+
+  // The kind is spelled out in each option, not left to a colour: "Autosave"
+  // and "Saved" are what tell two neighbouring versions apart.
+  const versionOptions = useMemo(
+    () =>
+      versions.map((v, position) => ({
+        value: v.version_id,
+        label: [
+          position === 0 ? 'Newest' : null,
+          `v${v.seq}`,
+          v.label?.trim() || null,
+          kindMeta(v.kind).label,
+          absDateTime(v.created_at),
+        ]
+          .filter(Boolean)
+          .join(' · '),
+      })),
+    [versions],
+  );
 
   /** Move to a version, dropping any commit chosen for the previous one.
    *
@@ -460,9 +489,20 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
     Boolean(dcId) &&
     versionDataVersion === undefined;
 
+  const openConfirm = useCallback(() => {
+    setRestoreError(null);
+    setConfirmRestore(true);
+  }, []);
+  const closeConfirm = useCallback(() => {
+    if (restoring) return;
+    setConfirmRestore(false);
+    setRestoreError(null);
+  }, [restoring]);
+
   const handleRestore = useCallback(async () => {
     if (!selectedId || !index) return;
     setRestoring(true);
+    setRestoreError(null);
     try {
       const result = await restoreComponentFromVersion(selectedId, index, restoreLayout);
       notifications.show({
@@ -470,21 +510,19 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
         title: result.readded ? 'Component restored' : 'Component reverted',
         message: result.readded
           ? 'It had been deleted and is back on the dashboard.'
-          : `Restored from ${selected ? versionTitle(selected) : 'the selected version'}. Everything else is untouched.`,
+          : `Restored from ${selectedTitle}. Everything else is untouched.`,
       });
       setConfirmRestore(false);
       onClose();
       onRestored?.();
     } catch (err) {
-      notifications.show({
-        color: 'red',
-        title: 'Restore failed',
-        message: (err as Error)?.message || String(err),
-      });
+      // Said in the dialog that asked, like main's other confirmations, so the
+      // reader can retry or cancel without hunting for a toast.
+      setRestoreError((err as Error)?.message || String(err));
     } finally {
       setRestoring(false);
     }
-  }, [selectedId, index, restoreLayout, selected, onClose, onRestored]);
+  }, [selectedId, index, restoreLayout, selectedTitle, onClose, onRestored]);
 
   /** Height of one rendered pane.
    *
@@ -496,7 +534,7 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
   const body = (() => {
     if (loadingVersions || (loading && !detail)) {
       return (
-        <Group justify="center" py="xl">
+        <Group justify="center" py="xl" role="status" aria-label="Loading version">
           <Loader size="sm" />
         </Group>
       );
@@ -540,13 +578,10 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
 
     // Side by side, past on the left. Two charts of the same shape are
     // compared by scanning across at a fixed height, and a vertical stack
-    // makes that a scroll instead of a glance. `grow` keeps the columns equal
-    // so neither is rendered at a different scale — a difference in size would
-    // read as a difference in the data.
-    const sameData =
-      dcId &&
-      typeof dataVersion === typeof compareDataVersion &&
-      dataVersion === compareDataVersion;
+    // makes that a scroll instead of a glance. Equal columns keep both panes
+    // at the same scale, since a difference in size would read as a difference
+    // in the data. Below `md` there is no room for two, and they stack.
+    const sameData = Boolean(dcId) && dataVersion === compareDataVersion;
 
     return (
       <Stack gap={6}>
@@ -558,13 +593,19 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
             <Icon
               icon="mdi:equal"
               width={12}
+              aria-hidden
               style={{ verticalAlign: '-1px', marginRight: 4 }}
             />
-            Same data on both sides — any difference below is the configuration.
+            Same data on both sides: any difference below comes from the configuration.
           </Text>
         )}
-        <Group align="stretch" grow gap="sm" wrap="nowrap">
-          <Stack gap={4} style={{ minWidth: 0 }}>
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="sm">
+          <Stack
+            gap={4}
+            style={{ minWidth: 0 }}
+            role="group"
+            aria-label={`${selectedTitle}, as saved`}
+          >
             <Group gap={6} wrap="nowrap">
               <Badge size="xs" color="yellow" variant="light" style={{ flexShrink: 0 }}>
                 {selected ? versionTitle(selected) : 'Selected version'}
@@ -572,9 +613,11 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
             </Group>
             <PaneDataPicker
               history={history}
+              boundToVersion
               versionDataVersion={versionDataVersion}
               value={dataOverride}
               onChange={setDataOverride}
+              ariaLabel={`Data version for ${selectedTitle}`}
               testId="component-version-data-select-past"
             />
             <Paper withBorder radius="md" p={4} style={{ minWidth: 0 }}>
@@ -582,7 +625,7 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
             </Paper>
           </Stack>
 
-          <Stack gap={4} style={{ minWidth: 0 }}>
+          <Stack gap={4} style={{ minWidth: 0 }} role="group" aria-label="Current component">
             <Group gap={6} wrap="nowrap">
               <Badge size="xs" color="blue" variant="light" style={{ flexShrink: 0 }}>
                 Current
@@ -594,6 +637,7 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
               // which is not bound to a stored version.
               value={compareOverride}
               onChange={setCompareOverride}
+              ariaLabel="Data version for the current component"
               testId="component-version-data-select-current"
             />
             <Paper withBorder radius="md" p={4} style={{ minWidth: 0 }}>
@@ -607,272 +651,275 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
               />
             </Paper>
           </Stack>
-        </Group>
+        </SimpleGrid>
       </Stack>
     );
   })();
 
-  const dataSelectValue =
-    dataOverride === undefined
-      ? VERSION_DEFAULT
-      : dataOverride === null
-        ? LIVE
-        : String(dataOverride);
-
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      size={compare ? '80rem' : 'xl'}
-      title={
-        <Group gap={8}>
-          <Icon icon="mdi:compare-horizontal" width={18} />
-          <Text fw={600}>Component history</Text>
-          {metadata?.title && (
-            <Text size="sm" c="dimmed" truncate>
-              {String(metadata.title)}
-            </Text>
-          )}
-        </Group>
-      }
-      data-testid="component-version-modal"
-    >
-      <Stack gap="sm">
-        {versions.length > 0 && (
-          // A dropdown, not a segmented control: a dashboard accumulates a
-          // version per save, so the strip is a handful of tabs on day one and
-          // an unusable horizontal scroll by month three. The select stays one
-          // line at any length, is searchable once that matters, and has room
-          // for the label and timestamp that tell the versions apart — `v37`
-          // on a tab does not.
-          //
-          // Step buttons flank it because "the one before this" is the most
-          // common move in a comparison, and hunting for it in a list is worse
-          // than a click.
-          <Group gap={6} wrap="nowrap" align="flex-end">
-            <Tooltip label="Older version" withArrow openDelay={400}>
-              <ActionIcon
-                variant="default"
-                size="lg"
-                // `versions` is newest-first, so older is a *higher* index.
-                disabled={selectedIndex < 0 || selectedIndex >= versions.length - 1}
-                onClick={() => selectVersion(versions[selectedIndex + 1]?.version_id)}
-                aria-label="Older version"
-                data-testid="component-version-older"
-              >
-                <Icon icon="mdi:chevron-left" width={18} />
-              </ActionIcon>
-            </Tooltip>
-
-            <Select
-              size="xs"
-              label="Version"
-              style={{ flex: 1, minWidth: 0 }}
-              data={versions.map((v, position) => ({
-                value: v.version_id,
-                label: `${position === 0 ? 'Latest · ' : ''}v${v.seq}${
-                  v.label ? ` · ${v.label}` : ''
-                } — ${absDateTime(v.created_at)}`,
-              }))}
-              value={selectedId ?? ''}
-              onChange={(value) => selectVersion(value ?? undefined)}
-              // Searchable past the point where scanning stops being viable.
-              searchable={versions.length > 8}
-              comboboxProps={{ withinPortal: true }}
-              allowDeselect={false}
-              maxDropdownHeight={280}
-              data-testid="component-version-select"
-            />
-
-            <Tooltip label="Newer version" withArrow openDelay={400}>
-              <ActionIcon
-                variant="default"
-                size="lg"
-                disabled={selectedIndex <= 0}
-                onClick={() => selectVersion(versions[selectedIndex - 1]?.version_id)}
-                aria-label="Newer version"
-                data-testid="component-version-newer"
-              >
-                <Icon icon="mdi:chevron-right" width={18} />
-              </ActionIcon>
-            </Tooltip>
+    <>
+      <Modal
+        opened={opened}
+        onClose={onClose}
+        size={compare ? '80rem' : 'xl'}
+        fullScreen={narrow}
+        // Over the dashboard, and above the floating map card, like main's
+        // other dashboard modals.
+        zIndex={Z_LAYERS.overlay}
+        // Portaled to <body>, so put back inside the dashboard's brand scope
+        // by hand (see `useBrandScopeAttributes`).
+        className={brandScope?.className}
+        data-mantine-color-scheme={brandScope?.['data-mantine-color-scheme']}
+        onEnterTransitionEnd={() => setReady(true)}
+        // Escape is a window listener on every open modal: with the restore
+        // confirmation up, it must close that one only.
+        closeOnEscape={!confirmRestore}
+        title={
+          <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+            {/* The icon of the menu item that opens it. */}
+            <Icon icon={EDIT_MENU_STYLE.history.icon} width={18} aria-hidden />
+            <Text fw={600}>Component history</Text>
+            {metadata?.title && (
+              <Text size="sm" c="dimmed" truncate>
+                {String(metadata.title)}
+              </Text>
+            )}
           </Group>
-        )}
+        }
+        data-testid="component-version-modal"
+      >
+        <Stack gap="sm">
+          {versions.length > 0 && (
+            // A dropdown, not a segmented control: a dashboard accumulates a
+            // version per save, so the strip is a handful of tabs on day one and
+            // an unusable horizontal scroll by month three. The select stays one
+            // line at any length, is searchable once that matters, and has room
+            // for the label and timestamp that tell the versions apart — `v37`
+            // on a tab does not.
+            //
+            // Step buttons flank it because "the one before this" is the most
+            // common move in a comparison, and hunting for it in a list is worse
+            // than a click.
+            <Group gap={6} wrap="nowrap" align="flex-end">
+              <Tooltip label="Older version" withArrow openDelay={400} zIndex={Z_LAYERS.tooltip}>
+                <ActionIcon
+                  variant="default"
+                  size="lg"
+                  // `versions` is newest-first, so older is a *higher* index.
+                  disabled={selectedIndex < 0 || selectedIndex >= versions.length - 1}
+                  onClick={() => selectVersion(versions[selectedIndex + 1]?.version_id)}
+                  aria-label="Older version"
+                  data-testid="component-version-older"
+                >
+                  <Icon icon="mdi:chevron-left" width={18} aria-hidden />
+                </ActionIcon>
+              </Tooltip>
 
-        {selected && (
-          <Paper withBorder radius="md" p="xs">
-            <Stack gap={8}>
-              <Group justify="space-between" wrap="nowrap" gap="sm">
-                <Stack gap={2} style={{ minWidth: 0 }}>
-                  <Text size="sm" fw={600} truncate>
-                    {versionTitle(selected)}
-                  </Text>
-                  <Group gap={6} wrap="nowrap">
-                    <Text size="xs" c="dimmed">
-                      {absDateTime(selected.created_at)}
+              <Select
+                size="xs"
+                label="Version"
+                style={{ flex: 1, minWidth: 0 }}
+                data={versionOptions}
+                value={selectedId ?? ''}
+                onChange={(value) => selectVersion(value ?? undefined)}
+                // Searchable past the point where scanning stops being viable.
+                searchable={versions.length > 8}
+                comboboxProps={COMBOBOX_PROPS}
+                allowDeselect={false}
+                maxDropdownHeight={280}
+                data-testid="component-version-select"
+              />
+
+              <Tooltip label="Newer version" withArrow openDelay={400} zIndex={Z_LAYERS.tooltip}>
+                <ActionIcon
+                  variant="default"
+                  size="lg"
+                  disabled={selectedIndex <= 0}
+                  onClick={() => selectVersion(versions[selectedIndex - 1]?.version_id)}
+                  aria-label="Newer version"
+                  data-testid="component-version-newer"
+                >
+                  <Icon icon="mdi:chevron-right" width={18} aria-hidden />
+                </ActionIcon>
+              </Tooltip>
+            </Group>
+          )}
+
+          {selected && (
+            <Paper withBorder radius="md" p="xs">
+              <Stack gap={8}>
+                <Group justify="space-between" wrap="wrap" gap="sm">
+                  <Stack gap={2} style={{ minWidth: 0 }}>
+                    <Text size="sm" fw={600} truncate>
+                      {versionTitle(selected)}
                     </Text>
-                    {typeof dataVersion === 'number' && (
-                      <Badge size="xs" color="yellow" variant="light">
-                        data v{dataVersion}
-                      </Badge>
-                    )}
+                    <Group gap={6} wrap="wrap">
+                      {selectedKind && (
+                        // Icon and word both: the kind's colour is a hint,
+                        // never the only way to read it.
+                        <Badge
+                          size="xs"
+                          variant="light"
+                          color={selectedKind.color}
+                          leftSection={<Icon icon={selectedKind.icon} width={10} aria-hidden />}
+                          data-testid="component-version-kind"
+                        >
+                          {selectedKind.label}
+                        </Badge>
+                      )}
+                      <Text size="xs" c="dimmed">
+                        {absDateTime(selected.created_at)}
+                      </Text>
+                      {typeof dataVersion === 'number' && (
+                        <Badge size="xs" color="yellow" variant="light">
+                          Data v{dataVersion}
+                        </Badge>
+                      )}
+                    </Group>
+                  </Stack>
+                  <Group gap="sm" wrap="nowrap">
+                    <Switch
+                      size="xs"
+                      checked={compare}
+                      onChange={(e) => setCompare(e.currentTarget.checked)}
+                      label="Compare"
+                      labelPosition="left"
+                      styles={{ label: { whiteSpace: 'nowrap' } }}
+                      data-testid="component-version-compare-toggle"
+                    />
+                    <Switch
+                      size="xs"
+                      checked={useHistoricalData}
+                      onChange={(e) => {
+                        setUseHistoricalData(e.currentTarget.checked);
+                        // The toggle and the select answer the same question;
+                        // leaving a stale override would make the toggle inert.
+                        setDataOverride(undefined);
+                      }}
+                      label="Historical data"
+                      labelPosition="left"
+                      styles={{ label: { whiteSpace: 'nowrap' } }}
+                      data-testid="component-version-data-toggle"
+                    />
                   </Group>
-                </Stack>
-                <Group gap="sm" wrap="nowrap">
-                  <Switch
-                    size="xs"
-                    checked={compare}
-                    onChange={(e) => setCompare(e.currentTarget.checked)}
-                    label="Compare"
-                    labelPosition="left"
-                    styles={{ label: { whiteSpace: 'nowrap' } }}
-                    data-testid="component-version-compare-toggle"
-                  />
-                  <Switch
-                    size="xs"
-                    checked={useHistoricalData}
-                    onChange={(e) => {
-                      setUseHistoricalData(e.currentTarget.checked);
-                      // The toggle and the select answer the same question;
-                      // leaving a stale override would make the toggle inert.
-                      setDataOverride(undefined);
-                    }}
-                    label="Historical data"
-                    labelPosition="left"
-                    styles={{ label: { whiteSpace: 'nowrap' } }}
-                    data-testid="component-version-data-toggle"
-                  />
                 </Group>
-              </Group>
 
-              {/* Dataset travel, independent of the version. The version sets
-                  the default; this overrides it, which is how "same chart,
-                  different data" and "different chart, same data" are both
-                  reachable.
+                {/* Dataset travel, independent of the version. The version sets
+                    the default; this overrides it, which is how "same chart,
+                    different data" and "different chart, same data" are both
+                    reachable.
 
-                  Hidden while comparing: each pane grows its own picker there,
-                  and two controls driving the same state is a way to make the
-                  one you are not looking at appear broken. */}
-              {!compare && dcId && history && history.commits.length > 0 && (
-                <Select
-                  size="xs"
-                  label="Data version"
-                  data={[
-                    {
-                      value: VERSION_DEFAULT,
-                      label:
-                        typeof versionDataVersion === 'number'
-                          ? `This version's data (v${versionDataVersion})`
-                          : "This version's data (none recorded)",
-                    },
-                    {
-                      value: LIVE,
-                      label:
-                        history.currentVersion !== null
-                          ? `Current data (v${history.currentVersion})`
-                          : 'Current data',
-                    },
-                    ...history.commits.map((commit) => {
-                      const detailText = describeCommit(commit);
-                      return {
-                        value: String(commit.version),
-                        label: `v${commit.version}${detailText ? ` — ${detailText}` : ''}`,
-                      };
-                    }),
-                  ]}
-                  value={dataSelectValue}
-                  onChange={(value) => {
-                    if (!value || value === VERSION_DEFAULT) setDataOverride(undefined);
-                    else if (value === LIVE) setDataOverride(null);
-                    else setDataOverride(Number(value));
-                  }}
-                  comboboxProps={{ withinPortal: true }}
-                  allowDeselect={false}
-                  data-testid="component-version-data-select"
-                />
-              )}
-            </Stack>
-          </Paper>
-        )}
-
-        {dataUnavailable && (
-          <Alert color="yellow" variant="light" icon={<Icon icon="mdi:alert" width={16} />}>
-            This version recorded no dataset version for the component's data
-            collection, so the component below is drawn from{' '}
-            <strong>current data</strong>. Its layout and configuration are from
-            the selected version.
-          </Alert>
-        )}
-
-        {body}
-
-        {canRestore && historical && (
-          <>
-            <Divider />
-            {confirmRestore ? (
-              <Paper withBorder radius="md" p="sm">
-                <Stack gap="xs">
-                  <Text size="sm">
-                    Restore this component as it was in{' '}
-                    <strong>{selected ? versionTitle(selected) : 'the selected version'}</strong>?
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    Only this component changes. Everything else on the dashboard
-                    stays as it is, and the current state is saved to history
-                    first, so this can be undone.
-                  </Text>
-                  <Switch
-                    size="xs"
-                    checked={restoreLayout}
-                    onChange={(e) => setRestoreLayout(e.currentTarget.checked)}
-                    label="Also restore its position and size"
+                    Hidden while comparing: each pane grows its own picker there,
+                    and two controls driving the same state is a way to make the
+                    one you are not looking at appear broken. */}
+                {!compare && dcId && (
+                  <PaneDataPicker
+                    history={history}
+                    boundToVersion
+                    versionDataVersion={versionDataVersion}
+                    value={dataOverride}
+                    onChange={setDataOverride}
+                    label="Data version"
+                    ariaLabel="Data version"
+                    testId="component-version-data-select"
                   />
-                  <Group justify="flex-end" gap="xs">
-                    <Button
-                      size="xs"
-                      variant="subtle"
-                      color="gray"
-                      onClick={() => setConfirmRestore(false)}
-                      disabled={restoring}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      size="xs"
-                      color="orange"
-                      loading={restoring}
-                      onClick={handleRestore}
-                      data-testid="component-version-restore-confirm"
-                    >
-                      Restore this component
-                    </Button>
-                  </Group>
-                </Stack>
-              </Paper>
-            ) : (
+                )}
+              </Stack>
+            </Paper>
+          )}
+
+          {dataUnavailable && (
+            <Alert color="yellow" variant="light" icon={<Icon icon="mdi:alert" width={16} />}>
+              This version recorded no dataset version for the component's data
+              collection, so the component below is drawn from its{' '}
+              <strong>latest data</strong>. Its layout and configuration are from
+              the selected version.
+            </Alert>
+          )}
+
+          {body}
+
+          {canRestore && historical && (
+            <>
+              <Divider />
               <Group justify="flex-end">
                 <Tooltip
                   label="Replaces only this component, leaving the rest of the dashboard alone"
                   withArrow
                   position="left"
+                  zIndex={Z_LAYERS.tooltip}
                 >
                   <Button
                     size="xs"
                     variant="light"
-                    color="orange"
-                    leftSection={<Icon icon="mdi:restore" width={14} />}
-                    onClick={() => setConfirmRestore(true)}
+                    leftSection={<Icon icon="mdi:restore" width={14} aria-hidden />}
+                    onClick={openConfirm}
                     data-testid="component-version-restore"
                   >
                     Restore this component
                   </Button>
                 </Tooltip>
               </Group>
-            )}
-          </>
-        )}
-      </Stack>
-    </Modal>
+            </>
+          )}
+        </Stack>
+      </Modal>
+
+      {/* A sibling of the modal above, not a child: React events bubble
+          through portals along the component tree, so nested inside it a key
+          press here would reach the outer dialog too. */}
+      <Modal
+        opened={opened && confirmRestore}
+        onClose={closeConfirm}
+        title="Restore this component?"
+        size="md"
+        centered
+        // Raised from inside the history modal, so one layer above it.
+        zIndex={Z_LAYERS.nestedOverlay}
+        className={brandScope?.className}
+        data-mantine-color-scheme={brandScope?.['data-mantine-color-scheme']}
+        closeOnClickOutside={!restoring}
+        data-testid="component-version-restore-modal"
+      >
+        <Stack gap="sm">
+          <Text size="sm">
+            This replaces the component with how it was in{' '}
+            <strong>{selectedTitle}</strong>.
+          </Text>
+          <Alert color="blue" variant="light" icon={<Icon icon="mdi:information" width={16} />}>
+            Only this component changes; everything else on the dashboard stays as
+            it is. The current state is saved as a version first, so this can be
+            undone.
+          </Alert>
+          <Switch
+            size="xs"
+            checked={restoreLayout}
+            onChange={(e) => setRestoreLayout(e.currentTarget.checked)}
+            disabled={restoring}
+            label="Also restore its position and size"
+            description="Off, it stays where it is now, in the same section."
+          />
+          {restoreError && (
+            <Alert color="red" variant="light" icon={<Icon icon="mdi:alert-circle" width={16} />}>
+              {restoreError}
+            </Alert>
+          )}
+          <Group justify="flex-end" gap="xs" mt="sm">
+            <Button variant="subtle" onClick={closeConfirm} disabled={restoring}>
+              Cancel
+            </Button>
+            <Button
+              leftSection={<Icon icon="mdi:restore" width={14} aria-hidden />}
+              loading={restoring}
+              onClick={handleRestore}
+              data-testid="component-version-restore-confirm"
+            >
+              Restore
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
   );
 };
 

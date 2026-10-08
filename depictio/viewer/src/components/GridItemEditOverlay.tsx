@@ -257,11 +257,11 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
               // Edit mode only, like the rest of this menu: it can restore the
               // component, which is a write.
               <Menu.Item
-                leftSection={<Icon icon="mdi:history" width={14} />}
+                leftSection={<Icon icon={EDIT_MENU_STYLE.history.icon} width={14} />}
                 onClick={() => onOpenHistory(componentId)}
                 data-testid="component-history-action"
               >
-                History
+                {EDIT_MENU_STYLE.history.label}
               </Menu.Item>
             )}
             {showDuplicate && (

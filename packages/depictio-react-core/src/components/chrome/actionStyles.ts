@@ -52,6 +52,9 @@ export const LOAD_ALL_ACTIVE_ICON = 'mdi:arrow-collapse-vertical';
 /** The editor's tile menu (`GridItemEditOverlay`), in menu order. */
 export const EDIT_MENU_STYLE = {
   edit: { icon: 'tabler:edit', label: 'Edit' },
+  /** The component across saved versions (`ComponentVersionModal`). Offered
+   *  once the dashboard has a saved version. */
+  history: { icon: 'mdi:history', label: 'History' },
   duplicate: { icon: 'tabler:copy', label: 'Duplicate' },
   'move-section': { icon: 'mdi:format-list-group', label: 'Move to section' },
   'copy-tab': { icon: 'mdi:content-duplicate', label: 'Copy to tab…' },
