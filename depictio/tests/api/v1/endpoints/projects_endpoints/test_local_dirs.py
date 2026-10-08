@@ -133,6 +133,29 @@ def test_sub_directories_sorted_with_hidden_and_escaping_ones_left_out(home):
     assert listing.truncated is False
 
 
+def test_has_children_counts_only_folders_the_listing_would_show(home, tmp_path):
+    results = home / "results"
+    (results / "notes" / ".git").mkdir()  # hidden
+    (results / "notes" / "draft.txt").write_text("a file")
+    (results / "linked-out").mkdir()
+    (results / "linked-out" / "elsewhere").symlink_to(tmp_path / "outside")  # escapes
+    by_name = {e.name: e for e in _list(str(results)).entries}
+    # run42 holds pipeline_info/, latest is a link to it.
+    assert by_name["run42"].has_children and by_name["latest"].has_children
+    assert not by_name["notes"].has_children
+    assert not by_name["linked-out"].has_children
+
+
+def test_the_roots_say_whether_they_hold_folders(home):
+    assert [e.has_children for e in _list().entries] == [True]
+
+
+def test_the_listing_says_whether_the_folder_is_a_run(home):
+    assert _list(str(home / "results" / "run42")).looks_like_run is True
+    assert _list(str(home / "results")).looks_like_run is False
+    assert _list().looks_like_run is False
+
+
 def test_a_denied_folder_is_not_listed(home):
     names = [e.name for e in _list(str(home)).entries]
     assert "depictio-local" not in names
@@ -278,3 +301,32 @@ async def test_me_optional_carries_the_flag_and_never_a_path(monkeypatch, home):
     monkeypatch.delenv("DEPICTIO_LOCAL_DATA_ROOTS")
     off = await user_routes.get_current_user_info_optional(token=None)
     assert off["local_data_roots_enabled"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("public", "credentialed", "enabled"),
+    [
+        ("", "", False),
+        (" , ", "", False),
+        ("open-data/runs", "", True),
+        ("", "lab-data", True),
+    ],
+)
+async def test_me_optional_says_whether_s3_can_be_browsed_never_which_bucket(
+    monkeypatch, public, credentialed, enabled
+):
+    from depictio.api.v1.endpoints.user_endpoints import routes as user_routes
+
+    monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", public)
+    monkeypatch.setenv("DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS", credentialed)
+    body = await user_routes.get_current_user_info_optional(token=None)
+    assert body["remote_browse_enabled"] is enabled
+    for name in ("open-data", "lab-data"):
+        assert name not in json.dumps(body, default=str)
+
+
+def test_invalid_remote_settings_turn_browsing_off(monkeypatch):
+    monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
+    monkeypatch.setenv("DEPICTIO_REMOTE_TIMEOUT_S", "not-a-number")
+    assert settings_models.remote_browse_enabled() is False

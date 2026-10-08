@@ -40,7 +40,8 @@ class StubS3Client:
     thought about it would leave it.
 
     ``pages_served`` and ``get_object_calls`` are what the "one listing answers
-    everything" and "the client is built once" tests assert on.
+    everything" and "the client is built once" tests assert on; ``listings``
+    records the parameters of every listing asked for.
     """
 
     def __init__(self, bodies: dict[str, bytes], page_size: int = 100, is_truncated=None):
@@ -49,9 +50,13 @@ class StubS3Client:
         self.is_truncated = is_truncated
         self.pages_served = 0
         self.get_object_calls: list[str] = []
+        self.listings: list[dict] = []
 
-    def _pages_for(self, prefix: str):
+    def _pages_for(self, prefix: str, delimiter: str | None = None):
         keys = [key for key in self.bodies if key.startswith(prefix)]
+        if delimiter:
+            yield from self._delimited_pages(prefix, keys, delimiter)
+            return
         for start in range(0, len(keys), self.page_size):
             page: dict = {
                 "Contents": [
@@ -63,12 +68,40 @@ class StubS3Client:
                 page["IsTruncated"] = self.is_truncated
             yield page
 
+    def _delimited_pages(self, prefix: str, keys: list[str], delimiter: str):
+        """Direct children only, as S3 answers a ``Delimiter`` listing: a key with
+        the delimiter past the prefix rolls up into one ``CommonPrefixes`` entry,
+        and both kinds count towards a page."""
+        items: dict[str, bool] = {}
+        for key in keys:
+            rest = key[len(prefix) :]
+            if delimiter in rest:
+                items[f"{prefix}{rest.split(delimiter, 1)[0]}{delimiter}"] = True
+            else:
+                items[key] = False
+        ordered = sorted(items)
+        for start in range(0, max(len(ordered), 1), self.page_size):
+            chunk = ordered[start : start + self.page_size]
+            page: dict = {
+                "Contents": [
+                    {"Key": key, "Size": len(self.bodies[key]), "ETag": f'"{key}-etag"'}
+                    for key in chunk
+                    if not items[key]
+                ],
+                "CommonPrefixes": [{"Prefix": key} for key in chunk if items[key]],
+                "IsTruncated": start + self.page_size < len(ordered),
+            }
+            if self.is_truncated is not None:
+                page["IsTruncated"] = self.is_truncated
+            yield page
+
     def get_paginator(self, _name):
         client = self
 
         class _Paginator:
-            def paginate(self, Bucket=None, Prefix="", **_kwargs):  # noqa: N803
-                for page in client._pages_for(Prefix):
+            def paginate(self, Bucket=None, Prefix="", Delimiter=None, **_kwargs):  # noqa: N803
+                client.listings.append({"Bucket": Bucket, "Prefix": Prefix, "Delimiter": Delimiter})
+                for page in client._pages_for(Prefix, Delimiter):
                     client.pages_served += 1
                     yield page
 

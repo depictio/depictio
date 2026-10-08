@@ -880,12 +880,33 @@ def test_the_template_is_detected_when_none_is_given(mock_db, megatest_s3, monke
     assert report.detected_template is not None
     assert report.detected_template.model_dump() == {
         "template_id": TEMPLATE_ID,
+        "template_version": "2.16.0",
         "pipeline": "nf-core/ampliseq",
         "version": "2.16.0",
         "engine": "nextflow",
+        "match": "exact",
     }
     # Detection reads the very root the preview reads: one listing.
     assert len(seen) == 1 and seen[0].location == S3_ROOT
+
+
+def test_another_version_of_the_pipeline_is_the_closest_match(mock_db, megatest_s3, monkeypatch):
+    from depictio.models.models.run_info import WorkflowRunInfo
+
+    megatest_s3()
+    _detects(
+        monkeypatch,
+        TEMPLATE_ID,
+        WorkflowRunInfo(
+            engine="nextflow", pipeline_name="nf-core/ampliseq", pipeline_version="2.17.0"
+        ),
+    )
+    detected = _call(template_id=None, dry_run=True).detected_template
+    assert (detected.template_version, detected.version, detected.match) == (
+        "2.16.0",
+        "2.17.0",
+        "closest",
+    )
 
 
 def test_a_given_template_skips_detection(mock_db, megatest_s3, monkeypatch):

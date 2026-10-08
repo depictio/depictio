@@ -364,3 +364,42 @@ class TestIngestDetectsAnS3RunFolder:
         assert result.exit_code == 1, result.output
         assert "Could not read DATA_DIR:" in output
         assert "Say which project to ingest" not in output
+
+
+class TestConfinedLocalRoots:
+    """With ``depictio local``'s policy on, a local run folder is read through the
+    confined ``LocalDataRoot``, so nothing the policy hides is read."""
+
+    def _confine(self, monkeypatch: pytest.MonkeyPatch, allowed: Path) -> None:
+        from depictio.models.local_access import LocalDataPolicy
+
+        policy = LocalDataPolicy.build([str(allowed)])
+        monkeypatch.setattr(run_detection, "local_data_policy", lambda: policy)
+        monkeypatch.setattr(data_root_module, "local_data_policy", lambda: policy)
+
+    def test_a_run_inside_the_roots_reads_as_in_place(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        local = write_tree(tmp_path / "roots" / FOLDER, _bytes(FLAT_RUN)).resolve()
+        expected = read_run_info(local)
+        self._confine(monkeypatch, tmp_path / "roots")
+
+        staged = read_run_info_for_root(LocalDataRoot(str(local)))
+
+        assert staged is not None and staged.pipeline_name == "nf-core/ampliseq"
+        assert _comparable(staged, str(local)) == _comparable(expected, str(local))
+
+    def test_a_pipeline_info_linked_out_of_the_roots_is_not_read(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        outside = write_tree(tmp_path / "outside", _bytes(FLAT_RUN)).resolve()
+        run = tmp_path / "roots" / FOLDER
+        run.mkdir(parents=True)
+        (run / "pipeline_info").symlink_to(outside / "pipeline_info")
+        # Read in place, the link would be followed.
+        assert read_run_info(run).pipeline_name == "nf-core/ampliseq"
+        self._confine(monkeypatch, tmp_path / "roots")
+
+        info = read_run_info_for_root(LocalDataRoot(str(run.resolve())))
+
+        assert info is None or info.pipeline_name is None

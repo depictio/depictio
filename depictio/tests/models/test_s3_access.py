@@ -746,6 +746,16 @@ class TestListing:
         pages = self._paginate(stubbed_s3)
         assert [obj["Key"] for obj in pages[0]["Contents"]] == ["run1/a.csv"]
 
+    def test_a_delimiter_asks_for_the_direct_children(self, stubbed_s3):
+        stubbed_s3.stubber.add_response(
+            "list_objects_v2",
+            {"CommonPrefixes": [{"Prefix": "run1/multiqc/"}], "IsTruncated": False},
+            {"Bucket": "lab", "Prefix": "run1/", "Delimiter": "/"},
+        )
+        target = _resolve("s3://lab/run1/", project=_project())
+        pages = list(iter_object_pages(target, "run1/", delimiter="/"))
+        assert pages[0]["CommonPrefixes"] == [{"Prefix": "run1/multiqc/"}]
+
     @pytest.mark.parametrize("code", ["NoSuchKey", "404"])
     def test_a_404_for_an_absent_prefix_is_an_empty_listing(self, stubbed_s3, code):
         """EMBL Group Volume buckets answer a prefix that holds nothing with a 404."""

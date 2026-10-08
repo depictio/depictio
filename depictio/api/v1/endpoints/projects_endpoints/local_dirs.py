@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+from collections.abc import Iterator
 
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
@@ -33,7 +34,7 @@ from depictio.models.logging import logger
 MAX_ENTRIES = 500
 
 # A folder holding one of these is very likely one pipeline run's output.
-_RUN_MARKERS = ("pipeline_info", "multiqc")
+RUN_MARKERS = ("pipeline_info", "multiqc")
 
 LOCAL_FOLDERS_OFF = "Local folders are not enabled on this server."
 NON_LOOPBACK_HOST = (
@@ -65,14 +66,21 @@ class LocalDirEntry(BaseModel):
     name: str
     path: str
     looks_like_run: bool = False
+    # Whether opening the folder would list anything: the picker draws no
+    # expand arrow on a leaf.
+    has_children: bool = False
 
 
 class LocalDirListing(BaseModel):
-    """One folder's sub-directories, or the allowed roots when ``path`` is None."""
+    """One folder's sub-directories, or the allowed roots when ``path`` is None.
+
+    ``looks_like_run`` says it of the listed folder itself (False for the roots).
+    """
 
     path: str | None = None
     root: str | None = None
     parent: str | None = None
+    looks_like_run: bool = False
     entries: list[LocalDirEntry] = Field(default_factory=list)
     truncated: bool = False
 
@@ -124,42 +132,79 @@ def active_local_policy() -> LocalDataPolicy:
 
 def looks_like_run(folder: str) -> bool:
     """Whether ``folder`` holds ``pipeline_info/`` or ``multiqc/``."""
-    return any(os.path.isdir(os.path.join(folder, marker)) for marker in _RUN_MARKERS)
+    return any(os.path.isdir(os.path.join(folder, marker)) for marker in RUN_MARKERS)
 
 
-def _entry(name: str, real: str) -> LocalDirEntry:
-    return LocalDirEntry(name=name, path=real, looks_like_run=looks_like_run(real))
+def _entry(policy: LocalDataPolicy, name: str, real: str) -> LocalDirEntry:
+    return LocalDirEntry(
+        name=name,
+        path=real,
+        looks_like_run=looks_like_run(real),
+        has_children=has_visible_sub_directory(policy, real),
+    )
+
+
+def sub_directory_names(folder: str) -> list[str] | None:
+    """The sorted names of the sub-directories of ``folder``, dot-names left out.
+
+    None when the server may not read it (a permission error, a folder gone
+    since it was listed): the callers treat that as empty, never as a failure.
+    """
+    try:
+        with os.scandir(folder) as scan:
+            return sorted(
+                entry.name
+                for entry in scan
+                if not entry.name.startswith(".") and is_directory(entry)
+            )
+    except PermissionError:
+        return None
+    except OSError as exc:
+        logger.info(f"local_dirs: cannot list {folder}: {exc}")
+        return None
+
+
+def is_directory(entry: os.DirEntry[str]) -> bool:
+    """``entry.is_dir`` through a symlink, False for a link that leads nowhere."""
+    try:
+        return entry.is_dir(follow_symlinks=True)
+    except OSError:
+        return False
+
+
+def visible_sub_directories(policy: LocalDataPolicy, folder: str) -> Iterator[tuple[str, str]]:
+    """``(name, real path)`` of each sub-directory of real folder ``folder`` the
+    policy would list, in name order, lazily.
+
+    Hidden: dot-names, and anything the policy would refuse to open (a symlink
+    that leaves the roots, a folder Depictio keeps for itself). A folder the
+    server may not read yields nothing.
+    """
+    for name in sub_directory_names(folder) or ():
+        try:
+            real = policy.confine(os.path.join(folder, name), want="dir")
+        except LocalPathRefused:
+            continue
+        yield name, real
+
+
+def has_visible_sub_directory(policy: LocalDataPolicy, folder: str) -> bool:
+    """Whether real folder ``folder`` holds a sub-directory the policy would list.
+
+    Stops at the first one the policy accepts: one listing of ``folder``, and
+    usually a single path resolved.
+    """
+    return next(visible_sub_directories(policy, folder), None) is not None
 
 
 def _sub_directories(policy: LocalDataPolicy, folder: str) -> tuple[list[LocalDirEntry], bool]:
     """The visible sub-directories of real folder ``folder``, sorted, and whether
-    there were more than :data:`MAX_ENTRIES`.
-
-    Hidden: dot-names, and anything the policy would refuse to open (a symlink
-    that leaves the roots, a folder Depictio keeps for itself). A folder the
-    server may not read lists as empty rather than failing the listing.
-    """
-    try:
-        with os.scandir(folder) as scan:
-            names = sorted(
-                entry.name
-                for entry in scan
-                if not entry.name.startswith(".") and entry.is_dir(follow_symlinks=True)
-            )
-    except PermissionError:
-        return [], False
-    except OSError as exc:
-        logger.info(f"local_dirs: cannot list {folder}: {exc}")
-        return [], False
-
+    there were more than :data:`MAX_ENTRIES` (see :func:`visible_sub_directories`)."""
     entries: list[LocalDirEntry] = []
-    for name in names:
-        path = os.path.join(folder, name)
-        if not policy.allows(path):
-            continue
+    for name, real in visible_sub_directories(policy, folder):
         if len(entries) == MAX_ENTRIES:
             return entries, True
-        entries.append(_entry(name, os.path.realpath(path)))
+        entries.append(_entry(policy, name, real))
     return entries, False
 
 
@@ -178,7 +223,7 @@ def list_local_dirs(path: str | None, *, request, current_user) -> LocalDirListi
     if not path:
         return LocalDirListing(
             entries=[
-                _entry(os.path.basename(root) or root, root)
+                _entry(policy, os.path.basename(root) or root, root)
                 for root in policy.roots
                 if os.path.isdir(root) and policy.allows(root)
             ]
@@ -194,6 +239,7 @@ def list_local_dirs(path: str | None, *, request, current_user) -> LocalDirListi
         path=real,
         root=root,
         parent=None if real == root else os.path.dirname(real),
+        looks_like_run=looks_like_run(real),
         entries=entries,
         truncated=truncated,
     )

@@ -1016,6 +1016,30 @@ def local_data_roots_enabled() -> bool:
     return local_data_policy() is not None
 
 
+def remote_browse_enabled() -> bool:
+    """Whether an administrator listed S3 locations every user may browse for a run
+    folder: ``DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS`` or ``..._CREDENTIALED_S3_BUCKETS``.
+
+    Read from the environment like the gateway reads it. A malformed
+    ``DEPICTIO_REMOTE_*`` value turns browsing off here, logged, rather than
+    failing the page-load request that carries the flag; the reads themselves
+    still fail on it loudly.
+    """
+    from pydantic import ValidationError
+
+    from depictio.models.s3_access import parse_bucket_list
+
+    try:
+        remote = RemoteConfig()
+    except ValidationError as exc:
+        _warn(f"Remote S3 browsing is off: the DEPICTIO_REMOTE_* settings are invalid ({exc})")
+        return False
+    return bool(
+        parse_bucket_list(remote.public_s3_buckets)
+        or parse_bucket_list(remote.credentialed_s3_buckets)
+    )
+
+
 @functools.lru_cache(maxsize=8)
 def _local_data_policy_for(_env: tuple[str | None, ...]) -> "LocalDataPolicy | None":
     # Imported here: this module is the earliest import in every context.

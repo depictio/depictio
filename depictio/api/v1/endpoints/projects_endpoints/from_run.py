@@ -41,7 +41,7 @@ the caller polls ``GET /projects/refresh_manifest/{run_id}``.
 import copy
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from bson import ObjectId
 from fastapi import HTTPException
@@ -124,12 +124,47 @@ class DetectedTemplate(BaseModel):
     The other fields are None when the folder did not say. ``template_id`` is
     nullable to match the viewer's type, but a report always names one: a
     folder no installed template fits is a 422 ``template_not_detected``.
+    ``GET /projects/folder_inspect`` answers in the same shape, and there it
+    can be None.
+
+    ``match`` says how the template was chosen: ``exact`` when its version is
+    the run's, ``closest`` when it is another version of the same pipeline,
+    ``none`` when no installed template fits the run.
     """
 
     template_id: str | None = None
+    template_version: str | None = None
     pipeline: str | None = None
     version: str | None = None
     engine: str | None = None
+    match: Literal["exact", "closest", "none"] | None = None
+
+
+def describe_detection(template_id: str | None, info) -> DetectedTemplate | None:
+    """What ``run_detection.detect_template_for_root`` answered, in the report's shape.
+
+    None when no engine recognised the folder (``info`` is None). The template
+    is an ``exact`` match when it is one of the ids the run itself suggests
+    (``WorkflowRunInfo.template_ids``: its version as written, or normalised),
+    and ``closest`` otherwise, since ``select_template_for_run`` falls back to
+    another shipped version of the same pipeline only.
+    """
+    if info is None:
+        return None
+    if not template_id:
+        match = "none"
+    elif template_id in info.template_ids():
+        match = "exact"
+    else:
+        match = "closest"
+    return DetectedTemplate(
+        template_id=template_id or None,
+        template_version=template_id.rsplit("/", 1)[-1] if template_id else None,
+        pipeline=info.pipeline_name,
+        version=info.pipeline_version,
+        engine=info.engine,
+        match=match,
+    )
 
 
 class FromRunDCPreview(BaseModel):
@@ -402,12 +437,7 @@ def _detect_template(root) -> tuple[str, DetectedTemplate]:
         logger.warning(f"Template detection failed for {root.location}: {exc}")
         template_id, info = None, None
 
-    detected = DetectedTemplate(
-        template_id=template_id,
-        pipeline=info.pipeline_name if info else None,
-        version=info.pipeline_version if info else None,
-        engine=info.engine if info else None,
-    )
+    detected = describe_detection(template_id, info) or DetectedTemplate()
     if not template_id:
         if detected.pipeline:
             run = " ".join(part for part in (detected.pipeline, detected.version) if part)

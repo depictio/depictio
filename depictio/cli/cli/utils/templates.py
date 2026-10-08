@@ -242,6 +242,30 @@ def locate_template(template_id: str) -> Path:
         FileNotFoundError: If no template YAML exists (``TemplateNotFoundError``
             for an unknown or out-of-tree id).
     """
+    located = _find_template(template_id)
+    if located is not None:
+        return located
+
+    roots = _projects_roots()
+    available = _list_available_templates(roots[0])
+    available_str = ", ".join(available) if available else "none found"
+    raise TemplateNotFoundError(
+        f"Template '{template_id}' not found under {roots[0]}. "
+        f"Available templates: {available_str}",
+        template_id=template_id,
+        available_templates=available,
+    )
+
+
+def _find_template(template_id: str) -> Path | None:
+    """:func:`locate_template` without its error: the YAML, or None when there is none.
+
+    A miss costs no more than a hit. Building ``locate_template``'s error
+    parses every shipped template YAML to list the catalogue, which is right
+    for a message shown once and far too slow for a question asked of each
+    candidate id of each detected run. A directory given by path that holds
+    no template YAML still raises ``FileNotFoundError``.
+    """
     # Path form first: an existing directory or YAML file wins over id lookup, so
     # a local bundle is never shadowed by an installed template of the same name.
     if _is_cli_context():
@@ -253,8 +277,7 @@ def locate_template(template_id: str) -> Path:
     # package layout), each confined so an id can never leave its root.
     # template.yaml (dedicated template file) is preferred over project.yaml
     # (fixture) in each.
-    roots = _projects_roots()
-    for root in roots:
+    for root in _projects_roots():
         template_dir = _template_dir_within(root, template_id)
         if template_dir is None:
             continue
@@ -262,15 +285,7 @@ def locate_template(template_id: str) -> Path:
             candidate = template_dir / filename
             if candidate.is_file():
                 return candidate
-
-    available = _list_available_templates(roots[0])
-    available_str = ", ".join(available) if available else "none found"
-    raise TemplateNotFoundError(
-        f"Template '{template_id}' not found under {roots[0]}. "
-        f"Available templates: {available_str}",
-        template_id=template_id,
-        available_templates=available,
-    )
+    return None
 
 
 def detect_template_from_run_dir(run_dir: str | Path) -> tuple[str | None, Any]:
@@ -328,7 +343,8 @@ def select_template_for_run(info: Any) -> str | None:
 
     for template_id in info.template_ids():
         try:
-            locate_template(template_id)
+            if _find_template(template_id) is None:
+                continue
         except FileNotFoundError:
             continue
         logger.info(f"Detected template '{template_id}' from run provenance")

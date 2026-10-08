@@ -1,0 +1,599 @@
+"""Find the run folder a project is created from: browse S3, inspect, search.
+
+Three reads back the viewer's run-folder picker for ``POST /projects/from_run``:
+
+- ``GET /projects/s3_dirs``: the sub-folders of an ``s3://`` location an
+  administrator listed for every user (``DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS``,
+  ``DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS``), or those locations themselves.
+  The S3 twin of ``GET /projects/local_dirs``, in the same shape;
+- ``GET /projects/folder_inspect``: what one folder holds, and which installed
+  template fits the run in it;
+- ``GET /projects/find_runs``: the run folders below a folder.
+
+A folder on this computer goes through the guards and the policy of
+:mod:`local_dirs` (local folders on, an administrator, a loopback ``Host``, a
+path the policy confines), so these reads see what the folder browser lists.
+An ``s3://`` location is resolved the way ``from_run`` resolves its run folder
+(:func:`from_run._run_folder_read_config`), so the picker never offers a
+location the creation then refuses: a malformed location, the instance's own
+bucket and anything no listed entry holds are refused before a request goes
+out, and every request goes through the resolved target's client.
+
+Every read is bounded: one listing page per S3 folder, a capped walk below a
+local folder, a capped key listing below an S3 prefix, and template detection
+for the first :data:`FIND_DETECT_RUNS` runs found.
+
+Synchronous: the routes dispatch via ``asyncio.to_thread``.
+"""
+
+from __future__ import annotations
+
+import os
+from collections import deque
+from dataclasses import dataclass
+from typing import Literal
+
+from pydantic import BaseModel, Field
+
+from depictio.api.v1 import remote_fetch
+from depictio.api.v1.configs.settings_models import local_data_policy
+from depictio.api.v1.endpoints.projects_endpoints.from_run import (
+    DetectedTemplate,
+    _build_data_root,
+    _is_local_path,
+    _run_folder_read_config,
+    describe_detection,
+)
+from depictio.api.v1.endpoints.projects_endpoints.local_dirs import (
+    MAX_ENTRIES,
+    RUN_MARKERS,
+    CodedHTTPException,
+    LocalDirEntry,
+    LocalDirListing,
+    active_local_policy,
+    is_directory,
+    require_local_caller,
+)
+from depictio.models.local_access import LocalDataPolicy, LocalPathRefused
+from depictio.models.logging import logger
+from depictio.models.s3_access import (
+    S3AccessError,
+    S3AccessRefused,
+    S3Target,
+    ensure_region,
+    is_instance_bucket,
+    iter_object_pages,
+    parse_bucket_list,
+    split_s3_url,
+)
+
+# How many names of each kind folder_inspect returns; its counts cover them all.
+MAX_NAMES = 20
+# Entries of a local folder folder_inspect looks at before saying ``truncated``.
+MAX_INSPECT_ENTRIES = 10_000
+
+# find_runs below a local folder: how deep, and how many folders it opens.
+FIND_MAX_DEPTH = 6
+FIND_MAX_DIRS = 5_000
+# find_runs below an s3:// prefix: how many keys it lists.
+FIND_MAX_KEYS = 20_000
+# find_runs either way: how many runs it returns, and detects the template of.
+FIND_MAX_RUNS = 100
+FIND_DETECT_RUNS = 50
+
+# The ``relative`` of a run that is the searched folder itself.
+SELF = "."
+
+LOCATION_RULE = "Give an s3:// location, such as s3://bucket/results/run42/."
+LOCATION_RULE_LOCAL = (
+    "Give an s3:// location or a folder on this computer: an absolute path such as "
+    "/Users/me/results/run42, or one starting with ~/."
+)
+
+
+class S3DirListing(LocalDirListing):
+    """One ``s3://`` location's sub-folders, or the allowed locations when ``path`` is None.
+
+    The shape of :class:`LocalDirListing`, every path an ``s3://`` URL ending
+    in ``/``. On an entry ``has_children`` is always True and ``looks_like_run``
+    always False: knowing would cost a request per entry. The listing's own
+    ``looks_like_run`` says whether the listed location holds ``pipeline_info/``
+    or ``multiqc/``.
+    """
+
+
+class FolderNames(BaseModel):
+    """How many entries of one kind a folder holds, and the first names, sorted."""
+
+    count: int = 0
+    names: list[str] = Field(default_factory=list)
+
+
+class FolderInspection(BaseModel):
+    """What one folder holds, direct children only, and the run in it.
+
+    ``detected`` is None when detection was not asked for, or when no engine
+    recognised the folder.
+    """
+
+    location: str
+    source: Literal["local", "s3"]
+    name: str
+    looks_like_run: bool = False
+    markers: list[str] = Field(default_factory=list)
+    folders: FolderNames = Field(default_factory=FolderNames)
+    files: FolderNames = Field(default_factory=FolderNames)
+    truncated: bool = False
+    detected: DetectedTemplate | None = None
+
+
+class FoundRun(BaseModel):
+    """One run folder below the searched folder.
+
+    ``relative`` is its path from the searched folder (``"."`` for that folder
+    itself), ``location`` its real path or ``s3://`` URL.
+    """
+
+    location: str
+    name: str
+    relative: str
+    markers: list[str] = Field(default_factory=list)
+    detected: DetectedTemplate | None = None
+
+
+class FoundRuns(BaseModel):
+    """The run folders below ``location``, sorted by ``relative``.
+
+    ``scanned`` is how many folders the search opened (local) or keys it
+    listed (S3). ``truncated`` says a bound stopped it: the depth, the number
+    of folders or keys, or more than :data:`FIND_MAX_RUNS` runs.
+    """
+
+    location: str
+    runs: list[FoundRun] = Field(default_factory=list)
+    truncated: bool = False
+    scanned: int = 0
+
+
+# ── locations ────────────────────────────────────────────────────────────────
+
+
+def _is_s3(location: str) -> bool:
+    return location[:5].lower() == "s3://"
+
+
+def _unsupported_location() -> CodedHTTPException:
+    rule = LOCATION_RULE_LOCAL if local_data_policy() is not None else LOCATION_RULE
+    return CodedHTTPException(422, rule, "location_unsupported")
+
+
+def _local_folder(location: str, *, request, current_user) -> tuple[LocalDataPolicy, str]:
+    """The policy and the real path of local folder ``location``, once allowed.
+
+    The refusals of ``GET /projects/local_dirs``: 404 when local folders are
+    off or the policy refuses the path, 403 for a foreign ``Host`` or a
+    non-administrator.
+    """
+    policy = active_local_policy()
+    require_local_caller(request, current_user)
+    try:
+        return policy, policy.confine(location, want="dir")
+    except LocalPathRefused as exc:
+        raise CodedHTTPException(404, exc.detail, exc.code) from exc
+
+
+def _folder_prefix(key: str) -> str:
+    """``key`` as a folder prefix: ``""`` for the bucket, else ending in one ``/``."""
+    key = key.strip("/")
+    return f"{key}/" if key else ""
+
+
+def allowed_s3_locations() -> list[tuple[str, str]]:
+    """``(bucket, prefix)`` of every location listed for every user, public ones first.
+
+    The instance's own bucket is left out even when listed: it is never read
+    as a data source. Each location once, as the administrator spelled it.
+    """
+    policy = remote_fetch.remote_policy()
+    instance_s3 = _run_folder_read_config().s3_storage
+    locations: list[tuple[str, str]] = []
+    for raw in (policy.public_s3_buckets, policy.credentialed_s3_buckets):
+        for bucket, prefix in parse_bucket_list(raw):
+            if is_instance_bucket(bucket, instance_s3) or (bucket, prefix) in locations:
+                continue
+            locations.append((bucket, prefix))
+    return locations
+
+
+@dataclass(frozen=True)
+class _S3Folder:
+    """An ``s3://`` location the server may read, taken as a folder."""
+
+    target: S3Target
+    bucket: str
+    # "" for the bucket itself, else ending in "/".
+    prefix: str
+    # The prefix of the outermost listed location holding it, same spelling.
+    root: str
+
+    @property
+    def url(self) -> str:
+        return f"s3://{self.bucket}/{self.prefix}"
+
+    @property
+    def name(self) -> str:
+        return self.prefix.rstrip("/").rsplit("/", 1)[-1] if self.prefix else self.bucket
+
+    @property
+    def parent(self) -> str | None:
+        """One level up, None at the listed location it was reached from."""
+        if self.prefix == self.root:
+            return None
+        return f"s3://{self.bucket}/{_folder_prefix(self.prefix.rstrip('/').rpartition('/')[0])}"
+
+    def child(self, name: str) -> str:
+        return f"{self.url}{name}/"
+
+
+def _s3_folder(url: str) -> _S3Folder:
+    """The folder ``url`` names, once the configuration lets the server read it.
+
+    Decided from configuration alone, before any request: a malformed
+    location, the instance's own bucket and a bucket nobody listed are refused
+    by ``resolve_s3_target`` (``S3AccessRefused``, code ``s3_refused``), and so
+    is a location above the listed one (``s3://b/`` when only ``s3://b/runs``
+    is listed). The listed locations are then checked once more, so nothing
+    outside them is browsed whatever the process context. Only then is the
+    bucket asked for its region, once per process, as for any run folder.
+    """
+    bucket, key = split_s3_url(url)
+    prefix = _folder_prefix(key)
+    location = f"s3://{bucket}/{prefix}"
+    target = remote_fetch.s3_read_target(location, _run_folder_read_config())
+    holding = [
+        listed
+        for listed_bucket, listed in allowed_s3_locations()
+        if listed_bucket == bucket and (not listed or prefix.startswith(f"{listed}/"))
+    ]
+    if not holding:
+        raise S3AccessRefused(f"{location} is not a location this server lets you browse.")
+    # The outermost one, so going up stops where nothing is readable any more.
+    root = _folder_prefix(min(holding, key=len))
+    return _S3Folder(target=ensure_region(target), bucket=bucket, prefix=prefix, root=root)
+
+
+def _first_page(folder: _S3Folder) -> dict:
+    """One ``Delimiter="/"`` listing page of ``folder``: its direct children, at
+    most 1,000 (the S3 page size). An empty dict when the prefix holds nothing."""
+    return next(iter_object_pages(folder.target, folder.prefix, delimiter="/"), {})
+
+
+def _page_folders(folder: _S3Folder, page: dict) -> list[str]:
+    """The sub-folder names on a ``Delimiter="/"`` page of ``folder``, sorted."""
+    names = {
+        str(common.get("Prefix") or "")[len(folder.prefix) :].strip("/")
+        for common in page.get("CommonPrefixes") or []
+    }
+    return sorted(name for name in names if name)
+
+
+def _page_files(folder: _S3Folder, page: dict) -> list[str]:
+    """The object names on a ``Delimiter="/"`` page of ``folder``, sorted.
+
+    The zero-byte key some consoles create to stand for the folder itself is
+    not one of them.
+    """
+    names = {str(obj.get("Key") or "")[len(folder.prefix) :] for obj in page.get("Contents") or []}
+    return sorted(name for name in names if name and "/" not in name)
+
+
+def _markers(folder_names: list[str]) -> list[str]:
+    """The run markers among ``folder_names``, in name order."""
+    return sorted(marker for marker in RUN_MARKERS if marker in folder_names)
+
+
+# ── GET /projects/s3_dirs ────────────────────────────────────────────────────
+
+
+def list_s3_dirs(url: str | None) -> S3DirListing:
+    """The sub-folders of ``url``, or the listed locations without one.
+
+    Refusals are ``S3AccessError`` (see :func:`_s3_folder`): the API answers
+    them ``{detail, code}``. A prefix that holds nothing lists as empty.
+    """
+    if not url:
+        return S3DirListing(
+            entries=[
+                LocalDirEntry(
+                    name=f"{bucket}/{prefix}" if prefix else bucket,
+                    path=f"s3://{bucket}/{_folder_prefix(prefix)}",
+                    has_children=True,
+                )
+                for bucket, prefix in allowed_s3_locations()
+            ]
+        )
+
+    folder = _s3_folder(url)
+    page = _first_page(folder)
+    names = _page_folders(folder, page)
+    return S3DirListing(
+        path=folder.url,
+        root=f"s3://{folder.bucket}/{folder.root}",
+        parent=folder.parent,
+        looks_like_run=bool(_markers(names)),
+        entries=[
+            LocalDirEntry(name=name, path=folder.child(name), has_children=True)
+            for name in names[:MAX_ENTRIES]
+        ],
+        truncated=len(names) > MAX_ENTRIES or bool(page.get("IsTruncated")),
+    )
+
+
+# ── GET /projects/folder_inspect ─────────────────────────────────────────────
+
+
+def _detect(root) -> DetectedTemplate | None:
+    """The run in data root ``root`` and the template that fits it, or None when
+    no engine recognises it. A read that fails while looking is None too,
+    except an S3 refusal or failure, which keeps its own code."""
+    from depictio.cli.cli.utils.run_detection import detect_template_for_root
+
+    try:
+        template_id, info = detect_template_for_root(root)
+    except S3AccessError:
+        raise
+    except (OSError, ValueError) as exc:
+        logger.warning(f"Template detection failed for {root.location}: {exc}")
+        return None
+    return describe_detection(template_id, info)
+
+
+def _local_children(policy: LocalDataPolicy, folder: str) -> tuple[list[str], list[str], bool]:
+    """``(folder names, file names, truncated)`` of real folder ``folder``.
+
+    What the policy lets the server read only: no dot-names, no symlink that
+    leaves the roots, no folder Depictio keeps for itself. At most
+    :data:`MAX_INSPECT_ENTRIES` entries are looked at. A folder the server may
+    not read holds nothing.
+    """
+    folders: list[str] = []
+    files: list[str] = []
+    try:
+        with os.scandir(folder) as scan:
+            for examined, entry in enumerate(scan):
+                if examined == MAX_INSPECT_ENTRIES:
+                    return sorted(folders), sorted(files), True
+                if entry.name.startswith(".") or not policy.allows(entry.path):
+                    continue
+                if is_directory(entry):
+                    folders.append(entry.name)
+                elif entry.is_file():
+                    files.append(entry.name)
+    except OSError as exc:
+        logger.info(f"folder_inspect: cannot list {folder}: {exc}")
+    return sorted(folders), sorted(files), False
+
+
+def _inspection(
+    *,
+    location: str,
+    source: Literal["local", "s3"],
+    name: str,
+    folders: list[str],
+    files: list[str],
+    truncated: bool,
+    detected: DetectedTemplate | None,
+) -> FolderInspection:
+    markers = _markers(folders)
+    return FolderInspection(
+        location=location,
+        source=source,
+        name=name,
+        looks_like_run=bool(markers),
+        markers=markers,
+        folders=FolderNames(count=len(folders), names=folders[:MAX_NAMES]),
+        files=FolderNames(count=len(files), names=files[:MAX_NAMES]),
+        truncated=truncated,
+        detected=detected,
+    )
+
+
+def inspect_folder(
+    location: str, *, detect: bool = True, request, current_user
+) -> FolderInspection:
+    """What ``location`` holds, and, with ``detect``, the template its run fits.
+
+    A local folder answers the refusals of ``GET /projects/local_dirs``; an
+    ``s3://`` one those of ``GET /projects/s3_dirs``; anything else is a 422
+    ``location_unsupported``. Detection reads the folder the way
+    ``POST /projects/from_run`` does, so what it names is what the creation
+    would pick.
+    """
+    if _is_s3(location):
+        folder = _s3_folder(location)
+        page = _first_page(folder)
+        detected = None
+        if detect:
+            detected = _detect(_build_data_root(folder.url, _run_folder_read_config()))
+        return _inspection(
+            location=folder.url,
+            source="s3",
+            name=folder.name,
+            folders=_page_folders(folder, page),
+            files=_page_files(folder, page),
+            truncated=bool(page.get("IsTruncated")),
+            detected=detected,
+        )
+    if not _is_local_path(location):
+        raise _unsupported_location()
+
+    policy, real = _local_folder(location, request=request, current_user=current_user)
+    folders, files, truncated = _local_children(policy, real)
+    detected = None
+    if detect:
+        from depictio.cli.cli.utils.data_root import LocalDataRoot
+
+        detected = _detect(LocalDataRoot(real))
+    return _inspection(
+        location=real,
+        source="local",
+        name=os.path.basename(real) or real,
+        folders=folders,
+        files=files,
+        truncated=truncated,
+        detected=detected,
+    )
+
+
+# ── GET /projects/find_runs ──────────────────────────────────────────────────
+
+
+def _walk_names(folder: str) -> list[str]:
+    """The sub-directory names of real folder ``folder``, dot-names left out:
+    plain folders first, then symlinked ones, each in name order.
+
+    Plain first, so a link to a folder of the same parent (``latest`` to
+    ``run42``) is the copy the search drops, not the folder itself.
+    """
+    plain: list[str] = []
+    linked: list[str] = []
+    try:
+        with os.scandir(folder) as scan:
+            for entry in scan:
+                if entry.name.startswith(".") or not is_directory(entry):
+                    continue
+                (linked if entry.is_symlink() else plain).append(entry.name)
+    except OSError as exc:
+        logger.info(f"find_runs: cannot list {folder}: {exc}")
+    return sorted(plain) + sorted(linked)
+
+
+def _find_local_runs(policy: LocalDataPolicy, start: str) -> FoundRuns:
+    """The run folders at most :data:`FIND_MAX_DEPTH` levels below real folder
+    ``start``, breadth first. ``truncated`` when a folder at that depth holds
+    sub-folders, as for the other bounds.
+
+    A folder is confined by the policy when it is opened, not when it is
+    found, so the cost is bounded by the :data:`FIND_MAX_DIRS` folders opened
+    whatever their size. A hidden, denied or escaping folder is never opened,
+    a link to a folder already opened is not opened twice, and a run is not
+    searched below. The queue never holds more folders than are left to open.
+    """
+    found: list[FoundRun] = []
+    queue: deque[tuple[str, str, int]] = deque([(start, "", 0)])
+    opened: set[str] = set()
+    truncated = False
+    while queue:
+        path, relative, depth = queue.popleft()
+        try:
+            folder = policy.confine(path, want="dir")
+        except LocalPathRefused:
+            continue
+        if folder in opened:
+            continue
+        if len(opened) == FIND_MAX_DIRS:
+            truncated = True
+            break
+        opened.add(folder)
+
+        names = _walk_names(folder)
+        markers = [
+            marker for marker in _markers(names) if policy.allows(os.path.join(folder, marker))
+        ]
+        if markers:
+            found.append(
+                FoundRun(
+                    location=folder,
+                    name=relative.rsplit("/", 1)[-1] if relative else os.path.basename(folder),
+                    relative=relative or SELF,
+                    markers=markers,
+                )
+            )
+            continue
+        if depth == FIND_MAX_DEPTH:
+            # Folders below are left unsearched: a bound stopped the search.
+            truncated = truncated or bool(names)
+            continue
+        for name in names:
+            if len(opened) + len(queue) >= FIND_MAX_DIRS:
+                truncated = True
+                break
+            queue.append(
+                (os.path.join(folder, name), f"{relative}/{name}" if relative else name, depth + 1)
+            )
+
+    found.sort(key=lambda run: run.relative)
+    if len(found) > FIND_MAX_RUNS:
+        found, truncated = found[:FIND_MAX_RUNS], True
+
+    from depictio.cli.cli.utils.data_root import LocalDataRoot
+
+    for run in found[:FIND_DETECT_RUNS]:
+        run.detected = _detect(LocalDataRoot(run.location))
+    return FoundRuns(location=start, runs=found, truncated=truncated, scanned=len(opened))
+
+
+def _run_of(relative_key: str) -> tuple[str, str] | None:
+    """``(run, marker)`` for a key relative to the searched prefix: the part
+    before its first ``pipeline_info/`` or ``multiqc/`` segment, or None."""
+    parts = relative_key.split("/")
+    for index, part in enumerate(parts[:-1]):
+        if part in RUN_MARKERS:
+            return "/".join(parts[:index]), part
+    return None
+
+
+def _find_s3_runs(location: str) -> FoundRuns:
+    """The run folders below ``location``, from one listing of at most
+    :data:`FIND_MAX_KEYS` keys. A run inside another run is not one of them."""
+    folder = _s3_folder(location)
+    markers: dict[str, set[str]] = {}
+    examined = 0
+    truncated = False
+    for page in iter_object_pages(folder.target, folder.prefix):
+        for obj in page.get("Contents") or []:
+            if examined == FIND_MAX_KEYS:
+                truncated = True
+                break
+            examined += 1
+            hit = _run_of(str(obj.get("Key") or "")[len(folder.prefix) :])
+            if hit is not None:
+                markers.setdefault(hit[0], set()).add(hit[1])
+        if truncated or (examined == FIND_MAX_KEYS and page.get("IsTruncated", True)):
+            truncated = True
+            break
+
+    kept: list[str] = []
+    # Shallowest first, so a run is seen before anything inside it.
+    for run in sorted(markers, key=lambda run: (run.count("/") if run else -1, run)):
+        if not any(not outer or run.startswith(f"{outer}/") for outer in kept):
+            kept.append(run)
+    runs = [
+        FoundRun(
+            location=folder.child(run) if run else folder.url,
+            name=run.rsplit("/", 1)[-1] if run else folder.name,
+            relative=run or SELF,
+            markers=sorted(markers[run]),
+        )
+        for run in kept
+    ]
+    runs.sort(key=lambda found: found.relative)
+    if len(runs) > FIND_MAX_RUNS:
+        runs, truncated = runs[:FIND_MAX_RUNS], True
+    return FoundRuns(location=folder.url, runs=runs, truncated=truncated, scanned=examined)
+
+
+def find_runs(location: str, *, request, current_user) -> FoundRuns:
+    """The run folders below ``location``: those holding ``pipeline_info/`` or
+    ``multiqc/``, the searched folder itself included.
+
+    Same refusals as :func:`inspect_folder`. Below a local folder, the first
+    :data:`FIND_DETECT_RUNS` runs carry the template detected for them; below
+    an ``s3://`` prefix none do, since each would cost a listing of its own.
+    """
+    if _is_s3(location):
+        return _find_s3_runs(location)
+    if not _is_local_path(location):
+        raise _unsupported_location()
+    policy, real = _local_folder(location, request=request, current_user=current_user)
+    return _find_local_runs(policy, real)
