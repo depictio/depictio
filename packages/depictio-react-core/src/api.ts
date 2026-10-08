@@ -2467,19 +2467,30 @@ export interface PreviewResult {
   total_columns: number;
   /** True when the server narrowed the frame with dashboard filters. */
   filter_applied?: boolean;
+  /** Delta version actually read; null when the current table was read. */
+  version?: number | null;
 }
 
 export async function fetchDataCollectionPreview(
   dcId: string,
   limit = 100,
   filters: InteractiveFilter[] = [],
+  /** Read a historical Delta commit instead of the current table. */
+  version?: number | null,
 ): Promise<PreviewResult> {
+  // The filtered POST variant has no version parameter. Refuse the combination
+  // rather than return current rows labelled as a past version.
+  if (version != null && filters.length > 0) {
+    throw new Error('A filtered preview cannot read a historical Delta version');
+  }
   // Unfiltered callers keep the existing GET; the POST variant applies the
   // dashboard's active filters server-side so builder previews match what the
   // dashboard's components show (rows AND total_rows are filtered).
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (version != null) params.set('version', String(version));
   const res =
     filters.length === 0
-      ? await authFetch(`${API_BASE}/deltatables/preview/${dcId}?limit=${limit}`)
+      ? await authFetch(`${API_BASE}/deltatables/preview/${dcId}?${params.toString()}`)
       : await authFetch(`${API_BASE}/deltatables/preview/${dcId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2487,6 +2498,54 @@ export async function fetchDataCollectionPreview(
         });
   if (!res.ok) {
     throw new Error(`Failed to fetch preview: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** One commit in a data collection's Delta history.
+ *
+ *  Rows are a merge of two sources, hence the sparse fields: `origin: 'delta'`
+ *  is a commit Delta knows about but depictio never recorded (or recorded
+ *  before delta_version existed), `'mongo'` is an aggregation whose commit has
+ *  aged out of the requested window, `'both'` has the full picture. Callers
+ *  should render what is present rather than assuming any field is set.
+ *
+ *  `by_email` is populated only for project owners, editors and admins. */
+export interface DeltaVersionEntry {
+  version?: number | null;
+  timestamp?: string | null;
+  operation?: string | null;
+  rows_added?: number | null;
+  files_added?: number | null;
+  files_removed?: number | null;
+  metadata?: Record<string, string>;
+  aggregation_version?: number | null;
+  aggregation_time?: string | null;
+  by_email?: string | null;
+  run_id?: string | null;
+  trigger?: string | null;
+  write_mode?: string | null;
+  rows_total?: number | null;
+  origin: 'delta' | 'mongo' | 'both';
+}
+
+export interface DeltaHistoryResponse {
+  delta_table_location: string;
+  current_version: number | null;
+  /** True when the object store could not be reached and only Mongo's view is
+   *  present — the UI says so rather than implying the table has no history. */
+  degraded: boolean;
+  versions: DeltaVersionEntry[];
+}
+
+/** Commit history of a data collection's Delta table, newest first. */
+export async function fetchDeltaHistory(
+  dcId: string,
+  limit = 20,
+): Promise<DeltaHistoryResponse> {
+  const res = await authFetch(`${API_BASE}/deltatables/history/${dcId}?limit=${limit}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch Delta history: ${res.status}`);
   }
   return res.json();
 }
@@ -3462,6 +3521,8 @@ export interface IngestionDataCollection {
   removal_reason: string | null;
   files_found: number;
   files_new: number;
+  /** Files whose content changed since the previous scan. */
+  files_updated: number;
   files_skipped: number;
   files_failed: number;
   ingested: boolean;
@@ -3481,6 +3542,10 @@ export interface IngestionRun {
   scan_time: string | null;
   /** 'ok' | 'partial' | 'no_scan' */
   status: string;
+  /** Tallies from this run's most recent scan, summed across its DCs. */
+  files_total: number;
+  files_new: number;
+  files_updated: number;
 }
 
 export interface IngestionSummary {
@@ -4487,7 +4552,7 @@ export interface MonitoringIngestionRun {
   data_collections?: MonitoringIngestionDataCollection[];
   /** `abandoned`: still `running` when no write arrived within the stale threshold. */
   status: 'running' | 'success' | 'partial' | 'failed' | 'interrupted' | 'abandoned';
-  steps?: { name: string; status: string; detail?: string | null }[];
+  steps?: MonitoringIngestionStep[];
   /** Step currently running (live async ingestion); null for finished runs. */
   current_step?: string | null;
   error?: string | null;
@@ -4495,6 +4560,57 @@ export interface MonitoringIngestionRun {
   /** Last write to the record; what the stale sweep measures from. */
   updated_at?: string | null;
   finished_at?: string | null;
+
+  /** How the run was initiated. Absent on runs recorded before this existed,
+   *  which the UI shows as "manual" — correct, since nothing else could start
+   *  one at the time. */
+  trigger?: 'manual' | 'watch' | 'schedule' | 'ui' | null;
+  /** Why a watcher fired: the paths whose change triggered this cycle. */
+  trigger_reason?: string | null;
+  progress?: MonitoringProgress | null;
+  counters?: Record<string, number> | null;
+  timings?: Record<string, number> | null;
+  concurrency?: number | null;
+  warnings?: string[];
+  errors?: MonitoringIngestionError[];
+  errors_truncated?: boolean;
+  logs_truncated?: boolean;
+}
+
+/** One step of an ingestion run. `counters` is an open dict so the CLI can add
+ *  measurements without a server-side schema change. */
+export interface MonitoringIngestionStep {
+  name: string;
+  status: string;
+  detail?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  duration_ms?: number | null;
+  index?: number | null;
+  total?: number | null;
+  progress?: MonitoringProgress | null;
+  counters?: Record<string, number> | null;
+  data_collection_tag?: string | null;
+  job_id?: string | null;
+  error?: string | null;
+}
+
+export interface MonitoringProgress {
+  current?: number | null;
+  total?: number | null;
+  /** Only present when the backend can compute a real fraction. The UI must
+   *  never synthesise one from a step index — a bar that jumps 0→50→100 across
+   *  three very unequal steps is worse than no bar at all. */
+  percent?: number | null;
+  unit?: string | null;
+}
+
+export interface MonitoringIngestionError {
+  step?: string | null;
+  data_collection_tag?: string | null;
+  message: string;
+  file_path?: string | null;
+  ts?: string | null;
 }
 
 /** Per-data-collection summary + local scan paths captured for an ingestion run. */
@@ -4506,6 +4622,54 @@ export interface MonitoringIngestionDataCollection {
   scan_pattern?: string | null;
   locations?: string[];
   file_count?: number | null;
+
+  /** Outcome counters. */
+  files_new?: number | null;
+  files_updated?: number | null;
+  files_unchanged?: number | null;
+  files_skipped?: number | null;
+  files_failed?: number | null;
+  rows_written?: number | null;
+  delta_version?: number | null;
+  duration_ms?: number | null;
+  status?: string | null;
+
+  /** Scan diagnostics. These turn a bare "No files found" from a dead end into
+   *  something actionable: how much of the tree was walked, how many candidates
+   *  the regex rejected, and example paths that were seen but not matched. */
+  dirs_walked?: number | null;
+  files_seen?: number | null;
+  regex_rejected?: number | null;
+  skip_reasons?: Record<string, number> | null;
+  sample_rejected?: string[];
+}
+
+/** A long-running CLI agent (a `depictio watch` process) as the server
+ *  last heard from it. Rows expire via TTL a few heartbeats after one dies, so
+ *  a listed agent is a live one. */
+export interface MonitoringCliAgent {
+  agent_id: string;
+  instance_label?: string | null;
+  hostname?: string | null;
+  pid?: number | null;
+  cli_version?: string | null;
+  project_id?: string | null;
+  project_name?: string | null;
+  mode?: string | null;
+  backend?: string | null;
+  watching?: string[];
+  status: 'idle' | 'settling' | 'scanning' | 'ingesting' | 'error';
+  last_trigger_at?: string | null;
+  last_run_id?: string | null;
+  last_error?: string | null;
+  /** Set while a "Run now" is waiting to be picked up by the agent; cleared the
+   *  moment it claims it, which is how the UI can show "requested" briefly. */
+  run_requested_at?: string | null;
+  run_requested_by?: string | null;
+  runs_total?: number | null;
+  started_at?: string | null;
+  heartbeat_at?: string | null;
+  expires_at?: string | null;
 }
 
 /** A recent application log line from the capped collection. */
@@ -4606,6 +4770,121 @@ export async function fetchAppLogs(opts: {
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load logs');
   const data = await res.json();
   return Array.isArray(data?.logs) ? (data.logs as MonitoringAppLog[]) : [];
+}
+
+/** Ingestion-run history for one project, permission-scoped.
+ *
+ * Distinct from `fetchIngestionRuns`, which is admin-only across all projects.
+ * `redacted` tells the UI that operator-machine fields (local paths, hostname,
+ * command line) were stripped because the caller is not an owner/editor — worth
+ * surfacing, so a viewer understands why those columns are empty rather than
+ * assuming the data is missing.
+ *
+ * A 404 means monitoring is off on this server; treated as an empty history.
+ */
+export async function fetchProjectIngestionRuns(
+  projectId: string,
+  opts: { limit?: number; skip?: number } = {},
+): Promise<{ runs: MonitoringIngestionRun[]; redacted: boolean }> {
+  const qs = monitoringQuery({ limit: opts.limit, skip: opts.skip });
+  const res = await authFetch(`${API_BASE}/projects/ingestion-runs/${projectId}${qs}`);
+  if (res.status === 404) return { runs: [], redacted: false };
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load ingestion history');
+  const data = await res.json();
+  return {
+    runs: Array.isArray(data?.runs) ? (data.runs as MonitoringIngestionRun[]) : [],
+    redacted: Boolean(data?.redacted),
+  };
+}
+
+/** Whether this project can be re-ingested from the browser.
+ *
+ *  `enabled` is whether the server offers the feature at all (hide the control
+ *  when false); `available` is whether this caller can use it now (disable and
+ *  show `reason` when false). A 404 means the server predates the endpoint —
+ *  reported as not enabled, which is the correct rendering. */
+export interface IngestionTriggerStatus {
+  enabled: boolean;
+  available: boolean;
+  reason: string | null;
+  unreachable_locations?: string[];
+}
+
+export async function fetchIngestionTriggerStatus(
+  projectId: string,
+): Promise<IngestionTriggerStatus> {
+  const res = await authFetch(`${API_BASE}/projects/ingestion/trigger-status/${projectId}`);
+  if (!res.ok) return { enabled: false, available: false, reason: null };
+  return res.json();
+}
+
+/** Start a server-side ingestion. Returns the job to poll and the run_id it
+ *  will be recorded under. `already_running` means an ingestion for this
+ *  project was already in flight and its job was handed back instead. */
+export interface IngestionTriggerResult {
+  job_id: string;
+  run_id: string | null;
+  already_running: boolean;
+}
+
+export async function triggerProjectIngestion(
+  projectId: string,
+  opts: { overwrite?: boolean } = {},
+): Promise<IngestionTriggerResult> {
+  const qs = opts.overwrite ? '?overwrite=true' : '';
+  const res = await authFetch(`${API_BASE}/projects/ingestion/trigger/${projectId}${qs}`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to start ingestion');
+  return res.json();
+}
+
+/** One offloaded job's status. Mirrors the JobStatus model; `poll_after_seconds`
+ *  is the server telling the client how long to wait before asking again. */
+export interface JobStatusResponse {
+  job_id: string;
+  kind: string;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
+  step?: string | null;
+  detail?: string | null;
+  progress?: { current?: number; total?: number } | null;
+  result?: Record<string, unknown> | null;
+  error?: string | null;
+  poll_after_seconds?: number | null;
+}
+
+export async function fetchJob(jobId: string): Promise<JobStatusResponse> {
+  const res = await authFetch(`${API_BASE}/jobs/${jobId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read job status');
+  return res.json();
+}
+
+/** List live CLI agents (watchers). Admin-scoped, or project-scoped when a
+ *  projectId is given. A 404 means this server predates agents — treated as an
+ *  empty list rather than an error, so the pane degrades to "none" instead of
+ *  showing a failure. */
+export async function fetchCliAgents(
+  opts: { projectId?: string; limit?: number } = {},
+): Promise<MonitoringCliAgent[]> {
+  const qs = monitoringQuery({ project_id: opts.projectId, limit: opts.limit });
+  const res = await authFetch(`${API_BASE}/monitoring/agents${qs}`);
+  if (res.status === 404) return [];
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load watchers');
+  const data = await res.json();
+  return Array.isArray(data?.agents) ? (data.agents as MonitoringCliAgent[]) : [];
+}
+
+/** Ask a running watcher to start a cycle now.
+ *
+ *  Resolves once the request is *recorded*, not once the cycle finishes: the
+ *  agent claims it on its next command poll (a few seconds), so the caller
+ *  should refresh rather than expect a result. `agentId` is the stored id from
+ *  `fetchCliAgents`. */
+export async function triggerCliAgentRun(agentId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/monitoring/agents/${encodeURIComponent(agentId)}/trigger`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to request a run');
 }
 
 export async function fetchMonitoringHealth(): Promise<MonitoringHealth> {

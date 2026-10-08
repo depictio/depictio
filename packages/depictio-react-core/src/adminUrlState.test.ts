@@ -26,6 +26,10 @@ describe('parseAdminUrl', () => {
       pane: 'ingestion',
     });
     expect(parseAdminUrl('/admin/logs/', '')).toMatchObject({ tab: 'monitoring', pane: 'logs' });
+    expect(parseAdminUrl('/admin/watchers', '')).toMatchObject({
+      tab: 'monitoring',
+      pane: 'watchers',
+    });
   });
 
   it('treats /admin/monitoring as the Tasks pane', () => {

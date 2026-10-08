@@ -227,6 +227,67 @@ const DcFileList: React.FC<{ dcId: string | null; tag: string }> = ({ dcId, tag 
   );
 };
 
+/** One badge per non-zero change count, so a data collection and a run show
+ *  the same change in the same colour. Empty when nothing changed. */
+function changeBadges(added: number, updated: number, failed = 0): React.ReactNode[] {
+  const badges: React.ReactNode[] = [];
+  if (added > 0) {
+    badges.push(
+      <Badge key="new" size="sm" variant="light" color="blue">
+        +{added} new
+      </Badge>,
+    );
+  }
+  if (updated > 0) {
+    badges.push(
+      <Badge key="updated" size="sm" variant="light" color="orange">
+        {updated} updated
+      </Badge>,
+    );
+  }
+  if (failed > 0) {
+    badges.push(
+      <Badge key="failed" size="sm" variant="light" color="red">
+        {failed} failed
+      </Badge>,
+    );
+  }
+  return badges;
+}
+
+/** "12 new · 3 updated" chips for one data collection.
+ *
+ *  Deliberately *not* a fifth entry in STATUS_META: status answers "is the
+ *  expected data there", freshness answers "did it change recently". Folding
+ *  the second into the first would make a collection that gained files look
+ *  like a different kind of thing from one that did not.
+ *
+ *  The counts come from each run's most recent scan, so they describe the last
+ *  ingestion rather than all-time totals — hence the tooltip. */
+const ChangeChips: React.FC<{ dc: IngestionDataCollection }> = ({ dc }) => {
+  const chips = changeBadges(dc.files_new, dc.files_updated, dc.files_failed);
+  if (chips.length === 0) {
+    return (
+      <Text size="sm" c="dimmed">
+        —
+      </Text>
+    );
+  }
+  return (
+    <Tooltip
+      label="Counted from the latest scan of each run — what the most recent ingestion changed, not an all-time total."
+      multiline
+      w={280}
+      withArrow
+      withinPortal
+    >
+      <Group gap={4} wrap="nowrap">
+        {chips}
+      </Group>
+    </Tooltip>
+  );
+};
+
 const DcRow: React.FC<{
   dc: IngestionDataCollection;
   dcId: string | null;
@@ -300,6 +361,9 @@ const DcRow: React.FC<{
         <Text size="sm">{filesCell}</Text>
       </Table.Td>
       <Table.Td>
+        <ChangeChips dc={dc} />
+      </Table.Td>
+      <Table.Td>
         <Group gap={8} wrap="nowrap">
           {dc.status === 'gated_out' ? (
             <Text size="sm" c="dimmed">
@@ -327,7 +391,7 @@ const DcRow: React.FC<{
     </Table.Tr>
     {expanded && hasDetails && (
       <Table.Tr>
-        <Table.Td colSpan={5} style={{ background: 'var(--mantine-color-default-hover)' }}>
+        <Table.Td colSpan={6} style={{ background: 'var(--mantine-color-default-hover)' }}>
           <div style={{ padding: '4px 0 4px 28px' }}>
             {showFiles && <DcFileList dcId={dcId} tag={dc.data_collection_tag} />}
             {showAgg && (
@@ -686,6 +750,7 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
                 <Table.Th>Requirement</Table.Th>
                 <Table.Th>Status</Table.Th>
                 <Table.Th>Files</Table.Th>
+                <Table.Th>Changes</Table.Th>
                 <Table.Th>Aggregated</Table.Th>
               </Table.Tr>
             </Table.Thead>
@@ -748,6 +813,8 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
                 <Table.Th>Run</Table.Th>
                 <Table.Th>Location</Table.Th>
                 <Table.Th>Last scan</Table.Th>
+                <Table.Th>Files</Table.Th>
+                <Table.Th>Changes</Table.Th>
                 <Table.Th>Status</Table.Th>
               </Table.Tr>
             </Table.Thead>
@@ -773,6 +840,19 @@ const IngestionReportPanel: React.FC<IngestionReportPanelProps> = ({
                   </Table.Td>
                   <Table.Td>
                     <Text size="xs">{r.scan_time || '—'}</Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="sm">{r.files_total || '—'}</Text>
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap={4} wrap="nowrap">
+                      {changeBadges(r.files_new, r.files_updated)}
+                      {!r.files_new && !r.files_updated && (
+                        <Text size="sm" c="dimmed">
+                          —
+                        </Text>
+                      )}
+                    </Group>
                   </Table.Td>
                   <Table.Td>
                     <Badge size="sm" variant="light" color={RUN_STATUS_COLOR[r.status] ?? 'gray'}>
