@@ -210,12 +210,20 @@ def prose_of(body: str) -> str:
 
 
 def check_text_intro_length(template_id: str) -> list[Violation]:
+    """At most ``MAX_INTRO_SENTENCES`` per paragraph (RULES.md, Prose).
+
+    Per paragraph, not per tile: an "About" card of two short paragraphs reads
+    as easily as one of three sentences. A folded (``>``) body keeps its
+    paragraphs on single lines with no blank line between them, so it is still
+    counted whole, the stricter reading.
+    """
     out: list[Violation] = []
     for label, tab in _iter_tabs(template_id):
         for c in _components(tab, "text"):
-            n = count_sentences(prose_of(c.get("body") or ""))
+            paragraphs = re.split(r"\n\s*\n", prose_of(c.get("body") or ""))
+            n = max((count_sentences(p) for p in paragraphs), default=0)
             if n > MAX_INTRO_SENTENCES:
-                out.append(f"{label} {_label(c)}: {n} sentences")
+                out.append(f"{label} {_label(c)}: {n} sentences in one paragraph")
     return out
 
 
