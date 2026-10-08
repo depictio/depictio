@@ -197,6 +197,16 @@ A KPI strip is four different readings, not four numbers in one style:
   direction ("usage gain") or count calls by direction.
 - Key figures read collections that every route writes. A card on an optional collection
   needs an alternate in the same slot, or a route leaves 3 cards on a 4-slot row.
+- A score that often sits at its maximum (BUSCO complete) prints "100% of 100" under
+  `coverage` or `gauge`. Give it a `threshold` at the floor the method publishes, with a
+  `warn` level below it.
+- A `box_plot` over values that span orders of magnitude (contig lengths, 500 bp to 200 kb)
+  draws a flat line. Show the median by a short category with `top_n`, or use a log figure in
+  the section below.
+- Cards in a locus section take `follow_region_filter: true`; without it they stay
+  genome-wide under a section that says "region".
+- Give a `box_plot` or `histogram` secondary enough `decimals` to tell its values apart:
+  "49 · 49 · 49" reads as one value.
 
 ## 6. Filters
 
@@ -268,6 +278,17 @@ A KPI strip is four different readings, not four numbers in one style:
 - Axes carry words, not column names: `effect_label` and `significance_label` on a volcano,
   `axis_prefix: PC` on a PCA, `labels:` on a figure. Leave `show_centroids` off when a group
   has two or three points: the labels cover them.
+- A legend that lists samples, libraries or assemblies takes half of a tab figure too, past
+  about 8 entries: `legend_pos: bottom`, or `none` when an axis already names them.
+- `parallel_coordinates` drops every row with a missing value on any axis, and its axis titles
+  overlap past about 6 axes. Pick at most 6 axes that every row fills.
+- `genome_view` and `coverage_track` draw one tick per contig. On a draft assembly with
+  hundreds of contigs, show the regions grouped by contig instead.
+- Count axes in code figures take `dtick=1`, so they print no 0.5 ticks.
+- A sankey whose flows all leave one node draws them in one colour by source: set
+  `color_mode: target`.
+- A heatmap draws every numeric column it is given. Name its `value_columns`, or a count
+  column washes the others out.
 - Minimal tiles and highlights on the Overview keep their controls behind the icon, by design.
 
 ## 9. Live values in text
