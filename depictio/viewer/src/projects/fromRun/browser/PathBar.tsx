@@ -12,6 +12,7 @@ import { Icon } from '@iconify/react';
 import { isS3Location, pathBarQuery, shortenHome, Z_LAYERS } from 'depictio-react-core';
 
 import { FlowBadge } from '../FlowBadge';
+import { folderLabel } from './useFolderTree';
 import type { FolderNode, FolderTreeState } from './useFolderTree';
 
 const MAX_SUGGESTIONS = 50;
@@ -148,7 +149,7 @@ export const PathBar: React.FC<PathBarProps> = ({
                     />
                     <Stack gap={0} style={{ minWidth: 0 }}>
                       <Text size="sm" truncate>
-                        {node.isRoot && node.source === 'local' ? shortenHome(node.path) : node.name}
+                        {folderLabel(node)}
                       </Text>
                       {!node.isRoot && (
                         <Text size="xs" c="dimmed" truncate>

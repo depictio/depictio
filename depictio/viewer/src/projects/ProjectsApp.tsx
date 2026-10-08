@@ -92,13 +92,14 @@ const ProjectsApp: React.FC = () => {
   /** Real from-manifest report held back for review (unmatched types, pruned
    *  or failed collections) instead of redirecting past it. */
   const [createdReport, setCreatedReport] = useState<FromManifestReport | null>(null);
-  /** From-run report whose ingestion is still running on the workers. Kept so
-   *  the user can watch it finish instead of being redirected to a dashboard
-   *  whose collections are still empty. */
-  const [createdRunReport, setCreatedRunReport] = useState<FromRunReport | null>(null);
-  /** What the create dialog knew about that run (template name, what was
-   *  read in the folder), for the created modal's summary. */
-  const [createdRunContext, setCreatedRunContext] = useState<RunCreatedContext | null>(null);
+  /** From-run report whose ingestion is still running on the workers, with
+   *  what the create dialog knew about the run (template name, what was read
+   *  in the folder). Kept so the user can watch it finish instead of being
+   *  redirected to a dashboard whose collections are still empty. */
+  const [createdRun, setCreatedRun] = useState<{
+    report: FromRunReport;
+    context: RunCreatedContext;
+  } | null>(null);
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, toggleDesktop] = useProjectsSidebar();
@@ -204,8 +205,7 @@ const ProjectsApp: React.FC = () => {
       });
       closeCreate();
       refresh();
-      setCreatedRunContext(context);
-      setCreatedRunReport(report);
+      setCreatedRun({ report, context });
       return report;
     },
     [closeCreate, refresh],
@@ -374,9 +374,9 @@ const ProjectsApp: React.FC = () => {
       />
       <ManifestCreatedModal report={createdReport} onClose={() => setCreatedReport(null)} />
       <RunCreatedModal
-        report={createdRunReport}
-        context={createdRunContext}
-        onClose={() => setCreatedRunReport(null)}
+        report={createdRun?.report ?? null}
+        context={createdRun?.context ?? null}
+        onClose={() => setCreatedRun(null)}
       />
       <EditProjectModal
         opened={Boolean(editTarget)}

@@ -1064,6 +1064,7 @@ export {
   folderAncestors,
   folderName,
   folderSource,
+  isLocalFolderPath,
   isS3Location,
   middleEllipsis,
   normalizeFolder,

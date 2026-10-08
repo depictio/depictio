@@ -14,7 +14,6 @@ import React from 'react';
 import {
   Accordion,
   Alert,
-  Button,
   Code,
   Divider,
   Group,
@@ -49,8 +48,10 @@ import { CollectionKindIcon, collectionKindMeta } from './CollectionKindIcon';
 import { FlowBadge } from './FlowBadge';
 import type { FlowStatus } from './FlowBadge';
 import { FolderPath } from './FolderPath';
+import { plural } from './plural';
 import { RunMadeBy, TemplateUsed } from './RunIdentity';
 import type { RunInfo } from './RunIdentity';
+import { SectionHeader } from './SectionHeader';
 import { ResolvedSettings } from './TemplateSettings';
 
 const SECTIONS: Record<
@@ -88,7 +89,7 @@ function rowStatus(dc: FromRunDCPreview, section: RunCollectionSection): FlowSta
 
 function countText(dc: FromRunDCPreview, unit: 'file' | 'input'): string {
   if (dc.status === 'pruned') return '';
-  if (dc.matched > 0) return `${dc.matched} ${unit}${dc.matched === 1 ? '' : 's'}`;
+  if (dc.matched > 0) return plural(dc.matched, unit);
   if (dc.status === 'ok') return 'Counted at ingestion';
   return `No ${unit}s`;
 }
@@ -201,6 +202,45 @@ const CollectionRow: React.FC<{
   );
 };
 
+/** One section of the plan: its header, then its collections in plan order. */
+const CollectionSection: React.FC<{
+  section: RunCollectionSection;
+  rows: FromRunDCPreview[];
+  dataRoot: string;
+}> = ({ section, rows, dataRoot }) => {
+  const meta = SECTIONS[section];
+  return (
+    <Accordion.Item value={section} data-testid={`run-section-${section}`}>
+      <Accordion.Control>
+        <SectionHeader
+          icon={meta.icon}
+          color={meta.color}
+          title={meta.title}
+          count={rows.length}
+          description={meta.description}
+        />
+      </Accordion.Control>
+      <Accordion.Panel>
+        <Stack gap={0}>
+          {rows.map((dc, index) => (
+            <React.Fragment key={dc.data_collection_tag}>
+              {index > 0 && <Divider />}
+              <CollectionRow dc={dc} dataRoot={dataRoot} section={section} />
+            </React.Fragment>
+          ))}
+        </Stack>
+      </Accordion.Panel>
+    </Accordion.Item>
+  );
+};
+
+/** Red when nothing is ready, yellow when some is, green when all is. */
+function readyColor(ready: number, considered: number): string {
+  if (ready === 0) return 'red';
+  if (ready < considered) return 'yellow';
+  return 'green';
+}
+
 /** "21 of 23 collections ready", as a ring and in words. */
 const ReadyRing: React.FC<{ ready: number; considered: number }> = ({ ready, considered }) => {
   if (considered === 0) {
@@ -210,14 +250,13 @@ const ReadyRing: React.FC<{ ready: number; considered: number }> = ({ ready, con
       </Text>
     );
   }
-  const color = ready === 0 ? 'red' : ready < considered ? 'yellow' : 'green';
   return (
     <Group gap="xs" wrap="nowrap">
       <RingProgress
         size={64}
         thickness={6}
         roundCaps
-        sections={[{ value: (ready / considered) * 100, color }]}
+        sections={[{ value: (ready / considered) * 100, color: readyColor(ready, considered) }]}
         label={
           <Text size="xs" fw={700} ta="center">
             {ready}/{considered}
@@ -225,7 +264,7 @@ const ReadyRing: React.FC<{ ready: number; considered: number }> = ({ ready, con
         }
       />
       <Text size="sm" fw={500} data-testid="run-match-summary" data-ready={ready} data-considered={considered}>
-        {ready} of {considered} collection{considered === 1 ? '' : 's'} ready
+        {ready} of {plural(considered, 'collection')} ready
       </Text>
     </Group>
   );
@@ -233,16 +272,16 @@ const ReadyRing: React.FC<{ ready: number; considered: number }> = ({ ready, con
 
 /** What made the run: the report's own detection, else the one read from
  *  the folder before the preview. Null when neither recognised it. */
-export function reportRunInfo(
+function reportRunInfo(
   report: FromRunReport,
   detection: DetectedTemplate | null,
 ): RunInfo | null {
   const d = report.detected_template ?? detection;
-  return d?.pipeline ? { pipeline: d.pipeline, version: d.version, engine: d.engine } : null;
+  return d?.pipeline ? d : null;
 }
 
 /** How the template the report used matches the run. */
-export function reportMatch(
+function reportMatch(
   report: FromRunReport,
   detection: DetectedTemplate | null,
 ): RunTemplateMatch | null {
@@ -363,42 +402,14 @@ export const RunPreview: React.FC<RunSummaryCardProps> = ({
           defaultValue={present.filter((s) => s !== 'optional')}
           chevronPosition="right"
         >
-          {present.map((section) => {
-            const meta = SECTIONS[section];
-            const rows = groups[section];
-            return (
-              <Accordion.Item key={section} value={section} data-testid={`run-section-${section}`}>
-                <Accordion.Control>
-                  <Group gap="sm" wrap="nowrap">
-                    <ThemeIcon variant="light" color={meta.color} size="md" radius="md">
-                      <Icon icon={meta.icon} width={16} />
-                    </ThemeIcon>
-                    <Stack gap={0} style={{ minWidth: 0 }}>
-                      <Text size="sm" fw={600}>
-                        {meta.title}{' '}
-                        <Text span size="sm" c="dimmed" fw={400}>
-                          ({rows.length})
-                        </Text>
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        {meta.description}
-                      </Text>
-                    </Stack>
-                  </Group>
-                </Accordion.Control>
-                <Accordion.Panel>
-                  <Stack gap={0}>
-                    {rows.map((dc, index) => (
-                      <React.Fragment key={dc.data_collection_tag}>
-                        {index > 0 && <Divider />}
-                        <CollectionRow dc={dc} dataRoot={report.data_root} section={section} />
-                      </React.Fragment>
-                    ))}
-                  </Stack>
-                </Accordion.Panel>
-              </Accordion.Item>
-            );
-          })}
+          {present.map((section) => (
+            <CollectionSection
+              key={section}
+              section={section}
+              rows={groups[section]}
+              dataRoot={report.data_root}
+            />
+          ))}
         </Accordion>
       )}
 
@@ -440,39 +451,3 @@ export const RunPreview: React.FC<RunSummaryCardProps> = ({
     </Stack>
   );
 };
-
-/** The preview's answer when no template was picked and the server could not
- *  tell which pipeline produced the folder: say so, and send the reader back
- *  to pick one. `message` is the server's own explanation. */
-export const TemplateNotDetectedAlert: React.FC<{
-  message: string;
-  onPickTemplate: () => void;
-}> = ({ message, onPickTemplate }) => (
-  <Alert
-    color="yellow"
-    variant="light"
-    icon={<Icon icon="mdi:help-circle-outline" width={18} />}
-    title="Pipeline not recognised, pick one"
-    data-testid="run-template-not-detected"
-  >
-    <Stack gap="xs">
-      <Text size="sm">{message}</Text>
-      <Text size="sm">
-        Choose the pipeline that produced this folder and its template version, then
-        preview again.
-      </Text>
-      <Group>
-        <Button
-          size="xs"
-          variant="light"
-          color="yellow"
-          leftSection={<Icon icon="mdi:arrow-left" width={14} />}
-          onClick={onPickTemplate}
-          data-testid="run-pick-template"
-        >
-          Pick a pipeline
-        </Button>
-      </Group>
-    </Stack>
-  </Alert>
-);

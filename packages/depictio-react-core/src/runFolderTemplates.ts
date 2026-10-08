@@ -64,8 +64,13 @@ export function splitTemplateId(templateId: string): TemplateIdParts {
   };
 }
 
+/** A version without surrounding spaces or a leading `v`. */
+function bareVersion(version: string): string {
+  return version.trim().replace(/^v/i, '');
+}
+
 function versionKey(version: string): { main: number[]; pre: string | null } {
-  const bare = version.trim().replace(/^v/i, '');
+  const bare = bareVersion(version);
   const dash = bare.indexOf('-');
   const main = dash >= 0 ? bare.slice(0, dash) : bare;
   const pre = dash >= 0 ? bare.slice(dash + 1) : null;
@@ -98,12 +103,12 @@ export function compareVersions(a: string, b: string): number {
 /** Same release, ignoring a leading `v` and surrounding spaces. */
 export function sameVersion(a: string | null | undefined, b: string | null | undefined): boolean {
   if (!a || !b) return false;
-  return a.trim().replace(/^v/i, '') === b.trim().replace(/^v/i, '');
+  return bareVersion(a) === bareVersion(b);
 }
 
 /** `v2.16.0` from `2.16.0` or `v2.16.0`. */
 export function formatVersion(version: string): string {
-  return `v${version.trim().replace(/^v/i, '')}`;
+  return `v${bareVersion(version)}`;
 }
 
 export interface RunTemplateVersion {

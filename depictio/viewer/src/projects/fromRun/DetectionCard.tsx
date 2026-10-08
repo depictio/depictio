@@ -114,10 +114,7 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
       body = (
         <Stack gap="sm">
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" verticalSpacing="sm">
-            <RunMadeBy
-              run={{ pipeline: detected.pipeline, version: detected.version, engine: detected.engine }}
-              testIdPrefix="run-detected"
-            />
+            <RunMadeBy run={detected} testIdPrefix="run-detected" />
             <TemplateUsed
               templateId={usedId}
               title={templateTitle}

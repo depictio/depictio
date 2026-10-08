@@ -10,49 +10,13 @@
  * (`GROUP_COL`) beside it, the name the template and `--var` use.
  */
 import React from 'react';
-import {
-  Accordion,
-  Code,
-  Group,
-  Stack,
-  Table,
-  Text,
-  TextInput,
-  ThemeIcon,
-  Tooltip,
-} from '@mantine/core';
-import { Icon } from '@iconify/react';
+import { Accordion, Code, Group, Stack, Table, Text, TextInput, Tooltip } from '@mantine/core';
 
 import { humanizeVariableName, templateSettingValue, Z_LAYERS } from 'depictio-react-core';
 import type { TemplateVariable } from 'depictio-react-core';
 
 import { FolderPath } from './FolderPath';
-
-/** The header of a folded settings block, in the look of the preview's
- *  collection sections. */
-const SettingsHeader: React.FC<{ title: string; count: number; note?: string; description: string }> = ({
-  title,
-  count,
-  note,
-  description,
-}) => (
-  <Group gap="sm" wrap="nowrap">
-    <ThemeIcon variant="light" color="gray" size="md" radius="md">
-      <Icon icon="mdi:tune-variant" width={16} />
-    </ThemeIcon>
-    <Stack gap={0} style={{ minWidth: 0 }}>
-      <Text size="sm" fw={600}>
-        {title}{' '}
-        <Text span size="sm" c="dimmed" fw={400}>
-          ({count}){note ? `, ${note}` : ''}
-        </Text>
-      </Text>
-      <Text size="xs" c="dimmed">
-        {description}
-      </Text>
-    </Stack>
-  </Group>
-);
+import { SectionHeader } from './SectionHeader';
 
 /** "Group column" and, beside it, `GROUP_COL`. */
 const SettingName: React.FC<{ name: string }> = ({ name }) => (
@@ -81,7 +45,9 @@ export const TemplateSettingsSection: React.FC<TemplateSettingsSectionProps> = (
     <Accordion variant="separated" radius="md" chevronPosition="right">
       <Accordion.Item value="settings" data-testid="run-template-settings">
         <Accordion.Control data-testid="run-template-settings-toggle">
-          <SettingsHeader
+          <SectionHeader
+            icon="mdi:tune-variant"
+            color="gray"
             title="Advanced: template settings"
             count={variables.length}
             note={overridden > 0 ? `${overridden} overridden` : undefined}
@@ -186,7 +152,9 @@ export const ResolvedSettings: React.FC<{ settings: Array<[string, string]>; dat
   <Accordion variant="separated" radius="md" chevronPosition="right">
     <Accordion.Item value="settings" data-testid="run-resolved-variables">
       <Accordion.Control data-testid="run-resolved-variables-toggle">
-        <SettingsHeader
+        <SectionHeader
+          icon="mdi:tune-variant"
+          color="gray"
           title="Template settings"
           count={settings.length}
           description="What the template resolved for this run folder. Override one in Advanced: template settings, on the Source step."

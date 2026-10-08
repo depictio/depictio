@@ -50,6 +50,12 @@ export interface FolderNode {
   isRoot: boolean;
 }
 
+/** How a folder is named in the tree and the path bar: an allowed local
+ *  root by its path (home as `~`), anything else by its name. */
+export function folderLabel(node: FolderNode): string {
+  return node.isRoot && node.source === 'local' ? shortenHome(node.path) : node.name;
+}
+
 export interface ChildrenState {
   status: 'loading' | 'loaded' | 'error';
   paths: string[];
@@ -334,8 +340,7 @@ export function useFolderTree({
       } else if (state?.status === 'loading' || node?.hasChildren) {
         kids = [placeholder(path, 'loading')];
       }
-      const label =
-        node?.isRoot && node.source === 'local' ? shortenHome(path) : (node?.name ?? folderName(path));
+      const label = node ? folderLabel(node) : folderName(path);
       const props: TreeNodeProps = { kind: 'folder', source: node?.source ?? folderSource(path) };
       return { value: path, label, nodeProps: props, children: kids };
     };

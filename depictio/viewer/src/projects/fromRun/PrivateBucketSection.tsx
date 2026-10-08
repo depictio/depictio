@@ -63,6 +63,12 @@ interface PrivateBucketSectionProps {
   disabledReason: string | null;
 }
 
+/** The heading of a finished test. */
+function testTitle(test: Extract<TestState, { status: 'done' | 'error' }>): string {
+  if (test.status === 'error') return 'The connection test did not run';
+  return test.result.success ? 'Connected' : 'The connection failed';
+}
+
 const TestResult: React.FC<{ test: TestState }> = ({ test }) => {
   if (test.status === 'idle' || test.status === 'testing') return null;
   const success = test.status === 'done' && test.result.success;
@@ -80,11 +86,7 @@ const TestResult: React.FC<{ test: TestState }> = ({ test }) => {
       </ThemeIcon>
       <Stack gap={0} style={{ minWidth: 0 }}>
         <Text size="sm" fw={600}>
-          {success
-            ? 'Connected'
-            : test.status === 'error'
-              ? 'The connection test did not run'
-              : 'The connection failed'}
+          {testTitle(test)}
         </Text>
         <Text size="sm" c="dimmed" style={{ overflowWrap: 'anywhere' }}>
           {message}

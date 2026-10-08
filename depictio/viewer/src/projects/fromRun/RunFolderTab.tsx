@@ -8,37 +8,27 @@
  * also fills the Pipeline and Template version fields, marked "Detected",
  * which the reader may change. Leaving them empty lets the server recognise
  * the pipeline itself when the plan is previewed.
+ *
+ * The tab holds the state and the requests; the Preview and Create steps
+ * render in `RunFolderSteps`, and the private bucket's rules live in
+ * `privateBucket.ts`.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  Box,
-  Button,
-  Center,
-  Group,
-  Loader,
-  Paper,
-  Stack,
-  Stepper,
-  Text,
-  TextInput,
-} from '@mantine/core';
+import { Alert, Box, Button, Group, Stack, Stepper, TextInput } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import {
   apiErrorCode,
   createProjectFromRun,
   defaultVersionFor,
-  EMPTY_RUN_STORAGE_FIELDS,
   findRunPipeline,
   groupRunTemplates,
   inspectFolder,
+  isLocalFolderPath,
   isPrivateBucketRefusal,
   isS3Location,
-  runCollectionTotals,
   runFoundNothing,
   runStorageFieldErrors,
-  runStorageFieldsBlank,
   runStorageFromFields,
   runTemplateMatch,
   s3BucketOf,
@@ -49,7 +39,6 @@ import type {
   FromRunReport,
   FromRunRequest,
   RunStorageBinding,
-  RunStorageFields,
   TemplateInfo,
 } from 'depictio-react-core';
 
@@ -57,10 +46,12 @@ import { DisabledReason, GatedButton } from '../../components/settings/SettingsS
 import FolderBrowserModal from './browser/FolderBrowserModal';
 import { DetectionCard } from './DetectionCard';
 import type { DetectionState } from './DetectionCard';
+import { closeSection, followBucket, NO_PRIVATE_BUCKET, openSection } from './privateBucket';
+import type { OpenPrivateBucketOptions, PrivateBucketState } from './privateBucket';
 import { PrivateBucketSection } from './PrivateBucketSection';
 import { rememberRunFolder } from './recentFolders';
 import type { RunCreatedContext } from './RunCreatedModal';
-import { RunPreview, RunSummaryCard, TemplateNotDetectedAlert } from './RunPreview';
+import { RunCreateStep, RunPreviewStep } from './RunFolderSteps';
 import { TemplatePicker } from './TemplatePicker';
 import { TemplateSettingsSection } from './TemplateSettings';
 
@@ -70,10 +61,10 @@ const BROWSE_STACK_ID = 'run-folder-browser';
 /** How long typing pauses before the folder is read. */
 const INSPECT_DELAY_MS = 450;
 
-/** A location the server reads from its own disk: absolute, or under the
- *  server user's home. */
-function isLocalPath(location: string): boolean {
-  return location.startsWith('/') || location.startsWith('~/') || location === '~';
+/** A location the server can read: an s3:// location, plus, when it allows
+ *  local folders, a path on its own disk. */
+function isReadableRoot(location: string, localEnabled: boolean): boolean {
+  return isS3Location(location) || (localEnabled && isLocalFolderPath(location));
 }
 
 /** The template choice, and where it came from: detection may replace its
@@ -84,29 +75,6 @@ interface Choice {
 }
 
 const NO_CHOICE: Choice = { templateId: null, from: null };
-
-/** The "Private bucket" section and the connection details typed in it. The
- *  details belong to `bucket` and are sent with reads of that bucket only;
- *  they live here, never in browser storage, a URL or the recent folders. */
-interface PrivateBucketState {
-  /** The bucket the section is for. */
-  bucket: string | null;
-  open: boolean;
-  /** Reading the run folder was refused: the bucket is not public. */
-  refused: boolean;
-  /** The reader closed the section for this bucket: a refusal leaves it
-   *  closed (the switch reopens it). */
-  dismissed: boolean;
-  fields: RunStorageFields;
-}
-
-const NO_PRIVATE_BUCKET: PrivateBucketState = {
-  bucket: null,
-  open: false,
-  refused: false,
-  dismissed: false,
-  fields: EMPTY_RUN_STORAGE_FIELDS,
-};
 
 interface RunFolderTabProps {
   /** The create dialog is open: every opening starts afresh. */
@@ -182,12 +150,10 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   }, [opened]);
 
   const trimmedRoot = dataRoot.trim();
-  // The server reads an s3:// location, plus, when it allows local folders,
-  // a path on its own disk. Anything else is refused here with the reason
+  // A location the server cannot read is refused here with the reason
   // spelled out rather than sent for a 422.
-  const rootReadable = (location: string) =>
-    isS3Location(location) || (localDataRootsEnabled && isLocalPath(location));
-  const prefixInvalid = trimmedRoot.length > 0 && !rootReadable(trimmedRoot);
+  const prefixInvalid =
+    trimmedRoot.length > 0 && !isReadableRoot(trimmedRoot, localDataRootsEnabled);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setInspectTarget(trimmedRoot), INSPECT_DELAY_MS);
@@ -217,53 +183,32 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   // the server lists no S3 location of its own.
   const browseEnabled = localDataRootsEnabled || remoteBrowseEnabled || Boolean(rootStorage);
 
-  /** Open the section for the bucket of `location`. A refusal does not reopen
-   *  a section the reader closed for that bucket; the reader always can. */
-  const openPrivateBucket = useCallback((location: string, refused: boolean, byReader: boolean) => {
-    const bucket = s3BucketOf(location);
-    if (!bucket) return;
-    setPrivateBucket((prev) => {
-      const same = prev.bucket === bucket;
-      if (same && prev.dismissed && !byReader) return { ...prev, refused: prev.refused || refused };
-      return {
-        bucket,
-        open: true,
-        refused: refused || (same && prev.refused),
-        dismissed: false,
-        fields: same ? prev.fields : EMPTY_RUN_STORAGE_FIELDS,
-      };
-    });
-  }, []);
+  /** Open the section for the bucket `location` names, if any. */
+  const openPrivateBucket = useCallback(
+    (location: string, options: OpenPrivateBucketOptions) => {
+      const bucket = s3BucketOf(location);
+      if (!bucket) return;
+      setPrivateBucket((prev) => openSection(prev, bucket, options));
+    },
+    [],
+  );
 
   const handlePrivateBucketToggle = (open: boolean) => {
     if (open) {
-      openPrivateBucket(trimmedRoot, false, true);
+      openPrivateBucket(trimmedRoot, { byReader: true });
       return;
     }
     // Closing forgets the details; a folder read with them is read again
     // without them.
     if (storageBinding) setStorageEpoch((n) => n + 1);
-    setPrivateBucket((prev) => ({
-      ...NO_PRIVATE_BUCKET,
-      bucket: prev.bucket,
-      refused: prev.refused,
-      dismissed: true,
-    }));
+    setPrivateBucket(closeSection);
   };
 
-  // Another bucket in the field: details typed for the previous one are
-  // dropped, never sent to this one. An empty section opened on purpose just
-  // follows the field.
+  // Another bucket in the field: the section follows it (`followBucket`).
   const targetBucket = s3BucketOf(inspectTarget);
   useEffect(() => {
     if (!targetBucket) return;
-    setPrivateBucket((prev) => {
-      if (!prev.bucket || prev.bucket === targetBucket) return prev;
-      if (prev.open && !prev.refused && runStorageFieldsBlank(prev.fields)) {
-        return { ...prev, bucket: targetBucket };
-      }
-      return NO_PRIVATE_BUCKET;
-    });
+    setPrivateBucket((prev) => followBucket(prev, targetBucket));
   }, [targetBucket]);
 
   // Read the folder: what it holds, which pipeline made it, which template
@@ -273,7 +218,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   useEffect(() => {
     if (!opened) return undefined;
     const location = inspectTarget;
-    if (!location || !rootReadable(location)) {
+    if (!location || !isReadableRoot(location, localDataRootsEnabled)) {
       setDetection({ status: 'idle' });
       return undefined;
     }
@@ -300,13 +245,11 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
           error: err.message || 'This folder could not be read.',
           code,
         });
-        if (isPrivateBucketRefusal(code)) openPrivateBucket(location, true, false);
+        if (isPrivateBucketRefusal(code)) openPrivateBucket(location, { refused: true });
       });
     return () => controller.abort();
-    // `rootReadable` only reads `localDataRootsEnabled`; the connection
-    // details are read through a ref (see `storageEpoch`).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opened, inspectTarget, localDataRootsEnabled, storageEpoch]);
+    // The connection details are read through a ref (see `storageEpoch`).
+  }, [opened, inspectTarget, localDataRootsEnabled, storageEpoch, openPrivateBucket]);
 
   // What the card shows: the current folder's reading, "loading" while the
   // reader is still typing, nothing for an empty or unreadable field.
@@ -443,7 +386,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
           setPreviewError(err.message || 'Failed to preview the run folder.');
           if (isPrivateBucketRefusal(code) && s3BucketOf(trimmedRoot)) {
             setPreviewNeedsBucket(true);
-            openPrivateBucket(trimmedRoot, true, false);
+            openPrivateBucket(trimmedRoot, { refused: true });
           }
         }
       })
@@ -459,7 +402,6 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   }, [opened, step]);
 
   const foundNothing = step > 0 && !!preview && runFoundNothing(preview.data_collections);
-  const totals = preview ? runCollectionTotals(preview.data_collections) : null;
   // The folder was read and nothing in it names a template: previewing would
   // only come back with "not recognised", so ask for the pipeline now.
   const noTemplateForFolder =
@@ -525,6 +467,23 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
 
   const displayName =
     preview?.project_name || trimmedName || selectedTemplate?.name || 'project';
+  const previewTitle = preview ? titleOf(preview.template_id) : null;
+  // A preview refused for want of the bucket's details: back to the Source
+  // step, with the section open.
+  const giveBucketDetails =
+    previewNeedsBucket && !privateBucketDisabledReason
+      ? () => {
+          openPrivateBucket(trimmedRoot, { refused: true, byReader: true });
+          setStep(0);
+        }
+      : null;
+
+  let rootError: string | undefined;
+  if (prefixInvalid) {
+    rootError = localDataRootsEnabled
+      ? 'Enter a full folder path, a path starting with ~/, or an s3:// location.'
+      : 'The run folder must be an s3:// location.';
+  }
 
   return (
     <Stack gap="md">
@@ -549,13 +508,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
               value={dataRoot}
               onChange={(e) => changeDataRoot(e.currentTarget.value)}
               leftSection={<Icon icon="mdi:folder-search-outline" width={16} />}
-              error={
-                prefixInvalid
-                  ? localDataRootsEnabled
-                    ? 'Enter a full folder path, a path starting with ~/, or an s3:// location.'
-                    : 'The run folder must be an s3:// location.'
-                  : undefined
-              }
+              error={rootError}
               spellCheck={false}
               // The Browse button sits beside the input itself, under the
               // label and above any error.
@@ -643,114 +596,28 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
         </Stepper.Step>
 
         <Stepper.Step label="Preview" description="What each collection gets">
-          <Stack gap="md" pt="md">
-            <Box aria-live="polite" role="status">
-              {previewLoading && (
-                <Center mih={120}>
-                  <Group gap="xs">
-                    <Loader size="sm" color={accent.secondary} />
-                    <Text size="sm" c="dimmed">
-                      {choice.templateId
-                        ? 'Reading the run folder and resolving the template...'
-                        : 'Reading the run folder and recognising its pipeline...'}
-                    </Text>
-                  </Group>
-                </Center>
-              )}
-            </Box>
-            {notDetected && (
-              <TemplateNotDetectedAlert message={notDetected} onPickTemplate={() => setStep(0)} />
-            )}
-            {previewError && (
-              <Alert
-                color="red"
-                variant="light"
-                icon={<Icon icon="mdi:alert-circle-outline" width={16} />}
-                data-testid="run-preview-error"
-              >
-                <Stack gap="xs" align="flex-start">
-                  <Text size="sm">{previewError}</Text>
-                  {previewNeedsBucket && !privateBucketDisabledReason && (
-                    <Button
-                      size="xs"
-                      variant="light"
-                      leftSection={<Icon icon="mdi:cloud-lock-outline" width={14} />}
-                      onClick={() => {
-                        openPrivateBucket(trimmedRoot, true, true);
-                        setStep(0);
-                      }}
-                      data-testid="run-preview-private-bucket"
-                    >
-                      Give the bucket&apos;s connection details
-                    </Button>
-                  )}
-                </Stack>
-              </Alert>
-            )}
-            {foundNothing && (
-              <Alert
-                color="red"
-                variant="light"
-                icon={<Icon icon="mdi:alert-circle" width={16} />}
-                title="Nothing to ingest in this folder"
-                data-testid="run-no-match-warning"
-              >
-                <Text size="sm">
-                  No data collection matched anything here. The paths under &ldquo;Not
-                  found&rdquo; are what was looked for: a run folder set one level too high, or
-                  too low, is the usual cause.
-                </Text>
-              </Alert>
-            )}
-            {preview && (
-              <RunPreview
-                report={preview}
-                templateTitle={titleOf(preview.template_id)}
-                detection={detected}
-              />
-            )}
-          </Stack>
+          <RunPreviewStep
+            loading={previewLoading}
+            detecting={!choice.templateId}
+            notDetected={notDetected}
+            onPickTemplate={() => setStep(0)}
+            error={previewError}
+            onGiveBucketDetails={giveBucketDetails}
+            foundNothing={foundNothing}
+            report={preview}
+            templateTitle={previewTitle}
+            detection={detected}
+          />
         </Stepper.Step>
 
         <Stepper.Step label="Create" description="Confirm & ingest">
-          <Stack gap="md" pt="md">
-            {preview && (
-              <RunSummaryCard
-                report={preview}
-                templateTitle={titleOf(preview.template_id)}
-                detection={detected}
-              />
-            )}
-            <Paper withBorder radius="md" p="lg">
-              <Stack gap="sm" align="center">
-                <Icon
-                  icon="mdi:rocket-launch-outline"
-                  width={36}
-                  color={`var(--mantine-color-${accent.secondary}-6)`}
-                />
-                <Text fw={500} ta="center">
-                  Create &ldquo;{displayName}&rdquo;
-                </Text>
-                <Text size="xs" c="dimmed" ta="center">
-                  {totals
-                    ? `${totals.ready} of ${totals.considered} data ` +
-                      `collection${totals.considered === 1 ? '' : 's'} will ` +
-                      'be ingested in the background. You can watch the run ' +
-                      'and open the dashboard from the next screen.'
-                    : 'The run folder will be ingested and the template dashboards imported.'}
-                </Text>
-                {rootStorage && (
-                  <Group gap={6} wrap="nowrap" justify="center" data-testid="run-create-storage-note">
-                    <Icon icon="mdi:cloud-lock-outline" width={14} style={{ flexShrink: 0 }} />
-                    <Text size="xs" c="dimmed" ta="center">
-                      The private bucket&apos;s connection details are saved as this
-                      project&apos;s storage settings.
-                    </Text>
-                  </Group>
-                )}
-              </Stack>
-            </Paper>
-          </Stack>
+          <RunCreateStep
+            report={preview}
+            templateTitle={previewTitle}
+            detection={detected}
+            projectName={displayName}
+            savesStorage={Boolean(rootStorage)}
+          />
         </Stepper.Step>
       </Stepper>
 

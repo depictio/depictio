@@ -22,6 +22,12 @@ export function folderSource(location: string): FolderSource {
   return isS3Location(location) ? 's3' : 'local';
 }
 
+/** True for a path the server reads from its own disk: absolute, or under
+ *  the server user's home (`~`, `~/...`). Expects trimmed input. */
+export function isLocalFolderPath(location: string): boolean {
+  return location.startsWith('/') || location.startsWith('~/') || location === '~';
+}
+
 interface SplitFolder {
   /** `s3://`, `/`, `~/`, or `` for a relative path. */
   prefix: string;
@@ -40,6 +46,14 @@ function splitFolder(location: string): SplitFolder {
     return { prefix: '/', segments: value.split('/').filter(Boolean) };
   }
   return { prefix: '', segments: value.split('/').filter(Boolean) };
+}
+
+/** True when `location` is `base` or below it: same prefix, and `base`'s
+ *  segments open `location`'s. */
+function isWithin(base: SplitFolder, location: SplitFolder): boolean {
+  if (base.prefix !== location.prefix) return false;
+  if (location.segments.length < base.segments.length) return false;
+  return base.segments.every((segment, i) => segment === location.segments[i]);
 }
 
 function joinFolder({ prefix, segments }: SplitFolder): string {
@@ -83,11 +97,7 @@ export function parentFolder(location: string): string | null {
 export function folderAncestors(root: string, target: string): string[] | null {
   const r = splitFolder(root);
   const t = splitFolder(target);
-  if (r.prefix !== t.prefix) return null;
-  if (t.segments.length < r.segments.length) return null;
-  for (let i = 0; i < r.segments.length; i += 1) {
-    if (r.segments[i] !== t.segments[i]) return null;
-  }
+  if (!isWithin(r, t)) return null;
   const chain: string[] = [];
   for (let depth = r.segments.length; depth <= t.segments.length; depth += 1) {
     chain.push(joinFolder({ prefix: t.prefix, segments: t.segments.slice(0, depth) }));
@@ -99,13 +109,10 @@ export function folderAncestors(root: string, target: string): string[] | null {
  *  the run folder), `''` when they are the same folder, null when `location`
  *  is not under `base`. Works on files as well as folders. */
 export function relativeToFolder(base: string, location: string): string | null {
+  if (!base.trim() || !location.trim()) return null;
   const b = splitFolder(base);
   const l = splitFolder(location);
-  if (!base.trim() || !location.trim()) return null;
-  if (b.prefix !== l.prefix || l.segments.length < b.segments.length) return null;
-  for (let i = 0; i < b.segments.length; i += 1) {
-    if (b.segments[i] !== l.segments[i]) return null;
-  }
+  if (!isWithin(b, l)) return null;
   return l.segments.slice(b.segments.length).join('/');
 }
 

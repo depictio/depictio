@@ -19,11 +19,11 @@ import type { ManifestRefreshReport, ManifestRefreshStatus } from 'depictio-reac
 
 import { INGESTION_STATUS_META } from './IngestionResultTable';
 
-export const POLL_INTERVAL_MS = 2_000;
+const POLL_INTERVAL_MS = 2_000;
 /** Give up polling after this long; the run keeps going server-side. */
-export const MAX_POLL_MS = 30 * 60 * 1_000;
+const MAX_POLL_MS = 30 * 60 * 1_000;
 /** Transient poll failures tolerated before a watcher stops and reports. */
-export const MAX_CONSECUTIVE_POLL_ERRORS = 3;
+const MAX_CONSECUTIVE_POLL_ERRORS = 3;
 
 /** A report is final once no row is still queued for, or running on, a
  *  worker. The poll endpoint has no run-level status field, so this is the
@@ -67,10 +67,10 @@ export function summarizeManifestRun(report: ManifestRefreshReport): string {
     counts.set(entry.status, (counts.get(entry.status) ?? 0) + 1);
   }
   const parts: string[] = [];
-  (Object.keys(INGESTION_STATUS_META) as ManifestRefreshStatus[]).forEach((status) => {
+  for (const status of Object.keys(INGESTION_STATUS_META) as ManifestRefreshStatus[]) {
     const n = counts.get(status);
     if (n) parts.push(`${n} ${INGESTION_STATUS_META[status].label.toLowerCase()}`);
-  });
+  }
   return parts.length > 0 ? parts.join(', ') : 'no collection reported';
 }
 
