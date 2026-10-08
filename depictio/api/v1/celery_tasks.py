@@ -3159,8 +3159,14 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
           "project_id", "wf_index", "dc_id", "dc_tag",
           "sync_files": bool,
           "user": {"id", "email", "is_admin"},
-          "depends_on": [dc_tag, ...] (optional; recipe DCs only, see
-                         ``manifest_ingest._recipe_dependencies``),
+          "depends_on": [dc_tag, ...] (optional; recipe DCs, see
+                         ``manifest_ingest._recipe_dependencies``, and scan
+                         followers),
+          "scan_dc_ids": [dc_id, ...] (optional; the scan leader of a
+                         workflow's recursive DCs, see
+                         ``manifest_ingest._scan_leaders``),
+          "scan_leader": dc_tag (optional; a recursive DC another task scans
+                         for, which it waits for and then only processes),
         }
 
     The project document is re-read here (nothing rich crosses the broker) and
@@ -3218,6 +3224,30 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
                 )
             raise self.retry(countdown=_DEPENDENCY_WAIT_SECONDS)
 
+    scan_leader = payload.get("scan_leader")
+    if scan_leader:
+        # The leader's walk registered this DC's files too. If it failed there
+        # is nothing to process, and saying so beats an empty-table error.
+        doc = store.get_ingestion_run(run_id) or {}
+        statuses = {s.get("name"): s.get("status") for s in doc.get("steps") or []}
+        if statuses.get(scan_leader) == "failed":
+            message = (
+                f"Not ingested: the scan of the run folder, done with '{scan_leader}', failed."
+            )
+            store.set_ingestion_step(
+                run_id,
+                step={"name": tag, "status": "failed", "detail": message},
+                current_step=None,
+            )
+            _finalize_manifest_refresh_run(run_id)
+            return {"tag": tag, "ok": False, "message": message}
+    # Only a recursive DC carries either key; the others keep the default scan.
+    scan_kwargs: dict = {}
+    if scan_leader:
+        scan_kwargs["scan"] = False
+    if payload.get("scan_dc_ids"):
+        scan_kwargs["scan_dc_ids"] = list(payload["scan_dc_ids"])
+
     store.set_ingestion_step(run_id, step={"name": tag, "status": "running"}, current_step=tag)
     try:
         project = projects_collection.find_one({"_id": ObjectId(payload["project_id"])})
@@ -3236,6 +3266,7 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
             sync_files=bool(payload.get("sync_files", True)),
             # Resolved worker-side so credentials never cross the broker.
             remote_storage_options=project_storage_for(payload["project_id"]),
+            **scan_kwargs,
         )
     except ProjectStorageUnusable as exc:
         # The project's stored storage config cannot be used from this worker

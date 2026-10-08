@@ -15,6 +15,7 @@ AWS megatest prefix. The heavy legs (scan → Delta, dashboard tag binding) are
 covered by their own suites and patched at their seams here.
 """
 
+import os
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
@@ -22,6 +23,7 @@ import mongomock
 import pytest
 from bson import ObjectId
 from fastapi import HTTPException
+from starlette.requests import Request
 
 from depictio.api.v1 import remote_fetch
 from depictio.api.v1.configs.config import settings
@@ -32,6 +34,7 @@ from depictio.api.v1.endpoints.projects_endpoints import (
     routes,
     storage_config,
 )
+from depictio.api.v1.endpoints.projects_endpoints.local_dirs import CodedHTTPException
 from depictio.models.models.users import UserBase
 from depictio.models.s3_access import S3AccessFailed, S3AccessRefused, S3Target
 from depictio.tests.cli.s3_stubs import (
@@ -42,6 +45,7 @@ from depictio.tests.cli.s3_stubs import (
     FailingS3Client,
     install_s3_client,
     install_s3_listing,
+    write_tree,
 )
 
 TEMPLATE_ID = "nf-core/ampliseq/2.16.0"
@@ -57,11 +61,12 @@ def _user(is_admin: bool = False) -> UserBase:
 
 def _call(
     data_root: str = S3_ROOT,
-    template_id: str = TEMPLATE_ID,
+    template_id: str | None = TEMPLATE_ID,
     user=None,
     project_name: str | None = None,
     variables: dict[str, str] | None = None,
     dry_run: bool = False,
+    request=None,
 ):
     return from_run._create_project_from_run(
         data_root=data_root,
@@ -70,15 +75,24 @@ def _call(
         project_name=project_name,
         variables=variables,
         dry_run=dry_run,
+        request=request,
     )
+
+
+def _request(host: str | None = "localhost:8058") -> Request:
+    """The incoming request, as far as the Host guard reads it."""
+    headers = [(b"host", host.encode())] if host is not None else []
+    return Request({"type": "http", "method": "POST", "path": "/", "headers": headers})
 
 
 @pytest.fixture(autouse=True)
 def server_context(monkeypatch):
     """Server context, the suite's default. Importing the CLI app sets
     ``DEPICTIO_CONTEXT=CLI`` for the whole process, and how a location is read
-    depends on it."""
+    depends on it. Local folders off unless a test turns them on."""
     monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+    monkeypatch.delenv("DEPICTIO_LOCAL_DATA_ROOTS", raising=False)
+    monkeypatch.delenv("DEPICTIO_AUTH_SINGLE_USER_MODE", raising=False)
 
 
 @pytest.fixture()
@@ -624,7 +638,9 @@ async def test_public_mode_blocks_a_non_admin():
         patch.object(routes, "_create_project_from_run") as work,
         pytest.raises(HTTPException) as exc,
     ):
-        await routes.create_project_from_run(payload, current_user=_user(is_admin=False))
+        await routes.create_project_from_run(
+            payload, _request(), current_user=_user(is_admin=False)
+        )
 
     assert exc.value.status_code == 403
     assert "public/demo mode" in str(exc.value.detail)
@@ -642,7 +658,7 @@ async def test_an_admin_passes_the_public_mode_gate():
         patch.object(routes, "settings", mock_settings),
         patch.object(routes, "_create_project_from_run", return_value={"gate": "passed"}) as work,
     ):
-        await routes.create_project_from_run(payload, current_user=_user(is_admin=True))
+        await routes.create_project_from_run(payload, _request(), current_user=_user(is_admin=True))
 
     work.assert_called_once()
 
@@ -653,5 +669,327 @@ async def test_no_user_401():
 
     payload = from_run.FromRunRequest(data_root=S3_ROOT, template_id=TEMPLATE_ID)
     with pytest.raises(HTTPException) as exc:
-        await routes.create_project_from_run(payload, current_user=None)
+        await routes.create_project_from_run(payload, _request(), current_user=None)
     assert exc.value.status_code == 401
+
+
+# ── a run folder on the server's own disk (depictio local) ───────────────────
+
+
+@pytest.fixture()
+def local_home(tmp_path, monkeypatch):
+    """Local folders on, ``home/`` the one root, the megatest tree at ``home/run42``."""
+    home = tmp_path / "home"
+    write_tree(home / "run42", MEGATEST_TREE)
+    (home / ".hidden-runs" / "run1").mkdir(parents=True)
+    (home / "depictio-local").mkdir()
+    outside = tmp_path / "outside"
+    write_tree(outside, MEGATEST_TREE)
+    (home / "escape").symlink_to(outside)
+    monkeypatch.setenv("DEPICTIO_AUTH_SINGLE_USER_MODE", "true")
+    monkeypatch.setenv("DEPICTIO_LOCAL_DATA_ROOTS", str(home))
+    monkeypatch.setenv("DEPICTIO_LOCAL_HOME", str(home / "depictio-local"))
+    return home
+
+
+def _local_refusal(data_root: str, *, request=None, user=None):
+    with pytest.raises(CodedHTTPException) as exc:
+        _call(
+            data_root=data_root,
+            dry_run=True,
+            request=_request() if request is None else request,
+            user=user or _user(is_admin=True),
+        )
+    return exc.value
+
+
+def test_a_local_folder_is_a_data_root_when_local_folders_are_on(mock_db, local_home):
+    report = _call(
+        data_root=str(local_home / "run42"),
+        dry_run=True,
+        request=_request(),
+        user=_user(is_admin=True),
+    )
+    assert report.success is True
+    assert report.data_root == os.path.realpath(local_home / "run42")
+    rows = _rows(report)
+    # A local root keeps the recursive multiqc scan, which a prefix turns into s3_prefix.
+    assert (rows["multiqc_data"].mode, rows["multiqc_data"].status) == ("recursive", "ok")
+    assert rows["samplesheet"].location.startswith(os.path.realpath(local_home / "run42"))
+    assert mock_db["projects"].count_documents({}) == 0
+
+
+def test_a_tilde_path_is_the_servers_home(mock_db, local_home, monkeypatch):
+    monkeypatch.setenv("HOME", str(local_home))
+    report = _call(data_root="~/run42", dry_run=True, request=_request(), user=_user(is_admin=True))
+    assert report.data_root == os.path.realpath(local_home / "run42")
+
+
+def test_a_local_folder_is_refused_when_local_folders_are_off(tmp_path):
+    write_tree(tmp_path / "run42", MEGATEST_TREE)
+    refused = _local_refusal(str(tmp_path / "run42"))
+    assert (refused.status_code, refused.code) == (422, "local_folders_off")
+    assert "s3://" in refused.detail
+
+
+def test_with_local_folders_on_another_scheme_names_both_kinds(local_home):
+    refused = _local_refusal("https://example.org/run1")
+    assert (refused.status_code, refused.code) == (422, "data_root_unsupported")
+    assert refused.detail == from_run.DATA_ROOT_RULE_LOCAL
+
+
+@pytest.mark.parametrize("host", ["evil.example:8058", "depictio-backend:8058", None])
+def test_a_local_folder_needs_a_loopback_host(local_home, host):
+    request = _request(host) if host else _request(None)
+    refused = _local_refusal(str(local_home / "run42"), request=request)
+    assert (refused.status_code, refused.code) == (403, "non_loopback_host")
+
+
+def test_a_local_folder_with_no_request_at_all_is_refused(local_home):
+    with pytest.raises(CodedHTTPException) as exc:
+        _call(data_root=str(local_home / "run42"), dry_run=True, user=_user(is_admin=True))
+    assert exc.value.code == "non_loopback_host"
+
+
+def test_a_local_folder_needs_an_administrator(local_home):
+    refused = _local_refusal(str(local_home / "run42"), user=_user(is_admin=False))
+    assert (refused.status_code, refused.code) == (403, "local_admin_only")
+
+
+@pytest.mark.parametrize(
+    ("rel", "code"),
+    [
+        ("escape", "local_path_outside"),
+        ("run42/../../outside", "local_path_outside"),
+        (".hidden-runs/run1", "local_path_hidden"),
+        ("depictio-local", "local_path_denied"),
+        ("nope", "local_path_missing"),
+        ("run42/input/samplesheet.csv", "local_path_not_a_folder"),
+    ],
+)
+def test_a_local_folder_the_policy_refuses_is_a_422_naming_only_the_typed_path(
+    local_home, rel, code
+):
+    typed = f"{local_home}/{rel}"
+    refused = _local_refusal(typed)
+    assert (refused.status_code, refused.code) == (422, code)
+    assert typed in refused.detail
+    assert str(local_home.parent / "outside") not in refused.detail.replace(typed, "")
+
+
+def test_a_relative_path_is_not_a_local_folder(local_home):
+    refused = _local_refusal("run42")
+    assert refused.code == "data_root_unsupported"
+
+
+def test_an_oversized_folder_is_refused_before_resolution(local_home, monkeypatch):
+    monkeypatch.setattr(from_run, "MAX_LOCAL_RUN_FILES", len(MEGATEST_TREE) - 1)
+    with patch("depictio.cli.cli.utils.templates.resolve_template") as resolve:
+        refused = _local_refusal(str(local_home / "run42"))
+    assert (refused.status_code, refused.code) == (422, "local_run_too_large")
+    resolve.assert_not_called()
+
+
+def test_a_folder_at_the_cap_is_not_oversized(local_home, monkeypatch, mock_db):
+    monkeypatch.setattr(from_run, "MAX_LOCAL_RUN_FILES", len(MEGATEST_TREE))
+    report = _call(
+        data_root=str(local_home / "run42"),
+        dry_run=True,
+        request=_request(),
+        user=_user(is_admin=True),
+    )
+    assert report.success is True
+
+
+def test_the_file_count_does_not_follow_links(tmp_path):
+    (tmp_path / "run").mkdir()
+    (tmp_path / "run" / "one.csv").write_text("x")
+    big = tmp_path / "big"
+    big.mkdir()
+    for index in range(5):
+        (big / f"{index}.csv").write_text("x")
+    (tmp_path / "run" / "linked").symlink_to(big)
+    assert from_run._holds_more_files_than(str(tmp_path / "run"), 1) is False
+    assert from_run._holds_more_files_than(str(big), 4) is True
+
+
+def test_a_real_local_run_makes_the_recursive_scan_its_own_leader(mock_db, local_home):
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    user = _user(is_admin=True)
+    with (
+        _imported_dashboard(),
+        patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
+        patch("depictio.api.v1.celery_tasks.manifest_refresh_dc_task") as task,
+    ):
+        report = _call(
+            data_root=str(local_home / "run42"),
+            project_name="local42",
+            request=_request(),
+            user=user,
+        )
+    assert report.success is True
+    payloads = {p["dc_tag"]: p for p in _dispatched_payloads(task)}
+    stored = mock_db["projects"].find_one({"_id": ObjectId(report.project_id)})
+    recursive = [
+        str(dc["_id"])
+        for wf in stored["workflows"]
+        for dc in wf["data_collections"]
+        if ((dc.get("config") or {}).get("scan") or {}).get("mode") == "recursive"
+    ]
+    assert recursive  # multiqc_data at least
+    leaders = [p for p in payloads.values() if p.get("scan_dc_ids")]
+    assert len(leaders) == 1
+    assert sorted(leaders[0]["scan_dc_ids"]) == sorted(
+        p["dc_id"] for p in payloads.values() if p["dc_id"] in recursive
+    )
+    run_doc = mock_db["ingestion_runs"].find_one({"run_id": report.run_id})
+    assert run_doc["data_root"] == os.path.realpath(local_home / "run42")
+
+
+# ── template detection ───────────────────────────────────────────────────────
+
+
+def _detects(monkeypatch, template_id, info=None):
+    from depictio.cli.cli.utils import run_detection
+
+    seen = []
+
+    def _detect(root):
+        seen.append(root)
+        return template_id, info
+
+    monkeypatch.setattr(run_detection, "detect_template_for_root", _detect)
+    return seen
+
+
+def _ampliseq_info():
+    from depictio.models.models.run_info import WorkflowRunInfo
+
+    return WorkflowRunInfo(
+        engine="nextflow", pipeline_name="nf-core/ampliseq", pipeline_version="2.16.0"
+    )
+
+
+def test_the_template_is_detected_when_none_is_given(mock_db, megatest_s3, monkeypatch):
+    megatest_s3()
+    seen = _detects(monkeypatch, TEMPLATE_ID, _ampliseq_info())
+    report = _call(template_id=None, dry_run=True)
+
+    assert report.template_id == TEMPLATE_ID
+    assert report.detected_template is not None
+    assert report.detected_template.model_dump() == {
+        "template_id": TEMPLATE_ID,
+        "pipeline": "nf-core/ampliseq",
+        "version": "2.16.0",
+        "engine": "nextflow",
+    }
+    # Detection reads the very root the preview reads: one listing.
+    assert len(seen) == 1 and seen[0].location == S3_ROOT
+
+
+def test_a_given_template_skips_detection(mock_db, megatest_s3, monkeypatch):
+    megatest_s3()
+    seen = _detects(monkeypatch, "nf-core/other/1")
+    report = _call(dry_run=True)
+    assert seen == []
+    assert report.detected_template is None
+
+
+def test_detection_on_a_local_folder(mock_db, local_home, monkeypatch):
+    seen = _detects(monkeypatch, TEMPLATE_ID, _ampliseq_info())
+    report = _call(
+        data_root=str(local_home / "run42"),
+        template_id=None,
+        dry_run=True,
+        request=_request(),
+        user=_user(is_admin=True),
+    )
+    assert report.detected_template.template_id == TEMPLATE_ID
+    assert seen[0].location == os.path.realpath(local_home / "run42")
+
+
+def test_an_unrecognised_folder_is_template_not_detected(megatest_s3, monkeypatch):
+    megatest_s3()
+    _detects(monkeypatch, None)
+    with pytest.raises(CodedHTTPException) as exc:
+        _call(template_id=None, dry_run=True)
+    assert (exc.value.status_code, exc.value.code) == (422, "template_not_detected")
+    assert "not recognised" in exc.value.detail
+
+
+def test_a_recognised_pipeline_with_no_template_says_which(megatest_s3, monkeypatch):
+    from depictio.models.models.run_info import WorkflowRunInfo
+
+    megatest_s3()
+    _detects(
+        monkeypatch,
+        None,
+        WorkflowRunInfo(engine="nextflow", pipeline_name="nf-core/sarek", pipeline_version="3.5.1"),
+    )
+    with pytest.raises(CodedHTTPException) as exc:
+        _call(template_id=None, dry_run=True)
+    assert exc.value.code == "template_not_detected"
+    assert "nf-core/sarek 3.5.1" in exc.value.detail
+
+
+def test_a_failed_read_during_detection_is_not_detected(megatest_s3, monkeypatch):
+    from depictio.cli.cli.utils import run_detection
+
+    megatest_s3()
+
+    def _broken(_root):
+        raise OSError("disk went away")
+
+    monkeypatch.setattr(run_detection, "detect_template_for_root", _broken)
+    with pytest.raises(CodedHTTPException) as exc:
+        _call(template_id=None, dry_run=True)
+    assert exc.value.code == "template_not_detected"
+    assert "disk went away" not in exc.value.detail
+
+
+def test_an_s3_failure_during_detection_keeps_its_code(megatest_s3, monkeypatch):
+    from depictio.cli.cli.utils import run_detection
+
+    megatest_s3()
+
+    def _denied(_root):
+        raise S3AccessFailed("denied", code="s3_access_denied", status_code=422)
+
+    monkeypatch.setattr(run_detection, "detect_template_for_root", _denied)
+    with pytest.raises(S3AccessFailed) as exc:
+        _call(template_id=None, dry_run=True)
+    assert exc.value.code == "s3_access_denied"
+
+
+def test_the_request_may_leave_the_template_out():
+    assert from_run.FromRunRequest(data_root=S3_ROOT).template_id is None
+    assert from_run.FromRunRequest(data_root=S3_ROOT, template_id=None).template_id is None
+
+
+@pytest.mark.asyncio
+async def test_the_route_answers_template_not_detected_with_detail_and_code(
+    megatest_s3, monkeypatch
+):
+    import json
+
+    megatest_s3()
+    _detects(monkeypatch, None)
+    payload = from_run.FromRunRequest(data_root=S3_ROOT, dry_run=True)
+    response = await routes.create_project_from_run(payload, _request(), current_user=_user())
+    assert response.status_code == 422
+    assert json.loads(response.body) == {
+        "detail": "The pipeline that produced this folder was not recognised. Pick a "
+        "template to continue.",
+        "code": "template_not_detected",
+    }
+
+
+@pytest.mark.asyncio
+async def test_the_route_passes_the_request_on(local_home):
+    payload = from_run.FromRunRequest(data_root=str(local_home / "run42"), dry_run=True)
+    response = await routes.create_project_from_run(
+        payload, _request("evil.example"), current_user=_user(is_admin=True)
+    )
+    assert response.status_code == 403
+    assert response.body and b"non_loopback_host" in response.body

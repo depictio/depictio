@@ -195,6 +195,15 @@ if not _cors_origins:
         "Set DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS to allow specific origins."
     )
 
+# Local folders are a single-user feature: on a shared server, reading the
+# server's own disk for whoever asks is never right, so the roots are ignored.
+if settings.local_data.root_list and not settings.auth.is_single_user_mode:
+    _logger.warning(
+        "DEPICTIO_LOCAL_DATA_ROOTS is set but single-user mode is off, so local folders "
+        "stay disabled. Set DEPICTIO_AUTH_SINGLE_USER_MODE=true (as `depictio local` "
+        "does) or unset DEPICTIO_LOCAL_DATA_ROOTS."
+    )
+
 # Add analytics middleware if enabled
 if settings.analytics.enabled:
     app.add_middleware(cast(Any, AnalyticsMiddleware), enabled=settings.analytics.enabled)

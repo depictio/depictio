@@ -30,8 +30,10 @@ from pathlib import Path
 from typing import Protocol
 
 from depictio.api.v1 import remote_fetch
+from depictio.api.v1.configs.settings_models import local_data_policy
 from depictio.cli.cli.utils.scan_utils import regex_match
 from depictio.cli.cli_logging import logger
+from depictio.models.local_access import LocalPathRefused
 from depictio.models.s3_access import (
     S3AccessFailed,
     S3Target,
@@ -300,8 +302,22 @@ class DataRoot(Protocol):
 # ── local ────────────────────────────────────────────────────────────────────
 
 
+def _readable(policy, path: Path) -> bool:
+    """Whether ``path`` may be read under ``policy``; everything may without one."""
+    return policy is None or policy.allows_read(str(path))
+
+
 class LocalDataRoot:
-    """A data root that is a directory on disk. A thin ``pathlib`` wrapper."""
+    """A data root that is a directory on disk. A thin ``pathlib`` wrapper.
+
+    On a server reading its own disk (``depictio local``, see
+    ``settings_models.local_data_policy``) every answer is confined: an entry
+    whose real path leaves the allowed folders (a symlink, a ``..`` in a
+    recipe's glob, a hidden or Depictio-owned folder) does not exist, is not
+    listed and is not read. Recipes reach files only through these methods,
+    so this is what keeps them in. Without that policy (the CLI, a shared
+    server) nothing changes.
+    """
 
     is_remote = False
     # A directory is read as it is at the moment of the question, so a local
@@ -321,16 +337,23 @@ class LocalDataRoot:
         return self._root / rel if rel else self._root
 
     def exists(self, rel: str) -> bool:
-        return self._child(rel).exists()
+        path = self._child(rel)
+        return path.exists() and _readable(local_data_policy(), path)
 
     def glob(self, pattern: str) -> list[str]:
-        return sorted(path.relative_to(self._root).as_posix() for path in self._root.glob(pattern))
+        policy = local_data_policy()
+        return sorted(
+            path.relative_to(self._root).as_posix()
+            for path in self._root.glob(pattern)
+            if _readable(policy, path)
+        )
 
     def match(self, regex: str, within: str = "") -> list[str]:
+        policy = local_data_policy()
         base = self._child(within)
         matched: list[str] = []
         for path in base.rglob("*"):
-            if not path.is_file():
+            if not path.is_file() or not _readable(policy, path):
                 continue
             # Basename first, then - only when the pattern spells a path - the
             # path relative to ``within``. Same two-shot rule as the local
@@ -345,10 +368,11 @@ class LocalDataRoot:
     def runs(self, runs_regex: str) -> list[str]:
         if not self._root.is_dir():
             return []
+        policy = local_data_policy()
         return sorted(
             path.name
             for path in self._root.iterdir()
-            if path.is_dir() and re.match(runs_regex, path.name)
+            if path.is_dir() and re.match(runs_regex, path.name) and _readable(policy, path)
         )
 
     def scoped(self, sub: str) -> LocalDataRoot:
@@ -379,6 +403,10 @@ class LocalDataRoot:
         path = self._child(rel)
         if not path.is_file():
             raise FileNotFoundError(f"No such file under the data root: {path}")
+        if not _readable(local_data_policy(), path):
+            raise LocalPathRefused(
+                f"'{path}' is outside the folders this server may read.", "local_path_outside"
+            )
         return path.read_bytes()
 
     def size(self, rel: str) -> int | None:

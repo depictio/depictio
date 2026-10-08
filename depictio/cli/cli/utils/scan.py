@@ -11,6 +11,7 @@ from bson import ObjectId
 from rich.markup import escape
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
+from depictio.api.v1.configs.settings_models import local_data_policy
 from depictio.api.v1.remote_fetch import (
     RemoteFetchFailed,
     direct_fetch_text,
@@ -245,6 +246,15 @@ def scan_single_file(
         if not match:
             # logger.debug(f"File {file_name} does not match regex, skipping.")
             return None
+
+    # On a server reading its own disk (``depictio local``), a match whose real
+    # path leaves the allowed folders (a symlink out of the run folder, into a
+    # hidden or a Depictio-owned folder) is not data: it is skipped like a file
+    # the regex does not match. Off everywhere else.
+    policy = local_data_policy()
+    if policy is not None and not policy.allows_read(file_location):
+        logger.warning(f"Skipped {file_location}: outside the folders this server may read.")
+        return None
 
     # Get file details. Kept after the regex check so a non-matching file still
     # costs nothing on the legacy (non-``scanned``) path.
