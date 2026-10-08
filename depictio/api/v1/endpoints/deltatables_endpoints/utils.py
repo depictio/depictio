@@ -1,7 +1,9 @@
 import collections
 import functools
+import hashlib
 import os
 from collections.abc import Callable
+from datetime import datetime
 
 import polars as pl
 from botocore.exceptions import ClientError
@@ -16,6 +18,78 @@ from depictio.api.v1.utils import numpy_to_python
 # Cap on how many distinct categorical values we sample into ``specs`` for the
 # card-builder preview. Kept small so specs stay compact in Mongo.
 _UNIQUE_VALUES_PREVIEW_CAP = 20
+
+
+def delta_identity_hash(delta_table_location: str, storage_options: dict) -> str:
+    """Hash the identity of a Delta table from its log, without reading data.
+
+    This replaces a ``df.hash_rows()`` over the fully materialised frame, which
+    on a ~14M-row data collection cost a full read plus a numpy round-trip and
+    contributed to OOM-killing the worker. The resulting digest is *not* a
+    content hash: it covers the table version and the active files (path, size,
+    modification time), which change whenever the data does.
+
+    One copy, shared by every path that records an aggregation (the inline
+    upsert, the offloaded one and the table-management endpoints): a second copy
+    is how they drift into hashing different things.
+    """
+    from deltalake import DeltaTable
+
+    dt = DeltaTable(delta_table_location, storage_options=storage_options)
+    parts = [str(dt.version())]
+    try:
+        actions = pl.from_arrow(dt.get_add_actions(flatten=True))
+        if not isinstance(actions, pl.DataFrame):
+            # A single-column result comes back as a Series; the fallback below
+            # handles it rather than this branch guessing at its shape.
+            raise TypeError(f"get_add_actions yielded {type(actions).__name__}, not a table")
+        wanted = [c for c in ("path", "size_bytes", "modification_time") if c in actions.columns]
+        parts += ["|".join(str(v) for v in row) for row in sorted(actions.select(wanted).rows())]
+    except Exception as e:
+        logger.warning(f"get_add_actions unavailable ({e}); hashing the file list instead.")
+        parts += sorted(dt.file_uris())
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
+def new_aggregation_hash(delta_table_location: str, identity: str = "") -> str:
+    """The ``aggregation_hash`` recorded for one write of a data collection.
+
+    ``identity`` is the table's ``delta_identity_hash``; leave it empty for a
+    collection with no Delta log to read (MultiQC is stored as raw parquet).
+    The digest is salted with the write time, so two upserts of byte-identical
+    data still get different values. Consumers only test it for inequality
+    (the realtime indicator, cache salts, comment staleness), and for
+    invalidation that bias is the safe one: a redundant recompute, never a
+    stale answer.
+    """
+    return hashlib.sha256(f"{delta_table_location}{datetime.now()}{identity}".encode()).hexdigest()
+
+
+def previous_column_types(
+    deltatable_doc: dict | None, before_version: int | None = None
+) -> dict[str, str]:
+    """Column name -> type recorded by an earlier aggregation, if any.
+
+    Feeding these back into ``precompute_columns_specs`` keeps a re-ingest from
+    silently changing the type a saved dashboard component was built against.
+
+    ``before_version`` exists for the offloaded path, which runs *after* its own
+    (specless) aggregation entry has been appended: without it the newest entry
+    is the empty one this job is about to fill, so the lookup would find no types
+    and the continuity check would silently do nothing. For the same reason any
+    specless entry is passed over (a pending or failed offload, or a row edit
+    from the table-management endpoints, which records no specs).
+    """
+    aggregations = (deltatable_doc or {}).get("aggregation") or []
+    if before_version is not None:
+        aggregations = [
+            a for a in aggregations if (a.get("aggregation_version") or 0) < before_version
+        ]
+    for aggregation in reversed(aggregations):
+        specs = aggregation.get("aggregation_columns_specs") or []
+        if specs:
+            return {s["name"]: s["type"] for s in specs if s.get("name") and s.get("type")}
+    return {}
 
 
 def get_s3_folder_size(bucket_name, prefix):

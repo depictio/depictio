@@ -10,6 +10,7 @@ from fastapi import HTTPException
 from mongomock_motor import AsyncMongoMockClient
 from pymongo.asynchronous.database import AsyncDatabase
 
+from depictio.api.v1.endpoints.user_endpoints import core_functions
 from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _add_token,
     _async_fetch_user_from_email,
@@ -1213,3 +1214,72 @@ class TestGetAnonymousUserSession:
             {"user_id": user_id_pydantic, "token_lifetime": "short-lived"}
         )
         assert saved_token is not None
+
+
+class TestInvalidJwtReporting:
+    """A stuck client must not be able to flush the capped log ledger.
+
+    The rejection itself is real and stays visible; what is bounded is how many
+    times the *same* dead token gets to say so.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clean_state(self, caplog):
+        # The level has to be set on "depictio" by name, not on the root logger:
+        # that logger carries the deployment's own verbosity (ERROR by default,
+        # see LoggingConfig), so a bare caplog.at_level would leave every warning
+        # dropped at the source and the assertions below counting zero.
+        caplog.set_level("WARNING", logger="depictio")
+        core_functions._invalid_jwt_seen.clear()
+        yield
+        core_functions._invalid_jwt_seen.clear()
+
+    def test_the_first_rejection_warns(self, caplog):
+        core_functions._report_invalid_jwt("token-a", "Signature verification failed")
+
+        assert len(caplog.records) == 1
+        assert "Signature verification failed" in caplog.records[0].getMessage()
+
+    def test_a_repeating_client_warns_once(self, caplog):
+        for _ in range(89):
+            core_functions._report_invalid_jwt("token-a", "Signature verification failed")
+
+        # 89 identical warnings was the observed real-world flood.
+        assert len(caplog.records) == 1
+
+    def test_distinct_tokens_each_warn(self, caplog):
+        core_functions._report_invalid_jwt("token-a", "boom")
+        core_functions._report_invalid_jwt("token-b", "boom")
+
+        # One stuck client and two stuck clients are different situations.
+        assert len(caplog.records) == 2
+
+    def test_the_next_window_reports_what_was_suppressed(self, caplog, monkeypatch):
+        clock = {"t": 1000.0}
+        monkeypatch.setattr(core_functions.time, "monotonic", lambda: clock["t"])
+
+        for _ in range(5):
+            core_functions._report_invalid_jwt("token-a", "boom")
+        clock["t"] += core_functions._INVALID_JWT_WINDOW_SECONDS + 1
+        caplog.clear()
+
+        core_functions._report_invalid_jwt("token-a", "boom")
+
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert len(warnings) == 1
+        # The count is the whole point: silence would hide an ongoing loop.
+        assert "and 4 more" in warnings[0].getMessage()
+
+    def test_tracking_is_bounded(self):
+        for index in range(core_functions._INVALID_JWT_TRACKED_MAX + 50):
+            core_functions._report_invalid_jwt(f"token-{index}", "boom")
+
+        # Otherwise rotating garbage tokens is an unauthenticated memory leak.
+        assert len(core_functions._invalid_jwt_seen) <= core_functions._INVALID_JWT_TRACKED_MAX
+
+    def test_the_token_never_reaches_the_log(self, caplog):
+        secret = "eyJhbGciOiJSUzI1NiJ9.super-secret-token-body.signature"
+        core_functions._report_invalid_jwt(secret, "Signature verification failed")
+
+        assert secret not in caplog.text
+        assert core_functions._token_fingerprint(secret) in caplog.text

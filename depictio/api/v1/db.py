@@ -71,4 +71,6 @@ instance_settings_collection = db[settings.mongodb.collections.instance_settings
 branding_assets_collection = db[settings.mongodb.collections.branding_assets_collection]
 telemetry_collection = db[settings.mongodb.collections.telemetry_collection]
 comment_threads_collection = db[settings.mongodb.collections.comment_threads_collection]
+cli_agents_collection = db[settings.mongodb.collections.cli_agents_collection]
+jobs_collection = db[settings.mongodb.collections.jobs_collection]
 test_collection = db[settings.mongodb.collections.test_collection]

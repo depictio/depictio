@@ -665,9 +665,10 @@ def _get_aggregation_hash(data_collection_id_str: str) -> str | None:
 
     Preferred over ``_get_aggregation_version`` as a cache-key salt: the version
     is a counter the upsert increments, whereas the hash is derived from the
-    Delta log itself (table version + active files, see ``_delta_identity_hash``)
-    and therefore describes the *state of the data* rather than how many times
-    it has been written.
+    Delta log itself (table version + active files, see ``delta_identity_hash``
+    and ``new_aggregation_hash`` in ``deltatables_endpoints/utils.py``) and
+    therefore describes the *state of the data* rather than how many times it
+    has been written.
 
     Note it is additionally salted with the write timestamp, so it is not a
     content-identity hash: two upserts of byte-identical data produce different

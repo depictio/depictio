@@ -882,11 +882,16 @@ def preview_deltatable(payload: dict) -> dict:
 
     Input shape:
         {"delta_table_location": str, "limit": int,
-         "filter_metadata": [...]}    # optional, cleaned InteractiveFilter list
+         "filter_metadata": [...],    # optional, cleaned InteractiveFilter list
+         "version": int | None}       # optional, a historical Delta commit
 
     With ``filter_metadata``, both the returned rows and ``total_rows`` are
     computed on the filtered frame, so the builder's "Showing X of N rows"
     reflects the dashboard's active filters.
+
+    ``version`` reads a historical Delta commit. The result is returned straight
+    to the caller and never cached, so a historical read cannot later be served
+    as if it were current data.
     """
     import polars as pl
 
@@ -897,18 +902,27 @@ def preview_deltatable(payload: dict) -> dict:
     delta_loc = payload["delta_table_location"]
     limit = max(1, min(int(payload.get("limit", 100)), 1000))
     filter_metadata = payload.get("filter_metadata") or []
+    raw_version = payload.get("version")
+    version = int(raw_version) if raw_version is not None else None
 
     started = time.monotonic()
+    # `version=None` is polars' own default: the latest commit.
     scan = apply_filters_to_scan(
-        pl.scan_delta(delta_loc, storage_options=polars_s3_config), filter_metadata
+        pl.scan_delta(delta_loc, storage_options=polars_s3_config, version=version),
+        filter_metadata,
     )
     df = scan.head(limit).collect()
-    total_rows, total_cols = scan.collect().shape
+    # Count on the same filtered scan, at the same version as the rows: reading
+    # the current table here would report a total that disagrees with what is
+    # being displayed. select(pl.len()) never materialises the frame.
+    total_rows = int(scan.select(pl.len()).collect().item())
+    total_cols = len(df.columns)
     rows = sanitize_for_json(df.to_dicts())
     elapsed_ms = int((time.monotonic() - started) * 1000)
     logger.info(
         f"celery_tasks.preview_deltatable rows={limit}/{total_rows} cols={total_cols} "
-        f"filters={len(filter_metadata)} elapsed_ms={elapsed_ms}"
+        f"filters={len(filter_metadata)} "
+        f"version={'current' if version is None else version} elapsed_ms={elapsed_ms}"
     )
 
     return {
@@ -917,6 +931,7 @@ def preview_deltatable(payload: dict) -> dict:
         "total_rows": total_rows,
         "total_columns": total_cols,
         "filter_applied": bool(filter_metadata),
+        "version": version,
     }
 
 

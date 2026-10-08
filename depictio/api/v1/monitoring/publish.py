@@ -28,7 +28,14 @@ _CHANNEL = f"depictio:events:dashboard:{ADMIN_MONITORING_CHANNEL}"
 _redis_client: Any = None
 
 
-def _get_redis() -> Any:
+def get_sync_redis() -> Any:
+    """Shared lazily-created sync Redis client.
+
+    Public because the rate limiter and the DC event publisher need the same
+    connection from the same sync contexts (Celery workers, request handlers
+    outside the loop); a second client per caller would multiply connections
+    for no benefit.
+    """
     global _redis_client
     if _redis_client is None:
         import redis  # sync client (redis-py); already a transitive dep of celery
@@ -52,7 +59,7 @@ def publish_monitoring_event(event_type: str, payload: dict[str, Any]) -> None:
             "dashboard_id": ADMIN_MONITORING_CHANNEL,
             "payload": payload,
         }
-        _get_redis().publish(_CHANNEL, json.dumps(message))
+        get_sync_redis().publish(_CHANNEL, json.dumps(message))
     except Exception as exc:  # pragma: no cover - defensive
         logger.debug(f"monitoring: live publish failed (non-fatal): {exc}")
 
@@ -64,8 +71,32 @@ def publish_task_event(task_id: str, task_name: str, kind: str, status: str) -> 
     )
 
 
-def publish_ingestion_event(run_id: str, status: str, instance: str | None) -> None:
-    publish_monitoring_event(
-        "ingestion_event",
-        {"run_id": run_id, "status": status, "instance": instance},
-    )
+def publish_ingestion_event(
+    run_id: str,
+    status: str,
+    instance: str | None,
+    *,
+    current_step: str | None = None,
+    step: dict[str, Any] | None = None,
+    progress: dict[str, Any] | None = None,
+    counters: dict[str, int] | None = None,
+) -> None:
+    """Announce an ingestion-run change, carrying the delta rather than a ping.
+
+    The payload includes the changed step so the client can patch its copy in
+    place. A bare notification would force a refetch of the whole run list on
+    every push — tolerable at two pushes per run (start, finish), but live step
+    reporting emits one per step and a watcher produces them continuously.
+
+    Kept small (< 1 KB): only the step that changed, never the whole run.
+    """
+    payload: dict[str, Any] = {"run_id": run_id, "status": status, "instance": instance}
+    if current_step is not None:
+        payload["current_step"] = current_step
+    if step is not None:
+        payload["step"] = step
+    if progress is not None:
+        payload["progress"] = progress
+    if counters is not None:
+        payload["counters"] = counters
+    publish_monitoring_event("ingestion_event", payload)
