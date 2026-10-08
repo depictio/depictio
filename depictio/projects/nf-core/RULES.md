@@ -193,6 +193,12 @@ A KPI strip is four different readings, not four numbers in one style:
   with `box_plot` or `histogram`.
 - A secondary with one value says nothing: one bar, one segment at 100%, a ring of one. Split
   by a column that has several values on every run, not only on the one you test with.
+- Neither does a breakdown whose shares are equal by design: callsets by caller (one per
+  caller and sample) always split evenly. Break down a measure instead (calls or true
+  positives by caller).
+- A median that every run pins to a floor or a centre says nothing either: the median clone
+  holds 1 sequence, a dispersion centred per bin has median 0. Count the rows past a
+  cut-off, or show the maximum.
 - A median over both directions of a fold change cancels to about 0. Restrict the card to one
   direction ("usage gain") or count calls by direction.
 - Key figures read collections that every route writes. A card on an optional collection
@@ -285,6 +291,8 @@ A KPI strip is four different readings, not four numbers in one style:
 - `genome_view` and `coverage_track` draw one tick per contig. On a draft assembly with
   hundreds of contigs, show the regions grouped by contig instead.
 - Count axes in code figures take `dtick=1`, so they print no 0.5 ticks.
+- A single-panel code figure keeps the tile's narrow margins, so long category labels are
+  cut: call `fig.update_yaxes(automargin=True)` (or `update_xaxes`) on it.
 - A sankey whose flows all leave one node draws them in one colour by source: set
   `color_mode: target`.
 - A heatmap draws every numeric column it is given. Name its `value_columns`, or a count
@@ -354,6 +362,10 @@ step). Text, highlights and links bind no data of their own, so:
 - unprunable text (hero, steps, how to read) names no `{VARIABLE}`: an unresolved one would
   print its braces;
 - `values` lines are pruned one by one, with their data collection.
+- a step that leads to a route's tab cites a value from that route's collection
+  (`{{n_callsets}} callsets scored by hap.py`): the import prunes the line with its data, so a
+  run shows only the routes it took. A `tab:` link alone stays and prints a bare label once its
+  tab is pruned.
 
 ## 14. Prose
 
