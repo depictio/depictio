@@ -60,8 +60,8 @@ collapsed.
 
 **MultiQC.** MultiQC panels only, and the only home of the read QC: fastp writes JSON and
 NanoPlot free text, neither of which a table collection can read. Open: general statistics,
-fastp reads kept and base quality, Bowtie 2 host and phiX removal, NanoStat long-read yield.
-Collapsed: long reads by quality and short-read insert sizes, then the QUAST, CheckM2 and
+fastp reads kept and base quality side by side, then Bowtie 2 host and phiX removal and
+NanoStat long-read yield at full width, one bar per library. Collapsed: long reads by quality and short-read insert sizes, then the QUAST, CheckM2 and
 GTDB-Tk panels that the next tabs draw in full. When a run publishes no `multiqc/`
 directory, the report is re-generated with `depictio.dev_scripts.multiqc_reprocess` from
 the run's raw outputs. Filter: the sample as the report names it.
@@ -79,10 +79,11 @@ and the assemblies the Nx curve draws.
 
 **Contigs.** Every contig of at least 1 kbp, once per sample whose reads were mapped back
 onto its assembly. Strip: the median depth of a contig in a sample (box plot), the median
-mean depth (its distribution), distinct contigs (the largest assemblers first) and the
-median contig length. Then length against depth, the plot a binner reads (a server-side
+mean depth (its distribution), the contig and sample pairs (by assembler; contig names
+repeat across assemblies, so the rows are counted rather than the names) and the median
+contig length. Then length against depth, the plot a binner reads (a server-side
 hash sample, one colour per sample), the depth of each assembly in each sample's reads as
-boxes, and the recruitment heatmap: one row per assembly, one column per sample mapped
+boxes on a linear axis (zero depths have no log, and the whiskers stop at 1.5 IQR), and the recruitment heatmap: one row per assembly, one column per sample mapped
 back, coloured by the log of the length-weighted mean depth, full width because sample ids
 label its columns. It stands in for the bin by sample depth heatmap, whose input
 (`GenomeBinning/depths/bins/`) is not always published. Filters: the sample whose reads
@@ -102,8 +103,8 @@ Filters: completeness, contamination and the quality band.
 phyla) and the median identity to the closest reference (against the 95% species
 boundary). Then the lineage sunburst beside identity against alignment fraction (no
 legend: colour is the phylum, keyed by the sunburst), the community each binning run
-recovered (phylum by default, the eight largest and Other, a binner strip on top, the rank
-in the tile's settings) and the Sankey of assembler to binner to phylum, weighted by bins.
+recovered (phylum by default, the eight largest and Other, one bar per assembler, binner
+and sample named on the axis, the rank in the tile's settings) and the Sankey of assembler to binner to phylum, weighted by bins.
 Collapsed: the taxonomy table. Filters: phylum and placement method.
 
 **Annotation.** Prokka's per-bin feature counts. Strip: coding sequences (by assembler),
@@ -115,7 +116,8 @@ the half of the MIMAG standard a completeness estimate cannot see. Collapsed: th
 annotation table. Filters: gene density and the two RNA counts.
 
 **Bin detail.** Strip: bins by MIMAG tier (a ring), tools per bin (its distribution), the
-best quality score (by assembler) and Prokka features (a ring by class). Then the locus map
+best quality score (by assembler) and the features Prokka gave a gene symbol, out of all
+it annotated. Then the locus map
 of the bin picked in the left panel or in the bin table, and feature lengths by class. The
 collapsed `Bin table` holds the four-way outer join of CheckM2, QUAST, GTDB-Tk and Prokka
 (one row per bin; `sources_present` counts the tools that reported on it) with the record

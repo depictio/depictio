@@ -373,6 +373,7 @@ main_dashboard:
     section: Findings
     source_tab: Assembly
     source_component: asm-size-contiguity
+    title: Assembly size and N50
     hide_legend: true
     caption: One point per assembly, coloured by assembler; up and to the right is a long assembly in long pieces.
     tag: mg-ov-hl-assembly
@@ -569,7 +570,7 @@ tabs:
     section: QC overview
     tag: mg-mqc-bowtie2
     title: Host and phiX removal
-    layout: {x: 0, y: 8, w: 4, h: 4}
+    layout: {x: 0, y: 8, w: 8, h: 4}
   - component_type: multiqc
     workflow_tag: mag
     data_collection_tag: multiqc_data
@@ -579,7 +580,7 @@ tabs:
     section: QC overview
     tag: mg-mqc-nanostat-summary
     title: Long-read yield
-    layout: {x: 4, y: 8, w: 4, h: 4}
+    layout: {x: 0, y: 12, w: 8, h: 4}
   - component_type: multiqc
     workflow_tag: mag
     data_collection_tag: multiqc_data
@@ -1001,7 +1002,7 @@ tabs:
     workflow_tag: mag
     data_collection_tag: contig_depths
     use: mag/contig_depths
-    aggregation: nunique
+    aggregation: count
     column_name: contig_id
     column_type: object
     secondary_layout: top_n
@@ -1009,12 +1010,12 @@ tabs:
     display:
       icon_name: mdi:dna
       icon_color: indigo
-      caption: distinct contigs, the largest assemblers first
+      caption: one per contig and sample mapped back, by assembler
     section: Coverage at a glance
     tag: mg-ctg-card-contigs
     index: ctg-card-contigs
-    title: Contigs
-    description: Distinct contigs of at least 1 kbp in the assemblies in view.
+    title: Contig-sample pairs
+    description: Every depth row, a contig of at least 1 kbp in one sample's reads. Contig names repeat across assemblies, so the rows are counted, not the names.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: mag
@@ -1069,13 +1070,12 @@ tabs:
       x: assembly_id
       y: depth
       color: read_sample
-      log_y: true
       labels: {assembly_id: Assembly, depth: Depth in the sample's reads, read_sample: Reads from}
     section: Depth by sample
     tag: mg-ctg-depth-box
     index: ctg-depth-box
     title: Contig depth by assembly and sample
-    description: A sample whose box sits low on an assembly contributed little to it.
+    description: A sample whose box sits low on an assembly contributed little to it. Whiskers stop at 1.5 IQR.
     layout: {x: 0, y: 0, w: 8, h: 4}
   # Assemblies against samples: sample ids label the columns, so the heatmap
   # takes the full width.
@@ -1556,10 +1556,6 @@ tabs:
       normalise_to_one: true
       sample_sort: input
       show_legend: true
-      annotation_strips:
-      - column: binner
-        label: Binner
-        position: top
     section: Community per binning run
     tag: mg-tax-stacked
     index: tax-recovered-community
@@ -1979,19 +1975,18 @@ tabs:
     data_collection_tag: prokka_gene_track
     use: prokka/gene_track
     aggregation: count
-    column_name: feature_id
+    column_name: gene
     column_type: object
-    secondary_layout: donut
-    breakdown_col: ftype
+    secondary_layout: completeness
     display:
       icon_name: mdi:shape-outline
       icon_color: cyan
-      caption: annotated features, by class
+      caption: features Prokka gave a gene symbol
     section: Bin detail at a glance
     tag: mg-det-card-features
     index: det-card-features
-    title: Features
-    description: Features Prokka annotated on the bins in view, split by class.
+    title: Named genes
+    description: Features with a gene symbol, out of every feature Prokka annotated on the bins in view.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: mag

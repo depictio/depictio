@@ -81,10 +81,12 @@ published coverage to within 0.05. Nonpareil runs on the short reads only.
 
 **Profiles.** Strip: distinct species named (by classifier), the median reads per taxon call
 (with its spread), the median unclassified share of a run (its distribution, for the
-classifiers that report one) and the largest share one taxon holds (by classifier). Then
-the composition: one bar per profiling run, so a bar never mixes two naming vocabularies,
-genus by default, the eight largest taxa and Other, a classifier strip on top and the rank in
-the tile's settings. Then the Krona rings, one wedge per classifier with its domains, phyla
+classifiers that report one) and the largest share one named taxon holds (by classifier,
+unclassified reads left out). Then the composition: one bar per profiling run, so a bar
+never mixes two naming vocabularies, species by default, the eight largest taxa and Other,
+the classifier named on the axis and the rank in the tile's settings. Species, not genus:
+kraken-style classifiers report direct counts, so their genus rows hold only the reads that
+stopped at a genus, and classifiers that report species only have no genus rows. Then the Krona rings, one wedge per classifier with its domains, phyla
 and classes fanning out, and sylph's containment composition (the same eight and Other).
 Collapsed: melon's genome copies (a sunburst, the copies per species and the table, pooled
 over the long-read samples) and the profile tables (the long cross-classifier table, its
@@ -96,7 +98,8 @@ classifiers that profiled it, and the spread between them is classifier disagree
 the median Shannon diversity (with its spread), taxa observed (the richest classifiers
 first), evenness (its distribution) and the top-taxon share (with its spread). Then richness
 against diversity (one point per run, colour the classifier, symbol the platform), the dot
-plot of each run's diversity and top-taxon share, and the rank-abundance accumulation: a
+plot of each run's diversity and top-taxon share, and the rank-abundance accumulation over
+the classified part of each profile (the unclassified row left out, the rest renormalised): a
 curve that reaches one after a handful of taxa is a profile carried by a few organisms.
 Collapsed: the per-run table. Filters: classifier, richness and evenness ranges.
 
@@ -104,7 +107,8 @@ Collapsed: the per-run table. Filters: classifier, richness and evenness ranges.
 (its distribution), detected taxa (by rank) and the phyla in the flow (by classifier). Then
 the Bray-Curtis PCoA of every profiling run (axes PCo1 and PCo2, a lasso selects runs and
 narrows the flow), the UpSet of the taxa each set of classifiers found, and the taxonomic flow
-from the root to the genus, the unclassified reads as a band of their own. Collapsed: the
+from the root to the phylum (the depth picker goes down to species), the unclassified reads as
+a band of their own. Collapsed: the
 taxon by run heatmap. Filters: classifier, platform, classifiers per taxon, domain and the
 flow classifier.
 
@@ -138,7 +142,7 @@ The import re-packs the Overview grid after a drop, so a lone highlight takes th
 
 `category_colors` is declared once, on the Overview, and read by every tab. The classifiers
 are pinned, so a run with another subset keeps its colours; the platforms and the domains
-(`unclassified` and `unresolved` grey) are written out. Phyla and genera are coloured
+(`unclassified` and `unresolved` grey) are written out. Phyla, genera and species are coloured
 `auto:rel_abundance`: the eight most abundant of the run take the palette, largest first,
 so both stacked compositions, the rings and the flow give a taxon the same colour, and Other
 is grey. The accumulation curve reads the classifier colours through

@@ -62,7 +62,7 @@ main_dashboard:
       Viruses: '#e8590c'
       unclassified: '#adb5bd'
       unresolved: '#868e96'
-    # The eight most abundant phyla and genera of the run take the palette,
+    # The eight most abundant phyla, genera and species take the palette,
     # largest first, so the stacked compositions, the rings and the flow agree;
     # the stacked compositions show the same eight and fold the rest into Other.
     phylum:
@@ -71,6 +71,11 @@ main_dashboard:
       unclassified: '#adb5bd'
       unresolved: '#868e96'
     genus:
+      '*': 'auto:rel_abundance'
+      Other: '#adb5bd'
+      unclassified: '#adb5bd'
+      unresolved: '#868e96'
+    species:
       '*': 'auto:rel_abundance'
       Other: '#adb5bd'
       unclassified: '#adb5bd'
@@ -346,7 +351,7 @@ main_dashboard:
       n_calls: {dc: taxpasta_presence, column: taxon, aggregation: count, format: integer}
       ani: {dc: sylph_ani, column: adjusted_ani, aggregation: median, format: 'decimals:1'}
     body: |
-      - **{{ph_share}}** of the species-level profiles is {{ph_top}} – the top phylum, classifiers pooled [Profiles](tab:Profiles)
+      - **{{ph_share}}** of the species-level abundance falls in {{ph_top}} – the top phylum, classifiers pooled [Profiles](tab:Profiles)
       - **{{shannon}}** median Shannon diversity – one value per sample and classifier [Diversity](tab:Diversity)
       - **{{n_multi}}** of {{n_calls}} taxon calls come from two classifiers or more – per sample [Concordance](tab:Concordance)
       - **{{ani}}%** median identity to the genomes sylph matched – 95% marks a species [Confidence](tab:Confidence)
@@ -360,7 +365,7 @@ main_dashboard:
     section: Findings
     source_tab: Profiles
     source_component: prof-composition
-    caption: One bar per classifier and database, the eight most abundant genera, the rest folded into Other.
+    caption: One bar per classifier and database, the eight most abundant species, the rest folded into Other.
     tag: tp-ov-hl-composition
     index: ov-hl-composition
     layout: {x: 0, y: 2, w: 5, h: 5}
@@ -833,7 +838,7 @@ tabs:
     display:
       icon_name: mdi:chart-timeline-variant
       icon_color: red
-      caption: median; 1 or less has reached 95%
+      caption: median multiple of the effort; 1 or less has reached 95%
       decimals: 1
     section: Depth at a glance
     tag: tp-depth-card-missing
@@ -1086,6 +1091,7 @@ tabs:
     aggregation: max
     column_name: rel_abundance
     column_type: float64
+    filter_expr: col('rank') != 'unclassified'
     secondary_layout: top_n
     breakdown_col: profiler
     display:
@@ -1097,30 +1103,27 @@ tabs:
     tag: tp-prof-card-dominant
     index: prof-card-dominant
     title: Largest share
-    description: The largest share one taxon holds in a run, by classifier.
+    description: The largest share one named taxon holds in a run, by classifier; unclassified reads left out.
     layout: {x: 6, y: 0, w: 2, h: 2}
-  # Genus and top 8, the eight the genus colours were given to.
+  # Species and top 8, the eight the species colours were given to. Species,
+  # not genus: kraken-style profiles hold direct counts, so their genus rows
+  # keep only the reads that stopped at a genus (one genus filled the bar), and
+  # classifiers that report species only drew no genus bar at all.
+  # The bar labels name the classifier, so no annotation strip.
   - component_type: advanced_viz
     workflow_tag: taxprofiler
     data_collection_tag: taxpasta_profiles
     use: taxpasta/stacked_taxonomy
     config:
-      default_rank: genus
+      default_rank: species
       top_n: 8
       sort_by: abundance
       normalise_to_one: true
-      # One bar per profiling run (profiler_db), so the strip carries the
-      # classifier, which is constant within a bar; the platform is not once
-      # several samples are in scope.
-      annotation_strips:
-      - column: profiler
-        label: Classifier
-        position: top
     section: Composition
     tag: tp-prof-stacked
     index: prof-composition
     title: Community composition per profiling run
-    description: Each run's assigned reads, the eight largest taxa at the picked rank and the rest as Other.
+    description: Each run's assigned reads at species, the eight largest and the rest as Other; the rank is in the settings.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: taxprofiler
@@ -1447,15 +1450,18 @@ tabs:
       # Rank the taxa inside each profiling run, then accumulate their shares: a
       # curve that saturates early is a concentrated profile. Needs a window rank
       # and a cumulative sum per run, which the UI builder cannot express.
+      # The unclassified row is left out and the rest renormalised, or a run
+      # with most reads unplaced would start near the top.
       ranked = (
-          df.filter(pl.col('rel_abundance') > 0)
-          .with_columns(pl.col('rel_abundance').rank('ordinal', descending=True).over(['profiler_db', 'sample']).alias('taxon_rank'))
+          df.filter((pl.col('rel_abundance') > 0) & (pl.col('rank') != 'unclassified'))
+          .with_columns((pl.col('rel_abundance') / pl.col('rel_abundance').sum().over(['profiler_db', 'sample'])).alias('share'))
+          .with_columns(pl.col('share').rank('ordinal', descending=True).over(['profiler_db', 'sample']).alias('taxon_rank'))
           .filter(pl.col('taxon_rank') <= 30)
           .sort(['profiler_db', 'sample', 'taxon_rank'])
-          .with_columns(pl.col('rel_abundance').cum_sum().over(['profiler_db', 'sample']).alias('cumulative_share'))
+          .with_columns(pl.col('share').cum_sum().over(['profiler_db', 'sample']).alias('cumulative_share'))
           .with_columns((pl.col('sample') + pl.lit(' | ') + pl.col('profiler_db')).alias('run'))
       )
-      fig = px.line(ranked.to_pandas(), x='taxon_rank', y='cumulative_share', color='profiler', line_group='run', hover_name='run', color_discrete_map=depictio_category_colors.get('profiler') or {}, labels={'taxon_rank': 'Taxa, most abundant first', 'cumulative_share': 'Cumulative share of the profile', 'profiler': 'Classifier'})
+      fig = px.line(ranked.to_pandas(), x='taxon_rank', y='cumulative_share', color='profiler', line_group='run', hover_name='run', color_discrete_map=depictio_category_colors.get('profiler') or {}, labels={'taxon_rank': 'Taxa, most abundant first', 'cumulative_share': 'Cumulative share of the classified profile', 'profiler': 'Classifier'})
       fig.update_yaxes(range=[0, 1.02])
       fig.update_layout(hovermode='closest', margin=dict(t=10))
     section: Profile concentration
@@ -1704,8 +1710,6 @@ tabs:
       min_size: 2
       show_set_sizes: true
       color_intersections_by: degree
-      default_annotation_cols:
-      - taxon
     section: Shared taxa
     tag: tp-conc-upset
     index: conc-upset
@@ -1717,9 +1721,11 @@ tabs:
     data_collection_tag: taxpasta_lineage
     use: taxpasta/lineage_sankey
     config:
-      step_cols: [root, superkingdom, phylum, genus]
+      # step_cols must be a prefix of available_step_cols: the depth picker
+      # reads the latter. Phylum is the deepest rank whose labels stay apart.
+      step_cols: [root, superkingdom, phylum]
       available_step_cols: [root, superkingdom, phylum, class, order, family, genus, species]
-      depth: 4
+      depth: 3
       value_col: rel_abundance
       value_label: share of the profile
       value_format: fraction
@@ -1731,8 +1737,8 @@ tabs:
     section: Taxonomic flow
     tag: tp-conc-sankey
     index: conc-lineage-sankey
-    title: Root to genus flow
-    description: Band width is the share of the selected runs that followed a lineage; unplaced reads are their own band.
+    title: Root to phylum flow
+    description: Band width is the share of the selected runs that followed a lineage; unplaced reads are their own band. The depth picker goes down to species.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: taxprofiler
