@@ -558,6 +558,18 @@ tabs:
     description: The remaining FastQC and Cutadapt panels
     collapsed: true
   components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [MultiQC](https://multiqc.info) gathers the per-sample
+      [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) and
+      [Cutadapt](https://cutadapt.readthedocs.io) reports. Read how many reads survived
+      primer trimming, how evenly they spread across samples, and whether base quality holds
+      to the end of the read.
+    tag: am-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: multiqc_data
@@ -711,7 +723,6 @@ tabs:
   - name: Diversity at a glance
     icon: mdi:counter
     color: grape
-    card_variant: compact
     description: The median of each index over the samples in view
   - name: Rarefaction
     icon: mdi:chart-line
@@ -727,6 +738,18 @@ tabs:
     description: Every index for every sample
     collapsed: true
   components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      Diversity within each sample, computed by [QIIME 2](https://qiime2.org) on the
+      rarefied feature table: richness (observed ASVs), Shannon, phylogenetic spread
+      (Faith's PD) and evenness. The cards give each index's median and spread across the
+      samples in view. The rarefaction curves show whether a sample was sequenced deeply
+      enough for an index to level off.
+    tag: am-alpha-intro
+    index: alpha-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
   # A value slice, not a sample list: the alpha_diversity_multi_canonical ->
   # rarefaction_canonical link carries the surviving samples to the curves.
   - component_type: interactive
@@ -750,15 +773,19 @@ tabs:
     aggregation: median
     column_name: shannon
     column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:chart-bell-curve
+      icon_color: grape
+      caption: median, with its spread
       decimals: 2
     section: Diversity at a glance
     tag: am-alpha-card-shannon
     index: alpha-card-shannon
     title: Shannon
     description: Median Shannon entropy, richness and evenness in one number.
-    layout: {x: 0, y: 0, w: 2, h: 1}
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
@@ -766,15 +793,18 @@ tabs:
     aggregation: median
     column_name: observed_features
     column_type: float64
+    secondary_layout: histogram
     display:
       icon_name: mdi:counter
+      icon_color: violet
+      caption: median, with its distribution
       decimals: 0
     section: Diversity at a glance
     tag: am-alpha-card-observed
     index: alpha-card-observed-features
     title: Observed ASVs
     description: Median number of ASVs seen in a sample, at the rarefaction depth.
-    layout: {x: 2, y: 0, w: 2, h: 1}
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
@@ -782,15 +812,19 @@ tabs:
     aggregation: median
     column_name: faith_pd
     column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:source-branch
+      icon_color: indigo
+      caption: median, with its spread
       decimals: 2
     section: Diversity at a glance
     tag: am-alpha-card-faith-pd
     index: alpha-card-faith-pd
     title: Faith PD
     description: Median phylogenetic diversity, the tree length a sample's ASVs span.
-    layout: {x: 4, y: 0, w: 2, h: 1}
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: alpha_diversity_multi_canonical
@@ -798,15 +832,19 @@ tabs:
     aggregation: median
     column_name: evenness
     column_type: float64
+    secondary_layout: gauge
+    coverage_max: 1
     display:
       icon_name: mdi:scale-balance
+      icon_color: pink
+      caption: median, 0 to 1
       decimals: 2
     section: Diversity at a glance
     tag: am-alpha-card-evenness
     index: alpha-card-evenness
     title: Evenness
     description: Median Pielou evenness, from 0 (one ASV dominates) to 1 (all equal).
-    layout: {x: 6, y: 0, w: 2, h: 1}
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: ampliseq
     use: qiime2/rarefaction
@@ -880,7 +918,6 @@ tabs:
   - name: Ordination at a glance
     icon: mdi:counter
     color: pink
-    card_variant: compact
     description: How many samples were placed, and how much the groups explain
   - name: Sample relationships
     icon: mdi:chart-scatter-plot
@@ -891,6 +928,17 @@ tabs:
     color: pink
     description: Phyla against samples, both axes clustered
   components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      Beta diversity: how different the communities of two samples are. The PCoA places each
+      sample so that the closer two points sit, the more alike their communities, and the
+      Bray-Curtis matrix beside it holds the distances it was drawn from. When the run
+      tested it, PERMANOVA says how much of that variation the grouping explains.
+    tag: am-ord-intro
+    index: ord-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: complex_heatmap_canonical
@@ -910,17 +958,21 @@ tabs:
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: embedding_pcoa
-    aggregation: nunique
+    aggregation: count
     column_name: sample_id
     column_type: object
+    secondary_layout: donut
+    breakdown_col: '{GROUP_COL}'
     display:
       icon_name: mdi:flask-outline
+      icon_color: violet
+      caption: one point each, by {GROUP_COL_DISPLAY}
     section: Ordination at a glance
     tag: am-ord-card-samples
     index: ord-card-samples
     title: Samples in the PCoA
     description: Samples below the rarefaction depth are left out of the ordination.
-    layout: {x: 0, y: 0, w: 4, h: 1}
+    layout: {x: 0, y: 0, w: 4, h: 2}
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: beta_adonis
@@ -928,17 +980,19 @@ tabs:
     column_name: r2
     column_type: float64
     filter_expr: (col('metric') == 'bray_curtis') & (col('term') == '{GROUP_COL}')
-    secondary_layout: coverage
+    secondary_layout: gauge
     coverage_max: 1
     display:
       icon_name: mdi:sigma
+      icon_color: pink
+      caption: share of the Bray-Curtis variation
       decimals: 2
     section: Ordination at a glance
     tag: am-ord-card-permanova
     index: ord-card-permanova
     title: PERMANOVA R² of {GROUP_COL_DISPLAY}
     description: Share of the Bray-Curtis variation that {GROUP_COL_DISPLAY} explains, over all samples.
-    layout: {x: 4, y: 0, w: 4, h: 1}
+    layout: {x: 4, y: 0, w: 4, h: 2}
   - component_type: advanced_viz
     workflow_tag: ampliseq
     viz_kind: embedding
@@ -1025,7 +1079,6 @@ tabs:
   - name: Community at a glance
     icon: mdi:counter
     color: teal
-    card_variant: compact
     description: Distinct taxa at each rank over the samples in view
   - name: Composition
     icon: mdi:chart-bar
@@ -1045,6 +1098,17 @@ tabs:
     description: The relative abundance table behind the tiles above
     collapsed: true
   components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      What the samples are made of, from the taxonomic classification of each ASV. The bars
+      give each group's composition, then each sample's, so a phylum that dominates one
+      group reads as a block rather than an average. The sunburst reads the same abundances
+      as a hierarchy, and the UpSet shows which taxa the groups share.
+    tag: am-comm-intro
+    index: comm-intro
+    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -1112,16 +1176,18 @@ tabs:
     aggregation: nunique
     column_name: Phylum
     column_type: object
-    secondary_layout: composition
+    secondary_layout: donut
     breakdown_col: Kingdom
     display:
       icon_name: mdi:bacteria-outline
+      icon_color: teal
+      caption: split by kingdom
     section: Community at a glance
     tag: am-comm-card-phyla
     index: community-phyla
     title: Phyla
     description: Distinct phyla, split by kingdom.
-    layout: {x: 0, y: 0, w: 2, h: 1}
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: sintax_rel_abundance
@@ -1129,64 +1195,79 @@ tabs:
     aggregation: nunique
     column_name: Phylum
     column_type: object
-    secondary_layout: composition
+    secondary_layout: donut
     breakdown_col: Kingdom
     display:
       icon_name: mdi:bacteria-outline
+      icon_color: teal
+      caption: split by kingdom
     section: Community at a glance
     tag: am-comm-card-phyla-sintax
     index: community-phyla-sintax
     title: Phyla
     description: Distinct phyla SINTAX assigned, split by kingdom.
-    layout: {x: 0, y: 0, w: 2, h: 1}
+    layout: {x: 0, y: 0, w: 2, h: 2}
   # The deeper ranks from the stacked-taxonomy DC, which carries one row per
   # sample, rank and taxon; a taxon absent from every sample in view is not
-  # counted.
+  # counted, nor is a lineage with no name at that rank (''). Families come
+  # from the sunburst DC instead, whose phylum column ranks them by phylum.
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: stacked_taxonomy_canonical
     aggregation: nunique
     column_name: taxon
     column_type: object
-    filter_expr: (col('rank') == 'Class') & (col('abundance') > 0) & col('taxon').is_not_null()
+    filter_expr: (col('rank') == 'Class') & (col('abundance') > 0) & col('taxon').is_not_null() & (col('taxon') != '')
+    secondary_layout: top_n
+    breakdown_col: sample_id
     display:
       icon_name: mdi:family-tree
+      icon_color: cyan
+      caption: the richest samples
     section: Community at a glance
     tag: am-comm-card-classes
     index: community-classes
     title: Classes
     description: Distinct classes present in the samples in view.
-    layout: {x: 2, y: 0, w: 2, h: 1}
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: stacked_taxonomy_canonical
     aggregation: nunique
     column_name: taxon
     column_type: object
-    filter_expr: (col('rank') == 'Order') & (col('abundance') > 0) & col('taxon').is_not_null()
+    filter_expr: (col('rank') == 'Order') & (col('abundance') > 0) & col('taxon').is_not_null() & (col('taxon') != '')
+    secondary_layout: top_n
+    breakdown_col: '{GROUP_COL}'
     display:
-      icon_name: mdi:family-tree
+      icon_name: mdi:sitemap
+      icon_color: blue
+      caption: the richest, by {GROUP_COL_DISPLAY}
     section: Community at a glance
     tag: am-comm-card-orders
     index: community-orders
     title: Orders
     description: Distinct orders present in the samples in view.
-    layout: {x: 4, y: 0, w: 2, h: 1}
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: ampliseq
-    data_collection_tag: stacked_taxonomy_canonical
+    data_collection_tag: sunburst_canonical
     aggregation: nunique
-    column_name: taxon
+    column_name: Family
     column_type: object
-    filter_expr: (col('rank') == 'Family') & (col('abundance') > 0) & col('taxon').is_not_null()
+    filter_expr: (col('abundance') > 0) & col('Family').is_not_null() & (col('Family') != '') & (col('Family') != 'Unclassified')
+    secondary_layout: top_n
+    breakdown_col: Phylum
     display:
-      icon_name: mdi:family-tree
+      icon_name: mdi:graph-outline
+      icon_color: indigo
+      caption: the richest phyla
     section: Community at a glance
     tag: am-comm-card-families
     index: community-families
     title: Families
     description: Distinct families present in the samples in view.
-    layout: {x: 6, y: 0, w: 2, h: 1}
+    layout: {x: 6, y: 0, w: 2, h: 2}
   # One 100% bar per group. Colour is the phylum, so the figure takes the group
   # column and its order from the kwargs and never spreads them.
   - component_type: figure
@@ -1343,7 +1424,6 @@ tabs:
   - name: Calls at a glance
     icon: mdi:counter
     color: red
-    card_variant: compact
     description: Taxa tested, and the calls passing 5% FDR by direction
   - name: Volcano and ranked effects
     icon: mdi:chart-scatter-plot
@@ -1355,6 +1435,17 @@ tabs:
     description: Every tested taxon, and the full record of the one picked
     collapsed: true
   components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [ANCOM-BC](https://bioconductor.org/packages/ANCOMBC) tests each taxon for a
+      difference in abundance between two groups, correcting for compositional bias and for
+      the number of tests. Pick a contrast on the left first: every number on this tab
+      depends on it.
+    tag: am-diff-intro
+    index: diff-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: ancombc_results
@@ -1421,16 +1512,18 @@ tabs:
     aggregation: nunique
     column_name: id
     column_type: object
-    secondary_layout: composition
+    secondary_layout: donut
     breakdown_col: Kingdom
     display:
       icon_name: mdi:bacteria-outline
+      icon_color: cyan
+      caption: split by kingdom
     section: Calls at a glance
     tag: am-diff-card-tested
     index: diff-card-total-taxa
     title: Tested
     description: Taxa ANCOM-BC tested in at least one contrast, split by kingdom.
-    layout: {x: 0, y: 0, w: 2, h: 1}
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: ancombc_results
@@ -1439,48 +1532,58 @@ tabs:
     column_name: id
     column_type: object
     filter_expr: col('q_val') < 0.05
-    secondary_layout: composition
-    breakdown_col: Kingdom
+    secondary_layout: top_n
+    breakdown_col: contrast
     display:
       icon_name: mdi:check-decagram
+      icon_color: red
+      caption: q < 0.05, by contrast
     section: Calls at a glance
     tag: am-diff-card-significant
     index: diff-card-significant
     title: Significant
     description: Taxa passing 5% FDR in at least one contrast, split by kingdom.
-    layout: {x: 2, y: 0, w: 2, h: 1}
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: ancombc_results
     use: qiime2/ancombc
-    aggregation: nunique
+    aggregation: count
     column_name: id
     column_type: object
     filter_expr: (col('q_val') < 0.05) & (col('lfc') > 0)
+    secondary_layout: composition
+    breakdown_col: contrast
     display:
       icon_name: mdi:arrow-up-bold-outline
+      icon_color: pink
+      caption: calls, by contrast
     section: Calls at a glance
     tag: am-diff-card-enriched
     index: diff-card-enriched
     title: Enriched
-    description: Significant taxa more abundant in a contrast's group than in its reference.
-    layout: {x: 4, y: 0, w: 2, h: 1}
+    description: Significant calls, one per taxon and contrast, more abundant in the contrast's group than in its reference.
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: ancombc_results
     use: qiime2/ancombc
-    aggregation: nunique
+    aggregation: count
     column_name: id
     column_type: object
     filter_expr: (col('q_val') < 0.05) & (col('lfc') < 0)
+    secondary_layout: composition
+    breakdown_col: contrast
     display:
       icon_name: mdi:arrow-down-bold-outline
+      icon_color: blue
+      caption: calls, by contrast
     section: Calls at a glance
     tag: am-diff-card-depleted
     index: diff-card-depleted
     title: Depleted
-    description: Significant taxa less abundant in a contrast's group than in its reference.
-    layout: {x: 6, y: 0, w: 2, h: 1}
+    description: Significant calls, one per taxon and contrast, less abundant in the contrast's group than in its reference.
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: ampliseq
     use: qiime2/volcano
@@ -1577,7 +1680,6 @@ tabs:
   - name: Tree at a glance
     icon: mdi:counter
     color: lime
-    card_variant: compact
     description: How many tips, how deeply classified, how confidently
   - name: Tree
     icon: mdi:family-tree
@@ -1589,6 +1691,17 @@ tabs:
     description: One row per tip with its full lineage
     collapsed: true
   components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      The ASV phylogeny built by the pipeline, each tip annotated with its taxonomic
+      assignment. The cards report how many tips there are, how far down the ranks the
+      classifier reached and how confident it was. The tree opens on the largest phyla; its
+      View switch draws every ASV.
+    tag: am-phylo-intro
+    index: phylo-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: phylogenetic_tree_metadata_canonical
@@ -1623,17 +1736,21 @@ tabs:
     workflow_tag: ampliseq
     data_collection_tag: phylogenetic_tree_metadata_canonical
     use: qiime2/tree_metadata
-    aggregation: nunique
+    aggregation: count
     column_name: taxon
     column_type: object
+    secondary_layout: donut
+    breakdown_col: Kingdom
     display:
       icon_name: mdi:dna
+      icon_color: lime
+      caption: one tip each, by kingdom
     section: Tree at a glance
     tag: am-phylo-card-asvs
     index: phylo-card-asvs
     title: ASVs
     description: Tips of the tree, one per ASV.
-    layout: {x: 0, y: 0, w: 2, h: 1}
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: phylogenetic_tree_metadata_canonical
@@ -1641,14 +1758,17 @@ tabs:
     aggregation: count
     column_name: Genus
     column_type: object
+    secondary_layout: completeness
     display:
       icon_name: mdi:check-circle-outline
+      icon_color: teal
+      caption: ASVs assigned down to a genus
     section: Tree at a glance
     tag: am-phylo-card-classified
     index: phylo-card-classified
     title: With a genus
     description: ASVs the classifier assigned down to genus.
-    layout: {x: 2, y: 0, w: 2, h: 1}
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: phylogenetic_tree_metadata_canonical
@@ -1656,15 +1776,20 @@ tabs:
     aggregation: median
     column_name: confidence
     column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.7
+    threshold_direction: min
     display:
-      icon_name: mdi:check-decagram
+      icon_name: mdi:target
+      icon_color: orange
+      caption: median; at or above 0.7, the classifier's default
       decimals: 2
     section: Tree at a glance
     tag: am-phylo-card-confidence
     index: phylo-card-confidence
     title: Confidence
     description: Median confidence of the classifier's assignments, from 0 to 1.
-    layout: {x: 4, y: 0, w: 2, h: 1}
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: phylogenetic_tree_metadata_canonical
@@ -1672,14 +1797,19 @@ tabs:
     aggregation: nunique
     column_name: Genus
     column_type: object
+    filter_expr: "col('Genus').is_not_null()"
+    secondary_layout: top_n
+    breakdown_col: Phylum
     display:
-      icon_name: mdi:format-list-group
+      icon_name: mdi:tag-multiple-outline
+      icon_color: grape
+      caption: the richest phyla
     section: Tree at a glance
     tag: am-phylo-card-genera
     index: phylo-card-genera
     title: Genera
     description: Distinct genera among the tips.
-    layout: {x: 6, y: 0, w: 2, h: 1}
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: ampliseq
     viz_kind: phylogenetic
@@ -1760,7 +1890,6 @@ tabs:
   - name: Reconstruction at a glance
     icon: mdi:counter
     color: indigo
-    card_variant: compact
     description: What SIDLE rebuilt from the per-region tables
   - name: Composition
     icon: mdi:chart-bar
@@ -1776,6 +1905,17 @@ tabs:
     description: The reconstructed table and its per-feature metrics
     collapsed: true
   components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [SIDLE](https://q2-sidle.readthedocs.io) rebuilds one feature table from several
+      amplicon regions sequenced separately, so each feature rests on evidence from more
+      than one region. The cards report the features reconstructed, the samples that carry
+      them, the phyla they resolve to and the regions each draws on.
+    tag: am-sidle-intro
+    index: sidle-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: interactive
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
@@ -1799,12 +1939,13 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:dna
+      icon_color: indigo
     section: Reconstruction at a glance
     tag: am-sidle-card-features
     index: sidle-card-features
     title: Features
     description: Features SIDLE reconstructed from the regions.
-    layout: {x: 0, y: 0, w: 2, h: 1}
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
@@ -1814,12 +1955,13 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:flask-outline
+      icon_color: violet
     section: Reconstruction at a glance
     tag: am-sidle-card-samples
     index: sidle-card-samples
     title: Samples
     description: Samples carrying at least one reconstructed feature.
-    layout: {x: 2, y: 0, w: 2, h: 1}
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
@@ -1827,16 +1969,18 @@ tabs:
     aggregation: nunique
     column_name: Phylum
     column_type: object
-    secondary_layout: composition
+    secondary_layout: donut
     breakdown_col: Kingdom
     display:
       icon_name: mdi:bacteria-outline
+      icon_color: teal
+      caption: split by kingdom
     section: Reconstruction at a glance
     tag: am-sidle-card-phyla
     index: sidle-card-phyla
     title: Phyla
     description: Distinct phyla the reconstructed features resolve to, split by kingdom.
-    layout: {x: 4, y: 0, w: 2, h: 1}
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: sidle_reconstruction_qc
@@ -1844,15 +1988,17 @@ tabs:
     aggregation: average
     column_name: num_regions
     column_type: int64
+    secondary_layout: histogram
     display:
       icon_name: mdi:vector-link
+      icon_color: orange
       decimals: 1
     section: Reconstruction at a glance
     tag: am-sidle-card-regions
     index: sidle-card-mean-regions
     title: Regions per feature
     description: Mean number of amplicon regions a feature was rebuilt from.
-    layout: {x: 6, y: 0, w: 2, h: 1}
+    layout: {x: 6, y: 0, w: 2, h: 2}
   # The SIDLE figures colour by phylum or genus, so they spread no group
   # kwargs: they keep the group column through the aggregation and facet by it.
   - component_type: figure

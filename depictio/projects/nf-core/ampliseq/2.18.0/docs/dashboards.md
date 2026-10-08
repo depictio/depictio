@@ -53,8 +53,10 @@ tab, collapsed, and absent from the Overview.
 
 ## Child tabs
 
-Each child tab opens with a compact strip of key numbers, then at most three open
-sections; tables, details and route alternates follow, collapsed.
+Each child tab opens with a short intro (the method, with a link to its tool, and how to
+read the tab), then a strip of four key numbers, each card with its own colour and a
+secondary that reads it (a box plot, a distribution, a gauge, a ranking or a share), then at
+most three open sections; tables, details and route alternates follow, collapsed.
 
 **MultiQC.** MultiQC panels only. Open: general statistics, Cutadapt filtered reads,
 FastQC sequence counts and quality histograms. Collapsed: the other FastQC and Cutadapt
@@ -62,33 +64,38 @@ panels. No per-sequence GC panel: amplicon reads occupy a narrow GC band and the
 reads as a flat line. Its own sample filter reads the MultiQC report, so it works on a
 run without `--metadata`.
 
-**Alpha Diversity.** Strip: median Shannon, observed ASVs, Faith's PD and evenness. Then
+**Alpha Diversity.** Strip: median Shannon and Faith's PD with their spread (box plots),
+observed ASVs with their distribution and evenness on a 0 to 1 gauge. Then
 the rarefaction curves (metric switch on the tile, curves per group) and Shannon
 diversity per group as a box plot with one point per sample. The per-sample table is
 collapsed. Filter: a Shannon range.
 
-**Ordination & Clustering.** Strip: the samples placed by the PCoA and, when the run
-tested a PERMANOVA formula, the share of variation the group explains. Then the PCoA on
+**Ordination & Clustering.** Strip: the samples placed by the PCoA, split by group, and,
+when the run tested a PERMANOVA formula, the share of variation the group explains (a
+gauge). Then the PCoA on
 Bray-Curtis (a lasso makes an analysis group) beside the Bray-Curtis distance heatmap
 (`ward`, `Blues`), and the clustered phylum by sample heatmap. Filter: phylum, on the
 heatmap rows.
 
-**Community & Diversity.** Strip: distinct phyla (by kingdom), classes, orders and
-families. Then the phylum composition per group (ten phyla and Other, as 100% bars), the
+**Community & Diversity.** Strip: distinct phyla (by kingdom), classes (the richest
+samples), orders (the richest groups) and families (the richest phyla); lineages with no
+name at a rank are left out. Then the phylum composition per group (ten phyla and Other, as 100% bars), the
 stacked composition per sample (the same ten and Other), the sunburst hierarchy and the
 UpSet of taxa shared between groups. Collapsed: the relative abundance table. No Sankey:
 it restates the sunburst. Filters: kingdom and phylum.
 
-**Differential Abundance.** Pick a contrast first. Strip: taxa tested, significant at 5%
-FDR, enriched and depleted (significant, by sign of the log-fold change). Then the volcano
+**Differential Abundance.** Pick a contrast first. Strip: taxa tested (by kingdom), significant
+at 5% FDR (by contrast), and the enriched and depleted calls (significant, by sign of the
+log-fold change), each split by contrast. Then the volcano
 and the largest effects per contrast. The collapsed `Taxon detail` holds the ANCOM-BC
 table with the taxon record card beside it: the card waits for a picked row. The volcano's
 View switch reads the same calls as an MA plot, from `ma_canonical` (`ancombc_results`
 has no mean abundance; the contrast filter narrows both), or as a QQ plot of the raw
 p-values. Filters: contrast, phylum, kingdom and a log-fold-change range.
 
-**Phylogeny.** Strip: ASVs, ASVs classified to genus, the median classifier confidence
-and distinct genera. Then the tree, opening on the Overview's summary: the ten largest
+**Phylogeny.** Strip: ASVs (a ring by kingdom), ASVs classified to genus (their share),
+the median classifier confidence (tips at or above 0.7, the classifier's default) and
+distinct genera (the richest phyla). Then the tree, opening on the Overview's summary: the ten largest
 phyla, one tip each, with their share of the reads per group. Its View switch draws the
 full ASV tree, coloured by any rank and pruned to the clade picked in the left panel. The
 tip taxonomy table is collapsed. The tip-metadata recipe

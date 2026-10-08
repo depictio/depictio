@@ -159,6 +159,19 @@ def interactive(
     return comp
 
 
+def intro(index: str, body: str) -> dict[str, Any]:
+    """A tab's intro, above its sections: what the tab holds and how to read it."""
+    return {
+        "component_type": "text",
+        "order": 1,
+        "body": body,
+        "tag": f"am-{index}",
+        "index": index,
+        # Sized by `fit_text_tiles`.
+        "layout": {"x": 0, "y": 0, "w": 8, "h": 1},
+    }
+
+
 def card(
     index: str,
     section: str,
@@ -171,8 +184,10 @@ def card(
     x: int,
     w: int,
     extra: dict[str, Any] | None = None,
+    caption: str | None = None,
 ) -> dict[str, Any]:
-    """A strip card on the metadata DC; the section's `card_variant` styles it."""
+    """A strip card on the metadata DC: its own colour, and a secondary in `extra`
+    that `caption` names in place of the bare aggregation."""
     comp: dict[str, Any] = {
         "component_type": "card",
         "workflow_tag": "ampliseq",
@@ -184,13 +199,17 @@ def card(
     comp.update(extra or {})
     comp.update(
         {
-            "display": {"icon_name": icon, "icon_color": color},
+            "display": {
+                "icon_name": icon,
+                "icon_color": color,
+                **({"caption": caption} if caption else {}),
+            },
             "section": section,
             "tag": f"am-ref-card-{index}",
             "index": index,
             "title": title,
             "description": description,
-            "layout": {"x": x, "y": 0, "w": w, "h": 1},
+            "layout": {"x": x, "y": 0, "w": w, "h": 2},
         }
     )
     return comp
@@ -416,7 +435,6 @@ def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order
                 "name": "Campaign at a glance",
                 "icon": "mdi:counter",
                 "color": "blue",
-                "card_variant": "compact",
                 "description": f"Samples by {group_display.lower()}, and the sites they came from",
             },
             {
@@ -440,11 +458,19 @@ def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order
             },
         ],
         "components": [
+            intro(
+                "ref-campaign-intro",
+                "Where and when each sample was taken. The date range and the site picker on "
+                "the left are persistent, so a period picked here narrows the diversity, "
+                "taxonomy and differential tabs too.",
+            ),
+            # One metadata row per sample: a count splits into parts of a whole,
+            # where a distinct count would only rank the groups.
             card(
                 "ref-campaign-samples",
                 "Campaign at a glance",
                 id_col,
-                "nunique",
+                "count",
                 "Samples",
                 "mdi:flask-outline",
                 "blue",
@@ -452,6 +478,7 @@ def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order
                 0,
                 4,
                 extra={"secondary_layout": "composition", "breakdown_col": group_col},
+                caption=f"by {group_display.lower()}",
             ),
             card(
                 "ref-campaign-sites",
@@ -465,6 +492,7 @@ def sampling_campaign_tab(group_col: str, group_display: str, id_col: str, order
                 4,
                 4,
                 extra={"secondary_layout": "composition", "breakdown_col": "city"},
+                caption="samples per site",
             ),
             {
                 "component_type": "map",
@@ -553,11 +581,21 @@ fig.update_layout(
 
 def environment_tab(group_col: str, group_display: str, id_col: str, order: int) -> dict:
     groups = _group_colors(group_col)
+    box = {"aggregations": ["box_plot_stats"], "secondary_layout": "box_plot"}
+    hist = {"secondary_layout": "histogram"}
+    shape = {"box_plot": "median, with its spread", "histogram": "median, with its distribution"}
     sonde = [
-        ("temperature", "ctd_temperature_c", "Temperature (°C)", "mdi:thermometer", "orange"),
-        ("conductivity", "ctd_conductivity_us_cm", "Conductivity (µS/cm)", "mdi:flash", "cyan"),
-        ("do", "ctd_do_mg_l", "Dissolved O₂ (mg/L)", "mdi:water-percent", "blue"),
-        ("nitrate", "ctd_nitrate_mg_l", "Nitrate (mg/L)", "mdi:molecule", "grape"),
+        ("temperature", "ctd_temperature_c", "Temperature (°C)", "mdi:thermometer", "orange", box),
+        (
+            "conductivity",
+            "ctd_conductivity_us_cm",
+            "Conductivity (µS/cm)",
+            "mdi:flash",
+            "cyan",
+            hist,
+        ),
+        ("do", "ctd_do_mg_l", "Dissolved O₂ (mg/L)", "mdi:water-percent", "blue", box),
+        ("nitrate", "ctd_nitrate_mg_l", "Nitrate (mg/L)", "mdi:molecule", "grape", hist),
     ]
     return {
         "title": "Environment (CTD)",
@@ -575,7 +613,6 @@ def environment_tab(group_col: str, group_display: str, id_col: str, order: int)
                 "name": "Sonde readings",
                 "icon": "mdi:waves",
                 "color": "cyan",
-                "card_variant": "compact",
                 "description": "Synthetic readings, shaped to separate the four habitats",
             },
             {
@@ -592,6 +629,13 @@ def environment_tab(group_col: str, group_display: str, id_col: str, order: int)
             },
         ],
         "components": [
+            intro(
+                "ref-env-intro",
+                "**These CTD values are synthetic.** They are shaped to be plausible for a "
+                "January campaign and to separate the four habitats, so that the environmental "
+                "filters on the left have something to act on. They demonstrate environmental "
+                "filtering and are not for analysis.",
+            ),
             *(
                 card(
                     f"ref-env-{key}",
@@ -604,8 +648,10 @@ def environment_tab(group_col: str, group_display: str, id_col: str, order: int)
                     f"Median {title.split(' (')[0].lower()} over the samples in view.",
                     2 * i,
                     2,
+                    extra=extra,
+                    caption=shape[extra["secondary_layout"]],
                 )
-                for i, (key, column, title, icon, color) in enumerate(sonde)
+                for i, (key, column, title, icon, color, extra) in enumerate(sonde)
             ),
             code_figure(
                 "ref-env-scatter-temp-cond",
