@@ -62,6 +62,7 @@ import { rememberRunFolder } from './recentFolders';
 import type { RunCreatedContext } from './RunCreatedModal';
 import { RunPreview, RunSummaryCard, TemplateNotDetectedAlert } from './RunPreview';
 import { TemplatePicker } from './TemplatePicker';
+import { TemplateSettingsSection } from './TemplateSettings';
 
 /** Stack id of the folder browser, which opens above the create dialog. */
 const BROWSE_STACK_ID = 'run-folder-browser';
@@ -605,6 +606,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
               pipeline={pipeline}
               templateId={choice.templateId}
               runVersion={detected?.version ?? null}
+              closestTemplateId={detected?.match === 'closest' ? detectedId : null}
               pipelineDetected={Boolean(pipeline && detectedPipeline && pipeline.key === detectedPipeline.key)}
               versionDetected={Boolean(choice.templateId && choice.templateId === detectedId)}
               onPipelineChange={handlePipelineChange}
@@ -622,19 +624,13 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
               error={nameUsed ? 'A project with this name already exists.' : undefined}
               data-testid="run-project-name-input"
             />
-            {extraVariables.map((v) => (
-              <TextInput
-                key={v.name}
-                label={`${v.name} (Optional)`}
-                description={v.description ?? undefined}
-                placeholder={v.default ?? ''}
-                value={variables[v.name] ?? ''}
-                onChange={(e) => {
-                  const value = e.currentTarget.value;
-                  setVariables((prev) => ({ ...prev, [v.name]: value }));
-                }}
+            {extraVariables.length > 0 && (
+              <TemplateSettingsSection
+                variables={extraVariables}
+                values={variables}
+                onChange={(name, value) => setVariables((prev) => ({ ...prev, [name]: value }))}
               />
-            ))}
+            )}
           </Stack>
         </Stepper.Step>
 

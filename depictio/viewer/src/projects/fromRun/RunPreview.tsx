@@ -1,9 +1,11 @@
 /**
  * The run-folder plan: a summary header (what made the run, the template
  * used, the run folder written once, how many collections are ready), then
- * the data collections grouped by what needs a look first: "Not found",
- * "Ready to ingest", "Optional, not found". Every path is written relative to
- * the run folder, which is what tells a folder set one level off.
+ * the data collections grouped by what needs a look first: "Not found" and
+ * "Ready to ingest" open, "Optional, not found" folded (it informs, it is not
+ * a problem), then the template settings the server resolved, folded too.
+ * Every path is written relative to the run folder, which is what tells a
+ * folder set one level off.
  *
  * Renders the dry-run plan on the Preview step and, unchanged, the real report
  * after creation (where dashboards that failed to import are listed too).
@@ -49,6 +51,7 @@ import type { FlowStatus } from './FlowBadge';
 import { FolderPath } from './FolderPath';
 import { RunMadeBy, TemplateUsed } from './RunIdentity';
 import type { RunInfo } from './RunIdentity';
+import { ResolvedSettings } from './TemplateSettings';
 
 const SECTIONS: Record<
   RunCollectionSection,
@@ -355,6 +358,8 @@ export const RunPreview: React.FC<RunSummaryCardProps> = ({
           multiple
           variant="separated"
           radius="md"
+          // What needs a look, and what is ready, start open; the optional
+          // collections that found nothing start folded.
           defaultValue={present.filter((s) => s !== 'optional')}
           chevronPosition="right"
         >
@@ -397,31 +402,17 @@ export const RunPreview: React.FC<RunSummaryCardProps> = ({
         </Accordion>
       )}
 
-      {(report.detected_runs.length > 0 || settings.length > 0) && (
-        <Stack gap={6}>
-          {report.detected_runs.length > 0 && (
-            <Group gap={6} wrap="wrap" data-testid="run-detected-runs">
-              <Text size="xs" c="dimmed">
-                Runs found in this folder:
-              </Text>
-              {report.detected_runs.map((name) => (
-                <Code key={name}>{name}</Code>
-              ))}
-            </Group>
-          )}
-          {settings.length > 0 && (
-            <Group gap={6} wrap="wrap" data-testid="run-resolved-variables">
-              <Text size="xs" c="dimmed">
-                Template settings:
-              </Text>
-              {settings.map(([key, value]) => (
-                <Code key={key} style={{ wordBreak: 'break-all' }}>
-                  {key} = {value}
-                </Code>
-              ))}
-            </Group>
-          )}
-        </Stack>
+      {settings.length > 0 && <ResolvedSettings settings={settings} dataRoot={report.data_root} />}
+
+      {report.detected_runs.length > 0 && (
+        <Group gap={6} wrap="wrap" data-testid="run-detected-runs">
+          <Text size="xs" c="dimmed">
+            Runs found in this folder:
+          </Text>
+          {report.detected_runs.map((name) => (
+            <Code key={name}>{name}</Code>
+          ))}
+        </Group>
       )}
 
       {failedDashboards.length > 0 && (

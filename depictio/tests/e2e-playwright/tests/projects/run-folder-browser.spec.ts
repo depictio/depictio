@@ -7,8 +7,9 @@
  * `/auth/me/optional` answer (the session stays real), and the folder calls
  * (`local_dirs`, `s3_dirs`, `folder_inspect`, `find_runs`) are stubbed with
  * a small folder tree. What is under test is the walk through it: lazy
- * expansion, the detail pane, the path bar, the run search, the recent
- * folders, and the path the run folder field ends up with.
+ * expansion, the detail pane, the path bar, the run search (its hits first,
+ * each saying who made the run), the recent folders, and the path the run
+ * folder field ends up with.
  */
 
 import { Page, Route } from "@playwright/test";
@@ -290,9 +291,9 @@ test.describe("Browse for a run folder", () => {
       "v2.16.0",
     );
     await expect(detail.locator("[data-testid='browse-detail-run-badge']")).toBeVisible();
-    await expect(detail.locator("[data-testid='browse-detail-markers']")).toContainText(
-      "pipeline_info",
-    );
+    const markers = detail.locator("[data-testid='browse-detail-markers']");
+    await expect(markers.locator("[data-marker='pipeline_info']")).toBeVisible();
+    await expect(markers.locator("[data-marker='multiqc']")).toBeVisible();
     await expect(detail.locator("[data-testid='browse-detail-counts']")).toHaveText(
       "2 folders, 3 files",
     );
@@ -394,6 +395,12 @@ test.describe("Browse for a run folder", () => {
     // A run folder searched from itself is listed as "This folder".
     await goTo(page, RUN42);
     await expect(treeNode(page, RUN42)).toHaveAttribute("data-selected", "true");
+    const detail = page.locator("[data-testid='browse-detail']");
+    const contentsToggle = detail.locator("[data-testid='browse-detail-contents-toggle']");
+    await expect(detail.locator("[data-testid='browse-detail-counts']")).toHaveText(
+      "2 folders, 3 files",
+    );
+    await expect(contentsToggle).toHaveCount(0);
     await page.locator("[data-testid='browse-find-runs']").click();
     const results = page.locator("[data-testid='browse-find-results']");
     await expect(results).toHaveAttribute("data-state", "ready");
@@ -403,8 +410,32 @@ test.describe("Browse for a run folder", () => {
       "1 run folder under run42, 3 folders looked through.",
     );
     await expect(results.locator("[data-testid='browse-find-truncated']")).toHaveCount(0);
+
+    // The hits come first; the folder's contents fold under a toggle that
+    // keeps their count, and open on demand.
+    expect(
+      await detail
+        .locator(
+          "[data-testid='browse-find-results'], [data-testid='browse-detail-contents-toggle']",
+        )
+        .evaluateAll((els) => els.map((el) => el.getAttribute("data-testid"))),
+    ).toEqual(["browse-find-results", "browse-detail-contents-toggle"]);
+    await expect(contentsToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(contentsToggle).toContainText("Contents");
+    await expect(contentsToggle).toContainText("(2 folders, 3 files)");
+    // A folded panel has no height but stays in the page: its aria-hidden
+    // says it is shut.
+    const contents = detail.locator("[data-testid='browse-detail-contents']");
+    await expect(contents).toHaveAttribute("aria-hidden", "true");
+    await contentsToggle.click();
+    await expect(contentsToggle).toHaveAttribute("aria-expanded", "true");
+    await expect(contents).toHaveAttribute("aria-hidden", "false");
+    await expect(contents.locator("[data-testid='browse-detail-files']")).toBeVisible();
+
     await results.getByRole("button", { name: "Clear the results" }).click();
     await expect(page.locator("[data-testid='browse-find-runs']")).toBeVisible();
+    await expect(contentsToggle).toHaveCount(0);
+    await expect(detail.locator("[data-testid='browse-detail-files']")).toBeVisible();
 
     // From the parent: two hits, one several levels down, and an honest
     // count of what was looked through.
@@ -419,21 +450,36 @@ test.describe("Browse for a run folder", () => {
     expect(await hits.evaluateAll((els) => els.map((el) => el.getAttribute("data-path")))).toEqual(
       [RUN42, RUN77],
     );
+    // Each hit: its path relative to the folder searched, then who made the
+    // run (the workflow's mark, pipeline and version) and its run records.
     const deepHit = results.locator(`[data-testid='browse-find-hit'][data-path='${RUN77}']`);
     await expect(deepHit).toContainText("batch/2026/run77");
-    await expect(deepHit).toContainText("nf-core/rnaseq v3.26.0");
+    await expect(deepHit).toHaveAttribute("data-detected", "true");
+    await expect(deepHit.locator("img[alt='nf-core']")).toBeVisible();
+    await expect(deepHit.locator("[data-testid='browse-find-hit-pipeline']")).toHaveText(
+      "nf-core/rnaseq",
+    );
+    await expect(deepHit.locator("[data-testid='browse-find-hit-version']")).toHaveText("v3.26.0");
+    await expect(deepHit.locator("[data-marker='pipeline_info']")).toBeVisible();
+    await expect(deepHit.locator("[data-marker='multiqc']")).toHaveCount(0);
+    const nearHit = results.locator(`[data-testid='browse-find-hit'][data-path='${RUN42}']`);
+    await expect(nearHit.locator("[data-testid='browse-find-hit-pipeline']")).toHaveText(
+      "nf-core/ampliseq",
+    );
+    await expect(nearHit.locator("[data-marker='multiqc']")).toBeVisible();
 
-    // The deep hit opens the tree on it; the hits stay listed meanwhile.
+    // The deep hit opens the tree on it; the hits stay listed meanwhile, and
+    // still come first.
     await deepHit.click();
     await expect(treeNode(page, RUN77)).toHaveAttribute("data-selected", "true");
     await expect(treeNode(page, YEAR)).toBeVisible();
-    const detail = page.locator("[data-testid='browse-detail']");
     await expect(detail).toHaveAttribute("data-path", RUN77);
     await expect(detail.locator("[data-testid='browse-detail-pipeline']")).toHaveText(
       "nf-core/rnaseq",
     );
     await expect(results).toBeVisible();
     await expect(deepHit).toHaveAttribute("data-active", "true");
+    await expect(contentsToggle).toHaveAttribute("aria-expanded", "false");
   });
 
   test("reopens on the folder in the field and lists the recent ones", async ({
@@ -677,7 +723,17 @@ test.describe("Browse for a run folder", () => {
     await page.locator("[data-testid='browse-find-runs']").click();
     const results = page.locator("[data-testid='browse-find-results']");
     await expect(results).toHaveAttribute("data-state", "ready");
-    await results.locator(`[data-testid='browse-find-hit'][data-path='${RUN}']`).click();
+    // An S3 search does not identify its hits: selecting one does.
+    const hit = results.locator(`[data-testid='browse-find-hit'][data-path='${RUN}']`);
+    await expect(hit).toHaveAttribute("data-detected", "false");
+    await expect(hit.locator("[data-status='run-folder']")).toBeVisible();
+    await expect(hit.locator("[data-testid='browse-find-hit-unidentified']")).toHaveText(
+      "Select it to identify the pipeline",
+    );
+    await expect(hit.locator("[data-testid='browse-find-hit-pipeline']")).toHaveCount(0);
+    await expect(hit.locator("[data-marker='pipeline_info']")).toBeVisible();
+    await expect(hit).toContainText("ampliseq/run-7");
+    await hit.click();
     await expect(treeNode(page, RUN)).toHaveAttribute("data-selected", "true");
 
     await page.locator("[data-testid='browse-select']").click();

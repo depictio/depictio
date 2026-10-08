@@ -4,13 +4,15 @@
  *  - Pipeline: one entry per pipeline, grouped by source, with the source's
  *    mark. Empty means "let Depictio recognise it from the folder".
  *  - Template version: the versions of that pipeline the catalog has a
- *    template for, newest first, the latest one and the one matching the run
- *    marked. A segmented control while they fit, a select beyond.
+ *    template for, newest first, each a card that wraps onto the next line
+ *    with its own marks (the one matching the run, or the closest to it, and
+ *    the newest). A select beyond `CARDS_MAX` versions. Arrow keys move
+ *    between the cards and pick, Tab enters and leaves them as one stop.
  *
  * Detection fills both and marks each "Detected" until the reader changes it.
  */
 import React, { useMemo } from 'react';
-import { Box, Group, Input, SegmentedControl, Select, Stack, Text } from '@mantine/core';
+import { Group, Input, Radio, Select, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import { formatVersion, sameVersion, Z_LAYERS } from 'depictio-react-core';
@@ -19,8 +21,11 @@ import type { RunPipeline, RunPipelineGroup, RunTemplateVersion } from 'depictio
 import { TemplateSourceLogo } from '../template';
 import { FlowBadge } from './FlowBadge';
 
-/** More versions than this switch the control to a select. */
-const SEGMENTED_MAX = 4;
+/** More versions than this switch the cards to a select. */
+const CARDS_MAX = 8;
+
+const VERSION_DESCRIPTION =
+  "The pipeline version the Depictio template was written for. The run's own version is shown above.";
 
 interface TemplatePickerProps {
   groups: RunPipelineGroup[];
@@ -28,6 +33,8 @@ interface TemplatePickerProps {
   templateId: string | null;
   /** Pipeline version that made the run, when known. */
   runVersion: string | null;
+  /** The template detection chose because no version matches the run. */
+  closestTemplateId?: string | null;
   pipelineDetected: boolean;
   versionDetected: boolean;
   onPipelineChange: (key: string | null) => void;
@@ -52,22 +59,46 @@ const FieldLabel: React.FC<{ text: string; detected: boolean; testId: string }> 
   </Group>
 );
 
-const VersionLabel: React.FC<{ version: RunTemplateVersion; runVersion: string | null }> = ({
-  version,
-  runVersion,
-}) => (
+const versionText = (version: RunTemplateVersion): string =>
+  version.version ? formatVersion(version.version) : 'single version';
+
+/** How a version relates to the run, then whether it is the newest. */
+const VersionMarks: React.FC<{
+  version: RunTemplateVersion;
+  runVersion: string | null;
+  closestTemplateId: string | null;
+}> = ({ version, runVersion, closestTemplateId }) => {
+  const matches = sameVersion(version.version, runVersion);
+  return (
+    <>
+      {matches && <FlowBadge status="matches-run" />}
+      {!matches && closestTemplateId === version.templateId && (
+        <FlowBadge
+          status="closest-to-run"
+          tooltip="No template exists for the run's own version: this one is the nearest."
+        />
+      )}
+      {version.latest && <FlowBadge status="latest" />}
+    </>
+  );
+};
+
+/** A version in the select's list. */
+const VersionOption: React.FC<{
+  version: RunTemplateVersion;
+  runVersion: string | null;
+  closestTemplateId: string | null;
+}> = ({ version, runVersion, closestTemplateId }) => (
   <Group
     gap={6}
-    wrap="nowrap"
-    justify="center"
+    wrap="wrap"
     component="span"
     data-testid={`run-version-option-${version.version ?? version.templateId}`}
   >
     <Text span size="sm" ff="monospace">
-      {version.version ? formatVersion(version.version) : 'single version'}
+      {versionText(version)}
     </Text>
-    {version.latest && <FlowBadge status="latest" />}
-    {sameVersion(version.version, runVersion) && <FlowBadge status="matches-run" />}
+    <VersionMarks version={version} runVersion={runVersion} closestTemplateId={closestTemplateId} />
   </Group>
 );
 
@@ -76,6 +107,7 @@ export const TemplatePicker: React.FC<TemplatePickerProps> = ({
   pipeline,
   templateId,
   runVersion,
+  closestTemplateId = null,
   pipelineDetected,
   versionDetected,
   onPipelineChange,
@@ -98,6 +130,11 @@ export const TemplatePicker: React.FC<TemplatePickerProps> = ({
   );
 
   const versions = pipeline?.versions ?? [];
+  const selected = templateId ?? versions[0]?.templateId ?? null;
+  const selectedListed = versions.some((v) => v.templateId === selected);
+  const versionLabel = (
+    <FieldLabel text="Template version" detected={versionDetected} testId="run-version-detected" />
+  );
 
   return (
     <Stack gap="md">
@@ -141,48 +178,82 @@ export const TemplatePicker: React.FC<TemplatePickerProps> = ({
         data-testid="run-pipeline-select"
       />
 
-      <Input.Wrapper
-        label={
-          <FieldLabel text="Template version" detected={versionDetected} testId="run-version-detected" />
-        }
-        description="The pipeline version the Depictio template was written for. The run's own version is shown above."
-      >
-        <Box mt={6}>
-          {!pipeline ? (
-            <Text size="sm" c="dimmed" data-testid="run-version-empty">
-              Pick a pipeline first, or leave both empty and Depictio picks the template that
-              matches the folder.
-            </Text>
-          ) : versions.length <= SEGMENTED_MAX ? (
-            <SegmentedControl
-              value={templateId ?? versions[0]?.templateId ?? ''}
-              onChange={onVersionChange}
-              data={versions.map((v) => ({
-                value: v.templateId,
-                label: <VersionLabel version={v} runVersion={runVersion} />,
-              }))}
-              size="sm"
-              data-testid="run-version-control"
-            />
-          ) : (
-            <Select
-              value={templateId}
-              onChange={(value) => value && onVersionChange(value)}
-              allowDeselect={false}
-              data={versions.map((v) => ({
-                value: v.templateId,
-                label: v.version ? formatVersion(v.version) : v.templateId,
-              }))}
-              comboboxProps={{ zIndex: Z_LAYERS.tooltip }}
-              renderOption={({ option }) => {
-                const v = versions.find((x) => x.templateId === option.value);
-                return v ? <VersionLabel version={v} runVersion={runVersion} /> : option.label;
-              }}
-              data-testid="run-version-select"
-            />
-          )}
-        </Box>
-      </Input.Wrapper>
+      {!pipeline ? (
+        <Input.Wrapper label={versionLabel} description={VERSION_DESCRIPTION}>
+          <Text size="sm" c="dimmed" mt={6} data-testid="run-version-empty">
+            Pick a pipeline first, or leave both empty and Depictio picks the template that
+            matches the folder.
+          </Text>
+        </Input.Wrapper>
+      ) : versions.length <= CARDS_MAX ? (
+        <Radio.Group
+          label={versionLabel}
+          description={VERSION_DESCRIPTION}
+          value={selected}
+          onChange={onVersionChange}
+          data-testid="run-version-control"
+        >
+          <Group gap="xs" wrap="wrap" mt={6}>
+            {versions.map((v) => {
+              const checked = v.templateId === selected;
+              return (
+                <Radio.Card
+                  key={v.templateId}
+                  value={v.templateId}
+                  radius="md"
+                  w="auto"
+                  px="sm"
+                  py={6}
+                  // One Tab stop for the whole set, as native radios have;
+                  // the arrow keys move between the cards.
+                  tabIndex={checked || (!selectedListed && v === versions[0]) ? 0 : -1}
+                  bg={checked ? 'var(--mantine-primary-color-light)' : undefined}
+                  style={{
+                    maxWidth: '100%',
+                    borderColor: checked ? 'var(--mantine-primary-color-filled)' : undefined,
+                  }}
+                  data-testid={`run-version-option-${v.version ?? v.templateId}`}
+                  data-template-id={v.templateId}
+                >
+                  <Group gap={8} wrap="wrap">
+                    <Radio.Indicator size="xs" />
+                    <Text span size="sm" fw={600} ff="monospace">
+                      {versionText(v)}
+                    </Text>
+                    <VersionMarks
+                      version={v}
+                      runVersion={runVersion}
+                      closestTemplateId={closestTemplateId}
+                    />
+                  </Group>
+                </Radio.Card>
+              );
+            })}
+          </Group>
+        </Radio.Group>
+      ) : (
+        <Select
+          label={versionLabel}
+          description={VERSION_DESCRIPTION}
+          value={templateId}
+          onChange={(value) => value && onVersionChange(value)}
+          allowDeselect={false}
+          data={versions.map((v) => ({
+            value: v.templateId,
+            label: v.version ? formatVersion(v.version) : v.templateId,
+          }))}
+          comboboxProps={{ zIndex: Z_LAYERS.tooltip }}
+          renderOption={({ option }) => {
+            const v = versions.find((x) => x.templateId === option.value);
+            return v ? (
+              <VersionOption version={v} runVersion={runVersion} closestTemplateId={closestTemplateId} />
+            ) : (
+              option.label
+            );
+          }}
+          data-testid="run-version-select"
+        />
+      )}
     </Stack>
   );
 };

@@ -27,7 +27,8 @@ export type FlowStatus =
   | 'other-pipeline'
   | 'no-template'
   | 'latest'
-  | 'matches-run';
+  | 'matches-run'
+  | 'closest-to-run';
 
 export const FLOW_STATUS: Record<FlowStatus, { color: string; icon: string; label: string }> = {
   ready: { color: 'green', icon: 'mdi:check-circle', label: 'Ready' },
@@ -42,8 +43,9 @@ export const FLOW_STATUS: Record<FlowStatus, { color: string; icon: string; labe
   'other-version': { color: 'yellow', icon: 'mdi:swap-horizontal', label: 'Different version' },
   'other-pipeline': { color: 'orange', icon: 'mdi:alert-outline', label: 'Different pipeline' },
   'no-template': { color: 'red', icon: 'mdi:help-circle-outline', label: 'No matching template' },
-  latest: { color: 'gray', icon: 'mdi:star-outline', label: 'Latest' },
+  latest: { color: 'gray', icon: 'mdi:star-outline', label: 'Newest' },
   'matches-run': { color: 'green', icon: 'mdi:check', label: 'Matches this run' },
+  'closest-to-run': { color: 'yellow', icon: 'mdi:approximately-equal', label: 'Closest to this run' },
 };
 
 /** The badge for a template match. */
