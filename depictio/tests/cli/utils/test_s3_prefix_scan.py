@@ -232,6 +232,13 @@ class TestListS3PrefixFailures:
 class TestS3ReadTarget:
     """Which credentials a prefix listing uses, decided before any request."""
 
+    @pytest.fixture(autouse=True)
+    def _server_context(self, monkeypatch):
+        """Server context unless a test says CLI: importing the CLI app sets
+        ``DEPICTIO_CONTEXT=CLI`` for the whole process, so a test that ran it
+        earlier in the same worker would otherwise decide these."""
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+
     @pytest.fixture
     def regions(self, monkeypatch):
         """Record what is asked for its region, and answer with a fixed one."""
