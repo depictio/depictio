@@ -410,8 +410,14 @@ backend:
     # Comma-separated S3 locations readable without credentials, each either
     # "bucket" or "bucket/prefix". Empty means unsigned access is off, which
     # is the default: a bucket listed here is read with no signature, every
-    # other s3:// URL keeps using the project or instance credentials.
+    # other s3:// URL needs the project's storage settings.
     DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS: ""
+    # Comma-separated S3 locations the backend and the worker may read with
+    # their own ambient credentials (IAM role, IRSA, AWS_* env), same syntax.
+    # Empty by default: a user-supplied location that is neither public nor
+    # covered by the project's storage settings is refused, and the instance's
+    # own S3 keys are never used for one. Any user can read what is listed.
+    DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS: ""
     # Per-download size cap in bytes (500 MiB).
     DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: "524288000"
     # Per-request timeout in seconds.

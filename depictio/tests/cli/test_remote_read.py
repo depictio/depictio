@@ -1,7 +1,8 @@
 """Unit tests for the remote (scan mode "url") read path in deltatables.
 
 Covers the http(s) bounded-download branch against a local in-thread HTTP
-server; s3:// branches only assert dispatch behavior (no object store here).
+server; s3:// branches only assert dispatch behavior and the storage options
+the resolved target hands polars (no object store here).
 
 Context matters: the CLI reads loopback directly (the user's own machine),
 while the API process and the Celery worker route every read through the SSRF
@@ -13,11 +14,14 @@ import http.server
 import logging
 import os
 import threading
+from types import SimpleNamespace
 
 import httpx
 import polars as pl
 import pytest
 
+from depictio.api.v1 import remote_fetch
+from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.api.v1.remote_fetch import RemoteURLRejected
 from depictio.cli.cli.utils.deltatables import (
     _download_remote_to_temp,
@@ -27,6 +31,7 @@ from depictio.cli.cli.utils.deltatables import (
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.files import File
 from depictio.models.models.users import Permission, UserBase
+from depictio.models.s3_access import ProjectS3Config, S3AccessRefused
 
 
 @pytest.fixture(autouse=True)
@@ -41,8 +46,12 @@ def _remote_env(monkeypatch):
         "DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES",
         "DEPICTIO_REMOTE_MAX_REDIRECTS",
         "DEPICTIO_REMOTE_TIMEOUT_S",
+        "DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS",
+        "DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS",
     ):
         monkeypatch.delenv(var, raising=False)
+    # No region lookup goes out from these tests: the resolved target is kept.
+    monkeypatch.setattr(remote_fetch, "ensure_region", lambda target: target)
     # The download client honors proxy env vars; a loopback server must not
     # be routed through the sandbox proxy.
     for var in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"):
@@ -236,19 +245,37 @@ def test_read_remote_temp_file_cleaned(http_fixture_server, tmp_path):
     assert set(_leftover_temp_files()) == before
 
 
+def _cli_config(project: ProjectS3Config | None = None) -> SimpleNamespace:
+    return SimpleNamespace(
+        s3_storage=S3DepictioCLIConfig(
+            bucket="depictio-bucket", root_user="instance-key", root_password="instance-secret-1"
+        ),
+        remote_storage_options=project,
+    )
+
+
+def _project() -> ProjectS3Config:
+    return ProjectS3Config(
+        endpoint_url="https://s3.example.org",
+        access_key_id="project-key",
+        secret_access_key="project-secret",
+        region="eu-central-1",
+    )
+
+
 def test_s3_unsupported_format_rejected():
     with pytest.raises(ValueError, match="not supported for s3"):
-        _read_remote_file_lazy("s3://bucket/key.xlsx", "xlsx", {}, {})
+        _read_remote_file_lazy("s3://bucket/key.xlsx", "xlsx", {}, _cli_config())
 
 
 def test_s3_parquet_dispatches_lazily():
     # No object store in unit tests: the scan must build lazily without
-    # touching the network — collection would fail, construction must not.
-    lf = _read_remote_file_lazy("s3://bucket/key.parquet", "parquet", {}, {})
+    # touching the network: collection would fail, construction must not.
+    lf = _read_remote_file_lazy("s3://bucket/key.parquet", "parquet", {}, _cli_config())
     assert isinstance(lf, pl.LazyFrame)
 
 
-class TestPublicBucketReads:
+class TestS3ReadTargets:
     """Which storage options a remote read ends up using.
 
     Asserted on the options handed to polars rather than on a real read: there
@@ -270,30 +297,59 @@ class TestPublicBucketReads:
     def test_an_allowlisted_bucket_is_read_unsigned(self, captured_scan, monkeypatch):
         monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
 
-        _read_remote_file_lazy(
-            "s3://open-data/x.parquet", "parquet", {}, {"aws_access_key_id": "k"}
-        )
+        _read_remote_file_lazy("s3://open-data/x.parquet", "parquet", {}, _cli_config(_project()))
 
         assert captured_scan["storage_options"]["aws_skip_signature"] == "true"
         assert "aws_access_key_id" not in captured_scan["storage_options"]
 
-    def test_an_unlisted_bucket_keeps_the_configured_credentials(self, captured_scan, monkeypatch):
+    def test_an_unlisted_bucket_reads_with_the_project_storage(self, captured_scan, monkeypatch):
         monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
 
         _read_remote_file_lazy(
-            "s3://private-data/x.parquet", "parquet", {}, {"aws_access_key_id": "k"}
+            "s3://private-data/x.parquet", "parquet", {}, _cli_config(_project())
         )
 
-        assert captured_scan["storage_options"] == {"aws_access_key_id": "k"}
+        options = captured_scan["storage_options"]
+        assert options["aws_access_key_id"] == "project-key"
+        assert options["aws_endpoint_url"] == "https://s3.example.org"
+        assert options["aws_region"] == "eu-central-1"
 
     def test_a_prefix_entry_does_not_open_the_whole_bucket(self, captured_scan, monkeypatch):
         monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "shared/public")
 
         _read_remote_file_lazy(
-            "s3://shared/private/x.parquet", "parquet", {}, {"aws_access_key_id": "k"}
+            "s3://shared/private/x.parquet", "parquet", {}, _cli_config(_project())
         )
 
-        assert captured_scan["storage_options"] == {"aws_access_key_id": "k"}
+        assert captured_scan["storage_options"]["aws_access_key_id"] == "project-key"
+
+    def test_the_cli_reads_with_its_configuration(self, captured_scan):
+        _read_remote_file_lazy("s3://depictio-bucket/x.parquet", "parquet", {}, _cli_config())
+
+        assert captured_scan["storage_options"]["aws_access_key_id"] == "instance-key"
+
+    def test_the_server_never_reads_with_the_instance_credentials(
+        self, server_context, captured_scan
+    ):
+        """No project storage, not public: refused, not read with the root keys."""
+        file_info = _make_remote_file("s3://someone-elses/x.parquet")
+        with pytest.raises(S3AccessRefused) as exc:
+            read_single_file_lazy(file_info, "parquet", {}, _cli_config())
+        assert exc.value.code == "s3_refused"
+        assert "url" not in captured_scan
+
+    def test_the_server_refuses_the_instance_bucket(self, server_context, captured_scan):
+        file_info = _make_remote_file("s3://depictio-bucket/6512ab/part-0.parquet")
+        with pytest.raises(S3AccessRefused, match="instance's own data"):
+            read_single_file_lazy(file_info, "parquet", {}, _cli_config(_project()))
+        assert "url" not in captured_scan
+
+    def test_preview_and_ingest_resolve_alike(self, server_context, captured_scan):
+        """The same URL and configuration give the same options, every time."""
+        cfg = _cli_config(_project())
+        first = remote_fetch.s3_read_storage_options("s3://lab/x.parquet", cfg)
+        _read_remote_file_lazy("s3://lab/x.parquet", "parquet", {}, cfg)
+        assert captured_scan["storage_options"] == first
 
 
 class TestProbeUrlMetadata:

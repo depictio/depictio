@@ -11,6 +11,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, tokens_collection
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
+from depictio.models.s3_access import ProjectS3Config
 
 
 def generate_join_dict(workflow: dict, project: dict | None = None) -> dict[str, dict[str, dict]]:
@@ -562,16 +563,16 @@ def _push_workflow_and_ingest(
     name: str,
     current_user,
     full_token: dict,
-    remote_storage_options: dict | None = None,
+    remote_storage_options: ProjectS3Config | None = None,
 ) -> dict:
     """Shared tail of the create-DC flows: atomically $push the workflow onto
     the project, then run scan + process via the CLI helpers, rolling the
     $push back on any failure.
 
-    ``remote_storage_options`` carries the project's own read credentials
-    (per-project storage config) for remote-URL sources; None reads with the
-    instance credentials. Uploads never set it: their source is a local temp
-    file.
+    ``remote_storage_options`` carries the project's own storage settings
+    for remote s3:// sources; None means the project has none, and such a
+    source is then read only if it is public (never with the instance
+    credentials). Uploads never set it: their source is a local temp file.
 
     Synchronous on purpose (see `_create_dc_from_upload`): the CLI helpers use
     a sync httpx client back into this same FastAPI process. Callers must
@@ -870,17 +871,16 @@ def _create_dc_from_url(
     if not full_token:
         raise HTTPException(status_code=401, detail="No API token on file for this user.")
 
-    # The project's own read credentials (per-project storage config), so a
-    # private s3:// URL is read with them rather than the instance's MinIO
-    # keys. Resolved before the workflow $push so an unusable config fails
-    # cleanly with nothing to roll back.
+    # The project's own storage settings, the only credentials a private
+    # s3:// URL is read with on the server. Resolved before the workflow $push
+    # so an unusable config fails cleanly with nothing to roll back.
     from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
         ProjectStorageUnusable,
-        storage_options_for_project,
+        project_storage_for,
     )
 
     try:
-        remote_storage_options = storage_options_for_project(project_oid)
+        remote_storage_options = project_storage_for(project_oid)
     except ProjectStorageUnusable as exc:
         logger.error(f"Project storage unusable for create_from_url: {exc}")
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
@@ -1109,14 +1109,15 @@ async def _ensure_user_cli_token(current_user) -> None:
     await _add_token(token_data)
 
 
-def _build_cli_config_for_user(current_user, remote_storage_options: dict | None = None):
+def _build_cli_config_for_user(current_user, remote_storage_options: ProjectS3Config | None = None):
     """Build a CLIConfig for in-process processor calls.
 
     The CLI helpers expect a stored token doc (they call back into the API
     over httpx). Mirrors the table-DC flow at ``_create_dc_from_upload``.
-    ``remote_storage_options`` carries a project's own read credentials for
-    remote url/manifest sources (per-project storage config); the instance
-    MinIO config stays the Delta write target either way.
+    ``remote_storage_options`` carries a project's own storage settings for
+    remote s3:// sources (see ``project_storage_for``); the instance S3
+    config stays the Delta write target either way, and is never used to
+    read a user-supplied location on the server.
     """
     from depictio.models.models.cli import CLIConfig, UserBaseCLIConfig
 

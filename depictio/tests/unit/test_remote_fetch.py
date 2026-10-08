@@ -21,6 +21,7 @@ from depictio.api.v1.remote_fetch import (
     AWS_DEFAULT_REGION,
     RemoteFetchFailed,
     RemoteURLRejected,
+    S3AccessRefused,
     bounded_download,
     fetch_validated_text,
     is_public_s3_location,
@@ -30,8 +31,10 @@ from depictio.api.v1.remote_fetch import (
     public_s3_region,
     public_s3_storage_options,
     remote_policy,
+    s3_read_target,
     validate_remote_url,
 )
+from depictio.models import s3_access
 
 # ---------------------------------------------------------------------------
 # Env isolation
@@ -44,6 +47,8 @@ _GATEWAY_ENV_VARS = (
     "DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES",
     "DEPICTIO_REMOTE_TIMEOUT_S",
     "DEPICTIO_REMOTE_MAX_REDIRECTS",
+    "DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS",
+    "DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS",
 )
 
 _PROXY_ENV_VARS = (
@@ -593,7 +598,9 @@ class TestPublicS3Allowlist:
 
     def test_storage_options_disable_signing_only_for_a_listed_location(self, monkeypatch):
         monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
-        monkeypatch.setattr(remote_fetch, "public_s3_region", lambda bucket: "eu-west-1")
+        monkeypatch.setattr(
+            s3_access, "ensure_region", lambda target: target.with_region("eu-west-1")
+        )
 
         options = public_s3_storage_options("s3://open-data/x.parquet")
 
@@ -608,9 +615,9 @@ class TestPublicBucketRegion:
 
     @pytest.fixture(autouse=True)
     def _clear_cache(self):
-        remote_fetch._public_bucket_regions.clear()
+        s3_access._bucket_regions.clear()
         yield
-        remote_fetch._public_bucket_regions.clear()
+        s3_access._bucket_regions.clear()
 
     @staticmethod
     def _stub_head_bucket(monkeypatch, head):
@@ -683,3 +690,66 @@ class TestPublicBucketRegion:
 
         assert public_s3_region("flaky") == AWS_DEFAULT_REGION
         assert public_s3_region("flaky") == "eu-west-1"
+
+
+class TestS3ReadTarget:
+    """The wrapper derives the resolver's inputs the same way for every caller."""
+
+    @staticmethod
+    def _config(**overrides):
+        from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
+
+        fields = {
+            "s3_storage": S3DepictioCLIConfig(
+                bucket="instance-bucket", root_user="root", root_password="instance-secret-1"
+            ),
+            "remote_storage_options": None,
+            **overrides,
+        }
+        return SimpleNamespace(**fields)
+
+    def test_an_unset_context_is_the_server(self, monkeypatch):
+        monkeypatch.delenv("DEPICTIO_CONTEXT", raising=False)
+        with pytest.raises(S3AccessRefused, match="cannot be read by the server"):
+            s3_read_target("s3://somewhere/x.csv", self._config())
+
+    def test_the_instance_bucket_comes_from_the_configuration(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "instance-bucket")
+        with pytest.raises(S3AccessRefused, match="instance's own data"):
+            s3_read_target("s3://instance-bucket/x.csv", self._config())
+
+    def test_without_a_configuration_the_environment_names_the_instance_bucket(self, monkeypatch):
+        """Preview (no CLI config) and worker must refuse the same location."""
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+        monkeypatch.setenv("DEPICTIO_S3_BUCKET", "env-instance-bucket")
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "env-instance-bucket")
+        with pytest.raises(S3AccessRefused, match="instance's own data"):
+            s3_read_target("s3://env-instance-bucket/x.csv")
+
+    def test_a_dict_of_project_storage_options_is_normalised(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+        target = s3_read_target(
+            "s3://lab/x.csv",
+            self._config(
+                remote_storage_options={
+                    "endpoint_url": "https://s3.example.org",
+                    "aws_access_key_id": "K",
+                    "aws_secret_access_key": "S",
+                    "region": "eu-west-3",
+                }
+            ),
+        )
+        assert (target.kind, target.region, target.access_key_id) == ("project", "eu-west-3", "K")
+
+    def test_the_cli_reads_with_its_configuration(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "cli")
+        target = s3_read_target("s3://instance-bucket/x.csv", self._config())
+        assert target.kind == "instance"
+        assert target.access_key_id == "root"
+
+    def test_the_timeout_comes_from_the_policy(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open")
+        monkeypatch.setenv("DEPICTIO_REMOTE_TIMEOUT_S", "7")
+        assert s3_read_target("s3://open/x", self._config()).timeout_s == 7.0

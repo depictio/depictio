@@ -3125,15 +3125,20 @@ def manifest_refresh_dc_task(payload: dict) -> dict:
     The project document is re-read here (nothing rich crosses the broker) and
     is never written: refresh has no scan-config changes to persist or revert,
     which is what makes per-DC parallelism safe.
+
+    Never retried: every failure, an S3 read the configuration refuses
+    included, is written as the DC's failed step and ends the task. A refusal
+    would only be refused again.
     """
     from depictio.api.v1.db import projects_collection
     from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import _run_dc_ingest
     from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
         ProjectStorageUnusable,
-        storage_options_for_project,
+        project_storage_for,
     )
     from depictio.api.v1.monitoring import store
     from depictio.models.models.users import UserBase
+    from depictio.models.s3_access import S3AccessError
 
     run_id = payload["run_id"]
     tag = payload["dc_tag"]
@@ -3154,7 +3159,7 @@ def manifest_refresh_dc_task(payload: dict) -> dict:
             user,
             sync_files=bool(payload.get("sync_files", True)),
             # Resolved worker-side so credentials never cross the broker.
-            remote_storage_options=storage_options_for_project(payload["project_id"]),
+            remote_storage_options=project_storage_for(payload["project_id"]),
         )
     except ProjectStorageUnusable as exc:
         # The project's stored storage config cannot be used from this worker
@@ -3163,6 +3168,11 @@ def manifest_refresh_dc_task(payload: dict) -> dict:
         # would be silent misbehaviour, so the DC step fails with the reason;
         # the operator context (key path) goes to the worker log only.
         logger.error(f"Manifest refresh for DC '{tag}' cannot use project storage: {exc}")
+        ok, message = False, exc.detail
+    except S3AccessError as exc:
+        # Refused by the configuration or failed at the store: the sanitized
+        # detail is the step's message, the code goes to the worker log.
+        logger.error(f"Manifest refresh for DC '{tag}' failed on S3 ({exc.code}): {exc.detail}")
         ok, message = False, exc.detail
     except Exception as exc:  # noqa: BLE001 — any crash is a per-DC failure
         logger.error(f"Manifest refresh task crashed for DC '{tag}': {exc}")

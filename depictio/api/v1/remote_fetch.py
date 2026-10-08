@@ -32,6 +32,7 @@ import os
 import socket
 from collections.abc import Iterator
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 import httpx
@@ -40,9 +41,21 @@ import httpx
 # model, and the models logger avoids the API logging stack. Pulling
 # ``depictio.api.v1.configs.config`` here would run full Settings validation
 # (and mint JWT keys) in the CLI process and in unit tests.
-from depictio.api.v1.configs.settings_models import RemoteConfig
+from depictio.api.v1.configs.settings_models import RemoteConfig, S3DepictioCLIConfig
+from depictio.models import s3_access
 from depictio.models.logging import logger
+
+# Re-exported: the S3 errors and the target type are what callers of the
+# wrappers below catch and receive.
+from depictio.models.s3_access import AWS_DEFAULT_REGION as AWS_DEFAULT_REGION
+from depictio.models.s3_access import ProjectS3Config, S3Target, ensure_region, resolve_s3_target
+from depictio.models.s3_access import S3AccessError as S3AccessError
+from depictio.models.s3_access import S3AccessFailed as S3AccessFailed
+from depictio.models.s3_access import S3AccessRefused as S3AccessRefused
 from depictio.models.utils import get_depictio_context
+
+if TYPE_CHECKING:
+    from mypy_boto3_s3 import S3Client
 
 _CHUNK_BYTES = 1024 * 1024
 
@@ -91,129 +104,72 @@ def _split_hosts(raw: str) -> set[str]:
     return {h.strip().lower() for h in raw.split(",") if h.strip()}
 
 
-# Public buckets are read against the default AWS endpoint. Their real region is
-# resolved per bucket by :func:`public_s3_region`; this is the region that
-# resolution is itself asked in, and the fallback when it comes back empty.
-AWS_DEFAULT_REGION = "us-east-1"
-
-# Buckets do not move, so one successful lookup per bucket per process is enough.
-_public_bucket_regions: dict[str, str] = {}
-
-
-def _split_public_buckets(raw: str) -> list[tuple[str, str]]:
-    """Parse ``public_s3_buckets`` into ``(bucket, prefix)`` pairs.
-
-    An entry is either ``bucket`` (the whole bucket, prefix ``""``) or
-    ``bucket/prefix`` (that subtree only). Bucket names are case sensitive, so
-    unlike the host lists these are not lowercased.
-    """
-    entries: list[tuple[str, str]] = []
-    for raw_entry in raw.split(","):
-        entry = raw_entry.strip().strip("/")
-        if not entry:
-            continue
-        bucket, _, prefix = entry.partition("/")
-        entries.append((bucket, prefix))
-    return entries
+# ── S3 locations ────────────────────────────────────────────────────────────
+# The decision itself lives in ``depictio.models.s3_access`` (importable from a
+# CLI-only install, no ``depictio.api`` imports). These wrappers supply what
+# that module takes as parameters: the gateway policy, the process context and
+# the instance S3 settings, so every caller decides the same way.
 
 
 def is_public_s3_location(url: str, policy: RemoteConfig | None = None) -> bool:
     """Whether ``url`` names an s3 location the administrator marked public.
 
-    Decided from configuration alone, never by probing: an unsigned read
-    attempted against an arbitrary user-supplied bucket would leak whether that
-    bucket exists and in which region, through the error it returns. So the
-    answer has to be known before any request goes out.
-
-    A ``bucket/prefix`` entry matches that prefix and everything under it, and
-    only on a path boundary, so ``data`` does not match ``database/``.
+    See :func:`depictio.models.s3_access.is_public_s3_location`.
     """
-    parsed = urlparse(url)
-    if parsed.scheme.lower() != "s3":
-        return False
-
-    policy = policy if policy is not None else remote_policy()
-    key = parsed.path.lstrip("/")
-    for bucket, prefix in _split_public_buckets(policy.public_s3_buckets):
-        if bucket != parsed.netloc:
-            continue
-        if not prefix or key == prefix or key.startswith(f"{prefix}/"):
-            return True
-    return False
-
-
-def _bucket_region_header(response: dict) -> str | None:
-    """``x-amz-bucket-region`` out of a boto3 response or an error payload."""
-    headers = (response.get("ResponseMetadata") or {}).get("HTTPHeaders") or {}
-    return headers.get("x-amz-bucket-region")
+    return s3_access.is_public_s3_location(url, policy if policy is not None else remote_policy())
 
 
 def public_s3_region(bucket: str) -> str:
     """Region of an allowlisted public ``bucket``, ``us-east-1`` when unknown.
 
-    The region has to be the bucket's own before the read starts: object-store
-    does not follow the 301 S3 answers for a bucket that lives elsewhere, it
-    fails with "Received redirect without LOCATION".
-
-    Asked with an unsigned HeadBucket: the ``x-amz-bucket-region`` header comes
-    back even on that 301 and on the 403 a bucket that forbids listing returns,
-    which is what makes this work without credentials. ``GetBucketLocation``
-    does not, it is denied outright.
-
-    This one talks to the network, so it must only ever be called for a bucket
-    :func:`is_public_s3_location` has already accepted: deciding the allowlist
-    from configuration alone is what keeps a user-supplied bucket name from
-    becoming an existence-and-region oracle.
+    See :func:`depictio.models.s3_access.public_s3_region`.
     """
-    cached = _public_bucket_regions.get(bucket)
-    if cached:
-        return cached
-
-    import boto3
-    from botocore import UNSIGNED
-    from botocore.config import Config
-    from botocore.exceptions import ClientError
-
-    probed: str | None = None
-    try:
-        client = boto3.client(
-            "s3",
-            config=Config(signature_version=UNSIGNED),
-            region_name=AWS_DEFAULT_REGION,
-        )
-        probed = _bucket_region_header(client.head_bucket(Bucket=bucket))
-    except ClientError as exc:
-        # The 301 and the 403 are answers, not failures: both name the region.
-        probed = _bucket_region_header(exc.response)
-    except Exception as exc:
-        # Offline, DNS down, a response in an unexpected shape: fall back and
-        # let the read itself report the real failure rather than masking it.
-        logger.warning(f"Could not resolve the region of public bucket '{bucket}': {exc}")
-
-    # Only a real answer is cached. Caching the fallback would pin a bucket to
-    # the wrong region for the life of the process after one transient failure,
-    # and a long-lived worker would then fail every later read of it.
-    if probed:
-        _public_bucket_regions[bucket] = probed
-    return probed or AWS_DEFAULT_REGION
+    return s3_access.public_s3_region(bucket, timeout_s=remote_policy().timeout_s)
 
 
 def public_s3_storage_options(url: str, policy: RemoteConfig | None = None) -> dict | None:
-    """Polars/object-store options for reading ``url`` unsigned, or ``None``.
+    """Polars options for reading ``url`` unsigned, or ``None`` when it is not public."""
+    return s3_access.public_s3_storage_options(
+        url, policy if policy is not None else remote_policy()
+    )
 
-    ``None`` means "not an allowlisted public location", and the caller keeps
-    whatever credentials it already had. ``PolarsStorageOptions`` cannot express
-    this shape (it requires a non-empty ``endpoint_url``), so this is a plain
-    dict: a public bucket is read against the default AWS endpoint with the
-    signature switched off, in the region :func:`public_s3_region` resolves for
-    it (one unsigned HeadBucket on the first call for a given bucket).
+
+def s3_read_target(url: str, CLI_config=None) -> S3Target:
+    """How ``url`` is read for ``CLI_config``. Configuration only, no request.
+
+    The inputs of :func:`depictio.models.s3_access.resolve_s3_target`, derived
+    the same way wherever a read starts (preview, API ingest, worker, CLI):
+
+    * the context from ``DEPICTIO_CONTEXT`` (unset or unknown means server);
+    * the project's storage settings from ``CLI_config.remote_storage_options``;
+    * the instance S3 settings from ``CLI_config.s3_storage``, or from the
+      environment (``S3DepictioCLIConfig()``) when there is no configuration,
+      so a read without one still knows which bucket is the instance's;
+    * the policy from ``DEPICTIO_REMOTE_*``.
+
+    Raises :class:`~depictio.models.s3_access.S3AccessRefused`.
     """
-    if not is_public_s3_location(url, policy):
-        return None
-    return {
-        "aws_skip_signature": "true",
-        "aws_region": public_s3_region(urlparse(url).netloc),
-    }
+    instance_s3 = getattr(CLI_config, "s3_storage", None) or S3DepictioCLIConfig()
+    project_storage = getattr(CLI_config, "remote_storage_options", None)
+    if isinstance(project_storage, dict):
+        project_storage = ProjectS3Config.model_validate(project_storage)
+    return resolve_s3_target(
+        url,
+        context="server" if is_server_context() else "cli",
+        project_storage=project_storage,
+        instance_s3=instance_s3,
+        policy=remote_policy(),
+    )
+
+
+def s3_read_client(url: str, CLI_config=None) -> "S3Client":
+    """boto3 client for reading ``url``: resolved target, in its bucket's region."""
+    return ensure_region(s3_read_target(url, CLI_config)).client()
+
+
+def s3_read_storage_options(url: str, CLI_config=None) -> dict[str, str]:
+    """polars ``storage_options`` for reading ``url``, same decision as :func:`s3_read_client`."""
+    return ensure_region(s3_read_target(url, CLI_config)).polars_options()
 
 
 def _resolve_addresses(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
@@ -236,8 +192,8 @@ def validate_remote_url(url: str, policy: RemoteConfig | None = None) -> None:
     """Validate a user-supplied URL before any fetch. Raises ``RemoteURLRejected``.
 
     ``s3://`` URLs skip the DNS/IP checks: they are read through the object
-    store client with the instance's configured credentials, not fetched over
-    arbitrary HTTP. ``policy`` lets the redirect loop reuse one policy read
+    store client, with the credentials :func:`s3_read_target` resolves for
+    them, not fetched over arbitrary HTTP. ``policy`` lets the redirect loop reuse one policy read
     across hops; callers normally leave it unset.
     """
     policy = policy if policy is not None else remote_policy()

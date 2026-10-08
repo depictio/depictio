@@ -13,7 +13,7 @@ from depictio.api.v1.remote_fetch import (
     bounded_download,
     direct_download,
     is_server_context,
-    public_s3_storage_options,
+    s3_read_storage_options,
 )
 from depictio.cli.cli.utils.api_calls import (
     api_create_files,
@@ -50,6 +50,7 @@ from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3
 from depictio.models.models.files import File
 from depictio.models.models.manifest import is_remote_url
 from depictio.models.models.s3 import PolarsStorageOptions
+from depictio.models.s3_access import S3AccessError, blank_foreign_session_token
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
 
@@ -260,30 +261,32 @@ def _read_remote_file_lazy(
     url: str,
     file_format: str,
     polars_kwargs: dict,
-    remote_storage_options: dict | None,
+    CLI_config: CLIConfig | None = None,
 ) -> pl.LazyFrame:
     """Read a remote file (scan mode "url") into a LazyFrame.
 
-    s3:// — lazy scan straight through the object store. A location on the
-    administrator's public bucket allowlist is read with the signature disabled,
-    since credentials for someone else's open bucket would only be rejected;
-    everything else uses the project's or the instance's configured credentials.
-    http(s):// — bounded download to a temp file, eager read, temp deleted;
+    s3://: lazy scan straight through the object store, with the target
+    ``s3_read_target`` resolves for this very URL from ``CLI_config``: a
+    public bucket unsigned, the project's own storage settings, or (CLI
+    context only) the configuration's S3 credentials. The same decision the
+    preview and the listing make, so the three never read one URL two ways;
+    a location the configuration does not allow raises ``S3AccessRefused``.
+    http(s)://: bounded download to a temp file, eager read, temp deleted;
     keeps lifetime simple at the cost of holding one file in memory.
     """
     if url.startswith("s3://"):
-        storage_options = public_s3_storage_options(url) or remote_storage_options or {}
+        if file_format not in ("parquet", "csv", "tsv", "txt"):
+            raise ValueError(
+                f"Format '{file_format}' is not supported for s3:// remote reads "
+                "(supported: parquet, csv, tsv, txt)."
+            )
+        storage_options = s3_read_storage_options(url, CLI_config)
         if file_format == "parquet":
             return pl.scan_parquet(url, storage_options=storage_options, **polars_kwargs)
-        if file_format in ["csv", "tsv", "txt"]:
-            effective_kwargs = dict(polars_kwargs)
-            if "separator" not in effective_kwargs and file_format == "tsv":
-                effective_kwargs["separator"] = "\t"
-            return pl.scan_csv(url, storage_options=storage_options, **effective_kwargs)
-        raise ValueError(
-            f"Format '{file_format}' is not supported for s3:// remote reads "
-            "(supported: parquet, csv, tsv, txt)."
-        )
+        effective_kwargs = dict(polars_kwargs)
+        if "separator" not in effective_kwargs and file_format == "tsv":
+            effective_kwargs["separator"] = "\t"
+        return pl.scan_csv(url, storage_options=storage_options, **effective_kwargs)
 
     temp_path = _download_remote_to_temp(url)
     try:
@@ -301,7 +304,7 @@ def read_single_file_lazy(
     file_info: File,
     file_format: str,
     polars_kwargs: dict,
-    remote_storage_options: dict | None = None,
+    CLI_config: CLIConfig | None = None,
 ) -> pl.LazyFrame:
     """
     Lazily scan a single file into a Polars LazyFrame according to the specified format.
@@ -310,8 +313,8 @@ def read_single_file_lazy(
         file_info (File): A validated File object.
         file_format (str): The file format (e.g. csv, parquet).
         polars_kwargs (dict): Additional keyword arguments for the Polars scanner.
-        remote_storage_options (dict | None): Polars storage options used for
-            s3:// remote locations (scan mode "url").
+        CLI_config (CLIConfig | None): Configuration the s3:// remote locations
+            (scan mode "url") resolve their read target from.
 
     Returns:
         pl.LazyFrame: The lazy DataFrame representation of the file.
@@ -326,9 +329,7 @@ def read_single_file_lazy(
 
     try:
         if is_remote_url(file_path):
-            lf = _read_remote_file_lazy(
-                file_path, file_format, polars_kwargs, remote_storage_options
-            )
+            lf = _read_remote_file_lazy(file_path, file_format, polars_kwargs, CLI_config)
         else:
             lf = _lazy_scan_path(file_path, file_format, polars_kwargs)
 
@@ -341,6 +342,10 @@ def read_single_file_lazy(
             lf = lf.with_columns(pl.lit(str(file_info.manifest_id)).alias("depictio_manifest_id"))
         return lf
 
+    except S3AccessError:
+        # Already a sanitized message with its own code: wrapping it would
+        # lose the code the API answers with.
+        raise
     except Exception as e:
         error_msg = f"Error scanning file {file_path}: {e}"
         logger.debug(error_msg)
@@ -351,7 +356,7 @@ def read_files_lazy(
     files: list,
     file_format: str,
     polars_kwargs: dict,
-    remote_storage_options: dict | None = None,
+    CLI_config: CLIConfig | None = None,
 ) -> list:
     """
     Lazily read all files into Polars LazyFrames.
@@ -360,15 +365,15 @@ def read_files_lazy(
         files (list): List of validated File objects.
         file_format (str): Format of the files.
         polars_kwargs (dict): Additional keyword arguments for the Polars scanners.
-        remote_storage_options (dict | None): Polars storage options for s3://
-            remote locations.
+        CLI_config (CLIConfig | None): Configuration s3:// remote locations
+            resolve their read target from.
 
     Returns:
         list: List of Polars LazyFrames.
     """
     lazy_frames = []
     for file_info in files:
-        lf = read_single_file_lazy(file_info, file_format, polars_kwargs, remote_storage_options)
+        lf = read_single_file_lazy(file_info, file_format, polars_kwargs, CLI_config)
         lazy_frames.append(lf)
     if not lazy_frames:
         error_msg = "No LazyFrames were generated from the files."
@@ -596,11 +601,6 @@ def clustering_columns(
     return [c for c in candidates if c in present]
 
 
-# The names deltalake reads a session token from in the environment, in any case: a bare
-# TOKEN as well as AWS_SESSION_TOKEN.
-_SESSION_TOKEN_NAMES = ("aws_session_token", "aws_token", "session_token", "token")
-
-
 def delta_storage_options(storage_options: PolarsStorageOptions) -> dict:
     """The options deltalake and polars get for Depictio's S3: the model's, and an empty
     session token when the environment holds one issued for another access key.
@@ -608,15 +608,12 @@ def delta_storage_options(storage_options: PolarsStorageOptions) -> dict:
     deltalake fills in every option it is not given from the environment, a session
     token included, and sends it with the keys it is given: the user's own AWS session
     token would reach Depictio's S3, the local server's included. An option given wins
-    over the environment, and there is no way to give none: it is given empty.
+    over the environment, and there is no way to give none: it is given empty. The rule
+    is ``blank_foreign_session_token``, which the remote reads share.
     """
-    options = storage_options.model_dump()
-    # Kept when it goes with the key given: temporary credentials exported for that key.
-    if os.environ.get("AWS_ACCESS_KEY_ID") != storage_options.aws_access_key_id and any(
-        name.lower() in _SESSION_TOKEN_NAMES for name in os.environ
-    ):
-        options["aws_session_token"] = ""
-    return options
+    return blank_foreign_session_token(
+        storage_options.model_dump(), storage_options.aws_access_key_id
+    )
 
 
 def delta_table_stats(
@@ -1059,19 +1056,15 @@ def client_aggregate_data(
     file_format = dc_props.get("format", "csv").lower()
     polars_kwargs = dict(dc_props.get("polars_kwargs", {}))
 
-    # Remote locations read with the project's own storage credentials
-    # when configured (per-project storage config, RFC §5.3), falling back
-    # to the instance's S3 config. The Delta write target below always
-    # stays on the instance config — read and write are two different
-    # credentials by design.
-    remote_options = CLI_config.remote_storage_options or storage_options.model_dump()
-
     def _read(run_tags: set[str] | None) -> tuple[list[File], list]:
         collected = fetch_file_data(str(dc_id), CLI_config, run_tags=run_tags)
         with timed("parse"):
-            frames = read_files_lazy(
-                collected, file_format, polars_kwargs, remote_storage_options=remote_options
-            )
+            # Each s3:// location resolves its own read target from CLI_config
+            # (public bucket, the project's storage settings, or, in CLI context
+            # only, the instance S3 config). The Delta write target below always
+            # stays on the instance config: read and write are two different
+            # credentials by design.
+            frames = read_files_lazy(collected, file_format, polars_kwargs, CLI_config=CLI_config)
         record("n_files", len(collected) if collected else 0)
         return collected, frames
 

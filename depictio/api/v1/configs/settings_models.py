@@ -906,9 +906,24 @@ class RemoteConfig(BaseSettings):
             "Comma-separated S3 locations readable without credentials, each either "
             "'bucket' or 'bucket/prefix'. Empty by default, so unsigned access is "
             "opt-in. A bucket listed here is read with the signature disabled; every "
-            "other s3:// URL keeps using the instance or project credentials. The "
-            "list is consulted before any request goes out, so naming a bucket that "
-            "is not on it never turns into an existence or region oracle."
+            "other s3:// URL needs the project's storage settings (or, on the server, "
+            "an entry in credentialed_s3_buckets). The list is consulted before any "
+            "request goes out, so naming a bucket that is not on it never turns into "
+            "an existence or region oracle."
+        ),
+    )
+    credentialed_s3_buckets: str = Field(
+        default="",
+        description=(
+            "Comma-separated S3 locations the API and the Celery worker may read with "
+            "their own ambient credentials (the AWS default chain: environment, IAM "
+            "role, web identity), same 'bucket' or 'bucket/prefix' syntax as "
+            "public_s3_buckets. Empty by default. Without an entry here, a server-side "
+            "read of an s3:// location that is neither public nor covered by the "
+            "project's storage settings is refused, and the instance's own S3 "
+            "credentials are never used for a user-supplied location. Any user of "
+            "the instance can read what is listed here, so list only data every user "
+            "may see."
         ),
     )
     timeout_s: float = Field(
