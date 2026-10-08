@@ -106,7 +106,21 @@ MapType = Literal["scatter_map", "density_map", "choropleth_map"]
 # the plotly-express map, and the aggregation planner has a violin branch), but
 # the model constant did not list it, so a template asking for one failed
 # validation before it reached either.
-ChartType = Literal["scatter", "line", "bar", "box", "violin", "histogram", "heatmap"]
+ChartType = Literal[
+    "scatter",
+    "line",
+    "bar",
+    "box",
+    "violin",
+    "histogram",
+    "ecdf",
+    "strip",
+    "area",
+    "funnel",
+    "density_heatmap",
+    "density_contour",
+    "heatmap",
+]
 
 # Aggregation functions (from card_component/utils.py AGGREGATION_MAPPING)
 AggregationFunction = Literal[

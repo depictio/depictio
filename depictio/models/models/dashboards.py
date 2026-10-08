@@ -43,6 +43,7 @@ from depictio.models.components.lite import (
     MultiQCLiteComponent,
     TableLiteComponent,
     TextLiteComponent,
+    index_from_tag,
 )
 from depictio.models.components.types import CardVariant, FigureStyle
 from depictio.models.logging import logger
@@ -1647,13 +1648,12 @@ class DashboardDataLite(BaseModel):
         Returns:
             Full dashboard dictionary ready for MongoDB insertion
         """
-        import uuid
         from datetime import datetime
 
         def build_base_component(comp_dict: dict[str, Any]) -> dict[str, Any]:
             """Build base component with common fields."""
             base: dict[str, Any] = {
-                "index": comp_dict.get("index") or str(uuid.uuid4()),
+                "index": comp_dict.get("index") or index_from_tag(comp_dict.get("tag")),
                 "component_type": comp_dict.get("component_type", "figure"),
                 "title": comp_dict.get("title", ""),
                 "workflow_tag": comp_dict.get("workflow_tag"),

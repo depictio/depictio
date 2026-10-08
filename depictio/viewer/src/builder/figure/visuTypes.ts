@@ -81,6 +81,59 @@ export const VISU_TYPES_FALLBACK: VisuTypeMeta[] = [
     icon: 'mdi:chart-histogram',
     group: 'core',
   },
+  // The rest of the curated set (`ALLOWED_VISUALIZATIONS`), so a failed fetch
+  // does not hide a chart type a YAML dashboard may already declare. Labels,
+  // icons and groups mirror `VIZ_LABELS_DESCRIPTIONS`, `_VISUALIZATION_ICONS`
+  // and `get_visualization_group` on the backend.
+  {
+    type: 'violin',
+    label: 'Violin Plot',
+    description: 'Distribution shape with kernel density.',
+    icon: 'mdi:violin',
+    group: 'core',
+  },
+  {
+    type: 'area',
+    label: 'Area Chart',
+    description: 'Filled line chart for cumulative quantities or composition.',
+    icon: 'mdi:chart-areaspline',
+    group: 'core',
+  },
+  {
+    type: 'ecdf',
+    label: 'ECDF',
+    description: 'Fraction of values at or below each point.',
+    icon: 'mdi:chart-bell-curve-cumulative',
+    group: 'advanced',
+  },
+  {
+    type: 'strip',
+    label: 'Strip Plot',
+    description: 'Every observation as a tick along a numeric axis.',
+    icon: 'mdi:chart-scatter-plot',
+    group: 'advanced',
+  },
+  {
+    type: 'funnel',
+    label: 'Funnel',
+    description: 'Stage-by-stage drop-off (e.g. conversion).',
+    icon: 'mdi:filter',
+    group: 'advanced',
+  },
+  {
+    type: 'density_heatmap',
+    label: 'Density Heatmap',
+    description: '2D bin counts as a heatmap.',
+    icon: 'mdi:grid',
+    group: 'advanced',
+  },
+  {
+    type: 'density_contour',
+    label: 'Density Contour',
+    description: '2D bin counts as contour lines.',
+    icon: 'mdi:chart-scatter-plot',
+    group: 'advanced',
+  },
   {
     type: 'heatmap',
     label: 'Heatmap',
