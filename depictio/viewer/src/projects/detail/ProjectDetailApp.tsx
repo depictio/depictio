@@ -370,16 +370,16 @@ const ProjectDetailApp: React.FC = () => {
 
   const refresh = () => setRefreshKey((k) => k + 1);
 
-  // Permission check — owners, editors, or admins may mutate DCs.
-  const canMutate = useMemo(() => {
-    if (!user || !project) return false;
-    if (user.is_admin) return true;
+  // Permission check: owners, editors, or admins may mutate DCs. Storage
+  // credentials are owners-only (stricter than canMutate), mirroring the
+  // backend's owner gate on /storage.
+  const { canMutate, isOwner } = useMemo(() => {
+    if (!user || !project) return { canMutate: false, isOwner: false };
+    if (user.is_admin) return { canMutate: true, isOwner: true };
     const matchUser = (list?: Array<{ _id?: string; id?: string }>) =>
       !!list?.some((u) => (u._id ?? u.id) === user.id);
-    return (
-      matchUser(project.permissions?.owners) ||
-      matchUser(project.permissions?.editors)
-    );
+    const owner = matchUser(project.permissions?.owners);
+    return { canMutate: owner || matchUser(project.permissions?.editors), isOwner: owner };
   }, [user, project]);
 
   // Refresh and export are refused to non-admins on a public/demo deployment.
@@ -390,14 +390,6 @@ const ProjectDetailApp: React.FC = () => {
     : isPublicMode && !user?.is_admin
       ? 'Disabled in public/demo mode for non-admin users.'
       : null;
-
-  // Storage credentials are owners-only (stricter than canMutate, which also
-  // covers editors), mirroring the backend's owner gate on /storage.
-  const isOwner = useMemo(() => {
-    if (!user || !project) return false;
-    if (user.is_admin) return true;
-    return !!project.permissions?.owners?.some((u) => (u._id ?? u.id) === user.id);
-  }, [user, project]);
 
   const workflows = useMemo<WorkflowShape[]>(
     () => (project?.workflows as WorkflowShape[] | undefined) || [],
@@ -1364,9 +1356,7 @@ const CreateDataCollectionModal: React.FC<{
   // ("https://e" first gives "e") until the user edits the name.
   useEffect(() => {
     if (tableSource !== 'url') return;
-    const trimmed = remoteUrl.trim();
-    if (!trimmed) return;
-    const basename = trimmed.split('?')[0].split('/').pop() || '';
+    const basename = remoteUrl.trim().split('?')[0].split('/').pop();
     if (!basename) return;
     const guessed = guessFormat(basename);
     if (guessed) {
@@ -1517,7 +1507,7 @@ const CreateDataCollectionModal: React.FC<{
           setSubmitting(false);
           return;
         }
-        if (!/^(https:\/\/|s3:\/\/|http:\/\/)/i.test(url)) {
+        if (!/^(https?|s3):\/\//i.test(url)) {
           // http:// passes here; whether the server accepts it depends on
           // DEPICTIO_REMOTE_ALLOW_HTTP.
           setError(
@@ -1610,6 +1600,14 @@ const CreateDataCollectionModal: React.FC<{
   };
 
   const isDelimited = fileFormat === 'csv' || fileFormat === 'tsv';
+
+  /** True while the chosen source still lacks an input the Create button needs. */
+  const isMissingInput = (): boolean => {
+    if (!name.trim()) return true;
+    if (dcType === 'multiqc') return multiqcDropzone.files.length === 0;
+    if (tableSource === 'url') return !remoteUrl.trim();
+    return !file || (coordsConfirmed && (!latColumn || !lonColumn));
+  };
 
   return (
     <Modal
@@ -1982,15 +1980,7 @@ const CreateDataCollectionModal: React.FC<{
             color={accent.secondary}
             onClick={handleSubmit}
             loading={submitting}
-            disabled={
-              !name.trim() ||
-              (dcType === 'multiqc'
-                ? multiqcDropzone.files.length === 0
-                : tableSource === 'url'
-                  ? !remoteUrl.trim()
-                  : !file ||
-                    (coordsConfirmed && (!latColumn || !lonColumn)))
-            }
+            disabled={isMissingInput()}
             leftSection={<Icon icon="mdi:cloud-upload-outline" width={16} />}
           >
             Create

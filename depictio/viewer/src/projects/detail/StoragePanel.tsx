@@ -16,7 +16,6 @@ import {
   Stack,
   Text,
   TextInput,
-  ThemeIcon,
   Tooltip,
   UnstyledButton,
 } from '@mantine/core';
@@ -34,6 +33,8 @@ import type { ProjectStorageConfig, ProjectStorageTestResult } from 'depictio-re
 
 import {
   DisabledReason,
+  EmptyState,
+  ErrorAlert,
   Field,
   GatedButton,
 } from '../../components/settings/SettingsSections';
@@ -47,6 +48,9 @@ interface StoragePanelProps {
 }
 
 const OWNER_ONLY = 'Only project owners can change the storage settings.';
+
+type FormField = 'endpoint' | 'bucket' | 'accessKey' | 'secret';
+type FieldErrors = Partial<Record<FormField, string>>;
 
 /** A value the reader may want to paste elsewhere (an endpoint, a key id),
  *  laid out like the dashboard identifiers. */
@@ -131,16 +135,13 @@ const TestResult: React.FC<{
 }> = ({ result, error }) => {
   if (error) {
     return (
-      <Alert
-        color="red"
-        variant="light"
-        icon={<Icon icon="mdi:alert-circle-outline" width={18} />}
+      <ErrorAlert
         title="Could not run the connection test"
         data-testid="storage-test-result"
         data-success="false"
       >
         {error}
-      </Alert>
+      </ErrorAlert>
     );
   }
   if (!result) return null;
@@ -186,7 +187,7 @@ const StorageForm: React.FC<{
   const [region, setRegion] = useState(existing?.region ?? 'us-east-1');
   const [accessKeyId, setAccessKeyId] = useState(existing?.access_key_id ?? '');
   const [secret, setSecret] = useState('');
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -200,19 +201,20 @@ const StorageForm: React.FC<{
    *  saved with. */
   const keepsStoredSecret = hasSecret && Boolean(typedKey) && !keyChanged && !placeChanged;
 
-  const clearFieldError = (name: string) =>
+  const clearFieldErrors = (...names: FormField[]) =>
     setFieldErrors((prev) => {
-      if (!(name in prev)) return prev;
+      if (!names.some((name) => name in prev)) return prev;
       const next = { ...prev };
-      delete next[name];
+      for (const name of names) delete next[name];
       return next;
     });
 
-  const validate = (): Record<string, string> => {
-    const errors: Record<string, string> = {};
+  const validate = (): FieldErrors => {
+    const errors: FieldErrors = {};
     const endpoint = endpointUrl.trim();
-    if (!endpoint) errors.endpoint = 'Enter the address of the storage service.';
-    else if (!/^https?:\/\//i.test(endpoint)) {
+    if (!endpoint) {
+      errors.endpoint = 'Enter the address of the storage service.';
+    } else if (!/^https?:\/\//i.test(endpoint)) {
       errors.endpoint = 'Enter the full address, starting with https://.';
     }
     if (!bucket.trim()) errors.bucket = 'Enter the bucket name.';
@@ -272,7 +274,7 @@ const StorageForm: React.FC<{
         value={endpointUrl}
         onChange={(e) => {
           setEndpointUrl(e.currentTarget.value);
-          clearFieldError('endpoint');
+          clearFieldErrors('endpoint');
         }}
         error={fieldErrors.endpoint}
         disabled={saving}
@@ -286,7 +288,7 @@ const StorageForm: React.FC<{
         value={bucket}
         onChange={(e) => {
           setBucket(e.currentTarget.value);
-          clearFieldError('bucket');
+          clearFieldErrors('bucket');
         }}
         error={fieldErrors.bucket}
         disabled={saving}
@@ -313,8 +315,7 @@ const StorageForm: React.FC<{
           value={accessKeyId}
           onChange={(e) => {
             setAccessKeyId(e.currentTarget.value);
-            clearFieldError('accessKey');
-            clearFieldError('secret');
+            clearFieldErrors('accessKey', 'secret');
           }}
           error={fieldErrors.accessKey}
           disabled={saving}
@@ -342,23 +343,16 @@ const StorageForm: React.FC<{
           value={secret}
           onChange={(e) => {
             setSecret(e.currentTarget.value);
-            clearFieldError('secret');
-            clearFieldError('accessKey');
+            clearFieldErrors('secret', 'accessKey');
           }}
           error={fieldErrors.secret}
           disabled={saving}
         />
       </SimpleGrid>
       {error && (
-        <Alert
-          color="red"
-          variant="light"
-          icon={<Icon icon="mdi:alert-circle-outline" width={18} />}
-          title="The storage settings were not saved"
-          data-testid="storage-save-error"
-        >
+        <ErrorAlert title="The storage settings were not saved" data-testid="storage-save-error">
           {error}
-        </Alert>
+        </ErrorAlert>
       )}
       <Group justify="flex-end" gap="xs">
         <Button variant="default" size="xs" onClick={onCancel} disabled={saving}>
@@ -512,16 +506,7 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
       />
     );
   } else if (loadError) {
-    body = (
-      <Alert
-        color="red"
-        variant="light"
-        icon={<Icon icon="mdi:alert-circle-outline" width={18} />}
-        title="Could not load the storage settings"
-      >
-        {loadError}
-      </Alert>
-    );
+    body = <ErrorAlert title="Could not load the storage settings">{loadError}</ErrorAlert>;
   } else if (config) {
     body = (
       <Stack gap="md">
@@ -643,21 +628,14 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
   } else {
     body = (
       <Stack gap="md">
-        <Group gap="sm" wrap="nowrap" align="flex-start">
-          <ThemeIcon variant="light" color="gray" size="lg" radius="md">
-            <Icon icon="mdi:cloud-off-outline" width={20} />
-          </ThemeIcon>
-          <Stack gap={2} style={{ minWidth: 0 }}>
-            <Text size="sm" fw={500}>
-              {canManage ? 'No storage configured' : 'Storage settings are for project owners'}
-            </Text>
-            <Text size="xs" c="dimmed" lh={1.35}>
-              {canManage
-                ? 'Without storage settings this project reads only public addresses and the buckets this server lists as public. Add an endpoint, a bucket and its keys to read a private bucket.'
-                : 'The owners of this project can attach a private bucket here. Ask one of them if a data collection cannot reach its files.'}
-            </Text>
-          </Stack>
-        </Group>
+        <EmptyState
+          icon="mdi:cloud-off-outline"
+          title={canManage ? 'No storage configured' : 'Storage settings are for project owners'}
+        >
+          {canManage
+            ? 'Without storage settings this project reads only public addresses and the buckets this server lists as public. Add an endpoint, a bucket and its keys to read a private bucket.'
+            : 'The owners of this project can attach a private bucket here. Ask one of them if a data collection cannot reach its files.'}
+        </EmptyState>
         <Stack gap={6}>
           <Group>
             <GatedButton

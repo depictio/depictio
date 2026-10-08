@@ -19,9 +19,10 @@ import { Icon } from '@iconify/react';
 
 import { Z_LAYERS } from 'depictio-react-core';
 
-/** A bare glyph in the (dashboard's) primary colour, the way the chrome draws
- *  its icons elsewhere (`SectionIcon`, the sidebar): a tinted square read as a
- *  button in a row that already carries a chevron. */
+/** A bare glyph in the primary colour (the dashboard's, inside its brand
+ *  scope), the way the chrome draws its icons elsewhere (`SectionIcon`, the
+ *  sidebar), rather than a tinted square, which reads as a button in a row
+ *  that already carries a chevron. */
 export const SECTION_ICON_STYLE: React.CSSProperties = {
   color: 'var(--mantine-primary-color-filled)',
   flexShrink: 0,
