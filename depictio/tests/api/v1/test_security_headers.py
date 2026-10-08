@@ -84,6 +84,16 @@ class TestBasemapOrigins:
             assert host in sources, f"{style} has no allowed origin"
 
 
+def test_maplibre_may_start_its_blob_workers() -> None:
+    """maplibre parses tiles and markers in workers it starts from blob: URLs.
+
+    Without `worker-src` the browser falls back to `script-src`, which has no
+    `blob:`: the style loads, then nothing draws.
+    """
+    assert "blob:" in _directive(CSP, "worker-src")
+    assert "blob:" not in _directive(CSP, "script-src")
+
+
 class TestNginxMirrorsTheApi:
     def test_policies_are_identical(self) -> None:
         text = NGINX_TEMPLATE.read_text()

@@ -38,9 +38,16 @@ SECURITY_HEADERS: dict[str, str] = {
     #     TileJSON) and tiles-{a,b,c,d}.basemaps.cartocdn.com (the .mvt tiles)
     #   open-street-map → tile.openstreetmap.org
     # The bare apex is listed separately: a `*.` wildcard does not match it.
+    #
+    # worker-src: maplibre parses tiles and GeoJSON in Web Workers it starts
+    # from blob: URLs. Without a worker-src the browser falls back to
+    # script-src, which has no blob:, so the workers are refused: the style and
+    # TileJSON load on the main thread, then no tile and no marker ever draws,
+    # and the map shows its legend over grey.
     "Content-Security-Policy": (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-eval' 'wasm-unsafe-eval'; "
+        "worker-src 'self' blob:; "
         "style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data: blob: https:; "
         "font-src 'self' data:; "
