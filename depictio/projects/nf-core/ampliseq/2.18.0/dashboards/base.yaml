@@ -1039,7 +1039,6 @@ tabs:
     icon: mdi:set-merge
     color: teal
     description: Which taxa the groups share, and which only one group holds
-    collapsed: true
   - name: Tables
     icon: mdi:table
     color: gray
@@ -1206,7 +1205,8 @@ tabs:
       shares = d.group_by([grp, 'Phylum']).agg(pl.col('rel_abundance').sum().alias('n')).with_columns((pl.col('n') / pl.col('n').sum().over(grp) * 100).alias('share')).sort(grp)
       orders = dict(depictio_group_kwargs.get('category_orders') or {}, Phylum=top + ['Other'])
       fig = px.bar(shares.to_pandas(), x='share', y=grp, color='Phylum', orientation='h', category_orders=orders, color_discrete_map=depictio_category_colors.get('Phylum') or {}, labels={grp: '', 'share': 'Share of the community (%)'})
-      fig.update_layout(barmode='stack', xaxis_range=[0, 100])
+      fig.update_layout(barmode='stack', xaxis_range=[0, 100], margin=dict(t=10))
+      fig.update_yaxes(automargin=True)
     section: Composition
     tag: am-comm-composition-by-group
     index: comm-composition-by-group
@@ -1229,7 +1229,8 @@ tabs:
       shares = d.group_by([grp, 'Phylum']).agg(pl.col('rel_abundance').sum().alias('n')).with_columns((pl.col('n') / pl.col('n').sum().over(grp) * 100).alias('share')).sort(grp)
       orders = dict(depictio_group_kwargs.get('category_orders') or {}, Phylum=top + ['Other'])
       fig = px.bar(shares.to_pandas(), x='share', y=grp, color='Phylum', orientation='h', category_orders=orders, color_discrete_map=depictio_category_colors.get('Phylum') or {}, labels={grp: '', 'share': 'Share of the community (%)'})
-      fig.update_layout(barmode='stack', xaxis_range=[0, 100])
+      fig.update_layout(barmode='stack', xaxis_range=[0, 100], margin=dict(t=10))
+      fig.update_yaxes(automargin=True)
     section: Composition
     tag: am-comm-sintax-composition
     index: comm-sintax-composition
@@ -1242,7 +1243,8 @@ tabs:
     data_collection_tag: stacked_taxonomy_canonical
     config:
       default_rank: Phylum
-      top_n: 15
+      # Ten and Other, as in the per-group bars above: the same key twice.
+      top_n: 10
       sort_by: abundance
       normalise_to_one: true
       annotation_strips:
@@ -1343,8 +1345,6 @@ tabs:
     color: red
     card_variant: compact
     description: Taxa tested, and the calls passing 5% FDR by direction
-  # No MA view: ancombc_results carries no mean abundance, and ma_canonical is
-  # not reached by the contrast filter, so it would ignore the contrast.
   - name: Volcano and ranked effects
     icon: mdi:chart-scatter-plot
     color: red
@@ -1494,6 +1494,11 @@ tabs:
       top_n_labels: 6
       effect_label: Log fold change
       significance_label: -log10 q-value
+      # The View switch: QQ reads the raw p-values; MA reads ma_canonical, the
+      # same calls with their mean abundance, which ancombc_results lacks. Its
+      # contrast column is narrowed by the same contrast filter.
+      p_value_col: p_val
+      ma_dc_tag: ma_canonical
     section: Volcano and ranked effects
     tag: am-diff-volcano
     index: adv-volcano
@@ -1577,7 +1582,7 @@ tabs:
   - name: Tree
     icon: mdi:family-tree
     color: lime
-    description: Every ASV as a tip, coloured by its assignment
+    description: The largest phyla, one tip each; the View switch draws every ASV
   - name: Tip taxonomy
     icon: mdi:table
     color: gray
@@ -1693,6 +1698,15 @@ tabs:
       taxon_col: taxon
       color_col: Phylum
       label_col: null
+      # Opens on the Overview's summary (one tip per phylum, read shares per
+      # group); the View switch in its settings draws the full ASV tree.
+      collapse_rank: Phylum
+      top_n: 10
+      size_by: abundance
+      abundance_dc_tag: taxonomy_rel_abundance
+      abundance_col: rel_abundance
+      abundance_sample_col: sample
+      abundance_split_col: '{GROUP_COL}'
       default_layout: circular
       ladderize: true
       show_metadata_strip: false
@@ -1711,7 +1725,7 @@ tabs:
     section: Tree
     tag: am-phylo-tree
     index: phylo-tree
-    title: ASV phylogenetic tree
+    title: Phylogenetic tree
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: ampliseq

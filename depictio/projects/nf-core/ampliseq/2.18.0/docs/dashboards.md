@@ -75,20 +75,23 @@ heatmap rows.
 
 **Community & Diversity.** Strip: distinct phyla (by kingdom), classes, orders and
 families. Then the phylum composition per group (ten phyla and Other, as 100% bars), the
-stacked composition per sample, and the sunburst hierarchy. Collapsed: the UpSet of taxa
-shared between groups, and the relative abundance table. No Sankey: it restates the
-sunburst. Filters: kingdom and phylum.
+stacked composition per sample (the same ten and Other), the sunburst hierarchy and the
+UpSet of taxa shared between groups. Collapsed: the relative abundance table. No Sankey:
+it restates the sunburst. Filters: kingdom and phylum.
 
 **Differential Abundance.** Pick a contrast first. Strip: taxa tested, significant at 5%
 FDR, enriched and depleted (significant, by sign of the log-fold change). Then the volcano
 and the largest effects per contrast. The collapsed `Taxon detail` holds the ANCOM-BC
-table with the taxon record card beside it: the card waits for a picked row. No MA view:
-`ancombc_results` has no mean-abundance column, and the contrast filter does not reach
-`ma_canonical`. Filters: contrast, phylum, kingdom and a log-fold-change range.
+table with the taxon record card beside it: the card waits for a picked row. The volcano's
+View switch reads the same calls as an MA plot, from `ma_canonical` (`ancombc_results`
+has no mean abundance; the contrast filter narrows both), or as a QQ plot of the raw
+p-values. Filters: contrast, phylum, kingdom and a log-fold-change range.
 
 **Phylogeny.** Strip: ASVs, ASVs classified to genus, the median classifier confidence
-and distinct genera. Then the ASV tree, coloured by any rank and pruned to the clade
-picked in the left panel. The tip taxonomy table is collapsed. The tip-metadata recipe
+and distinct genera. Then the tree, opening on the Overview's summary: the ten largest
+phyla, one tip each, with their share of the reads per group. Its View switch draws the
+full ASV tree, coloured by any rank and pruned to the clade picked in the left panel. The
+tip taxonomy table is collapsed. The tip-metadata recipe
 also computes, per ASV, the `GROUP_COL` level that carries most of its abundance; the
 column keeps its historical name `dominant_habitat` whatever factor fills it. Filters:
 kingdom and phylum.

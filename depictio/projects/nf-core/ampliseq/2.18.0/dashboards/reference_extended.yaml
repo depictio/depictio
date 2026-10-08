@@ -1475,7 +1475,6 @@ tabs:
     icon: mdi:set-merge
     color: teal
     description: Which taxa the groups share, and which only one group holds
-    collapsed: true
   - name: Tables
     icon: mdi:table
     color: gray
@@ -1681,7 +1680,9 @@ tabs:
 
       fig = px.bar(shares.to_pandas(), x=''share'', y=grp, color=''Phylum'', orientation=''h'', category_orders=orders, color_discrete_map=depictio_category_colors.get(''Phylum'') or {}, labels={grp: '''', ''share'': ''Share of the community (%)''})
 
-      fig.update_layout(barmode=''stack'', xaxis_range=[0, 100])'
+      fig.update_layout(barmode=''stack'', xaxis_range=[0, 100], margin=dict(t=10))
+
+      fig.update_yaxes(automargin=True)'
     section: Composition
     tag: am-comm-composition-by-group
     index: comm-composition-by-group
@@ -1717,7 +1718,9 @@ tabs:
 
       fig = px.bar(shares.to_pandas(), x=''share'', y=grp, color=''Phylum'', orientation=''h'', category_orders=orders, color_discrete_map=depictio_category_colors.get(''Phylum'') or {}, labels={grp: '''', ''share'': ''Share of the community (%)''})
 
-      fig.update_layout(barmode=''stack'', xaxis_range=[0, 100])'
+      fig.update_layout(barmode=''stack'', xaxis_range=[0, 100], margin=dict(t=10))
+
+      fig.update_yaxes(automargin=True)'
     section: Composition
     tag: am-comm-sintax-composition
     index: comm-sintax-composition
@@ -1735,7 +1738,7 @@ tabs:
     data_collection_tag: stacked_taxonomy_canonical
     config:
       default_rank: Phylum
-      top_n: 15
+      top_n: 10
       sort_by: abundance
       normalise_to_one: true
       annotation_strips:
@@ -2028,6 +2031,8 @@ tabs:
       top_n_labels: 6
       effect_label: Log fold change
       significance_label: -log10 q-value
+      p_value_col: p_val
+      ma_dc_tag: ma_canonical
     section: Volcano and ranked effects
     tag: am-diff-volcano
     index: adv-volcano
@@ -2133,7 +2138,7 @@ tabs:
   - name: Tree
     icon: mdi:family-tree
     color: lime
-    description: Every ASV as a tip, coloured by its assignment
+    description: The largest phyla, one tip each; the View switch draws every ASV
   - name: Tip taxonomy
     icon: mdi:table
     color: gray
@@ -2270,6 +2275,13 @@ tabs:
       taxon_col: taxon
       color_col: Phylum
       label_col: null
+      collapse_rank: Phylum
+      top_n: 10
+      size_by: abundance
+      abundance_dc_tag: taxonomy_rel_abundance
+      abundance_col: rel_abundance
+      abundance_sample_col: sample
+      abundance_split_col: habitat
       default_layout: circular
       ladderize: true
       show_metadata_strip: false
@@ -2287,7 +2299,7 @@ tabs:
     section: Tree
     tag: am-phylo-tree
     index: phylo-tree
-    title: ASV phylogenetic tree
+    title: Phylogenetic tree
     layout:
       x: 0
       y: 0
