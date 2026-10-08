@@ -156,6 +156,36 @@ def test_recompact_packs_within_a_section():
     assert by_i["box-c"]["y"] == 2
 
 
+def test_recompact_packs_route_alternates_as_one_tile():
+    """Items on one slot are alternates: they keep one place in the row."""
+    items = [
+        {"i": "box-text", "x": 0, "y": 0, "w": 8, "h": 2},
+        {"i": "box-comp", "x": 0, "y": 2, "w": 5, "h": 4},
+        {"i": "box-comp-sintax", "x": 0, "y": 2, "w": 5, "h": 4},
+        {"i": "box-tree", "x": 5, "y": 2, "w": 3, "h": 4},
+        {"i": "box-alpha", "x": 0, "y": 6, "w": 4, "h": 4},
+        {"i": "box-ord", "x": 4, "y": 6, "w": 4, "h": 4},
+    ]
+    by_i = {it["i"]: it for it in _recompact_main_grid(items)}
+    assert by_i["box-comp"] == {**items[1]}
+    assert by_i["box-comp-sintax"] == {**items[2]}
+    assert by_i["box-tree"] == {**items[3]}
+    assert (by_i["box-alpha"]["w"], by_i["box-ord"]["w"]) == (4, 4)
+
+
+def test_recompact_leaves_untouched_sections_as_authored():
+    """Only a section that lost a component is re-packed; the others just stack."""
+    items = [
+        {"i": "box-a", "x": 0, "y": 0, "w": 4, "h": 2},  # QC: a lone half-width tile
+        {"i": "box-b", "x": 0, "y": 2, "w": 4, "h": 2},  # Taxonomy, lost its row-mate
+    ]
+    sections = {"box-a": "QC", "box-b": "Taxonomy"}
+    by_i = {it["i"]: it for it in _recompact_main_grid(items, sections, {"Taxonomy"})}
+    assert by_i["box-a"]["w"] == 4
+    assert by_i["box-b"]["w"] == 8
+    assert by_i["box-b"]["y"] == 2
+
+
 # --------------------------------------------------------------------------- #
 # _tab_meets_minimum / _tab_has_visualization_components
 # --------------------------------------------------------------------------- #

@@ -5689,7 +5689,9 @@ def _component_has_data(component: dict, dc_meta: dict[str, dict]) -> bool:
 
 
 def _recompact_main_grid(
-    items: list[dict], sections_by_box: dict[str, str | None] | None = None
+    items: list[dict],
+    sections_by_box: dict[str, str | None] | None = None,
+    touched: set[str | None] | None = None,
 ) -> list[dict]:
     """Re-pack main-grid layout items after components were dropped.
 
@@ -5714,6 +5716,16 @@ def _recompact_main_grid(
     packing across a boundary would slide a component under the wrong header.
     Omitting it packs everything as one grid, which is what a dashboard with no
     sections gets.
+
+    ``touched`` names the sections that lost a component. When given, only those
+    are re-packed; every other section keeps its authored layout and only moves
+    down or up to stay stacked. A section nothing was removed from has no hole to
+    close, and re-packing it would undo its author's rows.
+
+    Items on the exact same slot (same x, y, w and h) are route alternates: a
+    template binds them to data collections of which one run keeps one. They are
+    packed as one tile, so a slot whose alternates have not all been removed yet
+    still takes one place in the row, not one row per alternate.
     """
     if not items:
         return items
@@ -5724,8 +5736,12 @@ def _recompact_main_grid(
             buckets.setdefault(sections_by_box.get(item.get("i", "")), []).append(item)
         out: list[dict] = []
         y_offset = 0
-        for bucket in buckets.values():
-            packed = _recompact_main_grid(bucket)
+        for name, bucket in buckets.items():
+            if touched is None or name in touched:
+                packed = _recompact_main_grid(bucket)
+            else:
+                top = min(int(item.get("y", 0)) for item in bucket)
+                packed = [{**item, "y": int(item.get("y", 0)) - top} for item in bucket]
             bottom = 0
             for item in packed:
                 out.append({**item, "y": item["y"] + y_offset})
@@ -5733,16 +5749,23 @@ def _recompact_main_grid(
             y_offset += bottom
         return out
 
-    ordered = sorted(items, key=lambda it: (it.get("y", 0), it.get("x", 0)))
-    rows: list[list[dict]] = []
-    current: list[dict] = []
+    def slot_of(item: dict) -> tuple:
+        return (item.get("x", 0), item.get("y", 0), item.get("w", 1), item.get("h", 1))
+
+    # One entry per slot, in reading order; alternates ride with the first.
+    slots: dict[tuple, list[dict]] = {}
+    for item in sorted(items, key=lambda it: (it.get("y", 0), it.get("x", 0))):
+        slots.setdefault(slot_of(item), []).append(item)
+
+    rows: list[list[list[dict]]] = []
+    current: list[list[dict]] = []
     current_w = 0
-    for item in ordered:
-        w = max(1, min(int(item.get("w", 1)), _GRID_COLS))
+    for group in slots.values():
+        w = max(1, min(int(group[0].get("w", 1)), _GRID_COLS))
         if current and current_w + w > _GRID_COLS:
             rows.append(current)
             current, current_w = [], 0
-        current.append(item)
+        current.append(group)
         current_w += w
     if current:
         rows.append(current)
@@ -5751,16 +5774,14 @@ def _recompact_main_grid(
     y = 0
     for row in rows:
         # A lone sub-full-width occupant would leave a half-empty row — widen it.
-        if len(row) == 1:
-            w0 = max(1, min(int(row[0].get("w", 1)), _GRID_COLS))
-            if w0 < _GRID_COLS:
-                row[0] = {**row[0], "w": _GRID_COLS}
+        widen = len(row) == 1
         x = 0
         row_h = 0
-        for item in row:
-            w = max(1, min(int(item.get("w", 1)), _GRID_COLS))
-            h = max(1, int(item.get("h", 1)))
-            repacked.append({**item, "x": x, "y": y, "w": w, "h": h})
+        for group in row:
+            w = _GRID_COLS if widen else max(1, min(int(group[0].get("w", 1)), _GRID_COLS))
+            h = max(1, int(group[0].get("h", 1)))
+            for item in group:
+                repacked.append({**item, "x": x, "y": y, "w": w, "h": h})
             x += w
             row_h = max(row_h, h)
         y += row_h
@@ -5877,6 +5898,11 @@ def _remove_components(dashboard_dict: dict, kept: list[dict], dropped: list[Any
     `dropped` holds the removed components' indices. Every key written is one
     `dashboard_dict` already had, so the dict can be used as a `$set` document.
     """
+    removed_sections = {
+        c.get("section") or None
+        for c in dashboard_dict.get("stored_metadata") or []
+        if c.get("index") in set(dropped)
+    }
     dashboard_dict["stored_metadata"] = kept
     drop_keys = {f"box-{idx}" for idx in dropped}
     for layout_key in ("left_panel_layout_data", "right_panel_layout_data", "stored_layout_data"):
@@ -5892,7 +5918,7 @@ def _remove_components(dashboard_dict: dict, kept: list[dict], dropped: list[Any
     if dashboard_dict.get("right_panel_layout_data"):
         sections_by_box = {f"box-{c.get('index')}": c.get("section") or None for c in kept}
         dashboard_dict["right_panel_layout_data"] = _recompact_main_grid(
-            dashboard_dict["right_panel_layout_data"], sections_by_box
+            dashboard_dict["right_panel_layout_data"], sections_by_box, removed_sections
         )
 
 
