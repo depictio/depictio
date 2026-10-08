@@ -165,3 +165,20 @@ def test_csv_output_format(tmp_path):
     )
     assert result.exit_code == 0, result.output
     assert out.read_text().splitlines()[0] == "id,type,url,run"
+
+
+def test_only_a_leading_dot_slash_is_dropped_from_relative_paths(tmp_path):
+    """Joined under --base-url as written: a hidden file keeps its dot, and a
+    parent reference is not silently turned into another file."""
+    table = _write(tmp_path, "sample,reads\ns1,./a.csv\ns2,.hidden.csv\ns3,../x.csv\n")
+    out = tmp_path / "manifest.json"
+    result = runner.invoke(
+        app,
+        ["manifest", "from-table", str(table), "--base-url", "s3://b/r", "-o", str(out)],
+    )
+    assert result.exit_code == 0, result.output
+    assert [e["url"] for e in json.loads(out.read_text())] == [
+        "s3://b/r/a.csv",
+        "s3://b/r/.hidden.csv",
+        "s3://b/r/../x.csv",
+    ]

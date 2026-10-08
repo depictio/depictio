@@ -178,7 +178,7 @@ def _create_project_from_manifest(
         validate_remote_url(manifest_url)
     except RemoteURLRejected as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    if manifest_url.startswith("s3://"):
+    if manifest_url[:5].lower() == "s3://":
         raise HTTPException(
             status_code=400,
             detail="s3:// manifest locations are not supported yet — serve the manifest over https.",

@@ -1,4 +1,5 @@
 import os
+import re
 import tempfile
 from collections.abc import Iterable
 from datetime import datetime
@@ -10,10 +11,11 @@ from pydantic import validate_call
 from rich.markup import escape
 
 from depictio.api.v1.remote_fetch import (
+    RemoteURLRejected,
     bounded_download,
     direct_download,
     is_server_context,
-    s3_read_storage_options,
+    s3_read_target_in_region,
 )
 from depictio.cli.cli.utils.api_calls import (
     api_create_files,
@@ -50,7 +52,12 @@ from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3
 from depictio.models.models.files import File
 from depictio.models.models.manifest import is_remote_url
 from depictio.models.models.s3 import PolarsStorageOptions
-from depictio.models.s3_access import S3AccessError, blank_foreign_session_token
+from depictio.models.s3_access import (
+    S3AccessError,
+    S3AccessFailed,
+    S3Target,
+    blank_foreign_session_token,
+)
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
 
@@ -195,25 +202,32 @@ def convert_to_file_objects(files_data: list) -> list:
     return files
 
 
+def _delimited_kwargs(file_path: str, file_format: str, polars_kwargs: dict) -> dict:
+    """``polars_kwargs`` with the separator a delimited file is read with.
+
+    Picked from the file's extension first, falling back to the declared
+    format when the extension is ambiguous. nf-core pipelines emit
+    samplesheets/metadata as either .csv or .tsv depending on the user's
+    input, so a DC declared "CSV" may actually point at a tab-separated file;
+    without this a .tsv lands as one comma-joined column. A `.csv` extension
+    keeps the comma default; an extensionless path uses the declared format.
+    Shared by local paths and s3:// keys, so both read one file the same way.
+    """
+    effective_kwargs = dict(polars_kwargs)
+    if "separator" not in effective_kwargs:
+        name = str(file_path).rsplit("/", 1)[-1]
+        suffix = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+        if suffix in ("tsv", "tab"):
+            effective_kwargs["separator"] = "\t"
+        elif suffix != "csv" and file_format == "tsv":
+            effective_kwargs["separator"] = "\t"
+    return effective_kwargs
+
+
 def _lazy_scan_path(file_path: str, file_format: str, polars_kwargs: dict) -> pl.LazyFrame:
     """Format dispatch shared by local paths and downloaded remote files."""
     if file_format in ["csv", "tsv", "txt"]:
-        effective_kwargs = dict(polars_kwargs)
-        if "separator" not in effective_kwargs:
-            # Pick the delimiter from the on-disk extension first, falling
-            # back to the declared format when the extension is ambiguous.
-            # nf-core pipelines emit samplesheets/metadata as either .csv or
-            # .tsv depending on the user's input, so a DC declared "CSV" may
-            # actually point at a tab-separated file — without this a .tsv
-            # lands as one comma-joined column. A `.csv` extension keeps the
-            # comma default; an extensionless path uses the declared format.
-            path_str = str(file_path)
-            suffix = path_str.rsplit(".", 1)[-1].lower() if "." in path_str else ""
-            if suffix in ("tsv", "tab"):
-                effective_kwargs["separator"] = "\t"
-            elif suffix != "csv" and file_format == "tsv":
-                effective_kwargs["separator"] = "\t"
-        return pl.scan_csv(file_path, **effective_kwargs)
+        return pl.scan_csv(file_path, **_delimited_kwargs(file_path, file_format, polars_kwargs))
     elif file_format == "parquet":
         return pl.scan_parquet(file_path, **polars_kwargs)
     elif file_format == "feather":
@@ -271,22 +285,39 @@ def _read_remote_file_lazy(
     context only) the configuration's S3 credentials. The same decision the
     preview and the listing make, so the three never read one URL two ways;
     a location the configuration does not allow raises ``S3AccessRefused``.
+    The schema is resolved here, which sends the first request, so a read S3
+    refuses (a 403, a 404, a redirect to another region) raises
+    ``S3AccessFailed`` for this URL, rather than a raw object-store error
+    later, from the aggregation of every file.
     http(s)://: bounded download to a temp file, eager read, temp deleted;
     keeps lifetime simple at the cost of holding one file in memory.
     """
-    if url.startswith("s3://"):
+    if url[:5].lower() == "s3://":
         if file_format not in ("parquet", "csv", "tsv", "txt"):
             raise ValueError(
                 f"Format '{file_format}' is not supported for s3:// remote reads "
                 "(supported: parquet, csv, tsv, txt)."
             )
-        storage_options = s3_read_storage_options(url, CLI_config)
+        # object-store wants the scheme in lower case; the key stays verbatim.
+        url = "s3://" + url[5:]
+        target = s3_read_target_in_region(url, CLI_config)
+        storage_options = target.polars_options()
         if file_format == "parquet":
-            return pl.scan_parquet(url, storage_options=storage_options, **polars_kwargs)
-        effective_kwargs = dict(polars_kwargs)
-        if "separator" not in effective_kwargs and file_format == "tsv":
-            effective_kwargs["separator"] = "\t"
-        return pl.scan_csv(url, storage_options=storage_options, **effective_kwargs)
+            lf = pl.scan_parquet(url, storage_options=storage_options, **polars_kwargs)
+        else:
+            lf = pl.scan_csv(
+                url,
+                storage_options=storage_options,
+                **_delimited_kwargs(url, file_format, polars_kwargs),
+            )
+        try:
+            lf.collect_schema()
+        except Exception as exc:
+            if _is_object_store_error(exc):
+                logger.debug(f"S3 read of {url} failed: {exc}")
+                raise _s3_read_failure(exc, target) from exc
+            raise
+        return lf
 
     temp_path = _download_remote_to_temp(url)
     try:
@@ -298,6 +329,42 @@ def _read_remote_file_lazy(
             os.unlink(temp_path)
         except OSError:
             pass
+
+
+# How object-store (under polars) reports an S3 answer. Its messages also carry
+# the endpoint, so only the status is taken from them, never the text.
+_OBJECT_STORE_STATUS = re.compile(r"status code: (\d{3})")
+_OBJECT_STORE_REDIRECT = "redirect without LOCATION"
+
+
+def _is_object_store_error(exc: Exception) -> bool:
+    message = str(exc)
+    return isinstance(exc, OSError) or "object-store error" in message or "S3 error" in message
+
+
+def _s3_read_failure(exc: Exception, target: S3Target) -> S3AccessFailed:
+    """The ``S3AccessFailed`` an object-store error on reading ``target`` stands for.
+
+    object-store reads an object with a HEAD first, whose answer has no body,
+    so the status is all there is to go on: a 404 cannot tell a missing key
+    from a missing bucket, and is reported as nothing found at the location.
+    """
+    from botocore.exceptions import ClientError
+
+    message = str(exc)
+    match = _OBJECT_STORE_STATUS.search(message)
+    status = int(match.group(1)) if match else None
+    if status is None and _OBJECT_STORE_REDIRECT in message:
+        status = 301
+    if status is None:
+        return S3AccessFailed.unreachable(target)
+    if status == 404:
+        return S3AccessFailed(
+            f"Nothing was found at {target.location}: check the bucket and the key.",
+            status_code=422,
+        )
+    answer = {"Error": {"Code": str(status)}, "ResponseMetadata": {"HTTPStatusCode": status}}
+    return S3AccessFailed.from_client_error(ClientError(answer, "HeadObject"), target)
 
 
 def read_single_file_lazy(
@@ -342,9 +409,10 @@ def read_single_file_lazy(
             lf = lf.with_columns(pl.lit(str(file_info.manifest_id)).alias("depictio_manifest_id"))
         return lf
 
-    except S3AccessError:
-        # Already a sanitized message with its own code: wrapping it would
-        # lose the code the API answers with.
+    except (S3AccessError, RemoteURLRejected):
+        # Already a sanitized message, typed: wrapping it would lose what the
+        # API answers with (the code of an S3 error, the 4xx of a refused or
+        # unreachable URL, ``RemoteFetchFailed`` included).
         raise
     except Exception as e:
         error_msg = f"Error scanning file {file_path}: {e}"

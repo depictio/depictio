@@ -142,3 +142,47 @@ def test_local_manifest_must_exist():
     )
     assert result.exit_code == 1
     assert "does not exist" in result.output
+
+
+def test_s3_manifest_refused_before_any_step():
+    """It used to pass every check and fail at the scan, after the project sync."""
+    result = runner.invoke(
+        app,
+        ["ingest", "--template", "generic/manifest-tables/1", "--manifest", "s3://b/m.json"],
+    )
+    assert result.exit_code == 1
+    assert "serve the manifest over https" in result.output
+    assert "Step 0" not in result.output
+
+
+def test_http_manifest_names_the_setting_it_needs(monkeypatch):
+    """Not "file does not exist": an http:// URL is not a local path."""
+    monkeypatch.delenv("DEPICTIO_REMOTE_ALLOW_HTTP", raising=False)
+    result = runner.invoke(
+        app,
+        ["ingest", "--template", "generic/manifest-tables/1", "--manifest", "http://h/m.json"],
+    )
+    assert result.exit_code == 1
+    assert "administrator" in result.output
+    assert "does not exist" not in result.output
+
+
+def test_an_optional_dc_the_manifest_lists_nothing_for_is_left_out(tmp_path, monkeypatch):
+    """generic/manifest-tables/1 declares `measurements` optional: a manifest
+    without it must not fail its scan once the project is synced."""
+    monkeypatch.setenv("DEPICTIO_CLI_CONFIG_PATH", str(tmp_path / "no-cli-config.yaml"))
+    manifest = tmp_path / "manifest.csv"
+    manifest.write_text("id,type,url\nS1,samples,https://data.example.org/s1.csv\n")
+    result = runner.invoke(
+        app,
+        [
+            "ingest",
+            "--template",
+            "generic/manifest-tables/1",
+            "--manifest",
+            str(manifest),
+            "--dry-run",
+        ],
+    )
+    assert "Left out 1 optional data collection(s)" in result.output
+    assert "measurements" in result.output

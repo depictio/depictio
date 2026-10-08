@@ -180,6 +180,76 @@ class TestDataManifestCsv:
         assert [entry.id for entry in counts_entries] == ["s1", "s2"]
         assert manifest.entries_for_type("unknown_tag") == []
 
+    def test_spaces_around_column_names_and_cells(self):
+        """The header is stripped for the presence check, so the rows must be
+        read by the stripped names too."""
+        text = "id, type, url, run\ns1, counts, s3://bucket/s1.parquet , run_A\n"
+        entry = DataManifest.from_csv(text).entries[0]
+        assert (entry.id, entry.type, entry.url, entry.run) == (
+            "s1",
+            "counts",
+            "s3://bucket/s1.parquet",
+            "run_A",
+        )
+
+    @pytest.mark.parametrize(
+        "content",
+        [
+            "\ufeffid,type,url\ns1,counts,s3://b/x\n",
+            b"\xef\xbb\xbfid,type,url\ns1,counts,s3://b/x\n",
+        ],
+        ids=["text", "bytes"],
+    )
+    def test_byte_order_mark_ignored(self, content):
+        """Spreadsheet exports start with a BOM, which used to hide the 'id' column."""
+        assert DataManifest.from_csv(content).entries[0].id == "s1"
+
+
+class TestRepeatedEntries:
+    """Each row becomes a File: a row listed twice would double the data."""
+
+    def test_identical_rows_rejected_with_their_positions(self):
+        text = "id,type,url\ns1,counts,s3://b/x\ns2,counts,s3://b/y\ns1,counts,s3://b/x\n"
+        with pytest.raises(ValueError, match="more than once") as excinfo:
+            DataManifest.from_csv(text)
+        assert "entries 1 and 3" in str(excinfo.value)
+        assert "url=s3://b/x" in str(excinfo.value)
+
+    def test_identical_json_entries_rejected(self):
+        entry = '{"id": "s1", "type": "counts", "url": "s3://b/x"}'
+        with pytest.raises(ValueError, match="more than once"):
+            DataManifest.from_json(f"[{entry}, {entry}]")
+
+    def test_rows_that_differ_only_by_run_are_still_repeats(self):
+        text = "id,type,url,run\ns1,counts,s3://b/x,r1\ns1,counts,s3://b/x,r2\n"
+        with pytest.raises(ValueError, match="more than once"):
+            DataManifest.from_csv(text)
+
+    def test_one_file_under_two_types_is_not_a_repeat(self):
+        text = "id,type,url\ns1,counts,s3://b/x\ns1,stats,s3://b/x\n"
+        assert DataManifest.from_csv(text).types() == {"counts", "stats"}
+
+
+class TestDataManifestParse:
+    """Format detection shared by the CLI and the API fetch paths."""
+
+    def test_json_detected_from_content_despite_a_byte_order_mark(self):
+        text = '\ufeff[{"id": "s1", "type": "counts", "url": "s3://b/x"}]'
+        assert DataManifest.parse(text, source="https://h/manifest").entries[0].id == "s1"
+
+    def test_json_bytes_with_a_byte_order_mark(self):
+        content = b'\xef\xbb\xbf{"entries": [{"id": "s1", "type": "counts", "url": "s3://b/x"}]}'
+        assert DataManifest.parse(content, source="https://h/m.json").entries[0].id == "s1"
+
+    def test_a_json_extension_wins_even_behind_a_query_string(self):
+        with pytest.raises(ValueError, match="not valid JSON"):
+            DataManifest.parse("id,type,url\n", source="https://h/m.json?sig=abc")
+
+    def test_anything_else_is_csv(self):
+        manifest = DataManifest.parse("id,type,url\ns1,counts,s3://b/x\n", source="m.csv")
+        assert manifest.source == "m.csv"
+        assert manifest.entries[0].type == "counts"
+
 
 class TestDataManifestJson:
     """Test suite for DataManifest.from_json."""

@@ -218,12 +218,45 @@ def assert_no_unbound_vars(config: dict) -> None:
         _restore_placeholders(origin)
 
 
+def _same_local_root(locations: list, root: str) -> bool:
+    """Whether a workflow's ``locations`` are exactly the one folder ``root``.
+
+    A location can carry ``{VAR}`` placeholders the model expands from the
+    environment, and be relative or behind a symlink: compared resolved, as
+    the bound root is.
+    """
+    if len(locations) != 1:
+        return False
+    location = re.sub(
+        r"\{([A-Z0-9_]+)\}", lambda m: os.environ.get(m.group(1), m.group(0)), str(locations[0])
+    )
+    if "{" in location or "__DEPICTIO_UNBOUND_" in location or "://" in location:
+        return False
+    return str(Path(location).expanduser().resolve()) == root
+
+
+def _unbound_recursive_tags(workflow: dict, bound_tags: set[str]) -> list[str]:
+    """The workflow's recursive DCs no --bind names: they walk its data_location."""
+    return sorted(
+        dc.get("data_collection_tag") or "?"
+        for dc in workflow.get("data_collections") or []
+        if dc.get("data_collection_tag") not in bound_tags
+        and str(((dc.get("config") or {}).get("scan") or {}).get("mode", "")).lower() == "recursive"
+    )
+
+
 def apply_bindings(config: dict, specs: list[str]) -> list[str]:
     """Rewrite each named DC's scan config in-place. Returns human-readable notes.
 
     Raises BindingError when a tag matches no data collection: a silently
     ignored --bind would leave the DC pointing at the template's original
     location, which is exactly the surprise this flag exists to remove.
+
+    A local recursive bind moves the walk root of its whole workflow
+    (``data_location`` is per workflow), so it is refused when another
+    recursive DC of that workflow, not bound, still walks a different root:
+    that DC would silently scan the bound folder instead. Binding it too, or
+    binding to a glob in the root it already walks, keeps the bind.
     """
     notes: list[str] = []
     if not specs:
@@ -236,11 +269,19 @@ def apply_bindings(config: dict, specs: list[str]) -> list[str]:
             if tag:
                 index[tag] = (workflow, dc)
 
+    parsed = [parse_binding(spec) for spec in specs]
+    bound_tags = {tag for tag, _ in parsed}
+    # What each workflow walked before any bind rewrote it, which is what its
+    # unbound recursive DCs still expect to walk.
+    original_locations = {
+        id(workflow): list((workflow.get("data_location") or {}).get("locations") or [])
+        for workflow in config.get("workflows") or []
+    }
+
     roots: dict[str, str] = {}
     remote_locations: dict[str, list[str]] = {}
     touched: dict[str, dict] = {}
-    for spec in specs:
-        tag, location = parse_binding(spec)
+    for tag, location in parsed:
         if tag not in index:
             raise BindingError(
                 f"--bind targets unknown data collection {tag!r}. "
@@ -267,6 +308,23 @@ def apply_bindings(config: dict, specs: list[str]) -> list[str]:
                     f"Conflicting local roots for workflow {workflow_name!r}: "
                     f"{previous} vs {local_root}. Local --bind targets in the same "
                     "workflow must share a directory."
+                )
+            current = original_locations.get(id(workflow), [])
+            unbound = _unbound_recursive_tags(workflow, bound_tags)
+            if unbound and not _same_local_root(current, local_root):
+                # Placeholders shown as the template wrote them, not as sentinels.
+                walked = ", ".join(_SENTINEL_RE.sub(r"{\1}", str(item)) for item in current)
+                keep_root = (
+                    f", or bind {tag} to a glob in {walked}"
+                    if len(current) == 1 and "{" not in walked
+                    else ""
+                )
+                raise BindingError(
+                    f"Cannot bind {tag} to {local_root}: workflow {workflow_name!r} scans "
+                    f"one local folder, and {', '.join(unbound)} (not bound) scan "
+                    f"{walked or 'no folder yet'}. Bind "
+                    f"{'it' if len(unbound) == 1 else 'them'} to the same folder too"
+                    f"{keep_root}."
                 )
             roots[str(workflow_name)] = local_root
             data_location = workflow.setdefault("data_location", {})

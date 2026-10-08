@@ -47,6 +47,22 @@ def _config():
     }
 
 
+def _with_recursive_dc(config):
+    """``_config()`` plus a recursive DC no test binds unless it says so."""
+    config["workflows"][0]["data_collections"].append(
+        {
+            "data_collection_tag": "multiqc",
+            "config": {
+                "scan": {
+                    "mode": "recursive",
+                    "scan_parameters": {"regex_config": {"pattern": r".*\.parquet"}},
+                }
+            },
+        }
+    )
+    return config
+
+
 class TestParseBinding:
     def test_splits_tag_and_location(self):
         assert parse_binding("samples=s3://b/x") == ("samples", "s3://b/x")
@@ -202,11 +218,52 @@ class TestApplyBindings:
             "s3://b/run42/*.samples.csv"
         ]
 
+    def test_remote_binding_leaves_an_unbound_recursive_dc_alone(self):
+        config = _with_recursive_dc(_config())
+        apply_bindings(config, ["samples=s3://b/run42/*.samples.csv"])
+        assert config["workflows"][0]["data_location"]["locations"] == ["/old/root"]
+
     def test_no_specs_is_a_no_op(self):
         config = _config()
         before = copy.deepcopy(config)
         assert apply_bindings(config, []) == []
         assert config == before
+
+
+class TestLocalBindingAndUnboundRecursiveDCs:
+    """A local recursive bind moves the walk root of the whole workflow, so it
+    must not silently take over a recursive DC that nobody bound."""
+
+    def test_refused_while_an_unbound_recursive_dc_walks_another_root(self, tmp_path):
+        with pytest.raises(BindingError) as excinfo:
+            apply_bindings(_with_recursive_dc(_config()), [f"samples={tmp_path}/*.csv"])
+        message = str(excinfo.value)
+        assert "multiqc" in message
+        assert "/old/root" in message
+
+    def test_accepted_when_every_recursive_dc_is_bound_to_the_same_folder(self, tmp_path):
+        config = _with_recursive_dc(_config())
+        apply_bindings(config, [f"samples={tmp_path}/*.csv", f"multiqc={tmp_path}"])
+        assert config["workflows"][0]["data_location"]["locations"] == [str(tmp_path.resolve())]
+
+    def test_accepted_for_a_glob_in_the_folder_already_walked(self, tmp_path):
+        config = _with_recursive_dc(_config())
+        config["workflows"][0]["data_location"]["locations"] = [str(tmp_path)]
+        apply_bindings(config, [f"samples={tmp_path}/*.samples.csv"])
+        assert config["workflows"][0]["data_location"]["locations"] == [str(tmp_path.resolve())]
+
+    def test_a_deferred_data_root_is_not_taken_over(self, tmp_path):
+        """No DATA_DIR given: the unbound DC still needs it, and must fail
+        rather than walk the folder bound for another DC."""
+        config = _with_recursive_dc(_config())
+        config["workflows"][0]["data_location"]["locations"] = ["__DEPICTIO_UNBOUND_DATA_ROOT__"]
+        with pytest.raises(BindingError, match=r"\{DATA_ROOT\}"):
+            apply_bindings(config, [f"samples={tmp_path}/*.csv"])
+
+    def test_a_dc_bound_remotely_no_longer_walks_the_root(self, tmp_path):
+        config = _with_recursive_dc(_config())
+        apply_bindings(config, [f"samples={tmp_path}/*.csv", "multiqc=s3://b/run42/"])
+        assert config["workflows"][0]["data_location"]["locations"] == [str(tmp_path.resolve())]
 
 
 class TestAssertNoUnboundVars:
