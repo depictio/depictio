@@ -13,8 +13,10 @@ Synchronous throughout (the CLI helpers use sync httpx back into this same
 FastAPI process) — the route dispatches via ``asyncio.to_thread``.
 """
 
+import asyncio
 import copy
 import re
+from pathlib import Path
 from typing import Any
 
 from bson import ObjectId
@@ -163,6 +165,114 @@ def _template_not_found_detail(template_id: str, exc: FileNotFoundError) -> str:
     return f"Template '{template_id}' not found.{hint}"
 
 
+def _refuse_a_taken_project_name(name: str, current_user) -> None:
+    """Refuse a name ``POST /projects/create`` refuses, with the error it gives.
+
+    The same check that route runs, ``_project_exists`` over the projects the
+    caller can see. The creation flows run synchronously in a worker thread,
+    which has no event loop of its own, so the coroutine is run to completion
+    here.
+    """
+    from depictio.api.v1.endpoints.projects_endpoints.routes import (
+        _project_exists,
+        _project_taken,
+        get_project_from_name,
+    )
+
+    lookup = get_project_from_name(project_name=name, current_user=current_user)
+    if asyncio.run(_project_exists(lookup)):
+        raise HTTPException(status_code=409, detail=_project_taken("name")["message"])
+
+
+def _import_template_dashboards(
+    dashboard_paths: list[Path],
+    *,
+    template_id: str,
+    project_id: ObjectId,
+    variables: dict[str, str],
+    current_user,
+) -> list[DashboardImportResult]:
+    """Import a template's dashboards into a new project, keyed as ``depictio ingest`` keys them.
+
+    Each dashboard is filed under the source key the CLI gives it
+    (``<template id without version>:<path in the template>``) and a child tab
+    names its parent by that key, with the CLI's own options: titles kept, a
+    dashboard the project already has kept. A later ``depictio ingest`` of the
+    same project with this template so finds these dashboards instead of adding
+    a second copy of each. In-process, through the shared import handler, which
+    binds DC tags to the ids just persisted and drops components whose optional
+    DC was pruned.
+    """
+    import yaml
+
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
+        import_dashboard_yaml_content,
+    )
+    from depictio.cli.cli.utils.templates import (
+        _main_dashboard_of,
+        dashboard_source_key,
+        locate_template,
+        substitute_template_variables,
+    )
+
+    try:
+        template_dir: Path | None = locate_template(template_id).parent
+    except FileNotFoundError:
+        template_dir = None
+    keys = [dashboard_source_key(path, template_id, template_dir) for path in dashboard_paths]
+
+    # Every file first: a child tab is sent with the key of the file that holds
+    # its parent, found by the parent's title.
+    loaded: list[tuple[str, Any] | Exception] = []
+    for path in dashboard_paths:
+        try:
+            text = path.read_text(encoding="utf-8")
+            parsed = yaml.safe_load(text)
+            if variables:
+                parsed = substitute_template_variables(parsed, variables)
+                # sort_keys=False: PyYAML sorts mapping keys by default, which
+                # re-orders every dict-shaped component config.
+                text = yaml.dump(
+                    parsed, default_flow_style=False, allow_unicode=True, sort_keys=False
+                )
+            loaded.append((text, parsed))
+        except Exception as exc:
+            loaded.append(exc)
+    main_keys: dict[str, str] = {}
+    for key, item in zip(keys, loaded, strict=True):
+        main = _main_dashboard_of(item[1]) if isinstance(item, tuple) else None
+        if main is not None and isinstance(main.get("title"), str):
+            main_keys.setdefault(main["title"], key)
+
+    results: list[DashboardImportResult] = []
+    for path, key, item in zip(dashboard_paths, keys, loaded, strict=True):
+        entry = DashboardImportResult(path=str(path), success=False)
+        try:
+            if isinstance(item, Exception):
+                raise item
+            text, parsed = item
+            parent_tag = parsed.get("parent_dashboard_tag") if isinstance(parsed, dict) else None
+            result = import_dashboard_yaml_content(
+                yaml_content=text,
+                project_id=project_id,
+                overwrite=False,
+                current_user=current_user,
+                source_key=key,
+                keep_titles=True,
+                parent_source_key=main_keys.get(parent_tag) if parent_tag else None,
+                existing="keep",
+            )
+            entry.success = bool(result.get("success"))
+            entry.dashboard_id = result.get("dashboard_id")
+            entry.title = result.get("title")
+        except HTTPException as exc:
+            entry.error = f"HTTP {exc.status_code}: {exc.detail}"
+        except Exception as exc:
+            entry.error = str(exc)
+        results.append(entry)
+    return results
+
+
 def _create_project_from_manifest(
     *,
     manifest_url: str,
@@ -192,15 +302,17 @@ def _create_project_from_manifest(
 
     # Resolve the template server-side. resolve_template is import-light CLI
     # code (yaml + models); data_root=None skips every filesystem-local step.
-    from depictio.cli.cli.utils.templates import resolve_template, substitute_template_variables
+    from depictio.cli.cli.utils.templates import resolve_template
 
     extra_vars = {**(variables or {}), "MANIFEST_URL": manifest_url}
     try:
-        resolved_config, _meta, _origin, dashboard_paths, resolved_vars = resolve_template(
-            template_id=template_id,
-            data_root=None,
-            project_name=project_name,
-            extra_vars=extra_vars,
+        resolved_config, template_metadata, _origin, dashboard_paths, resolved_vars = (
+            resolve_template(
+                template_id=template_id,
+                data_root=None,
+                project_name=project_name,
+                extra_vars=extra_vars,
+            )
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=_template_not_found_detail(template_id, exc))
@@ -273,19 +385,14 @@ def _create_project_from_manifest(
         report.success = True
         return report
 
-    # Create the project — same identity/uniqueness rules as POST /projects/create.
+    # Create the project, with the identity and uniqueness rules of POST /projects/create.
     from depictio.api.v1.endpoints.projects_endpoints.utils import (
         validate_workflow_uniqueness_in_project,
     )
     from depictio.models.models.projects import Project
     from depictio.models.timestamps import utc_now_str
 
-    if projects_collection.find_one({"name": resolved_config["name"]}):
-        raise HTTPException(
-            status_code=409,
-            detail=f"A project named '{resolved_config['name']}' already exists — "
-            "pass a different project_name.",
-        )
+    _refuse_a_taken_project_name(resolved_config["name"], current_user)
 
     project_config = copy.deepcopy(resolved_config)
     project_config["permissions"] = {
@@ -344,35 +451,15 @@ def _create_project_from_manifest(
                 )
             )
 
-    # Import the template's dashboards in-process. The shared import handler
-    # does the tag → id binding and drops components whose optional DC ended
-    # up empty (self-adapting import).
-    from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
-        import_dashboard_yaml_content,
+    # The template's dashboards, after ingestion: components whose optional DC
+    # ended up empty are dropped (self-adapting import).
+    report.dashboards = _import_template_dashboards(
+        dashboard_paths,
+        template_id=template_metadata.template_id,
+        project_id=project_oid,
+        variables=resolved_vars,
+        current_user=current_user,
     )
 
-    for path in dashboard_paths:
-        entry = DashboardImportResult(path=str(path), success=False)
-        try:
-            yaml_text = path.read_text(encoding="utf-8")
-            if resolved_vars:
-                import yaml as _yaml
-
-                parsed = substitute_template_variables(_yaml.safe_load(yaml_text), resolved_vars)
-                yaml_text = _yaml.dump(parsed, default_flow_style=False, allow_unicode=True)
-            result = import_dashboard_yaml_content(
-                yaml_text, project_oid, overwrite=True, current_user=current_user
-            )
-            entry.success = bool(result.get("success"))
-            entry.dashboard_id = result.get("dashboard_id")
-            entry.title = result.get("title")
-        except HTTPException as exc:
-            entry.error = f"HTTP {exc.status_code}: {exc.detail}"
-            all_ok = False
-        except Exception as exc:
-            entry.error = str(exc)
-            all_ok = False
-        report.dashboards.append(entry)
-
-    report.success = all_ok
+    report.success = all_ok and all(entry.success for entry in report.dashboards)
     return report

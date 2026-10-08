@@ -1,7 +1,7 @@
 """Create a project from a template and a run folder (RFC remote-data, phase 4).
 
 ``POST /projects/from_run`` is the browser twin of
-``depictio run --template <id> --data-root s3://...``: name a template and an
+``depictio ingest <run folder> --template <id>``: name a template and an
 ``s3://`` run prefix, get back what each data collection would find under it,
 and - unless it is a dry run - a project whose ingestion has been handed to
 Celery workers.
@@ -18,6 +18,11 @@ The data root is built **once** and handed to both ``resolve_template`` and
 ``preview_data_root``. Both accept a pre-built root; passing the location twice
 would cost two full S3 listings for one request.
 
+How the run folder is read is decided from the same inputs the workers decide
+from, so the preview never accepts a folder the ingestion then refuses (see
+:func:`_run_folder_read_config`). A refused or failed S3 read is left to
+propagate as ``S3AccessError``: the API answers it with ``{detail, code}``.
+
 Synchronous throughout (the CLI helpers use sync httpx back into this same
 FastAPI process) - the route dispatches via ``asyncio.to_thread``. Ingestion
 itself is not: a real run folder is minutes of work, so it goes to workers and
@@ -25,15 +30,19 @@ the caller polls ``GET /projects/refresh_manifest/{run_id}``.
 """
 
 import copy
+from dataclasses import dataclass
 from typing import Any
 
 from bson import ObjectId
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, field_validator
 
+from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.api.v1.db import projects_collection
 from depictio.api.v1.endpoints.projects_endpoints.from_manifest import (
     DashboardImportResult,
+    _import_template_dashboards,
+    _refuse_a_taken_project_name,
     _template_not_found_detail,
     validate_template_id,
 )
@@ -41,6 +50,7 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _dispatch_refresh_tasks,
 )
 from depictio.models.logging import logger
+from depictio.models.s3_access import ProjectS3Config, S3AccessError
 
 DATA_ROOT_RULE = (
     "data_root must be an s3:// prefix. The server cannot list a directory on the "
@@ -180,19 +190,41 @@ def _assert_data_collections_confined(config: dict[str, Any], root) -> None:
                     )
 
 
-def _build_data_root(data_root: str):
+@dataclass(frozen=True)
+class _RunFolderReads:
+    """The two fields of a CLI configuration ``remote_fetch.s3_read_target`` reads.
+
+    Deciding how a location is read needs no user and no token, and a dry run
+    mints none, so the preview carries these two alone.
+    """
+
+    s3_storage: S3DepictioCLIConfig
+    remote_storage_options: ProjectS3Config | None = None
+
+
+def _run_folder_read_config() -> _RunFolderReads:
+    """The read configuration of the preview, the same the workers will read with.
+
+    A worker reads with ``_build_cli_config_for_user``: the instance's S3
+    settings (``settings.s3``, which name the instance's own bucket, refused as
+    a data source) and the project's storage settings (``project_storage_for``).
+    A project created from a run folder has no storage settings yet, so both
+    sides decide from the instance settings and the bucket lists alone: an
+    administrator-listed public bucket is read unsigned, a credentialed one with
+    the server's own credentials, anything else is refused.
+    """
+    from depictio.api.v1.configs.config import settings
+
+    return _RunFolderReads(s3_storage=settings.s3)
+
+
+def _build_data_root(data_root: str, read_config: _RunFolderReads):
     """The one :class:`DataRoot` this request answers every question from.
 
-    ``CLI_config=None`` on purpose. The instance's own MinIO credentials are the
-    Delta *write* target and say nothing about a bucket the caller just named,
-    yet handing them over would satisfy ``S3DataRoot``'s "are there credentials
-    for this?" check for every bucket in the world and make its allowlist gate
-    inert. So a user-named prefix is read either because an administrator
-    allowlisted it (``DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS``, read unsigned) or
-    because this deployment's own AWS credential chain covers it. Anything else
-    is refused by ``S3DataRoot.__init__`` from configuration alone, before a
-    single request goes out, so a bucket name never becomes an
-    existence-and-region oracle.
+    Refused by ``S3DataRoot.__init__`` from configuration alone, before a
+    single request goes out, when the configuration does not allow the read
+    (``S3AccessRefused``, see :func:`_run_folder_read_config`), so a bucket
+    name never becomes an existence-and-region oracle.
     """
     if not data_root.lower().startswith("s3://"):
         raise HTTPException(status_code=422, detail=DATA_ROOT_RULE)
@@ -200,10 +232,11 @@ def _build_data_root(data_root: str):
     from depictio.cli.cli.utils.data_root import as_data_root
 
     try:
-        root = as_data_root(data_root, None)
+        root = as_data_root(data_root, read_config)
+    except S3AccessError:
+        raise
     except ValueError as exc:
-        # Not allowlisted and no credentials, or a malformed prefix. Both are
-        # the caller's to fix, and neither has talked to S3.
+        # A malformed prefix: the caller's to fix, and nothing has talked to S3.
         raise HTTPException(status_code=422, detail=str(exc))
     if root is None:  # pragma: no cover - as_data_root only returns None for None
         raise HTTPException(status_code=422, detail=DATA_ROOT_RULE)
@@ -275,7 +308,7 @@ def _create_project_from_run(
 ) -> FromRunReport:
     """The full run folder → project + dashboards + dispatched ingestion flow.
 
-    Sync — call via ``asyncio.to_thread``.
+    Sync: call via ``asyncio.to_thread``.
     """
     # The request model already enforces this; re-checked here so direct
     # callers cannot hand resolve_template a path either.
@@ -284,7 +317,8 @@ def _create_project_from_run(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
 
-    root = _build_data_root(data_root)
+    read_config = _run_folder_read_config()
+    root = _build_data_root(data_root, read_config)
     _assert_variables_confined(variables or {}, root)
 
     # One root, two consumers. resolve_template gives the config the project is
@@ -299,11 +333,13 @@ def _create_project_from_run(
                 data_root=root,
                 project_name=project_name,
                 extra_vars=dict(variables) if variables else None,
-                CLI_config=None,
+                CLI_config=read_config,
             )
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=_template_not_found_detail(template_id, exc))
+    except S3AccessError:
+        raise
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"Template resolution failed: {exc}")
 
@@ -318,10 +354,12 @@ def _create_project_from_run(
             template_id=template_id,
             data_root=root,
             variables=dict(variables) if variables else None,
-            CLI_config=None,
+            CLI_config=read_config,
         )
     except FileNotFoundError as exc:  # pragma: no cover - resolution already passed
         raise HTTPException(status_code=404, detail=_template_not_found_detail(template_id, exc))
+    except S3AccessError:
+        raise
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"Data root preview failed: {exc}")
 
@@ -354,19 +392,14 @@ def _create_project_from_run(
         report.success = True
         return report
 
-    # Create the project — same identity/uniqueness rules as POST /projects/create.
+    # Create the project, with the identity and uniqueness rules of POST /projects/create.
     from depictio.api.v1.endpoints.projects_endpoints.utils import (
         validate_workflow_uniqueness_in_project,
     )
     from depictio.models.models.projects import Project
     from depictio.models.timestamps import utc_now_str
 
-    if projects_collection.find_one({"name": resolved_config["name"]}):
-        raise HTTPException(
-            status_code=409,
-            detail=f"A project named '{resolved_config['name']}' already exists — "
-            "pass a different project_name.",
-        )
+    _refuse_a_taken_project_name(resolved_config["name"], current_user)
 
     project_config = copy.deepcopy(resolved_config)
     project_config["permissions"] = {
@@ -390,34 +423,14 @@ def _create_project_from_run(
     # Import the template's dashboards in-process, before the workers start:
     # the shared import handler binds DC tags to the ids just persisted and
     # drops components whose optional DC was pruned (self-adapting import).
-    from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
-        import_dashboard_yaml_content,
+    report.dashboards = _import_template_dashboards(
+        dashboard_paths,
+        template_id=template_metadata.template_id,
+        project_id=project_oid,
+        variables=resolved_vars,
+        current_user=current_user,
     )
-    from depictio.cli.cli.utils.templates import substitute_template_variables
-
-    all_ok = True
-    for path in dashboard_paths:
-        entry = DashboardImportResult(path=str(path), success=False)
-        try:
-            yaml_text = path.read_text(encoding="utf-8")
-            if resolved_vars:
-                import yaml as _yaml
-
-                parsed = substitute_template_variables(_yaml.safe_load(yaml_text), resolved_vars)
-                yaml_text = _yaml.dump(parsed, default_flow_style=False, allow_unicode=True)
-            result = import_dashboard_yaml_content(
-                yaml_text, project_oid, overwrite=True, current_user=current_user
-            )
-            entry.success = bool(result.get("success"))
-            entry.dashboard_id = result.get("dashboard_id")
-            entry.title = result.get("title")
-        except HTTPException as exc:
-            entry.error = f"HTTP {exc.status_code}: {exc.detail}"
-            all_ok = False
-        except Exception as exc:
-            entry.error = str(exc)
-            all_ok = False
-        report.dashboards.append(entry)
+    all_ok = all(entry.success for entry in report.dashboards)
 
     # Fan the ingestion out. Everything the workers need is on the project
     # document, which they re-read for themselves; the run document in Mongo is

@@ -3,8 +3,8 @@
 Orchestration-contract tests: SSRF-gateway rejection precedes everything,
 template resolution + manifest coverage checks produce the right errors and
 plans, project creation persists the resolved manifest scan configs with the
-caller as owner, and the per-DC ingest / dashboard-import fan-out is reported
-per item. The heavy legs (scan → Delta, dashboard tag binding) are covered by
+caller as owner under a free name, and the per-DC ingest / dashboard-import
+fan-out is reported per item, the dashboards keyed as the CLI keys them. The heavy legs (scan → Delta, dashboard tag binding) are covered by
 their own suites — here they are patched at their seams (`_run_dc_ingest`,
 `import_dashboard_yaml_content`).
 
@@ -19,9 +19,11 @@ import pytest
 from bson import ObjectId
 from fastapi import HTTPException
 
-from depictio.api.v1.endpoints.projects_endpoints import from_manifest, manifest_ingest
+from depictio.api.v1.endpoints.projects_endpoints import from_manifest, manifest_ingest, routes
 from depictio.api.v1.remote_fetch import RemoteURLRejected
 from depictio.models.models.users import UserBase
+
+_IMPORTER = "depictio.api.v1.endpoints.dashboards_endpoints.routes.import_dashboard_yaml_content"
 
 TEMPLATE_ID = "generic/manifest-tables/1"
 
@@ -74,7 +76,11 @@ def mock_db(monkeypatch):
     monkeypatch.setenv("DEPICTIO_REMOTE_URL_ALLOWLIST", "example.org")
     client = mongomock.MongoClient()
     database = client["depictio_test"]
-    with patch.object(from_manifest, "projects_collection", database["projects"]):
+    with (
+        patch.object(from_manifest, "projects_collection", database["projects"]),
+        # The duplicate-name check is POST /projects/create's, which reads here.
+        patch.object(routes, "projects_collection", database["projects"]),
+    ):
         yield database
 
 
@@ -171,7 +177,7 @@ def test_full_flow_creates_project_ingests_and_imports_dashboards(mock_db):
         _served(),
         patch.object(from_manifest, "_run_dc_ingest", return_value=(True, None)) as ingest,
         patch(
-            "depictio.api.v1.endpoints.dashboards_endpoints.routes.import_dashboard_yaml_content",
+            _IMPORTER,
             return_value={
                 "success": True,
                 "dashboard_id": str(ObjectId()),
@@ -201,10 +207,13 @@ def test_full_flow_creates_project_ingests_and_imports_dashboards(mock_db):
     assert all(r.status == "ingested" for r in report.ingestion)
     assert all(r.data_collection_id for r in report.ingestion)
 
-    # The template's base dashboard was imported against the new project.
+    # The template's base dashboard was imported against the new project,
+    # under the source key the CLI files it under.
     assert importer.call_count == 1
-    _yaml_text, project_oid = importer.call_args.args[:2]
-    assert project_oid == ObjectId(report.project_id)
+    kwargs = importer.call_args.kwargs
+    assert kwargs["project_id"] == ObjectId(report.project_id)
+    assert kwargs["source_key"] == "generic/manifest-tables:dashboards/base.yaml"
+    assert kwargs["existing"] == "keep"
     assert report.dashboards[0].success is True
     assert report.dashboards[0].title == "Manifest Overview"
 
@@ -214,7 +223,7 @@ def test_failed_dc_ingest_reported_and_project_kept(mock_db):
         _served(),
         patch.object(from_manifest, "_run_dc_ingest", return_value=(False, "boom")),
         patch(
-            "depictio.api.v1.endpoints.dashboards_endpoints.routes.import_dashboard_yaml_content",
+            _IMPORTER,
             return_value={"success": True, "dashboard_id": str(ObjectId()), "title": "t"},
         ),
     ):
@@ -227,11 +236,47 @@ def test_failed_dc_ingest_reported_and_project_kept(mock_db):
     assert mock_db["projects"].count_documents({"name": "run43"}) == 1
 
 
-def test_duplicate_project_name_409(mock_db):
-    mock_db["projects"].insert_one({"_id": ObjectId(), "name": "run42"})
-    with _served(), pytest.raises(HTTPException) as exc:
-        _call(project_name="run42")
+def test_a_taken_project_name_is_refused_as_create_refuses_it(mock_db):
+    """The same check and error as POST /projects/create, before anything is written."""
+    user = _user()
+    imported = {"success": True, "dashboard_id": str(ObjectId()), "title": "t"}
+    with (
+        _served(),
+        patch.object(from_manifest, "_run_dc_ingest", return_value=(True, None)) as ingest,
+        patch(_IMPORTER, return_value=imported),
+    ):
+        _call(user=user, project_name="run42")
+        ingest.reset_mock()
+        with pytest.raises(HTTPException) as exc:
+            _call(user=user, project_name="run42")
+
     assert exc.value.status_code == 409
+    assert exc.value.detail == routes._project_taken("name")["message"]
+    assert mock_db["projects"].count_documents({}) == 1
+    ingest.assert_not_called()
+
+
+def test_a_child_tab_names_its_parent_by_key(mock_db, tmp_path):
+    """As the CLI sends it: the tab's parent is found by key, so a renamed parent keeps it."""
+    main = tmp_path / "main.yaml"
+    main.write_text("title: Overview\n")
+    tab = tmp_path / "tab.yaml"
+    tab.write_text("title: Details\nparent_dashboard_tag: Overview\n")
+
+    with patch(_IMPORTER, return_value={"success": True}) as importer:
+        results = from_manifest._import_template_dashboards(
+            [main, tab],
+            template_id="generic/not-shipped/1",
+            project_id=ObjectId(),
+            variables={},
+            current_user=_user(),
+        )
+
+    assert [entry.success for entry in results] == [True, True]
+    main_call, tab_call = importer.call_args_list
+    assert main_call.kwargs["parent_source_key"] is None
+    assert tab_call.kwargs["parent_source_key"] == main_call.kwargs["source_key"]
+    assert tab_call.kwargs["source_key"] != main_call.kwargs["source_key"]
 
 
 # One entry on a host the gateway rejects (the other host passes).

@@ -5,14 +5,15 @@ of this file is a parity suite: the same virtual tree is built twice, once on
 disk and once as a stubbed key listing, and every question is asked of both.
 
 No network: the S3 listing comes from ``depictio.tests.cli.s3_stubs``, which
-replaces the client factory every remote path goes through.
+replaces the client every remote path goes through. How a location is read
+(public, project, instance, ambient, or refused) is the real decision.
 """
 
 from types import SimpleNamespace
 
 import pytest
 
-from depictio.api.v1 import remote_fetch
+from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
 from depictio.cli.cli.utils import data_root as data_root_module
 from depictio.cli.cli.utils.data_root import (
     LocalDataRoot,
@@ -20,8 +21,16 @@ from depictio.cli.cli.utils.data_root import (
     data_root_for,
     list_s3_objects,
 )
+from depictio.models.s3_access import S3AccessFailed, S3AccessRefused, S3Target
 
-from ..s3_stubs import install_s3_listing, s3_cli_config
+from ..s3_stubs import (
+    FailingS3Client,
+    StubS3Client,
+    install_s3_client,
+    install_s3_listing,
+    s3_cli_config,
+    s3_client_error,
+)
 
 # ── the shared virtual tree ──────────────────────────────────────────────────
 
@@ -48,22 +57,28 @@ def _body(rel: str) -> bytes:
 
 
 def _s3_storage():
-    from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
-
     return S3DepictioCLIConfig(root_user="minio", root_password="minio123")
 
 
+@pytest.fixture(autouse=True)
+def server_context(monkeypatch):
+    """Server context, the suite's default. Importing the CLI app sets
+    ``DEPICTIO_CONTEXT=CLI`` for the whole process, and how a location is read
+    depends on it."""
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+
+
 @pytest.fixture
-def no_ambient_credentials(monkeypatch):
-    """Strip the AWS env vars, so the allowlist guard is deterministic."""
-    for name in (
-        "AWS_ACCESS_KEY_ID",
-        "AWS_PROFILE",
-        "AWS_ROLE_ARN",
-        "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
-    ):
-        monkeypatch.delenv(name, raising=False)
+def no_bucket_lists(monkeypatch):
+    """No bucket an administrator listed, public or credentialed."""
     monkeypatch.delenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", raising=False)
+    monkeypatch.delenv("DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS", raising=False)
+
+
+@pytest.fixture
+def no_client(monkeypatch):
+    """Fail the test if any S3 client is built: the decision needs none."""
+    monkeypatch.setattr(S3Target, "client", lambda _target: pytest.fail("a client was built"))
 
 
 @pytest.fixture(params=["local", "s3"])
@@ -358,79 +373,158 @@ class TestTruncation:
         assert root.read_bytes("f9.csv") == b"body 9"
 
 
-class TestAllowlistGuard:
-    """A bucket name must never become an existence or region oracle."""
+class TestReadDecision:
+    """How a root is read is decided from configuration, before any request.
 
-    def test_an_unlisted_bucket_without_credentials_is_refused(
-        self, monkeypatch, no_ambient_credentials
+    A bucket name must never become an existence or region oracle, and the
+    server never reads a user-named location with the instance's credentials.
+    """
+
+    def test_an_unlisted_bucket_without_project_storage_is_refused(
+        self, no_bucket_lists, no_client
     ):
-        calls = []
-        monkeypatch.setattr(
-            data_root_module,
-            "s3_read_client",
-            lambda *args, **kwargs: calls.append(args) or pytest.fail("client was built"),
-        )
-        with pytest.raises(ValueError, match="DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS"):
+        with pytest.raises(S3AccessRefused) as exc:
             data_root_for("s3://someone-elses-bucket/data", None)
-        assert calls == []
+        assert exc.value.code == "s3_refused"
+        assert exc.value.status_code == 422
+
+    def test_an_ambient_aws_key_is_not_enough_on_the_server(
+        self, monkeypatch, no_bucket_lists, no_client
+    ):
+        """The server's own credentials read only the buckets an administrator lists."""
+        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIA")
+        with pytest.raises(S3AccessRefused):
+            data_root_for("s3://private-bucket/data", None)
+
+    def test_the_server_never_falls_back_to_the_instance_credentials(
+        self, no_bucket_lists, no_client
+    ):
+        cfg = SimpleNamespace(remote_storage_options=None, s3_storage=_s3_storage())
+        with pytest.raises(S3AccessRefused):
+            data_root_for(S3_ROOT, cfg)
+
+    def test_the_instance_bucket_is_refused_even_when_listed_public(self, monkeypatch, no_client):
+        """That bucket holds every project's data: refused before the public list."""
+        bucket = S3DepictioCLIConfig().bucket
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", bucket)
+        with pytest.raises(S3AccessRefused, match="instance's own data"):
+            data_root_for(f"s3://{bucket}/projects/run42", None)
 
     def test_an_allowlisted_bucket_is_accepted_without_credentials(
-        self, monkeypatch, no_ambient_credentials
+        self, monkeypatch, no_bucket_lists
     ):
         monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
         install_s3_listing(monkeypatch, {"run42/x.csv": b"x"})
         root = data_root_for("s3://open-data/run42", None)
         assert root.is_remote is True
+        assert root.exists("x.csv")
 
-    def test_configured_credentials_are_enough(self, monkeypatch, no_ambient_credentials):
+    def test_project_storage_is_enough(self, monkeypatch, no_bucket_lists):
         install_s3_listing(monkeypatch, {})
         assert data_root_for("s3://private-bucket/data", s3_cli_config()).is_remote is True
 
-    def test_an_ambient_aws_key_is_enough(self, monkeypatch, no_ambient_credentials):
-        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIA")
+    def test_the_cli_reads_with_its_own_configuration(self, monkeypatch, no_bucket_lists):
+        """CLI context keeps its order: no project storage, the config's S3 keys."""
+        monkeypatch.setenv("DEPICTIO_CONTEXT", "CLI")
         install_s3_listing(monkeypatch, {})
-        assert data_root_for("s3://private-bucket/data", None).is_remote is True
-
-
-class TestStorageOptions:
-    @pytest.fixture(autouse=True)
-    def no_region_probe(self, monkeypatch):
-        """``public_s3_region`` talks to AWS; it is resolved inside remote_fetch."""
-        monkeypatch.setattr(remote_fetch, "public_s3_region", lambda bucket: f"region-of-{bucket}")
-
-    def test_an_allowlisted_prefix_is_read_unsigned(self, monkeypatch, no_ambient_credentials):
-        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
-        install_s3_listing(monkeypatch, {})
-        options = data_root_for("s3://open-data/run42", None).storage_options()
-        assert options == {"aws_skip_signature": "true", "aws_region": "region-of-open-data"}
-
-    def test_project_credentials_win(self, monkeypatch):
-        install_s3_listing(monkeypatch, {})
-        options = data_root_for(S3_ROOT, s3_cli_config()).storage_options()
-        assert options == s3_cli_config().remote_storage_options
-
-    def test_the_instance_config_is_the_fallback(self, monkeypatch, no_ambient_credentials):
-        install_s3_listing(monkeypatch, {})
-        s3_storage = _s3_storage()
-        cfg = SimpleNamespace(remote_storage_options=None, s3_storage=s3_storage)
+        cfg = SimpleNamespace(remote_storage_options=None, s3_storage=_s3_storage())
         options = data_root_for(S3_ROOT, cfg).storage_options()
         assert options["aws_access_key_id"] == "minio"
         assert options["aws_secret_access_key"] == "minio123"
-        assert options["endpoint_url"] == s3_storage.endpoint_url
+        assert options["aws_endpoint_url"] == _s3_storage().endpoint_url
 
-    def test_without_any_configuration_there_are_no_options(
-        self, monkeypatch, no_ambient_credentials
-    ):
-        """Nothing to hand polars: object-store falls back to its own chain."""
-        monkeypatch.setenv("AWS_ACCESS_KEY_ID", "AKIA")
+
+class TestStorageOptions:
+    """What polars is handed is the target the root was listed with."""
+
+    @pytest.fixture(autouse=True)
+    def listing(self, monkeypatch, no_bucket_lists):
+        """An empty listing, and each bucket answering from a region named after it."""
         install_s3_listing(monkeypatch, {})
-        assert data_root_for("s3://private-bucket/run42", None).storage_options() is None
+        monkeypatch.setattr(
+            data_root_module,
+            "ensure_region",
+            lambda target: target.with_region(f"region-of-{target.bucket}"),
+        )
+
+    def test_an_allowlisted_prefix_is_read_unsigned(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "open-data")
+        options = data_root_for("s3://open-data/run42", None).storage_options()
+        assert options == {"aws_skip_signature": "true", "aws_region": "region-of-open-data"}
+
+    def test_the_project_storage_is_used_as_configured(self):
+        options = data_root_for(S3_ROOT, s3_cli_config()).storage_options()
+        assert options["aws_endpoint_url"] == "https://s3.example"
+        assert options["aws_access_key_id"] == "k"
+        assert options["aws_secret_access_key"] == "s"
+        assert options["aws_region"] == f"region-of-{S3_BUCKET}"
+        assert "aws_skip_signature" not in options
+
+    def test_a_credentialed_bucket_hands_polars_no_credentials(self, monkeypatch):
+        """Read with the server's own chain: object-store finds it by itself."""
+        monkeypatch.setenv("DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS", "private-bucket")
+        options = data_root_for("s3://private-bucket/run42", None).storage_options()
+        assert options == {"aws_region": "region-of-private-bucket"}
+
+    def test_a_scoped_view_reads_with_its_parents_target(self):
+        root = data_root_for(S3_ROOT, s3_cli_config())
+        assert root.scoped("run_1").storage_options() == root.storage_options()
+
+
+class TestS3Failures:
+    """Failures come out coded, sanitized, and with "absent" kept apart."""
+
+    def test_an_absent_prefix_is_an_empty_root(self, monkeypatch):
+        """Some gateways answer a prefix that holds nothing with a 404."""
+        install_s3_client(monkeypatch, FailingS3Client("NoSuchKey", 404))
+        root = data_root_for(S3_ROOT, s3_cli_config())
+        assert root.objects == []
+        assert root.exists("anything") is False
+
+    def test_a_missing_bucket_is_coded(self, monkeypatch):
+        install_s3_client(monkeypatch, FailingS3Client("NoSuchBucket", 404))
+        with pytest.raises(S3AccessFailed) as exc:
+            data_root_for(S3_ROOT, s3_cli_config())
+        assert exc.value.code == "s3_no_such_bucket"
+        assert f"'{S3_BUCKET}'" in exc.value.detail
+
+    def test_a_denied_read_is_coded_and_names_no_endpoint(self, monkeypatch):
+        class _DeniedReads(StubS3Client):
+            def get_object(self, Bucket, Key):  # noqa: N803 - boto3's own spelling
+                raise s3_client_error("AccessDenied", 403, "GetObject")
+
+        install_s3_client(monkeypatch, _DeniedReads({f"{S3_KEY_PREFIX}x.csv": b"x"}))
+        root = data_root_for(S3_ROOT, s3_cli_config())
+        with pytest.raises(S3AccessFailed) as exc:
+            root.read_bytes("x.csv")
+        assert exc.value.code == "s3_access_denied"
+        assert f"{S3_ROOT}/x.csv" in exc.value.detail
+        assert "s3.example" not in exc.value.detail
+
+    def test_an_object_gone_since_a_truncated_listing_is_absent(self, monkeypatch):
+        """A partial listing sends the read to S3; NoSuchKey there is "absent"."""
+
+        class _Gone(StubS3Client):
+            def get_object(self, Bucket, Key):  # noqa: N803 - boto3's own spelling
+                raise s3_client_error("NoSuchKey", 404, "GetObject")
+
+        bodies = {f"{S3_KEY_PREFIX}f{i}.csv": b"x" for i in range(10)}
+        install_s3_client(monkeypatch, _Gone(bodies, page_size=5))
+        root = S3DataRoot(S3_ROOT, s3_cli_config(), max_keys=5)
+        assert root.truncated is True
+        with pytest.raises(FileNotFoundError):
+            root.read_bytes("f9.csv")
 
 
 # ── the listing primitive ────────────────────────────────────────────────────
 
 
 class TestListS3Objects:
+    @pytest.fixture(autouse=True)
+    def public_bucket(self, monkeypatch):
+        """Bucket ``b`` allowlisted, so a listing without configuration is allowed."""
+        monkeypatch.setenv("DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS", "b")
+
     def test_returns_keys_relative_to_the_prefix(self, monkeypatch):
         install_s3_listing(
             monkeypatch,
@@ -453,20 +547,14 @@ class TestListS3Objects:
         assert objects[0].size == 3
         assert objects[0].last_modified is None
 
-    def test_a_non_s3_prefix_is_rejected_before_any_client(self, monkeypatch):
-        monkeypatch.setattr(
-            data_root_module,
-            "s3_read_client",
-            lambda *args, **kwargs: pytest.fail("client was built"),
-        )
+    def test_a_non_s3_prefix_is_rejected_before_any_client(self, no_client):
         with pytest.raises(ValueError, match="s3:// prefix"):
             list_s3_objects("https://host/d/", None)
 
-    def test_a_prefix_without_a_bucket_is_rejected(self, monkeypatch):
-        monkeypatch.setattr(
-            data_root_module,
-            "s3_read_client",
-            lambda *args, **kwargs: pytest.fail("client was built"),
-        )
+    def test_a_prefix_without_a_bucket_is_rejected(self, no_client):
         with pytest.raises(ValueError, match="no bucket"):
             list_s3_objects("s3://", None)
+
+    def test_an_unlisted_bucket_is_refused_before_any_client(self, no_client):
+        with pytest.raises(S3AccessRefused):
+            list_s3_objects("s3://not-listed/run42/", None)

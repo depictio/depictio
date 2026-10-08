@@ -1,9 +1,14 @@
 """One stubbed S3 for every CLI test that needs a remote data root.
 
 ``DataRoot``, the ``s3_prefix`` scan and remote recipe reads all reach S3
-through :func:`depictio.cli.cli.utils.data_root.s3_read_client`, so replacing
-that one factory is enough to run the whole remote path with no network: the
-key list handed in here *is* the bucket.
+through the client of the :class:`~depictio.models.s3_access.S3Target` that
+``data_root`` resolves, so replacing ``S3Target.client`` (and the region lookup
+``data_root`` asks for) is enough to run the whole remote path with no network:
+the key list handed in here *is* the bucket.
+
+Which target a location resolves to is left real. A test reading a bucket
+still needs the configuration to allow it: project storage
+(:func:`s3_cli_config`), or the bucket on ``DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS``.
 
 Not a ``test_*`` module on purpose. Pytest does not collect it, and test
 modules import their shared scaffolding from here rather than from each other.
@@ -14,8 +19,11 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+from botocore.exceptions import ClientError
+
 from depictio.cli.cli.utils import data_root as data_root_module
 from depictio.cli.cli.utils.data_root import data_root_for
+from depictio.models.s3_access import S3Target
 
 # ── the stub ─────────────────────────────────────────────────────────────────
 
@@ -71,6 +79,41 @@ class StubS3Client:
         return {"Body": io.BytesIO(self.bodies[Key])}
 
 
+def s3_client_error(code: str, status: int, operation: str = "ListObjectsV2") -> ClientError:
+    """The ``ClientError`` botocore raises for an S3 answer ``code`` / ``status``."""
+    return ClientError(
+        {"Error": {"Code": code, "Message": "x"}, "ResponseMetadata": {"HTTPStatusCode": status}},
+        operation,
+    )
+
+
+class FailingS3Client:
+    """A client whose listing answers with one S3 error, on its first page."""
+
+    def __init__(self, code: str, status: int):
+        self.error = s3_client_error(code, status)
+
+    def get_paginator(self, _name):
+        error = self.error
+
+        class _Paginator:
+            def paginate(self, **_kwargs):
+                raise error
+                yield  # a generator, like botocore's page iterator
+
+        return _Paginator()
+
+
+def install_s3_client(monkeypatch, client):
+    """Make ``client`` the client of every S3 target, with no region lookup.
+
+    A target keeps the region it was resolved with: no HeadBucket goes out.
+    """
+    monkeypatch.setattr(S3Target, "client", lambda _target: client)
+    monkeypatch.setattr(data_root_module, "ensure_region", lambda target: target)
+    return client
+
+
 def install_s3_listing(
     monkeypatch, tree: dict[str, bytes], key_prefix: str = "", **client_kwargs
 ) -> StubS3Client:
@@ -81,8 +124,7 @@ def install_s3_listing(
     client = StubS3Client(
         {f"{key_prefix}{rel}": body for rel, body in tree.items()}, **client_kwargs
     )
-    monkeypatch.setattr(data_root_module, "s3_read_client", lambda _url, _cfg: client)
-    return client
+    return install_s3_client(monkeypatch, client)
 
 
 def s3_cli_config():
