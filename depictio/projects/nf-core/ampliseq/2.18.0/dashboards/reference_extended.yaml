@@ -15,6 +15,7 @@ main_dashboard:
   project_tag: Ampliseq Microbial Community Analysis
   main_tab_name: Overview
   tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
@@ -64,7 +65,8 @@ main_dashboard:
     appearance: plain
     card_variant: headline
     filter_bar: true
-    description: The run in four numbers. The filter here narrows these four only.
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
   - name: Findings
     icon: mdi:star-outline
     color: gray
@@ -72,7 +74,7 @@ main_dashboard:
     figure_style: minimal
     filter_bar: true
     visible_filters: 2
-    description: What the data says, each with the tab that shows it.
+    description: What the data says, each with the tab that shows it, then the figures behind it.
   - name: How to read this dashboard
     icon: mdi:information-outline
     color: gray
@@ -96,6 +98,7 @@ main_dashboard:
     column_type: object
     display:
       icon_name: mdi:shape-outline
+      custom_color: violet
       strip_label: Habitat
     section: Key figures
     tag: am-ov-kf-group
@@ -106,8 +109,28 @@ main_dashboard:
       y: 0
       w: 2
       h: 1
+  - component_type: interactive
+    workflow_tag: ampliseq
+    data_collection_tag: metadata
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+      strip_label: Sample
+    section: Key figures
+    tag: am-ov-kf-sample
+    index: ov-kf-sample
+    title: Sample ID
+    layout:
+      x: 2
+      y: 0
+      w: 2
+      h: 1
   - component_type: text
     title: nf-core/ampliseq
+    logo: /assets/images/workflows/ampliseq.png
     order: 1
     body: 'Amplicon reads turned into a census of each sample''s community: who is there, how diverse it is and what differs between groups. [Run parameters](params:)
 
@@ -120,7 +143,57 @@ main_dashboard:
       w: 8
       h: 1
   - component_type: text
-    body: '::: steps
+    surface: card
+    body: '### About this dashboard
+
+      nf-core/ampliseq turns amplicon reads (16S, 18S or ITS) into amplicon sequence variants (ASVs), names each against a reference taxonomy and compares the communities of the samples. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+
+      The sample filters in the left panel apply to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+
+      '
+    tag: am-ov-about
+    index: ov-about
+    layout:
+      x: 0
+      y: 1
+      w: 5
+      h: 3
+  - component_type: text
+    surface: card
+    values:
+      samples:
+        dc: samplesheet
+        column: sampleID
+        aggregation: nunique
+        format: integer
+    body: '### The run
+
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
+
+      - ![](icon:mdi:dna) **Primers** {{param:FW_primer}} · {{param:RV_primer}}
+
+      - ![](icon:mdi:tag-outline) **Taxonomy** {{param:dada_ref_taxonomy}}
+
+      - ![](icon:mdi:filter-remove-outline) **Removed** {{param:exclude_taxa}}
+
+      '
+    tag: am-ov-run
+    index: ov-run
+    layout:
+      x: 5
+      y: 1
+      w: 3
+      h: 3
+  - component_type: text
+    surface: card
+    accent: green
+    body: '### Six steps from reads to communities
+
+      Each step names its settings and the tab that shows its result.
+
+
+      ::: steps
 
       1. ![](icon:mdi:content-cut) **Trim** Primers cut by Cutadapt · [Settings](params:primer) · [MultiQC](tab:MultiQC)
 
@@ -141,9 +214,9 @@ main_dashboard:
     index: ov-steps
     layout:
       x: 0
-      y: 1
+      y: 4
       w: 8
-      h: 2
+      h: 3
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: metadata
@@ -298,6 +371,7 @@ main_dashboard:
     column_type: object
     display:
       icon_name: mdi:shape-outline
+      custom_color: violet
       strip_label: Habitat
     section: Findings
     tag: am-ov-findings-group
@@ -316,6 +390,7 @@ main_dashboard:
     column_type: object
     display:
       icon_name: mdi:bacteria
+      custom_color: grape
       strip_label: Kingdom
     section: Findings
     tag: am-ov-findings-kingdom
@@ -334,6 +409,7 @@ main_dashboard:
     column_type: object
     display:
       icon_name: mdi:bacteria
+      custom_color: grape
       strip_label: Kingdom
     section: Findings
     tag: am-ov-findings-kingdom-sintax
@@ -352,6 +428,7 @@ main_dashboard:
     column_type: object
     display:
       icon_name: mdi:bacteria
+      custom_color: grape
       strip_label: Kingdom
     section: Findings
     tag: am-ov-findings-kingdom-sidle
@@ -445,72 +522,105 @@ main_dashboard:
     section: Findings
     source_tab: Community & Diversity
     source_component: comm-composition-by-group
+    caption: The ten most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it.
     tag: am-ov-hl-composition
     index: ov-hl-composition
     layout:
       x: 0
       y: 2
-      w: 4
-      h: 4
+      w: 5
+      h: 5
   - component_type: highlight
     section: Findings
     source_tab: Community & Diversity
     source_component: comm-sintax-composition
+    caption: The ten most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it.
     tag: am-ov-hl-composition-sintax
     index: ov-hl-composition-sintax
     layout:
       x: 0
       y: 2
-      w: 4
-      h: 4
+      w: 5
+      h: 5
   - component_type: highlight
     section: Findings
     source_tab: SIDLE
     source_component: sidle-composition
+    caption: The ten most abundant phyla of each group, the rest folded into Other. The Kingdom filter redraws it.
     tag: am-ov-hl-composition-sidle
     index: ov-hl-composition-sidle
     layout:
       x: 0
       y: 2
-      w: 4
-      h: 4
-  - component_type: highlight
+      w: 5
+      h: 5
+  - component_type: advanced_viz
+    workflow_tag: ampliseq
+    viz_kind: phylogenetic
+    data_collection_tag: phylogenetic_tree_canonical
+    config:
+      viz_kind: phylogenetic
+      tree_wf_id: 646b0f3c1e4a2d7f8e5b8ca3
+      tree_dc_id: 646b0f3c1e4a2d7f8e5b8cdb
+      tree_dc_tag: phylogenetic_tree_canonical
+      metadata_wf_id: 646b0f3c1e4a2d7f8e5b8ca3
+      metadata_dc_id: 646b0f3c1e4a2d7f8e5b8cdc
+      metadata_dc_tag: phylogenetic_tree_metadata_canonical
+      taxon_col: taxon
+      color_col: Kingdom
+      collapse_rank: Phylum
+      top_n: 10
+      size_by: abundance
+      abundance_dc_tag: taxonomy_rel_abundance
+      abundance_col: rel_abundance
+      abundance_sample_col: sample
+      abundance_split_col: habitat
+      extra_color_cols:
+      - dominant_habitat
+    title: Tree of life
+    link: tab:Phylogeny
+    caption: The ten largest phyla, one tip each, their share of the reads split by group beside them. Branch lengths are not to scale.
     section: Findings
-    source_tab: Alpha Diversity
-    source_component: alpha-boxplot-by-group
-    tag: am-ov-hl-alpha
-    index: ov-hl-alpha
+    tag: am-ov-tree
+    index: ov-tree
     layout:
-      x: 4
-      y: 2
-      w: 4
-      h: 4
-  - component_type: highlight
-    section: Findings
-    source_tab: Ordination & Clustering
-    source_component: ord-embedding
-    tag: am-ov-hl-ordination
-    index: ov-hl-ordination
-    layout:
-      x: 0
-      y: 6
-      w: 4
-      h: 4
+      x: 3
+      y: 7
+      w: 5
+      h: 5
   - component_type: highlight
     section: Findings
     source_tab: Differential Abundance
     source_component: adv-volcano
+    caption: One point per phylum and contrast; right of the line, more abundant than in the reference group.
     tag: am-ov-hl-volcano
     index: ov-hl-volcano
     layout:
-      x: 4
-      y: 6
-      w: 4
-      h: 4
+      x: 5
+      y: 2
+      w: 3
+      h: 5
+  - component_type: highlight
+    section: Findings
+    source_tab: Ordination & Clustering
+    source_component: ord-embedding
+    title: Sample ordination (PCoA)
+    caption: One point per sample; the closer two points, the more alike their communities (Bray-Curtis, PCoA).
+    tag: am-ov-hl-ordination
+    index: ov-hl-ordination
+    layout:
+      x: 0
+      y: 7
+      w: 3
+      h: 5
   - component_type: text
     body: '### Data & QC
 
       - [MultiQC](tab:MultiQC)
+
+      - [Sampling Campaign](tab:Sampling Campaign)
+
+      - [Environment (CTD)](tab:Environment (CTD))
 
 
       ### Diversity
@@ -547,6 +657,7 @@ main_dashboard:
     column_type: object
     display:
       icon_name: mdi:shape-outline
+      custom_color: violet
     section: Sample filters
     group: Sample scope
     tag: am-filter-group
@@ -565,6 +676,7 @@ main_dashboard:
     column_type: object
     display:
       icon_name: mdi:flask-outline
+      custom_color: teal
     section: Sample filters
     group: Sample scope
     tag: am-filter-sample
@@ -597,6 +709,7 @@ main_dashboard:
     column_type: datetime
     display:
       icon_name: mdi:calendar-outline
+      custom_color: indigo
     section: Campaign design
     tag: am-ref-filter-ref-sampling-date
     index: ref-sampling-date
@@ -615,6 +728,7 @@ main_dashboard:
     column_type: object
     display:
       icon_name: mdi:map-marker-outline
+      custom_color: orange
     section: Campaign design
     tag: am-ref-filter-ref-city
     index: ref-city
@@ -633,6 +747,7 @@ main_dashboard:
     column_type: float64
     display:
       icon_name: mdi:thermometer
+      custom_color: red
     section: Environment
     tag: am-ref-filter-ref-ctd-temperature
     index: ref-ctd-temperature
@@ -651,6 +766,7 @@ main_dashboard:
     column_type: float64
     display:
       icon_name: mdi:flash
+      custom_color: yellow
     section: Environment
     tag: am-ref-filter-ref-ctd-conductivity
     index: ref-ctd-conductivity
@@ -669,6 +785,7 @@ main_dashboard:
     column_type: float64
     display:
       icon_name: mdi:water-percent
+      custom_color: blue
     section: Environment
     tag: am-ref-filter-ref-ctd-do
     index: ref-ctd-do
@@ -687,6 +804,7 @@ main_dashboard:
     column_type: float64
     display:
       icon_name: mdi:molecule
+      custom_color: green
     section: Environment
     tag: am-ref-filter-ref-ctd-nitrate
     index: ref-ctd-nitrate
@@ -714,7 +832,7 @@ main_dashboard:
     selection_enabled: true
     selection_column: sample
     placement: floating
-    floating_initial_state: compact
+    floating_initial_state: docked
     tag: am-ref-map-sampling-sites
     index: ref-sampling-sites
     title: Sampling sites
@@ -753,6 +871,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:flask-outline
+      custom_color: teal
     section: MultiQC report
     tag: am-mqc-filter-sample
     index: mqc-sample-filter
@@ -974,6 +1093,7 @@ tabs:
     column_type: float64
     display:
       icon_name: mdi:chart-bell-curve
+      custom_color: pink
     section: Alpha filters
     tag: am-alpha-filter-shannon
     index: alpha-shannon-range
@@ -1170,6 +1290,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:bacteria-outline
+      custom_color: grape
     section: Ordination filters
     tag: am-ord-filter-phylum
     index: ord-phylum-filter
@@ -1232,6 +1353,7 @@ tabs:
       color_col: habitat
       point_size: 10
       show_density: false
+      axis_prefix: PCo
       selection_enabled: true
     section: Sample relationships
     tag: am-ord-embedding
@@ -1368,6 +1490,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:bacteria
+      custom_color: grape
     section: Community filters
     group: Taxonomy
     tag: am-comm-filter-kingdom
@@ -1386,6 +1509,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:bacteria-outline
+      custom_color: grape
     section: Community filters
     group: Taxonomy
     tag: am-comm-filter-phylum
@@ -1404,6 +1528,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:bacteria
+      custom_color: grape
     section: Community filters
     group: Taxonomy
     tag: am-comm-filter-kingdom-sintax
@@ -1422,6 +1547,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:bacteria-outline
+      custom_color: grape
     section: Community filters
     group: Taxonomy
     tag: am-comm-filter-phylum-sintax
@@ -1739,6 +1865,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:compare-horizontal
+      custom_color: red
     section: Differential filters
     group: Call scope
     tag: am-diff-filter-contrast
@@ -1757,6 +1884,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:bacteria-outline
+      custom_color: grape
     section: Differential filters
     group: Call scope
     tag: am-diff-filter-phylum
@@ -1775,6 +1903,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:bacteria
+      custom_color: grape
     section: Differential filters
     group: Call scope
     tag: am-diff-filter-kingdom
@@ -1793,6 +1922,7 @@ tabs:
     column_type: float64
     display:
       icon_name: mdi:arrow-expand-horizontal
+      custom_color: red
     section: Differential filters
     tag: am-diff-filter-lfc
     index: diff-lfc-slider
@@ -1896,6 +2026,8 @@ tabs:
       significance_threshold: 0.05
       effect_threshold: 1.0
       top_n_labels: 6
+      effect_label: Log fold change
+      significance_label: -log10 q-value
     section: Volcano and ranked effects
     tag: am-diff-volcano
     index: adv-volcano
@@ -2016,6 +2148,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:bacteria
+      custom_color: grape
     section: Tree filters
     group: Taxonomy scope
     tag: am-phylo-filter-kingdom
@@ -2034,6 +2167,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:bacteria-outline
+      custom_color: grape
     section: Tree filters
     group: Taxonomy scope
     tag: am-phylo-filter-phylum
@@ -2218,6 +2352,7 @@ tabs:
     column_type: object
     display:
       icon_name: mdi:bacteria-outline
+      custom_color: grape
     section: SIDLE filters
     tag: am-sidle-filter-phylum
     index: sidle-phylum-filter

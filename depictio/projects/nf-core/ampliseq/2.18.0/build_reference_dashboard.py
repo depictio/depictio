@@ -134,6 +134,7 @@ def interactive(
     column_type: str,
     title: str,
     icon: str,
+    color: str,
     y: int,
     h: int,
 ) -> dict[str, Any]:
@@ -144,7 +145,9 @@ def interactive(
         "interactive_component_type": kind,
         "column_name": column,
         "column_type": column_type,
-        "display": {"icon_name": icon},
+        # A Mantine palette name, one per column across the dashboard, so a
+        # filter reads as the same filter wherever it appears.
+        "display": {"icon_name": icon, "custom_color": color},
         "section": section,
         "tag": f"am-ref-filter-{index}",
         "index": index,
@@ -288,6 +291,7 @@ def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
                 "datetime",
                 "Sampling date",
                 "mdi:calendar-outline",
+                "indigo",
                 5,
                 3,
             ),
@@ -300,6 +304,7 @@ def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
                 "object",
                 "Site",
                 "mdi:map-marker-outline",
+                "orange",
                 8,
                 3,
             ),
@@ -312,6 +317,7 @@ def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
                 "float64",
                 "Temperature (°C)",
                 "mdi:thermometer",
+                "red",
                 11,
                 3,
             ),
@@ -324,6 +330,7 @@ def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
                 "float64",
                 "Conductivity (µS/cm)",
                 "mdi:flash",
+                "yellow",
                 14,
                 3,
             ),
@@ -336,6 +343,7 @@ def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
                 "float64",
                 "Dissolved O₂ (mg/L)",
                 "mdi:water-percent",
+                "blue",
                 17,
                 3,
             ),
@@ -348,6 +356,7 @@ def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
                 "float64",
                 "Nitrate (mg/L)",
                 "mdi:molecule",
+                "green",
                 20,
                 3,
             ),
@@ -376,7 +385,8 @@ def main_tab_layer(main: dict[str, Any], group_col: str, id_col: str) -> None:
                 "selection_enabled": True,
                 "selection_column": id_col,
                 "placement": "floating",
-                "floating_initial_state": "compact",
+                # Docked to the filter panel: floating, it covered the key figures.
+                "floating_initial_state": "docked",
                 "tag": "am-ref-map-sampling-sites",
                 "index": "ref-sampling-sites",
                 "title": "Sampling sites",
@@ -742,6 +752,26 @@ def add_tree_group_colour(dashboard: dict[str, Any]) -> None:
                 print(f"  dominant_habitat colour on {comp.get('index', comp.get('tag'))}")
 
 
+def list_demo_tabs(main: dict[str, Any], titles: list[str]) -> None:
+    """Name the demo tabs in the Overview's tab tiles, under "Data & QC".
+
+    base.yaml lists only the tabs every run can have; the reference run also
+    has the two demo tabs, which would otherwise be reachable from the sidebar
+    alone.
+    """
+    for comp in main["components"]:
+        body = comp.get("body") or ""
+        if comp.get("index") != "ov-how-to-read" or "### Data & QC" not in body:
+            continue
+        head, rest = body.split("### Data & QC\n", 1)
+        lines = rest.split("\n")
+        end = next(i for i, line in enumerate(lines) if not line.startswith("- "))
+        lines[end:end] = [f"- [{title}](tab:{title})" for title in titles]
+        comp["body"] = head + "### Data & QC\n" + "\n".join(lines)
+        return
+    raise SystemExit("no Data & QC tab list on the Overview")
+
+
 def insert_after_group(dashboard: dict[str, Any], group: str, new_tabs: list[dict]) -> None:
     """Add ``new_tabs`` at the end of tab group ``group``, shifting the tabs after it.
 
@@ -837,6 +867,8 @@ def build() -> dict[str, Any]:
             environment_tab(group_col, group_display, id_col, 0),
         ],
     )
+
+    list_demo_tabs(main, ["Sampling Campaign", "Environment (CTD)"])
 
     # Last, so it also covers the two tabs added just above.
     fit_text_tiles(dashboard)

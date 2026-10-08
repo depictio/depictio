@@ -26,20 +26,25 @@ without data is dropped, and so are the Overview tiles and rows that pointed at 
 The landing page, at compact width with the filter panel collapsed:
 
 - **Hero**: what the run is, and a link to the run parameters.
+- **About this dashboard** and **The run**: two cards side by side. The first says what the
+  dashboard shows and how to move through it; the second lists the run's facts (samples,
+  primers, reference taxonomy, removed taxa), read from the run parameters and the sample
+  sheet.
 - **Pipeline**: six steps (trim, denoise, classify, alpha, beta, test). Each step opens the
   parameters that drive it and the tab that shows its output. The classify step prints the
   reference taxonomy the run used, read from the run parameters.
 - **Key figures**: four headline cards, each opening the tab that explains it. Samples
   (split by group), phyla (split by kingdom), the median Shannon diversity (with its
   spread) and the median share of each sample's reads kept through the pipeline (from
-  `overall_summary.tsv`). A group filter above them narrows these four only.
+  `overall_summary.tsv`). A group and a sample filter above them narrow these four only.
 - **Findings**: result rows whose values are computed under the filters, each with a link
   to its tab: the most abundant phylum and its share, the median Shannon diversity, the
   share of variation explained by the group (PERMANOVA on Bray-Curtis, computed by the
   pipeline on all samples, so no filter changes it) and the number of phyla ANCOM-BC calls
-  significant at 5% FDR. Below them, four figures drawn from their tabs: phylum
-  composition per group, Shannon diversity per group, the PCoA and the volcano. The bar
-  of this section filters by group and kingdom.
+  significant at 5% FDR. Below them, four figures in two rows, each linking its tab: phylum
+  composition per group beside the ANCOM-BC volcano, then the PCoA beside a tree of the
+  ten largest phyla (dot area: share of the reads, split by group). The bar of this
+  section filters by group and kingdom.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
 The persistent `Sample filters` (group, then sample id) sit in the collapsed left panel
@@ -106,7 +111,7 @@ filters, the phyla card, the composition bar and the table.
 | No `--metadata` | No sample filters, Samples card, PERMANOVA and ANCOM-BC rows, volcano highlight, UpSet or Differential Abundance tab. The group figures show all samples as one group. |
 | `--skip_qiime` | SINTAX alternates replace the QIIME 2 ones; MultiQC and Community & Diversity are the only child tabs. |
 | Multi-region | The SIDLE tab and alternates; MultiQC and SIDLE are the only child tabs. |
-| `--skip_taxonomy` | No Community & Diversity, Ordination & Clustering or Differential Abundance tab, nor the Overview tiles and rows that point at them. |
+| `--skip_taxonomy` | No Community & Diversity, Ordination & Clustering or Differential Abundance tab, nor the Overview tiles and rows that point at them. The Overview tree sizes its dots by ASVs instead of reads. |
 | `--skip_alpha_rarefaction` | No Alpha Diversity tab, Shannon card or row. |
 | `--skip_ancom` | No Differential Abundance tab, ANCOM-BC row or volcano highlight. |
 | No PERMANOVA formula | No R² card or row. |

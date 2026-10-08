@@ -36,14 +36,15 @@ text tile accepts is `packages/depictio-react-core/src/components/markdownCheats
 
 ## 3. The Overview
 
-At most **17 grid rows** at compact width, in this order:
+At most **24 grid rows** at compact width, in this order:
 
 | Block | Section | Content | Size |
 |---|---|---|---|
-| Hero | none | one text: `title: nf-core/<pipeline>`, one sentence on what the run is, a `[Run parameters](params:)` link | w8 h1 |
-| Pipeline | none | a `::: steps` flow of 4 to 6 icon-led steps, each with `params:` and `tab:` links | w8 h2 |
-| Key figures | `appearance: plain`, `card_variant: headline`, `filter_bar: true` | 4 cards, each with `caption`, `link: tab:<Tab>` and a `description` | 4 × w2 h2 |
-| Findings | `appearance: plain`, `figure_style: minimal`, `filter_bar: true`, `visible_filters: 2` | a findings text with live `values:` (w8 h2, `surface: card`), then 4 `highlight` tiles, one per analysis tab | text w8, 4 × w4 h4 |
+| Hero | none | one text: `title: nf-core/<pipeline>`, its wordmark as `logo:` (and `logo_dark:`) when `depictio/api/static_assets/images/workflows/` ships it, one sentence on what the run is, a `[Run parameters](params:)` link | w8 h1 |
+| About | none | two `surface: card` texts side by side: `### About this dashboard` (what it shows, how to use it) and `### The run` (an icon list of run facts from `{{param:…}}` and `values:`) | w5 h3 + w3 h3 |
+| Pipeline | none | a `surface: card` text with `accent: <colour>`: a `###` heading, one intro line, then a `::: steps` flow of 4 to 6 icon-led steps, each with `params:` and `tab:` links | w8 h3 |
+| Key figures | `appearance: plain`, `card_variant: headline`, `filter_bar: true`, `visible_filters: 2` | at least 2 filters (the group, then the sample), then 4 cards, each with `caption`, `link: tab:<Tab>` and a `description` | 4 × w2 h2 |
+| Findings | `appearance: plain`, `figure_style: minimal`, `filter_bar: true`, `visible_filters: 2` | a findings text with live `values:` (w8 h2, `surface: card`), then 4 figures, one per analysis tab, in 2 rows that each fill the width | text w8, then w5 + w3 and w3 + w5 |
 | How to read | `appearance: plain` | one text: a `###` heading per tab group, then a `-` list of tab tiles `[Tab](tab:Tab): question` | w8 h2 |
 
 ```yaml
@@ -88,15 +89,29 @@ main_dashboard:
       - **{{top_share}}** of reads are {{top}}, the dominant phylum [Community](tab:Community & Diversity)
   ```
 - **Highlights** redraw a figure or an advanced viz of another tab with the Overview's
-  filters, in the minimal style. The source is named by its `index`:
+  filters, in the minimal style: no controls on the tile, a caption under it. The source is
+  named by its `index`:
   ```yaml
   - component_type: highlight
     section: Findings
     source_tab: Ordination & Clustering
     source_component: ord-embedding
-    layout: {x: 4, y: 2, w: 4, h: 4}
+    caption: One point per sample; the closer two points, the more alike their communities.
+    layout: {x: 0, y: 7, w: 3, h: 5}
   ```
   A highlight cannot show a MultiQC panel, a card or a table.
+- **Simplified figures**: where the child tab's figure is too dense for a third of the row,
+  draw a summary of it instead of a highlight. The tree summed by rank is one: an
+  `advanced_viz` with `collapse_rank`, `top_n` and `size_by: abundance`, its dots split by the
+  group (`abundance_split_col: '{GROUP_COL}'`), with `link: tab:<Tab>` and a caption.
+- **Each figure says something the Key figures do not.** A per-group box of the measure a
+  card already shows (the Shannon card, then a Shannon box) repeats it; prefer the tab's
+  result (the volcano, the ordination). Figures share one header style: title, the linked
+  tab's icon, no icon badge of their own.
+- **Findings rows fill the width.** Two rows of 8 columns, a wide and a narrow tile in each,
+  swapped on the second row (w5 + w3, then w3 + w5) so the eye zigzags. The tiles of one row
+  share a stored `h`: give both the height the taller one autofits to (an advanced viz
+  summary grows to its rows), or the next row starts ragged.
 
 ## 4. Child tabs
 
@@ -129,6 +144,9 @@ main_dashboard:
   id and the design columns from `METADATA_FILE`), plus at least one open, tab-local
   `filter_sections` entry on a column of the tab's own data collections. A tab without a
   filter is a defect. Each persistent filter must reach the tab's data through a link.
+- Every filter has an icon and a colour: `display: {icon_name: mdi:…, custom_color: <Mantine
+  palette name>}`. A column keeps its colour on every tab (the group `violet`, the sample id
+  `teal`, taxonomy `grape`...); without one the filter falls back to the brand blue.
 - Filter bars (`filter_bar`) appear on the Overview only, with at most 2 visible controls, each
   with a short `strip_label`. Never `display: strip`.
 - Put the group filter (`{GROUP_COL}`) first among the Overview's filters: the Guide demos the
@@ -151,7 +169,11 @@ main_dashboard:
   ```python
   # Colours by the group column: the groups' column and colours when grouped.
   grp = depictio_group_by[0] if depictio_group_by else "{GROUP_COL}"
-  colors = depictio_group_kwargs.get("color_discrete_map") or depictio_category_colors.get("{GROUP_COL}") or {}
+  colors = (
+      depictio_group_kwargs.get("color_discrete_map")
+      or depictio_category_colors.get("{GROUP_COL}")
+      or {}
+  )
   fig = px.box(df.to_pandas(), x=grp, y="shannon", color=grp, color_discrete_map=colors)
   # Colours by nothing else: spread the kwargs.
   fig = px.scatter(df.to_pandas(), x="dim_1", y="dim_2", **depictio_group_kwargs)
@@ -206,7 +228,7 @@ viz to their content. Never write `fit: fixed`.
 
 ## 11. Height budget
 
-- The Overview: at most 17 rows.
+- The Overview: at most 24 rows.
 - A child tab: at most **20 rows of sections open by default**. Everything else is in sections
   that start collapsed: details, tables, alternate routes, the sample sheet.
 
@@ -239,7 +261,9 @@ step). Text, highlights and links bind no data of their own, so:
 - No em dashes. Result rows separate claim and context with " – ".
 - Block markdown (lists, headings, `:::`, tables) uses `body: |`, one line per paragraph or
   item. A prose-only body uses `body: >` so it reflows to the tile.
-- At most 3 sentences of prose per text (the lint counts prose, not list items).
+- At most 3 sentences per paragraph (the lint counts prose, not list items).
+- No raw column names on axes. Code figures pass `labels=` (`{"dim_1": "PCo1"}`) or set the
+  axis titles; an embedding takes `axis_prefix` (`PCo` gives PCo1 / PCo2).
 - No megatest sample names, genes or loci: the sibling `megatest.yaml` `forbidden_terms` are
   checked in every title, description, body, caption and value filter.
 - Icons come from the bundled sets (`mdi:` mostly); section icons and colours from
