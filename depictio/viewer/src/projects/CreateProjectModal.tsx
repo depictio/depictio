@@ -23,7 +23,12 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { createProjectFromManifest, listProjectTemplates, useBrandAccents } from 'depictio-react-core';
+import {
+  createProjectFromManifest,
+  listProjectTemplates,
+  useBrandAccents,
+  Z_LAYERS,
+} from 'depictio-react-core';
 import type {
   CreateProjectInput,
   CreateProjectResult,
@@ -33,6 +38,7 @@ import type {
 } from 'depictio-react-core';
 
 import IngestionResultTable from './IngestionResultTable';
+import { GatedButton } from '../components/settings/SettingsSections';
 
 type Tab = 'create' | 'import' | 'manifest';
 type ProjectType = 'basic' | 'advanced';
@@ -171,7 +177,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
   const selectedTemplate =
     templates.find((t) => t.template_id === manifestTemplateId) ?? null;
-  // MANIFEST_URL is injected server-side from the URL field — never render a
+  // MANIFEST_URL is injected server-side from the URL field: never render a
   // form input for it.
   const extraVariables = (selectedTemplate?.variables ?? []).filter(
     (v) => v.name !== 'MANIFEST_URL',
@@ -545,6 +551,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       }))}
                       value={manifestTemplateId}
                       onChange={setManifestTemplateId}
+                      comboboxProps={{ zIndex: Z_LAYERS.tooltip }}
                       leftSection={
                         <Icon icon="mdi:file-document-outline" width={16} />
                       }
@@ -607,7 +614,11 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       </Center>
                     )}
                     {previewError && (
-                      <Alert color="red" variant="light">
+                      <Alert
+                        color="red"
+                        variant="light"
+                        icon={<Icon icon="mdi:alert-circle-outline" width={16} />}
+                      >
                         {previewError}
                       </Alert>
                     )}
@@ -646,7 +657,11 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               </Stepper>
 
               {error && (
-                <Alert color="red" variant="light">
+                <Alert
+                  color="red"
+                  variant="light"
+                  icon={<Icon icon="mdi:alert-circle-outline" width={16} />}
+                >
                   {error}
                 </Alert>
               )}
@@ -849,18 +864,17 @@ export const ManifestCreatedModal: React.FC<{
             <Button variant="default" onClick={onClose} data-testid="manifest-created-stay">
               Stay on projects
             </Button>
-            <Button
+            <GatedButton
               color={accent.secondary}
               leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
-              disabled={!dashboardId}
-              title={dashboardId ? undefined : 'No dashboard was imported for this project'}
+              reason={dashboardId ? null : 'No dashboard was imported for this project.'}
               onClick={() => {
                 if (dashboardId) window.location.assign(`/dashboard/${dashboardId}`);
               }}
               data-testid="manifest-created-open-dashboard"
             >
               Open dashboard
-            </Button>
+            </GatedButton>
           </Group>
         </Stack>
       )}

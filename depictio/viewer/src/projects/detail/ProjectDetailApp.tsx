@@ -1938,7 +1938,7 @@ const CreateDataCollectionModal: React.FC<{
             {dcType === 'table' && tableSource === 'url'
               ? 'The server fetches the URL itself and aggregates it to a Delta table. The address is screened before any request is made, so private and internal addresses are refused. '
               : 'The file will be scanned and aggregated to a Delta table on the server. '}
-            Larger files take longer — keep this dialog open until you see the
+            Larger files take longer: keep this dialog open until you see the
             success notification. Need the legacy flow?{' '}
             <Anchor
               href={`/project/${readProjectIdFromPath()}/data`}

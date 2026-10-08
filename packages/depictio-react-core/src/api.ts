@@ -4002,7 +4002,7 @@ export interface DashboardImportResult {
 }
 
 /** Inputs for POST /projects/from_manifest. The backend injects the
- *  `MANIFEST_URL` template variable from `manifest_url` — never send it via
+ *  `MANIFEST_URL` template variable from `manifest_url`: never send it via
  *  `variables`. With `dry_run` nothing is created and the report comes back
  *  with `planned` statuses and null ids. */
 export interface FromManifestRequest {
@@ -4013,7 +4013,7 @@ export interface FromManifestRequest {
   dry_run?: boolean;
 }
 
-/** Report returned by POST /projects/from_manifest — both for real creation
+/** Report returned by POST /projects/from_manifest, both for real creation
  *  and for a dry-run plan. `success: false` means the project exists but some
  *  collections/dashboards failed (per-row `message`/`error` says why). */
 export interface FromManifestReport {
@@ -4032,7 +4032,7 @@ export interface FromManifestReport {
 
 /** Create (or, with `dry_run`, plan) a project from a Data Manifest URL.
  *  Backend errors carry actionable `{detail}` strings (rejected URL, unknown
- *  template, duplicate name, unparseable manifest) — surfaced verbatim. */
+ *  template, duplicate name, unparseable manifest), surfaced verbatim. */
 export async function createProjectFromManifest(
   input: FromManifestRequest,
 ): Promise<FromManifestReport> {
@@ -4375,7 +4375,7 @@ export async function exportProjectZip(projectId: string): Promise<void> {
 }
 
 /** POST body for /projects/{id}/export_template. `template_id` is a
- *  slash-separated path (e.g. `my-lab/rnaseq-qc/1`) — each segment must match
+ *  slash-separated path (e.g. `my-lab/rnaseq-qc/1`); each segment must match
  *  `[A-Za-z0-9][A-Za-z0-9._-]*`. `data_root` re-parameterizes a local path
  *  prefix as `{DATA_ROOT}` in the exported config; leave it unset for
  *  manifest-driven projects. */
@@ -4387,9 +4387,9 @@ export interface ExportTemplateRequest {
 }
 
 /** Export a project as a reusable template bundle (owners/editors/admins).
- *  Resolves to the zip Blob — the caller decides how to hand it to the user.
+ *  Resolves to the zip Blob; the caller decides how to hand it to the user.
  *  Backend 422s carry meaningful `{detail}` strings (bad template_id format,
- *  or the exported config failing its round-trip self-check) — surfaced
+ *  or the exported config failing its round-trip self-check), surfaced
  *  verbatim. */
 export async function exportProjectTemplate(
   projectId: string,
@@ -4551,7 +4551,7 @@ export interface CreateDataCollectionUrlInput {
   lonColumn?: string | null;
 }
 
-/** Create a data collection from a remote URL — the no-upload twin of
+/** Create a data collection from a remote URL: the no-upload twin of
  *  `createDataCollectionFromUpload`. The file is fetched server-side, so this
  *  works for data far too large to push through the browser, and for buckets
  *  the browser cannot reach. */
