@@ -203,7 +203,7 @@ def assert_no_unbound_vars(config: dict) -> None:
             f"Template variable(s) {', '.join(sorted(found))} are still required: "
             "the data collections using them were not covered by --bind. "
             "Either add a --bind for them, or pass the variable "
-            "(--data-root / --manifest / --var)."
+            "(DATA_DIR / --manifest / --var)."
         )
 
     origin = config.get("template_origin")

@@ -256,7 +256,7 @@ the feature and doubles as the end-to-end test fixture.
 *Implemented (PR #965), after the sections above were written.* The scan modes
 above let the template author decide where the data has to live: a `manifest`
 DC forces whoever instantiates the template to write and host a manifest, a
-`{DATA_ROOT}` DC forces a local tree. `depictio run --bind TAG=LOCATION`
+`{DATA_ROOT}` DC forces a local tree. `depictio ingest --bind TAG=LOCATION`
 (repeatable) moves that decision to the person instantiating it. The user
 names a location and the scan mode is inferred from its shape
 (`depictio/cli/cli/utils/bindings.py`):
@@ -270,7 +270,7 @@ names a location and the scan mode is inferred from its shape
 
 ![One --bind flag, five location shapes, and the scan mode inferred from each](../images/data_binding_matrix.png)
 
-`--bind` satisfies the same requirement as `--data-root` or `--manifest`, so a
+`--bind` satisfies the same requirement as `DATA_DIR` or `--manifest`, so a
 template can run with neither. Manifests stay explicit (`--manifest`): a local
 `.csv` is data far more often than it is a manifest, and guessing otherwise
 from a filename would fail silently. A template variable the user did not
@@ -417,8 +417,8 @@ One orchestration endpoint, `POST /projects/from_manifest`:
 6. Return `{project_id, dashboard_ids, ingestion_report}`; the UI redirects to
    a filled dashboard.
 
-CLI mirror: `depictio run --template X --manifest URL|PATH` (the
-`--template`/`--data-root` scaffolding in `cli/commands/run.py` already has the
+CLI mirror: `depictio ingest --template X --manifest URL|PATH` (the
+`--template`/`DATA_DIR` scaffolding in `cli/commands/run.py` already has the
 mutual-exclusion structure to extend) — same shared functions, no new logic.
 
 **Growing the template pool — export, not auto-compose.** The original
@@ -438,7 +438,7 @@ catalog and a real layout packer exist.
 
 The export is also how a project travels between people and instances.
 `locate_template` accepts a directory or YAML path as well as a registered id,
-so the recipient of an exported bundle runs `depictio run --template ./folder`
+so the recipient of an exported bundle runs `depictio ingest <results dir> --template ./folder`
 as is and points each data collection at their own data with `--bind` (§4.4):
 no admin on the source instance, no server-side install, no manifest required.
 
