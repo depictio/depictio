@@ -100,6 +100,15 @@ main_dashboard:
     layout: {x: 0, y: 7, w: 3, h: 5}
   ```
   A highlight cannot show a MultiQC panel, a card or a table.
+- **A highlight draws an advanced viz exactly as its tab does**, in a w3 or w5 tile. Pick
+  sources that read at that width, and set them up on their tab so they do:
+  - Point labels only where the label says something, a gene or a taxon name. Peak, interval
+    or feature ids (`..._peak_75035`, `Interval_64490`) pile up over the points: set
+    `show_labels: false` (volcano) or `top_n_labels: 0` (manhattan) on the source.
+  - A legend listing samples or libraries takes half a w3 tile: set `hide_legend: true` on the
+    highlight and let its caption say what the colour is.
+  - An UpSet of more than 4 sets draws dozens of intersections a highlight cannot show: pick
+    another figure of that tab, or a simplified one.
 - **Simplified figures**: where the child tab's figure is too dense for a third of the row,
   draw a summary of it instead of a highlight. The tree summed by rank is one: an
   `advanced_viz` with `collapse_rank`, `top_n` and `size_by: abundance`, its dots split by the
@@ -141,7 +150,7 @@ main_dashboard:
 
 | Where | `variant` (or section `card_variant`) | Secondary layouts |
 |---|---|---|
-| Overview Key figures | `headline`, with `caption`, `link`, `description` | `composition`, `box_plot`, `coverage` |
+| Overview Key figures | `headline`, with `caption`, `link`, `description` | `composition`, `box_plot`, `coverage`, `threshold` |
 | Child KPI strip | `default` | one per card, chosen for what it says (below) |
 | Detail sections | `default` | any, with its required fields |
 
@@ -173,6 +182,9 @@ A KPI strip is four different readings, not four numbers in one style:
   not null (`(col('taxon') != '')`), and some tables write `Unclassified`.
 - A `{GROUP_COL}` breakdown needs a DC that carries the joined metadata columns. Without
   metadata the secondary falls away and the card keeps its number.
+- A fraction between 0 and 1 under `coverage` or `gauge` prints "7% of 1". Give it a
+  `threshold` at the floor the method publishes (FRiP 0.2, for instance), or use the
+  table's percentage column where it has one.
 
 ## 6. Filters
 
@@ -180,11 +192,16 @@ A KPI strip is four different readings, not four numbers in one style:
   id and the design columns from `METADATA_FILE`), plus at least one open, tab-local
   `filter_sections` entry on a column of the tab's own data collections. A tab without a
   filter is a defect. Each persistent filter must reach the tab's data through a link.
+- A left-panel filter narrows every tile on the tab whose data has its column, the KPI strip
+  included. Cards that each pin one value of that column (`filter_expr: col('context') ==
+  'CHG'`) print "–" once the filter picks another value, and on load when it has a
+  `default_value`. Split such a strip by another column, or move the filter into a
+  `filter_bar` on the section it serves.
 - Every filter has an icon and a colour: `display: {icon_name: mdi:…, custom_color: <Mantine
   palette name>}`. A column keeps its colour on every tab (the group `violet`, the sample id
   `teal`, taxonomy `grape`...); without one the filter falls back to the brand blue.
 - Filter bars (`filter_bar`) appear on the Overview only, with at most 2 visible controls, each
-  with a short `strip_label`. Never `display: strip`.
+  with a short `strip_label`, except for the case above. Never `display: strip`.
 - Put the group filter (`{GROUP_COL}`) first among the Overview's filters: the Guide demos the
   first categorical filter it finds.
 
