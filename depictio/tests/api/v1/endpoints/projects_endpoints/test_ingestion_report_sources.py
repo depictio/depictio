@@ -23,10 +23,26 @@ def _inputs(override, data_root):
         return _dc_source_inputs(config, data_root)
 
 
-def test_a_relative_source_is_resolved_under_the_data_root(tmp_path):
-    (tmp_path / "input").mkdir()
-    (tmp_path / "input" / "samplesheet.csv").write_text("sample\n")
-    assert _inputs({}, str(tmp_path)) == [str((tmp_path / "input" / "samplesheet.csv").resolve())]
+def test_a_relative_source_is_joined_onto_the_data_root_unprobed(tmp_path, monkeypatch):
+    """A shared server does not look at its disk for it: the data root is the
+    project's word too, so ``../etc/hosts`` would be an oracle."""
+    monkeypatch.delenv("DEPICTIO_LOCAL_DATA_ROOTS", raising=False)
+    (tmp_path / "real").mkdir()
+    (tmp_path / "run").symlink_to(tmp_path / "real")
+    assert _inputs({}, str(tmp_path / "run")) == [str(tmp_path / "run" / "input/samplesheet.csv")]
+    assert _inputs({"samplesheet": "../etc/hosts"}, "/usr") == ["/etc/hosts"]
+
+
+def test_under_depictio_local_a_source_below_a_root_is_resolved(tmp_path, monkeypatch):
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+    monkeypatch.setenv("DEPICTIO_AUTH_SINGLE_USER_MODE", "true")
+    monkeypatch.setenv("DEPICTIO_LOCAL_DATA_ROOTS", str(tmp_path))
+    (tmp_path / "run" / "input").mkdir(parents=True)
+    (tmp_path / "run" / "input" / "samplesheet.csv").write_text("sample\n")
+    assert _inputs({}, str(tmp_path / "run")) == [
+        str((tmp_path / "run" / "input" / "samplesheet.csv").resolve())
+    ]
+    assert _inputs({}, "s3://bucket/run") == ["s3://bucket/run/input/samplesheet.csv"]
 
 
 def test_an_override_outside_the_root_is_shown_as_stored(tmp_path):
