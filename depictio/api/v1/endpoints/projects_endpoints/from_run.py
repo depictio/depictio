@@ -4,15 +4,22 @@
 ``depictio ingest <run folder> --template <id>``: name a template and an
 ``s3://`` run prefix, get back what each data collection would find under it,
 and - unless it is a dry run - a project whose ingestion has been handed to
-Celery workers.
+Celery workers. Without a template, the pipeline is recognised from the folder
+itself (``run_detection.detect_template_for_root``).
+
+On a server that is the user's own computer (``depictio local``, see
+``settings_models.local_data_policy``) the run folder may also be a folder on
+that disk: an absolute or ``~/`` path, confined to the allowed roots, read only
+for a request from this machine (loopback ``Host``) by an administrator, and no
+larger than :data:`MAX_LOCAL_RUN_FILES` files.
 
 The engine is entirely reused. ``resolve_template`` produces the project config
 (repointing every data collection at the remote root), ``preview_data_root``
 reports what each of them would match, and the refresh machinery in
 :mod:`manifest_ingest` carries the fan-out. This module is the HTTP shape
 around them plus the two checks a browser-facing caller needs that the CLI does
-not: the data root has to be an object-store prefix this server is allowed to
-read, and the resolved data collections have to stay inside it.
+not: the data root has to be an object-store prefix (or allowed local folder)
+this server may read, and the resolved data collections have to stay inside it.
 
 The data root is built **once** and handed to both ``resolve_template`` and
 ``preview_data_root``. Both accept a pre-built root; passing the location twice
@@ -21,7 +28,9 @@ would cost two full S3 listings for one request.
 How the run folder is read is decided from the same inputs the workers decide
 from, so the preview never accepts a folder the ingestion then refuses (see
 :func:`_run_folder_read_config`). A refused or failed S3 read is left to
-propagate as ``S3AccessError``: the API answers it with ``{detail, code}``.
+propagate as ``S3AccessError``: the API answers it with ``{detail, code}``. So
+does every refusal raised here as ``CodedHTTPException`` (a local folder, an
+unrecognised pipeline), which the route turns into the same body.
 
 Synchronous throughout (the CLI helpers use sync httpx back into this same
 FastAPI process) - the route dispatches via ``asyncio.to_thread``. Ingestion
@@ -30,6 +39,7 @@ the caller polls ``GET /projects/refresh_manifest/{run_id}``.
 """
 
 import copy
+import os
 from dataclasses import dataclass
 from typing import Any
 
@@ -37,7 +47,7 @@ from bson import ObjectId
 from fastapi import HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
+from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig, local_data_policy
 from depictio.api.v1.db import projects_collection
 from depictio.api.v1.endpoints.projects_endpoints.from_manifest import (
     DashboardImportResult,
@@ -46,9 +56,14 @@ from depictio.api.v1.endpoints.projects_endpoints.from_manifest import (
     _template_not_found_detail,
     validate_template_id,
 )
+from depictio.api.v1.endpoints.projects_endpoints.local_dirs import (
+    CodedHTTPException,
+    require_local_caller,
+)
 from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _dispatch_refresh_tasks,
 )
+from depictio.models.local_access import LocalPathRefused
 from depictio.models.logging import logger
 from depictio.models.s3_access import ProjectS3Config, S3AccessError
 
@@ -57,6 +72,20 @@ DATA_ROOT_RULE = (
     "machine running the browser, and an https:// URL exposes no listing operation, "
     "so a run folder has to be named as an object-store prefix."
 )
+DATA_ROOT_RULE_LOCAL = (
+    "data_root must be an s3:// prefix or a folder on this computer: an absolute path "
+    "such as /Users/me/results/run42, or one starting with ~/."
+)
+LOCAL_FOLDERS_OFF = (
+    "This server does not read folders on its own disk, so data_root must be an s3:// "
+    "prefix. Folders on your computer can be used when Depictio runs on it, with "
+    "`depictio local`."
+)
+
+# A run folder with more files than this is refused rather than walked: it is
+# far past one pipeline run, and most likely a parent folder picked by mistake.
+# Matches the ceiling on one S3 listing (``data_root.DEFAULT_MAX_KEYS``).
+MAX_LOCAL_RUN_FILES = 100_000
 
 # Scan modes whose resolved parameters name a location, and the parameter that
 # holds it. ``manifest`` is deliberately absent: its URL is a document fetched
@@ -72,9 +101,11 @@ _SCAN_LOCATION_FIELDS = {
 class FromRunRequest(BaseModel):
     """Body of POST /projects/from_run."""
 
-    # An s3:// prefix holding one pipeline run's output.
+    # One pipeline run's output: an s3:// prefix, or, when local folders are
+    # on, an absolute or ~/ path on the server's disk.
     data_root: str
-    template_id: str
+    # None: recognise the pipeline from the folder.
+    template_id: str | None = None
     project_name: str | None = None
     # Extra template variables ({VAR} placeholders), same as ``--var`` on the CLI.
     variables: dict[str, str] = Field(default_factory=dict)
@@ -83,8 +114,22 @@ class FromRunRequest(BaseModel):
 
     @field_validator("template_id")
     @classmethod
-    def _well_formed_template_id(cls, value: str) -> str:
-        return validate_template_id(value)
+    def _well_formed_template_id(cls, value: str | None) -> str | None:
+        return None if value is None else validate_template_id(value)
+
+
+class DetectedTemplate(BaseModel):
+    """What the run folder said about the run that produced it.
+
+    The other fields are None when the folder did not say. ``template_id`` is
+    nullable to match the viewer's type, but a report always names one: a
+    folder no installed template fits is a 422 ``template_not_detected``.
+    """
+
+    template_id: str | None = None
+    pipeline: str | None = None
+    version: str | None = None
+    engine: str | None = None
 
 
 class FromRunDCPreview(BaseModel):
@@ -117,7 +162,10 @@ class FromRunReport(BaseModel):
 
     project_id: str | None = None
     project_name: str
+    # The template used: the one asked for, or the one detected.
     template_id: str
+    # Set whenever detection ran (no template_id in the request).
+    detected_template: DetectedTemplate | None = None
     data_root: str
     detected_runs: list[str] = Field(default_factory=list)
     resolved_variables: dict[str, str] = Field(default_factory=dict)
@@ -218,16 +266,71 @@ def _run_folder_read_config() -> _RunFolderReads:
     return _RunFolderReads(s3_storage=settings.s3)
 
 
-def _build_data_root(data_root: str, read_config: _RunFolderReads):
+def _is_local_path(data_root: str) -> bool:
+    """Whether ``data_root`` is spelled as a path on this disk: absolute or ``~/``."""
+    return data_root.startswith("/") or data_root == "~" or data_root.startswith("~/")
+
+
+def _holds_more_files_than(folder: str, limit: int) -> bool:
+    """Whether ``folder`` holds more than ``limit`` files, counting no further.
+
+    ``followlinks=False``: a symlinked directory is neither walked nor counted
+    into, so a link to a large tree elsewhere cannot make the walk endless.
+    """
+    count = 0
+    for _dirpath, _dirnames, filenames in os.walk(folder, followlinks=False):
+        count += len(filenames)
+        if count > limit:
+            return True
+    return False
+
+
+def _build_local_data_root(data_root: str, *, request, current_user):
+    """A :class:`LocalDataRoot` on the real path of ``data_root``, once allowed.
+
+    Refused, in this order: local folders off (422), a request not from this
+    machine or not from an administrator (403, see ``require_local_caller``),
+    a path the policy refuses (422, the policy's own message and code), a
+    folder holding more than :data:`MAX_LOCAL_RUN_FILES` files (422).
+    """
+    policy = local_data_policy()
+    if policy is None:
+        raise CodedHTTPException(422, LOCAL_FOLDERS_OFF, "local_folders_off")
+    require_local_caller(request, current_user)
+    try:
+        real = policy.confine(data_root, want="dir")
+    except LocalPathRefused as exc:
+        raise CodedHTTPException(422, exc.detail, exc.code) from exc
+    if _holds_more_files_than(real, MAX_LOCAL_RUN_FILES):
+        raise CodedHTTPException(
+            422,
+            f"'{data_root}' holds more than {MAX_LOCAL_RUN_FILES:,} files, far more than "
+            "one pipeline run writes. Pick the output folder of a single run.",
+            "local_run_too_large",
+        )
+
+    from depictio.cli.cli.utils.data_root import LocalDataRoot
+
+    return LocalDataRoot(real)
+
+
+def _build_data_root(
+    data_root: str, read_config: _RunFolderReads, *, request=None, current_user=None
+):
     """The one :class:`DataRoot` this request answers every question from.
 
     Refused by ``S3DataRoot.__init__`` from configuration alone, before a
     single request goes out, when the configuration does not allow the read
     (``S3AccessRefused``, see :func:`_run_folder_read_config`), so a bucket
-    name never becomes an existence-and-region oracle.
+    name never becomes an existence-and-region oracle. A local path goes
+    through :func:`_build_local_data_root`, which needs the request (for its
+    ``Host``) and the caller.
     """
+    if _is_local_path(data_root):
+        return _build_local_data_root(data_root, request=request, current_user=current_user)
     if not data_root.lower().startswith("s3://"):
-        raise HTTPException(status_code=422, detail=DATA_ROOT_RULE)
+        rule = DATA_ROOT_RULE_LOCAL if local_data_policy() is not None else DATA_ROOT_RULE
+        raise CodedHTTPException(422, rule, "data_root_unsupported")
 
     from depictio.cli.cli.utils.data_root import as_data_root
 
@@ -281,6 +384,46 @@ def _assert_variables_confined(variables: dict[str, str], root) -> None:
             )
 
 
+def _detect_template(root) -> tuple[str, DetectedTemplate]:
+    """The template id recognised in ``root``, with what the folder said.
+
+    A folder no installed template fits is a 422 coded
+    ``template_not_detected``: the caller picks one. A read that fails while
+    looking is the same answer, except an S3 refusal or failure, which keeps
+    its own code.
+    """
+    from depictio.cli.cli.utils.run_detection import detect_template_for_root
+
+    try:
+        template_id, info = detect_template_for_root(root)
+    except S3AccessError:
+        raise
+    except (OSError, ValueError) as exc:
+        logger.warning(f"Template detection failed for {root.location}: {exc}")
+        template_id, info = None, None
+
+    detected = DetectedTemplate(
+        template_id=template_id,
+        pipeline=info.pipeline_name if info else None,
+        version=info.pipeline_version if info else None,
+        engine=info.engine if info else None,
+    )
+    if not template_id:
+        if detected.pipeline:
+            run = " ".join(part for part in (detected.pipeline, detected.version) if part)
+            detail = (
+                f"This folder looks like a {run} run, but no installed template matches "
+                "it. Pick a template to continue."
+            )
+        else:
+            detail = (
+                "The pipeline that produced this folder was not recognised. Pick a "
+                "template to continue."
+            )
+        raise CodedHTTPException(422, detail, "template_not_detected")
+    return template_id, detected
+
+
 def _skip_reason(row) -> str:
     """Why a data collection the preview called ``missing`` isn't dispatched.
 
@@ -300,26 +443,39 @@ def _skip_reason(row) -> str:
 def _create_project_from_run(
     *,
     data_root: str,
-    template_id: str,
+    template_id: str | None = None,
     current_user,
     project_name: str | None = None,
     variables: dict[str, str] | None = None,
     dry_run: bool = False,
+    request=None,
 ) -> FromRunReport:
     """The full run folder → project + dashboards + dispatched ingestion flow.
+
+    ``template_id=None`` recognises the template from the folder. ``request``
+    is the HTTP request, which a local data root needs for its ``Host`` guard.
 
     Sync: call via ``asyncio.to_thread``.
     """
     # The request model already enforces this; re-checked here so direct
     # callers cannot hand resolve_template a path either.
-    try:
-        validate_template_id(template_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+    if template_id is not None:
+        try:
+            validate_template_id(template_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
 
     read_config = _run_folder_read_config()
-    root = _build_data_root(data_root, read_config)
+    root = _build_data_root(data_root, read_config, request=request, current_user=current_user)
     _assert_variables_confined(variables or {}, root)
+
+    detected: DetectedTemplate | None = None
+    if template_id is None:
+        template_id, detected = _detect_template(root)
+        try:
+            validate_template_id(template_id)
+        except ValueError as exc:  # pragma: no cover - detection yields catalog ids
+            raise HTTPException(status_code=422, detail=str(exc))
 
     # One root, two consumers. resolve_template gives the config the project is
     # built from; preview_data_root gives the per-collection rows the UI shows.
@@ -379,6 +535,7 @@ def _create_project_from_run(
     report = FromRunReport(
         project_name=resolved_config.get("name", ""),
         template_id=template_metadata.template_id,
+        detected_template=detected,
         data_root=root.location,
         detected_runs=list(preview.detected_runs),
         resolved_variables=dict(preview.resolved_variables),

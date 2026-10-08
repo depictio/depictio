@@ -11,6 +11,7 @@ from pydantic import BaseModel, EmailStr
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.configs.settings_models import local_data_roots_enabled
 from depictio.api.v1.db import users_collection
 from depictio.api.v1.endpoints.user_endpoints.agent_config_utils import (
     _generate_agent_config,
@@ -680,6 +681,10 @@ async def get_current_user_info_optional(
         # that omits the key degrades to the feature being off.
         "inspector_enabled": getattr(settings.viewer, "inspector_enabled", False),
         "dashboards_default_view": getattr(settings.viewer, "dashboards_default_view", "table"),
+        # Whether a run folder may be a folder on this server's disk (`depictio
+        # local`). Only the flag: this endpoint answers without a token, so the
+        # allowed folders themselves are never sent here.
+        "local_data_roots_enabled": local_data_roots_enabled(),
     }
 
 

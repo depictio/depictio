@@ -3,7 +3,7 @@ from collections.abc import Awaitable
 
 import boto3
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import ValidationError
 from pymongo.errors import DuplicateKeyError
 
@@ -48,6 +48,11 @@ from depictio.api.v1.endpoints.projects_endpoints.ingestion_report import (
     IngestionReport,
     IngestionSummary,
     build_ingestion_report,
+)
+from depictio.api.v1.endpoints.projects_endpoints.local_dirs import (
+    CodedHTTPException,
+    LocalDirListing,
+    list_local_dirs,
 )
 from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     IngestManifestRequest,
@@ -916,21 +921,26 @@ async def create_project_from_manifest(
 @projects_endpoint_router.post("/from_run", response_model=FromRunReport)
 async def create_project_from_run(
     payload: FromRunRequest,
+    request: Request,
     current_user=Depends(get_user_or_anonymous),
 ):
-    """Create a project (and its dashboards) from a template + an ``s3://`` run folder.
+    """Create a project (and its dashboards) from a template + a run folder.
 
     The browser twin of ``depictio ingest <run folder> --template <id>``:
-    resolve the template against the run prefix, report per data collection
+    resolve the template against the run folder, report per data collection
     what it would find there, create the project, import its dashboards, and
     hand the ingestion itself to Celery workers, since a real run folder is
     minutes of work, far past a request. The response carries a ``run_id`` to
     poll via ``GET /projects/refresh_manifest/{run_id}``. ``dry_run=true``
     returns the same per-collection plan and creates nothing.
 
+    The run folder is an ``s3://`` prefix or, when local folders are on, a
+    folder on the server's disk. Without ``template_id`` the pipeline is
+    recognised from the folder (``detected_template`` in the report).
+
     A taken project name is a 409, as on ``POST /projects/create``. A run
-    folder the server may not read, or whose read fails, answers
-    ``{detail, code}`` (``S3AccessError``).
+    folder the server may not read, or whose read fails, and a pipeline that
+    is not recognised answer ``{detail, code}``.
     """
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
@@ -942,15 +952,44 @@ async def create_project_from_run(
         )
 
         await _ensure_user_cli_token(current_user)
-    return await asyncio.to_thread(
-        _create_project_from_run,
-        data_root=payload.data_root,
-        template_id=payload.template_id,
-        current_user=current_user,
-        project_name=payload.project_name,
-        variables=payload.variables,
-        dry_run=payload.dry_run,
-    )
+    try:
+        return await asyncio.to_thread(
+            _create_project_from_run,
+            data_root=payload.data_root,
+            template_id=payload.template_id,
+            current_user=current_user,
+            project_name=payload.project_name,
+            variables=payload.variables,
+            dry_run=payload.dry_run,
+            request=request,
+        )
+    except CodedHTTPException as exc:
+        return exc.response()
+
+
+@projects_endpoint_router.get("/local_dirs", response_model=LocalDirListing)
+async def get_local_dirs(
+    request: Request,
+    path: str | None = Query(default=None),
+    current_user=Depends(get_user_or_anonymous),
+):
+    """List the sub-folders of ``path`` on the server's own disk, or the allowed roots.
+
+    For ``depictio local``, where the server is the user's computer: backs the
+    folder picker of ``POST /projects/from_run``. Sub-directories only, sorted,
+    hidden folders and symlinks that leave the allowed roots left out, at most
+    500 (``truncated`` says when there were more). 404 when local folders are
+    off or the path is outside the allowed roots, refused or missing; 403 for a
+    non-administrator or a request whose ``Host`` is not this machine.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    try:
+        return await asyncio.to_thread(
+            list_local_dirs, path, request=request, current_user=current_user
+        )
+    except CodedHTTPException as exc:
+        return exc.response()
 
 
 @projects_endpoint_router.post("/create")

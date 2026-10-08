@@ -10,6 +10,7 @@ import polars as pl
 from pydantic import validate_call
 from rich.markup import escape
 
+from depictio.api.v1.configs.settings_models import local_data_policy
 from depictio.api.v1.remote_fetch import (
     RemoteURLRejected,
     bounded_download,
@@ -39,6 +40,7 @@ from depictio.cli.cli.utils.multiqc_processor import process_multiqc_data_collec
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli.utils.telemetry import cli_version
 from depictio.cli.cli_logging import logger
+from depictio.models.local_access import LocalPathRefused
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
@@ -224,8 +226,24 @@ def _delimited_kwargs(file_path: str, file_format: str, polars_kwargs: dict) -> 
     return effective_kwargs
 
 
-def _lazy_scan_path(file_path: str, file_format: str, polars_kwargs: dict) -> pl.LazyFrame:
-    """Format dispatch shared by local paths and downloaded remote files."""
+def _lazy_scan_path(
+    file_path: str, file_format: str, polars_kwargs: dict, *, confine: bool = True
+) -> pl.LazyFrame:
+    """Format dispatch shared by local paths and downloaded remote files.
+
+    On a server reading its own disk (``depictio local``), a path the
+    local-data policy does not allow is refused here, at read time, whatever
+    registered it: a File record is only a path, and the scan that wrote it may
+    have run under another policy, or none. ``confine=False`` is for a file this
+    process just wrote itself (a remote download's temp file).
+    """
+    if confine:
+        policy = local_data_policy()
+        if policy is not None and not policy.allows_read(str(file_path)):
+            raise LocalPathRefused(
+                f"'{file_path}' is outside the folders this server may read.",
+                "local_path_outside",
+            )
     if file_format in ["csv", "tsv", "txt"]:
         return pl.scan_csv(file_path, **_delimited_kwargs(file_path, file_format, polars_kwargs))
     elif file_format == "parquet":
@@ -323,7 +341,9 @@ def _read_remote_file_lazy(
     try:
         # Eager read so the temp file can be deleted immediately — a lazy scan
         # would dangle on a path removed before collection.
-        return _lazy_scan_path(temp_path, file_format, polars_kwargs).collect().lazy()
+        return (
+            _lazy_scan_path(temp_path, file_format, polars_kwargs, confine=False).collect().lazy()
+        )
     finally:
         try:
             os.unlink(temp_path)

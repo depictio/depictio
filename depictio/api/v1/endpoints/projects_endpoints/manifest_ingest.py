@@ -294,8 +294,18 @@ def _run_dc_ingest(
     current_user,
     sync_files: bool = False,
     remote_storage_options: ProjectS3Config | None = None,
+    *,
+    scan: bool = True,
+    scan_dc_ids: list[str] | None = None,
 ) -> tuple[bool, str | None]:
     """Scan + process one DC through the CLI helpers. Returns (ok, error_message).
+
+    A ``recursive`` collection is scanned the way the CLI scans it, by
+    ``scan_files_for_workflow``: one walk of the workflow's run folders that
+    registers the runs and the files of every collection named in
+    ``scan_dc_ids`` (this one alone when None). Collections of one workflow
+    share its runs, so in a fan-out one task scans for all of them and the
+    others pass ``scan=False`` and only process (see ``_scan_leaders``).
 
     Synchronous on purpose — the helpers use a sync httpx client back into
     this same FastAPI process (see ``_push_workflow_and_ingest``).
@@ -333,7 +343,27 @@ def _run_dc_ingest(
     )
 
     target = next((dc for dc in workflow.data_collections if str(dc.id) == dc_id), None)
-    if target is None or target.config.scan is not None:
+    mode = target.config.scan.mode.lower() if target and target.config.scan else ""
+    if mode == "recursive":
+        if scan:
+            from depictio.cli.cli.utils.scan import scan_files_for_workflow
+
+            wanted = set(scan_dc_ids or []) | {dc_id}
+            scan_result = scan_files_for_workflow(
+                workflow=workflow,
+                data_collections=[dc for dc in workflow.data_collections if str(dc.id) in wanted],
+                CLI_config=cli_config,
+                # A refresh re-walks the runs already registered, as it
+                # re-reads every other source: overwrite-with-report.
+                command_parameters={
+                    "sync_files": sync_files,
+                    "rescan_folders": True,
+                    "rich_tables": False,
+                },
+            )
+            if (scan_result or {}).get("result") != "success":
+                return False, f"Scan failed: {(scan_result or {}).get('message', 'unknown error')}"
+    elif target is None or target.config.scan is not None:
         scan_result = process_data_collection_helper(
             CLI_config=cli_config,
             wf=workflow,
@@ -860,6 +890,38 @@ def _recipe_dependencies(project_dict: dict) -> dict[str, list[str]]:
     return dependencies
 
 
+def _scan_leaders(
+    project_dict: dict, to_dispatch: list[tuple[str, str, int, int]]
+) -> tuple[dict[str, list[str]], dict[str, str]]:
+    """Who scans for the ``recursive`` collections of each workflow in a fan-out.
+
+    A recursive scan walks the workflow's run folders once and registers one
+    ``WorkflowRun`` per run, which every recursive collection of the workflow
+    shares. One task per collection, each scanning for itself, would race to
+    create the same runs. So the first of them to be dispatched is the scan
+    leader and scans for all of them; the others wait for its step
+    (``depends_on``) and only process.
+
+    Returns ``({leader_tag: [dc_id, ...]}, {follower_tag: leader_tag})``.
+    """
+    workflows = project_dict.get("workflows") or []
+    members: dict[int, list[tuple[str, str]]] = {}
+    for tag, dc_id, wf_i, _entries in to_dispatch:
+        wf_dcs = (workflows[wf_i].get("data_collections") or []) if wf_i < len(workflows) else []
+        dc = next((d for d in wf_dcs if str(d.get("_id") or d.get("id") or "") == dc_id), {})
+        scan = (dc.get("config") or {}).get("scan") or {}
+        if str(scan.get("mode") or "").lower() == "recursive":
+            members.setdefault(wf_i, []).append((tag, dc_id))
+
+    leaders: dict[str, list[str]] = {}
+    followers: dict[str, str] = {}
+    for group in members.values():
+        leader_tag = group[0][0]
+        leaders[leader_tag] = [dc_id for _tag, dc_id in group]
+        followers.update({tag: leader_tag for tag, _dc_id in group[1:]})
+    return leaders, followers
+
+
 def _dispatch_refresh_tasks(
     *,
     project_dict: dict,
@@ -901,6 +963,11 @@ def _dispatch_refresh_tasks(
     today) would simply hold every step in it pending until each one's wait
     budget in ``manifest_refresh_dc_task`` runs out, and each would then fail
     naming what it was still waiting for.
+
+    Recursive collections of one workflow get a scan leader (see
+    ``_scan_leaders``): its payload carries ``scan_dc_ids``, the collections
+    it scans for, and each of the others ``scan_leader``, its tag, which is
+    also added to ``depends_on``.
 
     Shared with ``POST /projects/from_run``, which needs exactly this: a
     durable run whose steps a worker updates and a caller polls. The two flows
@@ -986,6 +1053,7 @@ def _dispatch_refresh_tasks(
         | {tag for tag, _dc_id, _wf_i, _entries in to_dispatch}
     )
     dependencies = _recipe_dependencies(project_dict)
+    scan_leaders, scan_followers = _scan_leaders(project_dict, to_dispatch)
 
     user_ctx = {
         "id": str(current_user.id),
@@ -1014,6 +1082,12 @@ def _dispatch_refresh_tasks(
             "user": user_ctx,
         }
         deps = [dep for dep in dependencies.get(tag, []) if dep in seeded_tags]
+        if tag in scan_leaders:
+            payload["scan_dc_ids"] = scan_leaders[tag]
+        if tag in scan_followers:
+            payload["scan_leader"] = scan_followers[tag]
+            if scan_followers[tag] not in deps:
+                deps.append(scan_followers[tag])
         if deps:
             payload["depends_on"] = deps
         try:

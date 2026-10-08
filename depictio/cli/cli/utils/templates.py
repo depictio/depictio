@@ -148,18 +148,26 @@ def _is_cli_context() -> bool:
     return get_depictio_context().lower() == "cli"
 
 
-def _local_fallback_allowed(root: DataRoot | None) -> bool:
-    """Whether a location the data root cannot see may be looked up on this disk.
+def _local_fallback_allowed(root: DataRoot | None, location: str) -> bool:
+    """Whether ``location``, which the data root cannot see, may be looked up on this disk.
 
-    With no root, or a local one, the filesystem is the data. Under a remote
-    root only the CLI may fall back: there ``--data-root s3://... --var
+    The CLI always may: there ``--data-root s3://... --var
     METADATA_FILE=/local/meta.tsv`` is the user reading their own disk. A server
     resolving a template for a browser must never probe its own disk on a
-    caller's behalf. Even the bare existence answer is an oracle, since an
-    optional collection pruned or kept says whether a path exists in the
-    container.
+    caller's behalf, whatever the root, local or remote or none. Even the bare
+    existence answer is an oracle, since an optional collection pruned or kept
+    says whether a path exists in the container. The one exception is a server
+    that is the user's own computer (``depictio local``), and only for a
+    location its local-data policy allows.
+
+    ``root`` is not consulted: whatever it is, the location is outside it.
     """
-    return root is None or not root.is_remote or _is_cli_context()
+    if _is_cli_context():
+        return True
+    from depictio.api.v1.configs.settings_models import local_data_policy
+
+    policy = local_data_policy()
+    return policy is not None and policy.allows(location)
 
 
 def _locate_template_path(template_id: str) -> Path | None:
@@ -518,7 +526,7 @@ def _single_file_location_exists(location: str, root: DataRoot | None) -> bool:
         # A URL outside the root: we cannot see it from here, so we must not
         # claim it is absent. Only locations we can actually check are pruned.
         return True
-    if not _local_fallback_allowed(root):
+    if not _local_fallback_allowed(root, location):
         return False
     return Path(location).is_file()
 
@@ -1349,10 +1357,7 @@ def _read_header_line(location: str, root: DataRoot | None) -> str | None:
         # A URL outside the root: we cannot read it from here. Falling through
         # to the filesystem would only mis-report it as absent.
         return None
-    if not _is_cli_context():
-        # The CLI user reads their own disk. A server resolving a template for
-        # a browser never opens a path a request names, or its first line
-        # would land in the project's variables.
+    if not _local_fallback_allowed(root, location):
         return None
 
     path = Path(location)
