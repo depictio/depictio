@@ -28,11 +28,15 @@ COLUMN_TYPES: tuple[str, ...] = (
 # Valid figure visualization types
 # ---------------------------------------------------------------------------
 
+# Keep in step with ``ChartType`` in components/types.py: both describe the same
+# figure component, and a value in one and not the other is a figure that
+# validates in one layer and is rejected in the next.
 VISU_TYPES: tuple[str, ...] = (
     "scatter",
     "line",
     "bar",
     "box",
+    "violin",
     "histogram",
     "heatmap",
 )

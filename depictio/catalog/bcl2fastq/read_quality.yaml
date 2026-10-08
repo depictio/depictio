@@ -1,0 +1,16 @@
+id: bcl2fastq_read_quality
+name: Base quality per lane and read
+description: >-
+  Yield and the share of bases at Q30 or above for every read of every lane,
+  pooled over the libraries and the Undetermined reads, from bcl2fastq
+  Stats.json.
+find:
+  path_glob: "**/Stats/Stats.json"
+recipe: bcl2fastq/read_quality.py
+fixture: read_quality.tsv
+renders_as:
+  - { id: lane_read_dots, component: advanced_viz, kind: dot_plot,
+      roles: {cluster: lane_label, gene: read_label, mean_expression: mean_quality, frac_expressing: frac_q30} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: lane_label, y: pct_q30, color: read_label, barmode: group, title: Bases at Q30 or above per lane and read} }
+  - { component: card, column: pct_q30, aggregation: min, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

@@ -1,0 +1,50 @@
+id: nonpareil_summary
+name: Coverage and diversity per library
+mode: set/summary
+description: >-
+  Nonpareil's fitted numbers, one row per sequencing library: the share of the
+  metagenome the reads already reach, the effort projected for 95 percent coverage,
+  how many times deeper that is than the run went, and the Nonpareil diversity
+  index. The card strip the coverage curve is read against.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/nonpareil/set
+find:
+  path_glob: "**/nonpareil/*all_samples.tsv"
+recipe: nonpareil/summary.py
+fixture: summary.tsv
+renders_as:
+  - {
+      component: card,
+      column: coverage,
+      aggregation: average,
+      secondary_layout: gauge,
+      coverage_max: 1,
+    }
+  - {
+      component: card,
+      column: diversity,
+      aggregation: median,
+      aggregations: [box_plot_stats],
+      secondary_layout: box_plot,
+    }
+  - {
+      component: card,
+      column: effort_multiple,
+      aggregation: median,
+      aggregations: [box_plot_stats],
+      secondary_layout: box_plot,
+    }
+  - {
+      component: card,
+      column: library,
+      aggregation: nunique,
+      secondary_layout: top_n,
+      breakdown_col: sample,
+      top_n_count: 3,
+    }
+  - {
+      component: figure,
+      visu_type: scatter,
+      dict_kwargs: { x: diversity, y: coverage, color: sample, size: effort_multiple },
+    }
+  - { component: interactive, interactive_type: RangeSlider, column_name: coverage }
+  - { component: table }

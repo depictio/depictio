@@ -19,16 +19,22 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="report",
         path="reports/hamronization_summarize/hamronization_combined_report.tsv",
         format="TSV",
+        input_schema={
+            "input_file_name": pl.Utf8,
+            "analysis_software_name": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 10000, "null_values": ["NA", ""]},
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "gene_symbol": pl.Utf8,
     "gene_name": pl.Utf8,
@@ -110,4 +116,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         # hits reported per ORF and per contig land on the same contig id.
         pl.col("sequence_id").str.replace(r"_\d+$", "").alias("contig"),
         pl.lit(1, dtype=pl.Int64).alias("hits"),
-    ).select(list(EXPECTED_SCHEMA))
+    ).select(list(OUTPUT_SCHEMA))

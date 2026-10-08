@@ -15,16 +15,23 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="rel_abundance", dc_ref="taxonomy_rel_abundance"),
+    RecipeSource(
+        ref="rel_abundance",
+        dc_ref="taxonomy_rel_abundance",
+        input_schema={"rel_abundance": pl.Float64},
+    ),
+    # No input_schema: the sample id and group columns are found by name or position.
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "taxon": pl.Utf8,
 }
-# Habitat columns are dynamic (one per habitat value) — validated via OPTIONAL_SCHEMA = {}.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+# Habitat columns are dynamic (one per habitat value) — validated via OPTIONAL_OUTPUT_SCHEMA = {}.
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _METADATA_ID_COL = "ID"
 _PRESENCE_THRESHOLD = 0.001  # 0.1% relative abundance — filter noise/sequencing artefacts

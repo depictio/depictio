@@ -14,16 +14,26 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="variants", dc_ref="variants_long"),
-    RecipeSource(ref="pangolin", dc_ref="pangolin_lineages"),
+    RecipeSource(
+        ref="variants",
+        dc_ref="variants_long",
+        input_schema={"sample": pl.Utf8, "mutation_label": pl.Utf8},
+    ),
+    RecipeSource(
+        ref="pangolin",
+        dc_ref="pangolin_lineages",
+        input_schema={"sample": pl.Utf8, "lineage": pl.Utf8},
+    ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "mutation_label": pl.Utf8,
 }
-# Lineage columns are dynamic — validated via OPTIONAL_SCHEMA = {}.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+# Lineage columns are dynamic — validated via OPTIONAL_OUTPUT_SCHEMA = {}.
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

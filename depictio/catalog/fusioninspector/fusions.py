@@ -14,12 +14,11 @@ literal ``.`` for every field it could not compute (a fusion with no junction
 reads has no CDS and no protein consequence), so those are mapped to ``unknown``
 or an empty string rather than kept as a fake category.
 
-The abridged table carries no sample column and the recipe harness concatenates
-the globbed files without their path, so no ``sample`` column can be recovered:
-the fusion is the unit of analysis here.
+The per-sample file carries no sample column, so the source declares
+``source_path`` and the sample is read off the file name.
 
 Output columns:
-    fusion, gene_5p, gene_3p, breakpoint_5p, breakpoint_3p, splice_type,
+    sample, fusion, gene_5p, gene_3p, breakpoint_5p, breakpoint_3p, splice_type,
     junction_reads, spanning_frags, supporting_reads, ffpm, log_ffpm,
     junction_fraction, far_left, far_right, counter_fusion_left,
     counter_fusion_right, prot_fusion_type, large_anchor_support, cds_left_id,
@@ -30,17 +29,60 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# The sample exists only in the file NAME (`fusioninspector/<sample>/<sample>.FusionInspector.fusions.abridged.tsv`): the source hands every
+# row the path of its file, and the sample is the basename minus the suffix.
+# Without it a cohort run pools every sample's calls into one table.
+_SOURCE_PATH = "_source_path"
+_SAMPLE_SUFFIX = ".FusionInspector.fusions.abridged.tsv"
+
+
+def _sample() -> pl.Expr:
+    """``fusioninspector/S1/S1.FusionInspector.fusions.abridged.tsv`` -> ``S1``."""
+    return (
+        pl.col(_SOURCE_PATH)
+        .str.split("/")
+        .list.last()
+        .str.strip_suffix(_SAMPLE_SUFFIX)
+        .alias("sample")
+    )
+
+
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="fusions",
+        source_path=_SOURCE_PATH,
         glob_pattern="fusioninspector/*/*.FusionInspector.fusions.abridged.tsv",
         format="TSV",
+        input_schema={
+            "#FusionName": pl.Utf8,
+            "JunctionReadCount": pl.Int64,
+            "SpanningFragCount": pl.Int64,
+            "LeftGene": pl.Utf8,
+            "LeftBreakpoint": pl.Utf8,
+            "RightGene": pl.Utf8,
+            "RightBreakpoint": pl.Utf8,
+            "SpliceType": pl.Utf8,
+            "LargeAnchorSupport": pl.Utf8,
+            "NumCounterFusionLeft": pl.Int64,
+            "NumCounterFusionRight": pl.Int64,
+            "FAR_left": pl.Float64,
+            "FAR_right": pl.Float64,
+            "FFPM": pl.Float64,
+            "CDS_LEFT_ID": pl.Utf8,
+            "CDS_RIGHT_ID": pl.Utf8,
+            "PROT_FUSION_TYPE": pl.Utf8,
+            "PFAM_LEFT": pl.Utf8,
+            "PFAM_RIGHT": pl.Utf8,
+        },
         # `annots` embeds JSON-ish double quotes, so quoting must stay off.
         read_kwargs={"infer_schema_length": 10000, "quote_char": None},
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
+    "sample": pl.Utf8,
     "fusion": pl.Utf8,
     "gene_5p": pl.Utf8,
     "gene_3p": pl.Utf8,
@@ -92,6 +134,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
 
     return (
         df.select(
+            _sample(),
             pl.col("#FusionName").cast(pl.Utf8).alias("fusion"),
             _symbol("LeftGene").alias("gene_5p"),
             _symbol("RightGene").alias("gene_3p"),
@@ -132,5 +175,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .alias("junction_fraction"),
         )
         .sort("supporting_reads", descending=True)
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
     )

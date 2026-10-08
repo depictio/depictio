@@ -41,23 +41,21 @@ Both use the same fields; a folder just splits the outputs into files.
 |---|---|---|---|
 | `id` | **MUST** | str | e.g. `ivar`, `qiime2`. |
 | `name` | **MUST** | str | Display name. |
-| `description` | CAN | str | |
-| `homepage` | CAN | str | |
+| `description` | **MUST** | str | One or two sentences, shown on the catalog card. |
+| `homepage` | **MUST** | str | Tool site or source repository. |
 | `nf_core_url` | CAN | str | Full nf-core module URL (per-output for multi-module tools like QIIME 2). |
 | `source_url` | CAN | str | Where a non-nf-core definition was read from (a Snakemake wrapper dir, a Galaxy tool XML). Format-checked as http(s) only — there is no registry to check it against. |
-| `biotools_url` | CAN | str | Full `https://bio.tools/<id>` URL. |
+| `biotools_url` | **MUST** (may be `null`) | str \| null | Full `https://bio.tools/<id>` URL; `null` when bio.tools has no entry. |
 | `edam_topics` | CAN | list[str] | Full EDAM URLs. |
 | `outputs` | **MUST** (flat file) | list[Output] | In a folder, these are the sibling files. |
 
-**Keep `module.yaml` lightweight.** For an nf-core-backed tool, declare only
-`id`, `name` and `nf_core_url` — the rest of the identity (`homepage`,
-`biotools_url`, `edam_topics`, `description`) already lives in the module's
-nf-core `meta.yml` and is derived from it, so don't duplicate it. Add an identity
-field here **only** to *override* a stale `meta.yml` (e.g. MultiQC `homepage`) or
-when the tool has **no** single nf-core module to derive from (QIIME 2 — identity
-declared in full, `nf_core_url` set per-output). The `nf_core_url` pointer is what
-existence-checking validates; the derived fields are trusted until a future
-`sync-identity` reconciles them against `meta.yml`.
+**Identity is declared, not derived.** The payload reads a tool's identity from
+`module.yaml` alone; nothing fetches the nf-core `meta.yml`. Copy the fields from
+it: `homepage` falls back to `tool_dev_url`, then `documentation`, when
+`meta.yml` leaves it empty, and `biotools_url` comes from the `biotools:`
+identifier (`null` when there is none). `catalog validate` rejects a module with
+no `description` or `homepage`; the `nf_core_url` pointer is what
+existence-checking validates against the vendored nf-core index.
 
 ## `outputs[]` — Output
 
@@ -141,7 +139,7 @@ ma, dot_plot, lollipop, qq, sunburst, oncoplot, coverage_track, sankey.
 
 ## The schema-ownership rule (no duplication)
 
-- **Recipe present** → the recipe (`EXPECTED_SCHEMA`) owns the output columns;
+- **Recipe present** → the recipe (`OUTPUT_SCHEMA`) owns the output columns;
   the YAML must **not** declare `columns`. `roles` are grounded against the
   recipe by `depictio dev catalog validate`.
 - **No recipe** → the raw file is bindable; declare its `columns` in the YAML,
@@ -179,7 +177,7 @@ while writing `roles`.
 2. `kind` valid for `advanced_viz`; role names valid for the `kind`.
 3. Each render's bound columns (`roles`/`dict_kwargs`/`card.column`) are
    **grounded** against the real data shape — the `fixture` (most complete) if
-   set, else the recipe's `EXPECTED_SCHEMA`, else the declared `columns`.
+   set, else the recipe's `OUTPUT_SCHEMA`, else the declared `columns`.
 4. Every referenced `recipe` resolves; every `fixture` reads.
 5. Every `nf_core_url` module + `edam_*` term **exists** in the vendored index.
 

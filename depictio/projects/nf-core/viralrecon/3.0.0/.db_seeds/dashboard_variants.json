@@ -51,6 +51,8 @@
       "group": "Call properties",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#4CAF50",
       "icon_name": "mdi:dna",
       "wf_tag": "nextflow/viralrecon"
@@ -93,6 +95,8 @@
       "group": "Call properties",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#9C27B0",
       "icon_name": "mdi:alert-circle",
       "wf_tag": "nextflow/viralrecon"
@@ -135,6 +139,8 @@
       "group": "Call properties",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#8E44AD",
       "icon_name": "mdi:shape-outline",
       "wf_tag": "nextflow/viralrecon"
@@ -177,6 +183,8 @@
       "group": "Call properties",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#F44336",
       "icon_name": "mdi:percent",
       "wf_tag": "nextflow/viralrecon"
@@ -219,6 +227,8 @@
       "group": "Call properties",
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#F68B33",
       "icon_name": "mdi:chart-line",
       "wf_tag": "nextflow/viralrecon"
@@ -261,12 +271,14 @@
       "group": null,
       "timescale": null,
       "show_marks": null,
+      "show_histogram": null,
+      "slider_mode": null,
       "custom_color": "#9C27B0",
       "icon_name": "mdi:alert-circle",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "1e733741-f070-4cb9-8e42-166436a3a1ac",
+      "index": "8a196b10-d926-4210-bb32-511012e1512c",
       "component_type": "text",
       "title": "Variant burden",
       "workflow_tag": "viralrecon",
@@ -286,7 +298,6 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
       "title_align": "left",
       "section": "Variant burden",
       "order": 2,
@@ -296,7 +307,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "3e96c4ef-e666-40a5-bdc2-b7c76b630ffc",
+      "index": "dd15613c-3a61-49be-8b2d-470162456bf5",
       "component_type": "card",
       "title": "Total Variant Calls",
       "workflow_tag": "viralrecon",
@@ -346,6 +357,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:dna",
       "icon_color": "#FF9800",
       "title_color": "#FF9800",
@@ -354,7 +366,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "0fe228df-c010-4dc4-a9ca-79a20ff578a6",
+      "index": "2c071bcb-2fc4-4589-a0ff-c8363698c7c7",
       "component_type": "card",
       "title": "Distinct Positions",
       "workflow_tag": "viralrecon",
@@ -404,6 +416,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:map-marker",
       "icon_color": "#FF9800",
       "title_color": "#FF9800",
@@ -412,7 +425,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "5ba9db26-e670-47de-a547-c12f0918da49",
+      "index": "f927bf75-1791-41f3-832e-85ddba44c01d",
       "component_type": "card",
       "title": "Samples w/ variants",
       "workflow_tag": "viralrecon",
@@ -462,6 +475,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:flask",
       "icon_color": "#45B8AC",
       "title_color": "#45B8AC",
@@ -470,7 +484,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "3b1142ad-8975-4e88-85ea-e08d46e6419a",
+      "index": "93c28f33-6ab5-4865-b34e-4e7698d5b80f",
       "component_type": "card",
       "title": "Unique AA Changes",
       "workflow_tag": "viralrecon",
@@ -520,6 +534,7 @@
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
+      "follow_region_filter": false,
       "icon_name": "mdi:alpha",
       "icon_color": "#F44336",
       "title_color": "#F44336",
@@ -552,7 +567,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "One dot per variant call \u00b7 y = AF \u00b7 above 0.5 = consensus, below = subconsensus.",
+      "description": "One dot per variant call, y is the allele frequency. Calls above 0.75, the default consensus threshold, make the consensus; calls below it are sub-consensus.",
       "title_size": "h3",
       "title_align": "left",
       "use": "ivar/manhattan",
@@ -566,6 +581,7 @@
       "section": "Variant burden",
       "viz_kind": "manhattan",
       "config": {
+        "controls_placement": "popover",
         "viz_kind": "manhattan",
         "chr_col": "CHROM",
         "pos_col": "POS",
@@ -573,7 +589,7 @@
         "feature_col": "mutation_label",
         "effect_col": null,
         "score_kind": "Allele frequency (AF)",
-        "score_threshold": 0.5,
+        "score_threshold": 0.75,
         "marker_size_above": 6,
         "marker_size_below": 4,
         "marker_size_uniform": 5,
@@ -585,7 +601,9 @@
         "default_color_by": "EFFECT",
         "top_n_labels": 8,
         "selection_enabled": true,
-        "selection_column": "sample"
+        "selection_column": "sample",
+        "mode": "manhattan",
+        "rainfall_class_col": null
       },
       "wf_tag": "nextflow/viralrecon"
     },
@@ -628,6 +646,7 @@
       "section": "Variant burden",
       "viz_kind": "lollipop",
       "config": {
+        "controls_placement": "popover",
         "viz_kind": "lollipop",
         "feature_id_col": "GENE",
         "position_col": "POS",
@@ -666,7 +685,7 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "The allele-frequency histogram is the distribution the AF slider on the left actually drives, and it was not plotted anywhere until now: sub-consensus calls pile up below 0.75, fixed ones at 1.0. The scatter beside it reads support the other way, reference depth against alternate depth, so a call with high frequency but almost no reads behind it sits away from the diagonal.",
+      "body": "The allele-frequency histogram is the distribution the AF slider on the left drives: calls under 0.75, the default consensus threshold, are sub-consensus, and fixed calls sit near 1.0. The scatter beside it reads support the other way, reference depth against alternate depth, so a call with high frequency but almost no reads behind it sits away from the diagonal.",
       "wf_tag": "nextflow/viralrecon"
     },
     {
@@ -791,11 +810,11 @@
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "Calls per gene and calls per sample. Read with the gene and effect filters on the left, this is how a spike protein cluster separates from background.",
+      "body": "Calls per gene and calls per sample. Read with the gene and effect filters on the left, this is how a cluster of calls on a single gene separates from background.",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "1713ae46-d7f0-4e72-892e-16d5aa076069",
+      "index": "78e071be-a3ea-4cfb-978f-c6ebc2eaf332",
       "component_type": "figure",
       "title": "Variant counts by gene & functional class",
       "workflow_tag": "viralrecon",
@@ -846,7 +865,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "52901bfb-48e0-4eca-af19-900bb8a2fb34",
+      "index": "cb936b18-3d61-4ab6-93c0-41d9989c2a3e",
       "component_type": "figure",
       "title": "Variants per sample",
       "workflow_tag": "viralrecon",
@@ -897,7 +916,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "27360fbb-554d-4820-b34d-6e9d74e39aa1",
+      "index": "1947d500-9dea-4f77-ab0a-6b9ab7096535",
       "component_type": "text",
       "title": "Which mutations travel together",
       "workflow_tag": "viralrecon",
@@ -917,129 +936,12 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
       "title_align": "left",
       "section": "Co-occurrence",
       "order": 2,
       "alignment": "left",
       "vertical_alignment": "center",
-      "body": "The oncoplot puts samples against genes and colours each cell by effect class, reordered so co-occurring mutations line up. The UpSet below it asks the same question against lineage instead: its columns are the lineages themselves, so picking a lineage in the persistent filter removes sets from the matrix by value, without going through a link the way the cards above do.",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "3b89b199-fc99-4b1b-a3ed-2cb725ffda3e",
-      "component_type": "card",
-      "title": "Samples (oncoplot)",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "oncoplot_canonical",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c1a"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Oncoplot-ready variant matrix (sample_id \u00d7 gene \u00d7 mutation_type)",
-        "data_collection_tag": "oncoplot_canonical",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c1a"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "use": "ivar/oncoplot_matrix",
-      "catalog_source": {
-        "toolId": "ivar",
-        "toolName": "iVar",
-        "outputId": "ivar_oncoplot_matrix",
-        "use": "ivar/oncoplot_matrix",
-        "description": "Sample by gene mutation matrix derived from the long variant table, one row per observed sample/gene/effect combination."
-      },
-      "section": "Co-occurrence",
-      "aggregation": "nunique",
-      "column_name": "sample_id",
-      "column_type": "object",
-      "value": null,
-      "aggregations": null,
-      "filter_expr": null,
-      "secondary_layout": "top_n",
-      "breakdown_col": "gene",
-      "top_n_count": 3,
-      "coverage_max": null,
-      "threshold_value": null,
-      "threshold_direction": "min",
-      "threshold_warn": null,
-      "attrition_cols": [],
-      "trend_col": null,
-      "icon_name": "mdi:flask",
-      "icon_color": "#45B8AC",
-      "title_color": "#45B8AC",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "639c7b89-9d21-4b00-95bd-2a91b8cc25cd",
-      "component_type": "card",
-      "title": "Genes (oncoplot)",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "oncoplot_canonical",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c1a"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Oncoplot-ready variant matrix (sample_id \u00d7 gene \u00d7 mutation_type)",
-        "data_collection_tag": "oncoplot_canonical",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c1a"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "use": "ivar/oncoplot_matrix",
-      "catalog_source": {
-        "toolId": "ivar",
-        "toolName": "iVar",
-        "outputId": "ivar_oncoplot_matrix",
-        "use": "ivar/oncoplot_matrix",
-        "description": "Sample by gene mutation matrix derived from the long variant table, one row per observed sample/gene/effect combination."
-      },
-      "section": "Co-occurrence",
-      "aggregation": "nunique",
-      "column_name": "gene",
-      "column_type": "object",
-      "value": null,
-      "aggregations": null,
-      "filter_expr": null,
-      "secondary_layout": "composition",
-      "breakdown_col": "mutation_type",
-      "top_n_count": 3,
-      "coverage_max": null,
-      "threshold_value": null,
-      "threshold_direction": "min",
-      "threshold_warn": null,
-      "attrition_cols": [],
-      "trend_col": null,
-      "icon_name": "mdi:molecule",
-      "icon_color": "#4CAF50",
-      "title_color": "#4CAF50",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
+      "body": "Which mutations co-occur across samples (oncoplot) and across lineages (UpSet).",
       "wf_tag": "nextflow/viralrecon"
     },
     {
@@ -1081,6 +983,7 @@
       "section": "Co-occurrence",
       "viz_kind": "oncoplot",
       "config": {
+        "controls_placement": "popover",
         "viz_kind": "oncoplot",
         "sample_id_col": "sample_id",
         "gene_col": "gene",
@@ -1114,12 +1017,13 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Rows are mutations, columns are lineages. Because the set columns are named after the lineages themselves, the persistent lineage filter narrows this matrix by value, without needing a project link.",
+      "description": "Rows are mutations, columns are lineages; the persistent lineage filter narrows the sets.",
       "title_size": "h3",
       "title_align": "left",
       "section": "Co-occurrence",
       "viz_kind": "upset_plot",
       "config": {
+        "controls_placement": "popover",
         "viz_kind": "upset_plot",
         "matrix_wf_id": {
           "$oid": "746b0f3c1e4a2d7f8e5b9c01"
@@ -1128,6 +1032,7 @@
           "$oid": "746b0f3c1e4a2d7f8e5b9c1e"
         },
         "set_columns": null,
+        "set_columns_pattern": null,
         "sort_by": "cardinality",
         "sort_order": "descending",
         "min_size": 1,
@@ -1167,7 +1072,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "7da2c3ea-17e9-492f-9e87-978094b27e84",
+      "index": "17fff260-52e8-44d6-864f-845c8527cb63",
       "component_type": "table",
       "title": "Variants table",
       "workflow_tag": "viralrecon",
@@ -1266,7 +1171,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-1e733741-f070-4cb9-8e42-166436a3a1ac",
+      "i": "box-8a196b10-d926-4210-bb32-511012e1512c",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -1281,7 +1186,7 @@
       ]
     },
     {
-      "i": "box-3e96c4ef-e666-40a5-bdc2-b7c76b630ffc",
+      "i": "box-dd15613c-3a61-49be-8b2d-470162456bf5",
       "x": 0,
       "y": 2,
       "w": 2,
@@ -1289,7 +1194,7 @@
       "static": true
     },
     {
-      "i": "box-0fe228df-c010-4dc4-a9ca-79a20ff578a6",
+      "i": "box-2c071bcb-2fc4-4589-a0ff-c8363698c7c7",
       "x": 2,
       "y": 2,
       "w": 2,
@@ -1297,7 +1202,7 @@
       "static": true
     },
     {
-      "i": "box-5ba9db26-e670-47de-a547-c12f0918da49",
+      "i": "box-f927bf75-1791-41f3-832e-85ddba44c01d",
       "x": 4,
       "y": 2,
       "w": 2,
@@ -1305,7 +1210,7 @@
       "static": true
     },
     {
-      "i": "box-3b1142ad-8975-4e88-85ea-e08d46e6419a",
+      "i": "box-93c28f33-6ab5-4865-b34e-4e7698d5b80f",
       "x": 6,
       "y": 2,
       "w": 2,
@@ -1403,7 +1308,7 @@
       ]
     },
     {
-      "i": "box-1713ae46-d7f0-4e72-892e-16d5aa076069",
+      "i": "box-78e071be-a3ea-4cfb-978f-c6ebc2eaf332",
       "x": 0,
       "y": 24,
       "w": 4,
@@ -1418,7 +1323,7 @@
       ]
     },
     {
-      "i": "box-52901bfb-48e0-4eca-af19-900bb8a2fb34",
+      "i": "box-cb936b18-3d61-4ab6-93c0-41d9989c2a3e",
       "x": 4,
       "y": 24,
       "w": 4,
@@ -1433,11 +1338,11 @@
       ]
     },
     {
-      "i": "box-27360fbb-554d-4820-b34d-6e9d74e39aa1",
+      "i": "box-1947d500-9dea-4f77-ab0a-6b9ab7096535",
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 2,
+      "h": 1,
       "static": false,
       "resizeHandles": [
         "se",
@@ -1446,27 +1351,11 @@
         "sw",
         "w"
       ]
-    },
-    {
-      "i": "box-3b89b199-fc99-4b1b-a3ed-2cb725ffda3e",
-      "x": 0,
-      "y": 2,
-      "w": 4,
-      "h": 2,
-      "static": true
-    },
-    {
-      "i": "box-639c7b89-9d21-4b00-95bd-2a91b8cc25cd",
-      "x": 4,
-      "y": 2,
-      "w": 4,
-      "h": 2,
-      "static": true
     },
     {
       "i": "box-adv-onco-matrix",
       "x": 0,
-      "y": 5,
+      "y": 1,
       "w": 8,
       "h": 8,
       "static": false,
@@ -1481,7 +1370,7 @@
     {
       "i": "box-adv-var-upset",
       "x": 0,
-      "y": 13,
+      "y": 9,
       "w": 8,
       "h": 8,
       "static": false,
@@ -1509,7 +1398,7 @@
       ]
     },
     {
-      "i": "box-7da2c3ea-17e9-492f-9e87-978094b27e84",
+      "i": "box-17fff260-52e8-44d6-864f-845c8527cb63",
       "x": 0,
       "y": 51,
       "w": 8,
@@ -1592,6 +1481,8 @@
     }
   ],
   "funnel_filtering": true,
+  "advanced_viz_controls": "header",
+  "autofit": true,
   "brand_theme": null,
   "buttons_data": {
     "unified_edit_mode": true,
@@ -1630,7 +1521,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-09-05 04:48:08",
+  "creation_time": "2026-09-17 09:20:46",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"

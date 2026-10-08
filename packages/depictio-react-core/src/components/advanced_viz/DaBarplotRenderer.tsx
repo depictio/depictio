@@ -1,15 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { NumberInput, ScrollArea, Stack, Tabs, useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import { ScrollArea, Stack, Tabs, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
+
+import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
+import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { isStaleFetch } from '../../fetchQueue';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { VizNumberInput } from './controls/VizControls';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
+import { demandForItems } from './contentDemand';
 
 interface DaBarplotConfig {
   feature_id_col: string;
@@ -36,6 +41,14 @@ const POSITIVE = '#1f77b4';
 const NEGATIVE = '#d62728';
 const FADED = 'rgba(127,127,127,0.45)';
 const ALL_TAB = 'all';
+
+// Per-panel height for the faceted "All" view. Tight enough to fit several
+// contrasts in view without forcing scroll for 2-3 panels.
+const FACETED_PANEL_HEIGHT = 240;
+/** `Stack gap="md"` between the faceted panels, plus the stack's own padding. */
+const FACET_GAP_PX = 20;
+/** The tab strip above the panels and the axis furniture below the last one. */
+const TABS_CHROME_PX = 72;
 
 type FeatureRow = { feat: string; label: string; lfc: number; sig: number };
 
@@ -247,23 +260,37 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
   const reportedPanel = drawnPanels.find((p) => p.grouped !== p.panel) ?? drawnPanels[0];
   useReportGroupColouring(groupRender, reportedPanel?.panel, reportedPanel?.grouped);
 
+  // Chart annotations, on the single-contrast view only: the faceted "All"
+  // view draws one plot per contrast under the same component. Bars are keyed
+  // on the feature id, slot 0 of `customdata`.
+  const singlePanel =
+    activeTab && activeTab !== ALL_TAB ? (drawnPanels[0]?.grouped ?? null) : null;
+  const annotations = usePlotAnnotationLayer({
+    componentIndex: String(metadata.index),
+    enabled: supportsAdvancedVizAnnotation(metadata) && singlePanel != null,
+    data: singlePanel ? applyDataTheme(singlePanel.data, isDark, theme) : null,
+    layout: singlePanel ? applyLayoutTheme(singlePanel.layout as any, isDark, theme) : null,
+    pointIdIndex: 0,
+    pointIdColumn: config.feature_id_col || undefined,
+  });
+
   // Memoised so AdvancedVizFrame's `extras` useMemo doesn't invalidate on every
   // render — an unmemoised element re-fires the frame's publish effect and loops
   // it against ComponentRenderer's setState ("Maximum update depth exceeded").
   // Mirrors the other renderers (Sunburst/Volcano/…) which already memoise this.
-  const controls = useMemo(
+  // Both of these decide which features are on screen at all, so the whole
+  // tier is the encoding one and nothing is left for the cosmetic popover.
+  const primaryControls = useMemo(
     () => (
-      <Stack gap="xs">
-        <NumberInput
-          size="xs"
+      <>
+        <VizNumberInput
           label="Top-N per panel"
           value={topN}
           onChange={(v) => setTopN(Math.max(1, Number(v) || 15))}
           min={1}
           max={50}
         />
-        <NumberInput
-          size="xs"
+        <VizNumberInput
           label="Significance threshold"
           value={sigThreshold}
           onChange={(v) => setSigThreshold(Math.max(0, Math.min(1, Number(v) || 0.05)))}
@@ -272,14 +299,25 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
           step={0.01}
           decimalScale={3}
         />
-      </Stack>
+      </>
     ),
     [topN, sigThreshold],
   );
 
-  // Per-panel height for the faceted "All" view. Tight enough to fit several
-  // contrasts in view without forcing scroll for 2–3 panels.
-  const FACETED_PANEL_HEIGHT = 240;
+  // One facet per contrast on screen, each at the height the faceted view
+  // gives it. The single-contrast tab is the same panel without the stack, so
+  // it asks for one facet's worth. Counted off `contrastNames`, not
+  // `drawnPanels`: the panels are rebuilt on every render (colour, threshold,
+  // grouping) and a demand keyed on them would republish on each one.
+  const contentDemand = useMemo(
+    () =>
+      demandForItems(
+        activeTab === ALL_TAB ? contrastNames.length : activeTab ? 1 : 0,
+        FACETED_PANEL_HEIGHT + FACET_GAP_PX,
+        TABS_CHROME_PX,
+      ),
+    [activeTab, contrastNames.length],
+  );
 
   const renderAllFaceted = () => (
     <ScrollArea style={{ width: '100%', height: '100%' }}>
@@ -307,17 +345,19 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
   );
 
   const renderSinglePanel = () => {
-    if (!activeTab || activeTab === ALL_TAB) return null;
-    const panel = drawnPanels[0]?.grouped;
-    if (!panel) return null;
+    if (!singlePanel) return null;
     return (
-      <Plot
-        data={applyDataTheme(panel.data, isDark, theme) as any}
-        layout={applyLayoutTheme(panel.layout as any, isDark, theme) as any}
-        useResizeHandler
-        style={{ width: '100%', height: '100%' }}
-        config={{ displaylogo: false, responsive: true } as any}
-      />
+      <>
+        <Plot
+          data={annotations.data as any}
+          layout={annotations.layout as any}
+          useResizeHandler
+          style={{ width: '100%', height: '100%' }}
+          config={{ displaylogo: false, responsive: true } as any}
+          {...annotations.plotProps()}
+        />
+        {annotations.toolbar}
+      </>
     );
   };
 
@@ -325,13 +365,15 @@ const DaBarplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gr
     <AdvancedVizFrame
       title={metadata.title || 'DA barplot'}
       subtitle={(metadata as any).description || (metadata as any).subtitle}
-      controls={controls}
+      primaryControls={primaryControls}
+      contentDemand={contentDemand}
       loading={loading}
       error={error}
       emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
       dataRows={rows ?? undefined}
       dataColumns={requiredCols}
       estimated={Boolean(reduction?.degraded)}
+      badges={annotations.badges}
       reduction={
         reduction && (reduction.sampled || fullLoad)
           ? {

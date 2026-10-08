@@ -37,6 +37,92 @@ function reoffer(except: string): void {
 }
 
 /**
+ * Slots bound the plots that are mounted, but Chrome counts every context that
+ * is still alive, and a context outlives its canvas. Plotly drops its GL
+ * canvases (`Plotly.purge` on unmount, or a plot whose traces stop being GL)
+ * without losing their contexts, so each one keeps counting toward the 16
+ * until the garbage collector gets round to it. A tile that shows a skeleton
+ * while it refetches unmounts its plot, so every filter change on a dashboard
+ * of GL tiles leaves a pair of live contexts behind per refetching tile. A few
+ * of those in a row are enough: the browser evicts the oldest live context,
+ * which belongs to the plot that did not refetch. Creating a group from a lasso
+ * is the textbook case: the lassoed tile excludes its own selection, so it is
+ * the one plot left standing while every other tile remounts twice (selection,
+ * then clear), and it is the one that goes blank a couple of seconds later.
+ *
+ * So a removed Plotly GL canvas has its context released on the spot.
+ */
+
+/** The shape `releaseRemovedGlCanvases` reads. Duck-typed so the logic can be
+ *  exercised without a DOM. */
+interface RemovedNodeLike {
+  nodeType?: number;
+  isConnected?: boolean;
+  classList?: { contains(token: string): boolean };
+  querySelectorAll?: (selector: string) => ArrayLike<unknown>;
+}
+
+interface GlContextLike {
+  isContextLost?: () => boolean;
+  getExtension(name: 'WEBGL_lose_context'): { loseContext(): void } | null;
+}
+
+interface GlCanvasLike extends RemovedNodeLike {
+  /** The d3 datum Plotly binds to each GL canvas; `regl._gl` is its context. */
+  __data__?: { regl?: { _gl?: GlContextLike } };
+}
+
+const PLOTLY_GL_CANVAS = 'gl-canvas';
+const ELEMENT_NODE = 1;
+
+function glCanvasesUnder(node: RemovedNodeLike): GlCanvasLike[] {
+  if (node.nodeType !== ELEMENT_NODE) return [];
+  if (node.classList?.contains(PLOTLY_GL_CANVAS)) return [node as GlCanvasLike];
+  if (typeof node.querySelectorAll !== 'function') return [];
+  return Array.from(node.querySelectorAll(`canvas.${PLOTLY_GL_CANVAS}`)) as GlCanvasLike[];
+}
+
+/**
+ * Lose the WebGL context of every Plotly GL canvas in `removed` that is no
+ * longer in the document. Returns how many contexts were released.
+ *
+ * The context is read from the regl instance Plotly stored on the canvas, never
+ * through `getContext`, which would create a context on a canvas that has none
+ * (Plotly leaves the pick layer without one). A canvas that is back in the
+ * document by the time this runs was moved, not dropped, and is left alone.
+ */
+export function releaseRemovedGlCanvases(removed: Iterable<RemovedNodeLike>): number {
+  let released = 0;
+  for (const node of removed) {
+    for (const canvas of glCanvasesUnder(node)) {
+      if (canvas.isConnected) continue;
+      const gl = canvas.__data__?.regl?._gl;
+      if (!gl || gl.isContextLost?.()) continue;
+      const ext = gl.getExtension('WEBGL_lose_context');
+      if (!ext) continue;
+      ext.loseContext();
+      released += 1;
+    }
+  }
+  return released;
+}
+
+let reaper: MutationObserver | null = null;
+
+/** Watch the document for removed Plotly GL canvases and release their
+ *  contexts. Installed once, by the first plot that asks for a GL slot. */
+function installGlContextReaper(): void {
+  if (reaper || typeof MutationObserver === 'undefined' || typeof document === 'undefined') return;
+  reaper = new MutationObserver((records) => {
+    for (const record of records) {
+      if (record.removedNodes.length === 0) continue;
+      releaseRemovedGlCanvases(record.removedNodes as unknown as Iterable<RemovedNodeLike>);
+    }
+  });
+  reaper.observe(document.body, { childList: true, subtree: true });
+}
+
+/**
  * Claim one of the bounded WebGL slots for the lifetime of the component.
  *
  * Slots go out in mount order, which on a dashboard grid means top-to-bottom —
@@ -64,6 +150,7 @@ export function useWebglSlot(wanted: boolean): boolean {
   const [granted, setGranted] = useState(false);
 
   useEffect(() => {
+    if (wanted) installGlContextReaper();
     const evaluate = () => {
       if (!wanted) {
         if (holders.delete(id)) reoffer(id);

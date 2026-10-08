@@ -24,6 +24,8 @@ Output schema:
     merged_library : Utf8   <sample>.mLb.clN, the merged filtered library
     group : Utf8            design group; the DESeq2 contrast level
     replicate : Int64       biological replicate number inside the group
+    replicate_label : Utf8  the replicate as a label (``R1``), so a filter can
+                            offer it as a factor rather than a numeric range
     n_libraries : Int64     sequencing libraries merged into the sample
     libraries : Utf8        those library ids, comma separated
 """
@@ -41,20 +43,24 @@ _TECHNICAL_SUFFIX = r"_T\d+$"
 #: ``<group>_R<replicate>`` -> the two parts.
 _SAMPLE_PATTERN = r"^(?<group>.+)_R(?<replicate>\d+)$"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="design",
         glob_pattern="**/design_reads.csv",
         format="CSV",
+        input_schema={"sample_id": pl.Utf8},
         read_kwargs={"infer_schema_length": 0},
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "merged_library": pl.Utf8,
     "group": pl.Utf8,
     "replicate": pl.Int64,
+    "replicate_label": pl.Utf8,
     "n_libraries": pl.Int64,
     "libraries": pl.Utf8,
 }
@@ -92,5 +98,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     # usable hub: the sample is its own group and the replicate is unknown.
     samples = samples.with_columns(
         pl.col("group").fill_null(pl.col("sample")),
+        pl.format("R{}", pl.col("replicate")).alias("replicate_label"),
     )
-    return samples.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return samples.select(list(OUTPUT_SCHEMA)).sort("sample")

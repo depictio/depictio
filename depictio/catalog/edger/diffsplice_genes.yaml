@@ -1,0 +1,21 @@
+id: edger_diffsplice_genes
+name: Differential exon usage per gene (edgeR)
+mode: splicing/exon-usage
+description: >-
+  edgeR diffSpliceDGE as nf-core/rnasplice's edger_exon route writes it, one
+  row per contrast and gene: the gene-level F-test and Simes FDRs, how many
+  exons were tested and called, and the most significant exon's relative log2
+  fold change (treatment over control).
+find: { path_glob: "**/contrast_*.usage.gene.csv" }
+recipe: edger/diffsplice_genes.py
+fixture: diffsplice_genes.tsv
+renders_as:
+  - id: gene_volcano
+    component: advanced_viz
+    kind: volcano
+    roles: { feature_id: gene_id, effect_size: log2fc, significance: fdr, category: direction }
+  - { component: card, column: gene_id, aggregation: nunique, secondary_layout: donut, breakdown_col: direction }
+  - { component: card, column: exons_significant, aggregation: sum, secondary_layout: top_n, breakdown_col: gene_id, top_n_count: 3 }
+  - { component: card, column: abs_log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: direction }
+  - { component: table, row_selection_enabled: true, row_selection_column: gene_id }

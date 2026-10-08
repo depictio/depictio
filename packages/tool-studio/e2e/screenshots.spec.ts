@@ -68,6 +68,8 @@ test('capture documentation screenshots', async ({ page }) => {
   //    Use a name that isn't in the catalog so recognition doesn't take over.
   await page.getByLabel('Tool id').fill('mytool');
   await page.getByLabel('Tool name').fill('My Tool');
+  await page.getByLabel('Tool description').fill('A test tool.');
+  await page.getByLabel('Homepage').fill('https://example.org');
   await page.getByLabel('Output slug').fill('coverage');
   await page.getByLabel('Path glob').fill('**/mytool/*.tsv');
   await page.screenshot({ path: shot('01-tool'), fullPage: true });
@@ -131,6 +133,8 @@ test('capture documentation screenshots', async ({ page }) => {
   await page.getByLabel('nf-core module').click();
   await page.getByLabel('Tool id').fill('mytool');
   await page.getByLabel('Tool name').fill('My Tool');
+  await page.getByLabel('Tool description').fill('A test tool.');
+  await page.getByLabel('Homepage').fill('https://example.org');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
 
   // 2b) Fixture from a URL — captured before the drop, since fetching replaces
@@ -193,6 +197,8 @@ test('capture the opened pull request', async ({ page }) => {
   // An obviously throwaway identity: this really does land on depictio/depictio.
   await page.getByLabel('Tool id').fill('tool_studio_demo');
   await page.getByLabel('Tool name').fill('Tool Studio Demo');
+  await page.getByLabel('Tool description').fill('A test tool.');
+  await page.getByLabel('Homepage').fill('https://example.org');
   await page.getByLabel('Output slug').fill('results');
   await page.getByLabel('Path glob').fill('**/tool_studio_demo/*.csv');
   await page.getByRole('button', { name: 'Next', exact: true }).click();

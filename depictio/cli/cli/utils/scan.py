@@ -3,6 +3,7 @@ import re
 from datetime import datetime
 
 from bson import ObjectId
+from rich.markup import escape
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
 from depictio.cli.cli.utils.api_calls import (
@@ -38,73 +39,6 @@ from depictio.models.models.workflows import (
     WorkflowRun,
     WorkflowRunScan,
 )
-
-# Supported image extensions for S3 verification
-SUPPORTED_IMAGE_EXTENSIONS = {
-    ".png",
-    ".jpg",
-    ".jpeg",
-    ".gif",
-    ".webp",
-    ".svg",
-    ".bmp",
-    ".tiff",
-    ".tif",
-}
-
-
-def _verify_s3_images(s3_base_folder: str, CLI_config: CLIConfig) -> dict:
-    """
-    Verify images exist at the specified S3 location.
-
-    Args:
-        s3_base_folder: S3 path (e.g., s3://bucket/path/to/images/)
-        CLI_config: CLI configuration with S3 credentials
-
-    Returns:
-        dict with 'count' of images found and 'sample' list of first few paths
-    """
-    import boto3
-
-    try:
-        # Parse S3 path
-        if not s3_base_folder.startswith("s3://"):
-            return {"count": 0, "sample": [], "error": "Invalid S3 path"}
-
-        s3_parts = s3_base_folder[5:].split("/", 1)
-        bucket = s3_parts[0]
-        prefix = s3_parts[1] if len(s3_parts) > 1 else ""
-
-        # Initialize S3 client
-        s3_client = boto3.client(
-            "s3",
-            aws_access_key_id=CLI_config.s3_storage.aws_access_key_id,
-            aws_secret_access_key=CLI_config.s3_storage.aws_secret_access_key,
-            endpoint_url=CLI_config.s3_storage.url,
-        )
-
-        # List objects with the prefix
-        paginator = s3_client.get_paginator("list_objects_v2")
-        pages = paginator.paginate(Bucket=bucket, Prefix=prefix, PaginationConfig={"MaxItems": 100})
-
-        image_count = 0
-        sample_images: list[str] = []
-
-        for page in pages:
-            for obj in page.get("Contents", []):
-                key = obj["Key"]
-                # Check if it's an image file
-                ext = "." + key.rsplit(".", 1)[-1].lower() if "." in key else ""
-                if ext in SUPPORTED_IMAGE_EXTENSIONS:
-                    image_count += 1
-                    if len(sample_images) < 5:
-                        sample_images.append(key)
-
-        return {"count": image_count, "sample": sample_images}
-
-    except Exception as e:
-        logger.warning(f"Failed to verify S3 images at {s3_base_folder}: {e}")
-        return {"count": 0, "sample": [], "error": str(e)}
 
 
 def scan_single_file(
@@ -594,6 +528,49 @@ def scan_run_for_multiple_data_collections(
     return workflow_run
 
 
+def flat_run_tag(location: str) -> str:
+    """The run a ``structure: flat`` location is registered as: its directory's name."""
+    return os.path.basename(os.path.normpath(location))
+
+
+def flat_run_tag_clash(data_location: WorkflowDataLocation) -> str | None:
+    """Why two locations of a flat workflow would be registered as one run, or ``None``.
+
+    A flat run is named after its directory, so ``/scratch/a/results`` and
+    ``/scratch/b/results`` would both be run ``results``: the scan registers the
+    files of both under it, and every sample is listed twice. The same directory
+    reached twice, through a symlink for instance, is one run.
+    """
+    if data_location.structure != "flat":
+        return None
+    first_by_tag: dict[str, str] = {}
+    for location in data_location.locations:
+        tag = flat_run_tag(location)
+        first = first_by_tag.setdefault(tag, location)
+        if os.path.realpath(first) != os.path.realpath(location):
+            return (
+                f"{first} and {location} would both be run '{tag}': a flat workflow names "
+                "each run after its directory, so their samples would be listed twice. "
+                "Rename one of the directories, or ingest it into another project."
+            )
+    return None
+
+
+def _run_to_rescan(existing_run: WorkflowRun | None, run_location: str) -> WorkflowRun | None:
+    """The registered run a rescan of ``run_location`` updates, or ``None`` for a new one.
+
+    A run of the same name registered from another directory is not it: a results
+    directory that moved leaves one behind. Reused, it kept the files of the old
+    directory next to those of the new one, and every sample was listed twice. As a
+    new run, the old one is removed with its files once the scan is done.
+    """
+    if existing_run and os.path.realpath(existing_run.run_location) != os.path.realpath(
+        run_location
+    ):
+        return None
+    return existing_run
+
+
 def scan_files_for_workflow(
     workflow: Workflow,
     data_collections: list[DataCollection],
@@ -618,6 +595,10 @@ def scan_files_for_workflow(
     update_files = command_parameters.get("sync_files", False)
     rich_tables = command_parameters.get("rich_tables", True)
 
+    clash = flat_run_tag_clash(workflow.data_location)
+    if clash:
+        raise ValueError(clash)
+
     workflow_id = workflow.id
 
     # Generate permissions for the files
@@ -640,7 +621,7 @@ def scan_files_for_workflow(
             console=None,
         ) as progress:
             task_id = progress.add_task(
-                "📋 Loading existing files from database", total=len(data_collections)
+                "Loading existing files from database", total=len(data_collections)
             )
 
             for dc in data_collections:
@@ -649,7 +630,7 @@ def scan_files_for_workflow(
                     :25
                 ]  # Left-align and pad/truncate to 25 chars
                 # Total description length: 45 chars to match run scanning
-                progress.update(task_id, description=f"📋 Loading files for {formatted_dc_tag}")
+                progress.update(task_id, description=f"Loading files for {formatted_dc_tag}")
                 response = api_get_files_by_dc_id(dc_id=str(dc.id), CLI_config=CLI_config)
                 if response.status_code == 200:
                     existing_files = response.json()
@@ -674,15 +655,20 @@ def scan_files_for_workflow(
                 logger.warning(f"Failed to retrieve existing files for data collection {dc.id}")
 
     # Pre-allocation of existing runs (shared across all data collections)
-    existing_runs_reformated: dict[str, dict] = {}
+    existing_runs_reformated: dict[str, WorkflowRun] = {}
+    # Runs whose directory is gone, by tag: the WorkflowRun model refuses a
+    # location that does not exist, so they are kept as ids only. A rescan
+    # removes them like any run it no longer finds; they used to fail the scan.
+    gone_run_ids: dict[str, str] = {}
     existing_runs_response = api_get_runs_by_wf_id(wf_id=str(workflow_id), CLI_config=CLI_config)
     logger.info(f"Existing Runs Response: {existing_runs_response}")
     if existing_runs_response.status_code == 200:
-        existing_runs = existing_runs_response.json()
-        if existing_runs:
-            existing_runs_reformated = {
-                e["run_tag"]: WorkflowRun.from_mongo(e) for e in existing_runs
-            }
+        for e in existing_runs_response.json() or []:
+            try:
+                existing_runs_reformated[e["run_tag"]] = WorkflowRun.from_mongo(e)
+            except ValueError as exc:
+                logger.info(f"Run {e.get('run_tag')} is no longer readable: {exc}")
+                gone_run_ids[e["run_tag"]] = str(e.get("_id") or e.get("id"))
 
     # Scan runs once and collect files for all data collections
     all_workflow_runs = []
@@ -691,7 +677,7 @@ def scan_files_for_workflow(
     locations = workflow.data_location.locations
     if not locations:
         rich_print_checked_statement(
-            f"No locations configured for workflow {workflow.workflow_tag}.",
+            f"No locations configured for workflow {escape(workflow.workflow_tag)}.",
             "warning",
         )
         return {"result": "error", "message": "No locations configured"}
@@ -706,7 +692,7 @@ def scan_files_for_workflow(
 
         if workflow.data_location.structure == "flat":
             # Treat the provided directory as a single run
-            run_tag = os.path.basename(os.path.normpath(location))
+            run_tag = flat_run_tag(location)
             if run_tag in existing_runs_reformated and not rescan_folders:
                 logger.debug(f"Skipping existing run {run_tag}.")
                 continue
@@ -721,7 +707,7 @@ def scan_files_for_workflow(
                 TextColumn("[progress.description]{task.description}"),
                 console=None,
             ) as progress:
-                progress.add_task(f"🔍 Scanning single location: {run_tag}")
+                progress.add_task(f"Scanning single location: {run_tag}")
 
                 workflow_run = scan_run_for_multiple_data_collections(
                     run_location=location,
@@ -734,7 +720,7 @@ def scan_files_for_workflow(
                     permissions=permissions,
                     rescan_folders=rescan_folders,
                     update_files=update_files,
-                    existing_run=existing_runs_reformated.get(run_tag, None),
+                    existing_run=_run_to_rescan(existing_runs_reformated.get(run_tag), location),
                 )
                 if workflow_run:
                     all_workflow_runs.append(workflow_run)
@@ -767,7 +753,7 @@ def scan_files_for_workflow(
                     console=None,  # Use default console
                 ) as progress:
                     task_id = progress.add_task(
-                        f"🔍 Scanning runs in {os.path.basename(location)}", total=len(valid_runs)
+                        f"Scanning runs in {os.path.basename(location)}", total=len(valid_runs)
                     )
 
                     for run_path, run in valid_runs:
@@ -779,7 +765,7 @@ def scan_files_for_workflow(
                         # Format run name to consistent width to avoid line changes
                         # Need 29 chars for run name to match total description length of 45 chars
                         formatted_run = f"{run:<29}"[:29]  # Left-align and pad/truncate to 29 chars
-                        progress.update(task_id, description=f"🔍 Scanning run: {formatted_run}")
+                        progress.update(task_id, description=f"Scanning run: {formatted_run}")
 
                         workflow_run = scan_run_for_multiple_data_collections(
                             run_location=run_path,
@@ -792,24 +778,30 @@ def scan_files_for_workflow(
                             permissions=permissions,
                             rescan_folders=rescan_folders,
                             update_files=update_files,
-                            existing_run=existing_runs_reformated.get(run, None),
+                            existing_run=_run_to_rescan(
+                                existing_runs_reformated.get(run), run_path
+                            ),
                         )
                         if workflow_run:
                             all_workflow_runs.append(workflow_run)
 
                         progress.advance(task_id)
 
-                    progress.update(task_id, description="✅ Scanning completed")
+                    progress.update(task_id, description="Scanning completed")
 
     # Handle missing runs if rescanning. Runs ONCE, after every location has been
     # walked: `all_workflow_runs` accumulates across locations, so doing this inside
     # the loop made a multi-location workflow delete the runs of the locations not
     # yet scanned (they were then re-created with fresh ids, losing scan_results).
     if rescan_folders:
-        missing_runs_tag = set(existing_runs_reformated.keys()) - {
-            run.run_tag for run in all_workflow_runs if run
-        }
-        missing_runs = [str(existing_runs_reformated[run_tag].id) for run_tag in missing_runs_tag]
+        run_ids = {
+            run_tag: str(run.id) for run_tag, run in existing_runs_reformated.items()
+        } | gone_run_ids
+        # By id, not by name: a run replaced by a new one of the same name (see
+        # _run_to_rescan) goes too, which also frees its name for the new one.
+        scanned_ids = {str(run.id) for run in all_workflow_runs if run}
+        missing_runs_tag = {tag for tag, run_id in run_ids.items() if run_id not in scanned_ids}
+        missing_runs = [run_ids[run_tag] for run_tag in missing_runs_tag]
 
         if missing_runs:
             logger.info(f"Runs to remove: {missing_runs}")
@@ -821,7 +813,8 @@ def scan_files_for_workflow(
                         if str(file["run_id"]) == run_id:
                             api_delete_file(file_id=str(file["_id"]), CLI_config=CLI_config)
             rich_print_checked_statement(
-                f"Removed {len(missing_runs)} runs and related files from the DB : {missing_runs_tag}",
+                f"Removed {len(missing_runs)} runs and related files from the DB: "
+                f"{escape(', '.join(sorted(missing_runs_tag)))}",
                 "info",
             )
 
@@ -832,7 +825,7 @@ def scan_files_for_workflow(
             TextColumn("[progress.description]{task.description}"),
             console=None,
         ) as progress:
-            progress.add_task(f"💾 Uploading {len(all_workflow_runs)} run(s) to server")
+            progress.add_task(f"Uploading {len(all_workflow_runs)} run(s) to server")
             api_upsert_runs_batch(all_workflow_runs, CLI_config, rescan_folders)
 
     # Generate single summary table for the entire workflow
@@ -843,7 +836,7 @@ def scan_files_for_workflow(
         rich_print_data_collection_light(all_workflow_runs, workflow)
 
     rich_print_checked_statement(
-        f"Scanned {len(all_workflow_runs)} runs in workflow {workflow.workflow_tag}",
+        f"Scanned {len(all_workflow_runs)} runs in workflow {escape(workflow.workflow_tag)}",
         "success",
     )
 
@@ -880,8 +873,8 @@ def scan_files_for_data_collection(
         error_msg = (
             f"Data collection {data_collection_id} not found in workflow {workflow.workflow_tag}."
         )
-        logger.error(error_msg)
-        rich_print_checked_statement(error_msg, "error")
+        # Raised to the scan step, whose ✗ line prints it.
+        logger.debug(error_msg)
         raise ValueError(error_msg)
 
     # Only handle single file mode here
@@ -973,7 +966,8 @@ def scan_files_for_data_collection(
         api_create_files(files=files, CLI_config=CLI_config, update=update_files)
 
     rich_print_checked_statement(
-        f"Scanned {len(files)} file(s) for data collection {data_collection.data_collection_tag}",
+        f"Scanned {len(files)} file(s) for data collection "
+        f"{escape(data_collection.data_collection_tag)}",
         "info",
     )
     return {"result": "success"}
@@ -1005,7 +999,7 @@ def scan_project_files(
         command_parameters = {}
 
     rich_print_checked_statement(
-        f"Scanning Project: [italic]'{project_config.name}'[/italic]", "info"
+        f"Scanning Project: [italic]'{escape(str(project_config.name))}'[/italic]", "info"
     )
 
     # Filter workflows if specific workflow_name is provided
@@ -1014,12 +1008,21 @@ def scan_project_files(
         workflows_to_scan = [w for w in workflows_to_scan if w.workflow_tag == workflow_name]
         if not workflows_to_scan:
             raise Exception(f"Workflow '{workflow_name}' not found in project")
+    # A tag no workflow has used to be a warning, and every collection was then
+    # scanned; a workflow without it is just not the one asked for.
+    if data_collection_tag:
+        known = [dc.data_collection_tag for w in workflows_to_scan for dc in w.data_collections]
+        if data_collection_tag not in known:
+            raise Exception(
+                f"Data collection '{data_collection_tag}' not found in project. "
+                f"Known: {', '.join(known) or 'none'}"
+            )
 
     total_runs_scanned = 0
 
     for workflow in workflows_to_scan:
         rich_print_checked_statement(
-            f" ↪ Scanning Workflow: [italic]'{workflow.workflow_tag}'[/italic]", "info"
+            f" ↪ Scanning Workflow: [italic]'{escape(workflow.workflow_tag)}'[/italic]", "info"
         )
 
         # Filter data collections if specific data_collection_tag is provided
@@ -1034,9 +1037,9 @@ def scan_project_files(
                 if dc.data_collection_tag == data_collection_tag
             ]
             if not data_collections_to_scan:
-                rich_print_checked_statement(
-                    f"Data collection '{data_collection_tag}' not found in workflow '{workflow.workflow_tag}'",
-                    "warning",
+                logger.info(
+                    f"Workflow '{workflow.workflow_tag}' has no data collection "
+                    f"'{data_collection_tag}': skipped"
                 )
                 continue
 
@@ -1081,7 +1084,7 @@ def scan_project_files(
             for dc in aggregate_data_collections:
                 scan_mode = dc.config.scan.mode.title() if dc.config.scan else "No scan config"
                 rich_print_checked_statement(
-                    f"  ↪ Scanning Data Collection: [italic]'{dc.data_collection_tag}'[/italic] - type {dc.config.type} - metatype {scan_mode}",
+                    f"  ↪ Scanning Data Collection: [italic]'{escape(dc.data_collection_tag)}'[/italic] - type {dc.config.type} - metatype {scan_mode}",
                     "info",
                 )
 
@@ -1104,7 +1107,7 @@ def scan_project_files(
         for dc in single_data_collections:
             scan_mode = dc.config.scan.mode.title() if dc.config.scan else "No scan config"
             rich_print_checked_statement(
-                f"  ↪ Scanning Data Collection: [italic]'{dc.data_collection_tag}'[/italic] - type {dc.config.type} - metatype {scan_mode}",
+                f"  ↪ Scanning Data Collection: [italic]'{escape(dc.data_collection_tag)}'[/italic] - type {dc.config.type} - metatype {scan_mode}",
                 "info",
             )
 
@@ -1121,7 +1124,7 @@ def scan_project_files(
         # Handle MultiQC data collections (no file scanning needed)
         for dc in multiqc_data_collections:
             rich_print_checked_statement(
-                f"  ↪ Scanning Data Collection: [italic]'{dc.data_collection_tag}'[/italic] - type {dc.config.type} - metatype MultiQC (no file scanning needed)",
+                f"  ↪ Scanning Data Collection: [italic]'{escape(dc.data_collection_tag)}'[/italic] - type {dc.config.type} - metatype MultiQC (no file scanning needed)",
                 "info",
             )
             # MultiQC collections don't need file scanning - they work with existing parquet files
@@ -1131,7 +1134,7 @@ def scan_project_files(
         # They have delta tables and are scanned like Table DCs
 
         rich_print_checked_statement(
-            f"Workflow {workflow.workflow_tag} processed successfully", "success"
+            f"Workflow {escape(workflow.workflow_tag)} processed successfully", "success"
         )
 
     return {"result": "success", "total_runs_scanned": total_runs_scanned}

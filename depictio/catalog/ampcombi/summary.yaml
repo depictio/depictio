@@ -9,6 +9,16 @@ find: { path_glob: "**/ampcombi2/Ampcombi_summary.tsv" }
 recipe: ampcombi/summary.py
 fixture: summary.tsv
 renders_as:
+  # The same property plane as a first-class kind rather than hand-drawn code.
+  # AMPcombi computes no net charge at pH 7, so the isoelectric point is the
+  # charge axis it actually reports: above about 7 the peptide is cationic at
+  # physiological pH, which with a high hydrophobicity is the classic
+  # membrane-active shape. Colour is the binned charge class so the three
+  # families stay separable, size the peptide length.
+  - id: amp_property_scatter
+    component: advanced_viz
+    kind: scatter_xy
+    roles: {x: hydrophobicity, y: isoelectric_point, label: cds_id, color: charge_class, size: aa_length}
   # Charge against hydrophobicity is the classic AMP property plane: cationic
   # and hydrophobic peptides cluster in the upper right. Colour = best tool
   # probability, size = peptide length.

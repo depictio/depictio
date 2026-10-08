@@ -30,11 +30,23 @@ from depictio.models.models.transforms import RecipeSource
 #: Data-collection tag the recipe reads: the output of `seacr/peaks.py`.
 PEAKS_DC_TAG = "seacr_peaks"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="peaks", dc_ref=PEAKS_DC_TAG),
+    RecipeSource(
+        ref="peaks",
+        dc_ref=PEAKS_DC_TAG,
+        input_schema={
+            "sample": pl.Utf8,
+            "width": pl.Int64,
+            "total_signal": pl.Float64,
+            "max_signal": pl.Float64,
+            "signal_density": pl.Float64,
+        },
+    ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "threshold_mode": pl.Utf8,
     "num_peaks": pl.Int64,
@@ -75,4 +87,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("max_signal").median().cast(pl.Float64).alias("max_signal_median"),
         pl.col("signal_density").median().cast(pl.Float64).alias("signal_density_median"),
     )
-    return summary.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return summary.select(list(OUTPUT_SCHEMA)).sort("sample")

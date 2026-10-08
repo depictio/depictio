@@ -1,6 +1,6 @@
-# Import a template-based project (run + dashboard import)
+# Import a template-based project (ingest + dashboard import)
 
-Runs `depictio-cli run --template <id> --data-root <path>` to ingest data and
+Runs `depictio-cli ingest <path> --template <id>` to ingest data and
 sync a template project (e.g. `nf-core/viralrecon/3.0.0`,
 `nf-core/ampliseq/2.16.0`), then re-imports each of the template's dashboard
 YAMLs via `depictio-cli dashboard import --overwrite`. Uses the per-worktree
@@ -31,22 +31,26 @@ Required:
 Optional flags (mirror the underlying CLI flags 1-to-1):
 
 - `--var KEY=VALUE` *(repeatable)*: extra template variables (passed straight
-  to `depictio-cli run --var`).
+  to `depictio-cli ingest --var`).
 - `--project-name <name>`: override the auto-generated project name.
-- `--overwrite`: pass `--overwrite` to `run` (re-process the workflow if it
-  already exists). Common when iterating on a recipe.
-- `--update-config`: pass `--update-config` to `run` (push the resolved
-  project config to the server, replacing what's there).
-- `--dashboards-only`: skip `run` entirely; only import dashboards. Use after
+- `--overwrite`: the same as `--update-config` (`ingest` treats them as one flag).
+- `--update-config`: pass `--update-config` to `ingest`: refresh the project in
+  place (new configuration, every run rescanned). Its dashboards are kept as
+  edited in the viewer, and the template's missing ones are added. Common when
+  iterating on a recipe.
+- `--reset-dashboards`: pass `--reset-dashboards` to `ingest`: re-apply the
+  template's dashboards over the project's, keeping their titles. Needed when
+  iterating on a template's dashboard YAML.
+- `--dashboards-only`: skip `ingest` entirely; only import dashboards. Use after
   hand-editing a `dashboards/*.yaml` when the data hasn't changed.
 - `--no-dashboards`: also skip step 5 (the explicit `dashboard import`
   loop). Use when you want to iterate on data only and re-import dashboards
-  manually later. (`run` itself is already always called with
-  `--skip-dashboard-import` — see step 4 — so this flag specifically
-  controls the post-run dashboard loop.)
+  manually later. (`ingest` itself is already always called with
+  `--skip dashboards`, see step 4, so this flag specifically
+  controls the post-ingest dashboard loop.)
 - `--dashboard <path>` *(repeatable)*: override the template's default
-  dashboard YAMLs with explicit file paths (forwarded to `run --dashboard`
-  AND used for the post-run `dashboard import` calls).
+  dashboard YAMLs with explicit file paths (forwarded to `ingest --dashboard`
+  AND used for the post-ingest `dashboard import` calls).
 - `--cli-config <path>`: path to the CLI config YAML. Default behaviour is
   **worktree-aware** — see "Worktree handling" below. Use this flag when you
   want to force a specific config file and skip auto-detection.
@@ -113,15 +117,15 @@ $ARGUMENTS
 
    - **Multi-tab template format** (`version: 1` + `main_dashboard:` + `tabs:`
      at top level — what `nf-core/*` templates ship): the only working path
-     is `depictio-cli run`'s built-in template importer (step 8 of `run`).
+     is `depictio-cli ingest`'s built-in template importer (step 8 of `ingest`).
      The standalone `depictio-cli dashboard import` cannot handle the
      multi-tab layout — it consumes one `DashboardDataLite` per YAML and
      silently ignores the `tabs:` block. So: **don't pass
-     `--skip-dashboard-import`** and rely on `run` to do the import.
+     `--skip dashboards`** and rely on `ingest` to do the import.
    - **Single-dashboard format** (no `tabs:` block, just a single dashboard
      definition — what `depictio/projects/init/*` and `depictio/projects/test/*`
      ship): use `depictio-cli dashboard import` per YAML with `--overwrite`.
-     Pass `--skip-dashboard-import` to `run` to avoid double-importing.
+     Pass `--skip dashboards` to `ingest` to avoid double-importing.
 
    Detect by reading the first dashboard YAML and checking whether the
    top-level keys include `main_dashboard` / `tabs`.
@@ -130,26 +134,25 @@ $ARGUMENTS
 
    ```bash
    source depictio/cli/.venv/bin/activate
-   depictio-cli run \
-     --CLI-config-path "<cli-config>" \
+   depictio-cli ingest "<data-root>" \
+     --server "<cli-config>" \
      --template "<template-id>" \
-     --data-root "<data-root>" \
-     [--skip-dashboard-import]    # ONLY for single-dashboard format
-     [--project-name "<name>"] \
+     [--skip dashboards]    # ONLY for single-dashboard format
+     [--project "<name>"] \
      [--var KEY=VALUE]... \
-     [--overwrite] \
-     [--update-config]
+     [--update-config] \
+     [--reset-dashboards]
    ```
 
    - All in one Bash invocation (the venv activation does not persist across
      calls).
-   - `--overwrite` and `--update-config` are passed through directly when
-     the user provides them. Don't add them silently. **For multi-tab
-     templates, `--overwrite` is what makes the dashboard import update
-     existing tabs instead of erroring** — pass it any time the user
-     re-runs.
-   - If `run` exits non-zero, **stop and surface the error**.
-   - When `run` succeeds, capture the project ID from its output (look for
+   - `--update-config` (or `--overwrite`) and `--reset-dashboards` are passed
+     through when the user provides them. Don't add them silently. On a
+     re-run, `--update-config` keeps the dashboards the project has and adds
+     the missing ones; only `--reset-dashboards` makes edits to the template's
+     dashboard YAML replace them.
+   - If `ingest` exits non-zero, **stop and surface the error**.
+   - When `ingest` succeeds, capture the project ID from its output (look for
      `View at:` lines or the project document via `api_get_project_from_name`).
 
 6. **(Single-dashboard format only)** Import dashboards explicitly with
@@ -159,19 +162,19 @@ $ARGUMENTS
 
    ```bash
    depictio-cli dashboard import "<dashboard-yaml>" \
-     --config "<cli-config>" \
+     --server "<cli-config>" \
      --overwrite \
      [--project "<project-id>"]
    ```
 
    - Pass `--project <id>` only if the YAML doesn't carry `project_tag`.
    - Imports run sequentially. If any fails, report which file and **stop**.
-   - Skip this whole step for multi-tab template format — `run` step 5
+   - Skip this whole step for multi-tab template format — the `ingest` call in step 5
      already handled it.
 
 6. **Verify and report**:
    - Print: template ID, data root, CLI config used, API URL (from the CLI
-     config's `api_base_url`), `run` outcome (skipped / success / failed),
+     config's `api_base_url`), `ingest` outcome (skipped / success / failed),
      and per-dashboard import results (filename → dashboard ID + title).
    - End with a one-liner like
      `View at: <api_base_url>/dashboard/<dashboard_id>` for each imported
@@ -184,7 +187,7 @@ $ARGUMENTS
 - Template's `dashboards:` list resolves to a file that's missing on disk
 - `depictio/cli/.venv` missing (tell user to run `/cli-venv`)
 - Resolved CLI config file doesn't exist
-- `depictio-cli run` exits non-zero (unless `--dashboards-only`)
+- `depictio-cli ingest` exits non-zero (unless `--dashboards-only`)
 - Any `depictio-cli dashboard import` exits non-zero
 
 ## Worktree handling
@@ -220,8 +223,8 @@ This skill auto-routes around that. When `--cli-config` is **not** passed:
    - `user.id`, `user.email` → the worktree admin's user record
 5. Print one line summarising the rewrite (path + api_base_url + s3 port +
    user id) so the user can sanity-check before the network calls fly.
-6. Use that file as the `--CLI-config-path` for `run` (and `--config` for
-   any standalone `dashboard import` calls).
+6. Use that file as the `--server` for `ingest` and for any standalone
+   `dashboard import` calls.
 
 **Token freshness**: re-fetch the token from MongoDB every time the config
 is regenerated (i.e. when port mismatch is detected). Don't trust a cached
@@ -355,12 +358,12 @@ cleanup, do it manually:
 - The CLI venv is per-worktree by design — running this skill in a worktree
   uses *that* worktree's CLI build, not the main checkout's. Matters when
   you've edited CLI source on a feature branch.
-- `depictio-cli run` already imports the template's default dashboards as
+- `depictio-cli ingest` already imports the template's default dashboards as
   step 8 of its pipeline. This skill still runs an explicit `dashboard
   import --overwrite` afterwards because:
   1. It's the idempotent path for re-iterating on dashboard YAML edits.
   2. The explicit import surfaces clearer per-file error messages than the
-     bundled step inside `run`.
+     bundled step inside `ingest`.
   3. `--overwrite` upgrades existing dashboards instead of erroring on
      duplicate-title.
 - Viralrecon-specific tip: the bundled test data lives at

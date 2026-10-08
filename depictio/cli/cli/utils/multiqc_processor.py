@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from rich.markup import escape
+
 from depictio.cli.cli.utils.api_calls import (
     api_check_duplicate_multiqc_report,
     api_create_multiqc_report,
@@ -15,8 +17,11 @@ from depictio.cli.cli.utils.api_calls import (
 )
 from depictio.cli.cli.utils.file_utils import compute_file_hash
 from depictio.cli.cli.utils.ingest_timing import record, timed
-from depictio.cli.cli.utils.rich_utils import rich_print_multiqc_processing_summary
-from depictio.cli.cli_logging import logger
+from depictio.cli.cli.utils.rich_utils import (
+    rich_print_checked_statement,
+    rich_print_multiqc_processing_summary,
+)
+from depictio.cli.cli_logging import logger, multiqc_logging
 from depictio.models.models.multiqc_reports import (
     GENERAL_STATS_ANCHOR,
     GENERAL_STATS_FALLBACK_ANCHORS,
@@ -107,8 +112,9 @@ def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
                 logger.warning("Could not detect MultiQC version")
 
         # Reset MultiQC state and parse the parquet file
-        multiqc.reset()
-        multiqc.parse_logs(parquet_path)
+        with multiqc_logging():
+            multiqc.reset()
+            multiqc.parse_logs(parquet_path)
 
         # Extract metadata using MultiQC module functions
         samples = multiqc.list_samples()
@@ -176,11 +182,13 @@ def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
 
         return metadata
 
-    except ImportError:
-        logger.error("MultiQC module not available. Please install MultiQC: pip install multiqc")
-        raise
+    except ImportError as e:
+        # Reported by the caller, with the file it was reading.
+        raise ImportError(
+            "MultiQC is not installed. Install it with: pip install 'depictio[multiqc]'"
+        ) from e
     except Exception as e:
-        logger.error(f"Failed to extract MultiQC metadata from {parquet_path}: {e}")
+        logger.debug(f"Failed to extract MultiQC metadata from {parquet_path}: {e}")
         raise
 
 
@@ -190,7 +198,9 @@ def _is_parseable_multiqc_file(file_path: str) -> bool:
         logger.warning(f"Skipping non-parquet file: {file_path}")
         return False
     if not Path(file_path).exists():
-        logger.error(f"File not found: {file_path}")
+        rich_print_checked_statement(
+            f"MultiQC report not found, skipped: {escape(file_path)}", "error"
+        )
         return False
     return True
 
@@ -243,7 +253,7 @@ def _parse_multiqc_files(file_paths: list[str]) -> list[tuple[str, Dict[str, Any
                 try:
                     out.append((path, future.result()))
                 except Exception as e:
-                    logger.error(f"Failed to process MultiQC file {path}: {e}")
+                    _report_unreadable(path, e)
                     out.append((path, None))
             return out
     except Exception as e:
@@ -263,9 +273,16 @@ def _parse_multiqc_files_serial(
         try:
             results.append((path, _parse_multiqc_worker(path)))
         except Exception as e:
-            logger.error(f"Failed to process MultiQC file {path}: {e}")
+            _report_unreadable(path, e)
             results.append((path, None))
     return results
+
+
+def _report_unreadable(path: str, error: Exception) -> None:
+    """Say which report could not be read, and why: the others are still ingested."""
+    rich_print_checked_statement(
+        f"Could not read MultiQC report {escape(path)}: {escape(str(error))}", "error"
+    )
 
 
 def multiqc_prerender_enabled() -> bool:
@@ -377,12 +394,13 @@ def _prerender_multiqc_figures(
 
     multiqc.reset()
     parsed = 0
-    for loc in full_locations:
-        try:
-            multiqc.parse_logs(local_by_loc[loc])
-            parsed += 1
-        except Exception as e:
-            logger.warning(f"Prerender: parse failed for {loc}: {e}")
+    with multiqc_logging():
+        for loc in full_locations:
+            try:
+                multiqc.parse_logs(local_by_loc[loc])
+                parsed += 1
+            except Exception as e:
+                logger.warning(f"Prerender: parse failed for {loc}: {e}")
     if parsed == 0:
         logger.warning("Prerender: no files parsed; skipping")
         return
@@ -461,8 +479,9 @@ def validate_multiqc_parquet(parquet_path: str) -> bool:
         import multiqc
 
         # Try to parse and extract basic metadata
-        multiqc.reset()
-        multiqc.parse_logs(parquet_path)
+        with multiqc_logging():
+            multiqc.reset()
+            multiqc.parse_logs(parquet_path)
 
         # Check if we can extract basic information
         samples = multiqc.list_samples()
@@ -678,7 +697,7 @@ def process_multiqc_data_collection(
 
                         if overwrite:
                             logger.info(
-                                f"🔄 Overwrite enabled - updating existing report with ID: {report_id}"
+                                f"Overwrite enabled - updating existing report with ID: {report_id}"
                             )
                             logger.info(f"   Original path: {file_path}")
                             logger.info(f"   Existing S3 location: {existing_s3_location}")
@@ -707,7 +726,7 @@ def process_multiqc_data_collection(
                             )
 
                             console.print(
-                                f"[yellow]🔄 Overwriting existing report:[/yellow] [cyan]{report_id}[/cyan] [dim]({display_path})[/dim]"
+                                f"[yellow]Overwriting existing report:[/yellow] [cyan]{report_id}[/cyan] [dim]({display_path})[/dim]"
                             )
 
                             # Extract S3 key from existing S3 location to preserve path
@@ -777,21 +796,21 @@ def process_multiqc_data_collection(
                                 )
 
                                 if response.status_code == 200:
-                                    logger.info(
-                                        f"✅ Successfully updated MultiQC report {report_id}"
-                                    )
-                                    console.print("[green]✅ Updated existing report[/green]")
+                                    logger.info(f"Successfully updated MultiQC report {report_id}")
+                                    console.print("[green]✓ Updated existing report[/green]")
                                     created_reports.append(report_id)
                                 else:
-                                    logger.error(
-                                        f"Failed to update report: {response.status_code} - {response.text}"
-                                    )
-                                    console.print(
-                                        "[yellow]⚠️  Warning: Failed to update report[/yellow]"
+                                    rich_print_checked_statement(
+                                        f"Failed to update report {escape(str(report_id))}: "
+                                        f"HTTP {response.status_code} {escape(response.text)}",
+                                        "warning",
                                     )
                             except Exception as update_error:
-                                logger.error(f"Error updating report: {update_error}")
-                                console.print("[yellow]⚠️  Warning: Error updating report[/yellow]")
+                                rich_print_checked_statement(
+                                    f"Error updating report {escape(str(report_id))}: "
+                                    f"{escape(str(update_error))}",
+                                    "warning",
+                                )
 
                             # Skip the normal upload and create flow (continue to next file)
                             continue
@@ -833,7 +852,7 @@ def process_multiqc_data_collection(
                             )
                             console.print(f"   [dim]Existing report ID: {report_id}[/dim]")
                             console.print(
-                                "   [yellow]💡 Tip: Use --overwrite to replace this report[/yellow]"
+                                "   [yellow]Use --overwrite to replace this report[/yellow]"
                             )
 
                             # The skipped file's content is identical to the
@@ -913,7 +932,7 @@ def process_multiqc_data_collection(
                                 saved_report = response.json()
                                 report_id = saved_report.get("report", {}).get("id")
                                 logger.info(
-                                    f"✅ MultiQC report {i + 1} saved successfully with ID: {report_id}"
+                                    f"MultiQC report {i + 1} saved successfully with ID: {report_id}"
                                 )
                                 created_reports.append(report_id)
 
@@ -927,27 +946,32 @@ def process_multiqc_data_collection(
                                 )
                                 logger.debug(f"Raw response: {response.text}")
                         else:
-                            logger.error(
-                                f"❌ Failed to save MultiQC report {i + 1}: HTTP {response.status_code}"
+                            rich_print_checked_statement(
+                                f"Failed to save MultiQC report {escape(file_path)}: "
+                                f"HTTP {response.status_code} {escape(response.text)}",
+                                "error",
                             )
-                            logger.error(f"Response body: {response.text}")
-                            try:
-                                error_detail = response.json()
-                                logger.error(f"Error details: {error_detail}")
-                            except Exception:
-                                logger.error("Could not parse error response as JSON")
 
                     except Exception as e:
-                        logger.warning(f"Failed to save MultiQC report {i + 1} to database: {e}")
+                        rich_print_checked_statement(
+                            f"Failed to save MultiQC report {escape(file_path)}: {escape(str(e))}",
+                            "error",
+                        )
 
                 except Exception as e:
-                    logger.error(f"Failed to process file {i + 1} ({file_path}): {e}")
+                    rich_print_checked_statement(
+                        f"Failed to upload MultiQC report {escape(file_path)}: {escape(str(e))}",
+                        "error",
+                    )
                     continue
 
         except ImportError:
-            logger.error("boto3 not available. Please install boto3: pip install boto3")
+            rich_print_checked_statement(
+                "MultiQC reports not uploaded: boto3 is not installed (pip install boto3)",
+                "error",
+            )
         except Exception as e:
-            logger.error(f"Unexpected error during file processing: {e}")
+            rich_print_checked_statement(f"MultiQC reports not uploaded: {escape(str(e))}", "error")
 
         logger.info(f"Created {len(created_reports)} MultiQC reports in database")
 
@@ -980,12 +1004,19 @@ def process_multiqc_data_collection(
             if response.status_code == 200:
                 logger.info("Updated dc_specific_properties with MultiQC metadata")
             else:
-                logger.warning(
-                    f"Failed to update dc_specific_properties: HTTP {response.status_code} - {response.text}"
+                rich_print_checked_statement(
+                    "Failed to store the MultiQC samples, modules and plots of "
+                    f"'{escape(data_collection.data_collection_tag)}': "
+                    f"HTTP {response.status_code} {escape(response.text)}",
+                    "error",
                 )
 
         except Exception as e:
-            logger.error(f"Failed to update dc_specific_properties: {e}")
+            rich_print_checked_statement(
+                "Failed to store the MultiQC samples, modules and plots of "
+                f"'{escape(data_collection.data_collection_tag)}': {escape(str(e))}",
+                "error",
+            )
 
         # Optional offline figure prerender: build the aggregated Plotly figures
         # here (the reports are already parsed) and ship them to S3 so the viewer
@@ -1033,5 +1064,6 @@ def process_multiqc_data_collection(
         }
 
     except Exception as e:
-        logger.error(f"Failed to process MultiQC data collection: {e}")
+        # Reported by the caller, which prints the message.
+        logger.debug(f"Failed to process MultiQC data collection: {e}")
         return {"result": "error", "message": f"Failed to process MultiQC data collection: {e}"}

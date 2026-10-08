@@ -158,6 +158,14 @@ def test_unrestricted_when_no_other_filter(patched_env):
     assert result["targets"]["comp-habitat"]["status"] == "unrestricted"
 
 
+def test_genome_region_does_not_narrow_a_selector(patched_env):
+    """A locus navigator's region is a place to look (``region_scope``): a
+    sidebar selector keeps offering every value instead of the region's one."""
+    region = {**_filter("nav", "depth", ["3"]), "source": "genome_selection"}
+    result = _call([region], ["comp-habitat"])
+    assert result["targets"]["comp-habitat"]["status"] == "unrestricted"
+
+
 def test_unknown_target_is_unsupported(patched_env):
     result = _call([], ["nope"])
     assert result["targets"]["nope"]["status"] == "unsupported"

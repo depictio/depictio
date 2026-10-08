@@ -2,15 +2,17 @@ id: fusionreport_fusions
 name: Fusion consensus
 mode: detect
 description: >-
-  One row per fusion call, with the knowledge bases that already know it, the
-  Fusion Indication Index fusion-report ranks by and a 0/1 flag per caller. The
-  caller flags are the set columns a caller-concordance UpSet reads.
+  One row per fusion and sample, with the knowledge bases that already know it,
+  the Fusion Indication Index fusion-report ranks by and a 0/1 flag per caller
+  the run executed, named after the tool. The sample is read off the file name.
+  The caller flags are the set columns a caller-concordance UpSet reads.
 find: { path_glob: "**/fusionreport/*/*.fusions.csv" }
 recipe: fusionreport/fusions.py
 fixture: fusions.tsv
 renders_as:
-  # The three caller flags are the only binary columns in the table, so the
-  # renderer picks exactly the caller sets on its own.
+  # The caller flags are the binary columns the renderer picks on its own. On a
+  # small run n_databases, n_tools or rank can be 0/1 too, so a dashboard names
+  # the sets by exclusion: set_columns_pattern "^(?!(n_databases|n_tools|rank)$)".
   - { id: caller_upset, component: advanced_viz, kind: upset_plot }
   # Rank is the position in fusion-report's own FII ordering, so the lollipop
   # reads as a ranked list of the run's fusions.

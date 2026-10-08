@@ -1,7 +1,10 @@
+from collections.abc import Awaitable
+
 import boto3
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import ValidationError
+from pymongo.errors import DuplicateKeyError
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -16,6 +19,7 @@ from depictio.api.v1.db import (
     runs_collection,
     users_collection,
 )
+from depictio.api.v1.endpoints.comments_endpoints.cascade import delete_threads_for_project
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     cascade_project_visibility,
 )
@@ -47,7 +51,7 @@ projects_endpoint_router = APIRouter()
 SEED_PROJECT_IDS: tuple[str, ...] = (
     "646b0f3c1e4a2d7f8e5b8c9a",  # Iris — depictio/projects/init/iris/project.yaml
     "646b0f3c1e4a2d7f8e5b8c9d",  # Penguins — depictio/projects/init/penguins/project.yaml
-    "646b0f3c1e4a2d7f8e5b8ca2",  # nf-core/ampliseq 2.14.0 — depictio/projects/nf-core/ampliseq/2.14.0/project.yaml
+    "646b0f3c1e4a2d7f8e5b8ca2",  # nf-core/ampliseq, latest version seeded: depictio/projects/nf-core/ampliseq/2.18.0/template.yaml
     "646b0f3c1e4a2d7f8e5b8d00",  # Advanced Visualisations — depictio/projects/init/advanced_viz_showcase/project.yaml
     "746b0f3c1e4a2d7f8e5b9ca2",  # nf-core/viralrecon 3.0.0 — depictio/projects/nf-core/viralrecon/3.0.0/template.yaml
 )
@@ -129,6 +133,7 @@ def _cascade_delete_project(project_id: PyObjectId, project_name: str) -> None:
         )
 
     dashboards_collection.delete_many({"project_id": ObjectId(project_id)})
+    delete_threads_for_project(project_id)
     projects_collection.delete_one({"_id": ObjectId(project_id)})
     logger.info(f"Project '{project_name}' ({project_id}) deleted with cascade.")
 
@@ -275,6 +280,25 @@ async def get_ingestion_health(project_id: PyObjectId, current_user=Depends(get_
     return build_ingestion_report(project).summary
 
 
+async def _project_exists(lookup: Awaitable[object]) -> bool:
+    """Whether a project lookup found one. A 404, or nothing returned, means the value
+    is free."""
+    try:
+        return await lookup is not None
+    except HTTPException as e:
+        if e.status_code == 404:
+            return False
+        raise
+
+
+def _project_taken(reason_tag: str) -> dict:
+    return {
+        "success": False,
+        "message": f"Project already exists using this {reason_tag}.",
+        "status_code": 409,
+    }
+
+
 @projects_endpoint_router.post("/create")
 async def create_project(project: Project, current_user=Depends(get_user_or_anonymous)):
     """Create a new project.
@@ -296,29 +320,31 @@ async def create_project(project: Project, current_user=Depends(get_user_or_anon
             detail="Project creation is disabled in public/demo mode for non-admin users",
         )
 
-    try:
-        if (
-            current_user.id not in [owner.id for owner in project.permissions.owners]
-            and not current_user.is_admin
-        ):
-            return {
-                "success": False,
-                "message": "User does not have permission to create this project.",
-                "status_code": 403,
-            }
+    if (
+        current_user.id not in [owner.id for owner in project.permissions.owners]
+        and not current_user.is_admin
+    ):
+        return {
+            "success": False,
+            "message": "User does not have permission to create this project.",
+            "status_code": 403,
+        }
 
-        existing_project_using_name = await get_project_from_name(project.name, current_user)
-        existing_project_using_id = await get_project_from_id(project.id, current_user)
-        if existing_project_using_name or existing_project_using_id:
-            reason_tag = "name" if existing_project_using_name else "id"
-            return {
-                "success": False,
-                "message": f"Project already exists using this {reason_tag}.",
-                "status_code": 409,
-            }
+    # One `_project_exists` per lookup, so a free name (its 404) does not skip the id
+    # check. By keyword: get_project_from_id's second parameter is `skip_enrichment`.
+    try:
+        name_taken = await _project_exists(
+            get_project_from_name(project_name=project.name, current_user=current_user)
+        )
+        id_taken = not name_taken and await _project_exists(
+            get_project_from_id(
+                project_id=project.id, skip_enrichment=True, current_user=current_user
+            )
+        )
     except HTTPException as e:
-        if e.status_code != 404:
-            return {"success": False, "message": str(e.detail), "status_code": e.status_code}
+        return {"success": False, "message": str(e.detail), "status_code": e.status_code}
+    if name_taken or id_taken:
+        return _project_taken("name" if name_taken else "id")
 
     try:
         validate_workflow_uniqueness_in_project(project)
@@ -328,7 +354,11 @@ async def create_project(project: Project, current_user=Depends(get_user_or_anon
     create_payload = project.mongo()
     create_payload["registration_time"] = utc_now_str()
     create_payload["last_modified"] = create_payload["registration_time"]
-    projects_collection.insert_one(create_payload)
+    try:
+        projects_collection.insert_one(create_payload)
+    except DuplicateKeyError:
+        # The id lookup above only sees the projects this user may read.
+        return _project_taken("id")
 
     return {
         "success": True,

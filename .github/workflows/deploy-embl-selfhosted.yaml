@@ -1,15 +1,18 @@
 name: Deploy to EMBL (Self-Hosted)
 
 # SECURITY NOTE: This workflow uses self-hosted runners.
-# It triggers after Docker build completes (not directly on tags).
+# It triggers after the image build of a tag push (never after a PR build).
 # Only users with write access can push tags.
+#
+# Automatic: every release tag, beta or stable, deploys to dev
+# (dev.demo.depictio.embl.org) once its images are built.
+# Manual only: demo (demo.depictio.embl.org), through workflow_dispatch.
 
 on:
-  # Trigger after Docker build workflows complete
+  # Trigger after the image build completes
   workflow_run:
     workflows:
-      - "Docker Image Build (AMD64) - Beta only"  # Beta tags (v*-b*)
-      - "Docker Image Multi Arch Build"            # Stable tags (v*)
+      - "Build images (api / worker / viewer / cli)"
     types:
       - completed
 
@@ -29,7 +32,7 @@ on:
           - demo
           - both
       register_projects:
-        description: 'Register demo projects after deployment'
+        description: 'Register demo projects after a demo deployment'
         required: false
         type: boolean
         default: true
@@ -40,127 +43,87 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Detect tag type (beta vs stable) for workflow_run events
-  detect-tag-type:
-    name: Detect Tag Type
+  # Version of the tag whose images were just built. The build also runs on
+  # pull requests, which must not deploy anything.
+  resolve-tag:
+    name: Resolve Tag
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      startsWith(github.event.workflow_run.head_branch, 'v')
     outputs:
-      is_beta: ${{ steps.detect.outputs.is_beta }}
-      is_stable: ${{ steps.detect.outputs.is_stable }}
-      version: ${{ steps.detect.outputs.version }}
+      version: ${{ steps.resolve.outputs.version }}
     steps:
-      - name: Detect tag type from ref
-        id: detect
+      - name: Resolve version from the tag
+        id: resolve
+        env:
+          TAG: ${{ github.event.workflow_run.head_branch }}
         run: |
-          # Extract ref from workflow_run event
-          REF="${{ github.event.workflow_run.head_branch }}"
-          echo "Workflow run ref: ${REF}"
-
-          # Remove 'v' prefix if present
-          VERSION="${REF#v}"
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-
-          # Check if this is a beta tag (contains -b)
-          if [[ "${VERSION}" =~ -b[0-9]+ ]]; then
-            echo "is_beta=true" >> $GITHUB_OUTPUT
-            echo "is_stable=false" >> $GITHUB_OUTPUT
-            echo "✅ Detected BETA tag: ${VERSION}"
-          else
-            echo "is_beta=false" >> $GITHUB_OUTPUT
-            echo "is_stable=true" >> $GITHUB_OUTPUT
-            echo "✅ Detected STABLE tag: ${VERSION}"
+          if [[ ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-b[0-9]+)?$ ]]; then
+            echo "::error::${TAG} is not a release tag (vX.Y.Z or vX.Y.Z-bN)"
+            exit 1
           fi
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "Deploying ${TAG#v} to dev"
 
-  # Dev environment - ALL tags (beta and stable) deploy here automatically
+  # Dev environment - every tag (beta and stable) deploys here automatically
   deploy-dev:
     name: Deploy to Dev (dev.demo.depictio.embl.org)
     runs-on: [self-hosted, embl-deploy]
     environment: embl-demo-dev
-    needs: [detect-tag-type]
+    needs: [resolve-tag]
     if: |
       always() &&
       (
-        (github.event_name == 'workflow_run' && needs.detect-tag-type.result == 'success') ||
+        (github.event_name == 'workflow_run' && needs.resolve-tag.result == 'success') ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'dev' || github.event.inputs.environment == 'both'))
       )
-    # Run for:
-    # 1. ALL tags - both beta and stable (workflow_run with any tag)
-    # 2. Manual dispatch targeting dev/both
-    outputs:
-      version: ${{ steps.version.outputs.version }}
+    env:
+      VERSION: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.version || needs.resolve-tag.outputs.version }}
+      NAMESPACE: datasci-depictio-demo-dev
+      RELEASE: devdemo
+      API_URL: https://dev.api.demo.depictio.embl.org
     steps:
+      # The chart and values come from main (or the dispatched branch), not
+      # from the tag, so a chart fix reaches dev without waiting for a release.
       - name: Checkout repository
         uses: actions/checkout@v7
-        with:
-          fetch-depth: 0  # Fetch all tags for validation
 
-      - name: Display available recent tags
-        if: github.event_name == 'workflow_dispatch'
+      - name: Check the images exist
         run: |
-          echo "📋 Recent available tags:"
-          echo "Beta tags (for dev environment):"
-          git tag -l 'v*-b*' --sort=-version:refname | head -10 | sed 's/^v/  - /'
-          echo ""
-          echo "Stable tags (for demo environment):"
-          git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-version:refname | grep -v '\-b' | head -10 | sed 's/^v/  - /'
-
-      - name: Determine version
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            # Use version from detect-tag-type job
-            VERSION="${{ needs.detect-tag-type.outputs.version }}"
-          fi
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "Deploying version: ${VERSION}"
-
-      - name: Validate tag exists
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          TAG="v${VERSION}"
-
-          echo "🔍 Validating tag: ${TAG}"
-
-          if git rev-parse "${TAG}" >/dev/null 2>&1; then
-            echo "✅ Tag ${TAG} exists"
-          else
-            echo "❌ Error: Tag ${TAG} does not exist!"
-            echo "Available recent tags:"
-            git tag -l 'v*' --sort=-version:refname | head -20
-            exit 1
-          fi
-
-      - name: Wait for Docker image to be available
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          IMAGE="ghcr.io/depictio/depictio:${VERSION}"
-          echo "Checking for image: ${IMAGE}"
-
-          for i in {1..30}; do
-            if docker manifest inspect "${IMAGE}" > /dev/null 2>&1; then
-              echo "Image ${IMAGE} is available"
-              break
+          for image in depictio-api depictio-worker depictio-viewer; do
+            token=$(curl -fsS "https://ghcr.io/token?scope=repository:depictio/${image}:pull" \
+              | sed -E 's/.*"token":"([^"]+)".*/\1/')
+            if ! curl -fsS -o /dev/null \
+              -H "Authorization: Bearer ${token}" \
+              -H "Accept: application/vnd.oci.image.index.v1+json, application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json" \
+              "https://ghcr.io/v2/depictio/${image}/manifests/${VERSION}"; then
+              echo "::error::ghcr.io/depictio/${image}:${VERSION} not found"
+              exit 1
             fi
-            echo "Waiting for image... (attempt $i/30)"
-            sleep 10
+            echo "ghcr.io/depictio/${image}:${VERSION} is available"
           done
 
+      # values-embl-secrets-demodev.yaml goes after the shared secrets file and
+      # gives dev an S3 bucket of its own: dev wipes its data on every upgrade,
+      # and the orphan cleanup deletes S3 files that its own MongoDB does not
+      # know, so sharing demo's bucket would delete demo's data.
       - name: Deploy to Dev environment
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
           echo "🚀 Deploying version ${VERSION} to dev.demo.depictio.embl.org"
 
-          helm upgrade --install devdemo ./helm-charts/depictio \
-            --namespace datasci-depictio-project-demo-dev \
+          helm upgrade --install "${RELEASE}" ./helm-charts/depictio \
+            --namespace "${NAMESPACE}" \
             -f helm-charts/depictio/values.yaml \
             -f helm-charts/depictio/values-embl-demo-base.yaml \
             -f helm-charts/depictio/values-embl-demo-dev.yaml \
             -f ~/actions-runner-embl/secrets/values-embl-secrets.yaml \
+            -f ~/actions-runner-embl/secrets/values-embl-secrets-demodev.yaml \
             --set backend.image.tag="${VERSION}" \
-            --set frontend.image.tag="${VERSION}" \
+            --set celery.image.tag="${VERSION}" \
+            --set viewer.image.tag="${VERSION}" \
             --wait --timeout 10m --atomic \
             --insecure-skip-tls-verify
 
@@ -169,103 +132,41 @@ jobs:
       - name: Verify deployment
         run: |
           echo "📋 Checking deployment status..."
-          kubectl get pods -n datasci-depictio-project-demo-dev -l release=devdemo,type=app
-          kubectl get ingress -n datasci-depictio-project-demo-dev
+          kubectl get pods -n "${NAMESPACE}" -l release="${RELEASE}",type=app
+          kubectl get ingress -n "${NAMESPACE}"
 
       - name: Wait for services to be ready
         run: |
-          echo "⏳ Waiting for backend to be ready..."
-          kubectl wait --for=condition=ready pod \
-            -l release=devdemo,app=depictio-backend \
-            -n datasci-depictio-project-demo-dev \
-            --timeout=300s
-
-          echo "⏳ Waiting for viewer to be ready..."
-          kubectl wait --for=condition=ready pod \
-            -l release=devdemo,app=depictio-viewer \
-            -n datasci-depictio-project-demo-dev \
-            --timeout=300s
+          for app in depictio-backend celery-worker depictio-viewer; do
+            echo "⏳ Waiting for ${app} to be ready..."
+            kubectl wait --for=condition=ready pod \
+              -l release="${RELEASE}",app="${app}" \
+              -n "${NAMESPACE}" \
+              --timeout=300s
+          done
 
           echo "✅ All services are ready"
 
-  # Register demo projects after dev deployment
-  register-projects-dev:
-    name: Register Demo Projects (Dev)
-    runs-on: [self-hosted, embl-deploy]
-    needs: deploy-dev
-    if: |
-      (github.event_name == 'workflow_run') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.register_projects == 'true')
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Setup Python and CLI
+      - name: Check the public API serves the new version
         run: |
-          # Use system Python or install via uv
-          if command -v uv &> /dev/null; then
-            cd depictio/cli
-            uv venv venv --python 3.11
-            source venv/bin/activate
-            uv pip install -e .
-          else
-            cd depictio/cli
-            python3 -m venv venv
-            source venv/bin/activate
-            pip install -e .
-          fi
+          for i in $(seq 1 30); do
+            served=$(curl -fsS "${API_URL}/health" | sed -E 's/.*"version":"([^"]+)".*/\1/' || true)
+            if [ "${served}" = "${VERSION}" ]; then
+              echo "✅ ${API_URL} serves ${VERSION}"
+              exit 0
+            fi
+            echo "Waiting for ${API_URL} to serve ${VERSION} (now: ${served:-unreachable}, attempt ${i}/30)"
+            sleep 10
+          done
+          echo "::error::${API_URL}/health does not report ${VERSION}"
+          exit 1
 
-      - name: Get admin token from backend pod
-        id: token
-        run: |
-          # Get admin config from backend pod
-          BACKEND_POD=$(kubectl get pods -n datasci-depictio-project-demo-dev \
-            -l release=devdemo,app=depictio-backend \
-            -o jsonpath='{.items[0].metadata.name}')
-
-          echo "Getting admin config from pod: ${BACKEND_POD}"
-          kubectl cp datasci-depictio-project-demo-dev/${BACKEND_POD}:/app/depictio/.depictio/admin_config.yaml ./admin_config.yaml
-
-          # Mask the token in logs
-          TOKEN=$(grep 'access_token' admin_config.yaml | awk '{print $2}' | tr -d "'\"")
-          echo "::add-mask::${TOKEN}"
-          echo "token=${TOKEN}" >> $GITHUB_OUTPUT
-
-      - name: Register Iris demo project
-        run: |
-          cd depictio/cli
-          source venv/bin/activate
-
-          echo "📊 Registering Iris demo project..."
-          depictio-cli config check \
-            --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
-            --CLI-config-path ../../admin_config.yaml || true
-
-          # Register the project (if command exists)
-          # depictio-cli project register \
-          #   --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
-          #   --CLI-config-path ../../admin_config.yaml || true
-
-      - name: Cleanup
-        if: always()
-        run: |
-          rm -f admin_config.yaml
-
-  # Demo environment - Only STABLE tags (no -b* suffix) deploy here
+  # Demo environment - manual dispatch only, never deployed automatically
   deploy-demo:
     name: Deploy to Demo (demo.depictio.embl.org)
     runs-on: [self-hosted, embl-deploy]
     environment: embl-demo
-    needs: [detect-tag-type]
-    if: |
-      always() &&
-      (
-        (github.event_name == 'workflow_run' && needs.detect-tag-type.result == 'success' && needs.detect-tag-type.outputs.is_stable == 'true') ||
-        (github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'demo' || github.event.inputs.environment == 'both'))
-      )
-    # Run for:
-    # 1. Stable tags (workflow_run with is_stable=true)
-    # 2. Manual dispatch targeting demo/both
+    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.environment == 'demo' || github.event.inputs.environment == 'both')
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
@@ -287,12 +188,7 @@ jobs:
       - name: Determine version
         id: version
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            # Use version from detect-tag-type job
-            VERSION="${{ needs.detect-tag-type.outputs.version }}"
-          fi
+          VERSION="${{ github.event.inputs.version }}"
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
           echo "Deploying version: ${VERSION}"
 
@@ -384,12 +280,12 @@ jobs:
             cd depictio/cli
             uv venv venv --python 3.11
             source venv/bin/activate
-            uv pip install -e .
+            uv pip install -e ../..
           else
             cd depictio/cli
             python3 -m venv venv
             source venv/bin/activate
-            pip install -e .
+            pip install -e ../..
           fi
 
       - name: Get admin token from backend pod
@@ -413,8 +309,8 @@ jobs:
 
           echo "📊 Registering Iris demo project..."
           depictio-cli config check \
-            --project-config-path ../api/v1/configs/iris_dataset/initial_project_cli.yaml \
-            --CLI-config-path ../../admin_config.yaml || true
+            --project-config-path ../projects/init/iris/project.yaml \
+            --server ../../admin_config.yaml || true
 
       - name: Cleanup
         if: always()

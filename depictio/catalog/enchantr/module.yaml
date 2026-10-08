@@ -1,11 +1,9 @@
-# enchantR: multi-output tool → a folder. module.yaml holds the tool fields;
+# enchantR: multi-output tool, so a folder. module.yaml holds the tool fields;
 # each sibling *.yaml is one output.
 #
 # enchantR is the Immcantation R package nf-core/airrflow runs for clonal
 # assignment, threshold finding and the repertoire analysis report. It has NO
-# nf-core module (airrflow calls it from its own local modules), so identity is
-# declared in full here rather than derived from a meta.yml. The same
-# documented exception as QIIME 2.
+# nf-core module (airrflow calls it from its own local modules).
 #
 # Two of the outputs (v_gene_usage, v_gene_matrix) are written by airrflow's own
 # repertoire_comparison Rmd rather than by enchantR itself; they carry
@@ -17,6 +15,7 @@ description: >-
   repertoire (AIRR) analysis: clonal assignment, nearest-neighbour distance
   threshold finding, and the clonal diversity / abundance / overlap report.
 homepage: https://immcantation.readthedocs.io
+biotools_url: null  # no bio.tools entry for this tool
 edam_topics:
   - http://edamontology.org/topic_0804 # Immunology
   - http://edamontology.org/topic_2830 # Immunoproteins, genes and antigens

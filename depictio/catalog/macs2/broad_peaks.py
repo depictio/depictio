@@ -43,11 +43,22 @@ _BROADPEAK_COLUMNS = [
     "neg_log10_qvalue",
 ]
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="broadpeak",
         glob_pattern="**/*_peaks.broadPeak",
         format="TSV",
+        input_schema={
+            "chr": pl.Utf8,
+            "start": pl.Utf8,
+            "end": pl.Utf8,
+            "peak_id": pl.Utf8,
+            "score": pl.Utf8,
+            "fold_enrichment": pl.Utf8,
+            "neg_log10_pvalue": pl.Utf8,
+            "neg_log10_qvalue": pl.Utf8,
+        },
         read_kwargs={
             "has_header": False,
             "new_columns": _BROADPEAK_COLUMNS,
@@ -56,7 +67,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "peak_id": pl.Utf8,
     "chr": pl.Utf8,
@@ -98,4 +110,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         # a broad call does not have.
         ((pl.col("start") + pl.col("end")) // 2 + 1).alias("midpoint"),
     )
-    return df.select(list(EXPECTED_SCHEMA)).sort(["sample", "chr", "start"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["sample", "chr", "start"])

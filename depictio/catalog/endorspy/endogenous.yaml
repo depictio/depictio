@@ -1,0 +1,23 @@
+id: endorspy_endogenous
+name: Endogenous DNA
+description: >-
+  Share of a library's reads that map to the target reference, before and after
+  the quality filter and deduplication, from endorS.py. The headline number of
+  an ancient-DNA screen: it says how much of an extract is the organism rather
+  than the soil, the excavator and the lab.
+find:
+  path_glob: "**/*_endogenous_dna_mqc.json"
+  path_glob_alt:
+    - "**/*_endogenous_dna.json"
+recipe: endorspy/endogenous.py
+fixture: endogenous.tsv
+renders_as:
+  - { id: endogenous_pre_post, component: advanced_viz, kind: scatter_xy,
+      roles: {x: endogenous_dna, y: endogenous_dna_post, label: sample, color: sample} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: endogenous_dna, color: sample, title: Endogenous DNA per library} }
+  - { component: card, column: endogenous_dna, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: endogenous_dna_post, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: endogenous_dna, aggregation: max, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: off_target_pct, aggregation: average, secondary_layout: donut, breakdown_col: sample }
+  - { component: card, column: endogenous_dna_loss, aggregation: average, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

@@ -1,10 +1,12 @@
 import io
 import json
 import zipfile
+from urllib.parse import quote
 
 import httpx
 import typer
 from pydantic import validate_call
+from rich.markup import escape
 
 from depictio.cli.cli.utils.common import (
     generate_api_headers,
@@ -24,6 +26,10 @@ from depictio.models.utils import convert_model_to_dict
 def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     """
     Login to the Depictio API using the CLI configuration.
+
+    The result holds ``success`` and ``status_code``, the HTTP status the server
+    answered: a failure is the token's only for a 401 or a 403, or a 200 whose verdict
+    is no. See report_login_failure.
     """
     loaded_config = load_depictio_config(yaml_config_path=yaml_config_path)
     # Build headers from the MODEL (not the dumped dict) so validate_call's
@@ -33,9 +39,12 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     # secret — the server only reads ``user.token`` from this payload, so the
     # masked value is fine (and keeps the secret out of logs and transit).
     depictio_CLI_config = loaded_config.model_dump(mode="json")
-    # DEBUG, not INFO: the dump still contains the live access token at
-    # user.token.access_token — keep it out of default-level logs.
-    logger.debug(f"Depictio CLI configuration loaded: {depictio_CLI_config}")
+    # Not the dump itself: it holds the live access token, and verbose logs of a
+    # pipeline run are archived.
+    logger.debug(
+        f"Depictio CLI configuration loaded: {loaded_config.api_base_url}, "
+        f"user {loaded_config.user.email}"
+    )
     rich_print_checked_statement("Checking server accessibility...", "info")
 
     # Connect to depictio API. Generous timeout because this is the CLI's
@@ -46,8 +55,9 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
     # cold-path; the call still returns as soon as the server responds.
     # 30 s wasn't enough in CI minikube/compose environments where the
     # first Beanie query pays the full async-driver init cost.
+    url = f"{depictio_CLI_config['api_base_url']}/depictio/api/v1/cli/validate_cli_config"
     response = get_http_client().post(
-        f"{depictio_CLI_config['api_base_url']}/depictio/api/v1/cli/validate_cli_config",
+        url,
         json=depictio_CLI_config,
         # /validate_cli_config now requires a bearer token (was unauthenticated);
         # the same token already lives in the posted config body.
@@ -62,26 +72,35 @@ def api_login(yaml_config_path: str = "~/.depictio/CLI.yaml") -> dict:
         if response_data.get("success"):
             return {
                 "success": True,
+                "status_code": response.status_code,
                 "CLI_config": depictio_CLI_config,
                 "is_admin": response_data.get("is_admin", False),
                 "user_id": response_data.get("user_id"),
                 "email": response_data.get("email"),
             }
         else:
-            logger.error(
+            logger.debug(
                 f"Depictio CLI configuration was not validated by the server: {response.text}"
             )
             rich_print_checked_statement(
-                f"Depictio CLI configuration was not validated by the server: {response.text}",
+                "Depictio CLI configuration was not validated by the server: "
+                f"{escape(response.text)}",
                 "error",
             )
-            return {"success": False}
+            return {"success": False, "status_code": response.status_code}
     else:
-        logger.error(f"Depictio CLI configuration is invalid: {response.text}")
-        rich_print_checked_statement(
-            f"Depictio CLI configuration is invalid: {response.text}", "error"
-        )
-        return {"success": False}
+        logger.debug(f"The server answered HTTP {response.status_code}: {response.text}")
+        if response.status_code in (401, 403, 422):
+            rich_print_checked_statement(
+                f"Depictio CLI configuration is invalid: {escape(response.text)}", "error"
+            )
+        else:
+            # Not a verdict on the configuration: a viewer host's 404 page, a proxy's
+            # 502 page. Their HTML stays in the debug log.
+            rich_print_checked_statement(
+                f"The server answered HTTP {response.status_code} to {escape(url)}", "error"
+            )
+        return {"success": False, "status_code": response.status_code}
 
 
 @validate_call
@@ -143,8 +162,11 @@ def api_get_project_from_name(project_name: str, CLI_config: CLIConfig):
     Get a project from the server using the project ID.
     """
     # First check if the project exists on the server DB for existing IDs and if the same metadata hash is used
+    # Quoted: a '#' or '?' in the name would otherwise end the path, so the project a
+    # run created under that name could never be found again.
     response = get_http_client().get(
-        f"{CLI_config.api_base_url}/depictio/api/v1/projects/get/from_name/{project_name}",
+        f"{CLI_config.api_base_url}/depictio/api/v1/projects/get/from_name/"
+        f"{quote(project_name, safe='')}",
         # params={"project_name": project_name},
         headers=generate_api_headers(CLI_config),
         timeout=60.0,  # cold-start safety net (httpx default of 5 s is too aggressive)
@@ -238,7 +260,7 @@ def api_sync_project_config_to_server(
     rich_print_checked_statement("Syncing pipeline configuration to server...", "info")
 
     # Check if the project exists on the server
-    logger.info(f"Project configuration: {ProjectConfig}")
+    logger.debug(f"Project configuration: {ProjectConfig}")
     project_config = ProjectConfig
 
     # First try to find project by ID (for updates to existing projects with new names)
@@ -263,11 +285,9 @@ def api_sync_project_config_to_server(
             f"Checked project by name '{ProjectConfig['name']}': status {response.status_code}"
         )
 
-    logger.info(f"Project configuration: {project_config}")
-
     if response.status_code == 200:
         rich_print_checked_statement("Project configuration found on server", "info")
-        logger.info(f"Project configuration found on server: {response.json()}")
+        logger.debug(f"Project configuration found on server: {response.json()}")
 
         # Already on the server and no update requested: hand the decision back.
         if not update:
@@ -282,8 +302,10 @@ def api_sync_project_config_to_server(
         response = api_update_project(project_config, CLI_config)
         succeeded, detail = _project_write_outcome(response)
         if not succeeded:
-            rich_print_checked_statement(f"Failed to update project on server: {detail}", "error")
-            logger.error(f"Failed to update project on server: {detail}")
+            logger.debug(f"Failed to update project on server: {detail}")
+            rich_print_checked_statement(
+                f"Failed to update project on server: {escape(str(detail))}", "error"
+            )
             raise typer.Exit(code=1)
         rich_print_checked_statement("Project updated on server", "success")
         logger.info("Project updated on server")
@@ -298,8 +320,10 @@ def api_sync_project_config_to_server(
         response = api_create_project(project_config, CLI_config)
         succeeded, detail = _project_write_outcome(response)
         if not succeeded:
-            logger.error(f"Failed to create project on server: {detail}")
-            rich_print_checked_statement(f"Failed to create project on server: {detail}", "error")
+            logger.debug(f"Failed to create project on server: {detail}")
+            rich_print_checked_statement(
+                f"Failed to create project on server: {escape(str(detail))}", "error"
+            )
             raise typer.Exit(code=1)
         logger.info("Project created on server")
         rich_print_checked_statement("Project created on server", "success")
@@ -307,7 +331,8 @@ def api_sync_project_config_to_server(
 
     else:
         rich_print_checked_statement(
-            f"Could not look up project on server (HTTP {response.status_code}): {response.text}",
+            f"Could not look up project on server (HTTP {response.status_code}): "
+            f"{escape(response.text)}",
             "error",
         )
         raise typer.Exit(code=1)
@@ -362,9 +387,8 @@ def api_get_files_by_dc_id(dc_id: str, CLI_config: CLIConfig) -> httpx.Response:
         httpx.Response: The response from the server.
     """
     logger.info(f"Getting files for data collection ID: {dc_id}")
-    logger.debug(f"CLI Config: {CLI_config}")
+    # The URL only: the config and the headers carry the access token.
     logger.info(f"{CLI_config.api_base_url}/depictio/api/v1/files/list/{dc_id}")
-    logger.info(generate_api_headers(CLI_config))
     response = get_http_client().get(
         f"{CLI_config.api_base_url}/depictio/api/v1/files/list/{dc_id}",
         headers=generate_api_headers(CLI_config),
@@ -436,7 +460,7 @@ def api_upsert_runs_batch(
 
 def api_monitoring_ingestion_start(
     CLI_config: CLIConfig,
-    command: str = "run",
+    command: str = "ingest",
     project_id: str | None = None,
     project_name: str | None = None,
     cli_version: str | None = None,
@@ -499,9 +523,19 @@ def api_monitoring_ingestion_finish(
             "project_id": project_id,
             "data_collections": data_collections or [],
         }
-        get_http_client().post(
-            url, json=payload, headers=generate_api_headers(CLI_config), timeout=timeout
-        )
+        headers = generate_api_headers(CLI_config)
+        try:
+            get_http_client().post(url, json=payload, headers=headers, timeout=timeout)
+        except httpx.TransportError as exc:
+            # A timeout is not retried: that would double the wait the short
+            # ``timeout`` of an error exit is there to cap.
+            if isinstance(exc, httpx.TimeoutException):
+                raise
+            # After a server error the server may drop the pooled keep-alive connection,
+            # and this call is often the next one to use it: retried once on a
+            # connection of its own, or the run stays recorded as running forever.
+            logger.debug(f"Monitoring ingestion finish retried after: {exc}")
+            httpx.post(url, json=payload, headers=headers, timeout=timeout)
     except Exception as exc:
         logger.debug(f"Monitoring ingestion finish failed (non-fatal): {exc}")
 
@@ -606,12 +640,13 @@ def api_upsert_deltatable(
             timeout=300.0,  # 5 minutes timeout for large deltatable processing
         )
         return response
-    except httpx.TimeoutException:
-        logger.error(
-            f"Deltatable upsert timed out after 300 seconds for data collection {data_collection_id}"
-        )
-        # Re-raise the exception to be handled by the caller
-        raise
+    except httpx.TimeoutException as exc:
+        # The caller reports the exception: said here what timed out, which httpx's own
+        # "timed out" does not.
+        raise httpx.TimeoutException(
+            f"Deltatable upsert timed out after 300 seconds for data collection "
+            f"{data_collection_id}"
+        ) from exc
 
 
 @validate_call
@@ -719,19 +754,19 @@ def api_create_backup(
         if response.status_code == 200:
             return response.json()
         else:
-            logger.error(f"Backup creation failed: {response.text}")
+            logger.debug(f"Backup creation failed: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",
             }
     except httpx.TimeoutException:
-        logger.error("Backup creation timed out")
+        logger.debug("Backup creation timed out")
         return {
             "success": False,
             "message": "Request timed out. The backup operation may still be running on the server.",
         }
     except Exception as e:
-        logger.error(f"Backup creation failed: {e}")
+        logger.debug(f"Backup creation failed: {e}")
         return {
             "success": False,
             "message": f"Request failed: {str(e)}",
@@ -763,7 +798,7 @@ def api_list_backups(CLI_config: CLIConfig) -> dict:
         if response.status_code == 200:
             return response.json()
         else:
-            logger.error(f"Failed to list backups: {response.text}")
+            logger.debug(f"Failed to list backups: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",
@@ -804,7 +839,7 @@ def api_validate_backup(CLI_config: CLIConfig, backup_id: str) -> dict:
         if response.status_code == 200:
             return response.json()
         else:
-            logger.error(f"Backup validation failed: {response.text}")
+            logger.debug(f"Backup validation failed: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",
@@ -866,7 +901,7 @@ def api_restore_backup(
             logger.debug(f"Restore result: {result}")
             return result
         else:
-            logger.error(
+            logger.debug(
                 f"Backup restore failed: status={response.status_code}, response={response.text}"
             )
             return {
@@ -1013,8 +1048,8 @@ def api_create_multiqc_report(multiqc_report: dict, CLI_config: "CLIConfig"):
     url = f"{CLI_config.api_base_url}/depictio/api/v1/multiqc/reports"
     headers = generate_api_headers(CLI_config)
 
+    # Not the headers: they carry the access token.
     logger.debug(f"POST URL: {url}")
-    logger.debug(f"Headers: {headers}")
     logger.debug(
         f"Payload keys: {list(multiqc_report.keys()) if isinstance(multiqc_report, dict) else 'not a dict'}"
     )
@@ -1028,11 +1063,11 @@ def api_create_multiqc_report(multiqc_report: dict, CLI_config: "CLIConfig"):
         )
         logger.debug(f"HTTP response received: {response.status_code}")
         return response
-    except httpx.TimeoutException:
-        logger.error("API request timed out after 30 seconds")
-        raise
+    except httpx.TimeoutException as exc:
+        # The caller reports the exception: said here how long it waited.
+        raise httpx.TimeoutException("the API did not answer within 30 seconds") from exc
     except httpx.RequestError as e:
-        logger.error(f"HTTP request failed: {e}")
+        logger.debug(f"HTTP request failed: {e}")
         raise
 
 
@@ -1056,8 +1091,8 @@ def api_update_multiqc_report(report_id: str, multiqc_report: dict, CLI_config: 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/multiqc/reports/{report_id}"
     headers = generate_api_headers(CLI_config)
 
+    # Not the headers: they carry the access token.
     logger.debug(f"PUT URL: {url}")
-    logger.debug(f"Headers: {headers}")
     logger.debug(
         f"Payload keys: {list(multiqc_report.keys()) if isinstance(multiqc_report, dict) else 'not a dict'}"
     )
@@ -1071,11 +1106,11 @@ def api_update_multiqc_report(report_id: str, multiqc_report: dict, CLI_config: 
         )
         logger.debug(f"HTTP response received: {response.status_code}")
         return response
-    except httpx.TimeoutException:
-        logger.error("API request timed out after 30 seconds")
-        raise
+    except httpx.TimeoutException as exc:
+        # The caller reports the exception: said here how long it waited.
+        raise httpx.TimeoutException("the API did not answer within 30 seconds") from exc
     except httpx.RequestError as e:
-        logger.error(f"HTTP request failed: {e}")
+        logger.debug(f"HTTP request failed: {e}")
         raise
 
 
@@ -1096,7 +1131,7 @@ def _post_migrate_endpoint(
         if response.status_code == 200:
             return response.json()
         else:
-            logger.error(f"{operation} failed: {response.text}")
+            logger.debug(f"{operation} failed: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",
@@ -1133,7 +1168,7 @@ def api_export_project(
             timeout=600.0,
         )
         if response.status_code != 200:
-            logger.error(f"Export failed: {response.text}")
+            logger.debug(f"Export failed: {response.text}")
             return {
                 "success": False,
                 "message": f"API request failed with status {response.status_code}: {response.text}",

@@ -1,0 +1,31 @@
+id: quast_assembly_report
+name: Assembly statistics
+mode: assembly-report
+description: >-
+  Contig counts, N50 and assembled length for each assembly, one row per
+  assembler and sample. Total length says how much of the community was
+  assembled at all; N50 says whether that length sits in a few long contigs a
+  binner can work with, or in a drift of short ones it cannot.
+find:
+  path_glob: "**/QUAST/transposed_report.tsv"
+  path_glob_alt:
+    - "**/quast/transposed_report.tsv"
+    - "**/QUAST/*/transposed_report.tsv"
+recipe: quast/assembly_report.py
+fixture: assembly_report.tsv
+renders_as:
+  - { id: n50_vs_length, component: advanced_viz, kind: scatter_xy,
+      roles: {x: total_length, y: n50, label: assembly_id, color: assembler, size: n_contigs} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: assembly_id, y: total_length, color: assembler, title: Assembled length per assembly} }
+  - { component: figure, visu_type: bar, dict_kwargs: {x: assembler, y: n50, color: sample, title: Contig N50 by assembler} }
+  - { component: card, column: total_length, aggregation: sum,
+      secondary_layout: composition, breakdown_col: assembler }
+  - { component: card, column: n50, aggregation: median,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: n_contigs, aggregation: sum,
+      secondary_layout: top_n, breakdown_col: assembly_id, top_n_count: 5 }
+  - { component: card, column: largest_contig, aggregation: max,
+      secondary_layout: top_n, breakdown_col: assembler, top_n_count: 4 }
+  - { component: card, column: gc_percent, aggregation: average,
+      aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table }

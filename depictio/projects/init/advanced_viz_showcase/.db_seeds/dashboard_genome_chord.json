@@ -1,0 +1,302 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7e"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d7e"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "chord-text",
+      "component_type": "text",
+      "title": "Structural rearrangements",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Rearrangement map",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "The 24 GRCh38 chromosomes on a ring, one chord per rearrangement joining its two breakpoints; width is the read support on a log scale, colour the event class, so only translocations cross the ring while deletions and duplications hug the rim. Hover a chord for its loci, click it to filter the dashboard by that event, click the background to clear; colour-by and the intra-chromosomal toggle are in the header. Input: Manta, TIDDIT or SvABA calls from nf-core/sarek, or arriba and STAR-Fusion from rnafusion.\n",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "chord-ring",
+      "component_type": "advanced_viz",
+      "title": "Rearrangement partners",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "genome_chord_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "40 rearrangement links over the 24 GRCh38 chromosomes: 6 recurrent heavy partners against a background of one-off events, in 4 classes",
+        "data_collection_tag": "genome_chord_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "40 links over the 24 GRCh38 chromosomes, coloured by event class and sized by supporting reads. Click a chord to filter by that event.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Rearrangement map",
+      "viz_kind": "genome_chord",
+      "config": {
+        "controls_placement": "header",
+        "viz_kind": "genome_chord",
+        "chrom_a_col": "chrom_a",
+        "pos_a_col": "pos_a",
+        "chrom_b_col": "chrom_b",
+        "pos_b_col": "pos_b",
+        "label_col": "label",
+        "weight_col": "weight",
+        "category_col": "category",
+        "sample_col": null,
+        "assembly": "hg38",
+        "max_links": 500,
+        "min_weight": null,
+        "colour_by": "category",
+        "show_labels": true,
+        "intra_chromosomal": true,
+        "selection_enabled": true,
+        "selection_column": "label"
+      },
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "chord-f-category",
+      "component_type": "interactive",
+      "title": "Event class",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "genome_chord_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "40 rearrangement links over the 24 GRCh38 chromosomes: 6 recurrent heavy partners against a background of one-off events, in 4 classes",
+        "data_collection_tag": "genome_chord_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Link scope",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "category",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Link filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": null,
+      "icon_name": "mdi:shape-outline",
+      "wf_tag": "python/advanced_viz_demo"
+    },
+    {
+      "index": "chord-f-weight",
+      "component_type": "interactive",
+      "title": "Supporting reads",
+      "workflow_tag": "advanced_viz_demo",
+      "data_collection_tag": "genome_chord_demo",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8d8e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "40 rearrangement links over the 24 GRCh38 chromosomes: 6 recurrent heavy partners against a background of one-off events, in 4 classes",
+        "data_collection_tag": "genome_chord_demo",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8d8e"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Link scope",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "weight",
+      "column_type": "int64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Link filters",
+      "timescale": null,
+      "show_marks": null,
+      "show_histogram": true,
+      "icon_name": "mdi:counter",
+      "wf_tag": "python/advanced_viz_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-chord-f-category",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-chord-f-weight",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-chord-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-chord-ring",
+      "x": 0,
+      "y": 2,
+      "w": 8,
+      "h": 8,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "Structural rearrangements",
+  "subtitle": "The 24 GRCh38 chromosomes on a ring, one chord per rearrangement: 40 links in 4 classes, chord width from the supporting reads.",
+  "icon": "mdi:chart-donut",
+  "icon_color": "red",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8d00"
+  },
+  "tab_order": 42,
+  "main_tab_name": null,
+  "tab_icon": "mdi:chart-donut",
+  "tab_icon_color": "red",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Link scope",
+      "icon": "mdi:filter-variant",
+      "color": "red",
+      "description": "Restricts which rearrangements are drawn, by class and by read support",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Rearrangement map",
+      "icon": "mdi:chart-donut",
+      "color": "red",
+      "description": "Which chromosomes this genome joined to which, and how strongly",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null,
+  "advanced_viz_controls": "popover",
+  "autofit": true
+}

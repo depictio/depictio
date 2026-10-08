@@ -57,11 +57,9 @@ jobs:
           # Reported as a number rather than the raw response body: a property that
           # is a blob of JSON cannot be charted or compared week to week.
           #
-          # depictio-cli is the only package this project publishes to PyPI — the
-          # server ships as container images and a Helm chart. `depictio` used to be
-          # polled here too and answered 404 every single week, which pinned the
-          # final gate red permanently over a distribution channel that does not
-          # exist.
+          # depictio is the package; depictio-cli is its alias for installs made
+          # under the old name, and each of its downloads pulls depictio as well.
+          # Both are counted, so the old name's share stays visible as it fades.
           #
           # pypistats throttles by source IP and hosted runners share theirs, so 429
           # is routine rather than exceptional: a descriptive User-Agent and a slow
@@ -70,7 +68,7 @@ jobs:
           # not failed — see the gate at the end of the job for why that distinction
           # decides the colour of the run.
           ua="depictio-telemetry/1.0 (+https://github.com/${GITHUB_REPOSITORY})"
-          for pkg in depictio-cli; do
+          for pkg in depictio depictio-cli; do
             url="https://pypistats.org/api/packages/${pkg}/recent"
             body="$RUNNER_TEMP/pypistats-${pkg}.json"
             # The status comes out of the same request that fetches the body, via
@@ -155,6 +153,7 @@ jobs:
         # last step is what turns the run red.
         if: always() && env.POSTHOG_API_KEY != ''
         env:
+          PYPI_DEPICTIO: ${{ steps.pypi.outputs.depictio }}
           PYPI_DEPICTIO_CLI: ${{ steps.pypi.outputs.depictio-cli }}
           TRAFFIC_CLONES: ${{ steps.traffic.outputs.clones }}
           TRAFFIC_CLONES_UNIQUES: ${{ steps.traffic.outputs.clones_uniques }}
@@ -199,6 +198,7 @@ jobs:
               "event": "distribution_snapshot",
               "distinct_id": "depictio-ci-metrics",
               "properties": {
+                  "pypi_depictio": metric("PYPI_DEPICTIO"),
                   "pypi_depictio_cli": metric("PYPI_DEPICTIO_CLI"),
                   "github_clones": metric("TRAFFIC_CLONES"),
                   "github_clones_unique": metric("TRAFFIC_CLONES_UNIQUES"),

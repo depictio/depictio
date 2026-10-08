@@ -126,19 +126,24 @@ depictio recipe run happy/summary.py            -d ./vb-testdata
 depictio recipe run sompy/summary.py            -d ./vb-testdata
 depictio recipe run sompy/regions.py            -d ./vb-testdata
 # 3. Validate the template, then ingest (needs the running stack)
-depictio run --template nf-core/variantbenchmarking/1.4.0 --data-root ./vb-testdata --dry-run --deep
-depictio run --template nf-core/variantbenchmarking/1.4.0 --data-root ./vb-testdata
-# 4. Snapshot the dashboards into .db_seeds/
-bash $DIR/generate_seeds.sh ./vb-testdata
+depictio ingest --template nf-core/variantbenchmarking/1.4.0 --data-root ./vb-testdata --dry-run
+depictio ingest --template nf-core/variantbenchmarking/1.4.0 --data-root ./vb-testdata
 ```
 
-### Wire the seeds into fresh-boot seeding (after `.db_seeds/*.json` exist)
+## Wave 3 (2026-09-23)
 
-The IDs are already reserved in `db_init_reference_datasets.py`
-(`STATIC_IDS["variantbenchmarking"]` + `DATASET_PATHS`). To make the dashboards load on a fresh
-deployment, add — mirroring the ampliseq/viralrecon pattern:
+Genericity and convention pass on the umbrella dashboard (`dashboards/base.yaml`).
 
-1. In `db_init_reference_datasets.py`, add `"variantbenchmarking"` to the `all_datasets` list.
-2. In `db_init.py`, add a `"variantbenchmarking"` branch to `_dataset_of_dashboard` (prefix match)
-   and append the 4 dashboard entries to `dashboards_config`
-   (`dashboard_overview/germline/somatic/sv_cnv.json` under the `.db_seeds/` path).
+| Item | Change |
+|---|---|
+| Vocabulary | `caller` is the tool, `truth_set` the truth set, `label` the callset id, across rtg-tools, som.py (summary, regions), truvari, SVanalyzer and Wittyer; `tp_base` (truth-set size) added to som.py |
+| Wittyer | `stats_type` (Event or Base) split out; figure and filter group on it |
+| Redundant tiles | the three F1 bar figures, and the FP/FN bars that repeated the confusion matrix, removed |
+| F1 cards | replaced by Truth-set variants (sum or max of `tp_base`); callset counts use `count` |
+| Structural & CNV | collections optional, linked on `label`; the tab drops on a run without them |
+| Texts | intros at most two sentences, thresholds documented, no truth-set or sample names (`forbidden_terms` in `megatest.yaml`) |
+| Layout | `advanced_viz_controls: header`; tab-local filter sections open |
+
+Not touched: the per-category dashboards under `categories/` (not linted by
+`test_template_conventions.py`). The SV tab
+is still not validated on a live ingest.

@@ -5,35 +5,52 @@ import polars as pl
 from depictio.models.models.transforms import RecipeSource
 from depictio.recipes.lib.lineage import kingdom_phylum
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="lfc",
         path="qiime2/ancombc/differentials/Category-habitat-level-2/lfc_slice.csv",
         format="CSV",
+        input_schema={
+            "id": pl.Utf8,
+        },
     ),
     RecipeSource(
         ref="p_val",
         path="qiime2/ancombc/differentials/Category-habitat-level-2/p_val_slice.csv",
         format="CSV",
+        input_schema={
+            "id": pl.Utf8,
+        },
     ),
     RecipeSource(
         ref="q_val",
         path="qiime2/ancombc/differentials/Category-habitat-level-2/q_val_slice.csv",
         format="CSV",
+        input_schema={
+            "id": pl.Utf8,
+        },
     ),
     RecipeSource(
         ref="w",
         path="qiime2/ancombc/differentials/Category-habitat-level-2/w_slice.csv",
         format="CSV",
+        input_schema={
+            "id": pl.Utf8,
+        },
     ),
     RecipeSource(
         ref="se",
         path="qiime2/ancombc/differentials/Category-habitat-level-2/se_slice.csv",
         format="CSV",
+        input_schema={
+            "id": pl.Utf8,
+        },
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "id": pl.Utf8,
     "contrast": pl.Utf8,
     "lfc": pl.Float64,

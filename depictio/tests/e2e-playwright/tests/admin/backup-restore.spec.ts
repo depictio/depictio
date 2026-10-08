@@ -1,4 +1,5 @@
 import { test, expect, getAuthMode } from "@fixtures/auth";
+import { DASHBOARDS_GRID_URL } from "@fixtures/dashboard";
 
 /**
  * Admin > Backups: full backup & restore loop.
@@ -39,7 +40,7 @@ test.describe("admin backup & restore", () => {
     // Dashboards visible before the restore — the same listing has to still
     // hold them afterwards (see the post-restore assertion below).
     const dashboardCards = page.locator("[data-testid='dashboard-card']");
-    await page.goto("/dashboards");
+    await page.goto(DASHBOARDS_GRID_URL);
     await expect(page.locator(".mantine-AppShell-root")).toBeVisible({ timeout: 15_000 });
     // Give the listing fetch a chance to paint before counting; a stack with
     // no seeded dashboards legitimately stays at zero and skips the check.
@@ -119,7 +120,7 @@ test.describe("admin backup & restore", () => {
     // a restore that fails to re-hydrate them writes documents whose
     // project_id no longer matches the listing's ObjectId filter, so the page
     // loads with zero dashboards instead of an error.
-    await page.goto("/dashboards");
+    await page.goto(DASHBOARDS_GRID_URL);
     await expect(page).toHaveURL(/\/dashboards/);
     if (dashboardsBefore > 0) {
       await expect(dashboardCards.first()).toBeVisible({ timeout: 30_000 });

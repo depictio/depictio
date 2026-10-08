@@ -15,6 +15,7 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="clone_sizes",
@@ -23,17 +24,23 @@ SOURCES: list[RecipeSource] = [
             "clone_sizes_table.tsv"
         ),
         format="TSV",
+        input_schema={
+            "sample_id": pl.Utf8,
+            "clone_id": pl.Int64,
+            "seq_count": pl.Int64,
+        },
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "clone": pl.Utf8,
     "subject_id": pl.Utf8,
     "n_samples": pl.Int64,
     "total_sequences": pl.Int64,
 }
 # Plus one Int8 set column per sample; the sample set is discovered from the data.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:

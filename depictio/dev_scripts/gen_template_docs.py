@@ -201,8 +201,8 @@ def _render_variables(meta: TemplateMetadata) -> list[str]:
     lines = [
         "### Template variables",
         "",
-        "Variables you provide when running the template — `DATA_ROOT` via `--data-root`, "
-        "the rest via `--var NAME=value`:",
+        "Variables you provide when running the template: `DATA_ROOT` is the results "
+        "directory given to `depictio ingest`, the others are set with `--var NAME=value`:",
         "",
         "| Variable | Required | Description |",
         "|---|:--:|---|",
@@ -451,7 +451,7 @@ def _render_recipes(refs: list[str], pipeline_version: str) -> list[str]:
         "### Recipes",
         "",
         "Each recipe reshapes raw pipeline output into a tidy table. The name links "
-        "to its source; *Output* lists the validated `EXPECTED_SCHEMA` columns.",
+        "to its source; *Output* lists the validated `OUTPUT_SCHEMA` columns.",
         "",
         "| Recipe | Transforms | Output |",
         "|---|---|---|",
@@ -463,7 +463,7 @@ def _render_recipes(refs: list[str], pipeline_version: str) -> list[str]:
             module = load_recipe(ref, pipeline_version)
             doc = (module.__doc__ or "").strip().splitlines()
             summary = _esc(doc[0]) if doc else "—"
-            columns = _recipe_columns(module.EXPECTED_SCHEMA)
+            columns = _recipe_columns(module.OUTPUT_SCHEMA)
         except Exception as exc:  # noqa: BLE001 — surface load failure, don't abort the doc
             summary, columns = f"⚠ failed to load: {_esc(str(exc))}", "—"
         lines.append(f"| {name} | {summary} | {columns} |")

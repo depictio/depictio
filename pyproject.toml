@@ -1,60 +1,73 @@
 [project]
 name = "depictio"
-version = "1.11.2"
-description = "Depictio — FastAPI backend + Celery worker for the React viewer SPA"
+version = "1.13.1"
+description = "Interactive dashboards for bioinformatics pipeline results: server, worker, viewer and CLI"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+# `pip install depictio` is the CLI, which talks to a Depictio server. The extras add
+# the rest on top of it:
+#   [multiqc]  reading MultiQC reports, which most nf-core templates ingest
+#   [server]   the API and the Celery worker (MultiQC included)
+#   [local]    `depictio local up`: the server, plus MongoDB, Redis and SeaweedFS
+#              fetched from conda-forge
+# depictio/cli/pyproject.toml publishes `depictio-cli`, an alias of this package.
 dependencies = [
-  # Core dependencies
-  "bcrypt==5.0.0",
-  "bleach==6.4.0",
   "beanie==2.2.0",
+  "bleach==6.4.0",
   # Capped at 1.43.0: s3fs 2026.4.0 -> aiobotocore caps botocore<1.43.1, so this
   # is the highest boto3 compatible with the pinned s3fs/aiobotocore chain.
   "boto3==1.43.0",
-  "celery==5.6.3",
-  "cloudpickle==3.1.2",
-  "cryptography==50.0.0",
   "colorlog==6.12.0",
-  # Visualization
-  "plotly-express==0.4.1",
-  "plotly-complexheatmap",
-  "plotly-upset",
-  # Data processing
   "deltalake==1.6.2",
-  "fastparquet==2026.5.0",
+  "httpx==0.28.1",
   "numpy==2.4.6",
-  "orjson==3.11.9",
   "pandas==3.0.5",
+  "plotly==6.9.0",
   # polars-lts-cpu is legacy; the modern LTS/older-CPU build is polars[rtcompat]
   # (-> polars-runtime-compat). rtcompat also matches multiqc 1.35's requirement.
   "polars[rtcompat,numpy,pandas,pyarrow,excel,deltalake]==1.43.2",
-  # API and web
-  "devtools==0.12.2",
-  "diskcache==5.6.3",
-  "fastapi==0.141.1",
-  "gunicorn==26.0.0",
-  "httpx==0.28.1",
-  "uvicorn==0.52.1",
-  "websockets==17.0.1",
-  # Database
-  "pymongo==4.17.0",
-  # Authentication and security
   "pydantic[email]==2.13.4",
   "pydantic-settings==2.14.2",
-  "pyjwt==2.13.0",
-  "python-jose==3.5.0",
-  "python-multipart==0.0.32",
-  "restrictedpython==8.4",
-  # Playwright for screenshots (pure Python - installs its own browsers)
-  "playwright==1.62.0",
-  # Utilities
-  "multiqc==1.35",
-  "mypy-boto3-s3==1.43.50",
-  "psutil==7.2.2",
   "python-dotenv==1.2.2",
   "pyyaml>=6.0.3",
+  "rich==15.0.0",
+  "typer==0.27.0",
+]
+authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
+urls = { Homepage = "https://github.com/depictio/depictio", Documentation = "https://depictio.github.io/depictio-docs/latest/" }
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Operating System :: OS Independent",
+]
+
+[project.optional-dependencies]
+# What users install: depictio (the CLI), depictio[multiqc] and depictio[local].
+# [server] is the API and worker that the Docker images, [local] and [dev] build on;
+# it is not a deployment of its own, so the docs do not offer it.
+multiqc = ["multiqc==1.35"]
+server = [
+  "depictio[multiqc]",
+  "bcrypt==5.0.0",
+  "celery==5.6.3",
+  "cloudpickle==3.1.2",
+  "cryptography==50.0.0",
+  "fastapi==0.141.1",
+  "fsspec==2026.4.0",
+  "gunicorn==26.0.0",
+  "mypy-boto3-s3==1.43.50",
+  # Dashboard thumbnails. The Chromium they drive is downloaded separately, by the
+  # worker image or by `depictio local up --screenshots`.
+  "playwright==1.62.0",
+  "plotly-express==0.4.1",
+  # In-tree packages (packages/): [tool.uv.sources] installs them from the
+  # checkout; the pins are what a published depictio wheel requires.
+  "plotly-complexheatmap==0.1.0",
+  "plotly-upset==0.1.0",
+  "psutil==7.2.2",
+  "pyjwt==2.13.0",
+  "pymongo==4.17.0",
+  "python-multipart==0.0.32",
   # Held at 5.2.1 (main's pin): redis-py 8.0 regressed the real-time pub/sub
   # event listener (connection_manager) — it starves the API event loop, so
   # internal HTTP self-calls time out and reference-dataset ingestion never
@@ -63,29 +76,16 @@ dependencies = [
   # this regression (it's runtime pub/sub behaviour), so a green `pytest` run is
   # not evidence that redis 8 is safe — verifying it needs the e2e/docker jobs.
   "redis==5.2.1",
-  "tomli==2.4.1",
-  "types-requests==2.33.0.20260712",
-  "umap-learn==0.5.12",
-  # Storage
+  "restrictedpython==8.4",
   "s3fs==2026.4.0",
-  "fsspec==2026.4.0",
-  # CLI utilities (required by API code that imports CLI helpers)
-  "typer==0.27.0",
-  "rich==15.0.0",
-  # Dev-only file watcher for live-reloading the Celery worker. run_celery_worker.sh
-  # wraps celery in `watchmedo auto-restart` when DEPICTIO_DEV_MODE=true; in prod
-  # it's installed (~1 MB) but never invoked. Celery has no built-in reloader.
-  "watchdog==6.0.0",
+  "umap-learn==0.5.12",
+  "uvicorn==0.52.1",
+  "websockets==17.0.1",
 ]
-authors = [{ name = "Thomas Weber", email = "thomas.weber@embl.de" }]
-urls = { Homepage = "http://github.com/depictio/depictio" }
-classifiers = [
-  "Programming Language :: Python :: 3",
-  "Operating System :: OS Independent",
-]
-
-[project.optional-dependencies]
+local = ["depictio[server]", "py-rattler==0.26.0"]
 dev = [
+  # The test suite covers the server too.
+  "depictio[server]",
   "bandit==1.9.4",
   "ruff==0.16.1",
   "ty==0.0.65",
@@ -100,12 +100,25 @@ dev = [
   "testcontainers==4.15.0",
   "types-bleach==6.4.0.20260728",
   "types-boto3==1.43.62",
+  "types-requests==2.33.0.20260712",
 ]
+
+# Groups are never published with the wheel, unlike extras.
+[dependency-groups]
+# File watcher for live-reloading the Celery worker: run_celery_worker.sh wraps
+# celery in `watchmedo auto-restart` when DEPICTIO_DEV_MODE=true (Celery has no
+# built-in reloader). Dockerfile.worker installs this group so the published
+# worker image still supports dev mode. Kept out of the core dependencies
+# because watchdog 6.0.0 has no Python 3.14 macOS wheel. The API's opt-in YAML
+# watcher (yaml_watcher.py) uses it when present and polls otherwise.
+worker-reload = ["watchdog==6.0.0"]
 
 
 [project.scripts]
-depictio-api = "depictio.api.run:main"
 depictio = "depictio.cli.depictio_cli:main"
+# The name the depictio-cli package has always installed, which the Nextflow hook and
+# existing scripts call.
+depictio-cli = "depictio.cli.depictio_cli:main"
 
 
 [tool.uv.sources]
@@ -116,9 +129,78 @@ plotly-upset = { path = "packages/plotly-upset", editable = true }
 requires = ["setuptools>=82.0.1", "wheel"]
 build-backend = "setuptools.build_meta"
 
+# The wheel serves `depictio local up`: the iris and penguins examples, plus the
+# nf-core templates for ingesting the user's own results. The Docker images copy the
+# source tree instead of installing the wheel, so none of the trimming below affects
+# them: they keep every reference project and thumbnail.
+[tool.setuptools]
+# Data files come from package-data alone, so a stale depictio.egg-info/SOURCES.txt
+# from an earlier build cannot add files back.
+include-package-data = false
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["depictio*"]
+exclude = [
+  "depictio.viewer.node_modules*",
+  # Leftovers of building depictio/cli/pyproject.toml (the depictio-cli alias) or of a
+  # CLI venv created there; namespace discovery would take them as packages.
+  "depictio.cli.build*",
+  "depictio.cli.venv*",
+  "depictio.tests*",
+  # Maintainer scripts (reseeding, seed and docs generation), run from a checkout.
+  "depictio.dev_scripts*",
+  "depictio.projects.test*",
+  # Example projects; iris and penguins ship as package-data below.
+  "depictio.projects.init.*",
+]
+
+# Files the server reads at runtime. The viewer bundle must be built first:
+# cd depictio/viewer && pnpm run build. Include globs are glob()-based: `**` recurses
+# but skips dot-directories, hence the separate .db_seeds patterns.
+[tool.setuptools.package-data]
+"depictio" = [
+  "viewer/dist/**/*",
+  # Reference thumbnails of the iris and penguins dashboards only.
+  "api/static/screenshots/6824cb3b89d2b72169309737_*.png",
+  "api/static/screenshots/6824cb3b89d2b72169309738_*.png",
+  "api/static/branding/**/*",
+  "api/static/dashboard_logos/**/*",
+  "api/static_assets/**/*",
+  "projects/init/iris/**/*",
+  "projects/init/iris/.db_seeds/*",
+  "projects/init/penguins/**/*",
+  "projects/init/penguins/.db_seeds/*",
+  "projects/nf-core/**/*",
+  "projects/nf-core/**/.db_seeds/*",
+  "catalog/**/*",
+  "cli/configs/**/*",
+]
+
+# Exclude patterns are fnmatch-based: `*` also crosses `/`, so each pattern matches
+# at any depth below its prefix, and no pattern can carve an exception out of another.
+[tool.setuptools.exclude-package-data]
+"depictio" = [
+  "viewer/dist/*.map",
+  "*/__pycache__/*",
+  "*.pyc",
+  # Template docs (screenshots), validation reports and megatest inputs: never read
+  # by the API or the CLI.
+  "projects/nf-core/*/docs/*",
+  "projects/nf-core/*.md",
+  "projects/nf-core/*/megatest.yaml",
+  "projects/nf-core/*/download_test_data.sh",
+  # Reference datasets of ampliseq and viralrecon (canonical TSVs, MultiQC parquet,
+  # trees, reference metadata). Only reference seeding reads them
+  # (db_init_reference_datasets.py); ingesting the user's own results reads the
+  # template.yaml, dashboards and recipes, and the user's files.
+  "projects/nf-core/ampliseq/*.tsv",
+  "projects/nf-core/ampliseq/*.parquet",
+  "projects/nf-core/ampliseq/*.nwk",
+  "projects/nf-core/viralrecon/*.tsv",
+  "projects/nf-core/viralrecon/*.parquet",
+  "projects/nf-core/viralrecon/*.nwk",
+]
 
 # [tool.mypy]
 # exclude = ["build/", "depictio/api/"]

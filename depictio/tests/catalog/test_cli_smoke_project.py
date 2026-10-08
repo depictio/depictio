@@ -1,7 +1,7 @@
 """The CLI smoke project must stay runnable without a server to run it against.
 
 `depictio/projects/test/catalog_cli_smoke/` exists to be ingested by
-`depictio-cli run`, and everything that can go wrong in that ingest — a recipe's
+`depictio-cli ingest`, and everything that can go wrong in that ingest — a recipe's
 input moving, a recipe's output schema changing, a collection the catalog stops
 recognising — goes wrong silently until someone stands the stack up.
 
@@ -55,7 +55,7 @@ SCANNED_FILES = {
 }
 
 # bray_curtis reads another collection rather than a file, so its upstream has to
-# be computed first and handed in — the same thing `depictio-cli run` does by
+# be computed first and handed in — the same thing `depictio-cli ingest` does by
 # reading the upstream's delta table.
 DC_REF_UPSTREAM = {"bray_curtis_canonical": {"rel_abundance": "taxonomy_rel_abundance"}}
 

@@ -178,8 +178,10 @@ class TestBackupEndpoints:
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.groups_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.instance_settings_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.branding_assets_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.comment_threads_collection")
     def test_create_backup_success(
         self,
+        mock_comment_threads,
         mock_branding_assets,
         mock_instance_settings,
         mock_groups,
@@ -217,6 +219,7 @@ class TestBackupEndpoints:
         mock_groups.find.return_value = []
         mock_instance_settings.find.return_value = []
         mock_branding_assets.find.return_value = []
+        mock_comment_threads.find.return_value = []
 
         try:
             response = client.post("/backup/create", json={"include_s3_data": False})
@@ -243,8 +246,10 @@ class TestBackupEndpoints:
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.groups_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.instance_settings_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.branding_assets_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.comment_threads_collection")
     def test_create_backup_with_temporary_users_exclusion(
         self,
+        mock_comment_threads,
         mock_branding_assets,
         mock_instance_settings,
         mock_groups,
@@ -292,6 +297,8 @@ class TestBackupEndpoints:
         mock_instance_settings.count_documents.return_value = 0
         mock_branding_assets.find.return_value = []
         mock_branding_assets.count_documents.return_value = 0
+        mock_comment_threads.find.return_value = []
+        mock_comment_threads.count_documents.return_value = 0
 
         try:
             response = client.post("/backup/create", json={"include_s3_data": False})
@@ -317,8 +324,10 @@ class TestBackupEndpoints:
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.groups_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.instance_settings_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.branding_assets_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.comment_threads_collection")
     async def test_backup_metadata_records_real_version(
         self,
+        mock_comment_threads,
         mock_branding_assets,
         mock_instance_settings,
         mock_groups,
@@ -352,6 +361,7 @@ class TestBackupEndpoints:
             mock_groups,
             mock_instance_settings,
             mock_branding_assets,
+            mock_comment_threads,
         ):
             mock_collection.find.return_value = []
             mock_collection.count_documents.return_value = 0

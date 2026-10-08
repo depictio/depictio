@@ -110,6 +110,33 @@ def catalog_info(
             console.print(f"     [dim]render:[/dim]  {tgt}{roles}")
 
 
+def _require_bundle() -> None:
+    """Stop now when the prebuilt bundle the page goes into is missing, rather than
+    after building every output for it: some 20 seconds for the gallery."""
+    from rich.markup import escape
+
+    from depictio.catalog.payload import TEMPLATE_PATH
+    from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
+
+    if not TEMPLATE_PATH.exists():
+        rich_print_checked_statement(
+            f"The catalog-preview bundle is not built: {escape(str(TEMPLATE_PATH))} is "
+            "missing. Build it with `cd depictio/viewer && pnpm run build:catalog-preview`.",
+            "error",
+        )
+        raise typer.Exit(code=1)
+
+
+def _quiet_multiqc() -> contextlib.AbstractContextManager[None]:
+    """MultiQC's warnings off too while the outputs build, unless -v asked for logs:
+    its fixtures log one per colour it cannot convert, some 200 for the gallery."""
+    import logging
+
+    from depictio.cli.cli_logging import multiqc_logging
+
+    return multiqc_logging(quiet_level=logging.ERROR)
+
+
 def _emit_html(html: str, out_path: Path, message: str, no_open: bool) -> None:
     """Write a self-contained HTML file, report it, and open it in a browser tab."""
     import webbrowser
@@ -167,18 +194,20 @@ def catalog_preview(
     ] = 0,
     no_open: Annotated[bool, typer.Option("--no-open", help="Do not open a browser tab")] = False,
 ) -> None:
-    """Preview an output's components on its fixture, served on an ephemeral
-    localhost server (Ctrl-C to stop); pass ``--out FILE`` to export a portable,
-    self-contained HTML instead.
+    """Preview an output's components in the browser, on its bundled fixture.
 
-    Renders every ``renders_as`` target through the depictio **React viewer's**
-    real ``ComponentRenderer`` (figure/card/table today). The data is computed
-    Dash-free from the output's bundled ``fixture``. Needs the prebuilt bundle
-    (``cd depictio/viewer && pnpm run build:catalog-preview``).
+    Served on an ephemeral localhost server (Ctrl-C to stop); --out FILE exports a
+    portable, self-contained HTML instead.
+
+    Renders every renders_as target through the depictio React viewer's real
+    ComponentRenderer (figure/card/table today). The data is computed Dash-free from
+    the output's bundled fixture. Needs the prebuilt bundle
+    (cd depictio/viewer && pnpm run build:catalog-preview).
     """
     from depictio.catalog.payload import CatalogPayloadError, render_html
     from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 
+    _require_bundle()
     pair = next(
         ((e, o) for e in load_catalog_entries() for o in e.outputs if o.id == output_id),
         None,
@@ -189,7 +218,8 @@ def catalog_preview(
     entry, output = pair
 
     try:
-        html = render_html(output, theme, tool=entry)
+        with _quiet_multiqc():
+            html = render_html(output, theme, tool=entry)
     except CatalogPayloadError as exc:
         typer.echo(f"  could not preview {output_id!r}: {exc}")
         raise typer.Exit(code=1)
@@ -214,25 +244,31 @@ def catalog_gallery(
     ] = 0,
     no_open: Annotated[bool, typer.Option("--no-open", help="Do not open a browser tab")] = False,
 ) -> None:
-    """Browse the whole catalog on one page (every tool's outputs, grouped, with
-    component-type badges, fixture chips, search/filter, copyable ``renders_as``),
-    served on an ephemeral localhost server (Ctrl-C to stop).
+    """Browse the whole catalog on one page in the browser.
+
+    Every tool's outputs, grouped, with component-type badges, fixture chips,
+    search/filter and copyable renders_as, served on an ephemeral localhost server
+    (Ctrl-C to stop).
 
     Clicking an output opens its full live preview (same renderer as
-    ``catalog preview``). Pass ``--out FILE`` to export a portable, self-contained
-    HTML instead; needs the prebuilt bundle
-    (``cd depictio/viewer && pnpm run build:catalog-preview``).
+    catalog preview). Pass --out FILE to export a portable, self-contained HTML
+    instead.
+
+    Served or exported, the page needs the prebuilt bundle
+    (cd depictio/viewer && pnpm run build:catalog-preview).
     """
     from depictio.catalog.payload import CatalogPayloadError, render_gallery_html
     from depictio.models.components.advanced_viz.catalog import load_catalog_entries
 
+    _require_bundle()
     entries = load_catalog_entries()
     if not entries:
         typer.echo("No catalog entries found.")
         raise typer.Exit(code=1)
 
     try:
-        html = render_gallery_html(entries, theme)
+        with _quiet_multiqc():
+            html = render_gallery_html(entries, theme)
     except CatalogPayloadError as exc:
         typer.echo(f"  could not build catalog gallery: {exc}")
         raise typer.Exit(code=1)
@@ -323,6 +359,7 @@ def catalog_validate(
         CATALOG_DIR,
         CatalogEntry,
         check_existence,
+        check_identity,
         ground_render_dtypes,
         load_entries_from_dir,
         read_fixture_schema,
@@ -346,11 +383,13 @@ def catalog_validate(
 
     # nf-core module + EDAM term existence (against the vendored indices).
     problems: list[str] = check_existence(entries)
+    # The catalog card shows description + homepage straight from module.yaml.
+    problems.extend(check_identity(entries))
     # A fixture is what every binding is grounded against, so a placeholder one
     # makes the whole entry meaningless while still passing every other check.
     problems.extend(_check_fixture_sanity(entries))
     # Ground each render's bound columns against the real data shape:
-    # the fixture (most complete) > the recipe's EXPECTED_SCHEMA > declared columns.
+    # the fixture (most complete) > the recipe's OUTPUT_SCHEMA > declared columns.
     # Beyond name existence, dtypes are checked too (advanced_viz roles + numeric
     # card aggregations) via `ground_render_dtypes`.
     for entry in entries:

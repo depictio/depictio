@@ -758,8 +758,16 @@ def test_every_shipped_manifest_is_consistent(mt: ModuleType, manifest_file: Pat
         "pipeline_info/software_versions.yml",
         "pipeline_info/software_versions.csv",
     )
+
+    # Keys are relative to the prefix, so a multi-route manifest (scrnaseq) lists
+    # its provenance under `aligner_<route>/pipeline_info/`; match on the
+    # `pipeline_info/...` tail of the key.
+    def _provenance_tail(key: str) -> str:
+        i = key.find("pipeline_info/")
+        return key[i:] if i >= 0 else key
+
     assert any(
-        fnmatchcase(name, k)
+        fnmatchcase(name, _provenance_tail(k))
         for k in manifest.keys + manifest.prefix_keys
         for name in provenance_names
     ), "the manifest fetches no provenance file (params JSON or software versions)"
@@ -793,7 +801,9 @@ def test_every_shipped_manifest_is_consistent(mt: ModuleType, manifest_file: Pat
         assert any(re.search(p, parquet) for p in patterns), (
             f"template MultiQC pattern(s) {patterns} do not match {parquet}"
         )
-        assert re.fullmatch(r"\d+\.\d+(\.\d+)?", manifest.multiqc["version"] or "")
+        # Pre-parquet runs record the version the run wrote, which can be a dev
+        # build (eager 2.4.5 wrote MultiQC 1.13.dev0 before the 1.35 reprocess).
+        assert re.fullmatch(r"\d+\.\d+(\.\d+)?(\.dev\d+)?", manifest.multiqc["version"] or "")
     if manifest.multiqc["reprocess"]:
         assert parquet is not None
 

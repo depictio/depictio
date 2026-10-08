@@ -1,0 +1,67 @@
+id: taxpasta_lineage
+name: Cross-profiler lineages
+mode: merge/lineage
+description: >-
+  The same grain as the cross-profiler abundances, with the seven NCBI ranks widened
+  into their own columns so a hierarchy can be drawn from them. The ancestry is read
+  back out of the indented kraken-style reports the run writes, and reads no
+  profiler could place keep an explicit unclassified lineage rather than dropping
+  out of the rings.
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/taxpasta/merge
+find: { path_glob: "**/taxpasta/*.tsv" }
+recipe: taxpasta/lineage.py
+fixture: lineage.tsv
+renders_as:
+  # Wide per-rank columns -> sunburst, exactly the shape melon's pooled table has,
+  # except this one keeps the profiler, database and sample it came from.
+  - {
+      id: lineage_sunburst,
+      component: advanced_viz,
+      kind: sunburst,
+      roles:
+        {
+          ranks: [superkingdom, phylum, class, order, family, genus, species],
+          abundance: rel_abundance,
+        },
+    }
+  # Pavian's flow view: the root fans out into the domains, and the reads the
+  # profiler could not place leave it as their own branch. `steps` is the catalog
+  # spelling of the tile's `step_cols`; a dashboard widens or narrows it.
+  - {
+      id: lineage_sankey,
+      component: advanced_viz,
+      kind: sankey,
+      roles: { steps: [root, superkingdom, phylum, genus] },
+    }
+  - {
+      component: card,
+      column: species,
+      aggregation: nunique,
+      secondary_layout: top_n,
+      breakdown_col: phylum,
+      top_n_count: 4,
+    }
+  - {
+      component: card,
+      column: rel_abundance,
+      aggregation: median,
+      aggregations: [box_plot_stats],
+      secondary_layout: box_plot,
+    }
+  - {
+      component: card,
+      column: phylum,
+      aggregation: nunique,
+      secondary_layout: composition,
+      breakdown_col: superkingdom,
+    }
+  - {
+      component: card,
+      column: rel_abundance,
+      aggregation: max,
+      secondary_layout: gauge,
+      coverage_max: 1,
+    }
+  - { component: interactive, interactive_type: MultiSelect, column_name: superkingdom }
+  - { component: interactive, interactive_type: MultiSelect, column_name: phylum }
+  - { component: table }

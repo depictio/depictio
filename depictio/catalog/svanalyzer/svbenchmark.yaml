@@ -3,7 +3,8 @@ name: svbenchmark SV summary
 mode: benchmark-summary
 description: >-
   Structural-variant accuracy from SVanalyzer svbenchmark (precision/recall/F1).
-  Optional — not produced by the public megatest; tolerant column matching.
+  Optional: not produced by the public megatest; tolerant column matching;
+  `caller` and `truth_set` come from the pipeline's `Caller` and `File` columns.
 find: { path_glob: "**/summary/tables/svbenchmark/svbenchmark.summary.csv" }
 recipe: svanalyzer/svbenchmark.py
 fixture: svbenchmark.tsv

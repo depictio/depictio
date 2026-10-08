@@ -24,11 +24,13 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="reports",
         glob_pattern="*/*/*.report.txt",
         format="csv",
+        input_schema={"line": pl.Utf8},
         # One column per line: \x1f never occurs in a kraken-style report, so the
         # reader cannot split the row and the recipe owns the tab handling.
         read_kwargs={
@@ -42,13 +44,14 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "taxonomy_id": pl.Utf8,
     "name": pl.Utf8,
     "rank": pl.Utf8,
 }
 
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 # kraken report rank codes. A trailing digit marks an intermediate level
 # (``D1`` = sub-domain), which collapses onto its parent rank here.

@@ -1,0 +1,2 @@
+sample	num_processed	num_mapped	mapping_rate	num_cells
+pbmc8k	784064148	662490360	0.8449440797540458	343057

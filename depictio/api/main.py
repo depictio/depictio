@@ -221,7 +221,7 @@ _VIEWER_INDEX = _VIEWER_DIST / "index.html"
 # as /static/screenshots/{id}_{light|dark}.png. The path is the canonical
 # screenshot output for both the worker (Playwright writes here) and the
 # React viewer (reads via this mount).
-_SCREENSHOTS_DIR = Path(__file__).resolve().parent / "static" / "screenshots"
+_SCREENSHOTS_DIR = settings.performance.screenshots_path
 _SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
 app.mount(
     "/static/screenshots",
@@ -392,8 +392,8 @@ else:
     logger.warning(
         "⚠️  React viewer bundle not built at %s (missing index.html or "
         "assets/) — /dashboard/ and /dashboard-edit/ routes will "
-        "404 until `cd depictio/viewer && npm install && npm run build` "
-        "is executed.",
+        "404 until it is built: `pnpm install` at the repository root, then "
+        "`pnpm run build` in depictio/viewer (`depictio local up` does both).",
         _VIEWER_DIST,
     )
 

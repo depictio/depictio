@@ -1,11 +1,11 @@
-# Clustering: UMAP — one tab of the advanced-visualisation showcase.
+# Cell neighbourhoods (UMAP): one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Clustering: UMAP'
+title: 'Cell neighbourhoods (UMAP)'
 subtitle: 'UMAP (uniform manifold approximation and projection) on the same matrix'
 icon: 'mdi:vector-arrange-below'
 icon_color: 'indigo'
@@ -15,7 +15,7 @@ dashboard_id: '646b0f3c1e4a2d7f8e5b8d15'
 is_main_tab: false
 tab_order: 5
 parent_dashboard_tag: volcano
-tab_icon: 'mdi:vector-arrange-below'
+tab_icon: 'mdi:account-group-outline'
 tab_icon_color: 'indigo'
 
 # Left-panel filter section. Deliberately not `persistent`: the 23 tabs of
@@ -44,11 +44,12 @@ components:
     vertical_alignment: top
     section: 'UMAP projection'
     body: >
-      A non-linear projection that preserves local neighbourhoods at the cost of global
-      distance: points that sit together really are neighbours, but the gap between two
-      clusters carries no meaning. Compare it against the PCA tab to see which structure is
-      real and which is an artefact of the embedding.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      The same samples through UMAP, which keeps local neighbourhoods and discards global
+      distance: points that sit together are neighbours, the gap between two clusters means
+      nothing. The Method and Colour by pickers sit in the tile header; a lasso or box
+      selection publishes the samples as a dashboard filter. This is the standard view of nf-
+      core/scrnaseq output once clustered (Scanpy or Seurat).
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-clustering_umap
     index: 'umap-embedding'
@@ -70,7 +71,8 @@ components:
       point_size: 9
       show_density: false
       selection_enabled: true
-    layout: { x: 0, y: 1, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-clustering_umap-cluster
     index: umap-f-cluster
@@ -102,6 +104,7 @@ components:
     placement: left
     section: 'Projection scope'
     group: 'Point filters'
+    show_histogram: true
     display:
       title_size: md
       custom_color: '#00BCD4'

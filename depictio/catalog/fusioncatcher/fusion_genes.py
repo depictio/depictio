@@ -14,12 +14,11 @@ counts intact, and derives three ready-to-plot columns: ``supporting_reads``
 long tail of a fusion table stays readable) and ``unique_fraction`` (how much of
 the support comes from uniquely mapped reads, a proxy for call confidence).
 
-The candidate table has no sample column and the recipe harness concatenates the
-globbed files without their path, so a row cannot be attributed to a sample. The
-fusion is the unit of analysis here, not the sample.
+The per-sample file carries no sample column, so the source declares
+``source_path`` and the sample is read off the file name.
 
 Output columns:
-    fusion, gene_5p, gene_3p, description, n_annotations, common_mapping_reads,
+    sample, fusion, gene_5p, gene_3p, description, n_annotations, common_mapping_reads,
     spanning_pairs, spanning_unique_reads, supporting_reads, longest_anchor,
     finding_method, breakpoint_5p, breakpoint_3p, predicted_effect, log_support,
     unique_fraction
@@ -29,16 +28,51 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# The sample exists only in the file NAME (`fusioncatcher/<sample>.fusion-genes.txt`): the source hands every
+# row the path of its file, and the sample is the basename minus the suffix.
+# Without it a cohort run pools every sample's calls into one table.
+_SOURCE_PATH = "_source_path"
+_SAMPLE_SUFFIX = ".fusion-genes.txt"
+
+
+def _sample() -> pl.Expr:
+    """``fusioncatcher/S1.fusion-genes.txt`` -> ``S1``."""
+    return (
+        pl.col(_SOURCE_PATH)
+        .str.split("/")
+        .list.last()
+        .str.strip_suffix(_SAMPLE_SUFFIX)
+        .alias("sample")
+    )
+
+
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="fusion_genes",
+        source_path=_SOURCE_PATH,
         glob_pattern="fusioncatcher/*.fusion-genes.txt",
         format="TSV",
+        input_schema={
+            "Gene_1_symbol(5end_fusion_partner)": pl.Utf8,
+            "Gene_2_symbol(3end_fusion_partner)": pl.Utf8,
+            "Fusion_description": pl.Utf8,
+            "Counts_of_common_mapping_reads": pl.Int64,
+            "Spanning_pairs": pl.Int64,
+            "Spanning_unique_reads": pl.Int64,
+            "Longest_anchor_found": pl.Int64,
+            "Fusion_finding_method": pl.Utf8,
+            "Fusion_point_for_gene_1(5end_fusion_partner)": pl.Utf8,
+            "Fusion_point_for_gene_2(3end_fusion_partner)": pl.Utf8,
+            "Predicted_effect": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 10000},
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
+    "sample": pl.Utf8,
     "fusion": pl.Utf8,
     "gene_5p": pl.Utf8,
     "gene_3p": pl.Utf8,
@@ -83,6 +117,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     spanning_unique = pl.col("spanning_unique_reads").cast(pl.Int64, strict=False).fill_null(0)
 
     out = df.select(
+        _sample(),
         pl.concat_str([gene_5p, pl.lit("--"), gene_3p]).alias("fusion"),
         gene_5p.alias("gene_5p"),
         gene_3p.alias("gene_3p"),
@@ -112,4 +147,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .otherwise(0.0)
         .cast(pl.Float64)
         .alias("unique_fraction"),
-    ).select(list(EXPECTED_SCHEMA))
+    ).select(list(OUTPUT_SCHEMA))

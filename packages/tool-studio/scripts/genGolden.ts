@@ -94,7 +94,13 @@ const renders: RenderSpec[] = [
 ];
 
 const entry = generateEntry({
-  tool: { id: toolId, name: 'Golden Tool', source: 'nf-core' },
+  tool: {
+    id: toolId,
+    name: 'Golden Tool',
+    source: 'nf-core',
+    description: 'Golden round-trip tool.',
+    homepage: 'https://example.org/golden',
+  },
   output: { slug: 'results', path_glob: '**/golden/*.csv', description: 'Golden round-trip fixture.' },
   fixtureFileName: fixture.fileName,
   fixtureContent: fixture.raw,

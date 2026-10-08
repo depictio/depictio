@@ -1,0 +1,13 @@
+sample	treatment	type	pair	sample_description
+SRX11780879	control	rnaseq	1	PM2_5_0_1
+SRX11780880	control	rnaseq	2	PM2_5_0_2
+SRX11780881	control	rnaseq	3	PM2_5_0_3
+SRX11780882	treated	rnaseq	4	PM2_5_400_1
+SRX11780883	treated	rnaseq	5	PM2_5_400_2
+SRX11780884	treated	rnaseq	6	PM2_5_400_3
+SRX11780885	control	riboseq	1	Ribo-seq_C01
+SRX11780886	control	riboseq	2	Ribo-seq_C02
+SRX11780887	control	riboseq	3	Ribo-seq_C03
+SRX11780888	treated	riboseq	4	Ribo-seq_P4001
+SRX11780889	treated	riboseq	5	Ribo-seq_P4002
+SRX11780890	treated	riboseq	6	Ribo-seq_P4003

@@ -1,11 +1,11 @@
-# Clustering: PCoA — one tab of the advanced-visualisation showcase.
+# Community dissimilarity (PCoA): one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Clustering: PCoA'
+title: 'Community dissimilarity (PCoA)'
 subtitle: 'PCoA via Bray–Curtis distance on a non-negative shift of the matrix'
 icon: 'mdi:relation-many-to-many'
 icon_color: 'cyan'
@@ -44,18 +44,20 @@ components:
     vertical_alignment: top
     section: 'PCoA projection'
     body: >
-      Principal coordinates: the projection is computed from a distance matrix rather than
-      from the feature table, which is what makes it the right choice for ecological
-      distances where Euclidean geometry does not apply. Axes are still comparable, as in
-      PCA.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      Principal coordinates of a Bray-Curtis distance matrix: each point is a sample, and
+      samples close together share a similar community composition. Unlike PCA it starts from
+      a distance, which is the right choice for ecological counts. The Method and Colour by
+      pickers sit in the tile header; a lasso or box selection publishes the samples as a
+      dashboard filter. nf-core/ampliseq and nf-core/taxprofiler produce the abundance tables
+      behind this view.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-clustering_pcoa
     index: 'pcoa-embedding'
     component_type: advanced_viz
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'embedding_pcoa'
-    title: 'PCoA — Bray–Curtis'
+    title: 'PCoA, Bray-Curtis'
     description: 'Principal Coordinates Analysis on a non-negative shift of the feature matrix. Pre-computed (instant render).'
     section: 'PCoA projection'
     viz_kind: 'embedding'
@@ -70,7 +72,8 @@ components:
       point_size: 9
       show_density: false
       selection_enabled: true
-    layout: { x: 0, y: 1, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-clustering_pcoa-cluster
     index: pcoa-f-cluster
@@ -102,6 +105,7 @@ components:
     placement: left
     section: 'Projection scope'
     group: 'Point filters'
+    show_histogram: true
     display:
       title_size: md
       custom_color: '#00BCD4'

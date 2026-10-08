@@ -1,17 +1,25 @@
+from __future__ import annotations
+
 import json
 import sys
 from collections import defaultdict
 from io import StringIO
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-import polars as pl
 from pydantic import validate_call
 from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
-from depictio.models.models.workflows import Workflow, WorkflowRun
+# Every command imports this module for its status lines, so it imports neither
+# polars nor the models (beanie, pymongo) itself: they are named here in annotations
+# only, and imported where they are used.
+if TYPE_CHECKING:
+    import polars as pl
+
+    from depictio.models.models.workflows import Workflow, WorkflowRun
 
 # Single shared console for the whole CLI. Everything routes through this so
 # styling/width stays consistent and we never shadow the builtin ``print``.
@@ -21,12 +29,58 @@ from depictio.models.models.workflows import Workflow, WorkflowRun
 console = Console()
 # Stable reference for helpers whose ``console`` parameter shadows the global.
 _DEFAULT_CONSOLE = console
+# For notices about the CLI itself, kept out of the output a script reads.
+err_console = Console(stderr=True)
+
+
+# Symbol, symbol style and message style of each status line. One-cell glyphs rather
+# than emoji: emoji widths vary between terminals, which misaligned consecutive lines.
+_STATUS_STYLES = {
+    "success": ("✓", "bold green", ""),
+    "error": ("✗", "bold red", "red"),
+    "warning": ("!", "bold yellow", "yellow"),
+    "info": ("•", "bold blue", ""),
+    "loading": ("…", "bold yellow", ""),
+}
+# The symbols where the console's encoding has no room for the glyphs above
+# (PYTHONIOENCODING=ascii, a Latin-1 locale): writing those would raise.
+_ASCII_SYMBOLS = {"success": "v", "error": "x", "warning": "!", "info": "*", "loading": "..."}
+
+
+def _encodable(text: str, encoding: str) -> bool:
+    try:
+        text.encode(encoding)
+    except (UnicodeEncodeError, LookupError):
+        return False
+    return True
+
+
+def _print_status(statement: str, mode: str, target: Optional[Console] = None) -> None:
+    # Looked up at each call, as tests swap the module's console for their own.
+    target = target or console
+    symbol, symbol_style, text_style = _STATUS_STYLES[mode]
+    if not _encodable(symbol, target.encoding):
+        symbol = _ASCII_SYMBOLS[mode]
+    # Not highlighted: the highlighter returns a new Text without the message's style,
+    # so an error would lose its red, and it would bold every bracket in it.
+    text = target.render_str(statement, style=text_style, highlight=False)
+    if not _encodable(text.plain, target.encoding):
+        # One '?' per character the encoding lacks, so the styles still line up.
+        text.plain = text.plain.encode(target.encoding, "replace").decode(target.encoding)
+    # Never wrapped here, so a path or a command in the message copies and greps
+    # intact, as in _print_rows: the terminal wraps a long line. A line the message
+    # breaks itself continues under its text rather than under the symbol.
+    for i, line in enumerate(text.split("\n", allow_blank=True)):
+        prefix = Text(symbol, style=symbol_style) if i == 0 else Text(" " * len(symbol))
+        row = Text.assemble(prefix, " ", line)
+        row.rstrip()
+        target.print(row, soft_wrap=True)
 
 
 @validate_call
 def handle_error(message: str, exit: bool = False):
     """Print an error message and raise a ValueError."""
-    console.print(f"• [bold red]:x: {message}[/bold red]")
+    _print_status(message, "error")
     if exit:
         sys.exit()
 
@@ -73,22 +127,18 @@ def rich_print_json(statement: str, json_obj: dict | list[dict]):
 
 
 @validate_call
-def rich_print_checked_statement(statement: str, mode: str, exit: bool = False):
+def rich_print_checked_statement(
+    statement: str, mode: str, exit: bool = False, stderr: bool = False
+):
     """
-    Print a statement with a check mark or cross.
+    Print a status line: a symbol for ``mode`` (loading, success, error, info,
+    warning), then ``statement``, which may hold Rich markup. On stderr with
+    ``stderr``.
     """
-    if mode not in ["loading", "success", "error", "info", "warning"]:
+    if mode not in _STATUS_STYLES:
         handle_error(f"Invalid mode: {mode}", exit=exit)
-    if mode == "loading":
-        console.print(f"• [bold yellow]:hourglass: {statement}[/bold yellow]")
-    elif mode == "success":
-        console.print(f"• [bold green]:white_check_mark: {statement}[/bold green]")
-    elif mode == "error":
-        console.print(f"• [bold red]:x: {statement}[/bold red]")
-    elif mode == "info":
-        console.print(f"• [bold blue]:blue_book: {statement}[/bold blue]")
-    elif mode == "warning":
-        console.print(f"• [bold orange1]:warning: {statement}[/bold orange1]")
+        return
+    _print_status(statement, mode, err_console if stderr else None)
 
 
 def render_records_table(
@@ -306,6 +356,7 @@ def add_rich_display_to_polars():
     Add rich display methods to Polars DataFrame.
     Call this once to enable df.rich_print() methods.
     """
+    import polars as pl
 
     def rich_print(self, title=None, max_rows=20, max_cols=10, show_dtypes=True, console=None):
         print_polars_with_rich(

@@ -18,7 +18,7 @@ The four subcommands are the four stages:
 * ``status``  read ``.nextflow.log`` and the execution trace, ``squeue -j`` only as a fallback,
 * ``fetch``   rsync the outputs back, minus the alignment blobs, and build the
   DATA_ROOT the template expects (samplesheet into ``input/``, viralrecon under ``run_1/``),
-* ``ingest``  run ``depictio-cli run`` over the repatriated trees.
+* ``ingest``  run ``depictio-cli ingest`` over the repatriated trees.
 
 The Nextflow head process runs *inside* a small SLURM job, never on the login
 node, and the Depictio trigger is deliberately absent from the cluster: these
@@ -164,7 +164,7 @@ class RunSpec:
 
     @property
     def data_root(self) -> Path:
-        """What --data-root is pointed at: the parent when the structure is sequencing-runs."""
+        """What `ingest` is pointed at: the parent when the structure is sequencing-runs."""
         return self.local_dir
 
     @property
@@ -512,7 +512,7 @@ def ssh(command: str, *, check: bool = True, quiet: bool = False) -> subprocess.
 
 
 # --- state -------------------------------------------------------------------
-# depictio-cli run exits 1 both for a real failure and for "the project already
+# depictio-cli ingest exits 1 both for a real failure and for "the project already
 # exists", and a SLURM job id is the only durable handle on a submitted run, so
 # the driver keeps its own record instead of re-deriving one from exit codes.
 STATE_PATH = LOCAL_ROOT / ".validation-state.json"
@@ -853,7 +853,7 @@ def cmd_reprocess(args: argparse.Namespace) -> int:
 def cmd_ingest(args: argparse.Namespace) -> int:
     """Ingest the repatriated runs with the 1.10.0 CLI.
 
-    Every run gets an explicit --project-name. The automatic name is
+    Every run gets an explicit --project. The automatic name is
     "<template_id> - <basename(data_root)>", and project creation is a
     check-then-insert with no unique index on the name, so two runs that derive
     the same name can both insert and leave a pair of homonym projects behind.
@@ -862,30 +862,28 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     failed = 0
     for index, spec in enumerate(specs):
         project = args.project_prefix + f"{spec.pipeline}-{spec.version}-{spec.profile}"
-        argv = [args.cli, "run"]
+        argv = [args.cli, "ingest", str(spec.data_root)]
         if args.cli_config:
             # Each worktree stack has its own token and port, so the default
             # ~/.depictio/CLI.yaml is rarely the right one here.
-            argv += ["--CLI-config-path", str(args.cli_config)]
+            argv += ["--server", str(args.cli_config)]
         argv += [
             "--template",
             spec.template_id,
-            "--data-root",
-            str(spec.data_root),
-            "--project-name",
+            "--project",
             project,
         ]
         if index > 0:
             # The check writes the fixed key .depictio/write_test; one probe per batch.
-            argv.append("--skip-s3-check")
+            argv += ["--skip", "s3-check"]
         if args.update:
-            argv += ["--update-config", "--overwrite"]
+            argv.append("--update-config")
         if args.dry_run:
             argv.append("--dry-run")
         _log(f"-> {' '.join(shlex.quote(t) for t in argv)}")
         code = subprocess.run(argv, check=False, cwd=_REPO_ROOT).returncode
         if code != 0:
-            _log(f"! {spec.key}: depictio-cli run exited {code}")
+            _log(f"! {spec.key}: depictio-cli ingest exited {code}")
             failed += 1
         update_state(spec.key, ingested=code == 0 and not args.dry_run, project_name=project)
     return 1 if failed else 0
@@ -983,7 +981,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_reprocess.add_argument("--dry-run", action="store_true")
     p_reprocess.set_defaults(func=cmd_reprocess)
 
-    p_ingest = subparsers.add_parser("ingest", help="depictio-cli run over the repatriated trees")
+    p_ingest = subparsers.add_parser(
+        "ingest", help="depictio-cli ingest over the repatriated trees"
+    )
     add_run_option(p_ingest)
     p_ingest.add_argument(
         "--cli",
@@ -997,7 +997,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="CLI config to use (default: $DEPICTIO_CLI_CONFIG_PATH, else the CLI's own)",
     )
     p_ingest.add_argument("--project-prefix", default="", help="prepended to every project name")
-    p_ingest.add_argument("--update", action="store_true", help="--update-config --overwrite")
+    p_ingest.add_argument("--update", action="store_true", help="pass --update-config")
     p_ingest.add_argument("--dry-run", action="store_true")
     p_ingest.set_defaults(func=cmd_ingest)
 

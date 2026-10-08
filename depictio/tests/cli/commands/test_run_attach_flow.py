@@ -1,4 +1,4 @@
-"""End-to-end flag contract for `depictio-cli run --attach-run`.
+"""End-to-end flag contract for `depictio-cli ingest --attach-run`.
 
 Attaching a run to an existing project is a specific combination of the flags the
 pipeline already had, and getting any one of them wrong is silently destructive:
@@ -66,12 +66,12 @@ def _invoke(app, runner, harness, extra_args):
         return runner.invoke(
             app,
             [
+                "ingest",
                 "--template",
                 "nf-core/ampliseq/2.16.0",
-                "--data-root",
                 str(extra_args["data_root"]),
-                "--skip-server-check",
-                "--skip-s3-check",
+                "--skip",
+                "server-check,s3-check",
                 *extra_args["flags"],
             ],
         )
@@ -94,12 +94,13 @@ class TestAttachRunFlags:
         assert harness.scan.call_args.kwargs["command_parameters"]["rescan_folders"] is False
         # The delta tables are rebuilt, including the runs already ingested.
         assert harness.process.call_args.kwargs["command_parameters"]["overwrite"] is True
-        # The existing dashboards are left alone.
+        # The template brings no dashboard here; with one, see TestDashboardsOnARefresh.
         harness.import_dashboards.assert_not_called()
-        # And the new run really was appended after the existing one.
-        assert harness.sync.call_args.kwargs["ProjectConfig"]["workflows"][0]["data_location"][
-            "locations"
-        ] == ["/data/run_a", str(data_root)]
+        # And the new run really was appended after the existing one, and recorded
+        # as attached so that a refresh keeps it.
+        synced = harness.sync.call_args.kwargs["ProjectConfig"]["workflows"][0]["data_location"]
+        assert synced["locations"] == ["/data/run_a", str(data_root)]
+        assert synced["attached_locations"] == [str(data_root)]
 
     def test_overwrite_alone_still_implies_a_full_rescan(
         self, app, runner, data_root, make_harness
@@ -114,6 +115,19 @@ class TestAttachRunFlags:
         )
         assert result.exit_code == 0, result.output
         assert harness.scan.call_args.kwargs["command_parameters"]["rescan_folders"] is True
+
+    def test_update_config_alone_refreshes_the_project_in_place(
+        self, app, runner, data_root, make_harness
+    ):
+        """One flag to re-ingest: the configuration, then the tables over the existing ones."""
+        harness = make_harness(data_root, remote_locations=["/data/run_a"])
+        result = _invoke(
+            app, runner, harness, {"data_root": data_root, "flags": ["--update-config"]}
+        )
+        assert result.exit_code == 0, result.output
+        assert harness.sync.call_args.kwargs["update"] is True
+        assert harness.scan.call_args.kwargs["command_parameters"]["rescan_folders"] is True
+        assert harness.process.call_args.kwargs["command_parameters"]["overwrite"] is True
 
     def test_attach_to_a_missing_project_stops_before_writing(
         self, app, runner, data_root, make_harness
@@ -153,10 +167,10 @@ class TestProvenanceStamping:
             result = runner.invoke(
                 app,
                 [
-                    "--data-root",
+                    "ingest",
                     str(root),
-                    "--skip-server-check",
-                    "--skip-s3-check",
+                    "--skip",
+                    "server-check,s3-check",
                     *flags,
                 ],
             )
@@ -266,11 +280,12 @@ class TestServerCheckHonoursTheVerdict:
             result = runner.invoke(
                 app,
                 [
+                    "ingest",
                     "--template",
                     "nf-core/ampliseq/2.16.0",
-                    "--data-root",
                     str(data_root),
-                    "--skip-s3-check",
+                    "--skip",
+                    "s3-check",
                 ],
             )
         finally:
@@ -283,6 +298,40 @@ class TestServerCheckHonoursTheVerdict:
         # It stopped at step 1: nothing was synced, scanned or processed.
         harness.sync.assert_not_called()
         harness.scan.assert_not_called()
+
+    def test_another_answer_is_not_blamed_on_the_token(self, app, runner, data_root, make_harness):
+        """A viewer host's 404 or a proxy's 502: a new token would not fix it."""
+        harness = make_harness(data_root, remote_locations=[])
+        patches = harness.patches()
+        patches.append(
+            patch(
+                "depictio.cli.cli.commands.run.api_login",
+                MagicMock(return_value={"success": False, "status_code": 404}),
+            )
+        )
+        for p in patches:
+            p.start()
+        try:
+            result = runner.invoke(
+                app,
+                [
+                    "ingest",
+                    "--template",
+                    "nf-core/ampliseq/2.16.0",
+                    str(data_root),
+                    "--skip",
+                    "s3-check",
+                ],
+            )
+        finally:
+            for p in patches:
+                p.stop()
+
+        assert result.exit_code == 1, result.output
+        out = " ".join(result.output.split())
+        assert "Server accessibility check failed: the server answered HTTP 404" in out
+        assert "expired" not in out
+        harness.sync.assert_not_called()
 
     def test_an_accepted_config_proceeds(self, app, runner, data_root, make_harness):
         harness = make_harness(data_root, remote_locations=[])
@@ -299,11 +348,12 @@ class TestServerCheckHonoursTheVerdict:
             result = runner.invoke(
                 app,
                 [
+                    "ingest",
                     "--template",
                     "nf-core/ampliseq/2.16.0",
-                    "--data-root",
                     str(data_root),
-                    "--skip-s3-check",
+                    "--skip",
+                    "s3-check",
                 ],
             )
         finally:

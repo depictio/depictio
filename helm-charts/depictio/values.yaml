@@ -262,9 +262,14 @@ s3:
 backend:
   image:
     repository: ghcr.io/depictio/depictio-api # FastAPI backend image (post-Dash split)
-    tag: "1.11.2"
+    tag: "1.13.1"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
+  # Raw container env entries (name/value or valueFrom), appended after the
+  # chart-managed ones. The ConfigMap is an explicit key allowlist, so this is
+  # the way to set variables it does not know, e.g. the botocore checksum
+  # switches an S3 gateway may need.
+  extraEnv: []
   resources:
     requests:
       memory: "1Gi"
@@ -359,7 +364,7 @@ backend:
     # ("thumbnails" or "table"), and the geometry of the thumbnails it shows:
     # the CSS viewport the dashboard is laid out at, times a pixel density that
     # keeps the shot readable once a card shrinks it.
-    DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: "thumbnails"
+    DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: "table"
     DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_WIDTH: "1440"
     DEPICTIO_PERFORMANCE_SCREENSHOT_VIEWPORT_HEIGHT: "900"
     DEPICTIO_PERFORMANCE_SCREENSHOT_SCALE: "2.0"
@@ -420,9 +425,11 @@ celery:
   image:
     # Distinct worker image (Celery + Playwright/chromium for screenshots).
     repository: ghcr.io/depictio/depictio-worker
-    tag: "1.11.2"
+    tag: "1.13.1"
     pullPolicy: Always
   replicas: 1
+  # Same as backend.extraEnv, for the worker container.
+  extraEnv: []
   resources:
     requests:
       memory: "512Mi"
@@ -455,7 +462,7 @@ celery:
 viewer:
   image:
     repository: ghcr.io/depictio/depictio-viewer # nginx + built React SPA
-    tag: "1.11.2"
+    tag: "1.13.1"
     pullPolicy: Always
   replicas: 1 # Balanced for stability and performance
   # Deployment update strategy. Default "Recreate" matches the other

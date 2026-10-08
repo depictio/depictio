@@ -47,16 +47,29 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="annotation",
         glob_pattern="**/*_peaks.annotatePeaks.txt",
         format="TSV",
+        input_schema={
+            "Chr": pl.Utf8,
+            "Start": pl.Utf8,
+            "End": pl.Utf8,
+            "Strand": pl.Utf8,
+            "Peak Score": pl.Utf8,
+            "Annotation": pl.Utf8,
+            "Distance to TSS": pl.Utf8,
+            "Nearest PromoterID": pl.Utf8,
+            "Gene Name": pl.Utf8,
+        },
         read_kwargs={"infer_schema_length": 0, "null_values": ["NA"]},
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "peak_id": pl.Utf8,
     "chr": pl.Utf8,
@@ -128,4 +141,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("gene_name").cast(pl.Utf8),
         pl.col("gene_type").cast(pl.Utf8),
     )
-    return df.select(list(EXPECTED_SCHEMA)).sort(["sample", "chr", "start"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["sample", "chr", "start"])

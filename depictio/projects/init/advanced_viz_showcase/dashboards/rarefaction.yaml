@@ -1,11 +1,11 @@
-# Rarefaction — one tab of the advanced-visualisation showcase.
+# Sequencing depth saturation: one tab of the advanced-visualisation showcase.
 #
 # Regenerate the seed after editing:
 #   venv/bin/python -m depictio.dev_scripts.generate_dashboard_seeds advanced_viz_showcase
 #
 # The component `index` values are pinned rather than auto-generated: they are
 # what keeps a regenerated seed byte-identical to the shipped one.
-title: 'Rarefaction'
+title: 'Sequencing depth saturation'
 subtitle: 'Alpha-diversity vs sequencing depth across 18 samples in 3 habitats (gut / skin / soil).'
 icon: 'mdi:chart-line'
 icon_color: 'cyan'
@@ -44,10 +44,12 @@ components:
     vertical_alignment: top
     section: 'Rarefaction curves'
     body: >
-      Diversity recomputed at a ladder of sequencing depths, several iterations per depth,
-      with the spread drawn as a confidence band. A curve that flattens means the sample was
-      sequenced deeply enough; one still climbing means richness is bounded by depth.
-    layout: { x: 0, y: 0, w: 8, h: 1 }
+      Alpha diversity recomputed at increasing subsampling depth, one curve per sample with
+      its spread across iterations. A curve that flattens was sequenced deeply enough; one
+      still climbing has richness bounded by depth. Group by habitat and the metric (Faith PD,
+      observed features, Shannon) are in the tile header. Input: the QIIME2 alpha-rarefaction
+      tables of nf-core/ampliseq.
+    layout: { x: 0, y: 0, w: 8, h: 2 }
 
   - tag: viz-rarefaction
     index: 'rare-curves'
@@ -55,7 +57,7 @@ components:
     workflow_tag: advanced_viz_demo
     data_collection_tag: 'rarefaction_demo'
     title: 'Rarefaction curves (Faith PD)'
-    description: 'Alpha-diversity rises with sequencing depth then plateaus. Drag the Habitat filter to colour-segregate; tune Top-N samples and ±SE band in the Settings popover.'
+    description: 'Alpha diversity rises with sequencing depth then plateaus. Metric and group-by sit in the tile header.'
     section: 'Rarefaction curves'
     viz_kind: 'rarefaction'
     config:
@@ -67,7 +69,8 @@ components:
       iter_col: "iter"
       group_col: "habitat"
       show_ci: true
-    layout: { x: 0, y: 2, w: 8, h: 8 }
+      controls_placement: "header"
+    layout: { x: 0, y: 2, w: 8, h: 9 }
 
   - tag: filter-rarefaction-habitat
     index: rare-f-habitat
@@ -117,6 +120,7 @@ components:
     placement: left
     section: 'Curve scope'
     group: 'Curve filters'
+    show_histogram: true
     display:
       title_size: md
       custom_color: '#00BCD4'

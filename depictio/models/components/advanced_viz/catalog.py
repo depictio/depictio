@@ -4,7 +4,7 @@ For each tool output, one catalog entry links:
 
   - `find`        — how to recognise the raw nf-core file (used at scan time).
   - `recipe`      — optional `.py` that reshapes it. **The recipe owns the
-                    output columns** (its `EXPECTED_SCHEMA`); the catalog does
+                    output columns** (its `OUTPUT_SCHEMA`); the catalog does
                     not repeat them.
   - `columns`     — the bindable columns, declared **only when there is no
                     recipe** (raw == bindable). Omitted when a recipe is present.
@@ -715,6 +715,21 @@ def check_existence(entries: tuple[CatalogEntry, ...] | list[CatalogEntry]) -> l
     return problems
 
 
+def check_identity(entries: tuple[CatalogEntry, ...] | list[CatalogEntry]) -> list[str]:
+    """Flag tools whose catalog card would render without a description or homepage.
+
+    Nothing derives a tool's identity from its nf-core ``meta.yml``: the payload
+    reads ``description`` and ``homepage`` from ``module.yaml`` alone, so a module
+    that leaves them out ships an empty card.
+    """
+    problems: list[str] = []
+    for entry in entries:
+        missing = [field for field in ("description", "homepage") if not getattr(entry, field)]
+        if missing:
+            problems.append(f"{entry.id}: module.yaml declares no {' or '.join(missing)}")
+    return problems
+
+
 # ---------------------------------------------------------------------------
 # Recipe output columns — used by `catalog validate` to ground recipe outputs.
 # Imports a recipe module, so it lives here but is only called from the CLI/CI.
@@ -755,11 +770,11 @@ def read_fixture_schema(path: Path) -> dict[str, str]:
 
 
 def recipe_output_columns(recipe_ref: str) -> list[str]:
-    """Return the output column names a recipe produces (its EXPECTED_SCHEMA)."""
+    """Return the output column names a recipe produces (its OUTPUT_SCHEMA)."""
     from depictio.recipes import load_recipe
 
     module = load_recipe(recipe_ref)
-    return list(module.EXPECTED_SCHEMA.keys())
+    return list(module.OUTPUT_SCHEMA.keys())
 
 
 # Aggregations that are only meaningful on a numeric column. min/max/count/

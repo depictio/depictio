@@ -19,6 +19,7 @@ from depictio.api.v1.endpoints.backup_endpoints.routes import backup_endpoint_ro
 from depictio.api.v1.endpoints.catalog_endpoints.routes import catalog_endpoint_router
 from depictio.api.v1.endpoints.celery_endpoints.routes import celery_endpoint_router
 from depictio.api.v1.endpoints.cli_endpoints.routes import cli_endpoint_router
+from depictio.api.v1.endpoints.comments_endpoints.routes import comments_endpoint_router
 from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboards_endpoint_router
 from depictio.api.v1.endpoints.datacollections_endpoints.routes import (
     datacollections_endpoint_router,
@@ -115,6 +116,12 @@ router.include_router(
     dashboards_endpoint_router,
     prefix="/dashboards",
     tags=["Dashboards"],
+)
+
+router.include_router(
+    comments_endpoint_router,
+    prefix="/comments",
+    tags=["Comments"],
 )
 
 router.include_router(

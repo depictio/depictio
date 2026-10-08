@@ -17,7 +17,7 @@ This script does two things:
   version's AWS megatest results (anonymous S3) in three layers:
     1. source-path existence (which recipe inputs moved/renamed),
     2. recipe execution — download each file-based recipe's inputs and actually
-       run ``transform()`` + assert ``EXPECTED_SCHEMA`` (catches column/content
+       run ``transform()`` + assert ``OUTPUT_SCHEMA`` (catches column/content
        changes, not just missing files); dc_ref/canonical recipes are skipped,
     3. ``depictio dev catalog validate`` as a static module/recipe gate.
   Pass ``--no-exec`` for the fast path-existence check only.
@@ -489,7 +489,7 @@ def build_drift_report(
 
     Layer 1 (always): recipe source-path existence against the new megatest.
     Layer 2 (when ``recipe_results`` given): the recipes actually run — load the
-    real files, run ``transform()`` and assert ``EXPECTED_SCHEMA``.
+    real files, run ``transform()`` and assert ``OUTPUT_SCHEMA``.
     Layer 3 (when ``catalog_result`` given): static ``catalog validate`` gate.
     ``run_root`` names the sub-directory of the run that is the DATA_ROOT and
     ``note`` is printed under the header (e.g. when the report had to fall back

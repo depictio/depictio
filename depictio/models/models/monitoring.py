@@ -6,10 +6,10 @@ Three durable records back the admin monitoring UI:
   handlers (``depictio/api/v1/monitoring/task_signals.py``) as the task moves
   through its lifecycle. Stored in the ``task_events`` collection, keyed by
   ``task_id``, with a TTL index on ``created_at`` for retention.
-- ``IngestionRun`` — one row per CLI ``run`` invocation, opened/closed by the
-  CLI via the ``/monitoring/ingestion`` endpoints. Tags each run with the
-  originating CLI instance (hostname + user-defined label) so multiple CLIs
-  talking to one server stay distinguishable.
+- ``IngestionRun`` — one row per CLI ``ingest`` (formerly ``run``) invocation,
+  opened/closed by the CLI via the ``/monitoring/ingestion`` endpoints. Tags each
+  run with the originating CLI instance (hostname + user-defined label) so multiple
+  CLIs talking to one server stay distinguishable.
 - ``AppLogRecord`` — recent application log lines, written by a logging handler
   into the capped ``app_logs`` collection (bounded, cross-process, queryable).
 
@@ -127,7 +127,8 @@ class IngestionDataCollection(BaseModel):
 
 
 class IngestionRun(BaseModel):
-    """Lifecycle record for one ingestion invocation (CLI ``run`` or UI upload).
+    """Lifecycle record for one ingestion invocation: CLI ``ingest`` (formerly ``run``) or
+    UI upload.
 
     Stored in the ``ingestion_runs`` collection, keyed by ``run_id``. CLI runs are
     opened by ``POST /monitoring/ingestion/start`` and closed by
@@ -148,6 +149,8 @@ class IngestionRun(BaseModel):
     email: Optional[str] = Field(default=None, description="Email of the ingesting user")
     project_id: Optional[str] = Field(default=None, description="Target project id")
     project_name: Optional[str] = Field(default=None, description="Target project name")
+    # "run" by default: the command was renamed ``ingest``, and a client that omits the
+    # field is one from before the rename.
     command: str = Field(default="run", description="CLI command that triggered the run")
     command_line: Optional[str] = Field(
         default=None, description="Exact CLI invocation used (sensitive flags redacted)"

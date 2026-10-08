@@ -3,7 +3,7 @@
 A Nextflow pipeline can push its own results into a running Depictio instance
 when it finishes. The mechanism is a `workflow.onComplete` handler shipped as a
 drop-in config snippet, `depictio/cli/configs/nextflow/depictio.config`, which
-runs `depictio-cli run` on the pipeline's output directory.
+runs `depictio-cli ingest` on the pipeline's output directory.
 
 ## What the handler does
 
@@ -16,7 +16,7 @@ On completion, in this order:
 3. Resolves the data root: `params.depictio_data_root`, else `params.outdir`.
    A relative path is made absolute against `workflow.launchDir`. If neither is
    set, it warns and returns.
-4. Builds the `depictio-cli run` argument list.
+4. Builds the `depictio-cli ingest` argument list.
 5. Runs it as a child process with stderr merged into stdout, exporting
    `DEPICTIO_DATA_ROOT` into the child environment, and streams the CLI's output
    line by line into the Nextflow log.
@@ -58,9 +58,9 @@ pip install depictio-cli
 
 and put the CLI configuration Depictio generated for you at
 `~/.depictio/CLI.yaml`. That is the path the CLI agents page in the viewer
-already tells you to save it to, and the path the snippet falls back to, so
-there is nothing to point at and nothing to export. Confirm it took, from that
-same machine, before trusting a long pipeline to it:
+already tells you to save it to, and the one the CLI reads when the snippet
+passes no `--server`, so there is nothing to point at and nothing to export.
+Confirm it took, from that same machine, before trusting a long pipeline to it:
 
 ```bash
 depictio-cli config check
@@ -212,7 +212,7 @@ the head job is a different machine with a different home directory and a
 different environment.
 
 ```bash
-depictio-cli config check --CLI-config-path /path/to/CLI.yaml
+depictio-cli config check --server /path/to/CLI.yaml
 ```
 
 It validates the configuration file, reaches the server with the token and names
@@ -224,7 +224,7 @@ the user it authenticated as, then checks the S3 storage:
 • ✅ S3 storage configuration is valid
 ```
 
-Run it as the same user, with the same `--CLI-config-path` or the same
+Run it as the same user, with the same `--server` or the same
 `DEPICTIO_CLI_*` environment variables the trigger will use. In a scheduler,
 that means running it inside a job, not on the login node.
 
@@ -239,17 +239,25 @@ nextflow run <pipeline> -c depictio.config -preview --outdir ./preflight-does-no
 You get the exact command the handler will run, and then a clean stop:
 
 ```
-[depictio] <executable> run --CLI-config-path ... --data-root ... --triggered-by nextflow --pipeline-id nf-core/ampliseq/2.16.0
-[depictio] • ✅ Resolved pipeline 'nf-core/ampliseq/2.16.0' to a bundled template.
-[depictio] • ❌ --data-root does not exist or is not a directory: ...
+[depictio] 💻 Command    :
+[depictio]     <executable> ingest /abs/path/preflight-does-not-exist \
+[depictio]         --server ... \
+[depictio]         --triggered-by nextflow \
+[depictio]         --pipeline-id nf-core/ampliseq/2.16.0
+[depictio] --------------------------------------------------------------
+[depictio] • ❌ DATA_DIR does not exist or is not a directory: ...
 ```
 
-That single output proves the executable was found, the CLI config loaded, the
-server answered and the template resolved. Point the preview at a data root that
-does not exist yet, as above: the preview runs no process, but the handler is
-real, so if the directory it would ingest already holds results the CLI carries
-on and genuinely creates the project. That is `--outdir` here, or
-`params.depictio_data_root` when you set it explicitly.
+That output proves the handler fired, the executable was found and started, and
+which options it was given (`--server` appears only when
+`params.depictio_cli_config` or `$DEPICTIO_CLI_CONFIG_PATH` is set). The CLI
+checks the results directory before anything else, so it stops there without
+reaching the server: the connection is what `depictio-cli config check` above
+proves. Point the preview at a data root that does not exist yet, as above: the
+preview runs no process, but the handler is real, so if the directory it would
+ingest already holds results the CLI carries on and genuinely creates the
+project. That is `--outdir` here, or `params.depictio_data_root` when you set it
+explicitly.
 
 Note that `nextflow config` is not an alternative here. It has no `-c` option, so
 it cannot see a snippet passed with `-c`; it shows the `depictio_*` parameters
@@ -417,11 +425,12 @@ A second execution finds its project already on the server. The CLI refuses to
 touch it and says so, exiting 2, which is the safe default but stops every re-run.
 Pick the behaviour you want:
 
-- `params.depictio_update = true` refreshes the existing project's configuration
-  and re-ingests the same data root, which is what you want after fixing a
-  pipeline and re-running with `-resume`. It passes `--overwrite` as well,
-  because the delta tables from the first ingestion are already written and
-  rebuilding them is the point.
+- `params.depictio_update = true` passes `--update-config`: it refreshes the
+  existing project's configuration and re-ingests the same data root, which is
+  what you want after fixing a pipeline and re-running with `-resume`. It also
+  rewrites the delta tables the first ingestion wrote, because rebuilding them is
+  the point, and keeps the project's dashboards as edited in the viewer, so the
+  refresh can run unattended at every completion.
 - `params.depictio_attach = true` keeps the existing runs and adds this one. It
   implies the update, so setting both is the same as setting only `depictio_attach`.
 
@@ -449,7 +458,7 @@ nextflow run <pipeline> --outdir results -c depictio.config
 | --- | --- |
 | `DEPICTIO_CLI_TOKEN` | Injected as `user.token.access_token`, overriding the file |
 | `DEPICTIO_CLI_API_BASE_URL` | Overrides `api_base_url` from the file |
-| `DEPICTIO_CLI_CONFIG_PATH` | Selects which CLI config file to load. It only applies when the caller left the path at its default, so an explicit `--CLI-config-path` (or `params.depictio_cli_config`) is never clobbered |
+| `DEPICTIO_CLI_CONFIG_PATH` | Selects which CLI config file to load. It only applies when the caller left the path at its default, so an explicit `--server` (or `params.depictio_cli_config`) is never clobbered |
 
 This is the right shape for a CI runner or a shared service account. On a laptop,
 the generated `~/.depictio/CLI.yaml` is less work and does the same thing.
@@ -496,9 +505,12 @@ params.depictio_cli_executable = [
     '-v', '{DATA_ROOT}:{DATA_ROOT}',
     '-v', "${home}/.depictio:${home}/.depictio:ro",
     '--network', 'host',
-    'ghcr.io/depictio/depictio-cli:1.9.2',
+    'ghcr.io/depictio/depictio-cli:<version>',
 ]
 ```
+
+Replace `<version>` with your server's release, 1.12.0 or later: the handler
+calls `ingest` and may pass `--server`, and earlier images have neither.
 
 `{DATA_ROOT}` is substituted when the pipeline completes, and it is the only way
 to mount the directory being ingested. The list itself is built when the config
@@ -508,7 +520,7 @@ docker dutifully mounts a directory called `null`. `System.getProperty` is fine
 there, which is why the home path above is interpolated normally.
 
 The image sets `depictio-cli` as its entrypoint, so the list stops at the image
-name and the handler appends `run` and its options.
+name and the handler appends `ingest` and its options.
 
 That same entrypoint is how you get the snippet itself on a machine with no CLI
 installed, which is otherwise the one case where
@@ -523,10 +535,15 @@ Then pass that file with `-c`, and put the `depictio_cli_executable` list above
 in it or in your own `nextflow.config`.
 
 Both binds map a host path onto **the same path inside the container**, and
-that is not cosmetic. The handler builds an absolute `--data-root` and an
-absolute `--CLI-config-path` from the host's point of view and passes them
-through verbatim, so a bind that lands them anywhere else makes the CLI fail on
-a path it cannot see. The data root is also what gets recorded in the project.
+that is not cosmetic. The handler builds an absolute results directory, and a
+`--server` file path when one is set, from the host's point of view and passes
+them through verbatim, so a bind that lands them anywhere else makes the CLI
+fail on a path it cannot see. The data root is also what gets recorded in the
+project.
+
+The container has its own home, so it finds no `~/.depictio/CLI.yaml` of its
+own. Set `params.depictio_cli_config`, or export `DEPICTIO_CLI_CONFIG_PATH` on
+the head job, so that the handler passes the bound file as `--server`.
 
 Instead of binding the configuration you can supply `DEPICTIO_CLI_TOKEN` and
 `DEPICTIO_CLI_API_BASE_URL` with `-e`, which is the better fit for CI, where the
@@ -541,7 +558,7 @@ Singularity or Apptainer works the same way, with `--bind` in place of `-v`:
 params.depictio_cli_executable = [
     'singularity', 'exec',
     '--bind', '{DATA_ROOT}',
-    'docker://ghcr.io/depictio/depictio-cli:1.9.2',
+    'docker://ghcr.io/depictio/depictio-cli:<version>',
     'depictio-cli',
 ]
 ```
@@ -577,16 +594,16 @@ stayed green, as designed.
 | Parameter | Default | CLI option it drives |
 | --- | --- | --- |
 | `depictio_enabled` | `true`, or whatever `--install --default-disabled` set | none, set to `false`/`true` to disable/force the trigger for one run |
-| `depictio_data_root` | `params.outdir` | `--data-root` |
-| `depictio_cli_config` | `$DEPICTIO_CLI_CONFIG_PATH`, else `~/.depictio/CLI.yaml` | `--CLI-config-path` |
+| `depictio_data_root` | `params.outdir` | the results directory, `ingest`'s argument |
+| `depictio_cli_config` | `$DEPICTIO_CLI_CONFIG_PATH` | `--server`, a CLI config file or `local` for the server `depictio local up` runs. With neither set, no `--server` is passed and the CLI uses `~/.depictio/CLI.yaml`, else the local server |
 | `depictio_template` | none | `--template` |
 | `depictio_project_config` | none | `--project-config-path` (wins over `--template`) |
-| `depictio_project` | none | `--project-name` |
+| `depictio_project` | none | `--project` |
 | `depictio_dashboard` | none | `--dashboard` (one path or a list; templates bring their own) |
 | `depictio_attach` | `false` | `--attach-run` |
-| `depictio_update` | `false` | `--update-config --overwrite` (ignored with `--attach-run`, which implies both) |
+| `depictio_update` | `false` | `--update-config` (ignored with `--attach-run`, which implies it); the project's dashboards are kept as edited in the viewer |
 | `depictio_user` | none | `--user` |
-| `depictio_cli_executable` | `depictio-cli` | the executable that is run, or a list (a container invocation); `{DATA_ROOT}` in a list element is substituted at completion |
+| `depictio_cli_executable` | `depictio-cli` | the executable that is run, or a list (a container invocation); `{DATA_ROOT}` in a list element is substituted at completion. `depictio-cli` is the former name of `depictio`, kept as an alias |
 
 Booleans are coerced explicitly, so `--depictio_enabled false` and
 `--depictio_attach false` behave as expected. Groovy treats every non-empty
@@ -606,9 +623,9 @@ Everything the handler emits is prefixed with `[depictio]`, on the console and i
 | `Ingestion trigger failed, pipeline result unchanged` | Anything else the handler hit. The exception is on that line; the pipeline's own result is never affected |
 | `depictio-cli exited with code N` | The ingestion itself failed. The CLI's own output is in the log above that line, prefixed with `[depictio]` |
 
-To see the exact command without running a pipeline, read the
-`[depictio] <executable> run ...` line: it is the full argument list, logged
-before the process starts.
+To see the exact command without running a pipeline, read the block under
+`[depictio] 💻 Command`: it is the full argument list, one option per line,
+logged before the process starts.
 
 ## Notes on the snippet's implementation
 

@@ -3,7 +3,7 @@
 Each test writes a minimal synthetic input file into a temp data_dir, runs
 the recipe via ``execute_recipe``, and asserts:
 
-  1. The recipe's own ``EXPECTED_SCHEMA`` is met (this is enforced by the
+  1. The recipe's own ``OUTPUT_SCHEMA`` is met (this is enforced by the
      recipe engine — checkpoint 4 in depictio/recipes/__init__.py:288).
   2. The result is non-empty.
   3. The canonical viz binding validates against the produced schema via
@@ -38,17 +38,8 @@ def _polars_schema_name(df: pl.DataFrame) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 
-def test_ampliseq_stacked_taxonomy_canonical(tmp_path: Path) -> None:
-    # The recipe fans in QIIME2 rel-table-{2..6}.tsv (one wide table per rank,
-    # taxa × samples), read from the run directory. Each carries the
-    # "# Constructed from biom file" banner QIIME2's biom export writes, which is
-    # why the sources skip a row.
-    #
-    # All five levels are written because the recipe engine rejects a required
-    # source that is missing *or* that loads zero rows, so a run cannot present
-    # QIIME2's collapse levels one at a time. Kingdom is not among them: the
-    # recipe derives it by summing the Phylum rows.
-    tables = tmp_path / "qiime2" / "rel_abundance_tables"
+def _write_rel_tables(data_dir: Path) -> None:
+    tables = data_dir / "qiime2" / "rel_abundance_tables"
     tables.mkdir(parents=True)
     lineages = {
         2: ("k__Bacteria;p__Firmicutes", "k__Bacteria;p__Bacteroidetes"),
@@ -76,6 +67,19 @@ def test_ampliseq_stacked_taxonomy_canonical(tmp_path: Path) -> None:
             f"{second}\t0.30\t0.50\n"
         )
 
+
+def test_ampliseq_stacked_taxonomy_canonical(tmp_path: Path) -> None:
+    # The recipe fans in QIIME2 rel-table-{2..6}.tsv (one wide table per rank,
+    # taxa × samples), read from the run directory. Each carries the
+    # "# Constructed from biom file" banner QIIME2's biom export writes, which is
+    # why the sources skip a row.
+    #
+    # All five levels are written because the recipe engine rejects a required
+    # source that is missing *or* that loads zero rows, so a run cannot present
+    # QIIME2's collapse levels one at a time. Kingdom is not among them: the
+    # recipe derives it by summing the Phylum rows.
+    _write_rel_tables(tmp_path)
+
     result = execute_recipe("qiime2/stacked_taxonomy_canonical.py", tmp_path)
 
     assert not result.is_empty()
@@ -98,6 +102,34 @@ def test_ampliseq_stacked_taxonomy_canonical(tmp_path: Path) -> None:
     )
     errors = validate_binding(cfg, _polars_schema_name(result))
     assert errors == [], f"binding errors: {errors}"
+
+
+def test_ampliseq_stacked_taxonomy_joins_categorical_metadata(tmp_path: Path) -> None:
+    # Annotation strips colour bars by a per-sample column read from this DC.
+    # A run grouped by something other than the reference dataset's `habitat`
+    # (TREC: `locality`) used to get no metadata at all, so every bar came out
+    # in one colour. Every low-cardinality categorical column is joined now;
+    # numeric and high-cardinality columns are not.
+    _write_rel_tables(tmp_path)
+    metadata = pl.DataFrame(
+        {
+            "ID": ["S1", "S2"],
+            "locality": ["Naples", "Athens"],
+            "season": ["spring", "spring"],
+            "depth_m": [1.0, 5.0],  # numeric: not a strip
+        }
+    )
+
+    result = execute_recipe(
+        "qiime2/stacked_taxonomy_canonical.py", tmp_path, extra_sources={"metadata": metadata}
+    )
+
+    assert {"locality", "season"}.issubset(result.columns)
+    assert not {"depth_m", "ID"} & set(result.columns)
+    per_sample = dict(result.select("sample_id", "locality").unique().iter_rows())
+    assert per_sample == {"S1": "Naples", "S2": "Athens"}
+    # Bars come out grouped by the first categorical column: Athens first.
+    assert result["sample_id"][0] == "S2"
 
 
 # ---------------------------------------------------------------------------

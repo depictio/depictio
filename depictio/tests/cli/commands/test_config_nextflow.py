@@ -11,8 +11,10 @@ the bareness of the output as much as its content.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from depictio.cli.cli.commands.config import app
@@ -43,8 +45,8 @@ class TestPathOutput:
         out = _stdout()
         assert out.endswith("\n")
         assert len(out.strip().splitlines()) == 1
-        # Rich's checkmarks, banners and box drawing all fail this.
-        assert not any(ch in out for ch in "•✅❌╭╮╰╯│")
+        # Rich's status symbols, banners and box drawing all fail this.
+        assert not any(ch in out for ch in "•✓✗✅❌╭╮╰╯│▀▄")
 
 
 class TestPrintOutput:
@@ -131,7 +133,22 @@ class TestInstallEnablesTheTriggerGlobally:
     def test_install_and_uninstall_together_are_refused(self, monkeypatch, tmp_path):
         result = self._run(monkeypatch, tmp_path, "--install", "--uninstall")
 
-        assert result.exit_code == 1
+        assert result.exit_code == 2
+
+    @pytest.mark.parametrize("other", ["--install", "--uninstall"])
+    def test_print_with_install_or_uninstall_is_refused(self, monkeypatch, tmp_path, other):
+        """One of the two used to be dropped without a word."""
+        result = self._run(monkeypatch, tmp_path, "--print", other)
+
+        assert result.exit_code == 2
+        assert "pass only one" in result.output
+        assert not (tmp_path / ".nextflow" / "config").exists()
+
+    def test_default_disabled_without_install_is_refused(self, monkeypatch, tmp_path):
+        result = self._run(monkeypatch, tmp_path, "--default-disabled")
+
+        assert result.exit_code == 2
+        assert "only applies with --install" in result.output
 
 
 class TestInstallDefaultToggle:
@@ -226,3 +243,79 @@ class TestTheHandlerForwardsDashboards:
         example = Path(depictio.cli.__file__).parent / "configs" / "nextflow" / "example"
         assert (example / "depictio_dashboard.yaml").is_file()
         assert "depictio_dashboard" in (example / "nextflow.config").read_text()
+
+
+class TestTheHandlerCallsIngest:
+    """The handler runs `depictio-cli ingest --server ...`. A handler copied from an
+    older release still calls `run`, which the CLI keeps as an alias."""
+
+    def _nextflow_dir(self) -> Path:
+        import depictio.cli
+
+        return Path(depictio.cli.__file__).parent / "configs" / "nextflow"
+
+    def _snippet(self) -> str:
+        return (self._nextflow_dir() / "depictio.config").read_text()
+
+    def test_it_runs_ingest(self):
+        snippet = self._snippet()
+        assert "argv.add('ingest')" in snippet
+        assert "argv.add('run')" not in snippet
+
+    def test_the_server_reaches_the_cli_as_server(self):
+        snippet = self._snippet()
+        assert "argv += ['--server', cliConfig]" in snippet
+        assert "--CLI-config-path" not in snippet
+
+    def test_the_data_root_is_the_argument_and_the_project_is_project(self):
+        """The CLI's current names, so a pipeline log carries no rename notice."""
+        snippet = self._snippet()
+        assert "argv.add(dataRoot)" in snippet
+        assert "argv += ['--project', projectName]" in snippet
+        # --update-config alone: a refresh keeps the dashboards edited in the viewer.
+        assert "argv += ['--update-config']" in snippet
+
+    def test_without_a_configuration_no_server_is_passed(self):
+        """Naming ~/.depictio/CLI.yaml itself turned off the CLI's own fallback to the
+        local server: with no such file, the ingestion failed on it."""
+        snippet = self._snippet()
+        assert (
+            "cfg.call('depictio_cli_config',\n"
+            "            System.getenv('DEPICTIO_CLI_CONFIG_PATH'))?.toString()?.trim()"
+        ) in snippet
+        assert '/.depictio/CLI.yaml")' not in snippet
+        assert "if (cliConfig) {" in snippet
+
+    def test_the_container_example_needs_a_release_with_ingest(self):
+        """1.9.2, the image it named, has neither `ingest` nor --server: a version
+        written here goes stale at every release, so the reader picks theirs."""
+        files = [self._nextflow_dir() / "depictio.config"]
+        files += sorted((self._nextflow_dir() / "example").iterdir())
+        images = [
+            image
+            for path in files
+            for image in re.findall(r"depictio-cli:[^'\]\s]+", path.read_text())
+        ]
+        assert images and set(images) == {"depictio-cli:<version>"}
+
+    def test_local_is_documented(self):
+        """`depictio_cli_config = 'local'` targets the server `depictio local up` runs."""
+        assert "--depictio_cli_config local" in self._snippet()
+        options = (self._nextflow_dir() / "example" / "depictio_all_options.config").read_text()
+        assert "params.depictio_cli_config = 'local'" in options
+
+    def test_no_text_still_names_the_former_command(self):
+        files = [self._nextflow_dir() / "depictio.config"]
+        files += sorted((self._nextflow_dir() / "example").iterdir())
+        for path in files:
+            text = path.read_text()
+            for former in (
+                "depictio-cli run",
+                "depictio run",
+                "--CLI-config-path",
+                "--data-root <",
+                "'--data-root'",
+                "--project-name",
+                "'--overwrite'",
+            ):
+                assert former not in text, f"{former!r} in {path.name}"

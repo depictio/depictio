@@ -59,11 +59,25 @@ from depictio.models.models.transforms import RecipeSource
 #: scan its per-sample SEACR beds into a DC with this tag (see module docstring).
 RAW_DC_TAG = "seacr_peaks_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
-    RecipeSource(ref="peaks", dc_ref=RAW_DC_TAG),
+    RecipeSource(
+        ref="peaks",
+        dc_ref=RAW_DC_TAG,
+        input_schema={
+            "chr": pl.Utf8,
+            "start": pl.Utf8,
+            "end": pl.Utf8,
+            "total_signal": pl.Utf8,
+            "max_signal": pl.Utf8,
+            "max_signal_region": pl.Utf8,
+            "source_path": pl.Utf8,
+        },
+    ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "peak_id": pl.Utf8,
     "threshold_mode": pl.Utf8,
@@ -149,4 +163,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .alias("signal_density"),
         (pl.col("total_signal") + 1.0).log10().alias("log10_total_signal"),
     )
-    return df.select(list(EXPECTED_SCHEMA)).sort(["sample", "chr", "start"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["sample", "chr", "start"])

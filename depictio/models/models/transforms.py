@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, field_serializer, field_validator, model_validator
 
 
 class RecipeSource(BaseModel):
@@ -15,8 +17,21 @@ class RecipeSource(BaseModel):
     format: str = "CSV"  # CSV, TSV, Parquet
     read_kwargs: dict | None = None  # Extra kwargs passed to polars read function
     optional: bool = False  # If True and dc_ref not resolvable, passes None to transform()
+    # Columns transform() reads from this source, as column -> polars dtype. Checked
+    # after the source is read and before transform() runs.
+    input_schema: dict[str, Any] | None = None
+    # Name of a column to add to every row, holding the path (relative to the data
+    # root, POSIX separators) of the file the row was read from. Lets a recipe
+    # derive a key the file content lacks, e.g. the sample of a per-sample fusion
+    # table: `pl.col("source_path").map_elements(...)` or a `str.extract`.
+    source_path: str | None = None
 
     model_config = ConfigDict(extra="forbid")
+
+    @field_serializer("input_schema", when_used="json")
+    def _dtype_names(self, schema: dict[str, Any] | None) -> dict[str, str] | None:
+        # Polars dtypes are not JSON types; their names are.
+        return None if schema is None else {col: str(dtype) for col, dtype in schema.items()}
 
     @field_validator("format")
     @classmethod
@@ -65,6 +80,10 @@ class TransformConfig(BaseModel):
     # Output already computed and shipped as a seed file: keep the lineage, never
     # re-run the recipe. Set by the init resolver, never declared in a YAML.
     materialized: bool = False
+    # Template-substituted parameters passed to recipes whose transform() accepts
+    # a ``params`` keyword (e.g. ``marker_panel: "{MARKER_PANEL}"``). Values still
+    # holding an unresolved ``{VAR}`` placeholder are dropped before the call.
+    params: dict[str, str] | None = None
 
     model_config = ConfigDict(extra="forbid")
 

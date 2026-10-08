@@ -33,6 +33,19 @@ keys:
   # Somatic (indel/): rtg-tools vcfeval + som.py aggregated summaries.
   - indel/summary/tables/*
 prefix_keys: []
+# Terms of the megatest (truth sets, sample ids, callers named in its results)
+# that must never appear in a dashboard text: the template reads any run.
+forbidden_terms:
+  - SEQC2
+  - GIAB
+  - HG002
+  - NA12878
+  - giab_v1
+  - giab_v2
+  - giab_beta
+  - test1
+  - test2
+  - test3
 renames: {}
 post_fetch_help: |
   === Quick test commands ===
@@ -43,8 +56,8 @@ post_fetch_help: |
   depictio dev recipe run sompy/summary.py -d {dest}
   depictio dev recipe run sompy/regions.py -d {dest}
 
-  # 2. Dry run (validate the template without a server; --deep checks file headers)
-  depictio run --template nf-core/variantbenchmarking/1.4.0 --data-root {dest} --dry-run --deep
+  # 2. Dry run (validate the template without a server)
+  depictio ingest --template nf-core/variantbenchmarking/1.4.0 --data-root {dest} --dry-run
 
   # 3. Full template run (requires a running depictio server)
-  depictio run --template nf-core/variantbenchmarking/1.4.0 --data-root {dest}
+  depictio ingest --template nf-core/variantbenchmarking/1.4.0 --data-root {dest}

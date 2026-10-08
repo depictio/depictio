@@ -42,11 +42,23 @@ _NARROWPEAK_COLUMNS = [
     "summit_offset",
 ]
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="narrowpeak",
         glob_pattern="**/*_peaks.narrowPeak",
         format="TSV",
+        input_schema={
+            "chr": pl.Utf8,
+            "start": pl.Utf8,
+            "end": pl.Utf8,
+            "peak_id": pl.Utf8,
+            "score": pl.Utf8,
+            "fold_enrichment": pl.Utf8,
+            "neg_log10_pvalue": pl.Utf8,
+            "neg_log10_qvalue": pl.Utf8,
+            "summit_offset": pl.Utf8,
+        },
         read_kwargs={
             "has_header": False,
             "new_columns": _NARROWPEAK_COLUMNS,
@@ -55,7 +67,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "peak_id": pl.Utf8,
     "chr": pl.Utf8,
@@ -97,4 +110,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         # narrowPeak start is 0-based; the summit offset is relative to it.
         (pl.col("start") + pl.col("summit_offset") + 1).alias("summit"),
     )
-    return df.select(list(EXPECTED_SCHEMA)).sort(["sample", "chr", "start"])
+    return df.select(list(OUTPUT_SCHEMA)).sort(["sample", "chr", "start"])
