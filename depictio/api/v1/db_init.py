@@ -467,7 +467,10 @@ async def create_initial_dashboards(
                 ),
                 "static_dc_id": None,
             }
+            # The Overview is the family's main tab: listed first so the child
+            # tabs find their parent already imported.
             for slug in (
+                "overview",
                 "multiqc",
                 "coverage_depth",
                 "lineage_clustering",

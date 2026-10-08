@@ -95,6 +95,7 @@ def test_optional_datasets_are_not_in_the_default_set():
         ("ampliseq_phylogeny", "ampliseq"),
         ("advanced_viz_volcano", "advanced_viz_showcase"),
         ("advanced_viz_upset", "advanced_viz_showcase"),
+        ("viralrecon_overview", "viralrecon"),
         ("viralrecon_variants", "viralrecon"),
         ("catalog_conformance_overview", "catalog_conformance"),
     ],

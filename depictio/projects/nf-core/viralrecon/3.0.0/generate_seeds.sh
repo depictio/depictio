@@ -22,7 +22,7 @@
 #
 # Output:
 #   - depictio/projects/nf-core/viralrecon/3.0.0/.db_seeds/dashboard_*.json
-#     for the 5 viralrecon dashboards (multiqc + coverage_depth +
+#     for the 6 viralrecon dashboards (overview + multiqc + coverage_depth +
 #     lineage_clustering + variants + sample_qc).
 set -euo pipefail
 
@@ -38,6 +38,11 @@ REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || (cd "
 # config to target a worktree stack, or the ingest below lands in whatever
 # stack ~/.depictio/CLI.yaml happens to name.
 CLI_CONFIG="${DEPICTIO_CLI_CONFIG:-${HOME}/.depictio/CLI.yaml}"
+# The project the dashboards are exported from. The default is the reference
+# project `db_init` seeds; on an instance without it (`depictio local`), pass the
+# id of the project step 1 created. The remap pins every id back to the static
+# ones either way.
+PROJECT_ID="${DEPICTIO_SEED_PROJECT_ID:-746b0f3c1e4a2d7f8e5b9ca2}"
 
 if [ ! -d "$DATA_ROOT" ]; then
     echo "ERROR: viralrecon test-data not found at $DATA_ROOT" >&2
@@ -60,10 +65,9 @@ python -m depictio.cli ingest \
     --update-config \
     --overwrite
 
-# 2. Export the 5 viralrecon dashboards from Mongo into .db_seeds/. The
+# 2. Export the 6 viralrecon dashboards from Mongo into .db_seeds/. The
 #    dashboard_ids below come from db_init_reference_datasets.STATIC_IDS
 #    and ``dashboards/base.yaml``.
-PROJECT_ID="746b0f3c1e4a2d7f8e5b9ca2"
 
 # Keyed by TAB TITLE, not by dashboard id: `_import_multi_tab_dashboard` mints a
 # fresh ObjectId for any tab it does not already find by title, so an id-keyed
@@ -74,7 +78,8 @@ PROJECT_ID="746b0f3c1e4a2d7f8e5b9ca2"
 # 4, and macOS still ships 3.2 as /bin/bash, where it parses as an indexed array
 # and the first title's leading word explodes as an unbound variable.
 DASH_FILES="
-nf-core/viralrecon	dashboard_multiqc.json
+nf-core/viralrecon	dashboard_overview.json
+MultiQC	dashboard_multiqc.json
 Coverage & Depth	dashboard_coverage_depth.json
 Lineage & Clustering	dashboard_lineage_clustering.json
 Variants	dashboard_variants.json
@@ -152,5 +157,5 @@ DEPICTIO_CONTEXT=cli python "$SCRIPT_DIR/remap_seeds_to_static_ids.py"
 
 echo ""
 echo "Seeds exported + remapped in $SEEDS_DIR"
-echo "The 5 viralrecon dashboards are already registered in"
+echo "The 6 viralrecon dashboards are already registered in"
 echo "  depictio/api/v1/db_init.py (dashboards_config) — no further wiring needed."
