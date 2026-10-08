@@ -44,7 +44,8 @@ import CreateProjectModal, {
   ManifestCreatedModal,
   manifestReportNeedsReview,
 } from './CreateProjectModal';
-import { FromRunCreatedModal } from './FromRunReport';
+import { RunCreatedModal } from './fromRun';
+import type { RunCreatedContext } from './fromRun';
 import EditProjectModal from './EditProjectModal';
 import DeleteProjectModal from './DeleteProjectModal';
 import { usePageTitle } from '../branding';
@@ -95,10 +96,13 @@ const ProjectsApp: React.FC = () => {
    *  the user can watch it finish instead of being redirected to a dashboard
    *  whose collections are still empty. */
   const [createdRunReport, setCreatedRunReport] = useState<FromRunReport | null>(null);
+  /** What the create dialog knew about that run (template name, what was
+   *  read in the folder), for the created modal's summary. */
+  const [createdRunContext, setCreatedRunContext] = useState<RunCreatedContext | null>(null);
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, toggleDesktop] = useProjectsSidebar();
-  const { user, localDataRootsEnabled } = useCurrentUser();
+  const { user, localDataRootsEnabled, remoteBrowseEnabled } = useCurrentUser();
   const { status: authStatus, loading: authLoading } = useAuthMode();
   // Fail closed while the auth status is still loading — on the very first
   // frame `authStatus` is null so `is_public_mode` would silently evaluate
@@ -197,7 +201,7 @@ const ProjectsApp: React.FC = () => {
   // workers. So there is never a redirect: the list refreshes behind a modal
   // that watches the run and offers the dashboard once the user is ready.
   const handleCreateFromRun = useCallback(
-    async (input: FromRunRequest) => {
+    async (input: FromRunRequest, context: RunCreatedContext) => {
       const report = await createProjectFromRun(input);
       notifications.show({
         color: 'teal',
@@ -207,6 +211,7 @@ const ProjectsApp: React.FC = () => {
       });
       closeCreate();
       refresh();
+      setCreatedRunContext(context);
       setCreatedRunReport(report);
       return report;
     },
@@ -365,10 +370,12 @@ const ProjectsApp: React.FC = () => {
         onCreateFromManifest={handleCreateFromManifest}
         onCreateFromRun={handleCreateFromRun}
         localDataRootsEnabled={localDataRootsEnabled}
+        remoteBrowseEnabled={remoteBrowseEnabled}
       />
       <ManifestCreatedModal report={createdReport} onClose={() => setCreatedReport(null)} />
-      <FromRunCreatedModal
+      <RunCreatedModal
         report={createdRunReport}
+        context={createdRunContext}
         onClose={() => setCreatedRunReport(null)}
       />
       <EditProjectModal

@@ -3415,6 +3415,11 @@ export interface AuthStatusResponse {
    *  path and offers a folder browser. No path is ever sent here. Older
    *  backends omit it: treat absent as `false`. */
   local_data_roots_enabled?: boolean;
+  /** The server may browse S3 locations an administrator listed for reading
+   *  run folders, so the run tab's folder browser offers an S3 side. No
+   *  bucket name is ever sent here. Older backends omit it: treat absent as
+   *  `false`. */
+  remote_browse_enabled?: boolean;
 }
 
 /** Session payload persisted to localStorage['local-store'] on successful auth.
@@ -4130,16 +4135,29 @@ export interface FromRunRequest {
   dryRun?: boolean;
 }
 
-/** What the server recognised in a run folder when no template was given.
- *  Every field is null when it could not tell; `template_id` null means no
- *  installed template matches. */
+/** How the template chosen for a run relates to the run's own version:
+ *  `exact` when the template targets the version that made the run,
+ *  `closest` when another version of the same pipeline was chosen, `none`
+ *  when the run was recognised but no installed template matches it. */
+export type TemplateMatch = 'exact' | 'closest' | 'none';
+
+/** What the server recognised in a run folder (`POST /projects/from_run`
+ *  when no template was given, `GET /projects/folder_inspect`). Every field
+ *  is null when it could not tell; `template_id` null means no installed
+ *  template matches. `version` is the pipeline version that made the run;
+ *  `template_version` is the pipeline version the chosen template targets. */
 export interface DetectedTemplate {
   template_id: string | null;
   /** e.g. `nf-core/ampliseq`. */
   pipeline: string | null;
+  /** Version of the pipeline that made the run. */
   version: string | null;
   /** Workflow engine, e.g. `nextflow`. */
   engine: string | null;
+  /** Pipeline version the chosen template targets. Older backends omit it. */
+  template_version?: string | null;
+  /** Older backends omit it. */
+  match?: TemplateMatch | null;
 }
 
 /** Report returned by POST /projects/from_run, both for a dry-run plan and
@@ -4192,18 +4210,24 @@ export async function createProjectFromRun(
   return (await res.json()) as FromRunReport;
 }
 
-/** One sub-directory in a local folder listing. */
+/** One sub-directory in a folder listing (local or S3). */
 export interface LocalDirEntry {
   name: string;
-  /** Absolute path on the server's disk. */
+  /** Absolute path on the server's disk, or an `s3://bucket/prefix/` URL. */
   path: string;
   /** The folder holds `pipeline_info/` or `multiqc/`, so it is likely the
-   *  output folder of one pipeline run. */
+   *  output folder of one pipeline run. Always false for S3 entries (only
+   *  the listing-level flag is known there). */
   looks_like_run: boolean;
+  /** The folder holds at least one sub-folder. Always true for S3 entries
+   *  (unknown without another request). Older backends omit it: treat absent
+   *  as `true`, so the folder can still be opened. */
+  has_children?: boolean;
 }
 
-/** Response of GET /projects/local_dirs. Without a path, `entries` are the
- *  allowed root folders themselves and `path`, `root` and `parent` are null. */
+/** Response of GET /projects/local_dirs and GET /projects/s3_dirs. Without a
+ *  path, `entries` are the allowed roots themselves and `path`, `root` and
+ *  `parent` are null. */
 export interface LocalDirListing {
   path: string | null;
   /** The allowed root `path` sits under. */
@@ -4214,6 +4238,18 @@ export interface LocalDirListing {
   entries: LocalDirEntry[];
   /** More sub-directories exist than the server lists (500). */
   truncated: boolean;
+  /** The listed folder itself holds `pipeline_info/` or `multiqc/`. */
+  looks_like_run?: boolean;
+}
+
+/** The S3 listing has the local listing's shape; entry paths are
+ *  `s3://bucket/prefix/` URLs ending with a slash. */
+export type S3DirListing = LocalDirListing;
+
+/** Optional request settings shared by the folder calls. */
+export interface FolderRequestOptions {
+  /** Cancels the request (a newer selection or keystroke supersedes it). */
+  signal?: AbortSignal;
 }
 
 /** List the sub-folders of `path` on the server's disk, or the allowed root
@@ -4221,11 +4257,113 @@ export interface LocalDirListing {
  *  local folders (`local_data_roots_enabled`): a 404 means the path is outside
  *  every allowed folder, refused or missing; a 403 means the caller may not
  *  browse. Both carry a plain-English `{detail}`, surfaced verbatim. */
-export async function listLocalDirs(path?: string | null): Promise<LocalDirListing> {
+export async function listLocalDirs(
+  path?: string | null,
+  options: FolderRequestOptions = {},
+): Promise<LocalDirListing> {
   const query = path ? `?path=${encodeURIComponent(path)}` : '';
-  const res = await authFetch(`${API_BASE}/projects/local_dirs${query}`);
+  const res = await authFetch(`${API_BASE}/projects/local_dirs${query}`, {
+    signal: options.signal,
+  });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to list folders');
   return (await res.json()) as LocalDirListing;
+}
+
+/** List the sub-folders (common prefixes) of an `s3://` location the server
+ *  may browse, or the allowed locations themselves when `url` is omitted.
+ *  Only useful when `remote_browse_enabled`. A location outside every allowed
+ *  one is refused with an S3 code (`s3_refused`, `s3_access_denied`, ...). */
+export async function listS3Dirs(
+  url?: string | null,
+  options: FolderRequestOptions = {},
+): Promise<S3DirListing> {
+  const query = url ? `?url=${encodeURIComponent(url)}` : '';
+  const res = await authFetch(`${API_BASE}/projects/s3_dirs${query}`, {
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list S3 folders');
+  return (await res.json()) as S3DirListing;
+}
+
+/** Direct children of one kind (folders or files) in a folder inspection. */
+export interface FolderContents {
+  /** Everything visible, not only the names below. */
+  count: number;
+  /** The first 20, sorted. */
+  names: string[];
+}
+
+/** Response of GET /projects/folder_inspect: what one folder holds, and the
+ *  pipeline and template recognised in it. */
+export interface FolderInspection {
+  /** The resolved location (a real path, or an `s3://.../` URL). */
+  location: string;
+  source: 'local' | 's3';
+  name: string;
+  looks_like_run: boolean;
+  /** Run markers present, e.g. `pipeline_info`, `multiqc`. */
+  markers: string[];
+  folders: FolderContents;
+  files: FolderContents;
+  /** The listing was cut short, so the counts are a lower bound. */
+  truncated: boolean;
+  /** Null when no engine recognised the folder (or detection was off). */
+  detected: DetectedTemplate | null;
+}
+
+/** Inspect one folder: its direct contents, its run markers and, unless
+ *  `detect` is false, the pipeline, version and template recognised in it.
+ *  `location` is an absolute path, a `~/...` path or an `s3://` URL. */
+export async function inspectFolder(
+  location: string,
+  options: FolderRequestOptions & { detect?: boolean } = {},
+): Promise<FolderInspection> {
+  const params = new URLSearchParams({ location });
+  if (options.detect === false) params.set('detect', 'false');
+  const res = await authFetch(`${API_BASE}/projects/folder_inspect?${params.toString()}`, {
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to inspect the folder');
+  return (await res.json()) as FolderInspection;
+}
+
+/** One run folder found below a location by `findRunFolders`. */
+export interface FoundRunFolder {
+  location: string;
+  name: string;
+  /** Path relative to the searched location, e.g. `a/run1`; `.` when the
+   *  searched folder is itself a run folder. */
+  relative: string;
+  markers: string[];
+  /** Filled for the first hits of a local search; null otherwise (inspect
+   *  the folder on selection instead). */
+  detected: DetectedTemplate | null;
+}
+
+/** Response of GET /projects/find_runs. */
+export interface FindRunsResult {
+  location: string;
+  runs: FoundRunFolder[];
+  /** A bound was hit (depth, folders visited, keys listed or hits kept), so
+   *  more run folders may exist. */
+  truncated: boolean;
+  /** Folders visited (local) or object keys listed (S3). */
+  scanned: number;
+}
+
+/** Look for run folders (folders holding `pipeline_info/` or `multiqc/`)
+ *  below `location`. Bounded server-side; `truncated` says when a bound was
+ *  hit. */
+export async function findRunFolders(
+  location: string,
+  options: FolderRequestOptions = {},
+): Promise<FindRunsResult> {
+  const params = new URLSearchParams({ location });
+  const res = await authFetch(`${API_BASE}/projects/find_runs?${params.toString()}`, {
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to search for run folders');
+  return (await res.json()) as FindRunsResult;
 }
 
 /** Per-DC status of a manifest refresh. A synchronous refresh reports
@@ -4320,15 +4458,27 @@ export interface TemplateVariable {
 }
 
 /** One entry from GET /projects/templates. Only templates with
- *  `manifest_capable` can back the from-manifest flow. */
+ *  `manifest_capable` can back the from-manifest flow, and only those with
+ *  `run_folder_capable` the from-run-folder flow. */
 export interface TemplateInfo {
   template_id: string;
   name: string;
   description: string | null;
+  /** The template's own revision, not the pipeline version it targets (that
+   *  one is the version segment of `template_id`). */
   version: string | null;
   manifest_capable: boolean;
   variables: TemplateVariable[];
   dashboards: string[];
+  /** The template resolves against a run folder and scans under it. Older
+   *  backends omit it. */
+  run_folder_capable?: boolean;
+  /** First id segment, e.g. `nf-core`. Older backends omit it. */
+  source?: string | null;
+  /** Id without its version, e.g. `nf-core/ampliseq`. Older backends omit it. */
+  pipeline?: string | null;
+  /** Workflow engine when the template declares it, e.g. `nextflow`. */
+  engine?: string | null;
 }
 
 /** Envelope returned by GET /projects/templates. */

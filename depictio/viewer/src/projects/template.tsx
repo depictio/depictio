@@ -122,6 +122,29 @@ export const TemplateSourceLogo: React.FC<{ source: string; size?: number }> = (
   );
 };
 
+/** Workflow engines with a known mark, keyed by the engine name the server
+ *  reports (`nextflow`, `snakemake`, `galaxy`). */
+const ENGINES: Record<string, { label: string; logo?: string }> = {
+  nextflow: { label: 'Nextflow', logo: 'nextflow.png' },
+  snakemake: { label: 'Snakemake', logo: 'snakemake.svg' },
+  galaxy: { label: 'Galaxy', logo: 'galaxy.png' },
+  cwl: { label: 'CWL' },
+};
+
+/** An engine as written for a reader: `Nextflow` for `nextflow`. */
+export function engineLabel(engine: string): string {
+  return ENGINES[engine.toLowerCase()]?.label ?? engine;
+}
+
+/** A workflow engine's mark, or nothing when the engine has none. */
+export const WorkflowEngineLogo: React.FC<{ engine: string; size?: number }> = ({
+  engine,
+  size = 16,
+}) => {
+  const logo = ENGINES[engine.toLowerCase()]?.logo;
+  return logo ? <BrandImg src={LOGO(logo)} alt={engineLabel(engine)} size={size} /> : null;
+};
+
 /** Shared chip that renders a template's brand mark (or letter fallback) +
  *  version pill, wrapped in an anchor pointing to the depictio-docs page for
  *  that template. The Anchor stops click propagation so opening the link

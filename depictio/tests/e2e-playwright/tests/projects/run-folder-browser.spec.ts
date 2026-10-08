@@ -1,0 +1,574 @@
+/**
+ * Folder browser of the "From a run folder" tab (FolderBrowserModal).
+ *
+ * The browser only exists when the server reads run folders from its own
+ * disk (`depictio local`) or may browse S3 locations, which CI's stack does
+ * neither of. So the capability flags are switched on by rewriting the real
+ * `/auth/me/optional` answer (the session stays real), and the folder calls
+ * (`local_dirs`, `s3_dirs`, `folder_inspect`, `find_runs`) are stubbed with
+ * a small folder tree. What is under test is the walk through it: lazy
+ * expansion, the detail pane, the path bar, the run search, the recent
+ * folders, and the path the run folder field ends up with.
+ */
+
+import { Page, Route } from "@playwright/test";
+import { test, expect, getAuthMode } from "@fixtures/auth";
+import {
+  detected,
+  inspection,
+  mockTemplates,
+  openRunTab,
+  setRunFolderFlags,
+  stubByParam,
+  StubAnswer,
+} from "@fixtures/runFolder";
+
+const ROOT = "/Users/e2e";
+const DOCUMENTS = `${ROOT}/Documents`;
+const RESULTS = `${ROOT}/results`;
+const BATCH = `${RESULTS}/batch`;
+const YEAR = `${BATCH}/2026`;
+const RUN41 = `${RESULTS}/run41`;
+const RUN42 = `${RESULTS}/run42`;
+const RUN77 = `${YEAR}/run77`;
+
+const S3_BUCKET = "s3://depictio-runs/";
+const S3_PIPELINE = `${S3_BUCKET}ampliseq/`;
+const S3_RUN = `${S3_PIPELINE}run-42/`;
+
+function entry(path: string, extra: Record<string, unknown> = {}) {
+  const name = path.replace(/\/+$/, "").split("/").pop();
+  return { name, path, looks_like_run: false, has_children: true, ...extra };
+}
+
+function listing(path: string, root: string, entries: unknown[], extra: Record<string, unknown> = {}) {
+  return {
+    json: { path, root, parent: null, entries, truncated: false, looks_like_run: false, ...extra },
+  };
+}
+
+/** `local_dirs` per `?path=`; "" is the roots listing. */
+const LOCAL: Record<string, StubAnswer> = {
+  "": { json: { path: null, root: null, parent: null, entries: [entry(ROOT)], truncated: false } },
+  [ROOT]: listing(ROOT, ROOT, [
+    entry(DOCUMENTS, { has_children: false }),
+    entry(RESULTS),
+  ]),
+  [DOCUMENTS]: listing(DOCUMENTS, ROOT, []),
+  [RESULTS]: listing(RESULTS, ROOT, [
+    entry(BATCH),
+    entry(RUN41, { has_children: false }),
+    entry(RUN42, { looks_like_run: true }),
+  ]),
+  [RUN41]: listing(RUN41, ROOT, []),
+  [RUN42]: listing(
+    RUN42,
+    ROOT,
+    [
+      entry(`${RUN42}/multiqc`, { has_children: false }),
+      entry(`${RUN42}/pipeline_info`, { has_children: false }),
+    ],
+    { looks_like_run: true },
+  ),
+  [BATCH]: listing(BATCH, ROOT, [entry(YEAR)]),
+  // More than the server lists: the tree says so.
+  [YEAR]: listing(YEAR, ROOT, [entry(RUN77, { looks_like_run: true })], { truncated: true }),
+  [RUN77]: listing(RUN77, ROOT, [entry(`${RUN77}/multiqc`, { has_children: false })], {
+    looks_like_run: true,
+  }),
+};
+
+/** `s3_dirs` per `?url=`; "" is the allowed locations. */
+const S3: Record<string, StubAnswer> = {
+  "": { json: { path: null, root: null, parent: null, entries: [entry(S3_BUCKET)], truncated: false } },
+  [S3_BUCKET]: listing(S3_BUCKET, S3_BUCKET, [entry(S3_PIPELINE)]),
+  [S3_PIPELINE]: listing(S3_PIPELINE, S3_BUCKET, [entry(S3_RUN)]),
+  [S3_RUN]: listing(
+    S3_RUN,
+    S3_BUCKET,
+    [entry(`${S3_RUN}multiqc/`), entry(`${S3_RUN}pipeline_info/`)],
+    { looks_like_run: true },
+  ),
+};
+
+const RNASEQ = detected({
+  template_id: "nf-core/rnaseq/3.26.0",
+  template_version: "3.26.0",
+  pipeline: "nf-core/rnaseq",
+  version: "3.26.0",
+});
+
+/** `folder_inspect` per `?location=`; any other folder holds nothing. */
+function inspections(delays: Record<string, number> = {}): Record<string, StubAnswer> {
+  const runRecords = {
+    looks_like_run: true,
+    markers: ["pipeline_info", "multiqc"],
+    folders: { count: 2, names: ["multiqc", "pipeline_info"] },
+    files: { count: 3, names: ["samplesheet.csv", "nextflow.log", "params.json"] },
+  };
+  const answers: Record<string, StubAnswer> = {
+    [RUN42]: { json: inspection(RUN42, { ...runRecords, detected: detected() }) },
+    [RUN77]: { json: inspection(RUN77, { ...runRecords, detected: RNASEQ }) },
+    [S3_RUN]: { json: inspection(S3_RUN, { ...runRecords, detected: detected() }) },
+  };
+  for (const [location, delayMs] of Object.entries(delays)) {
+    answers[location] = { ...(answers[location] ?? { json: inspection(location) }), delayMs };
+  }
+  return answers;
+}
+
+const FIND: Record<string, StubAnswer> = {
+  // The searched folder is itself a run folder.
+  [RUN42]: {
+    json: {
+      location: RUN42,
+      runs: [
+        {
+          location: RUN42,
+          name: "run42",
+          relative: ".",
+          markers: ["pipeline_info", "multiqc"],
+          detected: detected(),
+        },
+      ],
+      truncated: false,
+      scanned: 3,
+    },
+  },
+  [RESULTS]: {
+    json: {
+      location: RESULTS,
+      runs: [
+        {
+          location: RUN42,
+          name: "run42",
+          relative: "run42",
+          markers: ["pipeline_info", "multiqc"],
+          detected: detected(),
+        },
+        {
+          location: RUN77,
+          name: "run77",
+          relative: "batch/2026/run77",
+          markers: ["pipeline_info"],
+          detected: RNASEQ,
+        },
+      ],
+      truncated: true,
+      scanned: 120,
+    },
+  },
+};
+
+/** Stub every folder call; returns the paths listed, in order. */
+async function stubFolders(
+  page: Page,
+  { inspectDelays = {} }: { inspectDelays?: Record<string, number> } = {},
+): Promise<{ listed: string[] }> {
+  const listed = await stubByParam(page, "**/api/v1/projects/local_dirs**", "path", LOCAL);
+  await stubByParam(page, "**/api/v1/projects/s3_dirs**", "url", S3, () => ({
+    status: 422,
+    json: { detail: "This location is not one Depictio may browse.", code: "s3_refused" },
+  }));
+  await stubByParam(
+    page,
+    "**/api/v1/projects/folder_inspect**",
+    "location",
+    inspections(inspectDelays),
+    (location) => ({ json: inspection(location) }),
+  );
+  await stubByParam(page, "**/api/v1/projects/find_runs**", "location", FIND, (location) => ({
+    json: { location, runs: [], truncated: false, scanned: 1 },
+  }));
+  return { listed };
+}
+
+const treeNode = (page: Page, path: string) =>
+  page.locator(`[data-testid='browse-tree-node'][data-path='${path}']`);
+
+const chevron = (page: Page, path: string) =>
+  treeNode(page, path).locator("[data-testid='browse-tree-chevron']");
+
+async function openBrowser(page: Page): Promise<void> {
+  await openRunTab(page);
+  await page.locator("[data-testid='run-browse-local']").click();
+  await expect(page.locator("[data-testid='browse-modal']")).toBeVisible();
+}
+
+/** Type a path in the path bar and press Enter. */
+async function goTo(page: Page, path: string): Promise<void> {
+  const input = page.locator("[data-testid='browse-path-input']");
+  await input.fill(path);
+  await input.press("Enter");
+}
+
+test.describe("Browse for a run folder", () => {
+  // Same gate as create-from-run.spec.ts: creating a project as admin is not
+  // the path under test in public mode.
+  test.beforeEach(async ({ page }) => {
+    const { is_public_mode } = await getAuthMode();
+    test.skip(is_public_mode, "Project creation is not exercised in public mode.");
+    await mockTemplates(page);
+  });
+
+  test("expands folders lazily, with a chevron only where there are sub-folders, and walks by keyboard", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    await setRunFolderFlags(page, { local: true, remote: false });
+    const { listed } = await stubFolders(page);
+
+    await loginAsAdmin();
+    await openBrowser(page);
+
+    const modal = page.locator("[data-testid='browse-modal']");
+    await expect(modal.locator("[data-testid='browse-group-local']")).toContainText(
+      "This computer",
+    );
+    await expect(modal.locator("[data-testid='browse-group-s3']")).toHaveCount(0);
+
+    // Only the allowed roots are listed on opening, the home folder as "~".
+    await expect(treeNode(page, ROOT)).toBeVisible();
+    await expect(treeNode(page, ROOT)).toContainText("~");
+    expect(listed).not.toContain(ROOT);
+
+    await chevron(page, ROOT).click();
+    await expect(treeNode(page, RESULTS)).toBeVisible();
+    expect(listed).toContain(ROOT);
+    expect(listed).not.toContain(RESULTS);
+    await expect(chevron(page, DOCUMENTS)).toHaveCount(0);
+    await expect(chevron(page, RESULTS)).toHaveCount(1);
+
+    // Clicking a folder selects it; the arrows expand and move; Enter selects.
+    await treeNode(page, RESULTS).click();
+    const detail = page.locator("[data-testid='browse-detail']");
+    await expect(detail).toHaveAttribute("data-path", RESULTS);
+    await page.keyboard.press("ArrowRight");
+    await expect(treeNode(page, RUN42)).toBeVisible();
+    await expect(treeNode(page, RUN42)).toHaveAttribute("data-run-folder", "true");
+    await expect(treeNode(page, RUN42)).toContainText("Run folder");
+    await expect(treeNode(page, RUN41)).not.toHaveAttribute("data-run-folder", "true");
+    await expect(chevron(page, RUN41)).toHaveCount(0);
+
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await expect(detail).toHaveAttribute("data-path", BATCH);
+    await expect(treeNode(page, BATCH)).toHaveAttribute("data-selected", "true");
+    await expect(page.locator("[data-testid='browse-selected']")).toHaveAttribute(
+      "data-full-path",
+      BATCH,
+    );
+  });
+
+  test("the detail pane reads the selected folder, ignores a slower earlier answer, and selecting fills the field", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    await setRunFolderFlags(page, { local: true, remote: false });
+    await stubFolders(page, { inspectDelays: { [RESULTS]: 1_500 } });
+
+    await loginAsAdmin();
+    await openBrowser(page);
+
+    await chevron(page, ROOT).click();
+    await chevron(page, RESULTS).click();
+    await expect(treeNode(page, RUN42)).toBeVisible();
+
+    // `results` answers slowly; `run42` is selected before it does.
+    await treeNode(page, RESULTS).click();
+    await expect(page.locator("[data-testid='browse-detail-loading']")).toBeVisible();
+    await treeNode(page, RUN42).click();
+
+    const detail = page.locator("[data-testid='browse-detail']");
+    await expect(detail).toHaveAttribute("data-path", RUN42);
+    await expect(detail.locator("[data-testid='browse-detail-pipeline']")).toHaveText(
+      "nf-core/ampliseq",
+    );
+    await expect(detail.locator("[data-testid='browse-detail-version']")).toHaveText("v2.16.0");
+    await expect(detail.locator("[data-testid='browse-detail-template-version']")).toHaveText(
+      "v2.16.0",
+    );
+    await expect(detail.locator("[data-testid='browse-detail-run-badge']")).toBeVisible();
+    await expect(detail.locator("[data-testid='browse-detail-markers']")).toContainText(
+      "pipeline_info",
+    );
+    await expect(detail.locator("[data-testid='browse-detail-counts']")).toHaveText(
+      "2 folders, 3 files",
+    );
+    await expect(detail.locator("[data-testid='browse-detail-files']")).toContainText(
+      "samplesheet.csv",
+    );
+
+    // The answer for `results` lands after this and changes nothing.
+    await page.waitForTimeout(2_000);
+    await expect(detail).toHaveAttribute("data-path", RUN42);
+    await expect(detail.locator("[data-testid='browse-detail-name']")).toHaveText("run42");
+    await expect(detail.locator("[data-testid='browse-detail-pipeline']")).toHaveText(
+      "nf-core/ampliseq",
+    );
+
+    // A folder without run records gets a gentle hint, not a refusal.
+    const hint = page.locator("[data-testid='browse-not-run-hint']");
+    await expect(hint).toHaveCount(0);
+    await treeNode(page, RUN41).click();
+    await expect(detail.locator("[data-testid='browse-detail-not-recognised']")).toBeVisible();
+    await expect(hint).toBeVisible();
+    await expect(page.locator("[data-testid='browse-select']")).toBeEnabled();
+    await treeNode(page, RUN42).click();
+    await expect(hint).toHaveCount(0);
+
+    await page.locator("[data-testid='browse-select']").click();
+    await expect(page.locator("[data-testid='browse-modal']")).toBeHidden();
+    await expect(page.locator("[data-testid='run-data-root-input']")).toHaveValue(RUN42);
+
+    // The picked folder is read at once, and fills in the template.
+    const card = page.locator("[data-testid='run-detection-card']");
+    await expect(card).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
+    await expect(card.locator("[data-testid='run-detected-pipeline']")).toHaveText(
+      "nf-core/ampliseq",
+    );
+    await expect(page.locator("[data-testid='run-pipeline-detected']")).toBeVisible();
+  });
+
+  test("the path bar suggests sub-folders and opens the tree on the folder typed", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    await setRunFolderFlags(page, { local: true, remote: false });
+    await stubFolders(page);
+
+    await loginAsAdmin();
+    await openBrowser(page);
+
+    const input = page.locator("[data-testid='browse-path-input']");
+    await input.fill(`${RESULTS}/ru`);
+    const suggestions = page.locator("[data-testid='browse-path-suggestion']");
+    await expect(suggestions).toHaveCount(2);
+    expect(
+      await suggestions.evaluateAll((els) => els.map((el) => el.getAttribute("data-path"))),
+    ).toEqual([RUN41, RUN42]);
+
+    // Picking a suggestion opens the tree down to it and selects it.
+    await page.locator(`[data-testid='browse-path-suggestion'][data-path='${RUN42}']`).click();
+    await expect(treeNode(page, RUN42)).toHaveAttribute("data-selected", "true");
+    await expect(page.locator("[data-testid='browse-detail']")).toHaveAttribute(
+      "data-path",
+      RUN42,
+    );
+    await expect(input).toHaveValue(RUN42);
+
+    // Enter opens a folder several levels down, listing every level between.
+    await goTo(page, YEAR);
+    await expect(treeNode(page, YEAR)).toHaveAttribute("data-selected", "true");
+    await expect(treeNode(page, BATCH)).toBeVisible();
+    await expect(treeNode(page, RUN77)).toBeVisible();
+    await expect(page.locator("[data-testid='browse-tree-truncated']")).toBeVisible();
+
+    // A folder the server cannot open says why, under the path bar.
+    await goTo(page, `${ROOT}/missing`);
+    await expect(page.locator("[data-testid='browse-modal']")).toContainText(
+      "This folder does not exist.",
+    );
+    await expect(input).toHaveAttribute("aria-invalid", "true");
+    // The selection stays where it was.
+    await expect(treeNode(page, YEAR)).toHaveAttribute("data-selected", "true");
+
+    // A relative path is refused before any request.
+    await goTo(page, "results/run42");
+    await expect(page.locator("[data-testid='browse-modal']")).toContainText(
+      "Type a full path (starting with / or ~/) or an s3:// location.",
+    );
+  });
+
+  test("finds the run folders below a folder, and a hit opens the tree on it", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    await setRunFolderFlags(page, { local: true, remote: false });
+    await stubFolders(page);
+
+    await loginAsAdmin();
+    await openBrowser(page);
+
+    // A run folder searched from itself is listed as "This folder".
+    await goTo(page, RUN42);
+    await expect(treeNode(page, RUN42)).toHaveAttribute("data-selected", "true");
+    await page.locator("[data-testid='browse-find-runs']").click();
+    const results = page.locator("[data-testid='browse-find-results']");
+    await expect(results).toHaveAttribute("data-state", "ready");
+    await expect(results.locator("[data-testid='browse-find-hit']")).toHaveCount(1);
+    await expect(results.locator("[data-testid='browse-find-hit']")).toContainText("This folder");
+    await expect(results.locator("[data-testid='browse-find-summary']")).toHaveText(
+      "1 run folder under run42, 3 folders looked through.",
+    );
+    await expect(results.locator("[data-testid='browse-find-truncated']")).toHaveCount(0);
+    await results.getByRole("button", { name: "Clear the results" }).click();
+    await expect(page.locator("[data-testid='browse-find-runs']")).toBeVisible();
+
+    // From the parent: two hits, one several levels down, and an honest
+    // count of what was looked through.
+    await treeNode(page, RESULTS).click();
+    await page.locator("[data-testid='browse-find-runs']").click();
+    await expect(results).toHaveAttribute("data-state", "ready");
+    await expect(results.locator("[data-testid='browse-find-summary']")).toHaveText(
+      "2 run folders under results, 120 folders looked through.",
+    );
+    await expect(results.locator("[data-testid='browse-find-truncated']")).toBeVisible();
+    const hits = results.locator("[data-testid='browse-find-hit']");
+    expect(await hits.evaluateAll((els) => els.map((el) => el.getAttribute("data-path")))).toEqual(
+      [RUN42, RUN77],
+    );
+    const deepHit = results.locator(`[data-testid='browse-find-hit'][data-path='${RUN77}']`);
+    await expect(deepHit).toContainText("batch/2026/run77");
+    await expect(deepHit).toContainText("nf-core/rnaseq v3.26.0");
+
+    // The deep hit opens the tree on it; the hits stay listed meanwhile.
+    await deepHit.click();
+    await expect(treeNode(page, RUN77)).toHaveAttribute("data-selected", "true");
+    await expect(treeNode(page, YEAR)).toBeVisible();
+    const detail = page.locator("[data-testid='browse-detail']");
+    await expect(detail).toHaveAttribute("data-path", RUN77);
+    await expect(detail.locator("[data-testid='browse-detail-pipeline']")).toHaveText(
+      "nf-core/rnaseq",
+    );
+    await expect(results).toBeVisible();
+    await expect(deepHit).toHaveAttribute("data-active", "true");
+  });
+
+  test("reopens on the folder in the field and lists the recent ones", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    await setRunFolderFlags(page, { local: true, remote: false });
+    await stubFolders(page);
+
+    await loginAsAdmin();
+    await openBrowser(page);
+    // Nothing picked yet: no recent folders.
+    await expect(page.locator("[data-testid='browse-recent']")).toHaveCount(0);
+
+    await goTo(page, RUN42);
+    await expect(treeNode(page, RUN42)).toHaveAttribute("data-selected", "true");
+    await page.locator("[data-testid='browse-select']").click();
+    await expect(page.locator("[data-testid='run-data-root-input']")).toHaveValue(RUN42);
+
+    // Reopened, the browser starts on the field's folder.
+    await page.locator("[data-testid='run-browse-local']").click();
+    await expect(page.locator("[data-testid='browse-modal']")).toBeVisible();
+    await expect(treeNode(page, RUN42)).toHaveAttribute("data-selected", "true");
+    await expect(page.locator("[data-testid='browse-path-input']")).toHaveValue(RUN42);
+    await expect(
+      page.locator(`[data-testid='browse-recent-item'][data-path='${RUN42}']`),
+    ).toBeVisible();
+    await page.locator("[data-testid='browse-cancel']").click();
+    await expect(page.locator("[data-testid='browse-modal']")).toBeHidden();
+    await expect(page.locator("[data-testid='run-data-root-input']")).toHaveValue(RUN42);
+
+    // With the field emptied, the recent folder is one click away.
+    await page.locator("[data-testid='run-data-root-input']").fill("");
+    await page.locator("[data-testid='run-browse-local']").click();
+    await expect(page.locator("[data-testid='browse-detail-empty']")).toBeVisible();
+    await page.locator(`[data-testid='browse-recent-item'][data-path='${RUN42}']`).click();
+    await expect(treeNode(page, RUN42)).toHaveAttribute("data-selected", "true");
+    await expect(page.locator("[data-testid='browse-detail']")).toHaveAttribute(
+      "data-path",
+      RUN42,
+    );
+  });
+
+  test("S3 locations are listed beside local folders when the server allows browsing them", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    await setRunFolderFlags(page, { local: true, remote: true });
+    await stubFolders(page);
+
+    await loginAsAdmin();
+    await openBrowser(page);
+
+    const modal = page.locator("[data-testid='browse-modal']");
+    await expect(modal.locator("[data-testid='browse-group-local']")).toBeVisible();
+    await expect(modal.locator("[data-testid='browse-group-s3']")).toContainText("S3");
+
+    await expect(treeNode(page, S3_BUCKET)).toBeVisible();
+    await chevron(page, S3_BUCKET).click();
+    await chevron(page, S3_PIPELINE).click();
+    await treeNode(page, S3_RUN).click();
+
+    const detail = page.locator("[data-testid='browse-detail']");
+    await expect(detail).toHaveAttribute("data-path", S3_RUN);
+    await expect(detail.locator("[data-testid='browse-detail-run-badge']")).toBeVisible();
+    await expect(treeNode(page, S3_RUN)).toHaveAttribute("data-run-folder", "true");
+
+    await page.locator("[data-testid='browse-select']").click();
+    await expect(page.locator("[data-testid='run-data-root-input']")).toHaveValue(S3_RUN);
+    await expect(page.locator("[data-testid='run-detection-card']")).toHaveAttribute(
+      "data-state",
+      "ready",
+      { timeout: 20_000 },
+    );
+  });
+
+  test("with only S3 allowed, the browser shows S3 alone and refuses a local path", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    await setRunFolderFlags(page, { local: false, remote: true });
+    await stubFolders(page);
+
+    await loginAsAdmin();
+    await openBrowser(page);
+
+    const modal = page.locator("[data-testid='browse-modal']");
+    await expect(modal.locator("[data-testid='browse-group-s3']")).toBeVisible();
+    await expect(modal.locator("[data-testid='browse-group-local']")).toHaveCount(0);
+    const input = page.locator("[data-testid='browse-path-input']");
+    await expect(input).toHaveAttribute("placeholder", "s3://bucket/results/run42/");
+
+    await goTo(page, ROOT);
+    await expect(modal).toContainText(
+      "Browsing folders on this computer is not available on this server.",
+    );
+
+    // An S3 location outside the allowed ones is refused by the server, and
+    // its reason shown.
+    await goTo(page, "s3://another-bucket/run/");
+    await expect(modal).toContainText("This location is not one Depictio may browse.");
+  });
+
+  test("a folder the server refuses to list says why and can be tried again", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    await setRunFolderFlags(page, { local: true, remote: false });
+    await stubFolders(page);
+    // Registered last, so asked first: refuse `batch` once, then let the
+    // folder stubs answer.
+    let refused = false;
+    await page.route(
+      (url) =>
+        url.pathname.endsWith("/projects/local_dirs") && url.searchParams.get("path") === BATCH,
+      (route: Route) => {
+        if (refused) return route.fallback();
+        refused = true;
+        return route.fulfill({
+          status: 422,
+          json: { detail: "Depictio may not read this folder.", code: "local_path_refused" },
+        });
+      },
+    );
+
+    await loginAsAdmin();
+    await openBrowser(page);
+
+    await chevron(page, ROOT).click();
+    await chevron(page, RESULTS).click();
+    await chevron(page, BATCH).click();
+
+    const error = page.locator("[data-testid='browse-tree-error']");
+    await expect(error).toContainText("Depictio may not read this folder.");
+    await error.getByRole("button", { name: "Try again" }).click();
+    await expect(treeNode(page, YEAR)).toBeVisible();
+    await expect(error).toHaveCount(0);
+  });
+});

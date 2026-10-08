@@ -66,6 +66,10 @@ export interface UseCurrentUserResult {
    *  "From a run folder" tab then accepts a local path and offers a folder
    *  browser. False on older backends that do not send the flag. */
   localDataRootsEnabled: boolean;
+  /** True when the server may browse S3 locations an administrator listed:
+   *  the run tab's folder browser then offers an S3 side. False on older
+   *  backends that do not send the flag. */
+  remoteBrowseEnabled: boolean;
   loading: boolean;
 }
 
@@ -82,6 +86,7 @@ export function useCurrentUser(): UseCurrentUserResult {
   const [inspectorEnabled, setInspectorEnabled] = useState<boolean>(false);
   const [dashboardsDefaultView, setDashboardsDefaultView] = useState<string | null>(null);
   const [localDataRootsEnabled, setLocalDataRootsEnabled] = useState<boolean>(false);
+  const [remoteBrowseEnabled, setRemoteBrowseEnabled] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -98,6 +103,7 @@ export function useCurrentUser(): UseCurrentUserResult {
         setIsSingleUserMode(Boolean(data.is_single_user_mode));
         setInspectorEnabled(Boolean(data.inspector_enabled));
         setLocalDataRootsEnabled(Boolean(data.local_data_roots_enabled));
+        setRemoteBrowseEnabled(Boolean(data.remote_browse_enabled));
         setDashboardsDefaultView(
           typeof data.dashboards_default_view === 'string'
             ? data.dashboards_default_view
@@ -135,6 +141,7 @@ export function useCurrentUser(): UseCurrentUserResult {
     inspectorEnabled,
     dashboardsDefaultView,
     localDataRootsEnabled,
+    remoteBrowseEnabled,
     loading,
   };
 }
