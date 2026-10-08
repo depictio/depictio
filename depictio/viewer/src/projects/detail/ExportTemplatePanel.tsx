@@ -16,6 +16,9 @@ interface ExportTemplatePanelProps {
   projectId: string;
   /** Owners, editors and admins may export (the backend's gate). */
   canMutate: boolean;
+  /** Why the reader may not export on this deployment (public/demo mode for
+   *  non-admins, or still unknown while it loads); null otherwise. */
+  publicModeReason: string | null;
 }
 
 /**
@@ -23,9 +26,13 @@ interface ExportTemplatePanelProps {
  * as a reusable template bundle (.zip). Wraps POST
  * /projects/{id}/export_template; the backend's 422 `detail` strings are
  * meaningful (bad id format, round-trip self-check failure) and are shown
- * verbatim. The form starts empty each time the section opens.
+ * verbatim. The form starts empty each time the dialog opens.
  */
-const ExportTemplatePanel: React.FC<ExportTemplatePanelProps> = ({ projectId, canMutate }) => {
+const ExportTemplatePanel: React.FC<ExportTemplatePanelProps> = ({
+  projectId,
+  canMutate,
+  publicModeReason,
+}) => {
   const [templateId, setTemplateId] = useState('');
   const [version, setVersion] = useState('1.0.0');
   const [description, setDescription] = useState('');
@@ -35,8 +42,8 @@ const ExportTemplatePanel: React.FC<ExportTemplatePanelProps> = ({ projectId, ca
   const [error, setError] = useState<string | null>(null);
   const [downloaded, setDownloaded] = useState<string | null>(null);
 
-  const reason = canMutate ? null : EDITORS_ONLY;
-  const locked = submitting || !canMutate;
+  const reason = publicModeReason ?? (canMutate ? null : EDITORS_ONLY);
+  const locked = submitting || Boolean(reason);
 
   const handleExport = async () => {
     const trimmedId = templateId.trim();

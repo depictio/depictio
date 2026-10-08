@@ -345,7 +345,7 @@ const ProjectDetailApp: React.FC = () => {
   // for a <Loader/>, and section-local state would reset to collapsed.
   const [dcManagerOpened, { toggle: toggleDcManager }] = useDisclosure(false);
 
-  const { user } = useCurrentUser();
+  const { user, isPublicMode, loading: userLoading } = useCurrentUser();
   const projectId = readProjectIdFromPath();
 
   usePageTitle('Project Data Collections');
@@ -382,6 +382,15 @@ const ProjectDetailApp: React.FC = () => {
       matchUser(project.permissions?.editors)
     );
   }, [user, project]);
+
+  // Refresh and export are refused to non-admins on a public/demo deployment.
+  // Whether this is one is unknown until the auth status lands, so both stay
+  // gated until then rather than being enabled for a moment.
+  const publicModeReason = userLoading
+    ? 'Checking what you can change in this project...'
+    : isPublicMode && !user?.is_admin
+      ? 'Disabled in public/demo mode for non-admin users.'
+      : null;
 
   // Storage credentials are owners-only (stricter than canMutate, which also
   // covers editors), mirroring the backend's owner gate on /storage.
@@ -708,6 +717,7 @@ const ProjectDetailApp: React.FC = () => {
           projectName={project?.name}
           canManageStorage={isOwner}
           canMutate={canMutate}
+          publicModeReason={publicModeReason}
           dataCollections={allDataCollections}
           onReloadProject={refresh}
         />
@@ -1294,6 +1304,16 @@ const CreateDataCollectionModal: React.FC<{
     setLonColumn(coordsGuess.lonColumn);
   }, [file, coordsGuess]);
 
+  // The name last filled in from a picked file or a typed URL. While the name
+  // field still holds it, a newer file or URL replaces it; once the user
+  // edits the name, it is theirs and stays.
+  const autoNameRef = useRef('');
+  const autoFillName = (next: string) => {
+    if (name.trim() && name !== autoNameRef.current) return;
+    autoNameRef.current = next;
+    setName(next);
+  };
+
   // Reset everything when the modal closes — otherwise re-opening shows stale
   // state from the previous attempt.
   useEffect(() => {
@@ -1301,6 +1321,7 @@ const CreateDataCollectionModal: React.FC<{
       setDcType('table');
       setFile(null);
       setName('');
+      autoNameRef.current = '';
       setDescription('');
       setFileFormat('csv');
       setSeparator(',');
@@ -1324,8 +1345,10 @@ const CreateDataCollectionModal: React.FC<{
   }, [opened]);
 
   // Auto-fill format + name from picked filename. Don't clobber a name the
-  // user already typed; do clobber the format because picking a new file
-  // means a new format.
+  // user already typed (see autoFillName); do clobber the format because
+  // picking a new file means a new format. Runs per file only: re-running on
+  // every keystroke of the name field would reset a separator or format the
+  // user picked since.
   useEffect(() => {
     if (!file) return;
     const guessed = guessFormat(file.name);
@@ -1333,14 +1356,13 @@ const CreateDataCollectionModal: React.FC<{
       setFileFormat(guessed);
       setSeparator(guessed === 'tsv' ? '\t' : ',');
     }
-    if (!name.trim()) {
-      const stem = file.name.replace(/\.[^.]+$/, '');
-      setName(stem);
-    }
-  }, [file, name]);
+    autoFillName(file.name.replace(/\.[^.]+$/, ''));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file]);
 
   // Same auto-fill for the remote-URL source: the last path segment plays the
-  // role the picked filename plays above.
+  // role the picked filename plays above. It follows the URL as it is typed
+  // ("https://e" first gives "e") until the user edits the name.
   useEffect(() => {
     if (tableSource !== 'url') return;
     const trimmed = remoteUrl.trim();
@@ -1352,7 +1374,7 @@ const CreateDataCollectionModal: React.FC<{
       setFileFormat(guessed);
       setSeparator(guessed === 'tsv' ? '\t' : ',');
     }
-    if (!name.trim()) setName(basename.replace(/\.[^.]+$/, ''));
+    autoFillName(basename.replace(/\.[^.]+$/, ''));
     // `name` is intentionally read but not depended on: re-running on every
     // keystroke of the name field would fight the user's own edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1674,7 +1696,9 @@ const CreateDataCollectionModal: React.FC<{
                   }}
                 />
               )}
-              {file && (
+              {/* The URL source sends no coordinates, so a file picked before
+                  switching to it must not keep offering them. */}
+              {tableSource === 'upload' && file && (
                 <Paper p="sm" withBorder radius="sm" bg="var(--mantine-color-default-hover)">
                   <Stack gap="xs">
                     {coordsGuess && !coordsConfirmed && (

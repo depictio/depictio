@@ -35,13 +35,19 @@ import type {
   FromManifestReport,
   FromManifestRequest,
   TemplateInfo,
+  TemplateVariable,
 } from 'depictio-react-core';
 
 import IngestionResultTable from './IngestionResultTable';
-import { GatedButton } from '../components/settings/SettingsSections';
+import { useStepSettling } from './hooks/useStepSettling';
+import { DisabledReason, GatedButton } from '../components/settings/SettingsSections';
 
 type Tab = 'create' | 'import' | 'manifest';
 type ProjectType = 'basic' | 'advanced';
+
+/** A required template variable with a declared default is filled in
+ *  server-side, so only the ones without a default must be typed here. */
+const mustBeTyped = (v: TemplateVariable): boolean => v.required && !v.default;
 
 interface CreateProjectModalProps {
   opened: boolean;
@@ -182,6 +188,13 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   const extraVariables = (selectedTemplate?.variables ?? []).filter(
     (v) => v.name !== 'MANIFEST_URL',
   );
+  const missingVariables = extraVariables
+    .filter((v) => mustBeTyped(v) && !(manifestVariables[v.name] ?? '').trim())
+    .map((v) => v.name);
+  const missingVariablesReason =
+    missingVariables.length > 0
+      ? `Enter a value for ${missingVariables.join(', ')} to continue.`
+      : null;
 
   const trimmedManifestUrl = manifestUrl.trim();
   const trimmedManifestName = manifestProjectName.trim();
@@ -189,7 +202,10 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     trimmedManifestName.length > 0 &&
     existingNames.some((n) => n.toLowerCase() === trimmedManifestName.toLowerCase());
   const manifestSourceReady =
-    trimmedManifestUrl.length > 0 && !!manifestTemplateId && !manifestNameUsed;
+    trimmedManifestUrl.length > 0 &&
+    !!manifestTemplateId &&
+    !manifestNameUsed &&
+    missingVariables.length === 0;
 
   const buildManifestRequest = (dryRun: boolean): FromManifestRequest => {
     const variables: Record<string, string> = {};
@@ -234,8 +250,11 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   }, [opened, tab, manifestStep]);
 
   // Single primary action for the manifest stepper: Next / Next / Create.
+  // It ignores clicks for a moment after each step change, so a double click
+  // on Next stops on the Create step instead of creating straight away.
+  const manifestStepSettling = useStepSettling(manifestStep);
   const handleManifestSubmit = async () => {
-    if (!manifestSourceReady) return;
+    if (!manifestSourceReady || manifestStepSettling) return;
     if (manifestStep < 2) {
       setManifestStep(manifestStep + 1);
       return;
@@ -585,7 +604,8 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                     {extraVariables.map((v) => (
                       <TextInput
                         key={v.name}
-                        label={`${v.name} (Optional)`}
+                        label={mustBeTyped(v) ? v.name : `${v.name} (Optional)`}
+                        required={mustBeTyped(v)}
                         description={v.description ?? undefined}
                         placeholder={v.default ?? ''}
                         value={manifestVariables[v.name] ?? ''}
@@ -630,7 +650,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
                 <Stepper.Step label="Create" description="Confirm & create">
                   <Stack gap="md" pt="md">
-                    <Paper withBorder radius="md" p="lg">
+                    <Paper withBorder radius="md" p="lg" data-testid="manifest-create-step">
                       <Stack gap="sm" align="center">
                         <Icon
                           icon="mdi:rocket-launch-outline"
@@ -642,7 +662,9 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                         </Text>
                         <Text size="xs" c="dimmed" ta="center">
                           {preview
-                            ? `${preview.manifest_entries} manifest entries → ` +
+                            ? `${preview.manifest_entries} manifest entr${
+                                preview.manifest_entries === 1 ? 'y' : 'ies'
+                              } → ` +
                               `${preview.ingestion.length} data collection${
                                 preview.ingestion.length === 1 ? '' : 's'
                               }, ${preview.dashboards.length} dashboard${
@@ -679,11 +701,13 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                   onClick={handleManifestSubmit}
                   loading={submitting}
                   disabled={manifestSubmitDisabled}
+                  aria-disabled={manifestStepSettling || undefined}
                   data-testid="create-from-manifest-submit"
                 >
                   {manifestStep === 2 ? 'Create Project' : 'Next'}
                 </Button>
               </Group>
+              {manifestStep === 0 && <DisabledReason reason={missingVariablesReason} />}
             </Stack>
           </Tabs.Panel>
         </Tabs>
@@ -799,6 +823,7 @@ export const ManifestCreatedModal: React.FC<{
   const accent = useBrandAccents();
   const dashboardId =
     report?.dashboards.find((d) => d.success && d.dashboard_id)?.dashboard_id ?? null;
+  const openDashboardReason = dashboardId ? null : 'No dashboard was imported for this project.';
 
   const summary: string[] = [];
   if (report) {
@@ -860,22 +885,25 @@ export const ManifestCreatedModal: React.FC<{
             </Text>
           </Alert>
           <ManifestPreviewReport report={report} />
-          <Group justify="flex-end" gap="xs">
-            <Button variant="default" onClick={onClose} data-testid="manifest-created-stay">
-              Stay on projects
-            </Button>
-            <GatedButton
-              color={accent.secondary}
-              leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
-              reason={dashboardId ? null : 'No dashboard was imported for this project.'}
-              onClick={() => {
-                if (dashboardId) window.location.assign(`/dashboard/${dashboardId}`);
-              }}
-              data-testid="manifest-created-open-dashboard"
-            >
-              Open dashboard
-            </GatedButton>
-          </Group>
+          <Stack gap={6} align="flex-end">
+            <Group justify="flex-end" gap="xs">
+              <Button variant="default" onClick={onClose} data-testid="manifest-created-stay">
+                Stay on projects
+              </Button>
+              <GatedButton
+                color={accent.secondary}
+                leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
+                reason={openDashboardReason}
+                onClick={() => {
+                  if (dashboardId) window.location.assign(`/dashboard/${dashboardId}`);
+                }}
+                data-testid="manifest-created-open-dashboard"
+              >
+                Open dashboard
+              </GatedButton>
+            </Group>
+            <DisabledReason reason={openDashboardReason} />
+          </Stack>
         </Stack>
       )}
     </Modal>

@@ -172,7 +172,9 @@ const TestResult: React.FC<{
 
 /** Edit/create form for the storage config. The secret field is write-only:
  *  when a secret is already stored, leaving it empty keeps it (the PUT body
- *  sends null, which the backend treats as "unchanged"). */
+ *  sends null, which the backend treats as "unchanged"), unless the access
+ *  key ID changes: the stored secret belongs to the old key, so a new key
+ *  needs its own secret. */
 const StorageForm: React.FC<{
   projectId: string;
   existing: ProjectStorageConfig | null;
@@ -189,6 +191,10 @@ const StorageForm: React.FC<{
   const [error, setError] = useState<string | null>(null);
 
   const hasSecret = Boolean(existing?.has_secret);
+  const typedKey = accessKeyId.trim();
+  const keyChanged = typedKey !== (existing?.access_key_id ?? '');
+  /** A stored secret is kept only for the key it was saved with. */
+  const keepsStoredSecret = hasSecret && Boolean(typedKey) && !keyChanged;
 
   const clearFieldError = (name: string) =>
     setFieldErrors((prev) => {
@@ -206,12 +212,13 @@ const StorageForm: React.FC<{
       errors.endpoint = 'Enter the full address, starting with https://.';
     }
     if (!bucket.trim()) errors.bucket = 'Enter the bucket name.';
-    const key = accessKeyId.trim();
     const typedSecret = secret.trim();
-    if (key && !typedSecret && !hasSecret) {
-      errors.secret = 'Enter the secret that goes with this access key ID.';
+    if (typedKey && !typedSecret && !keepsStoredSecret) {
+      errors.secret = hasSecret
+        ? 'Enter the secret for this new access key ID: the stored one belongs to the old key.'
+        : 'Enter the secret that goes with this access key ID.';
     }
-    if (typedSecret && !key) errors.accessKey = 'Enter the access key ID for this secret.';
+    if (typedSecret && !typedKey) errors.accessKey = 'Enter the access key ID for this secret.';
     return errors;
   };
 
@@ -226,9 +233,10 @@ const StorageForm: React.FC<{
         endpoint_url: endpointUrl.trim(),
         bucket: bucket.trim(),
         region: region.trim() || 'us-east-1',
-        access_key_id: accessKeyId.trim() || null,
+        access_key_id: typedKey || null,
         // Empty means "keep the stored secret": send null so the backend
-        // leaves the previously stored (encrypted) value in place.
+        // leaves the previously stored (encrypted) value in place. Validation
+        // above only lets that through for an unchanged key.
         secret_access_key: secret.trim() || null,
       });
       notifications.show({
@@ -292,6 +300,10 @@ const StorageForm: React.FC<{
           description="Leave both keys empty for a bucket anyone may read."
           placeholder="AKIA..."
           data-testid="storage-access-key-input"
+          // Keep password managers from filling in the reader's own login.
+          autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
           value={accessKeyId}
           onChange={(e) => {
             setAccessKeyId(e.currentTarget.value);
@@ -304,12 +316,21 @@ const StorageForm: React.FC<{
         <PasswordInput
           label="Secret access key"
           description={
-            hasSecret
+            keepsStoredSecret
               ? 'Leave empty to keep the stored secret.'
-              : 'Stored encrypted and never shown again.'
+              : hasSecret && typedKey
+                ? 'A new access key ID needs its own secret: the stored one is replaced.'
+                : hasSecret
+                  ? 'Without an access key ID the stored secret is removed.'
+                  : 'Stored encrypted and never shown again.'
           }
-          placeholder={hasSecret ? 'unchanged' : 'Secret access key'}
+          placeholder={keepsStoredSecret ? 'unchanged' : 'Secret access key'}
           data-testid="storage-secret-input"
+          // Neither fill in the reader's own password nor offer to save the
+          // bucket secret as one.
+          autoComplete="new-password"
+          data-1p-ignore
+          data-lpignore="true"
           value={secret}
           onChange={(e) => {
             setSecret(e.currentTarget.value);
