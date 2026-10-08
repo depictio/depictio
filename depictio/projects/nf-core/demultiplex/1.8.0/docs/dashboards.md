@@ -83,7 +83,7 @@ The persistent `Sample filters` (group, then library, both on the hub) sit in th
 panel and narrow every library tab through the project links. Run health reads lanes, which no
 library link reaches, so the section is kept off that tab (`exclude_tabs`). The `Sample sheet`
 section (the hub table) is pinned to the bottom of every child tab, collapsed, and absent from
-the Overview.
+the Overview and from Run health, where a pick in it would narrow nothing.
 
 ## Child tabs
 
@@ -103,7 +103,8 @@ reads of a library as a share of an even split.
 **Run health.** The demultiplexer's lane and read statistics and the per-cycle quality of the
 fastp reports. Strip: clusters passing filter (then those assigned to a library), the lowest
 pass-filter rate on a gauge, the share of bases at Q30 in the weakest read (with the spread over
-lanes and reads) and the yield ranked by lane. Then every lane by Undetermined share and Q30
+lanes and reads) and the yield split by read (the lane scatter below sizes each lane by its
+yield, and a ranking by lane is a single bar on a one-lane run). Then every lane by Undetermined share and Q30
 (sized by yield; a lane low and to the right lost reads to both) beside the lane by read quality
 dot plot, and the base quality at every cycle, one curve per lane and read with its 10th to 90th
 percentile band. A lane or read that drops alone points at the flowcell or the chemistry, not
@@ -111,10 +112,11 @@ at the libraries. Collapsed: the Sequencing Analysis Viewer metrics (below) and 
 Filters: lane, read and cycle.
 
 **Library balance.** How the reads of each lane were shared. Strip: reads assigned to libraries
-(the three largest named), the median share of the lane per library (with its spread), the
+(with the share the three largest hold), the median share of the lane per library (with its spread), the
 smallest library against the mean library of the least even lane (a gauge, 100 is the mean) and
 the worst perfect index match. Then the composition of each lane (the eight largest libraries
-named, the rest pooled, Undetermined kept) beside the run to lane to library sunburst, then
+named, the rest pooled, Undetermined kept) beside the run to lane to library sunburst,
+coloured by library like the composition, then
 every library's share of its lane and reads against index purity. A library with few reads and
 a high perfect-match share was under-pooled; one with few reads and a low perfect-match share
 lost reads to index errors. Collapsed: reads per library and lane, Undetermined rows included.
@@ -122,14 +124,15 @@ Filters: lane, share of the lane and perfect index match.
 
 **Undetermined reads.** What no index matched. Strip: the Undetermined share of the worst lane
 (a gauge), the Undetermined reads ranked by lane, the reads in the top unknown barcodes split by
-class, and the three barcodes that carry most of a lane's Undetermined reads. Then the fifteen
+class, and the share of a lane's Undetermined reads carried by its most frequent barcode (with
+the distribution over the listed barcodes). Then the fifteen
 most frequent unknown barcodes over the lanes in view, coloured by class. Collapsed: the unknown
 barcode table and the CheckQC findings (one row per finding and a pass row for each silent
 check). Filters: lane, barcode class and rank in its lane.
 
 **Library QC.** fastp on every demultiplexed library. Strip: the reads fastp was given (then
-those it kept), the median duplication ranked by group, the three most adapter-rich libraries and
-the median share of bases at Q30 after filtering (with its spread). Then duplication against base
+those it kept), the median duplication ranked by group, the median share of reads with an
+adapter (with its distribution) and the median share of bases at Q30 after filtering (with its spread). Then duplication against base
 quality (one point per library, sized by reads and coloured by group) beside the library card,
 which shows the library lassoed in the scatter or picked in the fastp table, and every numeric
 library metric compared between two groups or two saved selections. With a few libraries per

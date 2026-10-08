@@ -49,14 +49,15 @@ The landing page, at compact width with the filter panel collapsed:
 - **Pipeline**: six steps (map, pair, bin, decay, domains, compartments). Each step opens the
   versions of its process and the tab that shows its output.
 - **Key figures**: four headline cards, each opening the tab that explains it. The FASTQ
-  pairs in the sample sheet (split by sample), the median valid-pair rate (a share of 1), the
-  median log-log slope of the decay curve (with its spread) and the median domain size (with
+  pairs in the sample sheet (split by sample), the median valid-pair rate (a share of 1, with
+  its spread over samples), the median log-log slope of the decay curve (with its spread) and the median domain size (with
   its spread). A sample filter and a FASTQ-pairs slider above them narrow these four only.
 - **Findings**: result rows whose values are computed under the filters, each with a link to
   its tab: the median valid-pair rate and cis share, the median slope of the pooled decay
   curve, how many TAD domains were called and their median size, and the share of the bins
   with an E1 sign that sit in the larger compartment. Below them, four figures in two rows,
-  each linking its tab: the read-pair flow beside the contact probability curve, then the
+  each linking its tab: the read-pair flow beside the contact probability curve (its legend
+  hidden; one colour per chromosome plus the pooled curve), then the
   domain size per insulation window beside the A and B bins per chromosome. The read-pair
   flow stands in for Contact maps, which has no figure here: it is a browser on one region,
   not a summary.
@@ -70,7 +71,7 @@ child tab, collapsed, and absent from the Overview.
 
 Each child tab opens with a short intro (the method, with a link to its tool, and how to read
 the tab), then a strip of four key numbers, each card with its own colour and a secondary that
-reads it (a box plot, a distribution, a gauge, a ranking, a funnel or a share), then at most
+reads it (a box plot, a distribution, a ranking, a funnel or a share), then at most
 three open sections; tables follow, collapsed.
 
 **MultiQC.** MultiQC panels only. Open: general statistics, FastQC sequence counts and
@@ -81,8 +82,8 @@ adapter-trimming module: HiC-Pro's mapping step trims. Filter: the FASTQ pairs m
 sample, on the hub, which links into the report.
 
 **Valid pairs.** HiC-Pro's statistics as numbers. Strip: the read pairs processed, with the
-funnel from reported pairs to long-range cis contacts; the median valid-pair rate (a gauge
-from 0 to 1); the median duplicate rate (box plot); the read pairs by mapping outcome (a
+funnel from reported pairs to long-range cis contacts; the median valid-pair rate (its
+distribution over samples); the median duplicate rate (box plot); the read pairs by mapping outcome (a
 ring). Then the read-pair flow (`hicpro/pair_flow_sankey`): HiC-Pro's three decisions (does
 the pair map uniquely at both ends, is it a real ligation product, is the contact cis or
 trans), one ribbon per path weighted by read pairs, each loss peeling off into a `Lost` lane
@@ -90,7 +91,7 @@ at the step where it stopped. Collapsed: the read-pair fates and the funnel per 
 Filters: mapping fate and contact fate on the flow, the valid-pair rate on the funnel.
 
 **Distance decay.** Strip: the median log-log slope (box plot), the valid pairs split into
-cis, trans and duplicates (a ring), the median long-range share of cis contacts (a gauge) and
+cis, trans and duplicates (a ring), the median long-range share of cis contacts (its distribution over samples) and
 the long-range cis contacts (the samples with the most). Then P(s), the probability that two
 loci a distance s apart are in contact, one curve per chromosome plus the pooled curve on
 log-log axes, with its local slope in a panel underneath. `cooltools/distance_profile.py`
@@ -128,8 +129,8 @@ resolution. There is no chromosome filter: the locus field is the tab's chromoso
 sidebar chromosome would not travel the region links.
 
 **Domains.** Genome-wide, no tracks. Strip: the median domain size (box plot), the domains
-called (the chromosomes with the most), the median mappable share of a domain (a gauge) and
-the insulation bins split into boundaries and the rest (a ring). Then the domain size per
+called (the chromosomes with the most), the median mappable share of a domain (its distribution)
+and the insulation bins split into boundaries (`true`) and the rest (a ring). Then the domain size per
 insulation window, one box per window. Collapsed: the domain intervals and the insulation
 bins. Filters: domain window and insulation window. cooltools calls boundaries, not domains,
 and no module in nf-core/hic 2.x emits an interval list, so `cooltools/domains.py` merges runs

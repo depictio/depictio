@@ -220,12 +220,14 @@ main_dashboard:
     aggregation: median
     column_name: valid_pair_rate
     column_type: float64
-    secondary_layout: coverage
-    coverage_max: 1
+    # A 0-1 fraction: a coverage bar would print "41% of 1", and HiC-Pro
+    # publishes no floor to set a threshold at, so the spread over samples.
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:check-decagram
       icon_color: teal
-      caption: median share of read pairs kept as valid contacts
+      caption: median share over samples, with its spread
       link: tab:Valid pairs
       decimals: 2
     section: Key figures
@@ -345,7 +347,8 @@ main_dashboard:
     section: Findings
     source_tab: Distance decay
     source_component: decay-ps-curve
-    caption: Contact probability against distance, one curve per chromosome plus the pooled one, on log-log axes.
+    hide_legend: true
+    caption: Contact probability against distance on log-log axes; one colour per chromosome, plus the pooled curve.
     tag: hc-ov-hl-decay
     index: ov-hl-decay
     layout: {x: 5, y: 2, w: 3, h: 4}
@@ -707,12 +710,11 @@ tabs:
     aggregation: median
     column_name: valid_pair_rate
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    secondary_layout: histogram
     display:
       icon_name: mdi:check-decagram
       icon_color: teal
-      caption: median share of read pairs, from 0 to 1
+      caption: median per sample, with the distribution
       decimals: 2
     section: Pairs at a glance
     tag: hc-vp-card-validrate
@@ -905,12 +907,11 @@ tabs:
     aggregation: median
     column_name: long_range_ratio
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    secondary_layout: histogram
     display:
       icon_name: mdi:ruler
       icon_color: indigo
-      caption: median share of cis contacts, from 0 to 1
+      caption: median per sample, with the distribution
       decimals: 2
     section: Decay at a glance
     tag: hc-dd-card-longrange
@@ -1355,12 +1356,11 @@ tabs:
     aggregation: median
     column_name: valid_fraction
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    secondary_layout: histogram
     display:
       icon_name: mdi:check-decagram
       icon_color: teal
-      caption: median share of a domain's bins with data
+      caption: median per domain, with the distribution
       decimals: 2
     section: Domains at a glance
     tag: hc-dom-card-valid
@@ -1380,7 +1380,7 @@ tabs:
     display:
       icon_name: mdi:border-all-variant
       icon_color: orange
-      caption: boundary bins against the rest
+      caption: bins called a boundary (true) against the rest
     section: Domains at a glance
     tag: hc-dom-card-boundaries
     index: dom-card-boundaries

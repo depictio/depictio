@@ -90,10 +90,10 @@ one row per library. Strip: read pairs analysed (with the share aligned, then ke
 deduplication), the worst mapping efficiency (passes at 70%, warns from 60%), the worst
 duplication (passes up to 10%, warns to 20%) and the worst conversion on a gauge. A bisulfite
 aligner searches four converted genomes, so an efficiency in the seventies is the expected
-ceiling. Then conversion per library, coloured by group, and the per-library QC profile: eight
-run-summary metrics on parallel axes. A library that crosses the others on the CHH axis is a
-conversion problem; one that crosses them on alignment and duplication together is a library
-preparation problem. Collapsed: the run summary, alignment and deduplication tables. Filters:
+ceiling. Then conversion per library, coloured by group, and the per-library QC profile: five
+run-summary metrics on parallel axes (read pairs, aligned, duplicated, CpG methylation and
+conversion). A library that crosses the others on the conversion axis is a bisulfite problem;
+one that crosses them on alignment and duplication together is a library preparation problem. Collapsed: the run summary, alignment and deduplication tables. Filters:
 read pairs, CpG methylation, conversion, mapping efficiency, duplication and alignments kept.
 
 Conversion is read as `100 - %CHH`, which assumes a mammalian genome where non-CpG methylation is
@@ -102,23 +102,26 @@ CHG and CHH for real, so on a plant run judge conversion on an unmethylated spik
 lambda instead.
 
 **Coverage.** Qualimap BamQC at full resolution. Strip: mean depth (with its spread), the share
-of the reference covered at least once, Qualimap's duplicate estimate (the libraries with most)
+of the reference covered at least once, Qualimap's duplicate estimate (with its distribution)
 and the mean mapping quality on Bowtie 2's 0 to 42 scale. Mean depth counts the bases at zero, so
 on a shallow run the breadth is the number to judge. Then the depth along the reference (one
 lane per library, Qualimap's windows mapped back onto their contigs with the per-contig lengths
 of the same `genome_results.txt`), and side by side the depth histogram and the share of the
-reference covered at least X deep. Collapsed: the BamQC table. Filters: contig and depth
-threshold.
+reference covered at least X deep. Collapsed: the BamQC table. Filter: contig, in the left
+panel. The depth threshold sits in the bar of the depth distribution section and narrows that
+section only, so the 1X breadth card keeps its value.
 
 **Bias and context.** Bismark's M-bias report and its per-context summary. Strip: CpG
-methylation (with its spread), CHG methylation (the libraries with most), the worst CHH
+methylation (with its spread), CHG methylation (with its distribution), the worst CHH
 methylation against a 2% line (the 98% conversion floor, on a mammalian genome) and the
 methylated calls split by context. Then one M-bias explorer over all six tables of the M-bias
-file, the context filter opening on CpG. A CpG curve that has not flattened by the end of the
+file, its context and read picked in the bar of its section, the context opening on CpG. The bar
+narrows the explorer only: in the left panel a context pick would also narrow the per-context
+strip, whose CHG and CHH cards would then print "–". A CpG curve that has not flattened by the end of the
 read is Bismark's own advice to add an `--ignore` / `--ignore_r2` trim and re-extract; a CHH
 curve that climbs at one end is unconverted cytosine at those positions. Collapsed: the raw
-M-bias positions and the per-context methylation counts. Filters: context, read and read
-position.
+M-bias positions and the per-context methylation counts. Filter: read position, in the left
+panel.
 
 **Methylation levels.** The methylome itself, out of the per-CpG bedGraph files. Strip: the share
 of CpGs at 98 to 100% methylation (with its spread), the share at 0 to 2% (a gauge), the median
@@ -138,7 +141,8 @@ transcription start site, and the same metagene as a signal matrix.
 **Cohort structure.** The library-by-window matrix read three ways. Strip: the libraries placed
 by the PCA (a ring by group) and the 150 most variable windows ranked by contig. Then the PCA
 coloured by group (a lasso makes an analysis group) beside the pairwise Pearson correlation,
-clustered, and the heatmap of the 150 windows whose methylation varies most. A library that
+clustered. Collapsed below them, the heatmap of the 150 windows whose methylation varies most
+(one column per library), too tall to open by default. A library that
 lands with the wrong block in all three is a swap, a mislabelled sheet or a conversion failure.
 Filter: contig, on the variable windows.
 

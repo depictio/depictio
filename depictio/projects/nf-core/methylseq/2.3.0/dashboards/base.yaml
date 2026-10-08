@@ -343,11 +343,13 @@ main_dashboard:
     section: Findings
     source_tab: Methylation levels
     source_component: lvl-density-profile
-    caption: One curve per library; a healthy methylome peaks near 0% and, higher, near 100%.
+    hide_legend: true
+    caption: One colour per library; a healthy methylome peaks near 0% and, higher, near 100%.
     tag: ms-ov-hl-density
     index: ov-hl-density
     layout: {x: 5, y: 2, w: 3, h: 4}
   - component_type: highlight
+    title: Libraries on a PCA
     section: Findings
     source_tab: Cohort structure
     source_component: coh-pca
@@ -940,7 +942,7 @@ tabs:
       fig = px.bar(d, x='sample', y='conversion_efficiency_pct', color=color, color_discrete_map=colors, category_orders=depictio_group_kwargs.get('category_orders') or {}, labels={'sample': '', 'conversion_efficiency_pct': 'Conversion efficiency (%)', grp: ''})
       low = float(d['conversion_efficiency_pct'].min()) if len(d) else 0.0
       fig.update_yaxes(range=[max(0.0, low - 1.0), 100])
-      fig.update_xaxes(tickangle=-45)
+      fig.update_xaxes(tickangle=-45, automargin=True)
       fig.update_layout(margin=dict(t=10))
     section: Conversion per library
     tag: ms-run-conversion-bar
@@ -961,16 +963,13 @@ tabs:
       - total_reads
       - pct_aligned
       - pct_duplicate
-      - cpgs_called
       - pct_cpg_methylation
-      - pct_chg_methylation
-      - pct_chh_methylation
       - conversion_efficiency_pct
     section: Library QC profile
     tag: ms-run-parallel
     index: run-qc-profile
     title: Per-library QC profile
-    description: A library crossing the others on CHH is a conversion problem; on alignment and duplication, a library preparation one.
+    description: Crossing the others on conversion is a bisulfite problem; on alignment and duplication, a library preparation one.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: methylseq
@@ -1022,7 +1021,7 @@ tabs:
   - name: Coverage filters
     icon: mdi:tune
     color: cyan
-    description: The contigs and the depth thresholds the coverage tiles read
+    description: The contigs the depth track reads
   grid_sections:
   - name: Coverage at a glance
     icon: mdi:counter
@@ -1032,9 +1031,12 @@ tabs:
     icon: mdi:chart-line
     color: cyan
     description: Windowed depth mapped back onto its contig, one lane per library
+  # Its own bar holds the depth threshold: in the left panel it would also
+  # narrow the 1X breadth card, which pins min_coverage == 1 (RULES §6).
   - name: Depth distribution
     icon: mdi:chart-bell-curve
     color: cyan
+    filter_bar: true
     description: How many bases sit at each depth, and how much clears a threshold
   - name: Coverage detail
     icon: mdi:table
@@ -1077,12 +1079,12 @@ tabs:
     display:
       icon_name: mdi:ruler
       custom_color: cyan
-    section: Coverage filters
-    group: Genomic scope
+      strip_label: Min depth
+    section: Depth distribution
     tag: ms-cov-filter-depth
     index: cov-depth-range
     title: Depth threshold
-    layout: {x: 0, y: 3, w: 1, h: 3}
+    layout: {x: 0, y: 0, w: 2, h: 1}
   - component_type: card
     workflow_tag: methylseq
     data_collection_tag: qualimap_bamqc_genome_results
@@ -1131,12 +1133,11 @@ tabs:
     aggregation: median
     column_name: duplication_rate
     column_type: float64
-    secondary_layout: top_n
-    breakdown_col: sample
+    secondary_layout: histogram
     display:
       icon_name: mdi:content-duplicate
       icon_color: orange
-      caption: the libraries with most
+      caption: median, with the distribution
       decimals: 1
     section: Coverage at a glance
     tag: ms-cov-card-dup
@@ -1227,7 +1228,10 @@ tabs:
 # Bias and context
 # ============================================================================
 # Whether the extraction needs an --ignore trim: one M-bias explorer over all
-# six tables of the M-bias file, context and read picked on the left.
+# six tables of the M-bias file, context and read picked in the bar of its
+# section. The bar narrows that section only (RULES §6): in the left panel a
+# context filter would also narrow the per-context summary, whose cards each
+# pin one context and would print "–" on any other.
 - title: Bias and context
   subtitle: Does the methylation extraction need a read-position trim?
   tab_group: Methylome
@@ -1238,10 +1242,10 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: Context and read
+  - name: Read position
     icon: mdi:filter-variant
     color: pink
-    description: The cytosine context, the read and the positions the explorer draws
+    description: The read positions the M-bias explorer and its table draw
   grid_sections:
   - name: Context at a glance
     icon: mdi:counter
@@ -1250,7 +1254,9 @@ tabs:
   - name: M-bias
     icon: mdi:chart-bell-curve
     color: pink
-    description: Methylation by read position, per context and read
+    filter_bar: true
+    visible_filters: 2
+    description: Methylation by read position; the bar picks the context and the read
   - name: Context detail
     icon: mdi:table
     color: gray
@@ -1263,10 +1269,11 @@ tabs:
       [Bismark](https://github.com/FelixKrueger/Bismark)'s M-bias report: methylation at each
       read position, per cytosine context and read. A CpG curve that has not flattened by the
       end of the read argues for an `--ignore` or `--ignore_r2` trim and a re-extraction. Pick
-      the context and the read on the left; the explorer opens on CpG.
+      the context and the read in the bar above the explorer, which opens on CpG.
     tag: ms-bias-intro
     index: bias-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
+  # The M-bias section's own bar: context and read narrow the explorer only.
   - component_type: interactive
     workflow_tag: methylseq
     data_collection_tag: bismark_mbias_all_contexts
@@ -1277,12 +1284,12 @@ tabs:
     display:
       icon_name: mdi:shape-outline
       custom_color: pink
-    section: Context and read
-    group: M-bias panel
+      strip_label: Context
+    section: M-bias
     tag: ms-bias-filter-context
     index: bias-context-filter
     title: Cytosine context
-    layout: {x: 0, y: 0, w: 1, h: 3}
+    layout: {x: 0, y: 0, w: 2, h: 1}
   - component_type: interactive
     workflow_tag: methylseq
     data_collection_tag: bismark_mbias_all_contexts
@@ -1292,12 +1299,14 @@ tabs:
     display:
       icon_name: mdi:swap-vertical
       custom_color: pink
-    section: Context and read
-    group: M-bias panel
+      strip_label: Read
+    section: M-bias
     tag: ms-bias-filter-read
     index: bias-read-filter
     title: Read
-    layout: {x: 0, y: 3, w: 1, h: 3}
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # Tab-local left-panel filter: no other collection of this tab has a
+  # `position` column, so it narrows the M-bias explorer and its table only.
   - component_type: interactive
     workflow_tag: methylseq
     data_collection_tag: bismark_mbias_all_contexts
@@ -1308,12 +1317,12 @@ tabs:
     display:
       icon_name: mdi:ruler
       custom_color: pink
-    section: Context and read
+    section: Read position
     group: M-bias panel
     tag: ms-bias-filter-position
     index: bias-position-range
     title: Read position
-    layout: {x: 0, y: 6, w: 1, h: 3}
+    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: card
     workflow_tag: methylseq
     data_collection_tag: bismark_methylation_context_summary
@@ -1343,12 +1352,11 @@ tabs:
     column_name: pct_methylated
     column_type: float64
     filter_expr: col('context') == 'CHG'
-    secondary_layout: top_n
-    breakdown_col: sample
+    secondary_layout: histogram
     display:
       icon_name: mdi:chart-bell-curve
       icon_color: grape
-      caption: the libraries with most
+      caption: median per library, with the distribution
       decimals: 2
     section: Context at a glance
     tag: ms-bias-card-chg
@@ -1415,7 +1423,7 @@ tabs:
     tag: ms-bias-mbias
     index: bias-mbias-profile
     title: M-bias by context and read
-    description: One curve per library, context and read; the filters on the left pick the context and the read.
+    description: One curve per library and read; the bar above picks the context and the read.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: methylseq
@@ -1655,10 +1663,13 @@ tabs:
     icon: mdi:chart-scatter-plot
     color: grape
     description: The PCA beside the pairwise correlation it summarises
+  # Collapsed: the heatmap autofits to its 150 rows (about 15 grid rows), past
+  # the tab's budget; the PCA and the correlation answer the tab's question.
   - name: Variable windows
     icon: mdi:chart-box-outline
     color: grape
     description: The windows whose methylation moves most across the libraries
+    collapsed: true
   components:
   - component_type: text
     order: 1
@@ -1763,6 +1774,10 @@ tabs:
       cluster_cols: true
       colorscale: RdBu
       row_annotation_cols: [chromosome]
+      # Every numeric column but the variance: one column per library of the
+      # run, unknown until ingest. The variance (up to about 1000) would
+      # otherwise set the colour scale and flatten the 0 to 100% libraries.
+      value_columns_pattern: '^(?!window_variance$)'
     section: Variable windows
     tag: ms-coh-variable
     index: coh-variable-windows
@@ -1967,7 +1982,7 @@ tabs:
       score_threshold: 1.3
       selection_enabled: true
       selection_column: chromosome
-      top_n_labels: 10
+      top_n_labels: 0
     section: Along the genome
     tag: ms-cmp-manhattan
     index: cmp-manhattan
@@ -1984,8 +1999,8 @@ tabs:
       p_value_col: p_value
       significance_threshold: 0.05
       effect_threshold: 10.0
-      top_n_labels: 10
-      show_labels: true
+      show_labels: false
+      effect_label: Difference (points)
     section: Effect and significance
     tag: ms-cmp-volcano
     index: cmp-volcano

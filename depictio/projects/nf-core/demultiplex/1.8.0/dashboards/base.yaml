@@ -95,8 +95,11 @@ main_dashboard:
     collapsed: true
     persistent: true
     pin: bottom
+    # Run health reads lanes, which no library link reaches: a pick here would
+    # narrow nothing there, so the sheet is kept off it with the sample filters.
     exclude_tabs:
     - Overview
+    - Run health
   components:
   # First in component order on purpose: the Guide demos the first categorical
   # filter that shares a data collection with the first card (Libraries, below).
@@ -314,7 +317,7 @@ main_dashboard:
     body: |
       - **{{low_cycle}}** lowest median Phred score at any cycle – pooled over the libraries, per lane and read [Run health](tab:Run health)
       - **{{cv}}%** coefficient of variation of the reads per library – the least even lane; 0 is a perfect pool [Balance](tab:Library balance)
-      - **{{cls_share}}** of the reads in the top unknown barcodes are {{top_class}} – the largest class [Undetermined](tab:Undetermined reads)
+      - **{{cls_share}}** of the reads in the top unknown barcodes fall in one class – {{top_class}}, the largest [Undetermined](tab:Undetermined reads)
       - **{{kept}}%** of the reads kept by fastp – median library and lane [Library QC](tab:Library QC)
     section: Findings
     tag: dm-ov-findings
@@ -341,6 +344,7 @@ main_dashboard:
     section: Findings
     source_tab: Library QC
     source_component: lib-scatter
+    hide_legend: true
     caption: One point per library, coloured by group; a library far from its group is worth a look.
     tag: dm-ov-hl-library
     index: ov-hl-library
@@ -823,32 +827,35 @@ tabs:
     title: Bases at Q30 (%)
     description: Share of the bases at Q30 or above in the weakest read of any lane.
     layout: {x: 4, y: 0, w: 2, h: 2}
+  # Split by read rather than ranked by lane: a one-lane run drew a single bar
+  # at 100%, and the lane scatter below already sizes every lane by its yield.
   - component_type: card
     workflow_tag: demultiplex
-    data_collection_tag: lane_summary
-    use: bcl2fastq/lane_summary
+    data_collection_tag: read_quality
+    use: bcl2fastq/read_quality
     aggregation: sum
     column_name: yield_gb
     column_type: float64
-    secondary_layout: top_n
-    breakdown_col: lane_label
-    top_n_count: 4
+    secondary_layout: composition
+    breakdown_col: read_label
     display:
       icon_name: mdi:database-outline
       icon_color: violet
-      caption: per lane, the largest first
+      caption: split by read
       decimals: 1
     section: Run health at a glance
     tag: dm-run-card-yield
     index: run-card-yield
     title: Yield (Gb)
-    description: Bases passing filter over the whole run, every lane and read.
+    description: Bases passing filter over the whole run, every lane, split by read.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: demultiplex
     data_collection_tag: lane_summary
     use: bcl2fastq/lane_health
     config:
+      x_title: Undetermined (%)
+      y_title: Bases at Q30 (%)
       selection_enabled: true
       selection_column: lane_label
     section: Lanes and reads
@@ -1105,13 +1112,13 @@ tabs:
     aggregation: sum
     column_name: reads
     column_type: int64
-    secondary_layout: top_n
+    secondary_layout: concentration
     breakdown_col: sample
     top_n_count: 3
     display:
       icon_name: mdi:counter
       icon_color: indigo
-      caption: the three largest libraries
+      caption: the share the three largest hold
     section: Balance at a glance
     tag: dm-bal-card-reads
     index: bal-card-reads
@@ -1185,6 +1192,7 @@ tabs:
     data_collection_tag: demux_stats
     use: bcl2fastq/lane_composition
     config:
+      default_rank: Library
       top_n: 8
       sort_by: abundance
     section: Lane composition
@@ -1197,11 +1205,13 @@ tabs:
     workflow_tag: demultiplex
     data_collection_tag: demux_stats
     use: bcl2fastq/lane_sunburst
+    config:
+      colour_by_rank: sample
     section: Lane composition
     tag: dm-bal-lane-sunburst
     index: bal-lane-sunburst
     title: Run, lane, library
-    description: Reads per lane, then per library inside the lane.
+    description: Reads per lane, then per library inside the lane, in the libraries' colours.
     layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: figure
     workflow_tag: demultiplex
@@ -1227,6 +1237,8 @@ tabs:
     data_collection_tag: demux_stats
     use: bcl2fastq/library_index_purity
     config:
+      x_title: Reads
+      y_title: Perfect index match (%)
       log_x: true
       selection_enabled: true
       selection_column: sample
@@ -1405,13 +1417,11 @@ tabs:
     aggregation: max
     column_name: pct_of_undetermined
     column_type: float64
-    secondary_layout: top_n
-    breakdown_col: barcode
-    top_n_count: 3
+    secondary_layout: histogram
     display:
       icon_name: mdi:chart-bar
       icon_color: grape
-      caption: the three most frequent barcodes
+      caption: the largest, with every listed barcode's share
       decimals: 1
     section: Undetermined at a glance
     tag: dm-und-card-top
@@ -1581,13 +1591,11 @@ tabs:
     aggregation: median
     column_name: pct_adapter_trimmed
     column_type: float64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
+    secondary_layout: histogram
     display:
       icon_name: mdi:content-cut
       icon_color: yellow
-      caption: the three most adapter-rich libraries
+      caption: median, with the distribution
       decimals: 1
     section: Library QC at a glance
     tag: dm-lib-card-adapter
@@ -1627,6 +1635,7 @@ tabs:
       size_col: reads
       x_title: Duplication (%)
       y_title: Bases at Q30 after fastp (%)
+      legend_pos: bottom
       selection_enabled: true
       selection_column: sample
     section: Libraries against each other
