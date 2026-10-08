@@ -41,7 +41,11 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_command_usage,
     rich_print_section_separator,
 )
-from depictio.cli.cli.utils.scan import flat_run_tag_clash, scan_project_files
+from depictio.cli.cli.utils.scan import (
+    flat_run_tag_clash,
+    prune_empty_optional_manifest_dcs,
+    scan_project_files,
+)
 from depictio.cli.cli.utils.scan_utils import (
     count_data_collection_matches,
     resolve_run_locations,
@@ -103,6 +107,31 @@ def _redacted_command_line() -> str | None:
         return None
 
 
+def _manifest_location_problem(manifest: str) -> str | None:
+    """Why ``--manifest`` cannot be read from where it points, or ``None``.
+
+    Decided from the scheme alone, before any step runs: an s3:// manifest used
+    to pass every check up to the scan, after the project was already synced,
+    and a plain http:// one was taken for a local file that "does not exist".
+    """
+    from depictio.models.models.manifest import is_remote_url
+
+    scheme = manifest.split("://", 1)[0].lower() if "://" in manifest else ""
+    if scheme == "s3":
+        return (
+            "--manifest cannot be read from s3:// yet: serve the manifest over https, "
+            "or use a local path."
+        )
+    if not scheme or is_remote_url(manifest):
+        return None
+    if scheme == "http":
+        return (
+            "--manifest is a plain http:// URL, which an administrator has to allow (the "
+            "DEPICTIO_REMOTE_ALLOW_HTTP environment variable). Use https, or a local path."
+        )
+    return f"--manifest takes an https:// URL or a local path, not {scheme}://."
+
+
 def _ingestion_data_collections(project_config, count_files: bool = False) -> list[dict]:
     """Per-DC summary (tag / type / format) + the local scan paths the CLI
     resolved, walked from the validated project config. Best-effort; never raises.
@@ -139,13 +168,13 @@ def _ingestion_data_collections(project_config, count_files: bool = False) -> li
                 elif normalized_mode == "recursive":
                     rc = getattr(params, "regex_config", None)
                     pattern = getattr(rc, "pattern", None) if rc else None
-                elif mode == "url":
+                elif normalized_mode == "url":
                     pattern = getattr(params, "url", None)
-                elif mode == "s3_prefix":
+                elif normalized_mode == "s3_prefix":
                     prefix = getattr(params, "prefix", None)
                     glob = getattr(params, "pattern", None)
                     pattern = f"{prefix}{glob}" if prefix and glob else prefix
-                elif mode == "manifest":
+                elif normalized_mode == "manifest":
                     pattern = getattr(params, "manifest_url", None)
                 else:
                     pattern = None
@@ -155,7 +184,7 @@ def _ingestion_data_collections(project_config, count_files: bool = False) -> li
                         "tag": getattr(dc, "data_collection_tag", None) or "",
                         "type": getattr(cfg, "type", None) if cfg else None,
                         "format": getattr(dcsp, "format", None) if dcsp else None,
-                        "scan_mode": mode,
+                        "scan_mode": normalized_mode,
                         "scan_pattern": pattern,
                         "locations": locations,
                         "file_count": file_count,
@@ -172,16 +201,25 @@ def _shorten_scan_pattern(pattern: str | None, locations: list[str]) -> str:
     A single-file scan's pattern is an absolute path, and in a terminal-width
     table it truncates to the data root every collection shares, hiding the one
     part that identifies the file. Relative to the configured location it stays
-    unambiguous and readable.
+    unambiguous and readable. A remote pattern (a URL, an s3:// prefix or a
+    manifest) is shown whole: it is not a path under a local location.
     """
     if not pattern:
         return "-"
+    if "://" in pattern:
+        return pattern
     for location in locations:
         try:
-            return str(Path(pattern).relative_to(location))
+            relative = Path(pattern).relative_to(location)
         except ValueError:
             continue
+        # The location itself (a single-file location is the file) says nothing.
+        return pattern if relative == Path(".") else str(relative)
     return pattern
+
+
+# Scan modes whose files are remote: a dry run does not list or fetch them.
+_REMOTE_SCAN_MODES = ("url", "s3_prefix", "manifest")
 
 
 def _print_dry_run_scan_preview(project_config) -> bool:
@@ -211,14 +249,21 @@ def _print_dry_run_scan_preview(project_config) -> bool:
     rows = []
     for record in records:
         file_count = record["file_count"]
+        if file_count is not None:
+            files = str(file_count)
+        elif record["scan_mode"] in _REMOTE_SCAN_MODES:
+            # Listed or fetched by the real scan only: a dry run reads nothing remote.
+            files = "not counted (remote)"
+        else:
+            # A collection with no scan config (a derived one) has no files
+            # to count, which is not the same as counting zero.
+            files = "n/a (no scan)"
         rows.append(
             {
                 "data collection": record["tag"],
                 "scan mode": record["scan_mode"] or "-",
                 "pattern": _shorten_scan_pattern(record["scan_pattern"], record["locations"]),
-                # A collection with no scan config (a derived one) has no files
-                # to count, which is not the same as counting zero.
-                "files": "n/a (no scan)" if file_count is None else str(file_count),
+                "files": files,
             }
         )
     render_records_table(rows, title="Dry run: files each data collection would match")
@@ -1133,6 +1178,12 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
         )
         raise typer.Exit(code=1)
 
+    if manifest:
+        manifest_problem = _manifest_location_problem(manifest)
+        if manifest_problem:
+            rich_print_checked_statement(escape(manifest_problem), "error")
+            raise typer.Exit(code=1)
+
     # --bind gives each data collection its location itself, so it stands in for
     # DATA_DIR / --manifest.
     if template and not data_root and not manifest and not bind:
@@ -1376,6 +1427,18 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                 except BindingError as exc:
                     rich_print_checked_statement(str(exc), "error")
                     raise typer.Exit(code=1)
+
+            # An optional manifest DC the manifest lists nothing for is left
+            # out here, as POST /projects/from_manifest does, rather than
+            # failing its scan after the project is synced. After --bind, so
+            # a DC bound elsewhere is no longer a manifest DC.
+            pruned_manifest_dcs = prune_empty_optional_manifest_dcs(template_resolved_config)
+            if pruned_manifest_dcs:
+                rich_print_checked_statement(
+                    f"Left out {len(pruned_manifest_dcs)} optional data collection(s) the "
+                    f"manifest lists nothing for: {escape(', '.join(pruned_manifest_dcs))}",
+                    "info",
+                )
 
             # Resolve dashboard paths: CLI --dashboard overrides template defaults
             if dashboard:

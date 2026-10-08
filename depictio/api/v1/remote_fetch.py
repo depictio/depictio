@@ -162,14 +162,19 @@ def s3_read_target(url: str, CLI_config=None) -> S3Target:
     )
 
 
+def s3_read_target_in_region(url: str, CLI_config=None) -> S3Target:
+    """:func:`s3_read_target`, moved to its bucket's region (one lookup per bucket)."""
+    return ensure_region(s3_read_target(url, CLI_config))
+
+
 def s3_read_client(url: str, CLI_config=None) -> "S3Client":
     """boto3 client for reading ``url``: resolved target, in its bucket's region."""
-    return ensure_region(s3_read_target(url, CLI_config)).client()
+    return s3_read_target_in_region(url, CLI_config).client()
 
 
 def s3_read_storage_options(url: str, CLI_config=None) -> dict[str, str]:
     """polars ``storage_options`` for reading ``url``, same decision as :func:`s3_read_client`."""
-    return ensure_region(s3_read_target(url, CLI_config)).polars_options()
+    return s3_read_target_in_region(url, CLI_config).polars_options()
 
 
 def _resolve_addresses(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
@@ -327,20 +332,33 @@ def _content_length(response: httpx.Response) -> int:
     return int(size_header) if size_header and size_header.isdigit() else -1
 
 
+def _probe_metadata(response: httpx.Response) -> dict:
+    """``{"size", "etag"}`` out of a HEAD answer, which has to be a 2xx.
+
+    A 404, or the 403 / 405 a presigned GET URL answers a HEAD with, describes
+    an error body, not the file: it raises :class:`RemoteFetchFailed`, so the
+    caller falls back to its URL + size identity hash and says so.
+    """
+    if not response.is_success:
+        raise RemoteFetchFailed(f"The provided URL answered HEAD with HTTP {response.status_code}.")
+    return {"size": _content_length(response), "etag": response.headers.get("etag", "")}
+
+
 def probe_remote_url(url: str, timeout_s: float | None = None) -> dict:
     """HEAD the URL through the gateway. Returns ``{"size": int, "etag": str}``
     with ``size = -1`` when unknown. s3:// URLs return unknowns (probed later
     by the object-store client).
 
-    Policy failures raise ``RemoteURLRejected``; reachability failures raise
-    the narrower :class:`RemoteFetchFailed` with a sanitized message.
+    Policy failures raise ``RemoteURLRejected``; reachability failures and a
+    non-2xx answer raise the narrower :class:`RemoteFetchFailed` with a
+    sanitized message.
     """
     if urlparse(url).scheme.lower() == "s3":
         validate_remote_url(url)
         return {"size": -1, "etag": ""}
     try:
         with open_validated_stream(url, timeout=timeout_s, method="HEAD") as response:
-            return {"size": _content_length(response), "etag": response.headers.get("etag", "")}
+            return _probe_metadata(response)
     except RemoteURLRejected:
         raise
     except Exception as exc:
@@ -421,10 +439,12 @@ def _direct_client(policy: RemoteConfig, timeout: float | None = None) -> httpx.
 
 
 def direct_probe(url: str, timeout_s: float | None = None) -> dict:
-    """CLI counterpart of :func:`probe_remote_url`, same ``{"size", "etag"}`` shape."""
+    """CLI counterpart of :func:`probe_remote_url`, same ``{"size", "etag"}`` shape.
+
+    A non-2xx answer raises :class:`RemoteFetchFailed`, as it does there.
+    """
     with _direct_client(remote_policy(), timeout=timeout_s) as client:
-        response = client.head(url)
-        return {"size": _content_length(response), "etag": response.headers.get("etag", "")}
+        return _probe_metadata(client.head(url))
 
 
 def direct_download(url: str, dest_path: str) -> int:

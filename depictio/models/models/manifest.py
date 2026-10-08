@@ -9,6 +9,7 @@ the stability rules that matter here:
   ``DEPICTIO_REMOTE_ALLOW_HTTP``).
 - The schema is closed — ``extra`` is the only open field.
 - ``version`` gates schema evolution.
+- An entry listed twice (same ``id``, ``type`` and ``url``) is refused.
 """
 
 import csv
@@ -16,7 +17,7 @@ import io
 import json
 import os
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 SUPPORTED_MANIFEST_VERSIONS = ("1",)
 
@@ -85,7 +86,12 @@ class ManifestEntry(BaseModel):
 
 
 class DataManifest(BaseModel):
-    """The manifest contract: a versioned, closed list of ``ManifestEntry``."""
+    """The manifest contract: a versioned, closed list of ``ManifestEntry``.
+
+    The entries are a list, not a set, and an entry repeated with the same
+    ``id``, ``type`` and ``url`` is refused rather than deduplicated: each copy
+    would become its own File, and the table would hold that file's rows twice.
+    """
 
     version: str = "1"
     entries: list[ManifestEntry] = []
@@ -102,6 +108,48 @@ class DataManifest(BaseModel):
             )
         return v
 
+    @model_validator(mode="after")
+    def reject_repeated_entries(self) -> "DataManifest":
+        first_position: dict[tuple[str, str, str], int] = {}
+        repeated: list[str] = []
+        for position, entry in enumerate(self.entries, start=1):
+            key = (entry.id, entry.type, entry.url)
+            if key in first_position:
+                # Without its query string: a presigned URL's is its signature.
+                shown_url = entry.url.split("?", 1)[0]
+                repeated.append(
+                    f"entries {first_position[key]} and {position} "
+                    f"(id={entry.id}, type={entry.type}, url={shown_url})"
+                )
+            else:
+                first_position[key] = position
+        if repeated:
+            more = f", and {len(repeated) - 3} more" if len(repeated) > 3 else ""
+            raise ValueError(
+                f"Manifest lists the same file more than once: {'; '.join(repeated[:3])}{more}. "
+                "Remove the repeated rows."
+            )
+        return self
+
+    @classmethod
+    def parse(
+        cls,
+        content: str | bytes,
+        source: str | None = None,
+        field_map: dict[str, str] | None = None,
+    ) -> "DataManifest":
+        """Parse a manifest whose format is not known yet: JSON or CSV.
+
+        A ``.json`` ``source`` (query string ignored) is JSON, and so is a
+        document that starts with ``{`` or ``[``; anything else is CSV. A UTF-8
+        byte order mark is ignored, here and in both parsers.
+        """
+        text = _as_text(content)
+        is_json_source = (source or "").split("?", 1)[0].lower().endswith(".json")
+        if is_json_source or text.lstrip().startswith(("{", "[")):
+            return cls.from_json(text, source=source, field_map=field_map)
+        return cls.from_csv(text, source=source, field_map=field_map)
+
     def types(self) -> set[str]:
         """Distinct ``type`` values (= data collection tags) in the manifest."""
         return {entry.type for entry in self.entries}
@@ -112,7 +160,7 @@ class DataManifest(BaseModel):
     @classmethod
     def from_csv(
         cls,
-        text: str,
+        text: str | bytes,
         source: str | None = None,
         field_map: dict[str, str] | None = None,
     ) -> "DataManifest":
@@ -121,10 +169,15 @@ class DataManifest(BaseModel):
         ``run`` is optional; any other column is folded into ``extra`` — the
         CSV affordance for the contract's single open field. ``field_map``
         remaps non-canonical column names onto the contract, keyed by
-        canonical name (e.g. ``{"id": "sample", "url": "path"}``).
+        canonical name (e.g. ``{"id": "sample", "url": "path"}``). Column
+        names and the ``url`` and ``run`` cells are read without surrounding
+        spaces, so ``id, type, url`` works as a header.
         """
-        reader = csv.DictReader(io.StringIO(text))
+        reader = csv.DictReader(io.StringIO(_as_text(text)))
+        # Rows are keyed by these names, so they are stripped here and not
+        # only for the presence check below.
         fieldnames = [name.strip() for name in (reader.fieldnames or [])]
+        reader.fieldnames = fieldnames
         column_of = _resolve_field_map(field_map)
         missing = {column_of[k] for k in ("id", "type", "url")} - set(fieldnames)
         if missing:
@@ -138,15 +191,15 @@ class DataManifest(BaseModel):
             extra = {
                 key: (value or "")
                 for key, value in row.items()
-                if key is not None and key.strip() not in known
+                if key is not None and key not in known
             }
             entries.append(
                 ManifestEntry(
                     id=(row.get(column_of["id"]) or ""),
                     type=(row.get(column_of["type"]) or ""),
-                    url=(row.get(column_of["url"]) or ""),
-                    run=(row.get(column_of["run"]) or None),
-                    extra={k.strip(): v for k, v in extra.items()},
+                    url=(row.get(column_of["url"]) or "").strip(),
+                    run=(row.get(column_of["run"]) or "").strip() or None,
+                    extra=extra,
                 )
             )
         return cls(entries=entries, source=source)
@@ -154,7 +207,7 @@ class DataManifest(BaseModel):
     @classmethod
     def from_json(
         cls,
-        text: str,
+        text: str | bytes,
         source: str | None = None,
         field_map: dict[str, str] | None = None,
     ) -> "DataManifest":
@@ -162,7 +215,7 @@ class DataManifest(BaseModel):
         ``version``) or a bare list of entries. ``field_map`` behaves as in
         ``from_csv`` and applies to each entry object."""
         try:
-            payload = json.loads(text)
+            payload = json.loads(_as_text(text))
         except json.JSONDecodeError as exc:
             raise ValueError(f"Manifest is not valid JSON: {exc}")
 
@@ -192,6 +245,13 @@ class DataManifest(BaseModel):
         else:
             raise ValueError("Manifest JSON must be an object or a list of entries")
         return manifest
+
+
+def _as_text(content: str | bytes) -> str:
+    """A manifest's text, without the UTF-8 byte order mark spreadsheet exports add."""
+    if isinstance(content, bytes):
+        return content.decode("utf-8-sig")
+    return content.removeprefix("﻿")
 
 
 def _resolve_field_map(field_map: dict[str, str] | None) -> dict[str, str]:

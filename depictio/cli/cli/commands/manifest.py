@@ -192,7 +192,7 @@ def from_table(
                 continue
             url = value if is_remote_url(value) or "://" in value else None
             if url is None:
-                url = f"{prefix}/{value.lstrip('./')}" if prefix else value
+                url = f"{prefix}/{value.removeprefix('./')}" if prefix else value
                 if not is_remote_url(url) and "://" not in url:
                     local_examples.append(value)
             entry = {"id": entity, "type": column, "url": url}

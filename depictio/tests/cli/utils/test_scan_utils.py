@@ -1115,3 +1115,20 @@ class TestResolveRunLocations:
 
         assert resolved.locations == [str(tmp_path)]
         assert resolved.warnings == []
+
+    def test_remote_locations_and_a_manifest_file_are_not_missing(self, tmp_path):
+        """A remote DC's location and a local manifest file are read by the DC's
+        own scan: they are no run directory, and no reason to warn."""
+        manifest = tmp_path / "manifest.csv"
+        manifest.write_text("id,type,url\n")
+        workflow = self._workflow("flat", [str(tmp_path)])
+        workflow.data_location.locations = [
+            "https://data.example.org/run42/manifest.json",
+            "s3://bucket/run42/",
+            str(manifest),
+        ]
+
+        resolved = resolve_run_locations(workflow)
+
+        assert resolved.locations == []
+        assert resolved.warnings == []

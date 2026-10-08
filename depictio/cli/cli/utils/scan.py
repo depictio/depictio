@@ -1811,8 +1811,9 @@ def fetch_manifest(manifest_url: str, field_map: dict | None = None):
     """Load and parse a Data Manifest from a local path or an http(s) URL.
 
     Format is decided by extension (.json vs anything else = CSV), falling
-    back to content sniffing. s3:// manifests are not supported yet (phase 2
-    covers file paths and https; the RFC tracks s3 manifests).
+    back to content sniffing (``DataManifest.parse``). s3:// manifests are not
+    supported yet (phase 2 covers file paths and https; the RFC tracks s3
+    manifests).
 
     Remote manifests are re-fetched on every scan, including scans the API
     runs in-process, so server context goes through the SSRF gateway
@@ -1841,14 +1842,91 @@ def fetch_manifest(manifest_url: str, field_map: dict | None = None):
             )
         if not os.path.exists(manifest_url):
             raise ValueError(f"Manifest '{manifest_url}' does not exist.")
-        with open(manifest_url) as fh:
+        with open(manifest_url, "rb") as fh:
             text = fh.read()
 
-    stripped = text.lstrip()
-    looks_json = manifest_url.endswith(".json") or stripped.startswith(("{", "["))
-    if looks_json:
-        return DataManifest.from_json(text, source=manifest_url, field_map=field_map)
-    return DataManifest.from_csv(text, source=manifest_url, field_map=field_map)
+    return DataManifest.parse(text, source=manifest_url, field_map=field_map)
+
+
+def _manifest_field_map(scan_params) -> dict[str, str]:
+    """``fetch_manifest``'s field map for one manifest DC's scan parameters (model or dict)."""
+
+    def param(name: str, default: str | None) -> str | None:
+        if isinstance(scan_params, dict):
+            return scan_params.get(name, default)
+        return getattr(scan_params, name, default)
+
+    field_map = {
+        "id": param("id_field", "id") or "id",
+        "type": param("type_field", "type") or "type",
+        "url": param("url_field", "url") or "url",
+    }
+    run_field = param("run_field", "run")
+    if run_field:
+        field_map["run"] = run_field
+    return field_map
+
+
+def prune_empty_optional_manifest_dcs(config: dict) -> list[str]:
+    """Drop the optional manifest DCs whose manifest lists no entry of their type. In place.
+
+    Meant for a resolved template, before the project sync: the rule
+    ``POST /projects/from_manifest`` applies, the same one the template applies
+    to an optional single-file DC whose file is missing. The scan of such a DC
+    would otherwise fail on its empty type. A required DC with no entry raises
+    ``ValueError`` here, before the project exists on the server. The links
+    naming a pruned DC go with it, and its expected-DC record says why. Returns
+    the pruned tags, sorted.
+    """
+    from depictio.cli.cli.utils.templates import prune_links_for_tags
+    from depictio.models.models.manifest import DataManifest
+
+    manifests: dict[tuple, DataManifest] = {}
+    pruned: set[str] = set()
+    for workflow in config.get("workflows") or []:
+        for dc in workflow.get("data_collections") or []:
+            scan = (dc.get("config") or {}).get("scan") or {}
+            if str(scan.get("mode", "")).lower() != "manifest":
+                continue
+            params = scan.get("scan_parameters") or {}
+            manifest_url = params.get("manifest_url")
+            if not manifest_url:
+                continue  # the model reports it, with the rest of the config
+            field_map = _manifest_field_map(params)
+            key = (manifest_url, tuple(sorted(field_map.items())))
+            if key not in manifests:
+                manifests[key] = fetch_manifest(manifest_url, field_map=field_map)
+            manifest = manifests[key]
+            tag = dc.get("data_collection_tag") or ""
+            manifest_type = params.get("manifest_type") or tag
+            if manifest.entries_for_type(manifest_type):
+                continue
+            if dc.get("optional"):
+                pruned.add(tag)
+                continue
+            raise ValueError(
+                f"Manifest {manifest_url} has no entry of type '{manifest_type}', which data "
+                f"collection '{tag}' needs. Its types: "
+                f"{', '.join(sorted(manifest.types())) or 'none'}."
+            )
+
+    if not pruned:
+        return []
+    for workflow in config.get("workflows") or []:
+        workflow["data_collections"] = [
+            dc
+            for dc in workflow.get("data_collections") or []
+            if dc.get("data_collection_tag") not in pruned
+        ]
+    if config.get("links"):
+        prune_links_for_tags(config, pruned)
+    origin = config.get("template_origin")
+    if isinstance(origin, dict):
+        for expected in origin.get("expected_data_collections") or []:
+            if expected.get("data_collection_tag") in pruned:
+                expected["included"] = False
+                expected["removal_reason"] = "optional: the manifest lists no entry for it"
+    return sorted(pruned)
 
 
 def scan_manifest_for_data_collection(
@@ -1867,14 +1945,10 @@ def scan_manifest_for_data_collection(
     import time
 
     scan_params = data_collection.config.scan.scan_parameters  # type: ignore[union-attr]
-    field_map = {
-        "id": scan_params.id_field,  # type: ignore[union-attr]
-        "type": scan_params.type_field,  # type: ignore[union-attr]
-        "url": scan_params.url_field,  # type: ignore[union-attr]
-    }
-    if scan_params.run_field:  # type: ignore[union-attr]
-        field_map["run"] = scan_params.run_field  # type: ignore[union-attr]
-    manifest = fetch_manifest(scan_params.manifest_url, field_map=field_map)  # type: ignore[union-attr]
+    manifest = fetch_manifest(
+        scan_params.manifest_url,  # type: ignore[union-attr]
+        field_map=_manifest_field_map(scan_params),
+    )
 
     entries = manifest.entries_for_type(scan_params.manifest_type)  # type: ignore[union-attr]
     if not entries:
@@ -2127,6 +2201,13 @@ def scan_files_for_data_collection(
     return {"result": "success"}
 
 
+def _scan_failure(data_collection_tag: str, scan_result: dict) -> str:
+    """The error a failed DC scan raises with, the scanner's own reason included."""
+    reason = scan_result.get("message")
+    suffix = f": {reason}" if reason else ""
+    return f"Failed to scan data collection {data_collection_tag}{suffix}"
+
+
 def scan_project_files(
     project_config,
     CLI_config: CLIConfig,
@@ -2305,7 +2386,7 @@ def scan_project_files(
             )
 
             if scan_result["result"] != "success":
-                raise Exception(f"Failed to scan data collection {dc.data_collection_tag}")
+                raise Exception(_scan_failure(dc.data_collection_tag, scan_result))
 
         # Scan remote (url/manifest) data collections individually — same path
         # as single DCs; scan_files_for_data_collection dispatches on mode.
@@ -2324,7 +2405,7 @@ def scan_project_files(
             )
 
             if scan_result["result"] != "success":
-                raise Exception(f"Failed to scan data collection {dc.data_collection_tag}")
+                raise Exception(_scan_failure(dc.data_collection_tag, scan_result))
 
         # Handle MultiQC data collections (no file scanning needed)
         for dc in multiqc_data_collections:

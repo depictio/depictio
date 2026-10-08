@@ -7,8 +7,10 @@ wrapped in `if not dry_run:`.
 
 import pytest
 
+from depictio.cli.cli.commands import run as run_mod
 from depictio.cli.cli.commands.run import (
     _ingestion_data_collections,
+    _print_dry_run_scan_preview,
     _shorten_scan_pattern,
 )
 from depictio.models.models.data_collections import DataCollection
@@ -39,6 +41,14 @@ class TestShortenScanPattern:
 
     def test_no_pattern_renders_as_a_dash(self):
         assert _shorten_scan_pattern(None, ["/data/a"]) == "-"
+
+    def test_a_remote_pattern_equal_to_its_location_is_shown_whole(self):
+        """Path('https://h/d.csv').relative_to itself is '.', which named nothing."""
+        url = "https://data.example.org/t.csv"
+        assert _shorten_scan_pattern(url, [url]) == url
+
+    def test_a_single_file_location_does_not_shorten_to_a_dot(self):
+        assert _shorten_scan_pattern("/data/m.csv", ["/data/m.csv"]) == "/data/m.csv"
 
 
 def _project_with_run(tmp_path) -> Project:
@@ -81,6 +91,65 @@ def _project_with_run(tmp_path) -> Project:
         data_collections=[],
         permissions={"owners": [], "editors": [], "viewers": []},
     )
+
+
+def _remote_project(mode: str = "url") -> Project:
+    workflow = Workflow(
+        name="wf",
+        engine={"name": "python"},
+        data_location={"structure": "flat", "locations": ["https://data.example.org/t.csv"]},
+        data_collections=[
+            DataCollection(
+                data_collection_tag="remote",
+                config={
+                    "type": "table",
+                    "scan": {
+                        "mode": mode,
+                        "scan_parameters": {"url": "https://data.example.org/t.csv"},
+                    },
+                    "dc_specific_properties": {"format": "csv"},
+                },
+            )
+        ],
+    )
+    return Project(
+        name="remote_project",
+        workflows=[workflow],
+        data_collections=[],
+        permissions={"owners": [], "editors": [], "viewers": []},
+    )
+
+
+class TestRemotePreview:
+    def test_a_mode_spelled_in_capitals_still_shows_its_pattern(self):
+        record = _ingestion_data_collections(_remote_project("URL"))[0]
+        assert record["scan_mode"] == "url"
+        assert record["scan_pattern"] == "https://data.example.org/t.csv"
+
+    def test_a_remote_dc_is_not_reported_as_having_no_scan(self, monkeypatch):
+        rows: list[dict] = []
+        warnings: list[str] = []
+        monkeypatch.setattr(
+            run_mod, "render_records_table", lambda found, title: rows.extend(found)
+        )
+        monkeypatch.setattr(
+            run_mod,
+            "rich_print_checked_statement",
+            lambda message, level: warnings.append(message) if level == "warning" else None,
+        )
+
+        assert _print_dry_run_scan_preview(_remote_project()) is True
+
+        assert rows == [
+            {
+                "data collection": "remote",
+                "scan mode": "url",
+                "pattern": "https://data.example.org/t.csv",
+                "files": "not counted (remote)",
+            }
+        ]
+        # Its location is a URL, not a folder that "does not exist".
+        assert warnings == []
 
 
 class TestIngestionDataCollections:

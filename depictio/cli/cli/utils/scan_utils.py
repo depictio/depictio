@@ -336,13 +336,17 @@ def resolve_run_locations(workflow: Workflow) -> ResolvedRuns:
 
     A location that does not exist, or that matches no run, becomes a warning
     rather than an exception: this feeds a preview, and one bad path must not
-    hide every other data collection's count behind a traceback.
+    hide every other data collection's count behind a traceback. A remote
+    location and a local manifest file are no run directory, and not missing
+    either: the data collections reading them scan them themselves.
     """
     structure = workflow.data_location.structure
     runs_regex = workflow.data_location.runs_regex
     run_locations: list[str] = []
     warnings: list[str] = []
     for location in workflow.data_location.locations:
+        if "://" in location or os.path.isfile(location):
+            continue
         if not os.path.isdir(location):
             warnings.append(f"Configured location '{location}' does not exist.")
             continue

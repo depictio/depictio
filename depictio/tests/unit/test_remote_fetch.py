@@ -23,6 +23,7 @@ from depictio.api.v1.remote_fetch import (
     RemoteURLRejected,
     S3AccessRefused,
     bounded_download,
+    direct_probe,
     fetch_validated_text,
     is_public_s3_location,
     is_server_context,
@@ -277,6 +278,14 @@ class _Handler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("ETag", ETAG)
             self.end_headers()
+        elif self.path == "/presigned":
+            # A URL signed for GET: S3 answers a HEAD with 403 and a body-less error.
+            status = 200 if include_body else 403
+            self.send_response(status)
+            self.send_header("Content-Length", str(len(PAYLOAD) if include_body else 0))
+            self.end_headers()
+            if include_body:
+                self.wfile.write(PAYLOAD)
         elif self.path == "/redirect":
             self._redirect("/data.bin")
         elif self.path == "/redirect-evil":
@@ -438,6 +447,28 @@ class TestProbeRemoteURL:
         with pytest.raises(RemoteURLRejected) as excinfo:
             probe_remote_url(f"{http_server}/redirect-evil", timeout_s=5)
         assert not isinstance(excinfo.value, RemoteFetchFailed)
+
+    @pytest.mark.parametrize("path, status", [("/missing", 404), ("/presigned", 403)])
+    def test_a_non_2xx_answer_is_a_failed_probe(self, loopback_env, http_server, path, status):
+        """The size and ETag of an error body describe no file: callers must
+        get a failure to degrade on, not a probe that looks successful."""
+        with pytest.raises(RemoteFetchFailed, match=f"HTTP {status}"):
+            probe_remote_url(f"{http_server}{path}", timeout_s=5)
+
+
+class TestDirectProbe:
+    """CLI counterpart of probe_remote_url: no host gating, same status rule."""
+
+    def test_returns_size_and_etag(self, loopback_env, http_server):
+        assert direct_probe(f"{http_server}/data.bin", timeout_s=5) == {
+            "size": len(PAYLOAD),
+            "etag": ETAG,
+        }
+
+    @pytest.mark.parametrize("path, status", [("/missing", 404), ("/presigned", 403)])
+    def test_a_non_2xx_answer_is_a_failed_probe(self, loopback_env, http_server, path, status):
+        with pytest.raises(RemoteFetchFailed, match=f"HTTP {status}"):
+            direct_probe(f"{http_server}{path}", timeout_s=5)
 
 
 # ---------------------------------------------------------------------------

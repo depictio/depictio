@@ -184,12 +184,7 @@ def _fetch_and_parse_manifest(manifest_url: str, field_map: dict[str, str]) -> D
         except OSError:
             pass
 
-    stripped = text.lstrip()
-    looks_json = manifest_url.split("?", 1)[0].endswith(".json") or stripped.startswith(("{", "["))
-    if looks_json:
-        manifest = DataManifest.from_json(text, source=manifest_url, field_map=field_map)
-    else:
-        manifest = DataManifest.from_csv(text, source=manifest_url, field_map=field_map)
+    manifest = DataManifest.parse(text, source=manifest_url, field_map=field_map)
     _reject_unsafe_entry_urls(manifest)
     return manifest
 
@@ -375,7 +370,7 @@ def _ingest_manifest_into_project(
         validate_remote_url(manifest_url)
     except RemoteURLRejected as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    if manifest_url.startswith("s3://"):
+    if manifest_url[:5].lower() == "s3://":
         raise HTTPException(
             status_code=400,
             detail="s3:// manifest locations are not supported yet — serve the manifest over https.",
@@ -587,7 +582,7 @@ def _manifest_preflight_entries(
             # The stored URL may predate the gateway or come from a CLI
             # ingest of a local manifest path — re-validate before fetching.
             validate_remote_url(manifest_url)
-            if manifest_url.startswith("s3://"):
+            if manifest_url[:5].lower() == "s3://":
                 raise RemoteURLRejected(
                     "s3:// manifest locations are not supported yet — "
                     "serve the manifest over https."

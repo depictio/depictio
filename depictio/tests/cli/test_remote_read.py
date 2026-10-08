@@ -22,7 +22,7 @@ import pytest
 
 from depictio.api.v1 import remote_fetch
 from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig
-from depictio.api.v1.remote_fetch import RemoteURLRejected
+from depictio.api.v1.remote_fetch import RemoteFetchFailed, RemoteURLRejected
 from depictio.cli.cli.utils.deltatables import (
     _download_remote_to_temp,
     _read_remote_file_lazy,
@@ -31,7 +31,7 @@ from depictio.cli.cli.utils.deltatables import (
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.files import File
 from depictio.models.models.users import Permission, UserBase
-from depictio.models.s3_access import ProjectS3Config, S3AccessRefused
+from depictio.models.s3_access import ProjectS3Config, S3AccessFailed, S3AccessRefused
 
 
 @pytest.fixture(autouse=True)
@@ -223,6 +223,23 @@ class TestDownloadServerContext:
         with pytest.raises(Exception, match="non-public address"):
             read_single_file_lazy(file_info, "csv", {})
 
+    def test_read_single_file_lazy_keeps_the_rejection_typed(
+        self, server_context, http_fixture_server
+    ):
+        """The API answers a refused URL with a 4xx by its type: a plain
+        Exception wrapped around it would turn that into a 500."""
+        file_info = _make_remote_file(f"{http_fixture_server}/table.csv")
+        with pytest.raises(RemoteURLRejected) as excinfo:
+            read_single_file_lazy(file_info, "csv", {})
+        assert not str(excinfo.value).startswith("Error scanning file")
+
+    def test_read_single_file_lazy_keeps_a_fetch_failure_typed(
+        self, server_context, allowlisted_loopback, http_fixture_server
+    ):
+        file_info = _make_remote_file(f"{http_fixture_server}/missing.csv")
+        with pytest.raises(RemoteFetchFailed, match="Could not download"):
+            read_single_file_lazy(file_info, "csv", {})
+
 
 def test_read_remote_csv_lazy(http_fixture_server):
     file_info = _make_remote_file(f"{http_fixture_server}/table.csv")
@@ -268,11 +285,141 @@ def test_s3_unsupported_format_rejected():
         _read_remote_file_lazy("s3://bucket/key.xlsx", "xlsx", {}, _cli_config())
 
 
-def test_s3_parquet_dispatches_lazily():
-    # No object store in unit tests: the scan must build lazily without
-    # touching the network: collection would fail, construction must not.
-    lf = _read_remote_file_lazy("s3://bucket/key.parquet", "parquet", {}, _cli_config())
-    assert isinstance(lf, pl.LazyFrame)
+@pytest.fixture()
+def fake_s3():
+    """A local S3 endpoint polars' object store reads from, with range reads.
+
+    ``lab/ok.parquet`` and ``lab/table.tsv`` hold data; the other keys answer
+    the way S3 refuses a read. Like S3, a HEAD answer carries no body, so the
+    status is all the reader learns.
+    """
+    import io
+
+    buffer = io.BytesIO()
+    pl.DataFrame({"sample": ["S1", "S2"], "value": [1, 2]}).write_parquet(buffer)
+    objects = {"/lab/ok.parquet": buffer.getvalue(), "/lab/table.tsv": b"sample\tvalue\nS1\t1\n"}
+    refusals = {"/lab/denied.parquet": 403, "/lab/moved.parquet": 301, "/lab/broken.parquet": 500}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def _answer(self, with_body: bool) -> None:
+            data = objects.get(self.path)
+            if data is None:
+                self.send_response(refusals.get(self.path, 404))
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            start, end, status = 0, len(data) - 1, 200
+            requested = self.headers.get("Range", "")
+            if requested.startswith("bytes="):
+                first, _, last = requested[len("bytes=") :].partition("-")
+                start = int(first)
+                end = min(int(last), end) if last else end
+                status = 206
+            chunk = data[start : end + 1]
+            self.send_response(status)
+            self.send_header("Content-Length", str(len(chunk)))
+            self.send_header("ETag", '"e1"')
+            self.send_header("Last-Modified", "Wed, 01 Jan 2025 00:00:00 GMT")
+            if status == 206:
+                self.send_header("Content-Range", f"bytes {start}-{end}/{len(data)}")
+            self.end_headers()
+            if with_body:
+                self.wfile.write(chunk)
+
+        def do_GET(self):  # noqa: N802 (http.server API)
+            self._answer(with_body=True)
+
+        def do_HEAD(self):  # noqa: N802
+            self._answer(with_body=False)
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"http://127.0.0.1:{server.server_address[1]}"
+    server.shutdown()
+
+
+def _fake_s3_config(endpoint: str) -> SimpleNamespace:
+    return _cli_config(
+        ProjectS3Config(
+            endpoint_url=endpoint,
+            access_key_id="project-key",
+            secret_access_key="project-secret",
+        )
+    )
+
+
+class TestS3ObjectStoreReads:
+    """s3:// reads through polars against a local endpoint."""
+
+    def test_parquet_rows_are_read(self, fake_s3):
+        lf = _read_remote_file_lazy("s3://lab/ok.parquet", "parquet", {}, _fake_s3_config(fake_s3))
+        assert lf.collect()["sample"].to_list() == ["S1", "S2"]
+
+    def test_an_upper_case_scheme_is_read_as_s3(self, fake_s3):
+        """polars takes 'S3://' for a local path; the scheme matches case-insensitively."""
+        lf = _read_remote_file_lazy("S3://lab/ok.parquet", "parquet", {}, _fake_s3_config(fake_s3))
+        assert lf.collect().height == 2
+
+    def test_a_tsv_key_declared_csv_is_read_with_tabs(self, fake_s3):
+        lf = _read_remote_file_lazy("s3://lab/table.tsv", "csv", {}, _fake_s3_config(fake_s3))
+        assert lf.collect().columns == ["sample", "value"]
+
+    @pytest.mark.parametrize(
+        "key, code, status_code",
+        [
+            ("denied.parquet", "s3_access_denied", 422),
+            ("absent.parquet", "s3_error", 422),
+            ("moved.parquet", "s3_wrong_region", 502),
+            ("broken.parquet", "s3_unreachable", 502),
+        ],
+    )
+    def test_a_refused_read_is_an_s3_access_failure(self, fake_s3, key, code, status_code):
+        file_info = _make_remote_file(f"s3://lab/{key}")
+        with pytest.raises(S3AccessFailed) as excinfo:
+            read_single_file_lazy(file_info, "parquet", {}, _fake_s3_config(fake_s3))
+        assert (excinfo.value.code, excinfo.value.status_code) == (code, status_code)
+        assert "lab" in excinfo.value.detail
+        # Sanitized: neither the endpoint nor a key reaches the message.
+        assert "127.0.0.1" not in excinfo.value.detail
+        assert "project-secret" not in excinfo.value.detail
+
+    def test_a_missing_object_says_nothing_was_found(self, fake_s3):
+        with pytest.raises(S3AccessFailed, match="Nothing was found at s3://lab/absent.parquet"):
+            _read_remote_file_lazy(
+                "s3://lab/absent.parquet", "parquet", {}, _fake_s3_config(fake_s3)
+            )
+
+    def test_an_unreachable_endpoint_is_an_s3_access_failure(self):
+        with pytest.raises(S3AccessFailed) as excinfo:
+            _read_remote_file_lazy(
+                "s3://lab/ok.parquet", "parquet", {}, _fake_s3_config("http://127.0.0.1:1")
+            )
+        assert excinfo.value.code == "s3_unreachable"
+
+
+@pytest.mark.parametrize(
+    "url, declared, separator",
+    [
+        ("s3://lab/x.tsv", "csv", "\t"),
+        ("s3://lab/x.csv", "tsv", None),
+        ("s3://lab/x", "tsv", "\t"),
+        ("s3://lab/dir.v2/x", "csv", None),
+    ],
+)
+def test_s3_separator_follows_the_extension_like_local_files(monkeypatch, url, declared, separator):
+    captured: dict = {}
+
+    def fake_scan_csv(source, storage_options=None, **kwargs):
+        captured.update(kwargs)
+        return pl.LazyFrame()
+
+    monkeypatch.setattr(pl, "scan_csv", fake_scan_csv)
+    _read_remote_file_lazy(url, declared, {}, _cli_config())
+    assert captured.get("separator") == separator
 
 
 class TestS3ReadTargets:
@@ -376,6 +523,24 @@ class TestProbeUrlMetadata:
             metadata = _probe_url_metadata("http://127.0.0.1:1/table.csv")
         assert metadata == {"size": -1, "etag": None}
         assert any("Could not probe" in rec.message for rec in caplog.records)
+
+    def test_cli_error_status_is_a_failed_probe(self, http_fixture_server, caplog):
+        """A 404 used to be recorded as a successful probe, with the size of
+        the error page and an empty ETag."""
+        from depictio.cli.cli.utils.scan import _probe_url_metadata
+
+        with caplog.at_level(logging.WARNING, logger="depictio-cli"):
+            metadata = _probe_url_metadata(f"{http_fixture_server}/missing.csv")
+        assert metadata == {"size": -1, "etag": None}
+        assert any("HTTP 404" in rec.message for rec in caplog.records)
+
+    def test_server_error_status_degrades(
+        self, server_context, allowlisted_loopback, http_fixture_server
+    ):
+        from depictio.cli.cli.utils.scan import _probe_url_metadata
+
+        metadata = _probe_url_metadata(f"{http_fixture_server}/missing.csv")
+        assert metadata == {"size": -1, "etag": None}
 
     def test_server_success_through_gateway(
         self, server_context, allowlisted_loopback, http_fixture_server
@@ -666,6 +831,112 @@ class TestManifestScan:
         )
         assert result["result"] == "error"
         assert "counts" in result["message"]  # available types listed
+
+
+class TestPruneEmptyOptionalManifestDCs:
+    """`ingest --manifest` drops an optional DC its manifest lists nothing for
+    before the project sync, as POST /projects/from_manifest does."""
+
+    @staticmethod
+    def _config(manifest: str) -> dict:
+        def dc(tag: str, optional: bool) -> dict:
+            return {
+                "data_collection_tag": tag,
+                "optional": optional,
+                "config": {
+                    "scan": {
+                        "mode": "manifest",
+                        "scan_parameters": {"manifest_url": manifest, "manifest_type": tag},
+                    }
+                },
+            }
+
+        return {
+            "workflows": [
+                {"name": "wf", "data_collections": [dc("samples", False), dc("extra", True)]}
+            ],
+            "links": [{"source_dc_tag": "samples", "target_dc_tag": "extra"}],
+            "template_origin": {
+                "expected_data_collections": [
+                    {"data_collection_tag": "samples", "included": True},
+                    {"data_collection_tag": "extra", "included": True, "optional": True},
+                ]
+            },
+        }
+
+    @pytest.fixture()
+    def manifest(self, tmp_path):
+        path = tmp_path / "manifest.csv"
+        path.write_text("id,type,url\nS1,samples,https://x.org/s1.csv\n")
+        return str(path)
+
+    def test_an_optional_dc_with_no_entry_is_pruned_with_its_links(self, manifest):
+        from depictio.cli.cli.utils.scan import prune_empty_optional_manifest_dcs
+
+        config = self._config(manifest)
+        assert prune_empty_optional_manifest_dcs(config) == ["extra"]
+        tags = [dc["data_collection_tag"] for dc in config["workflows"][0]["data_collections"]]
+        assert tags == ["samples"]
+        assert config["links"] == []
+        expected = config["template_origin"]["expected_data_collections"][1]
+        assert expected["included"] is False
+        assert "manifest" in expected["removal_reason"]
+
+    def test_a_required_dc_with_no_entry_fails_before_the_sync(self, manifest):
+        from depictio.cli.cli.utils.scan import prune_empty_optional_manifest_dcs
+
+        config = self._config(manifest)
+        config["workflows"][0]["data_collections"][1]["optional"] = False
+        with pytest.raises(ValueError, match="no entry of type 'extra'"):
+            prune_empty_optional_manifest_dcs(config)
+
+    def test_every_dc_present_prunes_nothing_and_fetches_once(self, manifest, monkeypatch):
+        from depictio.cli.cli.utils import scan as scan_mod
+
+        with open(manifest, "a") as handle:
+            handle.write("S1,extra,https://x.org/e1.csv\n")
+        fetched: list[str] = []
+        real_fetch = scan_mod.fetch_manifest
+
+        def counting_fetch(url, field_map=None):
+            fetched.append(url)
+            return real_fetch(url, field_map=field_map)
+
+        monkeypatch.setattr(scan_mod, "fetch_manifest", counting_fetch)
+        config = self._config(manifest)
+        assert scan_mod.prune_empty_optional_manifest_dcs(config) == []
+        assert len(config["workflows"][0]["data_collections"]) == 2
+        assert fetched == [manifest]
+
+
+def test_a_failed_dc_scan_names_its_reason(monkeypatch):
+    """The scanner's own message (an empty manifest type, a refused prefix) is
+    what tells the user what to fix; "Failed to scan" alone did not."""
+    from depictio.cli.cli.utils import scan as scan_mod
+
+    dc = SimpleNamespace(
+        id=PyObjectId(),
+        data_collection_tag="counts",
+        config=SimpleNamespace(type="table", scan=SimpleNamespace(mode="manifest")),
+    )
+    project = SimpleNamespace(
+        name="p", workflows=[SimpleNamespace(workflow_tag="wf", data_collections=[dc])]
+    )
+    monkeypatch.setattr(
+        scan_mod,
+        "scan_files_for_data_collection",
+        lambda **_: {"result": "error", "message": "Manifest has no entries of type 'counts'"},
+    )
+    with pytest.raises(Exception, match="counts: Manifest has no entries of type 'counts'"):
+        scan_mod.scan_project_files(project, CLI_config=SimpleNamespace())
+
+
+def test_fetch_manifest_reads_a_json_file_with_a_byte_order_mark(tmp_path):
+    from depictio.cli.cli.utils.scan import fetch_manifest
+
+    path = tmp_path / "manifest"
+    path.write_bytes(b'\xef\xbb\xbf[{"id": "S1", "type": "counts", "url": "https://x.org/a.csv"}]')
+    assert fetch_manifest(str(path)).entries[0].id == "S1"
 
 
 def test_manifest_id_column_injected(http_fixture_server):
