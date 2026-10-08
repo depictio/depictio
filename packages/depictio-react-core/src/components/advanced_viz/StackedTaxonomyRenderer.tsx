@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
 import { useElementSize } from '@mantine/hooks';
-import Plot from 'react-plotly.js';
+import Plot from './LegendAwarePlot';
 import {
   VizControlGroup,
   VizNumberInput,

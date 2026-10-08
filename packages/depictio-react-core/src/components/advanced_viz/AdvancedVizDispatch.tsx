@@ -4,6 +4,7 @@ import { InteractiveFilter, StoredMetadata } from '../../api';
 import { wrapWithChrome } from '../chrome';
 import { clearedSelectionFilters, ownSelection } from '../../selection';
 import { defaultRegionKey, withoutDefaultRegion } from './genomespy/defaultRegionMemo';
+import { HideLegendContext } from './LegendAwarePlot';
 import VolcanoRenderer from './VolcanoRenderer';
 import EmbeddingRenderer from './EmbeddingRenderer';
 import ManhattanRenderer from './ManhattanRenderer';
@@ -544,7 +545,9 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
                 <ControlsPlacementContext.Provider value={placementState}>
                   <ControlsDockContext.Provider value={dockState}>
                     <AdvancedVizRegionEchoContext.Provider value={regionEcho}>
-                      {inner}
+                      <HideLegendContext.Provider value={Boolean(metadata.hide_legend)}>
+                        {inner}
+                      </HideLegendContext.Provider>
                     </AdvancedVizRegionEchoContext.Provider>
                   </ControlsDockContext.Provider>
                 </ControlsPlacementContext.Provider>

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Tabs, useMantineColorScheme, useMantineTheme } from '@mantine/core';
-import Plot from 'react-plotly.js';
+import Plot from './LegendAwarePlot';
 import { VizNumberInput, VizSelect, VizSwitch } from './controls/VizControls';
 
 import {

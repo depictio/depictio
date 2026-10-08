@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import Plot from 'react-plotly.js';
+import Plot from './LegendAwarePlot';
 
 import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../../webglBudget';
 import { useGestureGuardedSelection } from './selectionGesture';

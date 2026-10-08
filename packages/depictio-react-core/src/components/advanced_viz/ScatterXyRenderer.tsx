@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
-import Plot from 'react-plotly.js';
+import Plot from './LegendAwarePlot';
 
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import type { PlotGraphHandlers } from '../annotations/usePlotAnnotationLayer';
