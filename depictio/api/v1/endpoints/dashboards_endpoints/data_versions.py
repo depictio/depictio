@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from depictio.api.v1.configs.logging_init import logger
-from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+from depictio.api.v1.endpoints.dashboards_endpoints import version_store, versioning
 
 
 @dataclass
@@ -109,12 +109,19 @@ def pins_from_stamps(stamps: list[dict[str, Any]]) -> DataVersionPins:
     return resolved
 
 
-def resolve_data_versions(request: dict[str, Any] | None) -> DataVersionPins:
+def resolve_data_versions(
+    request: dict[str, Any] | None, *, dashboard: dict[str, Any] | None = None
+) -> DataVersionPins:
     """Read the time-travel intent out of a render request body.
 
     Accepts both grains at once: ``as_of_version`` sets the baseline for the
     whole dashboard and ``data_versions`` overrides individual collections on
     top of it, which is what "pin this one component to older data" needs.
+
+    ``dashboard`` is the document being rendered. When given, an
+    ``as_of_version`` must belong to its tab family. Every render endpoint
+    passes it (see ``routes._data_pins``); only unit tests of the stamp logic
+    leave it out.
     """
     if not isinstance(request, dict):
         return DataVersionPins()
@@ -128,6 +135,16 @@ def resolve_data_versions(request: dict[str, Any] | None) -> DataVersionPins:
             # A deleted version is a caller error, not a reason to serve
             # current data as though it were historical.
             raise ValueError(f"Version {as_of} no longer exists.")
+        if dashboard is not None:
+            # Another family's version would pin this dashboard's collections
+            # to commits stamped for a different dashboard: a render labelled
+            # "as of v3" that is v3 of nothing on screen. It would also let a
+            # caller probe the stamps of a dashboard they were never shown by
+            # pairing it with one they can open. Same check, same reasoning, as
+            # the ``?version=`` preview in ``routes._overlay_version``.
+            family_id = versioning.resolve_family_id(dashboard)
+            if family_id is None or record.get("family_id") != str(family_id):
+                raise ValueError(f"Version {as_of} does not belong to this dashboard.")
         resolved = pins_from_stamps(record.get("data_collections") or [])
         resolved.as_of_version_id = str(as_of)
 

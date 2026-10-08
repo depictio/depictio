@@ -2080,6 +2080,7 @@ export async function fetchMapData(
   componentId: string,
   filters: InteractiveFilter[],
   signal?: AbortSignal,
+  dataVersions?: Record<string, unknown>,
 ): Promise<MapDataResponse> {
   // Not queued through `enqueueFetch`, unlike `fetchAdvancedVizData` above:
   // this fires when the user opens the popover, and making it wait behind a
@@ -2088,7 +2089,7 @@ export async function fetchMapData(
     `${API_BASE}/dashboards/map_data/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters }),
+      body: JSON.stringify({ filters, ...(dataVersions ?? {}) }),
       signal,
     },
   );

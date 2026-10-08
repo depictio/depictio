@@ -660,6 +660,21 @@ def _get_aggregation_version(data_collection_id_str: str) -> str | None:
         return None
 
 
+def _version_salt_for(data_collection_id_str: str, delta_version: int | None = None) -> str | None:
+    """The cache-key salt for one read of a collection, live or pinned.
+
+    The latest ``aggregation_version`` describes *current* data. A pinned read
+    appends ``_dv{N}`` so it is never filed under the live key, nor served from
+    it — see ``load_deltatable_lite`` for why that is a correctness requirement
+    rather than an optimisation. An unpinned read gets the bare version back, so
+    no existing key changes.
+    """
+    version_salt = _get_aggregation_version(data_collection_id_str)
+    if delta_version is not None:
+        version_salt = f"{version_salt or ''}_dv{delta_version}"
+    return version_salt
+
+
 def _get_aggregation_hash(data_collection_id_str: str) -> str | None:
     """Fetch the latest ``aggregation_hash`` for a DC from MongoDB.
 
@@ -1437,12 +1452,10 @@ def open_deltatable_scan(
     frames the cache is sized for (they belong in the result cache instead).
     """
     data_collection_id_str = str(data_collection_id)
-    version_salt = _get_aggregation_version(data_collection_id_str)
     # Same salt the row loader applies, and for the same correctness reason: the
     # filter/projection caches keyed on version_salt must not file a pinned
     # historical scan under the live key (see load_deltatable_lite).
-    if delta_version is not None:
-        version_salt = f"{version_salt or ''}_dv{delta_version}"
+    version_salt = _version_salt_for(data_collection_id_str, delta_version)
     effective_cols = _effective_projection(select_columns, metadata, False)
     return _open_sortable_scan(
         str(workflow_id),
@@ -1663,9 +1676,7 @@ def load_deltatable_lite(
     #    Silently wrong numbers, no error. Keyed as `_dvN` so a pinned read of
     #    the newest commit still can't collide with an unpinned one — they are
     #    equal today but diverge the moment the next commit lands.
-    version_salt = _get_aggregation_version(data_collection_id_str)
-    if delta_version is not None:
-        version_salt = f"{version_salt or ''}_dv{delta_version}"
+    version_salt = _version_salt_for(data_collection_id_str, delta_version)
 
     # Generate cache keys
     base_cache_key, filtered_cache_key, filter_hash = _generate_cache_keys(
@@ -1785,6 +1796,7 @@ def load_sorted_deltatable_lite(
     nulls_last: bool = True,
     select_columns: list[str] | None = None,
     page: tuple[int, int] | None = None,
+    delta_version: int | None = None,
 ) -> pl.DataFrame:
     """Return a sorted (optionally filtered / projected) frame, or one page of it.
 
@@ -1811,6 +1823,12 @@ def load_sorted_deltatable_lite(
     ``_generate_cache_keys``), so a realtime ingest that bumps the version — or
     an explicit ``invalidate_data_collection_cache`` (dc_id substring match) —
     busts this entry for free, exactly like the base frame.
+
+    ``delta_version`` pins every read here — the lazy sorted page and the
+    memoised full sort alike — to a past Delta commit, and salts the memo key
+    with it. Both halves matter: a pin honoured only by the loader would still
+    find a live sorted frame under an unsalted key and serve today's rows, and
+    a salted key over an unpinned read would file today's rows as the past.
     """
     import time
 
@@ -1819,7 +1837,7 @@ def load_sorted_deltatable_lite(
     data_collection_id_str = str(data_collection_id)
     workflow_id_str = str(workflow_id)
 
-    version_salt = _get_aggregation_version(data_collection_id_str)
+    version_salt = _version_salt_for(data_collection_id_str, delta_version)
     effective_cols = _effective_projection(select_columns, metadata, False)
     base_key, filtered_key, _ = _generate_cache_keys(
         workflow_id_str,
@@ -1873,6 +1891,7 @@ def load_sorted_deltatable_lite(
                 metadata,
                 effective_cols,
                 version_salt,
+                delta_version=delta_version,
             )
             if scan is not None:
                 est = _estimate_frame_size_bytes(scan)
@@ -1904,6 +1923,7 @@ def load_sorted_deltatable_lite(
             metadata=metadata,
             init_data=init_data,
             select_columns=select_columns,
+            delta_version=delta_version,
         )
         sorted_df = df.sort(
             sort_by, descending=descending, nulls_last=nulls_last, maintain_order=True
@@ -1929,6 +1949,7 @@ def count_deltatable_lite(
     metadata: list[dict] | None = None,
     init_data: dict[str, dict] | None = None,
     TOKEN: str | None = None,
+    delta_version: int | None = None,
 ) -> int:
     """Count rows of a (optionally filtered) Delta table without materialising it.
 
@@ -1940,6 +1961,10 @@ def count_deltatable_lite(
     Filters are applied with the same schema-guard as ``load_deltatable_lite``
     (see ``_apply_scan_filters``). Returns 0 on any scan/collect error rather
     than raising — a missing count only degrades the UI's "N of M" hint.
+
+    ``delta_version`` counts a past commit. A total read at the newest commit
+    beside rows from a pinned one sizes the grid for a table that is not the
+    one being shown — and under a filter it is not even the same number.
     """
     data_collection_id_str = str(data_collection_id)
     workflow_id_str = str(workflow_id)
@@ -1959,9 +1984,9 @@ def count_deltatable_lite(
                 if isinstance(data_collection_id, str)
                 else data_collection_id
             )
-        version_salt = _get_aggregation_version(data_collection_id_str)
+        version_salt = _version_salt_for(data_collection_id_str, delta_version)
         file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
-        delta_scan = _create_delta_scan(file_id, dc_type)
+        delta_scan = _create_delta_scan(file_id, dc_type, delta_version)
         delta_scan = _apply_scan_filters(delta_scan, metadata, data_collection_id_str, version_salt)
         result = delta_scan.select(pl.len()).collect()
         return int(result.item()) if result.height else 0

@@ -22,6 +22,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.api.v1.endpoints.comments_endpoints.cascade import delete_threads_for_dashboards
+from depictio.api.v1.endpoints.dashboards_endpoints import version_store, versioning
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     effective_category_colors,
     family_brand_theme,
@@ -106,17 +107,23 @@ _SCREENSHOTS_DIR = str(settings.performance.screenshots_path)
 _SCREENSHOT_STALE_AFTER_S = 3600
 
 
-def _data_pins(request: dict) -> DataVersionPins:
+def _data_pins(request: dict, dashboard_data: dict) -> DataVersionPins:
     """Time-travel pins for a render request, or empty pins for a live read.
 
     Every render endpoint takes an untyped ``request`` body, so this is the one
     place that reads the two time-travel keys. A malformed ``as_of_version``
-    (a version that no longer exists) is a 400 rather than a silent fallback to
-    current data: the caller asked for a specific past state, and answering
-    with today's numbers under that label is worse than an error.
+    (a version that no longer exists, or one from another dashboard's family)
+    is a 400 rather than a silent fallback to current data: the caller asked
+    for a specific past state, and answering with today's numbers under that
+    label is worse than an error.
+
+    Takes the dashboard document, so it can only be called once the dashboard
+    is loaded and the caller's permission on it checked — a version id is then
+    never resolved, nor its existence confirmed, for someone who cannot open
+    the dashboard.
     """
     try:
-        return resolve_data_versions(request)
+        return resolve_data_versions(request, dashboard=dashboard_data)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -242,11 +249,7 @@ def _ensure_baseline_quietly(
     No-ops from the second write onwards, and never raises.
     """
     try:
-        from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
-            ensure_baseline_quietly,
-        )
-
-        ensure_baseline_quietly(dashboard_id, author=current_user)  # type: ignore[arg-type]
+        versioning.ensure_baseline_quietly(dashboard_id, author=current_user)  # type: ignore[arg-type]
     except Exception as exc:  # noqa: BLE001 — versioning must never break a write
         logger.warning(f"Baseline capture failed for {dashboard_id}: {exc}")
 
@@ -264,13 +267,11 @@ def _capture_version_quietly(
     was unrecoverable. A deleted tab is the change most worth undoing and was
     the least recoverable.
 
-    Lazily imported and never allowed to raise: a missing version costs an undo
-    step, a failed write costs work. Same posture as the screenshot dispatch.
+    Never allowed to raise: a missing version costs an undo step, a failed write
+    costs work. Same posture as the screenshot dispatch.
     """
     try:
-        from depictio.api.v1.endpoints.dashboards_endpoints.versioning import capture_quietly
-
-        capture_quietly(dashboard_id, kind=kind, author=current_user)  # type: ignore[arg-type]
+        versioning.capture_quietly(dashboard_id, kind=kind, author=current_user)  # type: ignore[arg-type]
     except Exception as exc:  # noqa: BLE001 — versioning must never break a write
         logger.warning(f"Version capture failed for {dashboard_id}: {exc}")
 
@@ -552,8 +553,6 @@ def _overlay_version(
     project's snapshot by pairing a dashboard they can see with a guessed
     ``version_id``.
     """
-    from depictio.api.v1.endpoints.dashboards_endpoints import version_store, versioning
-
     record = version_store.get_version(version_id)
     if not record:
         raise HTTPException(status_code=404, detail="Version not found.")
@@ -642,13 +641,12 @@ async def get_dashboard(
     # Overlay a past version's content, if one was asked for. Done here so
     # everything downstream — the MultiQC prewarm check, the ObjectId
     # normalisation — sees the state that will actually be rendered.
-    previewing = False
+    previewing = bool(version_id)
     preview_main: dict | None = None
     if version_id:
         dashboard_dict, preview_main = _overlay_version(
             dashboard_dict, dashboard_data, dashboard_id, version_id
         )
-        previewing = True
 
     # For child tabs, fetch parent dashboard title for header display
     parent_title = get_parent_dashboard_title(dashboard_dict)
@@ -670,13 +668,9 @@ async def get_dashboard(
     # about it, so the live inheritance stands.
     if preview_main is not None and dashboard_dict.get("parent_dashboard_id"):
         if "brand_theme" in preview_main and not dashboard_dict.get("brand_theme"):
-            from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
-                restorable_brand_theme,
-            )
-
             # `inherited_brand_theme` was just read from the live main tab,
             # which holds the logo URLs to keep.
-            dashboard_dict["inherited_brand_theme"] = restorable_brand_theme(
+            dashboard_dict["inherited_brand_theme"] = versioning.restorable_brand_theme(
                 preview_main["brand_theme"], dashboard_dict.get("inherited_brand_theme")
             )
         if "category_colors" in preview_main:
@@ -1014,11 +1008,6 @@ async def save_dashboard(
     # make the next refresh of that source pick either copy.
     save_payload.pop("source_key", None)
 
-    from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
-        capture_quietly,
-        ensure_baseline_quietly,
-    )
-
     if existing_dashboard:
         project_id = existing_dashboard.get("project_id")
         if not project_id:
@@ -1045,7 +1034,7 @@ async def save_dashboard(
         # has already moved to; without this, the state being edited right now
         # is the one state no version can ever restore. No-ops from the second
         # save onwards, and runs only once the caller is known to be an editor.
-        ensure_baseline_quietly(dashboard_id, author=current_user)
+        versioning.ensure_baseline_quietly(dashboard_id, author=current_user)
 
         result = dashboards_collection.find_one_and_update(
             {"dashboard_id": dashboard_id},
@@ -1108,7 +1097,7 @@ async def save_dashboard(
         #
         # capture_quietly swallows everything: a missing version is a lost
         # undo step, a failed save is lost work.
-        capture_quietly(
+        versioning.capture_quietly(
             dashboard_id,
             kind="explicit" if force_screenshot or not existing_dashboard else "auto",
             seal=force_screenshot,
@@ -1340,11 +1329,7 @@ async def delete_dashboard(
         # still present.
         if dashboard.get("is_main_tab", True):
             try:
-                from depictio.api.v1.endpoints.dashboards_endpoints.version_store import (
-                    delete_family,
-                )
-
-                removed = delete_family(str(dashboard_id))
+                removed = version_store.delete_family(str(dashboard_id))
                 if removed:
                     logger.info(f"Removed {removed} version(s) for dashboard {dashboard_id}")
             except Exception as exc:  # noqa: BLE001 — cleanup must not fail the delete
@@ -2536,6 +2521,8 @@ class _ComponentContext:
     # Link-resolved filters, for callers that echo them back via
     # ``_emit_link_headers``.
     merged_filters: list[dict]
+    # The dashboard document the component was found on, for ``_data_pins``.
+    dashboard: dict
 
 
 def _component_context(
@@ -2617,6 +2604,7 @@ def _component_context(
         init_data=init_data,
         filter_metadata=_build_filter_metadata(merged_filters),
         merged_filters=merged_filters,
+        dashboard=dashboard_data,
     )
 
 
@@ -2761,7 +2749,6 @@ def bulk_compute_cards(
     )
 
     filters = request.get("filters") or []
-    pins = _data_pins(request)
     requested_ids: list[str] | None = request.get("component_ids")
     # "Compare groups in cards" (issue #89): sanitized at this trust boundary,
     # reduced per group on the frame path below. ``include_other`` mirrors the
@@ -2781,6 +2768,7 @@ def bulk_compute_cards(
     if not project_id or not check_project_permission(project_id, current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Permission denied.")
 
+    pins = _data_pins(request, dashboard_data)
     stored_metadata = dashboard_data.get("stored_metadata") or []
 
     # Collect card components (optionally filtered by component_ids)
@@ -2816,8 +2804,7 @@ def bulk_compute_cards(
     # would let a caller compute over data this dashboard does not reference
     # (and whose permissions were never checked). A card not already on this
     # dashboard is likewise ignored, since the loop only visits `cards`.
-    if isinstance(request.get("component_overrides"), dict):
-        cards = [_apply_component_override(card, request) for card in cards]
+    cards = [_apply_component_override(card, request) for card in cards]
 
     if not cards and not texts:
         return {"values": {}, "filter_applied": bool(filters), "filter_count": len(filters)}
@@ -3516,7 +3503,9 @@ def _emit_link_headers(response, merged: list[dict]) -> None:
     )
 
 
-def _cached_row_count(wf_oid, dc_id: str, filter_metadata, init_data, count_fn) -> int:
+def _cached_row_count(
+    wf_oid, dc_id: str, filter_metadata, init_data, count_fn, delta_version: int | None = None
+) -> int:
     """Row count for a (dc, filters) pair, memoised until the data version changes.
 
     AG Grid's infinite row model requests one block per scroll and each block
@@ -3525,10 +3514,14 @@ def _cached_row_count(wf_oid, dc_id: str, filter_metadata, init_data, count_fn) 
     change while the user scrolls. The aggregation version salt is in the key, so
     an ingest invalidates it for free.
 
+    ``delta_version`` counts a pinned commit and is part of the key. Without it
+    in the key, whichever of a live and a pinned grid counted first would size
+    the other's scrollbar — and under a filter the two totals genuinely differ.
+
     Falls back to counting directly if the cache is unavailable — this is an
     optimisation, and a wrong total would break the grid's paging.
     """
-    from depictio.api.v1.deltatables_utils import _generate_filter_hash, _get_aggregation_version
+    from depictio.api.v1.deltatables_utils import _generate_filter_hash, _version_salt_for
 
     def _count() -> int:
         return count_fn(
@@ -3536,13 +3529,14 @@ def _cached_row_count(wf_oid, dc_id: str, filter_metadata, init_data, count_fn) 
             data_collection_id=dc_id,
             metadata=filter_metadata or None,
             init_data=init_data,
+            delta_version=delta_version,
         )
 
     try:
         from depictio.api.cache import get_cache
 
         filter_hash = _generate_filter_hash(filter_metadata) if filter_metadata else "nofilter"
-        key = f"rowcount_{dc_id}_{filter_hash}_{_get_aggregation_version(dc_id)}"
+        key = f"rowcount_{dc_id}_{filter_hash}_{_version_salt_for(dc_id, delta_version)}"
         cache = get_cache()
         cached = cache.get(key)
         if cached is not None:
@@ -3556,7 +3550,14 @@ def _cached_row_count(wf_oid, dc_id: str, filter_metadata, init_data, count_fn) 
 
 
 def _load_natural_page(
-    wf_oid, dc_id: str, filter_metadata, init_data, select_columns, start: int, limit: int
+    wf_oid,
+    dc_id: str,
+    filter_metadata,
+    init_data,
+    select_columns,
+    start: int,
+    limit: int,
+    delta_version: int | None = None,
 ):
     """One page of an unsorted table, with the offset pushed into the scan.
 
@@ -3567,6 +3568,11 @@ def _load_natural_page(
     Falls back to the row loader when the scan can't be built, matching every
     other ``open_deltatable_scan`` caller. That fallback keeps the old
     materialise-then-slice shape, which is correct — just costlier on deep pages.
+
+    ``delta_version`` reaches both paths. The fallback is the one to watch: a
+    pin that cannot be honoured makes the scan fail, and an unpinned fallback
+    would then answer the historical request with current rows and a 200.
+    Pinned, the fallback fails the same way and the endpoint reports it.
     """
     from depictio.api.v1.deltatables_utils import load_deltatable_lite, open_deltatable_scan
 
@@ -3577,6 +3583,7 @@ def _load_natural_page(
             metadata=filter_metadata or None,
             init_data=init_data,
             select_columns=select_columns,
+            delta_version=delta_version,
         )
         if scan is not None:
             page = scan.slice(start, limit).collect()
@@ -3595,6 +3602,7 @@ def _load_natural_page(
         limit_rows=start + limit,
         init_data=init_data,
         select_columns=select_columns,
+        delta_version=delta_version,
     )
     return df.slice(start, limit)
 
@@ -3662,7 +3670,6 @@ async def render_figure_endpoint(
     )
 
     filters = request.get("filters") or []
-    pins = _data_pins(request)
     theme = request.get("theme") or "light"
     full_load = bool(request.get("full_load", False))
     group_defs = sanitize_group_defs(request.get("groups"))
@@ -3680,6 +3687,7 @@ async def render_figure_endpoint(
     if not project_id or not check_project_permission(project_id, current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Permission denied.")
 
+    pins = _data_pins(request, dashboard_data)
     component = next(
         (
             m
@@ -3845,7 +3853,12 @@ def render_table_endpoint(
 
     Request body:
         {"filters": [...], "start": 0, "limit": 100,
-         "sort_by": <col|null>, "sort_dir": "asc"|"desc"}
+         "sort_by": <col|null>, "sort_dir": "asc"|"desc",
+         "as_of_version": <version id>, "data_versions": {<dc_id>: <int>}}
+
+    The two time-travel keys are optional (see ``_data_pins``); when they pin
+    this table's collection, the schema, the total and the page are all read at
+    that commit.
 
     Response:
         {"columns": [{"field", "headerName", "type"}, ...],
@@ -3862,7 +3875,7 @@ def render_table_endpoint(
     import time as _time
 
     from depictio.api.v1.deltatables_utils import (
-        _get_aggregation_version,
+        _version_salt_for,
         count_deltatable_lite,
         load_sorted_deltatable_lite,
         schema_deltatable_lite,
@@ -3870,7 +3883,6 @@ def render_table_endpoint(
 
     _t0 = _time.perf_counter()
     filters = request.get("filters") or []
-    pins = _data_pins(request)
     start = int(request.get("start") or 0)
     limit = int(request.get("limit") or 100)
     limit = max(1, min(limit, 500))
@@ -3887,6 +3899,7 @@ def render_table_endpoint(
     if not project_id or not check_project_permission(project_id, current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Permission denied.")
 
+    pins = _data_pins(request, dashboard_data)
     component = next(
         (
             m
@@ -3905,6 +3918,12 @@ def render_table_endpoint(
     dc_id = component.get("dc_id")
     if not wf_id or not dc_id:
         raise HTTPException(status_code=400, detail="Component missing wf_id/dc_id.")
+
+    # One pin for every read below — schema, total, sorted page, natural page.
+    # Each of them used to be a separate way to answer a pinned request with
+    # current rows: the schema alone honoured it, so a historical grid showed
+    # today's rows under yesterday's headers, sized by today's total.
+    delta_version = pins.for_dc(str(dc_id))
 
     merged_filters = _resolve_link_filters_cached(
         filters=filters,
@@ -3944,7 +3963,7 @@ def render_table_endpoint(
             workflow_id=wf_oid,
             data_collection_id=str(dc_id),
             init_data=init_data,
-            delta_version=pins.for_dc(str(dc_id)),
+            delta_version=delta_version,
         )
         available_cols = list(schema.keys())
 
@@ -3984,9 +4003,14 @@ def render_table_endpoint(
         # Cheap is not free though: AG Grid's infinite row model asks for one
         # block per scroll and this ran on every single one, re-counting a table
         # whose size can't change between blocks. Memoise it per
-        # (dc, filters, data version) so only the first block pays.
+        # (dc, filters, data version, pin) so only the first block pays.
         total = _cached_row_count(
-            wf_oid, str(dc_id), filter_metadata, init_data, count_deltatable_lite
+            wf_oid,
+            str(dc_id),
+            filter_metadata,
+            init_data,
+            count_deltatable_lite,
+            delta_version=delta_version,
         )
 
         # Above a threshold, sorting stops being worth what it costs. A sort has
@@ -4029,6 +4053,7 @@ def render_table_endpoint(
                 init_data=init_data,
                 select_columns=select_columns,
                 page=(start, limit),
+                delta_version=delta_version,
             )
         else:
             # No sort → push the page window itself down to the Delta scan.
@@ -4040,7 +4065,14 @@ def render_table_endpoint(
             # 20 000 rows. ``slice`` on the lazy scan pushes the offset into the
             # reader instead, so cost is flat with depth.
             sliced = _load_natural_page(
-                wf_oid, str(dc_id), filter_metadata, init_data, select_columns, start, limit
+                wf_oid,
+                str(dc_id),
+                filter_metadata,
+                init_data,
+                select_columns,
+                start,
+                limit,
+                delta_version=delta_version,
             )
     except HTTPException:
         raise
@@ -4094,7 +4126,9 @@ def render_table_endpoint(
         # pages would then shift mid-scroll, silently duplicating and dropping
         # rows in the grid's block cache. Echoing the data version lets the
         # client purge its cache when the underlying order can have changed.
-        "data_version": _get_aggregation_version(str(dc_id)),
+        # Pin-salted like the cache keys: a grid moved between live and pinned
+        # data has changed tables, not just order, and must not keep its blocks.
+        "data_version": _version_salt_for(str(dc_id), delta_version),
     }
 
 
@@ -4129,7 +4163,6 @@ def render_image_paths_endpoint(
 
     body = request or {}
     filters = body.get("filters") or []
-    pins = _data_pins(body)
     body_max = body.get("max")
     chosen_max = body_max if body_max is not None else max
     limit = int(chosen_max) if chosen_max and int(chosen_max) > 0 else 50
@@ -4148,6 +4181,7 @@ def render_image_paths_endpoint(
     if not project_id or not check_project_permission(project_id, current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Permission denied.")
 
+    pins = _data_pins(body, dashboard_data)
     component = next(
         (
             m
@@ -4311,7 +4345,6 @@ def render_map_endpoint(
     from depictio.api.v1.deltatables_utils import load_deltatable_lite
     from depictio.api.v1.services.map.render import render_map
 
-    pins = _data_pins(request)
     theme = request.get("theme") or "light"
 
     ctx = _component_context(
@@ -4322,6 +4355,7 @@ def render_map_endpoint(
         current_user=current_user,
         access_token=access_token,
     )
+    pins = _data_pins(request, ctx.dashboard)
     component = ctx.component
     # The family's category colours, so the map draws a category in the colour
     # every other tile gives it (as render_figure_endpoint does).
@@ -4482,6 +4516,11 @@ def map_data_endpoint(
     dashboard's filters *minus* the map's own ``map_selection``, so the table
     matches the points currently drawn rather than only the lassoed ones.
 
+    Takes the same optional ``as_of_version`` / ``data_versions`` keys as
+    ``render_map`` (see ``_data_pins``), and reads the rows *and* the total at
+    the pinned commit. A map drawn as of an old version whose "show data" table
+    then listed today's rows would contradict the points it sits beside.
+
     Response:
         {
           "columns": [str],           # ordering, map columns first
@@ -4502,6 +4541,9 @@ def map_data_endpoint(
         current_user=current_user,
         access_token=access_token,
     )
+    # Resolved outside the ``try`` below: a stale or foreign version is the
+    # caller's 400, not a 422 "could not read this data collection".
+    delta_version = _data_pins(request, ctx.dashboard).for_dc(ctx.dc_id)
 
     try:
         df = load_deltatable_lite(
@@ -4512,6 +4554,7 @@ def map_data_endpoint(
             # truncated rather than silently reported as complete.
             limit_rows=MAP_DATA_MAX_ROWS + 1,
             init_data=ctx.init_data,
+            delta_version=delta_version,
         )
 
         truncated = df.height > MAP_DATA_MAX_ROWS
@@ -4527,6 +4570,7 @@ def map_data_endpoint(
                     ctx.filter_metadata,
                     ctx.init_data,
                     count_deltatable_lite,
+                    delta_version=delta_version,
                 ),
                 df.height,
             )

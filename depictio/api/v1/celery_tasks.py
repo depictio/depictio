@@ -644,6 +644,9 @@ def build_figure_preview(payload: dict) -> dict:
                 data_collection_id=str(dc_id),
                 metadata=filter_metadata or None,
                 init_data=init_data,
+                # Same commit as the rows, or "N of M" pairs a past sample
+                # with today's total.
+                delta_version=delta_version,
             ),
             displayed_count,
         )

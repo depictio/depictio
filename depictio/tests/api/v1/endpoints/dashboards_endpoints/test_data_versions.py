@@ -134,6 +134,55 @@ def test_missing_version_is_an_error_not_a_fallback(monkeypatch):
         resolve_data_versions({"as_of_version": "gone"})
 
 
+FAMILY = "507f1f77bcf86cd799439011"
+OTHER_FAMILY = "507f1f77bcf86cd799439099"
+
+
+def test_a_version_from_another_dashboard_is_an_error(monkeypatch):
+    """A real version id, paired with a dashboard it was never taken of.
+
+    Accepted, it pins this dashboard's collections to commits stamped for a
+    different one, and labels the render "as of" a version of nothing on screen.
+    Refused the same way a deleted version is, so the endpoint answers 400.
+    """
+    _stub_version(monkeypatch, [_delta_stamp(DC_A, 0)], family_id=OTHER_FAMILY)
+
+    with pytest.raises(ValueError, match="does not belong to this dashboard"):
+        resolve_data_versions(
+            {"as_of_version": "abc"}, dashboard={"dashboard_id": FAMILY, "is_main_tab": True}
+        )
+
+
+def test_the_main_tab_reads_its_own_versions(monkeypatch):
+    _stub_version(monkeypatch, [_delta_stamp(DC_A, 0)], family_id=FAMILY)
+
+    pins = resolve_data_versions(
+        {"as_of_version": "abc"}, dashboard={"dashboard_id": FAMILY, "is_main_tab": True}
+    )
+
+    assert pins.for_dc(DC_A) == 0
+
+
+def test_a_child_tab_reads_its_familys_versions(monkeypatch):
+    """A version covers the whole family, and is filed under the main tab's id.
+
+    A child tab rendering "as of" its family's version is the ordinary case, so
+    the check has to resolve the child to its parent rather than compare ids.
+    """
+    _stub_version(monkeypatch, [_delta_stamp(DC_A, 2)], family_id=FAMILY)
+
+    pins = resolve_data_versions(
+        {"as_of_version": "abc"},
+        dashboard={
+            "dashboard_id": "507f1f77bcf86cd799439012",
+            "is_main_tab": False,
+            "parent_dashboard_id": FAMILY,
+        },
+    )
+
+    assert pins.for_dc(DC_A) == 2
+
+
 def test_garbage_override_is_ignored_not_crashed():
     """A malformed client value must not 500 the render."""
     pins = resolve_data_versions({"data_versions": {DC_A: "not-a-number"}})
@@ -158,11 +207,11 @@ def test_pins_are_inert_by_default():
     assert not DataVersionPins().active
 
 
-def _stub_version(monkeypatch, stamps):
+def _stub_version(monkeypatch, stamps, family_id=None):
     from depictio.api.v1.endpoints.dashboards_endpoints import version_store
 
     monkeypatch.setattr(
         version_store,
         "get_version",
-        lambda vid: {"version_id": vid, "data_collections": stamps},
+        lambda vid: {"version_id": vid, "family_id": family_id, "data_collections": stamps},
     )
