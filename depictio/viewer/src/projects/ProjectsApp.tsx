@@ -164,33 +164,26 @@ const ProjectsApp: React.FC = () => {
   const handleCreateFromManifest = useCallback(
     async (input: FromManifestRequest) => {
       const report = await createProjectFromManifest(input);
-      const dashboardId = report.dashboards[0]?.dashboard_id;
+      closeCreate();
       if (manifestReportNeedsReview(report)) {
         // Something was skipped, unmatched or failed: the project exists, so
         // refresh the list, but keep the user here with the full report
         // rather than redirecting to a dashboard that hides it.
-        closeCreate();
         refresh();
         setCreatedReport(report);
-      } else if (dashboardId) {
-        notifications.show({
-          color: 'teal',
-          title: 'Project created from manifest',
-          message: `"${report.project_name}" is ready: opening its dashboard.`,
-          autoClose: 2500,
-        });
-        closeCreate();
-        window.location.assign(`/dashboard/${dashboardId}`);
-      } else {
-        notifications.show({
-          color: 'teal',
-          title: 'Project created from manifest',
-          message: `"${report.project_name}" is ready.`,
-          autoClose: 2500,
-        });
-        closeCreate();
-        refresh();
+        return report;
       }
+      const dashboardId = report.dashboards[0]?.dashboard_id;
+      notifications.show({
+        color: 'teal',
+        title: 'Project created from manifest',
+        message: dashboardId
+          ? `"${report.project_name}" is ready: opening its dashboard.`
+          : `"${report.project_name}" is ready.`,
+        autoClose: 2500,
+      });
+      if (dashboardId) window.location.assign(`/dashboard/${dashboardId}`);
+      else refresh();
       return report;
     },
     [closeCreate, refresh],

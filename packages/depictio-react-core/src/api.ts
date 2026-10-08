@@ -4962,7 +4962,8 @@ export interface CreateDataCollectionUrlInput {
   customSeparator?: string | null;
   compression: string;
   hasHeader: boolean;
-  /** Absolute https:// or s3:// URL. Screened server-side by the SSRF gateway. */
+  /** Absolute https:// or s3:// URL (http:// only where the server allows it).
+   *  Screened server-side by the SSRF gateway. */
   url: string;
   latColumn?: string | null;
   lonColumn?: string | null;
@@ -4977,7 +4978,6 @@ export async function createDataCollectionFromUrl(
 ): Promise<CreateDataCollectionResult> {
   const res = await authFetch(`${API_BASE}/datacollections/create_from_url`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       project_id: input.projectId,
       name: input.name,
