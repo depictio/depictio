@@ -32,6 +32,9 @@ interface DetectionCardProps {
   /** What to do about an unreadable folder, when the tab knows better than
    *  "pick the pipeline" (a private bucket). */
   errorHint?: string | null;
+  /** Said instead of the server's reason, when that reason speaks of
+   *  settings the reader cannot see yet (a project not created). */
+  errorMessage?: string | null;
 }
 
 const Line: React.FC<{ icon: string; color: string; children: React.ReactNode }> = ({
@@ -56,6 +59,7 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
   match,
   onUseDetected,
   errorHint,
+  errorMessage,
 }) => {
   if (state.status === 'idle') return null;
 
@@ -76,7 +80,7 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
           This folder could not be read
         </Text>
         <Text size="sm" c="dimmed" data-testid="run-detection-error">
-          {state.error}
+          {errorMessage || state.error}
         </Text>
         <Text size="xs" c="dimmed" data-testid="run-detection-error-hint">
           {errorHint || 'You can still pick the pipeline below and preview the folder.'}
