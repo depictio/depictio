@@ -141,7 +141,10 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
   const [recent, setRecent] = useState<RecentRunFolders>({ local: [], s3: [] });
   /** Run markers read by the detail pane, by location. */
   const [inspected, setInspected] = useState<Record<string, boolean>>({});
-  const treeBoxRef = useRef<HTMLDivElement>(null);
+  const treeRef = useRef<HTMLUListElement>(null);
+  /** Bumped by every new selection, revealed or clicked: a reveal answering
+   *  after a newer one is dropped, so the latest selection wins. */
+  const selectionRun = useRef(0);
 
   const templateTitles = useMemo(
     () => Object.fromEntries(templates.map((t) => [t.template_id, t.name])),
@@ -157,11 +160,26 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
     [tree],
   );
 
+  /** A folder picked in the tree itself: a reveal still in flight, or its
+   *  pending scroll, no longer applies. */
+  const pickFolder = useCallback(
+    (path: string) => {
+      selectionRun.current += 1;
+      setRevealing(false);
+      setRevealTarget(null);
+      selectFolder(path);
+    },
+    [selectFolder],
+  );
+
   const goTo = useCallback(
     async (location: string, quiet = false) => {
+      selectionRun.current += 1;
+      const run = selectionRun.current;
       setRevealing(true);
       setPathError(null);
       const result = await folderTree.reveal(location);
+      if (run !== selectionRun.current) return;
       setRevealing(false);
       if (!result.ok) {
         if (!quiet && result.error) setPathError(result.error);
@@ -182,10 +200,13 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
   // be browsed (silently staying on the roots when it cannot).
   useEffect(() => {
     if (!opened) return;
+    selectionRun.current += 1;
     tree.clearSelected();
     tree.setExpandedState(GROUPS_EXPANDED);
     setPathInput('');
     setPathError(null);
+    setRevealing(false);
+    setRevealTarget(null);
     setInspected({});
     setRecent(readRecentRunFolders());
     const start = (initialLocation ?? '').trim();
@@ -210,10 +231,11 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
   }, [tree.expandedState, folderTree.nodes, folderTree.children, folderTree.load]);
 
   // Scroll a folder opened from elsewhere (path bar, recent, search) into view
-  // once its row exists.
+  // once its row exists. Looked up in the tree only: a recent folder above it
+  // carries the same `data-path`.
   useEffect(() => {
-    if (!revealTarget || !treeBoxRef.current) return;
-    const row = treeBoxRef.current.querySelector<HTMLElement>(
+    if (!revealTarget || !treeRef.current) return;
+    const row = treeRef.current.querySelector<HTMLElement>(
       `[data-path="${CSS.escape(revealTarget)}"]`,
     );
     if (row) {
@@ -258,7 +280,7 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
     <FolderTreeNode
       payload={payload}
       isRun={looksLikeRun}
-      onSelect={selectFolder}
+      onSelect={pickFolder}
       onRetry={folderTree.retry}
     />
   );
@@ -302,9 +324,10 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
           <Grid.Col span={{ base: 12, md: 5 }}>
             <Paper withBorder radius="md" p="xs">
               <ScrollArea h={{ base: 260, md: 440 }} type="auto" offsetScrollbars>
-                <Stack gap="xs" ref={treeBoxRef}>
+                <Stack gap="xs">
                   <RecentFolders entries={recentEntries} onOpen={(path) => void goTo(path)} />
                   <Tree
+                    ref={treeRef}
                     data={folderTree.treeData}
                     tree={tree}
                     levelOffset="md"
@@ -317,7 +340,7 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
                       const value = item?.dataset.value;
                       if (value && folderTree.nodes[value]) {
                         event.preventDefault();
-                        selectFolder(value);
+                        pickFolder(value);
                       }
                     }}
                     aria-label="Folders"

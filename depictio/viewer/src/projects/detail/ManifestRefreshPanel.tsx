@@ -20,10 +20,12 @@ import IngestionResultTable from '../IngestionResultTable';
 import {
   formatElapsed,
   isManifestRunTerminal,
+  manifestRunOutcome,
   summarizeManifestRun,
   useElapsedMs,
   useManifestRunPoll,
 } from '../manifestRun';
+import type { ManifestRunOutcome } from '../manifestRun';
 
 /** The slice of a project data collection this panel reads: its tag and the
  *  raw `config` bag, whose `scan.mode` says whether the server can re-read the
@@ -53,18 +55,8 @@ function refreshableTagsOf(dcs: ReadonlyArray<ManifestRefreshDc>): string[] {
   return tags;
 }
 
-/** Outcome of a terminal report, read from its rows rather than from
- *  `report.success`: a poll that lands between the worker's last step write
- *  and the run's finalization sees every row final while `success` is still
- *  false. */
-function hasFailedRow(report: ManifestRefreshReport): boolean {
-  return report.refreshed.some((entry) => entry.status === 'failed');
-}
-
-/** `stopped` is neither an outcome nor a failure: the page stopped polling
- *  (the poll kept failing, or the run outlasted MAX_POLL_MS) while rows were
- *  still queued or running, and the run may well go on server-side. */
-export type RefreshState = 'idle' | 'starting' | 'running' | 'success' | 'failed' | 'stopped';
+/** A watched run's states, its ending ones from `manifestRunOutcome`. */
+export type RefreshState = 'idle' | 'starting' | 'running' | ManifestRunOutcome;
 
 /** States in which a run has ended, as far as this page knows. */
 export function isRefreshEnded(state: RefreshState): boolean {
@@ -170,11 +162,7 @@ export function useManifestRefresh(
     : runId
       ? 'running'
       : report && finishedAt != null
-        ? !isManifestRunTerminal(report)
-          ? 'stopped'
-          : hasFailedRow(report)
-            ? 'failed'
-            : 'success'
+        ? manifestRunOutcome(report)
         : error
           ? 'failed'
           : 'idle';

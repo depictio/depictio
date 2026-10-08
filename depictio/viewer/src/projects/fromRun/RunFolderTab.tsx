@@ -43,6 +43,7 @@ import type {
 } from 'depictio-react-core';
 
 import { DisabledReason, GatedButton } from '../../components/settings/SettingsSections';
+import { useStepSettling } from '../hooks/useStepSettling';
 import FolderBrowserModal from './browser/FolderBrowserModal';
 import { DetectionCard } from './DetectionCard';
 import type { DetectionState } from './DetectionCard';
@@ -444,8 +445,13 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     disabledReason = 'No data collection matched anything in this folder.';
   }
 
+  // One button reads Next, then Create Project on the last step: it ignores
+  // clicks for a moment after each step change, so a double click on Next
+  // stops on the Create step instead of creating straight away.
+  const stepSettling = useStepSettling(step);
+
   const handleSubmit = async () => {
-    if (disabledReason) return;
+    if (disabledReason || stepSettling) return;
     if (step === 0) rememberRunFolder(trimmedRoot);
     if (step < 2) {
       setStep(step + 1);
@@ -580,7 +586,11 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
               description="Defaults to a name derived from the template"
               placeholder="Enter project name"
               value={projectName}
-              onChange={(e) => setProjectName(e.currentTarget.value)}
+              onChange={(e) => {
+                setProjectName(e.currentTarget.value);
+                // A refusal of the previous name (taken already) no longer applies.
+                setError(null);
+              }}
               leftSection={<Icon icon="mdi:folder-outline" width={16} />}
               error={nameUsed ? 'A project with this name already exists.' : undefined}
               data-testid="run-project-name-input"
@@ -643,6 +653,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
         </Button>
         <Stack gap={4} align="flex-end" style={{ minWidth: 0 }}>
           <GatedButton
+            aria-disabled={stepSettling || undefined}
             color={accent.secondary}
             onClick={handleSubmit}
             loading={submitting}
