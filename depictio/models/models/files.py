@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 from depictio.models.config import DEPICTIO_CONTEXT
 from depictio.models.models.base import MongoModel, PyObjectId
 from depictio.models.models.data_collections import WildcardRegexBase
+from depictio.models.models.manifest import is_remote_url
 from depictio.models.models.users import Permission
 
 #: Outcomes a single file can have during a scan.
@@ -37,6 +38,10 @@ class File(MongoModel):
     file_hash: str
     filesize: int
     permissions: Permission
+    # Canonical entity/sample ID from a Data Manifest entry (scan mode
+    # "manifest"). Injected as the `depictio_manifest_id` column at read time
+    # so manifest-built DCs share a zero-config cross-DC join key.
+    manifest_id: str | None = None
 
     # --- indexed_file DCs ---------------------------------------------------
     # Set by the CLI when it mirrors an `indexed_file` DC to S3. Absent on every
@@ -74,7 +79,9 @@ class File(MongoModel):
 
     @field_validator("filesize")
     def validate_size(cls, v):
-        if v < 0:
+        # -1 is the documented "unknown" sentinel for remote files whose size
+        # could not be determined (no Content-Length on the URL).
+        if v < -1:
             raise ValueError("File size cannot be negative")
         if v == 0:
             raise ValueError("File size cannot be zero")
@@ -112,6 +119,10 @@ class File(MongoModel):
 
     @field_validator("file_location")
     def validate_location(cls, value):
+        if is_remote_url(value):
+            # Remote files (scan mode "url" / manifests) are identified by
+            # their URL; existence checks happen at fetch time, never here.
+            return value
         if DEPICTIO_CONTEXT.lower() == "cli":
             if not os.path.exists(value):
                 raise ValueError(f"The file '{value}' does not exist.")
