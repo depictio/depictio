@@ -98,6 +98,17 @@ const COMPACT_MIN_CONTENT_HEIGHT = 56;
 /** The tallest secondary strip (a box plot over its three numbers). */
 const HEADLINE_STRIP_MIN_PX = 60;
 
+/**
+ * The headline value's font size: 15% of the card's width, less for a figure
+ * longer than seven characters, so an eight-digit count ("17,670,732") still
+ * holds one line on a two-column card instead of breaking mid-number.
+ */
+export function headlineValueSize(value: string | number | null | undefined): string {
+  const length = value === null || value === undefined ? 1 : String(value).length;
+  if (length <= 7) return 'clamp(26px, 15cqw, 40px)';
+  return `clamp(20px, ${(105 / length).toFixed(1)}cqw, 40px)`;
+}
+
 const DepictioCard: React.FC<DepictioCardProps> = ({
   title = '',
   value = null,
@@ -311,7 +322,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           margin: 0,
           // The number is what the card is for. Scales with the card (see the
           // container on .depictio-card) so a narrow card still fits it.
-          fontSize: 'clamp(26px, 15cqw, 40px)',
+          fontSize: headlineValueSize(value),
           lineHeight: 1.05,
           letterSpacing: '-0.02em',
           fontVariantNumeric: 'tabular-nums',
