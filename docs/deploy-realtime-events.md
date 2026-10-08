@@ -43,7 +43,7 @@ git clone --depth 1 https://github.com/depictio/depictio.git && cd depictio
 
 depictio-cli ingest \
   --project-config-path depictio/projects/test/adapt_feedb_ms/project.yaml \
-  --update-config --rescan-folders --overwrite --skip-s3-check --skip-join
+  --update-config --skip s3-check,join
 ```
 
 - Creates DC `750a1b2c3d4e5f6a7b8c9d10` + the **Microscopy Real-time Monitor** dashboard.

@@ -11,6 +11,7 @@ the bareness of the output as much as its content.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -273,6 +274,29 @@ class TestTheHandlerCallsIngest:
         assert "argv += ['--project', projectName]" in snippet
         # --update-config alone: a refresh keeps the dashboards edited in the viewer.
         assert "argv += ['--update-config']" in snippet
+
+    def test_without_a_configuration_no_server_is_passed(self):
+        """Naming ~/.depictio/CLI.yaml itself turned off the CLI's own fallback to the
+        local server: with no such file, the ingestion failed on it."""
+        snippet = self._snippet()
+        assert (
+            "cfg.call('depictio_cli_config',\n"
+            "            System.getenv('DEPICTIO_CLI_CONFIG_PATH'))?.toString()?.trim()"
+        ) in snippet
+        assert '/.depictio/CLI.yaml")' not in snippet
+        assert "if (cliConfig) {" in snippet
+
+    def test_the_container_example_needs_a_release_with_ingest(self):
+        """1.9.2, the image it named, has neither `ingest` nor --server: a version
+        written here goes stale at every release, so the reader picks theirs."""
+        files = [self._nextflow_dir() / "depictio.config"]
+        files += sorted((self._nextflow_dir() / "example").iterdir())
+        images = [
+            image
+            for path in files
+            for image in re.findall(r"depictio-cli:[^'\]\s]+", path.read_text())
+        ]
+        assert images and set(images) == {"depictio-cli:<version>"}
 
     def test_local_is_documented(self):
         """`depictio_cli_config = 'local'` targets the server `depictio local up` runs."""

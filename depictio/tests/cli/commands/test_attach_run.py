@@ -146,6 +146,41 @@ class TestLocationMerge:
         assert report["kept_single"] == []
 
 
+class TestAttachedRecord:
+    """An attach records its run, so that a refresh keeps it and drops the rest."""
+
+    def test_the_new_run_is_recorded_and_the_first_one_is_not(self, remote):
+        local = _project(["/data/run_b"], "/data/run_b/metadata.tsv")
+        report = attach_run_to_project(local, remote)
+        assert local.workflows[0].data_location.attached_locations == ["/data/run_b"]
+        assert report["recorded"] == {"ampliseq": ["/data/run_b"]}
+
+    def test_the_record_the_server_holds_is_kept(self, remote):
+        remote["workflows"][0]["data_location"]["locations"] = ["/data/run_a", "/data/run_b"]
+        remote["workflows"][0]["data_location"]["attached_locations"] = ["/data/run_b"]
+        local = _project(["/data/run_c"], "/data/run_c/metadata.tsv")
+        attach_run_to_project(local, remote)
+        assert local.workflows[0].data_location.attached_locations == [
+            "/data/run_b",
+            "/data/run_c",
+        ]
+
+    def test_reattaching_a_run_records_it_without_adding_it(self, remote):
+        """How a run attached before the record existed is kept by later refreshes."""
+        local = _project(["/data/run_a"], "/data/run_a/metadata.tsv")
+        report = attach_run_to_project(local, remote)
+        assert report["added"] == {"ampliseq": []}
+        assert report["recorded"] == {"ampliseq": ["/data/run_a"]}
+        assert local.workflows[0].data_location.attached_locations == ["/data/run_a"]
+
+    def test_a_run_already_recorded_is_not_recorded_twice(self, remote):
+        remote["workflows"][0]["data_location"]["attached_locations"] = ["/data/run_a"]
+        local = _project(["/data/run_a"], "/data/run_a/metadata.tsv")
+        report = attach_run_to_project(local, remote)
+        assert report["recorded"] == {"ampliseq": []}
+        assert local.workflows[0].data_location.attached_locations == ["/data/run_a"]
+
+
 class TestSingleFileBindingIsPreserved:
     """A `scan.mode: single` collection points at ONE absolute path.
 

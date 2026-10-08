@@ -65,3 +65,20 @@ def test_taken_id_is_a_409_even_with_a_free_name(db, user):
     assert result["status_code"] == 409
     assert result["message"] == "Project already exists using this id."
     assert db["projects"].count_documents({}) == 1
+
+
+def test_id_of_a_project_the_user_cannot_see_is_a_409(db, user):
+    """The id lookup only sees the user's projects, so the insert met the id: a 500."""
+    project_id = ObjectId()
+    _create(user, name="Iris", project_id=project_id)
+    other = UserBase(id=ObjectId(), email="other@example.com")
+    other.is_admin = False
+
+    result = _create(other, name="Penguins", project_id=project_id)
+
+    assert result == {
+        "success": False,
+        "message": "Project already exists using this id.",
+        "status_code": 409,
+    }
+    assert db["projects"].count_documents({}) == 1

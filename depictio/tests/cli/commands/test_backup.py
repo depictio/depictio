@@ -467,6 +467,27 @@ class TestBackupFailures:
         assert "invalid or expired" in out
         assert "Access denied" not in out
 
+    @pytest.mark.parametrize("status", [404, 502])
+    @patch("depictio.cli.cli.commands.backup.api_login")
+    def test_another_answer_is_not_blamed_on_the_token(
+        self, mock_api_login, runner, tmp_path, monkeypatch, mock_cli_config, status
+    ):
+        """A viewer host's 404 or a proxy's 502: a new token would not fix it."""
+        monkeypatch.setenv("HOME", str(tmp_path))
+        for var in ("DEPICTIO_CLI_API_BASE_URL", "DEPICTIO_CLI_TOKEN"):
+            monkeypatch.delenv(var, raising=False)
+        config = tmp_path / "CLI.yaml"
+        config.write_text(yaml.dump(mock_cli_config))
+        mock_api_login.return_value = {"success": False, "status_code": status}
+
+        result = runner.invoke(app, ["list", "--server", str(config)])
+
+        assert result.exit_code == 1
+        out = " ".join(result.output.split())
+        assert f"Authentication failed: the server answered HTTP {status}" in out
+        assert "Tried http://localhost:8000, read from ~/CLI.yaml" in out
+        assert "invalid or expired" not in out
+
     @patch("depictio.cli.cli.commands.backup.load_depictio_config")
     @patch("depictio.cli.cli.commands.backup.api_login")
     def test_an_unreachable_server_is_named(self, mock_api_login, mock_load_config, runner):

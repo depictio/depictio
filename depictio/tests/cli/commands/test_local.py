@@ -98,7 +98,17 @@ def test_the_server_reaches_127_0_0_1_without_the_proxy(paths, monkeypatch):
     ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
     env = server_env(paths, ports, SECRETS, "none", False)
 
-    assert env["no_proxy"] == env["NO_PROXY"] == "localhost,.example.org,127.0.0.1,localhost"
+    assert env["no_proxy"] == env["NO_PROXY"] == "localhost,.example.org,127.0.0.1"
+
+
+def test_no_proxy_keeps_the_entries_of_both_spellings(paths, monkeypatch):
+    monkeypatch.setenv("no_proxy", "localhost,.example.org")
+    monkeypatch.setenv("NO_PROXY", ".corp.internal, localhost")
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+    env = server_env(paths, ports, SECRETS, "none", False)
+
+    expected = "localhost,.example.org,.corp.internal,127.0.0.1"
+    assert env["no_proxy"] == env["NO_PROXY"] == expected
 
 
 @pytest.mark.parametrize(
@@ -454,6 +464,48 @@ def test_windows_is_rejected_with_a_clear_message(monkeypatch):
         local_stack.check_platform_supported()
 
 
+def test_the_lock_without_fcntl_is_a_clear_error(paths, monkeypatch):
+    # As on Windows: None in sys.modules makes the import fail.
+    monkeypatch.setitem(sys.modules, "fcntl", None)
+    with pytest.raises(LocalStackError, match="POSIX file locks.*WSL2"):
+        local_stack.lock_for_startup(paths)
+    assert not (paths.home / local_stack.UP_LOCK).exists()
+
+
+@pytest.mark.parametrize(
+    ("holder", "command", "message"),
+    [
+        ("up", "up", "Another `depictio local up` is already starting this home"),
+        ("up", "wipe", "A `depictio local up` is starting this home"),
+        ("up", "export", "wait for it, or stop it, then try again"),
+        ("wipe", "up", "`depictio local wipe` is using this home"),
+        ("export", "wipe", "`depictio local export` is using this home"),
+    ],
+)
+def test_the_lock_names_the_command_holding_it(paths, holder, command, message):
+    held = local_stack.lock_for_startup(paths, holder)
+    try:
+        with pytest.raises(LocalStackError) as err:
+            local_stack.lock_for_startup(paths, command)
+    finally:
+        held.close()
+
+    assert message in str(err.value)
+    assert str(paths.home) in str(err.value)
+    # Released: the next command goes ahead.
+    local_stack.lock_for_startup(paths, command).close()
+
+
+def test_a_lock_held_by_an_earlier_up_is_named_as_up(paths):
+    # Before wipe and export took the lock, up wrote nothing in it.
+    import fcntl
+
+    with open(paths.home / local_stack.UP_LOCK, "a") as held:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(LocalStackError, match="A `depictio local up` is starting"):
+            local_stack.lock_for_startup(paths, "wipe")
+
+
 def test_example_tables_match_the_seeded_static_ids():
     from depictio.api.v1.db_init_reference_datasets import STATIC_IDS
 
@@ -797,6 +849,99 @@ def test_a_signal_during_startup_stops_what_was_started(paths, fake_start, monke
     assert signal.getsignal(signum) == before
 
 
+@pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGHUP], ids=["SIGTERM", "SIGHUP"])
+def test_a_signal_inside_spawn_still_stops_that_service(paths, fake_start, monkeypatch, signum):
+    started: list[subprocess.Popen] = []
+
+    def spawn(paths, name, cmd, env=None):
+        proc = subprocess.Popen(["sleep", "60"], start_new_session=True)
+        started.append(proc)
+        # Before spawn returns, as on a loaded machine: nothing has the pid yet.
+        os.kill(os.getpid(), signum)
+        return proc
+
+    monkeypatch.setattr(local_stack, "spawn", spawn)
+    try:
+        with pytest.raises(local_stack.Interrupted) as err:
+            local_stack.start_stack(paths, None, "none", False, log=lambda _: None)
+
+        assert err.value.signum == signum
+        assert len(started) == 1
+        assert started[0].wait(timeout=10) is not None
+    finally:
+        for proc in started:
+            proc.kill()
+
+
+@pytest.mark.parametrize(
+    "first",
+    [KeyboardInterrupt(), LocalStackError("Timed out")],
+    ids=["ctrl-c", "error"],
+)
+@pytest.mark.parametrize(
+    "second", [signal.SIGINT, signal.SIGTERM, signal.SIGHUP], ids=["ctrl-c", "SIGTERM", "SIGHUP"]
+)
+def test_a_signal_while_stopping_does_not_cut_the_stop_short(
+    paths, fake_start, monkeypatch, first, second
+):
+    stopped = []
+    handlers = {signum: signal.getsignal(signum) for signum in (signal.SIGINT, second)}
+
+    def start_services(paths, ports, secret_values, env, record=None):
+        for i, name in enumerate(("mongo", "redis", "s3")):
+            record(name, MagicMock(pid=4000 + i))
+        raise first
+
+    def terminate_group(pid, *args, **kwargs):
+        stopped.append(pid)
+        if len(stopped) == 1:
+            # Pressed again, or the terminal closed, while the first service stops.
+            os.kill(os.getpid(), second)
+            time.sleep(0.2)
+
+    monkeypatch.setattr(local_stack, "start_services", start_services)
+    monkeypatch.setattr(local_stack, "live_pids", lambda state: dict(state.pids) if state else {})
+    monkeypatch.setattr(local_stack, "terminate_group", terminate_group)
+
+    # BaseException: an interrupt escaping the cleanup must fail this test, not end the run.
+    with pytest.raises(BaseException) as err:
+        local_stack.start_stack(paths, None, "none", False, log=lambda _: None)
+
+    assert err.value is first
+    assert stopped == [4002, 4001, 4000]
+    assert not paths.state.exists()
+    assert {signum: signal.getsignal(signum) for signum in handlers} == handlers
+
+
+def test_start_services_stops_every_service_it_started_despite_a_second_ctrl_c(paths, monkeypatch):
+    started = iter(MagicMock(pid=4000 + i) for i in range(3))
+    stopped = []
+    before = signal.getsignal(signal.SIGINT)
+    first = KeyboardInterrupt()
+
+    def wait_until(*args, **kwargs):
+        raise first  # Ctrl-C while MongoDB starts
+
+    def stop_child(proc, timeout=20):
+        stopped.append(proc.pid)
+        if len(stopped) == 1:
+            os.kill(os.getpid(), signal.SIGINT)
+            time.sleep(0.2)
+
+    monkeypatch.setattr(local_stack, "spawn", lambda *a, **k: next(started))
+    monkeypatch.setattr(local_stack, "seaweedfs_port_flags", lambda taken: [])
+    monkeypatch.setattr(local_stack, "wait_until", wait_until)
+    monkeypatch.setattr(local_stack, "_stop_child", stop_child)
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+
+    with pytest.raises(KeyboardInterrupt) as err:
+        local_stack.start_services(paths, ports, SECRETS, {})
+
+    assert err.value is first
+    assert stopped == [4002, 4001, 4000]
+    assert signal.getsignal(signal.SIGINT) == before
+
+
 def test_a_cli_config_deleted_after_the_first_run_is_written_again(paths, fake_start, monkeypatch):
     (paths.home / "mongo" / "WiredTiger").write_text("data")
     monkeypatch.setattr(
@@ -962,6 +1107,27 @@ def test_a_token_list_that_fails_is_a_warning(paths, monkeypatch):
 def test_rebuild_cli_config_failing_names_the_file(paths):
     with pytest.raises(LocalStackError, match="admin_config.yaml is missing and the API could not"):
         local_stack.rebuild_cli_config(paths, _free_ports(1)[0], SECRETS)
+
+
+@pytest.mark.parametrize("endpoint", ["login", "me/tokens", "generate_agent_config"])
+def test_an_api_answer_that_is_not_an_object_is_an_error(paths, monkeypatch, endpoint):
+    answer_post = _Auth.do_POST
+
+    def do_post(self):
+        if self.path == f"{self.AUTH}/{endpoint}":
+            self.rfile.read(int(self.headers["Content-Length"]))
+            self._answer(200, ["not", "an", "object"])
+        else:
+            answer_post(self)
+
+    monkeypatch.setattr(_Auth, "do_POST", do_post)
+
+    with pytest.raises(LocalStackError) as err:
+        _rebuild_against_fake_api(paths)
+
+    assert "admin_config.yaml is missing and the API could not write it again" in str(err.value)
+    assert f"/auth/{endpoint} did not answer a JSON object" in str(err.value)
+    assert not paths.cli_config.exists()
 
 
 def test_a_service_that_exits_is_named_at_the_start_of_the_sentence(paths):

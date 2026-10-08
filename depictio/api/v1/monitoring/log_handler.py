@@ -16,7 +16,7 @@ from depictio.models.models.monitoring import AppLogRecord
 
 # Loggers whose records we never persist, to avoid recursion (the handler itself
 # talks to MongoDB through pymongo) and noise.
-_SKIP_LOGGER_PREFIXES = ("pymongo", "motor", "depictio.api.v1.monitoring.store")
+_SKIP_LOGGER_PREFIXES = ("pymongo", "depictio.api.v1.monitoring.store")
 
 _local = threading.local()
 

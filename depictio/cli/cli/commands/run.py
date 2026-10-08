@@ -23,6 +23,7 @@ from depictio.cli.cli.utils.common import (
     describe_api_target,
     generate_api_headers,
     load_depictio_config,
+    report_login_failure,
     say_local_server_running,
 )
 from depictio.cli.cli.utils.config import validate_project_config_and_check_S3_storage
@@ -33,11 +34,16 @@ from depictio.cli.cli.utils.image_upload import (
 )
 from depictio.cli.cli.utils.renamed import note_if_called_as, note_renamed, pick_renamed
 from depictio.cli.cli.utils.rich_utils import (
+    render_records_table,
     rich_print_checked_statement,
     rich_print_command_usage,
     rich_print_section_separator,
 )
-from depictio.cli.cli.utils.scan import scan_project_files
+from depictio.cli.cli.utils.scan import flat_run_tag_clash, scan_project_files
+from depictio.cli.cli.utils.scan_utils import (
+    count_data_collection_matches,
+    resolve_run_locations,
+)
 from depictio.cli.cli.utils.server_target import (
     LegacyConfigPathOption,
     ServerOption,
@@ -92,22 +98,40 @@ def _redacted_command_line() -> str | None:
         return None
 
 
-def _ingestion_data_collections(project_config) -> list[dict]:
+def _ingestion_data_collections(project_config, count_files: bool = False) -> list[dict]:
     """Per-DC summary (tag / type / format) + the local scan paths the CLI
-    resolved, walked from the validated project config. Best-effort; never raises."""
+    resolved, walked from the validated project config. Best-effort; never raises.
+
+    ``count_files`` walks the run directories to fill ``file_count`` with what a
+    scan would match. Off by default: the monitoring ledger is written after the
+    scan, which already knows the real counts, so pre-walking for it would be
+    both slower and less accurate. The dry run is the one caller with no scan to
+    learn from, so it is the one that pays for the walk.
+    """
     out: list[dict] = []
     try:
         for wf in getattr(project_config, "workflows", None) or []:
             dl = getattr(wf, "data_location", None)
             locations = [str(x) for x in (getattr(dl, "locations", None) or [])] if dl else []
-            for dc in getattr(wf, "data_collections", None) or []:
+            data_collections = getattr(wf, "data_collections", None) or []
+            # Counted for the whole workflow at once: the counter walks each run
+            # directory a single time and tests every pattern against that one
+            # listing, as the scanner does.
+            file_counts: list[int | None] = [None] * len(data_collections)
+            if count_files:
+                run_locations = resolve_run_locations(wf).locations
+                file_counts = count_data_collection_matches(data_collections, run_locations)
+            for dc, file_count in zip(data_collections, file_counts, strict=True):
                 cfg = getattr(dc, "config", None)
                 scan = getattr(cfg, "scan", None) if cfg else None
                 mode = getattr(scan, "mode", None) if scan else None
                 params = getattr(scan, "scan_parameters", None) if scan else None
-                if mode == "single":
+                # Lowercased like the scanner, which compares `scan.mode.lower()`
+                # while the model stores whatever spelling the config used.
+                normalized_mode = mode.lower() if mode else None
+                if normalized_mode == "single":
                     pattern = getattr(params, "filename", None)
-                elif mode == "recursive":
+                elif normalized_mode == "recursive":
                     rc = getattr(params, "regex_config", None)
                     pattern = getattr(rc, "pattern", None) if rc else None
                 else:
@@ -121,12 +145,79 @@ def _ingestion_data_collections(project_config) -> list[dict]:
                         "scan_mode": mode,
                         "scan_pattern": pattern,
                         "locations": locations,
-                        "file_count": None,
+                        "file_count": file_count,
                     }
                 )
     except Exception:
         return out
     return out
+
+
+def _shorten_scan_pattern(pattern: str | None, locations: list[str]) -> str:
+    """Render a scan pattern short enough to survive the preview table.
+
+    A single-file scan's pattern is an absolute path, and in a terminal-width
+    table it truncates to the data root every collection shares, hiding the one
+    part that identifies the file. Relative to the configured location it stays
+    unambiguous and readable.
+    """
+    if not pattern:
+        return "-"
+    for location in locations:
+        try:
+            return str(Path(pattern).relative_to(location))
+        except ValueError:
+            continue
+    return pattern
+
+
+def _print_dry_run_scan_preview(project_config) -> bool:
+    """Show what a real scan would match, per data collection.
+
+    Answering "is --data-root pointing at the right level?" is the whole reason
+    to run ``--dry-run``, and it could not: every step was wrapped in
+    ``if not dry_run`` and the run then printed "Data scanning completed" all
+    the same. The counts come from the scanner's own matcher, so a preview
+    cannot promise files the scan would not find.
+
+    Returns whether every data collection would find something, so the caller
+    does not follow a warning with a green "completed".
+    """
+    records = _ingestion_data_collections(project_config, count_files=True)
+    if not records:
+        rich_print_checked_statement("No data collection found in the project config.", "warning")
+        return False
+
+    # Reported before the table: a location that resolved no run at all explains
+    # every zero below it, and naming the directory level is what turns "0 files"
+    # into a fix.
+    for workflow in getattr(project_config, "workflows", None) or []:
+        for warning in resolve_run_locations(workflow).warnings:
+            rich_print_checked_statement(warning, "warning")
+
+    rows = []
+    for record in records:
+        file_count = record["file_count"]
+        rows.append(
+            {
+                "data collection": record["tag"],
+                "scan mode": record["scan_mode"] or "-",
+                "pattern": _shorten_scan_pattern(record["scan_pattern"], record["locations"]),
+                # A collection with no scan config (a derived one) has no files
+                # to count, which is not the same as counting zero.
+                "files": "n/a (no scan)" if file_count is None else str(file_count),
+            }
+        )
+    render_records_table(rows, title="Dry run: files each data collection would match")
+
+    empty = [record["tag"] for record in records if record["file_count"] == 0]
+    if empty:
+        rich_print_checked_statement(
+            f"{len(empty)} data collection(s) would match no file: {', '.join(empty)}. "
+            "Check --data-root and the scan patterns before running for real.",
+            "warning",
+        )
+    return not empty
 
 
 # How long an error exit waits for the server to record the outcome. Short, so
@@ -331,63 +422,135 @@ def _write_provisioned_cli_config(base_raw_config: dict, provision: dict) -> str
     return path
 
 
-def merge_run_locations(project_config, remote_project: dict, drop_missing: bool = False) -> dict:
-    """Put the run locations the server holds back in front of this run's, in place.
+def _server_run_locations(remote_project: dict) -> dict[str, tuple[list[str], list[str]]]:
+    """Each workflow's run locations on the server, and those --attach-run added, by tag."""
+    by_tag: dict[str, tuple[list[str], list[str]]] = {}
+    for wf_doc in remote_project.get("workflows", []) or []:
+        wf_tag = wf_doc.get("workflow_tag")
+        if wf_tag:
+            data_location = wf_doc.get("data_location") or {}
+            # Fresh lists, so the remote entries are never aliased into the model.
+            by_tag[wf_tag] = (
+                list(data_location.get("locations") or []),
+                list(data_location.get("attached_locations") or []),
+            )
+    return by_tag
+
+
+def _distinct_locations(*groups: list[str]) -> list[str]:
+    """The locations in order, each directory once. Compared by real path, so a data
+    root reached through a symlink is the run it points to, not a second one."""
+    seen: set[str] = set()
+    distinct: list[str] = []
+    for group in groups:
+        for location in group:
+            real = os.path.realpath(location)
+            if real not in seen:
+                seen.add(real)
+                distinct.append(location)
+    return distinct
+
+
+def merge_run_locations(project_config, remote_project: dict) -> dict:
+    """Add this run's locations to those the server holds, in place, and record them
+    as attached.
 
     ``data_location.locations`` is a list and the scan treats each entry as its own
     run (``structure: flat``) or walks it for run subdirectories
     (``sequencing-runs``), so the locations are the project's runs. A configuration
-    resolved from one data root lists that root only: pushed as-is, it would drop
-    every run added since with ``--attach-run``.
+    resolved from one data root lists that root only: an attach keeps every
+    location the server holds, and puts this run's after them.
 
-    Locations are compared by real path, so a data root reached through a symlink
-    is the run it points to, not a second one. With ``drop_missing``, a location
-    the server holds that is no longer a directory is left out: the scan fails on
-    a location it cannot walk, so keeping it would fail the whole refresh.
+    ``attached_locations`` records them, so that a refresh keeps them (see
+    :func:`refresh_run_locations`). A location the project already has is recorded
+    too: attaching it again is how a run attached before the record existed is
+    kept by the next refresh.
 
-    Returns ``{"added": {workflow_tag: [locations]}, "kept": {workflow_tag:
-    [locations]}, "missing": {workflow_tag: [locations]}}``, where ``kept`` are
-    the server's locations this configuration did not list.
+    Returns ``{"added": {workflow_tag: [locations]}, "recorded": {workflow_tag:
+    [locations]}}``: the locations new to the project, and those newly recorded
+    as attached.
     """
-    remote_locations: dict[str, list[str]] = {}
-    for wf_doc in remote_project.get("workflows", []) or []:
-        wf_tag = wf_doc.get("workflow_tag")
-        if wf_tag:
-            remote_locations[wf_tag] = list(
-                (wf_doc.get("data_location") or {}).get("locations") or []
-            )
-
+    server = _server_run_locations(remote_project)
     added: dict[str, list[str]] = {}
-    kept: dict[str, list[str]] = {}
-    missing: dict[str, list[str]] = {}
+    recorded: dict[str, list[str]] = {}
     for wf in project_config.workflows:
-        known = remote_locations.get(wf.workflow_tag, [])
-        if drop_missing:
-            missing[wf.workflow_tag] = [loc for loc in known if not os.path.isdir(loc)]
-            known = [loc for loc in known if loc not in missing[wf.workflow_tag]]
-        seen = {os.path.realpath(loc) for loc in known}
-        ours = set()
-        new_locations = []
-        for loc in wf.data_location.locations:
-            real = os.path.realpath(loc)
-            ours.add(real)
-            if real not in seen:
-                seen.add(real)
-                new_locations.append(loc)
-        # A fresh list, so the remote entry is never aliased into the model.
-        wf.data_location.locations = known + new_locations
-        added[wf.workflow_tag] = new_locations
-        kept[wf.workflow_tag] = [loc for loc in known if os.path.realpath(loc) not in ours]
+        known, attached = server.get(wf.workflow_tag, ([], []))
+        ours = _distinct_locations(wf.data_location.locations)
+        known_real = {os.path.realpath(loc) for loc in known}
+        added[wf.workflow_tag] = [loc for loc in ours if os.path.realpath(loc) not in known_real]
+        wf.data_location.locations = known + added[wf.workflow_tag]
 
-    return {"added": added, "kept": kept, "missing": missing}
+        # Under the name the locations list it by, which is the server's for a run
+        # it already holds through another path.
+        listed: dict[str, str] = {}
+        for loc in wf.data_location.locations:
+            listed.setdefault(os.path.realpath(loc), loc)
+        attached_real = {os.path.realpath(loc) for loc in attached}
+        recorded[wf.workflow_tag] = [
+            listed[os.path.realpath(loc)]
+            for loc in ours
+            if os.path.realpath(loc) not in attached_real
+        ]
+        wf.data_location.attached_locations = attached + recorded[wf.workflow_tag]
+
+    return {"added": added, "recorded": recorded}
+
+
+def refresh_run_locations(project_config, remote_project: dict, drop_missing: bool = False) -> dict:
+    """Set the run locations of a refresh, in place: this configuration's, then those
+    added with --attach-run.
+
+    Any other location the server holds is dropped, so the rescan removes its runs:
+    a results directory that moved replaces the old one instead of being ingested
+    next to it, and a location taken out of a project file goes away. A project
+    ingested before attached runs were recorded has no record, so its extra
+    locations are dropped too.
+
+    An attached location that is not a directory on this host is reported as
+    missing. The rescan would remove its runs, so the caller stops unless
+    ``drop_missing``, which takes it out of the locations and of the record.
+
+    Returns ``{"attached": {workflow_tag: [locations]}, "dropped": {workflow_tag:
+    [locations]}, "missing": {workflow_tag: [locations]}}``: the attached locations
+    kept besides this configuration's, the server's locations left out, and the
+    attached locations not on disk.
+    """
+    server = _server_run_locations(remote_project)
+    report: dict[str, dict[str, list[str]]] = {"attached": {}, "dropped": {}, "missing": {}}
+    for wf in project_config.workflows:
+        tag = wf.workflow_tag
+        known, attached = server.get(tag, ([], []))
+        requested = _distinct_locations(wf.data_location.locations)
+        requested_real = {os.path.realpath(loc) for loc in requested}
+        missing = [
+            loc
+            for loc in _distinct_locations(attached)
+            if os.path.realpath(loc) not in requested_real and not os.path.isdir(loc)
+        ]
+        missing_real = {os.path.realpath(loc) for loc in missing}
+        if drop_missing:
+            attached = [loc for loc in attached if os.path.realpath(loc) not in missing_real]
+
+        wf.data_location.locations = _distinct_locations(requested, attached)
+        wf.data_location.attached_locations = attached
+        kept_real = {os.path.realpath(loc) for loc in wf.data_location.locations}
+        report["attached"][tag] = [
+            loc for loc in wf.data_location.locations if os.path.realpath(loc) not in requested_real
+        ]
+        report["dropped"][tag] = [
+            loc for loc in known if os.path.realpath(loc) not in kept_real | missing_real
+        ]
+        report["missing"][tag] = missing
+    return report
 
 
 def attach_run_to_project(project_config, remote_project: dict) -> dict:
     """Fold this run into an existing project, in place, and report what changed.
 
     Appending this run's directory to the locations is all it takes to add a run
-    (see :func:`merge_run_locations`). The scan is incremental, so the runs already
-    registered are skipped.
+    (see :func:`merge_run_locations`), which also records it as attached so that a
+    refresh keeps it. The scan is incremental, so the runs already registered are
+    skipped.
 
     Two things are deliberately preserved from the server:
 
@@ -399,7 +562,8 @@ def attach_run_to_project(project_config, remote_project: dict) -> dict:
       the config (the stale-file cleanup in ``scan_files_for_data_collection``), so
       the original run's samplesheet/metadata/tree would be dropped.
 
-    Returns ``{"added": {workflow_tag: [locations]}, "kept_single": [dc_tags]}``.
+    Returns ``{"added": {workflow_tag: [locations]}, "recorded": {workflow_tag:
+    [locations]}, "kept_single": [dc_tags]}``.
     """
     remote_single: dict[tuple[str, str], str] = {}
     for wf_doc in remote_project.get("workflows", []) or []:
@@ -415,7 +579,7 @@ def attach_run_to_project(project_config, remote_project: dict) -> dict:
             if filename and dc_tag:
                 remote_single[(wf_tag, dc_tag)] = filename
 
-    added = merge_run_locations(project_config, remote_project)["added"]
+    merge = merge_run_locations(project_config, remote_project)
 
     kept_single: list[str] = []
     for wf in project_config.workflows:
@@ -427,24 +591,75 @@ def attach_run_to_project(project_config, remote_project: dict) -> dict:
                 dc.config.scan.scan_parameters.filename = previous
                 kept_single.append(dc.data_collection_tag)
 
-    return {"added": added, "kept_single": kept_single}
+    return {**merge, "kept_single": kept_single}
 
 
-def _report_kept_locations(project_config, merge: dict) -> None:
-    """Say, for a refresh, which runs the project keeps and which it loses."""
-    for wf_tag, gone in merge["missing"].items():
-        for location in gone:
+def _stop_on_missing_locations(report: dict) -> None:
+    """End a refresh that would remove the runs of attached locations not on this host.
+
+    Checked before the sync, so nothing has been changed yet: dropping them is for
+    --drop-missing-runs to ask for, as a location that is only unmounted here, or
+    reached under another path on another host, would otherwise lose its runs.
+    """
+    for wf_tag, missing in report["missing"].items():
+        for location in missing:
             rich_print_checked_statement(
-                f"Workflow '{escape(wf_tag)}': run location {escape(location)} is no longer "
-                f"on disk. It is left out, so this refresh removes its runs and files from "
-                f"the project and rebuilds the tables without them.",
+                f"Workflow '{escape(wf_tag)}': run location {escape(location)}, added with "
+                f"--attach-run, is not on this host.",
+                "error",
+            )
+    rich_print_checked_statement(
+        "A refresh would remove the runs and files of the location(s) above, so it stops "
+        "here and nothing was changed. Run it where they are reachable, or pass "
+        "--drop-missing-runs to remove those runs from the project.",
+        "error",
+    )
+    raise typer.Exit(code=1)
+
+
+def _stop_on_run_tag_clash(project_config) -> None:
+    """End the command when two flat locations of a workflow would share a run name.
+
+    Checked once the locations are final, before the sync records them (the scan
+    would refuse them only after the project was updated) and before the runs they
+    add or keep are announced.
+    """
+    for wf in project_config.workflows:
+        clash = flat_run_tag_clash(wf.data_location)
+        if clash:
+            rich_print_checked_statement(
+                f"Workflow '{escape(str(wf.workflow_tag))}': {escape(clash)}", "error"
+            )
+            raise typer.Exit(code=1)
+
+
+def _report_run_locations(project_config, report: dict) -> None:
+    """Say, for a refresh, which runs the project keeps and which it loses."""
+    for wf_tag, missing in report["missing"].items():
+        for location in missing:
+            rich_print_checked_statement(
+                f"Workflow '{escape(wf_tag)}': run location {escape(location)} is not on "
+                f"this host. --drop-missing-runs is given, so this refresh removes its runs "
+                f"and files from the project and rebuilds the tables without them.",
+                "warning",
+            )
+    for wf_tag, dropped in report["dropped"].items():
+        for location in dropped:
+            rich_print_checked_statement(
+                f"Workflow '{escape(wf_tag)}': run location {escape(location)} is not in this "
+                f"configuration and was not added with --attach-run, so this refresh removes "
+                f"its runs and files from the project.",
                 "warning",
             )
     total = sum(len(wf.data_location.locations) for wf in project_config.workflows)
-    earlier = sum(len(locations) for locations in merge["kept"].values())
+    attached = sum(len(locations) for locations in report["attached"].values())
     rich_print_checked_statement(
-        f"The project keeps {total} run location(s)"
-        + (f", {earlier} of them from earlier ingests" if earlier else ""),
+        f"The project keeps {total} run location(s): "
+        + (
+            f"{total - attached} from this configuration, {attached} added with --attach-run"
+            if attached
+            else "those of this configuration"
+        ),
         "info",
     )
 
@@ -508,9 +723,11 @@ def _drop_pinned_ids(config: dict) -> None:
         wf.pop("_id", None)
         collections.extend(wf.get("data_collections") or [])
     for dc in collections:
-        dc_id = dc.pop("id", None) or dc.pop("_id", None)
-        if dc_id and dc.get("data_collection_tag"):
-            tag_by_id[str(dc_id)] = dc["data_collection_tag"]
+        # Both keys, as a file may carry both: a kept `_id` would give the renamed
+        # copy the original's id, and with it the original's Delta table.
+        for dc_id in (dc.pop("id", None), dc.pop("_id", None)):
+            if dc_id and dc.get("data_collection_tag"):
+                tag_by_id[str(dc_id)] = dc["data_collection_tag"]
     for join in config.get("joins") or []:
         join.pop("id", None)
     for link in config.get("links") or []:
@@ -644,9 +861,11 @@ def register_run_command(app: typer.Typer):
             typer.Option(
                 "--update-config",
                 help="Refresh a project that exists: its configuration, and its tables with "
-                "every run rescanned. Runs added with --attach-run are kept. Its dashboards "
-                "are kept as they are, edits made in the viewer included; the template's "
-                "dashboards it lacks are added. A project not on the server yet is created.",
+                "every run rescanned. Its runs become those of DATA_DIR (or of the project "
+                "file's locations) and those added with --attach-run; the runs of any other "
+                "location are removed. Its dashboards are kept as they are, edits made in "
+                "the viewer included; the template's dashboards it lacks are added. A "
+                "project not on the server yet is created.",
             ),
         ] = False,
         var: Annotated[
@@ -683,10 +902,21 @@ def register_run_command(app: typer.Typer):
             typer.Option(
                 "--attach-run",
                 help="Add DATA_DIR to an EXISTING project as one more run, instead of "
-                "creating a project. The project is found by --project, else by the "
+                "creating a project. The run is recorded as attached, so a later "
+                "--update-config keeps it. The project is found by --project, else by the "
                 "template's own name. Implies --update-config, dashboards included. The "
                 "tables of file-based collections are rebuilt from all runs; collections a "
                 "recipe computes still read the project's first run only.",
+                rich_help_panel=PROJECT_PANEL,
+            ),
+        ] = False,
+        drop_missing_runs: Annotated[
+            bool,
+            typer.Option(
+                "--drop-missing-runs",
+                help="On a refresh, remove the runs of a location added with --attach-run "
+                "that is not on this host. Without it, such a refresh stops before "
+                "changing anything.",
                 rich_help_panel=PROJECT_PANEL,
             ),
         ] = False,
@@ -913,6 +1143,20 @@ def register_run_command(app: typer.Typer):
             raise typer.BadParameter(
                 "give --reset-dashboards or --skip dashboards, not both",
                 param_hint="--reset-dashboards",
+            )
+        # A project file brings no dashboards of its own: the reset would reset
+        # nothing, and still refresh the whole project.
+        if reset_dashboards and project_config_path and not dashboard and not template:
+            raise typer.BadParameter(
+                "needs dashboards to reset, and a project file has none: pass --dashboard, "
+                "or use --template",
+                param_hint="--reset-dashboards",
+            )
+        # An attach scans incrementally, so it removes no run: the option would do nothing.
+        if drop_missing_runs and attach_run:
+            raise typer.BadParameter(
+                "give --drop-missing-runs or --attach-run, not both: an attach removes no run",
+                param_hint="--drop-missing-runs",
             )
         skip_server_check = "server-check" in skipped
         skip_s3_check = "s3-check" in skipped
@@ -1283,23 +1527,7 @@ def register_run_command(app: typer.Typer):
         else:
             rich_print_section_separator(f"Step 1/{total_steps}: Checking server accessibility")
             try:
-                # api_login reports a rejected configuration by RETURNING
-                # {"success": False}, not by raising, so the except below
-                # cannot see it. Unchecked, an expired token printed its own
-                # error and was immediately followed by "check passed"; the
-                # run then died at step 3 on a validation error that named
-                # nothing about authentication. For a pipeline-triggered run
-                # that is the difference between a log saying "your token
-                # expired" and one nobody can act on.
-                if not api_login(CLI_config_path).get("success"):
-                    raise RuntimeError(
-                        "the server rejected this CLI configuration (see the error "
-                        "above). The token is most likely expired, or was minted "
-                        "for a different Depictio instance."
-                    )
-                rich_print_checked_statement("Server accessibility check passed", "success")
-                success_count += 1
-                _rec("server_check", "success", "server reachable")
+                login = api_login(CLI_config_path)
             except typer.Exit:
                 # Already reported, by the configuration load. `typer.Exit`
                 # subclasses RuntimeError, so the handler below used to catch it
@@ -1318,6 +1546,28 @@ def register_run_command(app: typer.Typer):
                 _rec("server_check", "failed", f"{e} (tried {target})")
                 if not continue_on_error:
                     raise typer.Exit(code=1)
+            else:
+                # api_login reports a refused login by RETURNING {"success": False},
+                # not by raising. Unchecked, an expired token was followed by "check
+                # passed", and the run died at step 3 on an error that said nothing
+                # about authentication. Only a refusal blames the token: a viewer
+                # host's 404 or a proxy's 502 is not its fault.
+                if login.get("success"):
+                    rich_print_checked_statement("Server accessibility check passed", "success")
+                    success_count += 1
+                    _rec("server_check", "success", "server reachable")
+                else:
+                    report_login_failure(
+                        CLI_config_path, login, "Server accessibility check failed"
+                    )
+                    say_local_server_running(CLI_config_path)
+                    _rec(
+                        "server_check",
+                        "failed",
+                        f"login refused (HTTP {login.get('status_code', 200)})",
+                    )
+                    if not continue_on_error:
+                        raise typer.Exit(code=1)
 
         # Step 2: Check S3 storage
         if skip_s3_check:
@@ -1344,6 +1594,10 @@ def register_run_command(app: typer.Typer):
                 _rec("s3_check", "failed", str(e))
                 if not continue_on_error:
                     raise typer.Exit(code=1)
+
+        # Stays None when validation fails under --continue-on-error: the later steps
+        # check it, so the failure is not reported again as a broken scan.
+        project_config = None
 
         # Step 3: Validate project configuration
         rich_print_section_separator(f"Step 3/{total_steps}: Validating project configuration")
@@ -1410,16 +1664,19 @@ def register_run_command(app: typer.Typer):
             rich_print_checked_statement(escape(filter_error), "error")
             raise typer.Exit(code=1)
 
-        # A refresh keeps the runs the project already has. The configuration lists
-        # only this run's data root, and pushed as-is it dropped every run added with
-        # --attach-run: the full rescan then deleted them from the project.
+        # A refresh keeps the runs of this configuration's locations and of those
+        # added with --attach-run, and the full rescan removes any other. Settled
+        # here, before the sync, so a refresh that has to stop changes nothing.
         if update_config and not attach_run and not dry_run:
             remote = api_get_project_from_name(str(project_config.name), CLI_config)
             if remote.status_code == 200:
-                _report_kept_locations(
-                    project_config,
-                    merge_run_locations(project_config, remote.json(), drop_missing=True),
+                run_locations = refresh_run_locations(
+                    project_config, remote.json(), drop_missing=drop_missing_runs
                 )
+                if not drop_missing_runs and any(run_locations["missing"].values()):
+                    _stop_on_missing_locations(run_locations)
+                _stop_on_run_tag_clash(project_config)
+                _report_run_locations(project_config, run_locations)
 
         # Step 3b (--attach-run): fold the run into an EXISTING project instead of
         # creating a new one. `data_location.locations` is a list and the scan treats
@@ -1444,6 +1701,7 @@ def register_run_command(app: typer.Typer):
                     raise typer.Exit(code=2)
 
                 report = attach_run_to_project(project_config, remote.json())
+                _stop_on_run_tag_clash(project_config)
                 added_locations = {tag: locs for tag, locs in report["added"].items() if locs}
                 for wf_tag, new_locations in added_locations.items():
                     rich_print_checked_statement(
@@ -1455,7 +1713,12 @@ def register_run_command(app: typer.Typer):
                     rich_print_checked_statement(
                         "--attach-run: this data location is already one of the project's "
                         "runs, so no run is added. Its tables are rebuilt from the runs it "
-                        "already has.",
+                        "already has."
+                        + (
+                            " It is now recorded as attached, so a refresh keeps it."
+                            if any(report["recorded"].values())
+                            else ""
+                        ),
                         "info",
                     )
                 if report["kept_single"]:
@@ -1474,6 +1737,9 @@ def register_run_command(app: typer.Typer):
                 rich_print_checked_statement(f"--attach-run failed: {escape(str(e))}", "error")
                 _rec("attach_run", "failed", str(e))
                 raise typer.Exit(code=1)
+
+        # The locations of a first ingest or a dry run, which no step above checked.
+        _stop_on_run_tag_clash(project_config)
 
         # Open the monitoring ingestion record now that CLI_config is validated.
         # Best-effort: a monitoring outage must never affect the ingestion.
@@ -1643,6 +1909,10 @@ def register_run_command(app: typer.Typer):
             rich_print_section_separator(f"Step 5/{total_steps}: Scanning data files")
             ingestion.current_step = "scan"
             try:
+                if project_config is None:
+                    raise Exception(
+                        "no validated project configuration, see the validation step above"
+                    )
                 if not dry_run:
                     # Get remote project configuration to compare hashes
                     remote_project_config = api_get_project_from_name(
@@ -1684,6 +1954,10 @@ def register_run_command(app: typer.Typer):
                     else:
                         raise Exception("Failed to fetch remote project configuration")
 
+                if dry_run:
+                    # The preview warns by itself when something would match nothing;
+                    # the line below is an info, not a green "completed".
+                    _print_dry_run_scan_preview(project_config)
                 _step_done("Data scanning completed", f"Would scan the data files{scope}")
                 success_count += 1
                 _rec("scan", "success", "data files scanned")
@@ -1869,6 +2143,7 @@ def register_run_command(app: typer.Typer):
             try:
                 if not dry_run:
                     from depictio.cli.cli.utils.templates import (
+                        dashboard_outcome,
                         import_dashboards_from_template,
                     )
 
@@ -1912,11 +2187,12 @@ def register_run_command(app: typer.Typer):
                                 (
                                     str(r.get("title") or "dashboard"),
                                     str(r["dashboard_id"]),
-                                    r["status"],
+                                    dashboard_outcome(r),
                                 )
                             )
                         rich_print_checked_statement(
-                            f"Dashboard {r['status']}: {escape(str(r.get('title', 'unknown')))}",
+                            f"Dashboard {dashboard_outcome(r)}: "
+                            f"{escape(str(r.get('title', 'unknown')))}",
                             "success",
                         )
                         if r.get("dash_url"):
@@ -1945,30 +2221,24 @@ def register_run_command(app: typer.Typer):
                     if failed:
                         raise Exception(f"{len(failed)} dashboard(s) failed to import")
 
+                if reset_dashboards:
+                    existing = " over those the project has"
+                elif update_config:
+                    existing = ", keeping those the project already has"
+                else:
+                    existing = ""
                 _step_done(
                     "Dashboard import completed",
-                    f"Would import {len(template_dashboard_paths)} dashboard(s)"
-                    + (
-                        " over those the project has"
-                        if reset_dashboards
-                        else ", keeping those the project already has"
-                        if update_config
-                        else ""
-                    ),
+                    f"Would import {len(template_dashboard_paths)} dashboard(s){existing}",
                 )
                 success_count += 1
-                # `imported`/`failed` are only bound in the non-dry-run branch above.
+                # `imported` is only bound in the non-dry-run branch above, and a
+                # failed import raised there, so none failed here.
                 _imp = locals().get("imported") or []
-                _fld = locals().get("failed") or []
-                _done = [sum(r.get("status") == s for r in _imp) for s in DASHBOARD_STATUSES]
-                _rec(
-                    "dashboard_import",
-                    "success",
-                    " / ".join(
-                        f"{n} {status}" for n, status in zip(_done, DASHBOARD_STATUSES, strict=True)
-                    )
-                    + f" / {len(_fld)} failed",
-                )
+                _counts = [
+                    f"{sum(r.get('status') == s for r in _imp)} {s}" for s in DASHBOARD_STATUSES
+                ]
+                _rec("dashboard_import", "success", " / ".join(_counts) + " / 0 failed")
             except Exception as e:
                 rich_print_checked_statement(f"Dashboard import failed: {escape(str(e))}", "error")
                 _rec("dashboard_import", "failed", str(e))

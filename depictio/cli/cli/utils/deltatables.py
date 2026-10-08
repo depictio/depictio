@@ -414,6 +414,29 @@ def clustering_columns(
     return [c for c in candidates if c in present]
 
 
+# The names deltalake reads a session token from in the environment, in any case: a bare
+# TOKEN as well as AWS_SESSION_TOKEN.
+_SESSION_TOKEN_NAMES = ("aws_session_token", "aws_token", "session_token", "token")
+
+
+def delta_storage_options(storage_options: PolarsStorageOptions) -> dict:
+    """The options deltalake and polars get for Depictio's S3: the model's, and an empty
+    session token when the environment holds one issued for another access key.
+
+    deltalake fills in every option it is not given from the environment, a session
+    token included, and sends it with the keys it is given: the user's own AWS session
+    token would reach Depictio's S3, the local server's included. An option given wins
+    over the environment, and there is no way to give none: it is given empty.
+    """
+    options = storage_options.model_dump()
+    # Kept when it goes with the key given: temporary credentials exported for that key.
+    if os.environ.get("AWS_ACCESS_KEY_ID") != storage_options.aws_access_key_id and any(
+        name.lower() in _SESSION_TOKEN_NAMES for name in os.environ
+    ):
+        options["aws_session_token"] = ""
+    return options
+
+
 def delta_table_stats(
     destination_file: str, storage_options: PolarsStorageOptions
 ) -> tuple[int, int]:
@@ -427,7 +450,7 @@ def delta_table_stats(
         from deltalake import DeltaTable
 
         actions = DeltaTable(
-            destination_file, storage_options=storage_options.model_dump()
+            destination_file, storage_options=delta_storage_options(storage_options)
         ).get_add_actions(flatten=True)
         cols = actions.column_names
         size = sum(actions.column("size_bytes").to_pylist()) if "size_bytes" in cols else 0
@@ -456,7 +479,7 @@ def sink_delta_table(
         raise AttributeError("This polars build has no LazyFrame.sink_delta")
     sink_delta(
         destination_file,
-        storage_options=storage_options.model_dump(),
+        storage_options=delta_storage_options(storage_options),
         delta_write_options={"schema_mode": "overwrite"},
         mode="overwrite",
     )
@@ -490,7 +513,7 @@ def write_delta_table(
 
     aggregated_df.write_delta(
         destination_file,
-        storage_options=storage_options.model_dump(),
+        storage_options=delta_storage_options(storage_options),
         delta_write_options={"schema_mode": "overwrite"},
         mode="overwrite",
     )
@@ -523,7 +546,7 @@ def read_delta_table(
     Raises:
         Exception: If reading the Delta table fails.
     """
-    opts = storage_options.model_dump()
+    opts = delta_storage_options(storage_options)
     try:
         df = pl.read_delta(destination_file, storage_options=opts)
         logger.debug(f"Delta table read from {destination_file}.")
