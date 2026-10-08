@@ -207,6 +207,35 @@ class TestServerContext:
                 policy=_Policy(credentialed_s3_buckets="lab-shared/results"),
             )
 
+    def test_the_project_keys_for_a_listed_bucket_win_over_the_public_list(self):
+        """A bucket listed as public may still hold objects only its keys can read."""
+        target = _resolve(
+            "s3://lab-bucket/private/x.csv",
+            project=_project(),
+            policy=_Policy(public_s3_buckets="lab-bucket"),
+        )
+        assert target.kind == "project"
+        assert target.unsigned is False
+        assert target.access_key_id == "PROJECTKEY"
+
+    def test_keys_for_another_bucket_leave_a_public_bucket_unsigned(self):
+        target = _resolve(
+            "s3://open-data/x.parquet",
+            project=_project(),
+            policy=_Policy(public_s3_buckets="open-data"),
+        )
+        assert target.kind == "public"
+        assert target.access_key_id is None
+
+    def test_keyless_settings_for_a_listed_bucket_leave_it_public(self):
+        target = _resolve(
+            "s3://lab-bucket/x.csv",
+            project=_project(access_key_id="", secret_access_key=""),
+            policy=_Policy(public_s3_buckets="lab-bucket"),
+        )
+        assert target.kind == "public"
+        assert target.endpoint_url is None
+
     def test_the_project_storage_wins_over_the_credentialed_list(self):
         target = _resolve(
             "s3://lab-shared/x.csv",
@@ -282,6 +311,15 @@ class TestCliContext:
             "s3://open-data/x", context="cli", policy=_Policy(public_s3_buckets="open-data")
         )
         assert target.kind == "public"
+
+    def test_the_project_keys_for_this_bucket_come_before_the_public_list(self):
+        target = _resolve(
+            "s3://lab-bucket/x",
+            context="cli",
+            project=_project(),
+            policy=_Policy(public_s3_buckets="lab-bucket"),
+        )
+        assert target.kind == "project"
 
     def test_then_the_project(self):
         target = _resolve("s3://lab-bucket/x", context="cli", project=_project())
