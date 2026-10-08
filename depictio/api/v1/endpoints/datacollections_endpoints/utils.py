@@ -637,6 +637,9 @@ def _push_workflow_and_ingest(
             {"_id": project_oid},
             {"$pull": {"workflows": {"_id": ObjectId(str(workflow.id))}}},
         )
+        # Re-raised as is: a refused or failed remote read (RemoteURLRejected,
+        # RemoteFetchFailed, S3AccessError) reaches its handler in
+        # depictio/api/main.py, which answers 400, 422 or 502 with a code.
         raise
 
     return {

@@ -23,7 +23,6 @@ instead of degrading to ``None``, because silently reading a private bucket
 with the wrong credentials is exactly the failure the feature exists to avoid.
 """
 
-from datetime import datetime
 from urllib.parse import urlparse
 
 from bson import ObjectId
@@ -48,6 +47,7 @@ from depictio.models.s3_access import (
     probe_bucket,
     project_target,
 )
+from depictio.models.timestamps import utc_now_str
 
 
 class ProjectStorageUnusable(RuntimeError):
@@ -122,9 +122,10 @@ class ProjectStorageConfigIn(BaseModel):
     ``bucket`` is required: the storage test probes that bucket and nothing
     else (an endpoint-wide ``list_buckets`` is denied by gateways that scope a
     key to one bucket). ``secret_access_key`` is optional on update: omitted
-    or null keeps the stored secret, so edits don't require retyping it. An
-    empty ``access_key_id`` means "read without credentials", and drops any
-    stored secret.
+    or null keeps the stored secret, so edits don't require retyping it, as
+    long as the access key ID, the endpoint and the bucket stay the ones it
+    was saved with. An empty ``access_key_id`` means "read without
+    credentials", and drops any stored secret.
     """
 
     endpoint_url: str
@@ -271,6 +272,33 @@ def _user_owns_project(project_dict: dict, current_user) -> bool:
     return any(str(owner.get("_id") or owner.get("id") or "") == user_id for owner in owners)
 
 
+def _refuse_stored_secret_for_new_settings(
+    existing: dict, payload: ProjectStorageConfigIn, access_key_id: str
+) -> None:
+    """422 when a PUT without a secret changes what the stored secret belongs to."""
+    if access_key_id != existing.get("access_key_id"):
+        raise HTTPException(
+            status_code=422,
+            detail="Enter the secret for the new access key: the stored one is for another key.",
+        )
+    changed = [
+        name
+        for name, new, old in (
+            ("endpoint", payload.endpoint_url, existing.get("endpoint_url")),
+            ("bucket", payload.bucket, existing.get("bucket")),
+        )
+        if new != old
+    ]
+    if changed:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Enter the secret again for the new {' and '.join(changed)}: a stored "
+                "secret is only kept for the endpoint and bucket it was saved with."
+            ),
+        )
+
+
 def _set_project_storage(
     project_id: str, payload: ProjectStorageConfigIn, current_user
 ) -> ProjectStorageConfigOut:
@@ -290,8 +318,13 @@ def _set_project_storage(
     elif payload.secret_access_key:
         secret_encrypted = encrypt_secret(payload.secret_access_key)
     else:
-        # Omitted/empty secret keeps whatever is stored: write-only semantics.
+        # Omitted/empty secret keeps whatever is stored: write-only semantics,
+        # for the settings it was saved with only. Kept across a new key, or a
+        # new endpoint or bucket, an old secret would be sent where its owner
+        # never gave it.
         secret_encrypted = existing.get("secret_encrypted")
+        if secret_encrypted:
+            _refuse_stored_secret_for_new_settings(existing, payload, access_key_id)
     if access_key_id and not secret_encrypted:
         # Reads would refuse a key without its secret; say so at save time.
         raise HTTPException(status_code=422, detail="Enter the secret for this access key.")
@@ -301,7 +334,8 @@ def _set_project_storage(
     # db_init call never ran.
     ensure_project_storage_indexes(project_storage_collection)
 
-    updated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Naive UTC, like every stored timestamp: the viewer reads it as UTC.
+    updated_at = utc_now_str()
     project_storage_collection.update_one(
         {"project_id": project_oid},
         {

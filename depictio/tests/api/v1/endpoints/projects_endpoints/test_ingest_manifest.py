@@ -4,7 +4,8 @@ Same philosophy as the create_from_url tests: the full scan → remote read →
 Delta pipeline is covered by the CLI unit tests; here we prove the endpoint's
 contract — SSRF-gateway rejection precedes any database access, the type→tag
 mapping and per-DC report are correct, the manifest scan config is persisted
-on success and reverted on failure.
+on success and reverted on failure, with the DC's File records, and for that
+DC only.
 """
 
 from unittest.mock import patch
@@ -123,6 +124,8 @@ def mock_db(monkeypatch):
     database = client["depictio_test"]
     with (
         patch.object(manifest_ingest, "projects_collection", database["projects"]),
+        # File records: snapshotted before each DC's scan, restored on failure.
+        patch.object(manifest_ingest, "files_collection", database["files"]),
         patch.object(dc_utils, "projects_collection", database["projects"]),
         patch.object(dc_utils, "tokens_collection", database["tokens"]),
         # The ingest flow resolves per-project storage credentials.
@@ -256,6 +259,118 @@ def test_failed_ingest_reverts_scan_config(mock_db, served_manifest):
     stored = mock_db["projects"].find_one({"_id": doc["_id"]})
     scan = stored["workflows"][0]["data_collections"][0]["config"]["scan"]
     assert scan["mode"] == "url"
+
+
+def _scan_like_the_cli(mock_db, outcomes: dict[tuple[str, str], dict]):
+    """Fake CLI helper whose scan does what scan.py's manifest scan does to
+    the File records (drops those absent from the manifest, registers one per
+    entry), and whose answer per (dc_id, mode) comes from ``outcomes``."""
+
+    def _helper(CLI_config, wf, dc_id, mode, command_parameters=None):
+        if mode == "scan":
+            mock_db["files"].delete_many({"data_collection_id": ObjectId(dc_id)})
+            mock_db["files"].insert_many(
+                [
+                    {"data_collection_id": ObjectId(dc_id), "file_location": url}
+                    for url in ("https://example.org/s1.csv", "https://example.org/s2.csv")
+                ]
+            )
+        return outcomes.get((dc_id, mode), {"result": "success"})
+
+    return _helper
+
+
+def test_failed_ingest_restores_the_dc_files(mock_db, served_manifest):
+    """The manifest scan swaps the DC's File records for the manifest's
+    entries; a run that then fails must put the old ones back, ids included."""
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts"])
+    mock_db["projects"].insert_one(doc)
+    mock_db["tokens"].insert_one({"user_id": user.id, "access_token": "x"})
+    dc_oid = doc["workflows"][0]["data_collections"][0]["_id"]
+    before = [
+        {
+            "_id": ObjectId(),
+            "data_collection_id": dc_oid,
+            "file_location": "https://example.org/counts.csv",
+        }
+    ]
+    mock_db["files"].insert_many([dict(f) for f in before])
+    helper = _scan_like_the_cli(
+        mock_db, {(str(dc_oid), "process"): {"result": "error", "message": "boom"}}
+    )
+
+    with (
+        patch.object(dc_utils, "_build_cli_config_for_user", return_value=object()),
+        patch("depictio.cli.cli.utils.helpers.process_data_collection_helper", side_effect=helper),
+    ):
+        report = _call(project_id=str(doc["_id"]), user=user)
+
+    assert report.matched[0].status == "failed"
+    assert list(mock_db["files"].find({"data_collection_id": dc_oid})) == before
+
+
+def test_a_failed_dc_reverts_only_its_own_scan_config(mock_db):
+    """The revert is one DC's scan block, not a write-back of the whole
+    ``workflows`` array read at the start: the flexible_metadata the upsert
+    wrote for a DC ingested earlier in the same call, and an edit made
+    meanwhile, both survive."""
+    user = _user()
+    doc = _project_doc(user.id, tags=["annotations", "counts"])
+    mock_db["projects"].insert_one(doc)
+    mock_db["tokens"].insert_one({"user_id": user.id, "access_token": "x"})
+    annotations_id, counts_id = (str(dc["_id"]) for dc in doc["workflows"][0]["data_collections"])
+    manifest = """
+    [
+      {"id": "s1", "type": "annotations", "url": "https://example.org/a1.csv"},
+      {"id": "s1", "type": "counts", "url": "https://example.org/s1.csv"}
+    ]
+    """
+    projects = mock_db["projects"]
+
+    def _helper(CLI_config, wf, dc_id, mode, command_parameters=None):
+        if dc_id == annotations_id and mode == "process":
+            # What the deltatable upsert writes for the DC it just materialized.
+            projects.update_one(
+                {"_id": doc["_id"]},
+                {"$set": {"workflows.0.data_collections.0.flexible_metadata": {"size": 1}}},
+            )
+            # And someone renames the project while the call runs.
+            projects.update_one({"_id": doc["_id"]}, {"$set": {"name": "renamed"}})
+        if dc_id == counts_id and mode == "process":
+            return {"result": "error", "message": "boom"}
+        return {"result": "success"}
+
+    with (
+        _serve(manifest),
+        patch.object(dc_utils, "_build_cli_config_for_user", return_value=object()),
+        patch("depictio.cli.cli.utils.helpers.process_data_collection_helper", side_effect=_helper),
+    ):
+        report = _call(project_id=str(doc["_id"]), user=user)
+
+    by_tag = {m.data_collection_tag: m.status for m in report.matched}
+    assert by_tag == {"annotations": "ingested", "counts": "failed"}
+    stored = projects.find_one({"_id": doc["_id"]})
+    annotations, counts = stored["workflows"][0]["data_collections"]
+    assert annotations["flexible_metadata"] == {"size": 1}
+    assert annotations["config"]["scan"]["mode"] == "manifest"
+    assert counts["config"]["scan"]["mode"] == "url"
+    assert stored["name"] == "renamed"
+
+
+def test_an_aborted_call_reverts_the_dc_it_had_started(mock_db, served_manifest):
+    """An HTTPException out of the ingest (no API token) aborts the call: the
+    DC whose config was already written goes back to its own scan config."""
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts"])
+    mock_db["projects"].insert_one(doc)  # and no token on file
+
+    with pytest.raises(HTTPException) as exc:
+        _call(project_id=str(doc["_id"]), user=user)
+
+    assert exc.value.status_code == 401
+    stored = mock_db["projects"].find_one({"_id": doc["_id"]})
+    assert stored["workflows"][0]["data_collections"][0]["config"]["scan"]["mode"] == "url"
 
 
 # One entry on a host the gateway rejects (the other host passes).

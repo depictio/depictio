@@ -605,3 +605,27 @@ def test_async_run_all_preflight_failures_still_returns_run_id(mock_db):
         assert polled.success is False
         assert [r.status for r in polled.refreshed] == ["failed"]
         assert "Could not fetch manifest" in (polled.refreshed[0].message or "")
+
+
+def test_async_run_records_each_dc_under_its_own_scan_mode(mock_db, served_manifest):
+    """Refresh re-reads url DCs too; the run must not record them as manifest."""
+    from depictio.api.v1.monitoring import store as monitoring_store
+
+    user = _user()
+    doc = _project_doc(user.id, tags=["counts"])
+    doc["workflows"] += _project_doc(user.id, tags=["sites"], scan_mode="url")["workflows"]
+    mock_db["projects"].insert_one(doc)
+
+    with (
+        patch.object(monitoring_store, "ingestion_runs_collection", mock_db["ingestion_runs"]),
+        patch("depictio.api.v1.celery_tasks.manifest_refresh_dc_task"),
+    ):
+        report = manifest_ingest._refresh_manifest_in_project(
+            project_id=str(doc["_id"]), current_user=user, async_run=True
+        )
+
+    run_doc = mock_db["ingestion_runs"].find_one({"run_id": report.run_id})
+    assert {d["tag"]: d["scan_mode"] for d in run_doc["data_collections"]} == {
+        "counts": "manifest",
+        "sites": "url",
+    }

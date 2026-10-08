@@ -300,6 +300,110 @@ def test_path_like_template_id_422_before_any_lookup(mock_db):
     assert mock_db["projects"].count_documents({}) == 0
 
 
+def _custom_template(tmp_path, scan_overrides: dict[str, dict], extra: dict | None = None):
+    """The reference template with per-tag ``scan_parameters`` overrides (and
+    ``extra`` top-level keys), on disk.
+
+    Returns the patch that makes ``resolve_template`` load it.
+    """
+    from pathlib import Path
+
+    import yaml
+
+    from depictio.cli.cli.utils import templates as templates_module
+
+    source = Path(templates_module.__file__).resolve().parents[4] / "depictio" / "projects"
+    config = yaml.safe_load((source / TEMPLATE_ID / "template.yaml").read_text())
+    for workflow in config["workflows"]:
+        for dc in workflow["data_collections"]:
+            dc["config"]["scan"]["scan_parameters"].update(
+                scan_overrides.get(dc["data_collection_tag"], {})
+            )
+    config.update(extra or {})
+    target = tmp_path / "template.yaml"
+    target.write_text(yaml.safe_dump(config))
+    return patch.object(templates_module, "locate_template", return_value=target)
+
+
+# Same rows as MANIFEST_JSON, with the id under "sample".
+MANIFEST_SAMPLE_COLUMN = """
+[
+  {"sample": "s1", "type": "samples", "url": "https://example.org/s1.csv"},
+  {"sample": "s2", "type": "samples", "url": "https://example.org/s2.csv"},
+  {"sample": "s1", "type": "measurements", "url": "https://example.org/m1.csv"}
+]
+"""
+
+
+def test_coverage_reads_the_manifest_with_the_dcs_columns(mock_db, tmp_path):
+    """A template whose DCs say ``id_field: sample`` reads a manifest without
+    an ``id`` column; the coverage check must parse it the same way."""
+    overrides = {tag: {"id_field": "sample"} for tag in ("samples", "measurements")}
+    with _custom_template(tmp_path, overrides), _served(MANIFEST_SAMPLE_COLUMN):
+        report = _call(dry_run=True)
+
+    assert report.success is True
+    by_tag = {r.data_collection_tag: r.entries for r in report.ingestion}
+    assert by_tag == {"samples": 2, "measurements": 1}
+
+
+def test_dcs_reading_different_columns_422(mock_db, tmp_path):
+    overrides = {"samples": {"id_field": "sample"}}  # measurements keeps "id"
+    with (
+        _custom_template(tmp_path, overrides),
+        _served(MANIFEST_SAMPLE_COLUMN),
+        pytest.raises(HTTPException) as exc,
+    ):
+        _call(dry_run=True)
+
+    assert exc.value.status_code == 422
+    assert "samples read id from 'sample'" in exc.value.detail
+    assert "measurements read id from 'id'" in exc.value.detail
+
+
+def test_an_empty_manifest_type_reads_the_tag_like_refresh_does(mock_db, tmp_path):
+    """Coverage check and refresh pre-flight share one rule: a missing or
+    empty ``manifest_type`` reads the DC's tag, never rows of type ''."""
+    with _custom_template(tmp_path, {"samples": {"manifest_type": ""}}), _served():
+        report = _call(dry_run=True)
+
+    assert {r.data_collection_tag: r.entries for r in report.ingestion}["samples"] == 2
+    assert manifest_ingest._manifest_type_of({"manifest_type": ""}, "samples") == "samples"
+    assert manifest_ingest._manifest_type_of({}, "samples") == "samples"
+    assert manifest_ingest._manifest_type_of({"manifest_type": " counts "}, "x") == "counts"
+
+
+def test_template_links_are_stored_with_the_new_dc_ids(mock_db, tmp_path):
+    """A template (an exported bundle, say) links its DCs by tag; the project
+    is stored with the ids of its own new DCs next to those tags."""
+    link = {
+        "source_dc_tag": "samples",
+        "source_column": "depictio_manifest_id",
+        "target_dc_tag": "measurements",
+        "target_type": "table",
+    }
+    with (
+        _custom_template(tmp_path, {}, extra={"links": [link]}),
+        _served(),
+        patch.object(from_manifest, "_run_dc_ingest", return_value=(True, None)),
+        patch(
+            "depictio.api.v1.endpoints.dashboards_endpoints.routes.import_dashboard_yaml_content",
+            return_value={"success": True, "dashboard_id": str(ObjectId()), "title": "t"},
+        ),
+    ):
+        report = _call(project_name="linked")
+
+    stored = mock_db["projects"].find_one({"_id": ObjectId(report.project_id)})
+    ids = {
+        dc["data_collection_tag"]: str(dc["_id"])
+        for wf in stored["workflows"]
+        for dc in wf["data_collections"]
+    }
+    (stored_link,) = stored["links"]
+    assert str(stored_link["source_dc_id"]) == ids["samples"]
+    assert str(stored_link["target_dc_id"]) == ids["measurements"]
+
+
 def test_unknown_template_404_hides_server_paths(mock_db):
     from pathlib import Path
 
