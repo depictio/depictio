@@ -59,6 +59,17 @@ describe('runStorageFromFields', () => {
     expect(runStorageFromFields({ ...EMPTY_RUN_STORAGE_FIELDS, region: '   ' })).toBeNull();
   });
 
+  it('is null without the access key or its secret, whatever else is given', () => {
+    const endpoint = { ...EMPTY_RUN_STORAGE_FIELDS, endpointUrl: 'https://s3.example.org' };
+    expect(runStorageFieldsBlank(endpoint)).toBe(false);
+    expect(runStorageFromFields(endpoint)).toBeNull();
+    expect(runStorageFromFields({ ...endpoint, accessKeyId: 'AKIAEXAMPLE' })).toBeNull();
+    expect(runStorageFromFields({ ...endpoint, secretAccessKey: 'very-secret' })).toBeNull();
+    expect(
+      runStorageFromFields({ ...endpoint, accessKeyId: '  ', secretAccessKey: ' \t ' }),
+    ).toBeNull();
+  });
+
   it('trims every field and sends an empty one as null', () => {
     expect(
       runStorageFromFields({
@@ -70,21 +81,19 @@ describe('runStorageFromFields', () => {
     ).toEqual(STORAGE);
   });
 
-  it('takes an endpoint alone (a bucket anyone may read, elsewhere than Amazon)', () => {
+  it('sends the endpoint and region as null when left empty (Amazon S3, default region)', () => {
     expect(
-      runStorageFromFields({ ...EMPTY_RUN_STORAGE_FIELDS, endpointUrl: 'https://s3.example.org' }),
-    ).toEqual({
-      endpoint_url: 'https://s3.example.org',
-      region: null,
-      access_key_id: null,
-      secret_access_key: null,
-    });
+      runStorageFromFields({
+        ...EMPTY_RUN_STORAGE_FIELDS,
+        accessKeyId: 'AKIAEXAMPLE',
+        secretAccessKey: 'very-secret',
+      }),
+    ).toEqual({ ...STORAGE, endpoint_url: null });
   });
 });
 
 describe('runStorageFieldErrors', () => {
-  it('accepts empty fields and a complete set', () => {
-    expect(runStorageFieldErrors(EMPTY_RUN_STORAGE_FIELDS)).toEqual({});
+  it('accepts a key and its secret, with or without an endpoint and region', () => {
     expect(
       runStorageFieldErrors({
         endpointUrl: 'https://s3.example.org',
@@ -93,25 +102,44 @@ describe('runStorageFieldErrors', () => {
         secretAccessKey: 'secret',
       }),
     ).toEqual({});
+    expect(
+      runStorageFieldErrors({
+        ...EMPTY_RUN_STORAGE_FIELDS,
+        accessKeyId: 'AKIA',
+        secretAccessKey: 'secret',
+      }),
+    ).toEqual({});
   });
 
-  it('wants a key and its secret together', () => {
-    expect(
-      runStorageFieldErrors({ ...EMPTY_RUN_STORAGE_FIELDS, accessKeyId: 'AKIA' }),
-    ).toHaveProperty('secretAccessKey');
+  it('wants the access key and its secret, and says first that both are missing', () => {
+    for (const fields of [
+      EMPTY_RUN_STORAGE_FIELDS,
+      { ...EMPTY_RUN_STORAGE_FIELDS, endpointUrl: 'https://s3.example.org', region: 'eu-west-1' },
+      { ...EMPTY_RUN_STORAGE_FIELDS, accessKeyId: '  ', secretAccessKey: ' ' },
+    ]) {
+      const errors = runStorageFieldErrors(fields);
+      expect(Object.keys(errors)).toEqual(['accessKeyId', 'secretAccessKey']);
+      expect(Object.values(errors)[0]).toBe('Enter the access key and its secret.');
+    }
+  });
+
+  it('says which of the two is missing', () => {
+    expect(runStorageFieldErrors({ ...EMPTY_RUN_STORAGE_FIELDS, accessKeyId: 'AKIA' })).toEqual({
+      secretAccessKey: 'Enter the secret that goes with this access key.',
+    });
     expect(
       runStorageFieldErrors({ ...EMPTY_RUN_STORAGE_FIELDS, secretAccessKey: 'secret' }),
-    ).toHaveProperty('accessKeyId');
+    ).toEqual({ accessKeyId: 'Enter the access key this secret goes with.' });
   });
 
   it('refuses an endpoint without its scheme and a region that is not a plain name', () => {
     const errors = runStorageFieldErrors({
-      ...EMPTY_RUN_STORAGE_FIELDS,
       endpointUrl: 's3.example.org',
       region: 'eu west 1',
+      accessKeyId: 'AKIA',
+      secretAccessKey: 'secret',
     });
-    expect(errors).toHaveProperty('endpointUrl');
-    expect(errors).toHaveProperty('region');
+    expect(Object.keys(errors)).toEqual(['endpointUrl', 'region']);
   });
 });
 

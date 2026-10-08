@@ -897,9 +897,10 @@ async def test_run_storage(
 
     The probes of ``POST /projects/{project_id}/storage/test`` (HeadBucket,
     region detection, one one-key listing under the location's prefix), for
-    the settings of a project not created yet. Settings no read could use and
-    failed probes answer ``success: false``; the detected region is answered,
-    not saved.
+    the settings of a project not created yet. Settings without an access key
+    and its secret are a 422; other settings no read could use, and failed
+    probes, answer ``success: false``. The detected region is answered, not
+    saved.
     """
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")

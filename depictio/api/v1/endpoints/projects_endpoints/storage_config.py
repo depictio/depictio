@@ -26,8 +26,11 @@ Settings can also arrive before their project exists: a run folder in a
 private bucket is browsed, inspected and previewed with the settings typed in
 next to it (:class:`RunStorageIn`, validated by :meth:`RunStorageIn.settings_for`
 exactly as a saved config is), and ``POST /projects/from_run`` stores them on
-the project it creates. Until then they live in the request body only: never
-logged, never answered back, never written anywhere.
+the project it creates. Those always carry an access key and its secret: a
+bucket read without credentials is one an administrator listed
+(``DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS``), never one a user names. Until then
+they live in the request body only: never logged, never answered back, never
+written anywhere.
 """
 
 import re
@@ -204,13 +207,21 @@ class StorageTestResult(BaseModel):
     detected_region: str | None = None
 
 
+RUN_STORAGE_KEYS_REQUIRED = (
+    "Give the bucket's access key and secret: a bucket without credentials is read only "
+    "when an administrator allows it."
+)
+
+
 class RunStorageIn(BaseModel):
     """Storage settings typed in with an ``s3://`` run folder, before its project exists.
 
     No bucket field: the bucket is the one the location names
     (:meth:`settings_for`). An empty ``endpoint_url`` means AWS S3, an empty
-    ``region`` the default one. The secret is a ``SecretStr`` so a model that
-    ends up in a log line or a traceback shows it masked.
+    ``region`` the default one. The access key and its secret are required
+    (:meth:`require_keys`), unlike on ``PUT /projects/{id}/storage``. The
+    secret is a ``SecretStr`` so a model that ends up in a log line or a
+    traceback shows it masked.
     """
 
     endpoint_url: str | None = None
@@ -218,17 +229,32 @@ class RunStorageIn(BaseModel):
     access_key_id: str | None = None
     secret_access_key: SecretStr | None = None
 
+    def require_keys(self) -> None:
+        """Refuse settings without an access key or without its secret (422).
+
+        Blank and whitespace-only count as missing. Without this, settings
+        with no keys would read any public bucket unsigned, at any endpoint,
+        outside the buckets an administrator lists
+        (``DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS``). The detail is fixed text:
+        neither value is echoed.
+        """
+        key = (self.access_key_id or "").strip()
+        secret = self.secret_access_key.get_secret_value() if self.secret_access_key else ""
+        if not key or not secret.strip():
+            raise HTTPException(status_code=422, detail=RUN_STORAGE_KEYS_REQUIRED)
+
     def settings_for(self, location: str) -> ProjectStorageConfigIn:
         """These settings for the bucket of ``location``, validated as a saved config is.
 
-        Built through :class:`ProjectStorageConfigIn`, so its rules apply as
-        they are, then checked as ``PUT /projects/{id}/storage`` checks before
-        storing: the endpoint gating (400), the instance's own bucket
-        (``S3AccessRefused``), a key without its secret (422). A malformed
-        location is ``S3AccessRefused`` too. Nothing goes out but the DNS
-        lookup of the endpoint gating.
+        Missing keys first (:meth:`require_keys`, 422). Then built through
+        :class:`ProjectStorageConfigIn`, so its rules apply as they are, and
+        checked as ``PUT /projects/{id}/storage`` checks before storing: the
+        endpoint gating (400), the instance's own bucket (``S3AccessRefused``).
+        A malformed location is ``S3AccessRefused`` too. Nothing goes out but
+        the DNS lookup of the endpoint gating.
         """
         bucket, _key = split_s3_url(location)
+        self.require_keys()
         secret = self.secret_access_key.get_secret_value() if self.secret_access_key else None
         try:
             payload = ProjectStorageConfigIn(
@@ -625,15 +651,17 @@ def _test_run_storage(location: str, storage: RunStorageIn) -> StorageTestResult
     """Probe the bucket of ``location`` with settings typed in and stored nowhere.
 
     The probes of :func:`_test_project_storage`, the listing under the
-    location's prefix. Settings no read could use and failed probes answer
-    ``success: false`` with the message a read would get; a malformed
-    location raises ``S3AccessRefused``, since it is the request at fault,
-    not the settings. The detected region is answered, not written anywhere.
+    location's prefix. Other settings no read could use and failed probes
+    answer ``success: false`` with the message a read would get. A malformed
+    location raises ``S3AccessRefused`` and settings without both keys a 422
+    ``HTTPException``, since it is the request at fault, not the settings.
+    The detected region is answered, not written anywhere.
     """
     from botocore.exceptions import ClientError
 
     bucket, key = split_s3_url(location)
     prefix = f"{key.strip('/')}/" if key.strip("/") else ""
+    storage.require_keys()
     try:
         config = read_settings(storage.settings_for(location))
         target = project_target(config, bucket, prefix, timeout_s=remote_policy().timeout_s)

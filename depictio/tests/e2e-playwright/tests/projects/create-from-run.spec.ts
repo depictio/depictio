@@ -953,8 +953,12 @@ test.describe("Create project from a run folder", () => {
     await expect(explanation).toContainText("Project settings, Storage");
     expect(inspects[0]).toMatchObject({ method: "GET", value: PRIVATE_ROOT, storage: null });
 
-    // A key without its secret cannot go on.
+    // Without the access key and its secret, or with a key alone, it cannot go on.
     const submit = page.locator("[data-testid='create-from-run-submit']");
+    await expect(page.locator("[data-testid='run-submit-disabled-reason']")).toContainText(
+      "Enter the access key and its secret.",
+    );
+    await expect(submit).toBeDisabled();
     await section.locator("[data-testid='run-private-bucket-endpoint']").fill(PRIVATE_ENDPOINT);
     await section.locator("[data-testid='run-private-bucket-access-key']").fill(PRIVATE_KEY);
     await expect(page.locator("[data-testid='run-submit-disabled-reason']")).toContainText(

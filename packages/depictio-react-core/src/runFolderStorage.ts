@@ -7,6 +7,9 @@
  * and with nothing else. They live in component state only (never in browser
  * storage, a URL or the recent folders) and are stored server-side only when
  * the project is created, as its storage settings.
+ *
+ * They always include an access key and its secret: a bucket read without
+ * credentials is one the server's administrator lists, never one named here.
  */
 
 import type { RunStorageIn } from './api';
@@ -60,15 +63,18 @@ export function runStorageFieldsBlank(fields: RunStorageFields): boolean {
 }
 
 /** The request body for the fields: trimmed, an empty field sent as null.
- *  Null when every field is empty (no settings to send). */
+ *  Null without the access key or without its secret: the server refuses
+ *  settings that lack either, so none are sent. */
 export function runStorageFromFields(fields: RunStorageFields): RunStorageIn | null {
-  if (runStorageFieldsBlank(fields)) return null;
   const value = (text: string) => text.trim() || null;
+  const accessKeyId = value(fields.accessKeyId);
+  const secretAccessKey = value(fields.secretAccessKey);
+  if (!accessKeyId || !secretAccessKey) return null;
   return {
     endpoint_url: value(fields.endpointUrl),
     region: value(fields.region),
-    access_key_id: value(fields.accessKeyId),
-    secret_access_key: value(fields.secretAccessKey),
+    access_key_id: accessKeyId,
+    secret_access_key: secretAccessKey,
   };
 }
 
@@ -79,7 +85,10 @@ const REGION_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 export type RunStorageFieldErrors = Partial<Record<keyof RunStorageFields, string>>;
 
 /** What the server would refuse in the fields, per field, in the words the
- *  form shows. Empty when they can be sent. */
+ *  form shows. Empty when they can be sent. The access key and its secret
+ *  are both required, so empty fields are refused too: check them only
+ *  while the section is in use. The first error says what is missing, both
+ *  keys at once when neither is given. */
 export function runStorageFieldErrors(fields: RunStorageFields): RunStorageFieldErrors {
   const errors: RunStorageFieldErrors = {};
   const endpoint = fields.endpointUrl.trim();
@@ -92,8 +101,14 @@ export function runStorageFieldErrors(fields: RunStorageFields): RunStorageField
   }
   const key = fields.accessKeyId.trim();
   const secret = fields.secretAccessKey.trim();
-  if (key && !secret) errors.secretAccessKey = 'Enter the secret that goes with this access key.';
-  if (secret && !key) errors.accessKeyId = 'Enter the access key this secret goes with.';
+  if (!key && !secret) {
+    errors.accessKeyId = 'Enter the access key and its secret.';
+    errors.secretAccessKey = 'Enter the secret that goes with the access key.';
+  } else if (!secret) {
+    errors.secretAccessKey = 'Enter the secret that goes with this access key.';
+  } else if (!key) {
+    errors.accessKeyId = 'Enter the access key this secret goes with.';
+  }
   return errors;
 }
 

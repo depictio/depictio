@@ -6,8 +6,11 @@ The POST twins of ``/projects/s3_dirs``, ``/folder_inspect`` and ``/find_runs``,
 settings alone (a ``project`` target, whatever the bucket lists say), they are
 validated exactly as a saved config is, the instance's own bucket stays
 refused, and only the creation stores them, on the project it creates, before
-its ingestion is dispatched. The secret is never logged and never answered
-back: every test here fails if a log record of any level carries it.
+its ingestion is dispatched. They need an access key and its secret: without
+them every route answers 422 before anything is read or stored, so a bucket
+read without credentials stays one an administrator listed. The secret is
+never logged and never answered back: every test here fails if a log record
+of any level carries it.
 
 No network: S3 is the shared stub (``depictio/tests/cli/s3_stubs.py``) or a
 botocore ``Stubber``; Mongo is mongomock.
@@ -209,35 +212,46 @@ def test_the_instance_endpoint_is_exempt_but_not_its_bucket(monkeypatch):
         storage.settings_for(f"s3://{INSTANCE}/projects/")
 
 
-@pytest.mark.parametrize(
-    ("overrides", "says"),
-    [
-        ({"secret_access_key": None}, "Enter the secret for this access key."),
-        ({"access_key_id": None}, "A secret access key needs its access key ID."),
-        ({"access_key_id": "  "}, "A secret access key needs its access key ID."),
-        ({"region": "x@evil.example/"}, "The region must be a plain name"),
-    ],
-)
-def test_settings_no_read_could_use_are_a_422_without_the_secret(overrides, says):
+def _assert_no_chained_input(exc: BaseException):
+    """Nothing chained, so no traceback shows the validation input."""
+    assert exc.__cause__ is None
+    assert exc.__context__ is None or exc.__suppress_context__
+
+
+def test_a_region_no_read_could_use_is_a_422_without_the_secret():
     with pytest.raises(HTTPException) as exc:
-        _storage(**overrides).settings_for(f"s3://{PRIVATE}/runs/")
+        _storage(region="x@evil.example/").settings_for(f"s3://{PRIVATE}/runs/")
     assert exc.value.status_code == 422
-    assert says in exc.value.detail
+    assert "The region must be a plain name" in exc.value.detail
     assert not _echoed(exc.value)
-    # Nothing chained either, so no traceback shows the validation input.
-    assert exc.value.__cause__ is None
-    assert exc.value.__context__ is None or exc.value.__suppress_context__
+    _assert_no_chained_input(exc.value)
 
 
-def test_no_keys_at_all_reads_unsigned_at_the_endpoint():
-    settings_in = _storage(access_key_id=None, secret_access_key=None).settings_for(
-        f"s3://{PRIVATE}/"
-    )
-    target = remote_fetch.s3_read_target(
-        f"s3://{PRIVATE}/",
-        from_run._run_folder_read_config(storage_config.read_settings(settings_in)),
-    )
-    assert (target.kind, target.unsigned, target.endpoint_url) == ("project", True, ENDPOINT)
+# Settings missing the access key, its secret or both; blank and spaces are missing.
+MISSING_KEYS = [
+    pytest.param({"access_key_id": None, "secret_access_key": None}, id="neither"),
+    pytest.param({"access_key_id": "", "secret_access_key": ""}, id="both-empty"),
+    pytest.param({"access_key_id": "  ", "secret_access_key": " \t "}, id="both-spaces"),
+    pytest.param({"secret_access_key": None}, id="no-secret"),
+    pytest.param({"secret_access_key": "   "}, id="secret-spaces"),
+    pytest.param({"access_key_id": None}, id="no-key"),
+    pytest.param({"access_key_id": "  "}, id="key-spaces"),
+]
+
+
+def _assert_keys_required(exc: HTTPException):
+    assert exc.status_code == 422
+    assert exc.detail == storage_config.RUN_STORAGE_KEYS_REQUIRED
+    assert KEY_ID not in exc.detail and not _echoed(exc)
+
+
+@pytest.mark.parametrize("endpoint", ["", ENDPOINT], ids=["aws", "endpoint"])
+@pytest.mark.parametrize("overrides", MISSING_KEYS)
+def test_settings_without_both_keys_are_a_422_that_says_so(endpoint, overrides):
+    with pytest.raises(HTTPException) as exc:
+        _storage(endpoint_url=endpoint, **overrides).settings_for(f"s3://{PRIVATE}/runs/")
+    _assert_keys_required(exc.value)
+    _assert_no_chained_input(exc.value)
 
 
 @pytest.mark.asyncio
@@ -548,7 +562,6 @@ def test_storage_test_failures_use_the_sanitized_mapping(stubbed_s3, secret_neve
     [
         (f"s3://{INSTANCE}/projects/", {}, "instance's own data"),
         (f"s3://{PRIVATE}/", {"endpoint_url": "https://other.example.org"}, "allowlist"),
-        (f"s3://{PRIVATE}/", {"secret_access_key": None}, "Enter the secret"),
     ],
 )
 def test_storage_test_answers_unusable_settings_without_a_request(
@@ -558,6 +571,14 @@ def test_storage_test_answers_unusable_settings_without_a_request(
     assert result.success is False
     assert says in result.message
     assert not _echoed(result)
+
+
+@pytest.mark.parametrize("overrides", MISSING_KEYS)
+def test_storage_test_without_both_keys_is_a_422_not_a_result(no_client, overrides):
+    """A request missing what the settings require, not settings that failed."""
+    with pytest.raises(HTTPException) as exc:
+        storage_config._test_run_storage(f"s3://{PRIVATE}/runs/", _storage(**overrides))
+    _assert_keys_required(exc.value)
 
 
 def test_storage_test_refuses_a_location_that_is_not_s3(no_client):
@@ -649,6 +670,44 @@ def test_invalid_storage_is_refused_before_anything_is_read_or_created(
         _from_run(storage=_storage(endpoint_url="https://192.168.1.10:9000"))
     assert exc.value.status_code == 400
     assert mock_db["projects"].count_documents({}) == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("endpoint", ["", ENDPOINT], ids=["aws", "endpoint"])
+async def test_storage_without_keys_is_a_422_on_every_route(mock_db, no_client, endpoint):
+    """No keys used to read the bucket unsigned, with no endpoint any public AWS bucket,
+    whatever the bucket lists say: every route refuses them, reading and storing nothing."""
+    keyless = _storage(endpoint_url=endpoint, access_key_id=None, secret_access_key=None)
+    location = f"s3://{PRIVATE}/runs/r1/"
+    user = _user()
+    for call in (
+        routes.test_run_storage(
+            RunStorageTestRequest(location=location, storage=keyless), current_user=user
+        ),
+        routes.post_s3_dirs(S3DirsRequest(url=location, storage=keyless), current_user=user),
+        routes.post_folder_inspect(
+            FolderInspectRequest(location=location, storage=keyless), _request(), current_user=user
+        ),
+        routes.post_find_runs(
+            FindRunsRequest(location=location, storage=keyless), _request(), current_user=user
+        ),
+        routes.create_project_from_run(
+            from_run.FromRunRequest(data_root=location, dry_run=True, storage=keyless),
+            _request(),
+            current_user=user,
+        ),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await call
+        _assert_keys_required(exc.value)
+
+    # The creation itself, as the route runs it once the user's CLI token exists.
+    with pytest.raises(HTTPException) as exc:
+        _from_run(data_root=location, current_user=user, storage=keyless)
+    _assert_keys_required(exc.value)
+    assert mock_db["projects"].count_documents({}) == 0
+    assert mock_db["project_storage"].count_documents({}) == 0
+    assert not settings.auth.keys_dir.exists()
 
 
 def test_storage_with_a_local_folder_is_ignored(mock_db, tmp_path):

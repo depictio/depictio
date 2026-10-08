@@ -4144,8 +4144,9 @@ export interface FromRunRequest {
  *  they are for exists (`RunStorageIn` server-side). There is no bucket
  *  field: the bucket is the one the `s3://` location names. An empty
  *  `endpoint_url` means Amazon S3, an empty `region` the default one. The
- *  secret only ever travels in a request body, never in a URL, and is never
- *  echoed back. */
+ *  access key and its secret are required: the server answers 422 without
+ *  either. The secret only ever travels in a request body, never in a URL,
+ *  and is never echoed back. */
 export interface RunStorageIn {
   endpoint_url: string | null;
   region: string | null;
@@ -4429,8 +4430,9 @@ export async function findRunFolders(
  *  prefix. Nothing is stored, the detected region included: put it in the
  *  region field. Settings no read could use, and a failed connection, come
  *  back as `{success: false, message}`; a location that is not `s3://` (422
- *  `s3_refused`) and a refusal to the caller (403) throw an
- *  `ApiDetailError` carrying the server's `detail`. */
+ *  `s3_refused`), settings without the access key or its secret (422) and a
+ *  refusal to the caller (403) throw an `ApiDetailError` carrying the
+ *  server's `detail`. */
 export async function testRunStorage(
   location: string,
   storage: RunStorageIn,
