@@ -20,6 +20,7 @@ Fan-out is sequential for now; Celery parallelism is a phase-4 concern
 
 import copy
 import os
+import re
 import tempfile
 from urllib.parse import urlparse
 
@@ -922,6 +923,74 @@ def _scan_leaders(
     return leaders, followers
 
 
+# A from_run pre-flight failure whose missing sources are other collections
+# only: ``template_preview`` names a missing dc_ref "collection '<tag>'" and
+# ``from_run._skip_reason`` lists the missing sources in this sentence. Any
+# other wording (a file of its own missing) does not match.
+_MISSING_COLLECTIONS_ONLY = re.compile(
+    r"Not ingested: source\(s\) not found under the data root: "
+    r"(collection '[^']+'(?:, collection '[^']+')*)\."
+)
+
+
+def _missing_collections(message: str) -> list[str]:
+    """The collections a pre-flight failure misses, when they are all it misses."""
+    match = _MISSING_COLLECTIONS_ONLY.fullmatch(message or "")
+    return re.findall(r"collection '([^']+)'", match.group(1)) if match else []
+
+
+def _not_built_detail(refs: list[str], absent: set[str]) -> str:
+    """Why a collection whose own inputs are there is skipped: what it reads is not."""
+
+    def _clause(tags: list[str], adjective: str, state: str) -> str:
+        names = ", ".join(f"'{tag}'" for tag in tags)
+        noun, verb = ("collections", "are") if len(tags) > 1 else ("collection", "is")
+        return f"the {adjective}{noun} {names} it reads {verb} {state}"
+
+    optional = [ref for ref in refs if ref in absent]
+    unbuilt = [ref for ref in refs if ref not in absent]
+    clauses = []
+    if optional:
+        clauses.append(_clause(optional, "optional ", "absent from this run"))
+    if unbuilt:
+        clauses.append(_clause(unbuilt, "", "not built in this run either"))
+    return f"Not built: {', and '.join(clauses)}."
+
+
+def _skip_dependants_of_absent_collections(
+    preflight_failed: list[tuple[str, str, str]],
+    preflight_skipped: list[tuple[str, str, str]],
+) -> tuple[list[tuple[str, str, str]], list[tuple[str, str, str]]]:
+    """Move to the skipped steps a pre-flight failure that only reads skipped collections.
+
+    A required collection whose own files are all there, but which reads
+    (``dc_ref``) an optional collection this run skips, cannot be built for that
+    reason alone: the absence is nominal, so it is skipped, saying which
+    collection it is missing, rather than failed. One that misses a file of its
+    own, or reads a collection that failed, stays failed. Repeated until nothing
+    moves, so a chain built on one absent collection is skipped whole.
+
+    Returns ``(preflight_failed, preflight_skipped)`` with those entries moved.
+    """
+    failed = list(preflight_failed)
+    skipped = list(preflight_skipped)
+    absent = {tag for tag, _dc_id, _message in skipped}
+    unbuilt: set[str] = set()
+    moved = True
+    while moved:
+        moved = False
+        for entry in list(failed):
+            tag, dc_id, message = entry
+            refs = _missing_collections(message)
+            if not refs or any(ref not in absent and ref not in unbuilt for ref in refs):
+                continue
+            failed.remove(entry)
+            skipped.append((tag, dc_id, _not_built_detail(refs, absent)))
+            unbuilt.add(tag)
+            moved = True
+    return failed, skipped
+
+
 def _dispatch_refresh_tasks(
     *,
     project_dict: dict,
@@ -949,8 +1018,9 @@ def _dispatch_refresh_tasks(
     collection whose absence is nominal (an optional template collection this
     run folder never produces), seeded "skipped" rather than "failed" so the
     run can still close "success" around it (see
-    ``_finalize_manifest_refresh_run``). Both default to empty, so the
-    manifest refresh flow, which never has one, is unaffected.
+    ``_finalize_manifest_refresh_run``). So is a failure that only misses such
+    a collection: see ``_skip_dependants_of_absent_collections``. Both default
+    to empty, so the manifest refresh flow, which never has one, is unaffected.
 
     A recipe DC's payload carries ``depends_on`` (see ``_recipe_dependencies``)
     for every dc_ref that still has a step *in this run* (``seeded_tags``
@@ -989,7 +1059,9 @@ def _dispatch_refresh_tasks(
         IngestionStep,
     )
 
-    skipped = preflight_skipped or []
+    preflight_failed, skipped = _skip_dependants_of_absent_collections(
+        preflight_failed, preflight_skipped or []
+    )
     modes = scan_modes or {}
     run_id = uuid4().hex
     # Pre-flight failures first, then pre-flight skips, then the DCs a worker
