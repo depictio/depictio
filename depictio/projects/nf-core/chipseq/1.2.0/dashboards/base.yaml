@@ -275,19 +275,20 @@ main_dashboard:
     aggregation: median
     column_name: frip_score
     column_type: float64
-    secondary_layout: coverage
-    coverage_max: 1
+    secondary_layout: threshold
+    threshold_value: 0.01
+    threshold_direction: min
     display:
       icon_name: mdi:target
       icon_color: lime
-      caption: median share of reads in peaks
+      caption: median; ENCODE wants at least 0.01
       link: tab:MultiQC
-      decimals: 2
+      decimals: 3
     section: Key figures
     tag: cs-ov-kf-frip
     index: ov-kf-frip
     title: FRiP
-    description: Median fraction of each ChIP's reads falling inside its called peaks, the ChIP signal-to-noise.
+    description: Median fraction of each ChIP's reads falling inside its called peaks, the ChIP signal-to-noise. The strip counts the ChIPs at or above the ENCODE floor of 1%.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Findings filter bar: the condition, then the antibody, both on the hub.
   - component_type: interactive
@@ -350,6 +351,7 @@ main_dashboard:
     source_tab: Peaks
     source_component: pk-manhattan
     caption: One point per peak at its summit, as high as its significance; colour is the library.
+    hide_legend: true
     tag: cs-ov-hl-manhattan
     index: ov-hl-manhattan
     layout: {x: 0, y: 2, w: 5, h: 4}
@@ -357,10 +359,33 @@ main_dashboard:
     section: Findings
     source_tab: Annotation
     source_component: anno-tss-distance
-    caption: Each library's peaks by distance to the nearest start site; the band is the promoter window.
+    caption: Each library's peaks by distance to the nearest start site, one curve per library; the band is the promoter window.
+    hide_legend: true
     tag: cs-ov-hl-tss
     index: ov-hl-tss
     layout: {x: 5, y: 2, w: 3, h: 4}
+  # The consensus UpSet stacks every antibody's libraries into one plot, too
+  # many sets for a third of the row: this summary counts each antibody's
+  # intervals by how many of its libraries call them.
+  - component_type: figure
+    workflow_tag: chipseq
+    data_collection_tag: macs2_consensus_boolean
+    use: macs2/consensus_boolean
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Consensus intervals per antibody by the number of libraries calling them.
+      d = df.group_by(['consensus_set', 'num_samples']).agg(pl.len().cast(pl.Int64).alias('intervals')).sort(['consensus_set', 'num_samples'])
+      fig = px.bar(d.to_pandas(), x='num_samples', y='intervals', color='consensus_set', barmode='group', labels={'num_samples': 'Libraries calling the interval', 'intervals': 'Consensus intervals', 'consensus_set': ''})
+      fig.update_xaxes(dtick=1)
+      fig.update_layout(margin=dict(t=10))
+    title: Replicate agreement
+    link: tab:Consensus
+    caption: Each antibody's consensus intervals by how many of its libraries call a peak on them; the right-hand bars are the reproducible set.
+    section: Findings
+    tag: cs-ov-consensus-support
+    index: ov-consensus-support
+    layout: {x: 0, y: 6, w: 3, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Differential binding
@@ -368,14 +393,6 @@ main_dashboard:
     caption: One point per interval and contrast; right of the line, more binding in the first condition.
     tag: cs-ov-hl-volcano
     index: ov-hl-volcano
-    layout: {x: 0, y: 6, w: 3, h: 4}
-  - component_type: highlight
-    section: Findings
-    source_tab: Consensus
-    source_component: cons-upset
-    caption: Each bar is one combination of libraries calling the same consensus interval, largest first.
-    tag: cs-ov-hl-upset
-    index: ov-hl-upset
     layout: {x: 3, y: 6, w: 5, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out.
@@ -814,12 +831,11 @@ tabs:
     aggregation: median
     column_name: js_distance
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    secondary_layout: histogram
     display:
       icon_name: mdi:magnet
       icon_color: indigo
-      caption: median, 0 to 1
+      caption: median, with its distribution
       decimals: 2
     section: Signal at a glance
     tag: cs-sig-card-jsd
@@ -846,25 +862,28 @@ tabs:
     title: Genome called enriched
     description: Median share of the genome deepTools calls enriched over the input.
     layout: {x: 4, y: 0, w: 2, h: 2}
+  # preseq's curve ends at a billion reads for every library (the recipe clips
+  # there), so that depth compares the libraries like for like.
   - component_type: card
     workflow_tag: chipseq
-    data_collection_tag: deeptools_plot_profile
-    use: deeptools/plot_profile
-    aggregation: max
-    column_name: signal
+    data_collection_tag: preseq_complexity_curve
+    use: preseq/complexity_curve
+    aggregation: median
+    column_name: expected_distinct
     column_type: float64
-    secondary_layout: top_n
-    breakdown_col: sample
+    filter_expr: col('total_reads') == 1000000000
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
-      icon_name: mdi:chart-line
+      icon_name: mdi:fingerprint
       icon_color: teal
-      caption: the strongest libraries
-      decimals: 2
+      caption: median at 1 billion reads, with its spread
+      decimals: 0
     section: Signal at a glance
-    tag: cs-sig-card-signal
-    index: sig-card-signal
-    title: Strongest metagene signal
-    description: The highest mean signal any library reaches along the metagene window.
+    tag: cs-sig-card-distinct
+    index: sig-card-distinct
+    title: Distinct fragments
+    description: Distinct fragments preseq expects a library to yield at a billion reads; a low value is a library that sequencing deeper will not save.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: chipseq
@@ -875,15 +894,15 @@ tabs:
       y_col: js_distance
       label_col: sample
       size_col: diff_enrichment
-      color_col: auc_ratio
-      color_scale: Viridis
+      # A colour and a legend per ChIP: point labels piled up on the replicates.
+      color_col: sample
       x_title: Share of the genome called enriched
       y_title: Jensen-Shannon distance to the input
       min_size: 8
       max_size: 26
       opacity: 0.85
       marker_outline: true
-      top_n_labels: 5
+      top_n_labels: 0
       legend_pos: right
       selection_enabled: true
       selection_column: sample
@@ -891,8 +910,8 @@ tabs:
     tag: cs-sig-fingerprint
     index: sig-fingerprint
     title: Coverage concentration per ChIP
-    description: Enriched genome share against divergence from the input; size is the differential enrichment, colour the concentration. Click a point to select the library.
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    description: Enriched genome share against divergence from the input; size is the differential enrichment, colour the ChIP. Click a point to select the library.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: chipseq
     data_collection_tag: preseq_complexity_curve
@@ -903,7 +922,9 @@ tabs:
       line_width: 2
       x_title: Sequencing depth (reads)
       y_title: Expected distinct molecules
-      legend_pos: right
+      # Every ChIP and input has a curve: under the plot the legend wraps
+      # across the row instead of scrolling.
+      legend_pos: bottom
       selection_enabled: true
       selection_column: sample
     section: Complexity and metagene
@@ -911,7 +932,7 @@ tabs:
     index: sig-complexity
     title: Library complexity
     description: One curve per library, extrapolated by preseq; the band is the 95% interval on that extrapolation.
-    layout: {x: 0, y: 0, w: 4, h: 6}
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
     workflow_tag: chipseq
     data_collection_tag: deeptools_plot_profile
@@ -921,18 +942,18 @@ tabs:
       reference_label: TSS
       shaded_bands:
       - [300, 400, Gene body]
-      x_title: 'Bin along the window: 1 = -3 kb, 300 = TSS, 400 = TES, 700 = +3 kb'
+      x_title: Bin (TSS at 300, TES at 400)
       y_title: Mean signal
       line_width: 2
-      legend_pos: right
+      legend_pos: bottom
       selection_enabled: true
       selection_column: sample
     section: Complexity and metagene
     tag: cs-sig-metagene
     index: sig-metagene
     title: Metagene signal profile
-    description: Mean signal of every library along a scaled gene, the start site marked and the gene body shaded.
-    layout: {x: 4, y: 0, w: 4, h: 6}
+    description: Mean signal of every library along a scaled gene with 3 kb flanks, the start site marked and the gene body shaded.
+    layout: {x: 0, y: 6, w: 8, h: 6}
 # ============================================================================
 # Peak calls
 # ============================================================================
@@ -1054,11 +1075,11 @@ tabs:
     column_name: peak_id
     column_type: object
     secondary_layout: top_n
-    breakdown_col: sample
+    breakdown_col: chr
     display:
       icon_name: mdi:counter
       icon_color: indigo
-      caption: the libraries with the most
+      caption: the chromosomes with the most
     section: Peaks at a glance
     tag: cs-pk-card-count
     index: pk-card-count
@@ -1111,20 +1132,18 @@ tabs:
     aggregation: median
     column_name: neg_log10_qvalue
     column_type: float64
-    secondary_layout: threshold
-    threshold_value: 1.3
-    threshold_direction: min
-    threshold_warn: 1
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:check-decagram
       icon_color: red
-      caption: median; at or above 1.3, q below 0.05
+      caption: median, with its spread
       decimals: 1
     section: Peaks at a glance
     tag: cs-pk-card-qvalue
     index: pk-card-qvalue
     title: Median -log10 q
-    description: Median significance of the calls, as -log10 of the MACS2 q-value.
+    description: Median significance of the calls, as -log10 of the MACS2 q-value; every call already passes q 0.05 (1.3).
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: chipseq
@@ -1137,7 +1156,8 @@ tabs:
       default_color_by: sample
       selection_enabled: true
       selection_column: peak_id
-      top_n_labels: 10
+      # Peak ids say nothing as point labels; they piled up over the tallest calls.
+      top_n_labels: 0
     section: Significance along the genome
     tag: cs-pk-manhattan
     index: pk-manhattan
@@ -1529,12 +1549,13 @@ tabs:
     aggregation: count
     column_name: peak_id
     column_type: object
-    secondary_layout: top_n
+    secondary_layout: composition
     breakdown_col: sample
+    follow_region_filter: true
     display:
       icon_name: mdi:counter
       icon_color: indigo
-      caption: the libraries with the most
+      caption: calls, by library
     section: Region at a glance
     tag: cs-loc-card-peaks
     index: loc-card-peaks
@@ -1550,6 +1571,7 @@ tabs:
     column_type: int64
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
+    follow_region_filter: true
     display:
       icon_name: mdi:set-merge
       icon_color: violet
@@ -1570,6 +1592,7 @@ tabs:
     column_type: object
     secondary_layout: donut
     breakdown_col: annotation_class
+    follow_region_filter: true
     display:
       icon_name: mdi:chart-donut
       icon_color: blue
@@ -1590,6 +1613,7 @@ tabs:
     filter_expr: col('gene_name').is_not_null() & (col('gene_name') != '')
     secondary_layout: top_n
     breakdown_col: annotation_class
+    follow_region_filter: true
     display:
       icon_name: mdi:dna
       icon_color: teal
@@ -1704,6 +1728,7 @@ tabs:
     icon: mdi:chart-box-outline
     color: violet
     description: Fold enrichment of the most strongly bound intervals, clustered
+    collapsed: true
   - name: Consensus tables
     icon: mdi:table
     color: gray
@@ -1715,8 +1740,8 @@ tabs:
     body: >
       The per-ChIP calls merged into one set of intervals per antibody: an interval every
       replicate calls is reproducible binding. Pick one consensus set on the left first,
-      since the libraries of two sets never meet. The UpSet shows which libraries agree,
-      the heatmap the signal at the strongest intervals.
+      since the libraries of two sets never meet. The UpSet shows which libraries agree;
+      the heatmap below it, folded, the signal at the strongest intervals.
     tag: cs-cons-intro
     index: cons-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -2014,12 +2039,12 @@ tabs:
     aggregation: count
     column_name: gene_id
     column_type: object
-    secondary_layout: top_n
-    breakdown_col: contrast
+    secondary_layout: composition
+    breakdown_col: direction
     display:
       icon_name: mdi:counter
       icon_color: grape
-      caption: tests, by contrast
+      caption: tests, by outcome
     section: Calls at a glance
     tag: cs-diff-card-tested
     index: diff-card-tested
@@ -2100,8 +2125,8 @@ tabs:
       category_col: direction
       significance_threshold: 0.05
       effect_threshold: 1.0
-      top_n_labels: 15
-      show_labels: true
+      # gene_id holds interval ids here, which say nothing as point labels.
+      show_labels: false
       avg_log_intensity_col: log2_base_mean
       log2_fold_change_col: log2fc
       fold_change_threshold: 1.0
@@ -2121,12 +2146,12 @@ tabs:
     config:
       significance_col: padj
       significance_threshold: 0.05
-      top_n: 25
+      top_n: 10
     section: Volcano and ranked effects
     tag: cs-diff-dabar
     index: diff-dabar
     title: Largest effects
-    description: The 25 intervals with the largest significant effect, signed by direction.
+    description: The 10 intervals with the largest significant effect per contrast, signed by direction.
     layout: {x: 0, y: 6, w: 5, h: 5}
   - component_type: figure
     workflow_tag: chipseq
@@ -2136,8 +2161,9 @@ tabs:
     mode: code
     code_content: |-
       # Significant intervals per contrast and direction. A merge-level suffix,
-      # when the contrast id carries one, is dropped from the axis label.
-      d = df.filter(pl.col('significant')).with_columns(pl.col('contrast').str.replace(r'\.m(Lb|Rp)\.clN$', '').alias('comparison'))
+      # when the contrast id carries one, is dropped from the axis label, and the
+      # rest breaks before 'vs' so the label fits a third of the row.
+      d = df.filter(pl.col('significant')).with_columns(pl.col('contrast').str.replace(r'\.m(Lb|Rp)\.clN$', '').str.replace('vs', '<br>vs ', literal=True).alias('comparison'))
       d = d.group_by(['comparison', 'direction']).agg(pl.len().cast(pl.Int64).alias('intervals')).sort(['comparison', 'direction'])
       fig = px.bar(d.to_pandas(), x='intervals', y='comparison', color='direction', orientation='h', barmode='group', text='intervals', color_discrete_map=depictio_category_colors.get('direction') or {}, labels={'comparison': '', 'intervals': 'Significant intervals', 'direction': 'Direction'})
       fig.update_layout(margin=dict(t=10))
@@ -2160,6 +2186,7 @@ tabs:
       hover_cols: [dim_1_percent, dim_2_percent]
       point_size: 12
       marker_outline: true
+      axis_prefix: PC
       legend_pos: right
       plot_style: grid
       selection_enabled: true

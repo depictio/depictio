@@ -49,14 +49,14 @@ The landing page, at compact width with the filter panel collapsed:
   the versions of its tool and the tab that shows its output.
 - **Key figures**: four headline cards, each opening the tab that explains it. Samples
   (split by target, IgG controls included), the median fragment length (with its spread),
-  the SEACR peaks (split by target) and the median FRiP (a share of 1). A target and a sample
-  filter above them narrow these four only.
+  the SEACR peaks (split by target) and the median FRiP (a box plot over the samples). A
+  target and a sample filter above them narrow these four only.
 - **Findings**: result rows whose values are computed under the filters, each with a link to
   its tab: the median mononucleosome to sub-nucleosome ratio, the target holding the most
   SEACR peaks and its share, the median share of a sample's SEACR peaks that MACS2 also
   called, and how many consensus intervals two replicates or more support. Below them, four
   figures in two rows, each linking its tab: the fragment-length distribution beside the mean
-  pile-up on the SEACR summits, then the MACS2 against SEACR scatter beside the reproducible
+  pile-up at the SEACR summits, then the MACS2 against SEACR scatter beside the reproducible
   share per target. The Locus tab has no figure here: it is a browser, not a summary. The bar
   of this section filters by target and sample.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
@@ -71,7 +71,7 @@ the Overview.
 
 Each child tab opens with a short intro (the method, with a link to its tool, and how to read
 the tab), then a strip of four key numbers, each card with its own colour and a secondary that
-reads it (a box plot, a distribution, a gauge, a ranking or a share), then at most three open
+reads it (a box plot, a distribution, a ranking or a share), then at most three open
 sections; tables, details and alternate views follow, collapsed.
 
 **MultiQC.** MultiQC panels only. Open: general statistics, FastQC sequence counts and the
@@ -82,9 +82,10 @@ and the spike-in scale factor, read from the spike-in table and carried into the
 reverse link.
 
 **Libraries.** The tables the pipeline publishes beside the report. Strip: read pairs (the
-deepest libraries), the spike-in scale factor (box plot), duplicate reads (the share the three
-most duplicated libraries hold) and the median Jensen-Shannon distance to a uniform library (a
-gauge from 0 to 1). Then the scale factor and the duplicate share per library, the fingerprint
+total, with the pairs per library as a distribution), the spike-in scale factor (box plot),
+duplicate reads (the share the three most duplicated libraries hold) and the median
+Jensen-Shannon distance to a uniform library (box plot). Then the scale factor and the
+duplicate share per library, the fingerprint
 metrics scatter (`deeptools/fingerprint_scatter`: targets sit apart from the IgG controls,
 point size is the share of the genome with no reads), and the PCA beside the clustered
 correlation matrix of the genome-wide bin counts. Collapsed: target against spike-in depth,
@@ -95,13 +96,14 @@ factor and the coverage concentration.
 **Fragments.** The nucleosomal ladder. Strip: the median fragment length (box plot), the
 fragments counted (split by target), the fragments by nucleosome class (a ring) and the
 mononucleosome to sub-nucleosome ratio per target. Then the fragment-length distribution
-(25 to 800 bp, one curve per sample coloured by target, the sub-nucleosomal and
-mononucleosomal windows shaded) beside its cumulative twin, and each library split into the
+(25 to 800 bp, one curve per sample coloured by target, the sub-nucleosomal (sub) and
+mononucleosomal (mono) windows shaded) beside its cumulative twin, and each library split into the
 four classes (below 120 bp, to 250, to 450, above). Collapsed: the class table. Filters:
 nucleosome class and fragment length.
 
 **Peaks.** Strip: SEACR regions (split by sample), their median width (box plot), the median
-coverage per base (its distribution) and the lowest FRiP in view (a gauge). Then the region
+coverage per base (its distribution) and the lowest FRiP in view (with a box plot over every
+library). Then the region
 width histogram (log axis) beside the mean pile-up on the summits, the summit-centred pile-up
 matrix of each sample's 500 strongest regions (`signal_matrix`, one panel per sample), and the
 fragment coverage inside and outside peaks per library. FRiP is built in base pairs of
@@ -112,10 +114,11 @@ SEACR summary and the signal budget. Filters: region width, coverage per base an
 regions, then regions called and median coverage per base on the per-sample summary.
 
 **Caller agreement.** Strip: peaks called (a ring by caller), the median peak width by caller,
-the worst agreement in view (a gauge) and the calls only one caller made (the samples with the
-most). Then the MACS2 against SEACR scatter (one point per sample, sized by the share of calls
-they share, selectable) beside the calls the other caller did not make, and the MACS2
-significance along the genome (`-log10(q)`). Collapsed: the comparison table. Filters: caller
+the share of one caller's peaks the other reproduces (box plot; a sample one caller left empty
+is left out, since it shares nothing by construction) and the calls only one caller made
+(split by target). Then the MACS2 against SEACR scatter (one point per sample, sized by the
+share of calls they share, selectable) beside the calls the other caller did not make, and the
+MACS2 significance along the genome (`-log10(q)`, without point labels). Collapsed: the comparison table. Filters: caller
 and share reproduced.
 
 **Consensus.** Strip: consensus intervals (a ring by replicate support), the reproducible ones
@@ -127,7 +130,8 @@ intervals. Collapsed: the consensus table. Filters: replicate support, interval 
 member peaks.
 
 **Locus.** One region on one genome axis. Strip: SEACR regions (by sample), their coverage per
-base, the MACS2 peaks and the consensus intervals (by support) of the region in view; the cards
+base, the MACS2 peaks (by sample) and the consensus intervals (by support) of the region in
+view; the cards
 follow the navigator's region as the tracks do. Then the SEACR navigator (`genome_view`, rect
 marks, `assembly: {GENOME}`), opening on a documented default region, and three tracks that
 follow its region through the `region` links of `template.yaml`: the fragment pile-up

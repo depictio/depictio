@@ -251,7 +251,8 @@ main_dashboard:
     title: Peaks
     description: Regions SEACR called over the samples in view. The bar splits them by target.
     layout: {x: 4, y: 0, w: 2, h: 2}
-  # frip is repeated on the two rows of a sample, so the median is of samples.
+  # frip is repeated on the two rows of a sample; the In peaks row keeps one
+  # value per sample, so the median and the box are of samples.
   - component_type: card
     workflow_tag: cutandrun
     data_collection_tag: frip
@@ -259,12 +260,13 @@ main_dashboard:
     aggregation: median
     column_name: frip
     column_type: float64
-    secondary_layout: coverage
-    coverage_max: 1
+    filter_expr: col('signal_class') == 'In peaks'
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:target
       icon_color: teal
-      caption: median share of coverage in peaks
+      caption: median per sample, with its spread
       link: tab:Peaks
       decimals: 2
     section: Key figures
@@ -337,7 +339,7 @@ main_dashboard:
     section: Findings
     source_tab: Fragments
     source_component: frag-length-dist
-    caption: One curve per sample, coloured by target; the shaded bands are the sub-nucleosomal and mononucleosomal windows.
+    caption: One curve per sample, coloured by target; the shaded bands are the sub-nucleosomal (sub) and mononucleosomal (mono) windows.
     tag: cr-ov-hl-fragments
     index: ov-hl-fragments
     layout: {x: 0, y: 2, w: 5, h: 4}
@@ -345,6 +347,7 @@ main_dashboard:
     section: Findings
     source_tab: Peaks
     source_component: pk-pileup-profile
+    title: Pile-up at the summits
     caption: Mean fragments per million around the summits of each sample's strongest SEACR peaks; a sharp mark peaks at 0.
     tag: cr-ov-hl-pileup
     index: ov-hl-pileup
@@ -740,13 +743,11 @@ tabs:
     aggregation: sum
     column_name: total_pairs
     column_type: int64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
+    secondary_layout: histogram
     display:
       icon_name: mdi:dna
       icon_color: blue
-      caption: the deepest libraries
+      caption: total; the bars, pairs per library
     section: Libraries at a glance
     tag: cr-lib-card-pairs
     index: lib-card-pairs
@@ -800,12 +801,12 @@ tabs:
     aggregation: median
     column_name: synthetic_js_distance
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:chart-line
       icon_color: grape
-      caption: median, from 0 (uniform) to 1
+      caption: median, with its spread
       decimals: 2
     section: Libraries at a glance
     tag: cr-lib-card-jsd
@@ -818,7 +819,10 @@ tabs:
     data_collection_tag: bowtie2_spikein_factors
     use: bowtie2/spikein_factor_bar
     visu_type: bar
-    dict_kwargs: {x: sample, y: scale_factor, color: sample}
+    dict_kwargs:
+      x: sample
+      y: scale_factor
+      labels: {sample: '', scale_factor: Spike-in scale factor}
     section: Spike-in and duplication
     tag: cr-lib-fig-scale
     index: lib-fig-scale
@@ -837,7 +841,8 @@ tabs:
       d = df.with_columns((100 * pl.col('duplicate_reads') / pl.col('total_reads')).alias('duplicate_pct')).sort('sample')
       fig = px.bar(d.to_pandas(), x='sample', y='duplicate_pct', labels={'sample': '', 'duplicate_pct': 'Duplicate reads (%)'}, **depictio_group_kwargs)
       fig.update_layout(margin=dict(t=10))
-      fig.update_xaxes(tickangle=-45)
+      # Room for the slanted names, so the first ones are not cut at the edge.
+      fig.update_xaxes(tickangle=-45, automargin=True)
     section: Spike-in and duplication
     tag: cr-lib-fig-dup
     index: lib-fig-dup
@@ -880,6 +885,7 @@ tabs:
       color_col: sample
       point_size: 16
       marker_outline: true
+      axis_prefix: PC
       legend_pos: right
       selection_enabled: true
       selection_column: sample
@@ -916,7 +922,11 @@ tabs:
     selection_enabled: true
     selection_column: sample
     visu_type: scatter
-    dict_kwargs: {x: spikein_aligned, y: target_aligned, color: sample}
+    dict_kwargs:
+      x: spikein_aligned
+      y: target_aligned
+      color: sample
+      labels: {spikein_aligned: Spike-in read pairs aligned, target_aligned: Target read pairs aligned, sample: ''}
     section: Depth detail
     tag: cr-lib-fig-depth
     index: lib-fig-depth
@@ -1134,22 +1144,27 @@ tabs:
       if grp not in d.columns:
           grp = 'sample'
       fig = px.line(d.to_pandas(), x='fragment_length', y='fraction', color=grp, line_group='sample', color_discrete_map=colors, hover_name='sample', labels={'fragment_length': 'Fragment length (bp)', 'fraction': 'Share of fragments', grp: ''})
-      # The sub-nucleosomal and mononucleosomal windows of seacr/fragment_classes.
-      for start, end, label in ((0, 120, 'sub-nucleosomal'), (120, 250, 'mononucleosomal')):
+      # The sub-nucleosomal and mononucleosomal windows of seacr/fragment_classes,
+      # labelled short enough to fit inside them.
+      for start, end, label in ((0, 120, 'sub'), (120, 250, 'mono')):
           fig.add_vrect(x0=start, x1=end, fillcolor='grey', opacity=0.1, line_width=0, annotation_text=label, annotation_position='top left')
       fig.update_layout(margin=dict(t=10))
     section: Fragment length
     tag: cr-frag-fig-dist
     index: frag-length-dist
     title: Fragment length distribution
-    description: The share of each sample's fragments at every length; the bands are the class windows.
+    description: The share of each sample's fragments at every length; the bands are the sub-nucleosomal (sub) and mononucleosomal (mono) windows.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: cutandrun
     data_collection_tag: seacr_fragment_lengths
     use: seacr/seacr_fragment_cumulative
     visu_type: line
-    dict_kwargs: {x: fragment_length, y: cumulative_fraction, color: sample}
+    dict_kwargs:
+      x: fragment_length
+      y: cumulative_fraction
+      color: sample
+      labels: {fragment_length: Fragment length (bp), cumulative_fraction: Cumulative share of fragments, sample: ''}
     section: Fragment length
     tag: cr-frag-fig-cumulative
     index: frag-length-cumulative
@@ -1161,7 +1176,12 @@ tabs:
     data_collection_tag: seacr_fragment_classes
     use: seacr/seacr_fragment_class_stack
     visu_type: bar
-    dict_kwargs: {x: sample, y: fraction, color: fragment_class, barmode: stack}
+    dict_kwargs:
+      x: sample
+      y: fraction
+      color: fragment_class
+      barmode: stack
+      labels: {sample: '', fraction: Share of the library's fragments, fragment_class: ''}
     section: Nucleosome classes
     tag: cr-frag-fig-classes
     index: frag-class-stack
@@ -1374,12 +1394,13 @@ tabs:
     aggregation: min
     column_name: frip
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    filter_expr: col('signal_class') == 'In peaks'
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:target
       icon_color: teal
-      caption: the weakest library, 0 to 1
+      caption: the weakest library; the box, every library
       decimals: 2
     section: Peaks at a glance
     tag: cr-pk-card-frip-min
@@ -1392,7 +1413,12 @@ tabs:
     data_collection_tag: seacr_peaks
     use: seacr/seacr_width_hist
     visu_type: histogram
-    dict_kwargs: {x: width, color: sample, nbins: 60, log_x: true}
+    dict_kwargs:
+      x: width
+      color: sample
+      nbins: 60
+      log_x: true
+      labels: {width: Region width (bp), sample: ''}
     section: Peak shape
     tag: cr-pk-fig-width
     index: pk-width-hist
@@ -1446,7 +1472,12 @@ tabs:
     data_collection_tag: frip
     use: cutandrun/frip_composition_bar
     visu_type: bar
-    dict_kwargs: {x: sample, y: fraction, color: signal_class, barmode: stack}
+    dict_kwargs:
+      x: sample
+      y: fraction
+      color: signal_class
+      barmode: stack
+      labels: {sample: '', fraction: Share of fragment coverage, signal_class: ''}
     section: Signal in peaks
     tag: cr-pk-fig-frip
     index: pk-frip-bar
@@ -1624,21 +1655,22 @@ tabs:
     workflow_tag: cutandrun
     data_collection_tag: caller_agreement
     use: cutandrun/caller_agreement
-    aggregation: min
+    aggregation: median
     column_name: frac_shared
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    filter_expr: (col('n_peaks') > 0) & (col('n_peaks_other') > 0)
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:alert-outline
       icon_color: pink
-      caption: the lowest share reproduced, 0 to 1
+      caption: median, with its spread
       decimals: 2
     section: Agreement at a glance
-    tag: cr-ca-card-worst
-    index: ca-card-worst
-    title: Worst agreement
-    description: The smallest share of one caller's peaks that the other caller also called, over samples and callers.
+    tag: cr-ca-card-shared
+    index: ca-card-shared
+    title: Share reproduced
+    description: The share of one caller's peaks the other caller also called, per sample and caller, where both called something; the low whisker is the worst agreement.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: cutandrun
@@ -1647,13 +1679,12 @@ tabs:
     aggregation: sum
     column_name: n_unique
     column_type: int64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
+    secondary_layout: composition
+    breakdown_col: target
     display:
       icon_name: mdi:shape-outline
       icon_color: grape
-      caption: the samples with the most
+      caption: calls, by target
     section: Agreement at a glance
     tag: cr-ca-card-unique
     index: ca-card-unique
@@ -1701,7 +1732,12 @@ tabs:
     data_collection_tag: caller_agreement
     use: cutandrun/caller_unique_bar
     visu_type: bar
-    dict_kwargs: {x: sample, y: n_unique, color: caller, barmode: group}
+    dict_kwargs:
+      x: sample
+      y: n_unique
+      color: caller
+      barmode: group
+      labels: {sample: '', n_unique: Calls the other caller missed, caller: Caller}
     section: Caller against caller
     tag: cr-ca-fig-unique
     index: ca-unique-bar
@@ -1719,7 +1755,8 @@ tabs:
       default_color_by: sample
       selection_enabled: true
       selection_column: peak_id
-      top_n_labels: 10
+      # Peak ids say nothing as point labels; they piled up over the tallest calls.
+      top_n_labels: 0
     section: MACS2 along the genome
     tag: cr-ca-av-macs-manhattan
     index: ca-macs-manhattan
@@ -1955,7 +1992,12 @@ tabs:
     data_collection_tag: seacr_consensus_peaks
     use: seacr/seacr_consensus_width_hist
     visu_type: histogram
-    dict_kwargs: {x: width, color: support, nbins: 60, log_x: true}
+    dict_kwargs:
+      x: width
+      color: support
+      nbins: 60
+      log_x: true
+      labels: {width: Interval width (bp), support: Replicates}
     section: How reproducible
     tag: cr-cons-fig-width
     index: cons-width-hist
@@ -2108,14 +2150,13 @@ tabs:
     aggregation: count
     column_name: peak_id
     column_type: object
-    secondary_layout: top_n
+    secondary_layout: composition
     breakdown_col: sample
-    top_n_count: 3
     follow_region_filter: true
     display:
       icon_name: mdi:counter
       icon_color: orange
-      caption: the samples with the most
+      caption: MACS2 peaks, by sample
     section: Region at a glance
     tag: cr-loc-card-macs
     index: loc-card-macs

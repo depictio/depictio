@@ -42,15 +42,20 @@ The landing page, at compact width with the filter panel collapsed:
   version of the tool that ran it and the tab that shows its output.
 - **Key figures**: four headline cards, each opening the tab that explains it. Libraries
   (split by condition), peaks called (the box shows the spread per ChIP), the significant
-  differential calls (split by direction) and the median FRiP score. A condition and a
-  library filter above them narrow these four only.
+  differential calls (split by direction) and the median FRiP score, its strip counting the
+  ChIPs at or above the ENCODE floor of 1%. A condition and a library filter above them
+  narrow these four only.
 - **Findings**: result rows computed under the filters, each with a link to its tab: the
   median fold enrichment at the summits, the most common HOMER feature class and its share,
   the consensus intervals called by more than one library, and the interval tests DESeq2
   calls significant (one test per interval and contrast). Below them, four figures in two
   rows: the peak significance along the genome beside the peaks around the nearest start
-  site, then the volcano beside the consensus UpSet. The bar of this section filters by
-  condition and antibody.
+  site, then a summary of the consensus beside the volcano. The summary counts each
+  antibody's consensus intervals by how many of its libraries call them and links to the
+  Consensus tab: the UpSet there draws the libraries of every antibody, too many sets for a
+  third of the row. Peak and interval ids are not drawn as point labels, and the two
+  per-library highlights hide their legends. The bar of this section filters by condition
+  and antibody.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
 The persistent `Sample filters` (condition, antibody, library, replicate, role) sit in the
@@ -72,16 +77,17 @@ duplicates, featureCounts assignments and the strand shift correlation curve. It
 `Library scope` filter narrows the panels by sequencing library (`<sample>_T<n>`).
 
 **Signal.** Strip: coverage concentration (the fingerprint area ratio, box plot), the
-divergence from the input (gauge), the share of the genome called enriched (distribution)
-and the strongest metagene signal (the strongest libraries). Then the fingerprint scatter
-(only the ChIPs carry a point: both axes are measured against the input), the preseq
-complexity curves with their 95% band and the deepTools metagene profile with the start
-site marked and the gene body shaded. Filters: genome called enriched and extrapolated
+divergence from the input (distribution), the share of the genome called enriched
+(distribution) and the distinct fragments preseq expects at a billion reads (box plot). Then
+the fingerprint scatter (only the ChIPs carry a point: both axes are measured against the
+input; the legend names them, with no point labels), then, one per row so their legends of
+every ChIP and input wrap under the plot, the preseq complexity curves with their 95% band
+and the deepTools metagene profile with the start site marked and the gene body shaded. Filters: genome called enriched and extrapolated
 depth.
 
-**Peaks.** Strip: peaks in view (the libraries with the most), peak width (box plot), fold
-enrichment (distribution) and the median -log10 q-value (threshold at 1.3, q 0.05). Then the
-genome-wide significance panel, the width distribution on a log axis, and the two summit
+**Peaks.** Strip: peaks in view (the chromosomes with the most), peak width (box plot), fold
+enrichment (distribution) and the median -log10 q-value (box plot: MACS2 calls at q 0.05, so
+every call passes that line). Then the genome-wide significance panel, without point labels, the width distribution on a log axis, and the two summit
 profiles: the other libraries' summits around each summit (replicates of a sharp factor
 pile up) beside the average footprint of a call. Neither profile is a read coverage: the
 recipe aggregates the calls themselves. The MACS2 table is collapsed. Filters: significance,
@@ -94,8 +100,8 @@ the promoter window shaded. The collapsed `Peak annotation` holds the HOMER tabl
 peak record card beside it: the card waits for a picked row. Filters: feature class and
 distance to the start site.
 
-**Locus.** Three collections on one genome axis. Strip: calls in the region (the libraries
-with the most), libraries per consensus interval, feature classes and nearest genes; the
+**Locus.** Three collections on one genome axis. Strip: calls in the region (split by
+library), libraries per consensus interval, feature classes and nearest genes; the
 cards follow the region like the tracks. Then the navigator (`macs2/peak_genome_view`, one
 lane per library, `assembly: {GENOME}`), a coverage track of the consensus intervals with
 one lane per consensus set, and the HOMER annotation coloured by feature class (it stands in
@@ -106,15 +112,17 @@ class.
 **Consensus.** Pick one consensus set first: the libraries of two antibodies never meet.
 Strip: consensus intervals (by consensus set), libraries per interval (box plot), peaks
 merged and the support of the strongest intervals (a ring). Then the UpSet of the libraries
-calling each interval and the fold-enrichment heatmap over the 250 strongest intervals of
-each set, clustered, rows annotated by set and support. Both tables are collapsed. Filters:
+calling each interval. The fold-enrichment heatmap over the 250 strongest intervals of each
+set, clustered, rows annotated by set and support, sits folded below it: it grows to one row
+per interval and would take the tab past its height. Both tables are collapsed. Filters:
 consensus set, libraries per interval and chromosome.
 
 **Differential binding.** Pick a contrast first. Strip: intervals tested (one test per
-interval and contrast, by contrast), significant calls (a ring by direction), the effect
-size of the calls (box plot) and the strongest significance (threshold at 1.3). Then the
-volcano, whose View switch reads the same rows as an MA plot (`log2_base_mean`) or a QQ plot
-of the raw p-values, the largest effects beside the calls per contrast, and the sample space:
+interval and contrast, split by outcome), significant calls (a ring by direction), the
+effect size of the calls (box plot) and the strongest significance (threshold at 1.3). Then
+the volcano, without point labels (the ids are interval ids), whose View switch reads the
+same rows as an MA plot (`log2_base_mean`) or a QQ plot of the raw p-values, the ten largest
+effects per contrast beside the calls per contrast, and the sample space:
 the pipeline's PCA, coloured by consensus set, beside the library distance heatmap (`ward`,
 `Blues`). The three tables are collapsed. The `Contrast` filter is a single `Select`: DESeq2
 numbers the intervals afresh in each consensus set, so a row is an interval only together

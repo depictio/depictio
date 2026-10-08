@@ -279,19 +279,21 @@ main_dashboard:
     aggregation: median
     column_name: frip_score
     column_type: float64
-    secondary_layout: coverage
-    coverage_max: 1
+    secondary_layout: threshold
+    threshold_value: 0.3
+    threshold_direction: min
+    threshold_warn: 0.2
     display:
       icon_name: mdi:target
       icon_color: lime
-      caption: median share of reads in peaks
+      caption: median; ENCODE wants 0.3, accepts 0.2
       link: tab:MultiQC
       decimals: 2
     section: Key figures
     tag: at-ov-kf-frip
     index: ov-kf-frip
     title: FRiP
-    description: Median fraction of each library's reads falling inside its called peaks, the ATAC signal-to-noise.
+    description: Median fraction of each library's reads falling inside its called peaks, the ATAC signal-to-noise. The strip counts the libraries at the ENCODE target (0.3), in the acceptable band (0.2) and below it.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Findings filter bar: the group, then the chromosome of the peak calls.
   - component_type: interactive
@@ -354,6 +356,7 @@ main_dashboard:
     source_tab: Peaks
     source_component: pk-manhattan
     caption: One point per peak at the centre of its region, as high as its significance; colour is the library.
+    hide_legend: true
     tag: at-ov-hl-manhattan
     index: ov-hl-manhattan
     layout: {x: 0, y: 2, w: 5, h: 4}
@@ -361,10 +364,32 @@ main_dashboard:
     section: Findings
     source_tab: Annotation
     source_component: anno-tss-distance
-    caption: Each library's peaks by distance to the nearest start site; the band is the promoter window.
+    caption: Each library's peaks by distance to the nearest start site, one curve per library; the band is the promoter window.
+    hide_legend: true
     tag: at-ov-hl-tss
     index: ov-hl-tss
     layout: {x: 5, y: 2, w: 3, h: 4}
+  # The consensus UpSet draws one set per library, too many for a third of the
+  # row: this summary counts the intervals by how many libraries call them.
+  - component_type: figure
+    workflow_tag: atacseq
+    data_collection_tag: macs2_consensus_boolean
+    use: macs2/consensus_boolean
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Consensus intervals by the number of libraries calling a peak on them.
+      d = df.group_by('num_samples').agg(pl.len().cast(pl.Int64).alias('intervals')).sort('num_samples')
+      fig = px.bar(d.to_pandas(), x='num_samples', y='intervals', labels={'num_samples': 'Libraries calling the interval', 'intervals': 'Consensus intervals'})
+      fig.update_xaxes(dtick=1)
+      fig.update_layout(margin=dict(t=10))
+    title: Replicate agreement
+    link: tab:Consensus
+    caption: Consensus intervals by how many libraries call a peak on them; the right-hand bars are the reproducible set.
+    section: Findings
+    tag: at-ov-consensus-support
+    index: ov-consensus-support
+    layout: {x: 0, y: 6, w: 3, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Differential accessibility
@@ -372,14 +397,6 @@ main_dashboard:
     caption: One point per interval and contrast; right of the line, more accessible in the first group.
     tag: at-ov-hl-volcano
     index: ov-hl-volcano
-    layout: {x: 0, y: 6, w: 3, h: 4}
-  - component_type: highlight
-    section: Findings
-    source_tab: Consensus
-    source_component: cons-upset
-    caption: Each bar is one combination of libraries calling the same consensus interval, largest first.
-    tag: at-ov-hl-upset
-    index: ov-hl-upset
     layout: {x: 3, y: 6, w: 5, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out.
@@ -859,12 +876,12 @@ tabs:
     aggregation: median
     column_name: mitochondrial_fraction
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:bacteria-outline
       icon_color: cyan
-      caption: median, 0 to 1
+      caption: median, with its spread
       decimals: 2
     section: Library quality at a glance
     tag: at-aq-card-mito
@@ -999,12 +1016,12 @@ tabs:
     aggregation: median
     column_name: properly_paired_fraction
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:vector-link
       icon_color: teal
-      caption: median, 0 to 1
+      caption: median, with its spread
       decimals: 2
     section: Fragment ladder
     tag: at-aq-card-paired
@@ -1020,19 +1037,20 @@ tabs:
     mode: code
     code_content: |-
       # The informative part of the ladder: the histogram runs to 1000 bp, but the
-      # tail past 800 bp is empty. One curve per library, the ataqv windows shaded.
+      # tail past 800 bp is empty. One curve per library, the ataqv windows shaded
+      # and labelled short enough to fit inside them.
       d = df.filter(pl.col('fragment_length') <= 800).sort(['sample', 'fragment_length'])
       color_col = depictio_group_by[0] if depictio_group_by and depictio_group_by[0] in d.columns else 'sample'
       colors = depictio_group_kwargs.get('color_discrete_map') or depictio_category_colors.get(color_col) or {}
       fig = px.line(d.to_pandas(), x='fragment_length', y='fraction_of_all_reads', color=color_col, line_group='sample', color_discrete_map=colors, hover_name='sample', labels={'fragment_length': 'Fragment length (bp)', 'fraction_of_all_reads': 'Fraction of all reads', color_col: ''})
-      for start, end, label in ((0, 100, 'sub-nucleosomal'), (150, 324, 'mononucleosomal')):
+      for start, end, label in ((0, 100, 'NFR'), (150, 324, 'mono-nucleosome')):
           fig.add_vrect(x0=start, x1=end, fillcolor='grey', opacity=0.10, line_width=0, annotation_text=label, annotation_position='top left')
       fig.update_layout(margin=dict(t=10))
     section: Fragment ladder
     tag: at-aq-ladder
     index: aq-ladder
     title: Fragment length distribution
-    description: Fraction of reads at each fragment length, per library, over the informative 0 to 800 bp range.
+    description: Fraction of reads at each fragment length, per library, from 0 to 800 bp; shaded, the nucleosome-free (NFR) and mono-nucleosome windows.
     layout: {x: 0, y: 2, w: 5, h: 4}
   - component_type: figure
     workflow_tag: atacseq
@@ -1179,12 +1197,11 @@ tabs:
     aggregation: median
     column_name: synthetic_js_distance
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
+    secondary_layout: histogram
     display:
       icon_name: mdi:magnet
       icon_color: indigo
-      caption: median, 0 to 1
+      caption: median, with its distribution
       decimals: 2
     section: Signal at a glance
     tag: at-sig-card-jsd
@@ -1192,44 +1209,48 @@ tabs:
     title: Divergence from uniform
     description: Median Jensen-Shannon distance between a library's coverage and a uniform library of its depth.
     layout: {x: 2, y: 0, w: 2, h: 2}
+  # preseq's curve ends at a billion reads for every library (the recipe clips
+  # there), so that depth compares the libraries like for like.
   - component_type: card
     workflow_tag: atacseq
-    data_collection_tag: deeptools_fingerprint_metrics
-    use: deeptools/fingerprint_metrics
+    data_collection_tag: preseq_complexity_curve
+    use: preseq/complexity_curve
     aggregation: median
-    column_name: x_intercept
+    column_name: expected_distinct
     column_type: float64
-    secondary_layout: histogram
+    filter_expr: col('total_reads') == 1000000000
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
-      icon_name: mdi:percent-outline
+      icon_name: mdi:fingerprint
       icon_color: orange
-      caption: median, with its distribution
-      decimals: 2
+      caption: median at 1 billion reads, with its spread
+      decimals: 0
     section: Signal at a glance
-    tag: at-sig-card-empty
-    index: sig-card-empty
-    title: Bins without reads
-    description: Median share of genome bins with no read at all, where the fingerprint curve leaves the axis.
+    tag: at-sig-card-distinct
+    index: sig-card-distinct
+    title: Distinct fragments
+    description: Distinct fragments preseq expects a library to yield at a billion reads; a low value is a library that sequencing deeper will not save.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: atacseq
     data_collection_tag: deeptools_plot_profile
     use: deeptools/plot_profile
-    aggregation: max
+    aggregation: median
     column_name: signal
     column_type: float64
-    secondary_layout: top_n
-    breakdown_col: sample
+    filter_expr: col('bin_label') == 'TSS'
+    secondary_layout: histogram
     display:
       icon_name: mdi:chart-line
       icon_color: teal
-      caption: the strongest libraries
+      caption: median at the start site, with its distribution
       decimals: 2
     section: Signal at a glance
     tag: at-sig-card-signal
     index: sig-card-signal
-    title: Strongest metagene signal
-    description: The highest mean signal any library reaches along the metagene window.
+    title: Signal at the start site
+    description: Mean metagene signal of each library in the start-site bin, where an ATAC library peaks.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: atacseq
@@ -1241,9 +1262,8 @@ tabs:
       marker_size: 12
       opacity: 0.85
       marker_outline: true
-      top_n_labels: 4
-      # A colour and a legend per library: without them a point is readable
-      # only from the few labels.
+      # The legend names the libraries; point labels piled up on the replicates.
+      top_n_labels: 0
       color_col: sample
       legend_pos: right
       selection_enabled: true
@@ -1282,7 +1302,7 @@ tabs:
       reference_label: TSS
       shaded_bands:
       - [300, 400, Gene body]
-      x_title: 'Bin along the window: 1 = -3 kb, 300 = TSS, 400 = TES, 700 = +3 kb'
+      x_title: Bin (TSS at 300, TES at 400)
       y_title: Mean signal
       line_width: 2
       legend_pos: right
@@ -1292,7 +1312,7 @@ tabs:
     tag: at-sig-metagene
     index: sig-metagene
     title: Metagene signal profile
-    description: Mean accessibility of every library along a scaled gene, the start site marked and the gene body shaded.
+    description: Mean accessibility of every library along a scaled gene with 3 kb flanks, the start site marked and the gene body shaded.
     layout: {x: 4, y: 0, w: 4, h: 6}
 # ============================================================================
 # Peak calls
@@ -1395,11 +1415,11 @@ tabs:
     column_name: peak_id
     column_type: object
     secondary_layout: top_n
-    breakdown_col: sample
+    breakdown_col: chr
     display:
       icon_name: mdi:counter
       icon_color: indigo
-      caption: the libraries with the most
+      caption: the chromosomes with the most
     section: Peaks at a glance
     tag: at-pk-card-count
     index: pk-card-count
@@ -1483,7 +1503,8 @@ tabs:
       default_color_by: sample
       selection_enabled: true
       selection_column: peak_id
-      top_n_labels: 10
+      # Peak ids say nothing as point labels; they piled up over the tallest calls.
+      top_n_labels: 0
     section: Significance along the genome
     tag: at-pk-manhattan
     index: pk-manhattan
@@ -1837,12 +1858,13 @@ tabs:
     aggregation: count
     column_name: peak_id
     column_type: object
-    secondary_layout: top_n
+    secondary_layout: composition
     breakdown_col: sample
+    follow_region_filter: true
     display:
       icon_name: mdi:counter
       icon_color: indigo
-      caption: the libraries with the most
+      caption: calls, by library
     section: Region at a glance
     tag: at-loc-card-peaks
     index: loc-card-peaks
@@ -1858,6 +1880,7 @@ tabs:
     column_type: int64
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
+    follow_region_filter: true
     display:
       icon_name: mdi:set-merge
       icon_color: violet
@@ -1878,6 +1901,7 @@ tabs:
     column_type: object
     secondary_layout: donut
     breakdown_col: annotation_class
+    follow_region_filter: true
     display:
       icon_name: mdi:chart-donut
       icon_color: blue
@@ -1898,6 +1922,7 @@ tabs:
     filter_expr: col('gene_name').is_not_null() & (col('gene_name') != '')
     secondary_layout: top_n
     breakdown_col: annotation_class
+    follow_region_filter: true
     display:
       icon_name: mdi:dna
       icon_color: teal
@@ -2022,6 +2047,7 @@ tabs:
     icon: mdi:chart-box-outline
     color: violet
     description: Fold enrichment of the most strongly accessible intervals, clustered
+    collapsed: true
   - name: Consensus tables
     icon: mdi:table
     color: gray
@@ -2033,7 +2059,8 @@ tabs:
     body: >
       The per-library calls merged into one set of intervals. An interval every library
       calls is reproducible; one a single library calls is noise or specific to its group.
-      The UpSet shows which libraries agree, the heatmap the signal at the strongest.
+      The UpSet shows which libraries agree; the heatmap below it, folded, the signal
+      at the strongest.
     tag: at-cons-intro
     index: cons-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -2334,12 +2361,12 @@ tabs:
     aggregation: count
     column_name: gene_id
     column_type: object
-    secondary_layout: top_n
-    breakdown_col: contrast
+    secondary_layout: composition
+    breakdown_col: direction
     display:
       icon_name: mdi:counter
       icon_color: grape
-      caption: tests, by contrast
+      caption: tests, by outcome
     section: Calls at a glance
     tag: at-diff-card-tested
     index: diff-card-tested
@@ -2420,8 +2447,8 @@ tabs:
       category_col: direction
       significance_threshold: 0.05
       effect_threshold: 1.0
-      top_n_labels: 15
-      show_labels: true
+      # gene_id holds interval ids here, which say nothing as point labels.
+      show_labels: false
       avg_log_intensity_col: log2_base_mean
       log2_fold_change_col: log2fc
       fold_change_threshold: 1.0
@@ -2441,12 +2468,12 @@ tabs:
     config:
       significance_col: padj
       significance_threshold: 0.05
-      top_n: 25
+      top_n: 10
     section: Volcano and ranked effects
     tag: at-diff-dabar
     index: diff-dabar
     title: Largest effects
-    description: The 25 intervals with the largest significant effect, signed by direction.
+    description: The 10 intervals with the largest significant effect per contrast, signed by direction.
     layout: {x: 0, y: 6, w: 5, h: 5}
   - component_type: figure
     workflow_tag: atacseq
@@ -2456,8 +2483,9 @@ tabs:
     mode: code
     code_content: |-
       # Significant intervals per contrast and direction. The contrast ids carry
-      # the merge-level suffix the pipeline stamps on every consensus file.
-      d = df.filter(pl.col('significant')).with_columns(pl.col('contrast').str.replace(r'\.m(Lb|Rp)\.clN$', '').alias('comparison'))
+      # the merge-level suffix the pipeline stamps on every consensus file; the
+      # rest breaks before 'vs' so the label fits a third of the row.
+      d = df.filter(pl.col('significant')).with_columns(pl.col('contrast').str.replace(r'\.m(Lb|Rp)\.clN$', '').str.replace('vs', '<br>vs ', literal=True).alias('comparison'))
       d = d.group_by(['comparison', 'direction']).agg(pl.len().cast(pl.Int64).alias('intervals')).sort(['comparison', 'direction'])
       fig = px.bar(d.to_pandas(), x='intervals', y='comparison', color='direction', orientation='h', barmode='group', text='intervals', color_discrete_map=depictio_category_colors.get('direction') or {}, labels={'comparison': '', 'intervals': 'Significant intervals', 'direction': 'Direction'})
       fig.update_layout(margin=dict(t=10))
@@ -2475,6 +2503,7 @@ tabs:
     config:
       point_size: 14
       marker_outline: true
+      axis_prefix: PC
       legend_pos: right
       plot_style: grid
       selection_enabled: true
