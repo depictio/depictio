@@ -34,11 +34,16 @@ from depictio.cli.cli.utils.image_upload import (
 )
 from depictio.cli.cli.utils.renamed import note_if_called_as, note_renamed, pick_renamed
 from depictio.cli.cli.utils.rich_utils import (
+    render_records_table,
     rich_print_checked_statement,
     rich_print_command_usage,
     rich_print_section_separator,
 )
 from depictio.cli.cli.utils.scan import flat_run_tag_clash, scan_project_files
+from depictio.cli.cli.utils.scan_utils import (
+    count_data_collection_matches,
+    resolve_run_locations,
+)
 from depictio.cli.cli.utils.server_target import (
     LegacyConfigPathOption,
     ServerOption,
@@ -93,22 +98,40 @@ def _redacted_command_line() -> str | None:
         return None
 
 
-def _ingestion_data_collections(project_config) -> list[dict]:
+def _ingestion_data_collections(project_config, count_files: bool = False) -> list[dict]:
     """Per-DC summary (tag / type / format) + the local scan paths the CLI
-    resolved, walked from the validated project config. Best-effort; never raises."""
+    resolved, walked from the validated project config. Best-effort; never raises.
+
+    ``count_files`` walks the run directories to fill ``file_count`` with what a
+    scan would match. Off by default: the monitoring ledger is written after the
+    scan, which already knows the real counts, so pre-walking for it would be
+    both slower and less accurate. The dry run is the one caller with no scan to
+    learn from, so it is the one that pays for the walk.
+    """
     out: list[dict] = []
     try:
         for wf in getattr(project_config, "workflows", None) or []:
             dl = getattr(wf, "data_location", None)
             locations = [str(x) for x in (getattr(dl, "locations", None) or [])] if dl else []
-            for dc in getattr(wf, "data_collections", None) or []:
+            data_collections = getattr(wf, "data_collections", None) or []
+            # Counted for the whole workflow at once: the counter walks each run
+            # directory a single time and tests every pattern against that one
+            # listing, as the scanner does.
+            file_counts: list[int | None] = [None] * len(data_collections)
+            if count_files:
+                run_locations = resolve_run_locations(wf).locations
+                file_counts = count_data_collection_matches(data_collections, run_locations)
+            for dc, file_count in zip(data_collections, file_counts, strict=True):
                 cfg = getattr(dc, "config", None)
                 scan = getattr(cfg, "scan", None) if cfg else None
                 mode = getattr(scan, "mode", None) if scan else None
                 params = getattr(scan, "scan_parameters", None) if scan else None
-                if mode == "single":
+                # Lowercased like the scanner, which compares `scan.mode.lower()`
+                # while the model stores whatever spelling the config used.
+                normalized_mode = mode.lower() if mode else None
+                if normalized_mode == "single":
                     pattern = getattr(params, "filename", None)
-                elif mode == "recursive":
+                elif normalized_mode == "recursive":
                     rc = getattr(params, "regex_config", None)
                     pattern = getattr(rc, "pattern", None) if rc else None
                 else:
@@ -122,12 +145,79 @@ def _ingestion_data_collections(project_config) -> list[dict]:
                         "scan_mode": mode,
                         "scan_pattern": pattern,
                         "locations": locations,
-                        "file_count": None,
+                        "file_count": file_count,
                     }
                 )
     except Exception:
         return out
     return out
+
+
+def _shorten_scan_pattern(pattern: str | None, locations: list[str]) -> str:
+    """Render a scan pattern short enough to survive the preview table.
+
+    A single-file scan's pattern is an absolute path, and in a terminal-width
+    table it truncates to the data root every collection shares, hiding the one
+    part that identifies the file. Relative to the configured location it stays
+    unambiguous and readable.
+    """
+    if not pattern:
+        return "-"
+    for location in locations:
+        try:
+            return str(Path(pattern).relative_to(location))
+        except ValueError:
+            continue
+    return pattern
+
+
+def _print_dry_run_scan_preview(project_config) -> bool:
+    """Show what a real scan would match, per data collection.
+
+    Answering "is --data-root pointing at the right level?" is the whole reason
+    to run ``--dry-run``, and it could not: every step was wrapped in
+    ``if not dry_run`` and the run then printed "Data scanning completed" all
+    the same. The counts come from the scanner's own matcher, so a preview
+    cannot promise files the scan would not find.
+
+    Returns whether every data collection would find something, so the caller
+    does not follow a warning with a green "completed".
+    """
+    records = _ingestion_data_collections(project_config, count_files=True)
+    if not records:
+        rich_print_checked_statement("No data collection found in the project config.", "warning")
+        return False
+
+    # Reported before the table: a location that resolved no run at all explains
+    # every zero below it, and naming the directory level is what turns "0 files"
+    # into a fix.
+    for workflow in getattr(project_config, "workflows", None) or []:
+        for warning in resolve_run_locations(workflow).warnings:
+            rich_print_checked_statement(warning, "warning")
+
+    rows = []
+    for record in records:
+        file_count = record["file_count"]
+        rows.append(
+            {
+                "data collection": record["tag"],
+                "scan mode": record["scan_mode"] or "-",
+                "pattern": _shorten_scan_pattern(record["scan_pattern"], record["locations"]),
+                # A collection with no scan config (a derived one) has no files
+                # to count, which is not the same as counting zero.
+                "files": "n/a (no scan)" if file_count is None else str(file_count),
+            }
+        )
+    render_records_table(rows, title="Dry run: files each data collection would match")
+
+    empty = [record["tag"] for record in records if record["file_count"] == 0]
+    if empty:
+        rich_print_checked_statement(
+            f"{len(empty)} data collection(s) would match no file: {', '.join(empty)}. "
+            "Check --data-root and the scan patterns before running for real.",
+            "warning",
+        )
+    return not empty
 
 
 # How long an error exit waits for the server to record the outcome. Short, so
@@ -1505,6 +1595,10 @@ def register_run_command(app: typer.Typer):
                 if not continue_on_error:
                     raise typer.Exit(code=1)
 
+        # Stays None when validation fails under --continue-on-error: the later steps
+        # check it, so the failure is not reported again as a broken scan.
+        project_config = None
+
         # Step 3: Validate project configuration
         rich_print_section_separator(f"Step 3/{total_steps}: Validating project configuration")
         try:
@@ -1815,6 +1909,10 @@ def register_run_command(app: typer.Typer):
             rich_print_section_separator(f"Step 5/{total_steps}: Scanning data files")
             ingestion.current_step = "scan"
             try:
+                if project_config is None:
+                    raise Exception(
+                        "no validated project configuration, see the validation step above"
+                    )
                 if not dry_run:
                     # Get remote project configuration to compare hashes
                     remote_project_config = api_get_project_from_name(
@@ -1856,6 +1954,10 @@ def register_run_command(app: typer.Typer):
                     else:
                         raise Exception("Failed to fetch remote project configuration")
 
+                if dry_run:
+                    # The preview warns by itself when something would match nothing;
+                    # the line below is an info, not a green "completed".
+                    _print_dry_run_scan_preview(project_config)
                 _step_done("Data scanning completed", f"Would scan the data files{scope}")
                 success_count += 1
                 _rec("scan", "success", "data files scanned")
