@@ -3165,12 +3165,18 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
           "depends_on": [dc_tag, ...] (optional; recipe DCs, see
                          ``manifest_ingest._recipe_dependencies``, and scan
                          followers),
-          "scan_dc_ids": [dc_id, ...] (optional; the scan leader of a
-                         workflow's recursive DCs, see
+          "scan_dc_ids": [dc_id, ...] (optional; the scan leader of the DCs
+                         of a workflow that register its runs, see
                          ``manifest_ingest._scan_leaders``),
-          "scan_leader": dc_tag (optional; a recursive DC another task scans
-                         for, which it waits for and then only processes),
+          "scan_leader": dc_tag (optional; a DC another task scans for,
+                         which it waits for and then only processes),
         }
+
+    A scan leader records the outcome of each scan it runs on its own step,
+    under ``scans`` (``{dc_id: None, or the failure message}``), apart from
+    its processing outcome, which is the step's status. A follower is failed
+    by its own entry there only: a leader whose processing failed after its
+    scans succeeded leaves its followers to be processed.
 
     The project document is re-read here (nothing rich crosses the broker) and
     is never written: refresh has no scan-config changes to persist or revert,
@@ -3201,17 +3207,28 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
 
     run_id = payload["run_id"]
     tag = payload["dc_tag"]
+    # A scan leader's scan outcomes, kept on every write of its step.
+    scans: dict[str, str | None] = {}
+
+    def _step(status: str, detail: str | None = None) -> dict:
+        step: dict = {"name": tag, "status": status, "detail": detail}
+        if scans:
+            step["scans"] = dict(scans)
+        return step
 
     def _close_step(ok: bool, message: str | None) -> dict:
         """Write this DC's terminal step, close the run if it was the last one,
         and answer the task's result."""
         store.set_ingestion_step(
-            run_id,
-            step={"name": tag, "status": "success" if ok else "failed", "detail": message},
-            current_step=None,
+            run_id, step=_step("success" if ok else "failed", message), current_step=None
         )
         _finalize_manifest_refresh_run(run_id)
         return {"tag": tag, "ok": ok, "message": message}
+
+    def _record_scan(dc_id: str, error: str | None) -> None:
+        """Write one scan outcome as soon as it is known, before any processing."""
+        scans[dc_id] = error
+        store.set_ingestion_step(run_id, step=_step("running"), current_step=tag)
 
     depends_on = payload.get("depends_on") or []
     if depends_on:
@@ -3233,21 +3250,29 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
 
     scan_leader = payload.get("scan_leader")
     if scan_leader:
-        # The leader's walk registered this DC's files too. If it failed there
-        # is nothing to process, and saying so beats an empty-table error.
+        # The leader's scan registered this DC's files too. If that scan failed
+        # there is nothing to process, and saying so beats an empty-table
+        # error. Its own processing failing says nothing about this DC.
         doc = store.get_ingestion_run(run_id) or {}
-        statuses = {s.get("name"): s.get("status") for s in doc.get("steps") or []}
-        if statuses.get(scan_leader) == "failed":
+        leader = next((s for s in doc.get("steps") or [] if s.get("name") == scan_leader), {})
+        leader_scans = leader.get("scans") or {}
+        if payload["dc_id"] in leader_scans:
+            scan_error = leader_scans[payload["dc_id"]]
+            if scan_error is not None:
+                return _close_step(False, f"{scan_error} (scanned by '{scan_leader}')")
+        elif leader.get("status") == "failed":
+            # Failed before it got to this DC's scan (or before recording it).
             return _close_step(
                 False,
                 f"Not ingested: the scan of the run folder, done with '{scan_leader}', failed.",
             )
-    # Only a recursive DC carries either key; the others keep the default scan.
+    # Only a run-registering DC carries either key; the others keep the default scan.
     scan_kwargs: dict = {}
     if scan_leader:
         scan_kwargs["scan"] = False
     if payload.get("scan_dc_ids"):
         scan_kwargs["scan_dc_ids"] = list(payload["scan_dc_ids"])
+        scan_kwargs["on_scanned"] = _record_scan
 
     store.set_ingestion_step(run_id, step={"name": tag, "status": "running"}, current_step=tag)
     try:

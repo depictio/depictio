@@ -21,6 +21,7 @@ from depictio.api.v1.remote_fetch import (
     probe_remote_url,
     validate_remote_url,
 )
+from depictio.cli.cli.utils import data_root as data_root_module
 from depictio.cli.cli.utils.api_calls import (
     api_create_files,
     api_create_files_chunked,
@@ -32,7 +33,6 @@ from depictio.cli.cli.utils.api_calls import (
     api_upsert_runs_batch,
 )
 from depictio.cli.cli.utils.common import format_timestamp
-from depictio.cli.cli.utils.data_root import list_s3_objects
 from depictio.cli.cli.utils.rich_utils import (
     rich_print_checked_statement,
     rich_print_data_collection_light,
@@ -73,7 +73,7 @@ from depictio.models.models.workflows import (
     WorkflowRun,
     WorkflowRunScan,
 )
-from depictio.models.s3_access import S3AccessError
+from depictio.models.s3_access import S3AccessError, iter_object_pages
 
 #: Counter keys carried by every per-data-collection scan stat block. Declared
 #: once so the run-level aggregate stays in sync when a counter is added.
@@ -603,13 +603,23 @@ def scan_run_for_multiple_data_collections(
             and sc.scan_result["reason"] not in NOT_UPLOADED_SCAN_REASONS
         ]
 
-        # Registered files this scan did not encounter. Computed here rather
-        # than inside the branch below: a data collection that matched nothing
-        # in this run still needs the number, and that is precisely the case
-        # where every one of its files under this run has disappeared.
-        missing_files_location = set(existing_files_for_dc.keys()) - {
-            str(sc.file.file_location) for sc in dc_file_scan_results
-        }
+        # Registered files of this run that this scan did not encounter: this
+        # run's own (registered to it, or under its folder), never those of the
+        # other runs of the DC, which their own walk accounts for. Counted
+        # against every registered file, a sync deleted each run's files while
+        # walking the next one, and only the last run walked kept any (#1169).
+        # Computed here rather than inside the branch below: a data collection
+        # that matched nothing in this run still needs the number, and that is
+        # precisely the case where every one of its files under this run has
+        # disappeared. Registered locations are resolved paths, so the run is
+        # too: a run reached through a symlink would otherwise match nothing.
+        run_id = str(workflow_run.id)
+        run_prefix = os.path.join(os.path.realpath(run_location), "")
+        missing_files_location = {
+            location
+            for location, existing in existing_files_for_dc.items()
+            if str(existing.get("run_id")) == run_id or str(location).startswith(run_prefix)
+        } - {str(sc.file.file_location) for sc in dc_file_scan_results}
 
         # Hoisted so the id buckets below are always defined: a data collection
         # that matched nothing this cycle still needs an (empty) entry.
@@ -711,9 +721,7 @@ def scan_run_for_multiple_data_collections(
         # time has genuinely disappeared. Unlike the count above this one is
         # scoped correctly, which is what lets a deletion mark the collection as
         # changed instead of the table quietly keeping rows for a file that is
-        # no longer on disk. Registered locations are resolved paths, so the run
-        # is too: a run reached through a symlink would otherwise match nothing.
-        run_prefix = os.path.join(os.path.realpath(run_location), "")
+        # no longer on disk.
         vanished_files = [
             location for location in missing_files_location if str(location).startswith(run_prefix)
         ]
@@ -1067,10 +1075,15 @@ def scan_files_for_workflow(
     # location that does not exist, so they are kept as ids only. A rescan
     # removes them like any run it no longer finds; they used to fail the scan.
     gone_run_ids: dict[str, str] = {}
+    # Runs located at a URL: an ``s3_prefix`` scan of the workflow registered
+    # them, and no walk of a local folder ever finds one.
+    remote_run_tags: set[str] = set()
     existing_runs_response = api_get_runs_by_wf_id(wf_id=str(workflow_id), CLI_config=CLI_config)
     logger.info(f"Existing Runs Response: {existing_runs_response}")
     if existing_runs_response.status_code == 200:
         for e in existing_runs_response.json() or []:
+            if "://" in str(e.get("run_location") or ""):
+                remote_run_tags.add(e["run_tag"])
             try:
                 existing_runs_reformated[e["run_tag"]] = WorkflowRun.from_mongo(e)
             except ValueError as exc:
@@ -1223,7 +1236,15 @@ def scan_files_for_workflow(
                 registered = _run_to_rescan(existing_runs_reformated.get(run_tag), run_location)
                 if registered is not None:
                     kept_ids.add(str(registered.id))
-        missing_runs_tag = {tag for tag, run_id in run_ids.items() if run_id not in kept_ids}
+        # Only the runs this walk covers: a run another scan registered (one
+        # at a URL) is never "no longer found" by it, unless the walk
+        # registered its name anew.
+        scanned_tags = {run.run_tag for run in all_workflow_runs if run}
+        missing_runs_tag = {
+            tag
+            for tag, run_id in run_ids.items()
+            if run_id not in kept_ids and (tag in scanned_tags or tag not in remote_run_tags)
+        }
         missing_runs = [run_ids[run_tag] for run_tag in sorted(missing_runs_tag)]
         removed_label = escape(", ".join(sorted(missing_runs_tag)))
 
@@ -1623,60 +1644,81 @@ def list_s3_prefix(
     to strip the run segment, so a data collection pattern written relative to a
     run directory means remotely what it means locally.
 
-    Two bounds, both reported as warnings: matches stop at ``max_files``, and
-    no further page is requested once ``max_files * S3_PREFIX_KEY_BUDGET_FACTOR``
-    keys have been examined, so a prefix with millions of non-matching keys
-    cannot pin the calling thread. A page already fetched is always scanned in
-    full, which is why the budget is checked between pages.
+    Two bounds, both reported as warnings, and both checked between pages: a
+    page already fetched is always scanned in full. No further page is
+    requested once ``max_files`` objects match, and a further match on the
+    page that holds the last one shows the results are truncated. Nor once
+    ``max_files * S3_PREFIX_KEY_BUDGET_FACTOR`` keys have been listed, so a
+    prefix with millions of non-matching keys cannot pin the calling thread.
 
     Returns dicts of {url, key, size, etag, last_modified}; raises ValueError on
     a malformed prefix so the caller can surface it as a scan failure, and an
     ``S3AccessError`` when the read is refused or fails.
     """
     key_budget = max_files * S3_PREFIX_KEY_BUDGET_FACTOR
-    # The listing itself lives in data_root, which is what a DataRoot is built
-    # on too; matching and the two bounds stay here because they are the scan
-    # mode's own contract.
-    objects, budget_exhausted = list_s3_objects(prefix, CLI_config, max_keys=key_budget)
+    # How a prefix is read is data_root's decision, as for a DataRoot. The pages
+    # are read here, one at a time, so the listing stops at the cap: matching
+    # and the two bounds are the scan mode's own contract.
+    _bucket, key_prefix = data_root_module.split_s3_prefix(prefix)
+    target = data_root_module._s3_read_target(prefix, CLI_config)
 
     matches: list[dict] = []
-    truncated = False
-    for obj in objects:
-        candidate = obj.relative if match_path is None else match_path(obj.relative)
-        if candidate is None:
-            continue
-        if not _key_matches(candidate, os.path.basename(obj.key), pattern, pattern_syntax):
-            continue
-        if len(matches) >= max_files:
-            truncated = True
+    # Every key listed counts against the budget, folder markers included:
+    # listing them costs the same.
+    keys_listed = 0
+    past_cap = False  # a match beyond max_files was seen
+    stopped_early = False  # pages were left unlisted
+    for page in iter_object_pages(target, key_prefix):
+        for obj in page.get("Contents", []):
+            keys_listed += 1
+            key = obj["Key"]
+            if key.endswith("/"):
+                continue
+            relative = key[len(key_prefix) :].lstrip("/") if key_prefix else key
+            candidate = relative if match_path is None else match_path(relative)
+            if candidate is None:
+                continue
+            if not _key_matches(candidate, os.path.basename(key), pattern, pattern_syntax):
+                continue
+            if len(matches) >= max_files:
+                past_cap = True
+                break
+            matches.append(
+                {
+                    "url": f"s3://{target.bucket}/{key}",
+                    "key": key,
+                    "relative": relative,
+                    "size": obj.get("Size", -1),
+                    "etag": (obj.get("ETag") or "").strip('"'),
+                    "last_modified": obj.get("LastModified"),
+                }
+            )
+        if past_cap:
             break
-        matches.append(
-            {
-                "url": obj.url,
-                "key": obj.key,
-                "relative": obj.relative,
-                "size": obj.size,
-                "etag": obj.etag,
-                "last_modified": obj.last_modified,
-            }
-        )
+        # ``IsTruncated`` is set on every list_objects_v2 page; a listing that
+        # ends on the page a bound is reached on is complete.
+        if (len(matches) >= max_files or keys_listed >= key_budget) and page.get(
+            "IsTruncated", True
+        ):
+            stopped_early = True
+            break
 
-    if truncated:
+    if past_cap or (stopped_early and len(matches) >= max_files):
         # Never let a cap silently look like "that's all there is". The cap is
         # the tighter of the two bounds, so it is reported on its own.
-        budget_exhausted = False
+        certainty = "are" if past_cap else "may be"
         rich_print_checked_statement(
-            f"s3_prefix scan hit the max_files cap ({max_files}) under {prefix} — "
-            "results are truncated. Narrow `pattern` or raise `max_files`.",
+            f"s3_prefix scan stopped at the max_files cap ({max_files}) under {prefix}: "
+            f"results {certainty} truncated. Narrow `pattern` or raise `max_files`.",
             "warning",
         )
-    if budget_exhausted:
+    elif stopped_early:
         message = (
-            f"s3_prefix scan examined {len(objects)} keys under {prefix} and stopped at the "
+            f"s3_prefix scan listed {keys_listed} keys under {prefix}, reaching its "
             f"budget of {key_budget} keys (max_files {max_files} x "
-            f"{S3_PREFIX_KEY_BUDGET_FACTOR}) before the end of the listing; results are "
-            f"partial ({len(matches)} matched). Narrow `prefix` or `pattern`, or raise "
-            "`max_files`."
+            f"{S3_PREFIX_KEY_BUDGET_FACTOR}), and stopped before the end of the listing; "
+            f"results are partial ({len(matches)} matched). Narrow `prefix` or `pattern`, "
+            "or raise `max_files`."
         )
         logger.warning(message)
         rich_print_checked_statement(message, "warning")
