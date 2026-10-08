@@ -129,6 +129,33 @@ def test_dry_run_reports_plan_without_creating(mock_db):
     assert mock_db["projects"].count_documents({}) == 0
 
 
+def test_a_metadata_file_variable_is_never_opened_on_the_server(mock_db, tmp_path, monkeypatch):
+    """A request's METADATA_FILE names a path on the server's disk: resolving
+    the template for a browser must not open it, or the file's first line
+    would come back as the project's column variables."""
+    from depictio.cli.cli.utils import templates
+
+    # Importing the CLI app elsewhere in the session flips the context to CLI.
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+
+    server_file = tmp_path / "server-only.tsv"
+    server_file.write_text("private_header\tother\n")
+    with (
+        _served(),
+        patch.object(templates, "_auto_detect_metadata_columns") as detect,
+    ):
+        report = from_manifest._create_project_from_manifest(
+            manifest_url="https://example.org/manifest.json",
+            template_id=TEMPLATE_ID,
+            current_user=_user(),
+            project_name=None,
+            variables={"METADATA_FILE": str(server_file)},
+            dry_run=True,
+        )
+    assert report.success is True
+    detect.assert_not_called()
+
+
 def test_optional_dc_without_rows_is_pruned(mock_db):
     with _served(MANIFEST_SAMPLES_ONLY):
         report = _call(dry_run=True)

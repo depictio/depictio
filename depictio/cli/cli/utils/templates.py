@@ -1517,8 +1517,11 @@ def resolve_template(
         data_root_abs, template_metadata.provenance, provenance_files
     )
 
-    # 3b. Auto-detect metadata annotation columns when METADATA_FILE is provided
-    if "METADATA_FILE" in variables:
+    # 3b. Auto-detect metadata annotation columns when METADATA_FILE is provided.
+    # CLI only: there it is the user reading their own disk. A server resolving
+    # a template for a browser (POST /projects/from_manifest) never opens a path
+    # a request names, or its first line would land in the project's variables.
+    if "METADATA_FILE" in variables and _is_cli_context():
         metadata_path = Path(variables["METADATA_FILE"])
         if not metadata_path.is_absolute() and data_root_abs is not None:
             # Try relative to data_root first, then CWD

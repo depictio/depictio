@@ -68,6 +68,7 @@ def _project_doc(
         Scan,
         ScanManifest,
         ScanRecursive,
+        ScanSingle,
         ScanURL,
     )
     from depictio.models.models.data_collections_types.table import DCTableConfig
@@ -90,6 +91,8 @@ def _project_doc(
                 mode="recursive",
                 scan_parameters=ScanRecursive(regex_config=Regex(pattern=r".*\.csv")),
             )
+        elif scan_mode == "single":
+            scan = Scan(mode="single", scan_parameters=ScanSingle(filename=str(location)))
         else:
             scan = Scan(mode="url", scan_parameters=ScanURL(url=f"https://example.org/{tag}.csv"))
         data_collections.append(
@@ -194,14 +197,25 @@ def test_a_local_dc_the_server_cannot_see_is_not_offered(mock_db):
     assert "re-read" in exc.value.detail
 
 
-def test_a_local_dc_the_server_can_see_is_offered(mock_db, tmp_path):
-    """The same project on a server that does have the data root mounted."""
+@pytest.mark.parametrize("scan_mode", ["recursive", "single"])
+def test_a_local_dc_is_not_offered_even_where_the_server_can_read_it(mock_db, tmp_path, scan_mode):
+    """A local path stored on a project is its owner's word: the server never
+    scans one of its own paths on a user's behalf, or any user could read
+    whatever this process can (its keys, its environment) into a table."""
+    target = tmp_path / "server-file.csv"
+    target.write_text("a,b\n1,2\n")
     user = _user()
-    doc = _project_doc(user.id, tags=["counts"], scan_mode="recursive", location=str(tmp_path))
+    location = str(target) if scan_mode == "single" else str(tmp_path)
+    doc = _project_doc(user.id, tags=["counts"], scan_mode=scan_mode, location=location)
     mock_db["projects"].insert_one(doc)
-    with pytest.raises(HTTPException) as exc:
+    with (
+        patch.object(manifest_ingest, "_run_dc_ingest") as ingest,
+        pytest.raises(HTTPException) as exc,
+    ):
         _call(project_id=str(doc["_id"]), user=user)
-    assert exc.value.status_code != 422
+    assert exc.value.status_code == 422
+    assert "refreshed with the CLI" in exc.value.detail
+    ingest.assert_not_called()
 
 
 def test_unknown_tag_422(mock_db):

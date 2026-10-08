@@ -32,10 +32,9 @@ const SUMMARY_ORDER: ManifestRefreshStatus[] = [
   'failed',
 ];
 
-/** Scan modes whose source the server reads over the network, so it can always
- *  read it again. A local source depends on whether the data root is mounted in
- *  the API container, which only the server can know, so those are left out
- *  here: a server that does have the mount still accepts them on the API. */
+/** Scan modes whose source the server reads over the network, so it can read
+ *  it again. The server never re-reads a local path on a user's behalf: data
+ *  ingested from a local folder is refreshed with the CLI. */
 const REMOTE_SCAN_MODES = new Set(['manifest', 'url', 's3_prefix']);
 
 /** Tags of the collections the server can re-read, and so re-ingest. */
