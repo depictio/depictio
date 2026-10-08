@@ -112,7 +112,7 @@ Filters: lineage, clade and the two QC verdicts.
 
 | Route | What changes |
 |---|---|
-| Nanopore (`platform: nanopore`) | `summary_metrics` and the variant tables are pruned: no persistent filters, Key figures, Sample sheet or Variants tab, and Sample QC keeps only its Nextclade scatter. Coverage and typing read the ARTIC outputs. No collection of this route alone can stand in a Key figure slot: see below. |
+| Nanopore (`platform: nanopore`) | The ivar variant tables are pruned: no Variants tab, PCA, UpSet or missense row. `summary_metrics` stays (the ARTIC summary has every column but `% Mapped reads`, left empty), so the Key figures, the persistent filters and the Sample sheet stay too. Coverage and typing read the ARTIC outputs. |
 | A partial run (no caller output, no Pangolin) | The summary writes NA for the calls and the lineage: Variants per sample reads "–", the lineage filter in the left panel offers NA alone, and the Variants and Lineage & Clustering tabs are pruned. The Overview's bars and cards do not split by lineage. |
 | No primer scheme (metagenomic) | No amplicon cards, tracks, heatmap or table; the Coverage strip keeps its two window cards, and the amplicon row and figure leave the Overview. |
 | Non-SARS virus, `--skip_pangolin`, `--skip_nextclade` | No typing cards, flow or tables for the missing tool, and its Findings row and figure leave the Overview. |
@@ -122,13 +122,8 @@ The import re-packs the Overview grid after a drop, so a lone figure takes the f
 
 Two tiles on one grid slot are route alternates only when no run keeps both: the import
 packs them as one tile and draws whichever survives. The nanopore route writes no
-collection the illumina route lacks (it repoints the same tags at `artic_minion/`), so the
-Key figures cannot take a nanopore alternate. The nanopore `summary_variants_metrics_mqc.csv`
-carries every column the Key figures read; what prunes it is the recipe, whose output schema
-requires `% Mapped reads`, absent from that file. Making that column optional in
-`depictio/catalog/multiqc/summary_metrics.py` and dropping `summary_metrics` from the
-`IS_NANOPORE` `remove_dc_tags` in `template.yaml` restores the Key figures, the persistent
-filters and the Sample sheet on that route.
+collection the illumina route lacks (it repoints the same tags at `artic_minion/`), so its
+Key figures read the same `summary_metrics` as the illumina route rather than alternates.
 
 ## Colours
 
