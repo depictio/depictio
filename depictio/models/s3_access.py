@@ -766,18 +766,25 @@ def is_missing_prefix(exc: Exception) -> bool:
     return code in _MISSING_PREFIX_CODES or (status == 404 and not code)
 
 
-def iter_object_pages(target: S3Target, prefix: str) -> Iterator[dict]:
+def iter_object_pages(
+    target: S3Target, prefix: str, *, delimiter: str | None = None
+) -> Iterator[dict]:
     """ListObjectsV2 pages under ``prefix`` in ``target``'s bucket.
 
-    A 404 for a prefix that holds nothing is an empty listing; every other
-    failure raises :class:`S3AccessFailed`. Exceptions raised by the caller's
-    loop body are the caller's: only the paginator's own are mapped.
+    With ``delimiter="/"`` a page holds the direct children only: the keys
+    under ``Contents``, the sub-prefixes under ``CommonPrefixes``. A 404 for a
+    prefix that holds nothing is an empty listing; every other failure raises
+    :class:`S3AccessFailed`. Exceptions raised by the caller's loop body are
+    the caller's: only the paginator's own are mapped.
     """
     from botocore.exceptions import ClientError
 
+    params: dict[str, Any] = {"Bucket": target.bucket, "Prefix": prefix}
+    if delimiter:
+        params["Delimiter"] = delimiter
     try:
         paginator = target.client().get_paginator("list_objects_v2")
-        pages = iter(paginator.paginate(Bucket=target.bucket, Prefix=prefix))
+        pages = iter(paginator.paginate(**params))
     except Exception as exc:
         raise S3AccessFailed.from_exception(exc, target.with_key(prefix)) from exc
     while True:

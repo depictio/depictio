@@ -63,6 +63,14 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _ingest_manifest_into_project,
     _refresh_manifest_in_project,
 )
+from depictio.api.v1.endpoints.projects_endpoints.run_folders import (
+    FolderInspection,
+    FoundRuns,
+    S3DirListing,
+    find_runs,
+    inspect_folder,
+    list_s3_dirs,
+)
 from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
     ProjectStorageConfigIn,
     ProjectStorageConfigOut,
@@ -987,6 +995,72 @@ async def get_local_dirs(
     try:
         return await asyncio.to_thread(
             list_local_dirs, path, request=request, current_user=current_user
+        )
+    except CodedHTTPException as exc:
+        return exc.response()
+
+
+@projects_endpoint_router.get("/s3_dirs", response_model=S3DirListing)
+async def get_s3_dirs(
+    url: str | None = Query(default=None),
+    current_user=Depends(get_user_or_anonymous),
+):
+    """List the sub-folders of ``url``, or the S3 locations an administrator listed.
+
+    The S3 twin of ``GET /projects/local_dirs``, for any signed-in user: the
+    locations are the public and credentialed bucket lists, the instance's own
+    bucket never among them. One listing page per call, at most 500 folders
+    (``truncated`` says when there were more). A location outside the lists,
+    and a read the store refuses or fails, answer ``{detail, code}``.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await asyncio.to_thread(list_s3_dirs, url)
+
+
+@projects_endpoint_router.get("/folder_inspect", response_model=FolderInspection)
+async def get_folder_inspect(
+    request: Request,
+    location: str = Query(...),
+    detect: bool = Query(default=True),
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Describe one folder: its direct sub-folders and files, whether it looks
+    like a run, and (``detect``, the default) the template its run fits.
+
+    ``location`` is a folder on this computer (``depictio local``, with the
+    guards of ``GET /projects/local_dirs``) or an ``s3://`` location (with
+    those of ``GET /projects/s3_dirs``). Refusals answer ``{detail, code}``.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    try:
+        return await asyncio.to_thread(
+            inspect_folder, location, detect=detect, request=request, current_user=current_user
+        )
+    except CodedHTTPException as exc:
+        return exc.response()
+
+
+@projects_endpoint_router.get("/find_runs", response_model=FoundRuns)
+async def get_find_runs(
+    request: Request,
+    location: str = Query(...),
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Find the run folders (holding ``pipeline_info/`` or ``multiqc/``) below ``location``.
+
+    Bounded: six levels and 5,000 folders below a local folder, 20,000 keys
+    below an ``s3://`` prefix, 100 runs; ``truncated`` says when a bound
+    stopped the search. Below a local folder the first 50 runs carry their
+    detected template. Same locations and refusals as
+    ``GET /projects/folder_inspect``.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    try:
+        return await asyncio.to_thread(
+            find_runs, location, request=request, current_user=current_user
         )
     except CodedHTTPException as exc:
         return exc.response()
