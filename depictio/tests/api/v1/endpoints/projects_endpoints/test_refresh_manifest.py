@@ -207,10 +207,13 @@ def test_a_local_dc_the_server_cannot_see_is_not_offered(mock_db):
 
 
 @pytest.mark.parametrize("scan_mode", ["recursive", "single"])
-def test_a_local_dc_is_not_offered_even_where_the_server_can_read_it(mock_db, tmp_path, scan_mode):
+def test_a_local_dc_is_not_offered_even_where_the_server_can_read_it(
+    mock_db, tmp_path, monkeypatch, scan_mode
+):
     """A local path stored on a project is its owner's word: the server never
     scans one of its own paths on a user's behalf, or any user could read
     whatever this process can (its keys, its environment) into a table."""
+    monkeypatch.delenv("DEPICTIO_LOCAL_DATA_ROOTS", raising=False)
     target = tmp_path / "server-file.csv"
     target.write_text("a,b\n1,2\n")
     user = _user()
@@ -225,6 +228,37 @@ def test_a_local_dc_is_not_offered_even_where_the_server_can_read_it(mock_db, tm
     assert exc.value.status_code == 422
     assert "refreshed with the CLI" in exc.value.detail
     ingest.assert_not_called()
+
+
+@pytest.mark.parametrize("scan_mode", ["recursive", "single"])
+def test_under_depictio_local_only_a_dc_inside_a_root_is_offered(
+    mock_db, tmp_path, monkeypatch, scan_mode
+):
+    """A single-user ``depictio local`` server is the user's own computer: a
+    local source inside a root of its local-data policy is re-read, as at
+    creation. One outside every root stays refused, though the server sees it."""
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
+    monkeypatch.setenv("DEPICTIO_AUTH_SINGLE_USER_MODE", "true")
+    home, outside = tmp_path / "home", tmp_path / "outside"
+    monkeypatch.setenv("DEPICTIO_LOCAL_DATA_ROOTS", str(home))
+    user = _user()
+
+    def _project_in(folder) -> str:
+        folder.mkdir()
+        (folder / "counts.csv").write_text("a,b\n1,2\n")
+        location = str(folder / "counts.csv") if scan_mode == "single" else str(folder)
+        doc = _project_doc(user.id, tags=["counts"], scan_mode=scan_mode, location=location)
+        mock_db["projects"].insert_one(doc)
+        return str(doc["_id"])
+
+    inside_id, outside_id = _project_in(home), _project_in(outside)
+    with patch.object(manifest_ingest, "_run_dc_ingest", return_value=(True, None)) as ingest:
+        report = _call(project_id=inside_id, user=user)
+        with pytest.raises(HTTPException) as exc:
+            _call(project_id=outside_id, user=user)
+    assert [r.status for r in report.refreshed] == ["ingested"]
+    assert ingest.call_count == 1
+    assert exc.value.status_code == 422
 
 
 def _transformed_project_doc(owner_id: ObjectId, tag: str, location: str) -> dict:
