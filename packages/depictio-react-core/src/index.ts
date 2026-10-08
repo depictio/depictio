@@ -520,6 +520,9 @@ export {
   createProjectFromManifest,
   createProjectFromRun,
   listLocalDirs,
+  listS3Dirs,
+  inspectFolder,
+  findRunFolders,
   ApiDetailError,
   apiErrorCode,
   refreshManifest,
@@ -925,8 +928,15 @@ export type {
   FromRunReport,
   FromRunDCPreview,
   DetectedTemplate,
+  TemplateMatch,
   LocalDirEntry,
   LocalDirListing,
+  S3DirListing,
+  FolderRequestOptions,
+  FolderContents,
+  FolderInspection,
+  FoundRunFolder,
+  FindRunsResult,
   ManifestIngestDCResult,
   ManifestRefreshStatus,
   ManifestRefreshEntry,
@@ -1046,6 +1056,53 @@ export {
   templateFilterValues,
 } from './templateFilter';
 export type { ParsedTemplate } from './templateFilter';
+// "From a run folder": locations, the template catalog per pipeline, and the
+// reading of a run-folder plan.
+export {
+  folderAncestors,
+  folderName,
+  folderSource,
+  isS3Location,
+  middleEllipsis,
+  normalizeFolder,
+  parentFolder,
+  pathBarQuery,
+  relativeToFolder,
+  relativeToRunFolder,
+  shortenFolder,
+  shortenHome,
+} from './runFolderPaths';
+export type { FolderSource } from './runFolderPaths';
+export {
+  compareVersions,
+  defaultVersionFor,
+  findRunPipeline,
+  formatVersion,
+  groupRunTemplates,
+  isRunFolderCapable,
+  runTemplateMatch,
+  runTemplateMatchText,
+  sameVersion,
+  sourceLabel,
+  splitTemplateId,
+} from './runFolderTemplates';
+export type {
+  RunPipeline,
+  RunPipelineGroup,
+  RunTemplateEntry,
+  RunTemplateMatch,
+  RunTemplateMatchInput,
+  RunTemplateVersion,
+  TemplateIdParts,
+} from './runFolderTemplates';
+export {
+  groupRunCollections,
+  isCollectionReady,
+  runCollectionSection,
+  runCollectionTotals,
+  runFoundNothing,
+} from './runFolderReport';
+export type { RunCollectionEntry, RunCollectionSection } from './runFolderReport';
 export {
   asEnum,
   asList,

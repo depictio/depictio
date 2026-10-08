@@ -24,9 +24,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import {
-  apiErrorCode,
   createProjectFromManifest,
-  createProjectFromRun,
   listProjectTemplates,
   useBrandAccents,
   Z_LAYERS,
@@ -45,13 +43,8 @@ import type {
 import IngestionResultTable from './IngestionResultTable';
 import { useStepSettling } from './hooks/useStepSettling';
 import { DisabledReason, GatedButton } from '../components/settings/SettingsSections';
-import {
-  FromRunPreviewReport,
-  TemplateNotDetectedAlert,
-  fromRunFoundNothing,
-  fromRunMatchTotals,
-} from './FromRunReport';
-import LocalFolderBrowserModal from './LocalFolderBrowserModal';
+import { RunFolderTab } from './fromRun';
+import type { RunCreatedContext } from './fromRun';
 
 type Tab = 'create' | 'import' | 'manifest' | 'run';
 type ProjectType = 'basic' | 'advanced';
@@ -60,19 +53,9 @@ type ProjectType = 'basic' | 'advanced';
  *  server-side, so only the ones without a default must be typed here. */
 const mustBeTyped = (v: TemplateVariable): boolean => v.required && !v.default;
 
-/** Run-tab template choice meaning "recognise the pipeline from the folder":
- *  sent as `template_id: null`. Not a valid template id, so it cannot clash. */
-const DETECT_TEMPLATE = '__detect__';
-
-/** Stack ids: the folder browser opens above the create dialog. */
+/** Stack id of the create dialog: the run tab's folder browser opens above
+ *  it, in the same `Modal.Stack`. */
 const CREATE_STACK_ID = 'create-project';
-const BROWSE_STACK_ID = 'local-folder-browser';
-
-/** A location the server reads from its own disk: absolute, or under the
- *  server user's home. */
-function isLocalPath(location: string): boolean {
-  return location.startsWith('/') || location.startsWith('~/');
-}
 
 interface CreateProjectModalProps {
   opened: boolean;
@@ -81,10 +64,13 @@ interface CreateProjectModalProps {
   onCreate: (input: CreateProjectInput) => Promise<CreateProjectResult>;
   onImport: (file: File, overwrite: boolean) => Promise<void>;
   onCreateFromManifest: (input: FromManifestRequest) => Promise<FromManifestReport>;
-  onCreateFromRun: (input: FromRunRequest) => Promise<FromRunReport>;
+  onCreateFromRun: (input: FromRunRequest, context: RunCreatedContext) => Promise<FromRunReport>;
   /** The server reads run folders from its own disk (`depictio local`): the
    *  run tab then takes a local path and offers a folder browser. */
   localDataRootsEnabled?: boolean;
+  /** The server may browse allowed S3 locations: the folder browser then
+   *  offers an S3 side. */
+  remoteBrowseEnabled?: boolean;
 }
 
 const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
@@ -96,6 +82,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   onCreateFromManifest,
   onCreateFromRun,
   localDataRootsEnabled = false,
+  remoteBrowseEnabled = false,
 }) => {
   const accent = useBrandAccents();
   const [tab, setTab] = useState<Tab>('create');
@@ -124,23 +111,6 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
 
-  // From a run folder tab state
-  const [runStep, setRunStep] = useState(0);
-  const [runDataRoot, setRunDataRoot] = useState('');
-  const [runTemplateId, setRunTemplateId] = useState<string | null>(DETECT_TEMPLATE);
-  const [runProjectName, setRunProjectName] = useState('');
-  const [runVariables, setRunVariables] = useState<Record<string, string>>({});
-  const [runPreview, setRunPreview] = useState<FromRunReport | null>(null);
-  const [runPreviewLoading, setRunPreviewLoading] = useState(false);
-  const [runPreviewError, setRunPreviewError] = useState<string | null>(null);
-  /** The server's explanation when detection found no template (422
-   *  `template_not_detected`): a "pick a template" state, not a failure. */
-  const [runNotDetected, setRunNotDetected] = useState<string | null>(null);
-  /** The template choice came from detection, not from the reader: a new
-   *  folder then goes back to "Detect from the folder". */
-  const [runTemplateDetected, setRunTemplateDetected] = useState(false);
-  const [browseOpened, setBrowseOpened] = useState(false);
-
   // Reset everything whenever the modal opens.
   useEffect(() => {
     if (!opened) return;
@@ -159,16 +129,6 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     setManifestVariables({});
     setPreview(null);
     setPreviewError(null);
-    setRunStep(0);
-    setRunDataRoot('');
-    setRunTemplateId(DETECT_TEMPLATE);
-    setRunProjectName('');
-    setRunVariables({});
-    setRunPreview(null);
-    setRunPreviewError(null);
-    setRunNotDetected(null);
-    setRunTemplateDetected(false);
-    setBrowseOpened(false);
     setError(null);
     setSubmitting(false);
     importResetRef.current?.();
@@ -176,8 +136,8 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
   // Every template the backend knows, fetched fresh per open so a newly
   // registered template shows up without a page reload. The From Manifest tab
-  // narrows this to the manifest-capable ones; the From a run folder tab uses
-  // the full list, since a run folder is scanned whatever the scan mode.
+  // narrows this to the manifest-capable ones, the From a run folder tab to
+  // the run-folder-capable ones (grouped per pipeline).
   useEffect(() => {
     if (!opened) return;
     let cancelled = false;
@@ -341,188 +301,20 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   const manifestDisplayName =
     preview?.project_name || trimmedManifestName || selectedTemplate?.name || 'project';
 
-  const runDetecting = runTemplateId === DETECT_TEMPLATE;
-  const runSelectedTemplate = runDetecting
-    ? null
-    : (templates.find((t) => t.template_id === runTemplateId) ?? null);
-  // DATA_ROOT is injected server-side from the run folder field, so it never
-  // gets a form input of its own.
-  const runExtraVariables = (runSelectedTemplate?.variables ?? []).filter(
-    (v) => v.name !== 'DATA_ROOT',
-  );
-  // "Detect from the folder" first, then every template. A template the
-  // server detected but that the listing lacks (a version alias resolved to
-  // an id the listing does not name) still gets an option, so it can show.
-  const runTemplateOptions = useMemo(() => {
-    const options = [
-      { value: DETECT_TEMPLATE, label: 'Detect from the folder' },
-      ...templates.map((t) => ({ value: t.template_id, label: t.name })),
-    ];
-    if (
-      runTemplateId &&
-      runTemplateId !== DETECT_TEMPLATE &&
-      !templates.some((t) => t.template_id === runTemplateId)
-    ) {
-      options.push({ value: runTemplateId, label: runTemplateId });
-    }
-    return options;
-  }, [templates, runTemplateId]);
-
-  const trimmedRunDataRoot = runDataRoot.trim();
-  // The server reads an s3:// location, plus, when it allows local folders,
-  // a path on its own disk. Anything else is refused here with the reason
-  // spelled out rather than sent for a 422.
-  const runPrefixInvalid =
-    trimmedRunDataRoot.length > 0 &&
-    !trimmedRunDataRoot.startsWith('s3://') &&
-    !(localDataRootsEnabled && isLocalPath(trimmedRunDataRoot));
-  const trimmedRunName = runProjectName.trim();
-  const runNameUsed =
-    trimmedRunName.length > 0 &&
-    existingNames.some((n) => n.toLowerCase() === trimmedRunName.toLowerCase());
-  const runSourceReady =
-    trimmedRunDataRoot.length > 0 &&
-    !runPrefixInvalid &&
-    !!runTemplateId &&
-    !runNameUsed;
-
-  const buildRunRequest = (dryRun: boolean): FromRunRequest => {
-    const variables: Record<string, string> = {};
-    for (const v of runExtraVariables) {
-      const value = (runVariables[v.name] ?? '').trim();
-      if (value) variables[v.name] = value;
-    }
-    return {
-      dataRoot: trimmedRunDataRoot,
-      templateId: runDetecting ? null : runTemplateId,
-      projectName: trimmedRunName || null,
-      ...(Object.keys(variables).length > 0 ? { variables } : {}),
-      dryRun,
-    };
-  };
-
-  // Dry-run plan, re-fetched every time the Preview step is entered so a
-  // Previous → Next round-trip picks up edited inputs.
-  useEffect(() => {
-    if (!opened || tab !== 'run' || runStep !== 1) return;
-    if (!trimmedRunDataRoot || !runTemplateId) return;
-    let cancelled = false;
-    const detecting = runTemplateId === DETECT_TEMPLATE;
-    setRunPreview(null);
-    setRunPreviewError(null);
-    setRunNotDetected(null);
-    setRunPreviewLoading(true);
-    createProjectFromRun(buildRunRequest(true))
-      .then((r) => {
-        if (cancelled) return;
-        setRunPreview(r);
-        // Show the recognised template as the choice, still editable: going
-        // back lists its variables, and Create uses exactly what was previewed.
-        if (detecting && r.template_id) {
-          setRunTemplateId(r.template_id);
-          setRunTemplateDetected(true);
-        }
-      })
-      .catch((err: Error) => {
-        if (cancelled) return;
-        if (detecting && apiErrorCode(err) === 'template_not_detected') {
-          setRunNotDetected(
-            err.message || 'The pipeline that produced this folder was not recognised.',
-          );
-        } else {
-          setRunPreviewError(err.message || 'Failed to preview the run folder.');
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setRunPreviewLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // Inputs are frozen while on the Preview step, so entering it is the only
-    // dependency that matters.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opened, tab, runStep]);
-
-  // Single primary action for the run stepper: Next / Next / Create.
-  const handleRunSubmit = async () => {
-    if (!runSourceReady) return;
-    if (runStep < 2) {
-      setRunStep(runStep + 1);
-      return;
-    }
-    setSubmitting(true);
-    setError(null);
-    try {
-      await onCreateFromRun(buildRunRequest(false));
-    } catch (err) {
-      setError((err as Error).message || 'Failed to create project from run folder.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  // Nothing matched is the wrong-prefix case: creating would produce a project
-  // with no data at all, so it is blocked. A partial match warns and allows.
-  const runFoundNothing = runStep > 0 && !!runPreview && fromRunFoundNothing(runPreview);
-  const runTotals = runPreview ? fromRunMatchTotals(runPreview) : null;
-  // Disabled with a visible reason rather than hidden (project convention).
-  let runDisabledReason: string | null = null;
-  if (trimmedRunDataRoot.length === 0) {
-    runDisabledReason = localDataRootsEnabled
-      ? 'Enter or browse to the run folder.'
-      : 'Enter the location of the run folder.';
-  } else if (runPrefixInvalid) {
-    runDisabledReason = localDataRootsEnabled
-      ? 'The run folder must be a folder path or an s3:// location.'
-      : 'The run folder must be an s3:// location.';
-  } else if (!runTemplateId) {
-    runDisabledReason = 'Choose a template first.';
-  } else if (runNameUsed) {
-    runDisabledReason = 'A project with this name already exists.';
-  } else if (
-    runStep === 1 &&
-    (runPreviewLoading || (!runPreview && !runPreviewError && !runNotDetected))
-  ) {
-    // Between entering the step and the effect firing there is no preview
-    // and no error yet: that is still "loading", not a failure.
-    runDisabledReason = 'Reading the run folder.';
-  } else if (runStep === 1 && runNotDetected) {
-    runDisabledReason = 'The pipeline was not recognised: pick a template first.';
-  } else if (runStep === 1 && runPreviewError) {
-    runDisabledReason = 'The run folder could not be read.';
-  } else if (runFoundNothing) {
-    runDisabledReason = 'No data collection matched anything in this folder.';
-  }
-
-  const runDisplayName =
-    runPreview?.project_name || trimmedRunName || runSelectedTemplate?.name || 'project';
-
-  // A template detection picked belongs to the folder it was detected in.
-  const changeRunDataRoot = (value: string) => {
-    setRunDataRoot(value);
-    if (runTemplateDetected) {
-      setRunTemplateId(DETECT_TEMPLATE);
-      setRunTemplateDetected(false);
-    }
-  };
-
   // Escape and the close button both land here; neither may drop a request
   // that is still being sent.
   const handleModalClose = () => {
     if (!submitting) onClose();
   };
 
-  // The create dialog and, above it, the folder browser: one stack, so the
-  // browser gets the higher layer and Escape closes only the top one.
   const createDialog = (
     <Modal
       stackId={CREATE_STACK_ID}
       opened={opened}
       onClose={handleModalClose}
       centered
-      // The run preview is a five-column table plus full S3 paths, which the
-      // other tabs' width would wrap into noise.
+      // The run tab shows a detection card, a two-column summary and the
+      // grouped plan, which the other tabs' width would wrap into noise.
       size={tab === 'run' ? 'xl' : 'lg'}
       withCloseButton
       closeOnClickOutside={false}
@@ -958,289 +750,26 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           </Tabs.Panel>
 
           <Tabs.Panel value="run" pt="md">
-            <Stack gap="md">
-              <Stepper
-                active={runStep}
-                onStepClick={setRunStep}
-                color={accent.secondary}
-                size="sm"
-                allowNextStepsSelect={false}
-              >
-                <Stepper.Step label="Source" description="Run folder & template">
-                  <Stack gap="md" pt="md">
-                    <TextInput
-                      label="Run folder"
-                      description={
-                        localDataRootsEnabled
-                          ? 'A folder on this computer (a full path, or one starting with ~/) or an s3:// location: the output folder of one pipeline run.'
-                          : "The s3:// location of one pipeline run's output folder, the level the template's paths start from."
-                      }
-                      required
-                      placeholder={
-                        localDataRootsEnabled ? '~/results/run42' : 's3://bucket/results/run42/'
-                      }
-                      value={runDataRoot}
-                      onChange={(e) => changeRunDataRoot(e.currentTarget.value)}
-                      leftSection={<Icon icon="mdi:folder-search-outline" width={16} />}
-                      error={
-                        runPrefixInvalid
-                          ? localDataRootsEnabled
-                            ? 'Enter a full folder path, a path starting with ~/, or an s3:// location.'
-                            : 'The run folder must be an s3:// location.'
-                          : undefined
-                      }
-                      // The Browse button sits beside the input itself, under
-                      // the label and above any error.
-                      inputContainer={(input) =>
-                        localDataRootsEnabled ? (
-                          <Group gap="xs" wrap="nowrap" align="flex-start">
-                            <Box style={{ flex: 1, minWidth: 0 }}>{input}</Box>
-                            <Button
-                              variant="default"
-                              leftSection={<Icon icon="mdi:folder-open-outline" width={16} />}
-                              onClick={() => setBrowseOpened(true)}
-                              data-testid="run-browse-local"
-                            >
-                              Browse
-                            </Button>
-                          </Group>
-                        ) : (
-                          input
-                        )
-                      }
-                      data-testid="run-data-root-input"
-                    />
-                    <Select
-                      label="Template"
-                      description={
-                        runDetecting
-                          ? "Depictio reads which pipeline and version produced the folder from the run's own records, then picks the matching template."
-                          : runTemplateDetected
-                            ? 'Recognised from the folder. Pick another template to use that one instead.'
-                            : runSelectedTemplate?.description ||
-                              'The template matching the pipeline that produced this run.'
-                      }
-                      required
-                      placeholder="Select a template"
-                      data={runTemplateOptions}
-                      value={runTemplateId}
-                      onChange={(value) => {
-                        setRunTemplateId(value ?? DETECT_TEMPLATE);
-                        setRunTemplateDetected(false);
-                      }}
-                      allowDeselect={false}
-                      comboboxProps={{ zIndex: Z_LAYERS.tooltip }}
-                      leftSection={
-                        <Icon
-                          icon={runDetecting ? 'mdi:auto-fix' : 'mdi:file-document-outline'}
-                          width={16}
-                        />
-                      }
-                      error={templatesError ?? undefined}
-                      searchable
-                      // Show the template_id under each name so near-identical
-                      // templates stay distinguishable in the dropdown; the
-                      // detect choice says what it does instead.
-                      renderOption={({ option }) => (
-                        <Stack gap={0}>
-                          <Text size="sm">{option.label}</Text>
-                          <Text size="xs" c="dimmed">
-                            {option.value === DETECT_TEMPLATE
-                              ? 'Recognise the pipeline from the folder'
-                              : option.value}
-                          </Text>
-                        </Stack>
-                      )}
-                      data-testid="run-template-select"
-                    />
-                    <TextInput
-                      label="Project Name (Optional)"
-                      description="Defaults to a name derived from the template"
-                      placeholder="Enter project name"
-                      value={runProjectName}
-                      onChange={(e) => setRunProjectName(e.currentTarget.value)}
-                      leftSection={<Icon icon="mdi:folder-outline" width={16} />}
-                      error={
-                        runNameUsed
-                          ? 'A project with this name already exists.'
-                          : undefined
-                      }
-                      data-testid="run-project-name-input"
-                    />
-                    {runExtraVariables.map((v) => (
-                      <TextInput
-                        key={v.name}
-                        label={`${v.name} (Optional)`}
-                        description={v.description ?? undefined}
-                        placeholder={v.default ?? ''}
-                        value={runVariables[v.name] ?? ''}
-                        onChange={(e) => {
-                          const value = e.currentTarget.value;
-                          setRunVariables((prev) => ({
-                            ...prev,
-                            [v.name]: value,
-                          }));
-                        }}
-                      />
-                    ))}
-                  </Stack>
-                </Stepper.Step>
-
-                <Stepper.Step label="Preview" description="What each collection gets">
-                  <Stack gap="md" pt="md">
-                    <Box aria-live="polite" role="status">
-                      {runPreviewLoading && (
-                        <Center mih={120}>
-                          <Group gap="xs">
-                            <Loader size="sm" color={accent.secondary} />
-                            <Text size="sm" c="dimmed">
-                              {runDetecting
-                                ? 'Reading the run folder and recognising its pipeline...'
-                                : 'Reading the run folder and resolving the template...'}
-                            </Text>
-                          </Group>
-                        </Center>
-                      )}
-                    </Box>
-                    {runNotDetected && (
-                      <TemplateNotDetectedAlert
-                        message={runNotDetected}
-                        onPickTemplate={() => setRunStep(0)}
-                      />
-                    )}
-                    {runPreviewError && (
-                      <Alert
-                        color="red"
-                        variant="light"
-                        icon={<Icon icon="mdi:alert-circle-outline" width={16} />}
-                        data-testid="run-preview-error"
-                      >
-                        {runPreviewError}
-                      </Alert>
-                    )}
-                    {runPreview && <FromRunPreviewReport report={runPreview} />}
-                    {runFoundNothing && (
-                      <Alert
-                        color="red"
-                        variant="light"
-                        icon={<Icon icon="mdi:alert-circle" width={16} />}
-                        data-testid="run-no-match-warning"
-                      >
-                        <Text size="sm">
-                          No data collection matched anything in this folder, so there
-                          is nothing to ingest. The paths listed above are what the
-                          server looked for: a run folder set one directory too high,
-                          or too low, is the usual cause.
-                        </Text>
-                      </Alert>
-                    )}
-                    {!runFoundNothing &&
-                      runTotals &&
-                      runTotals.matched < runTotals.considered && (
-                        <Alert
-                          color="yellow"
-                          variant="light"
-                          icon={<Icon icon="mdi:information-outline" width={16} />}
-                          data-testid="run-partial-warning"
-                        >
-                          <Text size="sm">
-                            {runTotals.considered - runTotals.matched} of{' '}
-                            {runTotals.considered} collections found no inputs. You can
-                            still create the project; those collections stay empty
-                            until their inputs exist.
-                          </Text>
-                        </Alert>
-                      )}
-                  </Stack>
-                </Stepper.Step>
-
-                <Stepper.Step label="Create" description="Confirm & ingest">
-                  <Stack gap="md" pt="md">
-                    <Paper withBorder radius="md" p="lg">
-                      <Stack gap="sm" align="center">
-                        <Icon
-                          icon="mdi:rocket-launch-outline"
-                          width={36}
-                          color={`var(--mantine-color-${accent.secondary}-6)`}
-                        />
-                        <Text fw={500} ta="center">
-                          Create “{runDisplayName}”
-                        </Text>
-                        <Text size="xs" c="dimmed" ta="center">
-                          {runTotals
-                            ? `${runTotals.matched} of ${runTotals.considered} data ` +
-                              `collection${runTotals.considered === 1 ? '' : 's'} will ` +
-                              'be ingested in the background. You can watch the run ' +
-                              'and open the dashboard from the next screen.'
-                            : 'The run folder will be ingested and the template dashboards imported.'}
-                        </Text>
-                      </Stack>
-                    </Paper>
-                  </Stack>
-                </Stepper.Step>
-              </Stepper>
-
-              {error && (
-                <Alert
-                  color="red"
-                  variant="light"
-                  icon={<Icon icon="mdi:alert-circle-outline" width={16} />}
-                  data-testid="run-create-error"
-                >
-                  {error}
-                </Alert>
-              )}
-
-              <Group justify="space-between" align="flex-start" wrap="nowrap">
-                <Button
-                  variant="default"
-                  onClick={() => setRunStep((s) => Math.max(0, s - 1))}
-                  disabled={runStep === 0 || submitting}
-                  data-testid="run-previous"
-                >
-                  Previous
-                </Button>
-                <Stack gap={4} align="flex-end" style={{ minWidth: 0 }}>
-                  <GatedButton
-                    color={accent.secondary}
-                    onClick={handleRunSubmit}
-                    loading={submitting}
-                    reason={runDisabledReason}
-                    data-testid="create-from-run-submit"
-                  >
-                    {runStep === 2 ? 'Create Project' : 'Next'}
-                  </GatedButton>
-                  <DisabledReason
-                    reason={runDisabledReason}
-                    icon="mdi:information-outline"
-                    testId="run-submit-disabled-reason"
-                  />
-                </Stack>
-              </Group>
-            </Stack>
+            <RunFolderTab
+              opened={opened}
+              existingNames={existingNames}
+              templates={templates}
+              templatesError={templatesError}
+              localDataRootsEnabled={localDataRootsEnabled}
+              remoteBrowseEnabled={remoteBrowseEnabled}
+              onCreateFromRun={onCreateFromRun}
+              submitting={submitting}
+              setSubmitting={setSubmitting}
+            />
           </Tabs.Panel>
         </Tabs>
       </Stack>
     </Modal>
   );
 
-  return (
-    <Modal.Stack>
-      {createDialog}
-      {localDataRootsEnabled && (
-        <LocalFolderBrowserModal
-          stackId={BROWSE_STACK_ID}
-          opened={opened && browseOpened}
-          onClose={() => setBrowseOpened(false)}
-          onSelect={(path) => {
-            changeRunDataRoot(path);
-            setBrowseOpened(false);
-          }}
-          initialPath={trimmedRunDataRoot}
-        />
-      )}
-    </Modal.Stack>
-  );
+  // One stack, so the run tab's folder browser gets the higher layer and
+  // Escape closes only the top one.
+  return <Modal.Stack>{createDialog}</Modal.Stack>;
 };
 
 /** True when a real (non dry-run) from-manifest report carries something the
