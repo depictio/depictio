@@ -19,6 +19,11 @@ location the creation then refuses: a malformed location, the instance's own
 bucket and anything no listed entry holds are refused before a request goes
 out, and every request goes through the resolved target's client.
 
+A private bucket is read with storage settings typed in next to the location
+(the POST twins of the three routes, body field ``storage``): the location is
+then read with them alone, whatever the lists say, and browsing reaches the
+whole bucket, as far as the keys allow.
+
 Every read is bounded: one listing page per S3 folder, a capped walk below a
 local folder, a capped key listing below an S3 prefix, and template detection
 for the first :data:`FIND_DETECT_RUNS` runs found.
@@ -42,6 +47,7 @@ from depictio.api.v1.endpoints.projects_endpoints.from_run import (
     _build_data_root,
     _is_local_path,
     _run_folder_read_config,
+    _RunFolderReads,
     describe_detection,
 )
 from depictio.api.v1.endpoints.projects_endpoints.local_dirs import (
@@ -53,6 +59,10 @@ from depictio.api.v1.endpoints.projects_endpoints.local_dirs import (
     active_local_policy,
     is_directory,
     require_local_caller,
+)
+from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
+    RunStorageIn,
+    read_settings,
 )
 from depictio.models.local_access import LocalDataPolicy, LocalPathRefused
 from depictio.models.logging import logger
@@ -141,6 +151,31 @@ class FoundRun(BaseModel):
     detected: DetectedTemplate | None = None
 
 
+class S3DirsRequest(BaseModel):
+    """Body of POST /projects/s3_dirs: the query of the GET route, and storage settings.
+
+    Without ``url`` the listed locations are answered and ``storage`` is not used.
+    """
+
+    url: str | None = None
+    storage: RunStorageIn | None = None
+
+
+class FolderInspectRequest(BaseModel):
+    """Body of POST /projects/folder_inspect. ``storage`` is for an ``s3://`` location."""
+
+    location: str
+    detect: bool = True
+    storage: RunStorageIn | None = None
+
+
+class FindRunsRequest(BaseModel):
+    """Body of POST /projects/find_runs. ``storage`` is for an ``s3://`` location."""
+
+    location: str
+    storage: RunStorageIn | None = None
+
+
 class FoundRuns(BaseModel):
     """The run folders below ``location``, sorted by ``relative``.
 
@@ -213,8 +248,11 @@ class _S3Folder:
     bucket: str
     # "" for the bucket itself, else ending in "/".
     prefix: str
-    # The prefix of the outermost listed location holding it, same spelling.
+    # The prefix of the outermost listed location holding it, same spelling;
+    # "" (the bucket) when it is read with storage settings.
     root: str
+    # What every other read of the folder (detection) is decided from.
+    reads: _RunFolderReads
 
     @property
     def url(self) -> str:
@@ -235,7 +273,7 @@ class _S3Folder:
         return f"{self.url}{name}/"
 
 
-def _s3_folder(url: str) -> _S3Folder:
+def _s3_folder(url: str, storage: RunStorageIn | None = None) -> _S3Folder:
     """The folder ``url`` names, once the configuration lets the server read it.
 
     Decided from configuration alone, before any request: a malformed
@@ -245,11 +283,23 @@ def _s3_folder(url: str) -> _S3Folder:
     is listed). The listed locations are then checked once more, so nothing
     outside them is browsed whatever the process context. Only then is the
     bucket asked for its region, once per process, as for any run folder.
+
+    With ``storage`` the settings are validated as a saved config is (see
+    ``RunStorageIn.settings_for``: 400 or 422, the instance's bucket
+    ``S3AccessRefused``) and the folder is read with them alone; the lists do
+    not apply, and the bucket itself is the root.
     """
     bucket, key = split_s3_url(url)
     prefix = _folder_prefix(key)
     location = f"s3://{bucket}/{prefix}"
-    target = remote_fetch.s3_read_target(location, _run_folder_read_config())
+    if storage is not None:
+        reads = _run_folder_read_config(read_settings(storage.settings_for(location)))
+        target = remote_fetch.s3_read_target(location, reads)
+        return _S3Folder(
+            target=ensure_region(target), bucket=bucket, prefix=prefix, root="", reads=reads
+        )
+    reads = _run_folder_read_config()
+    target = remote_fetch.s3_read_target(location, reads)
     holding = [
         listed
         for listed_bucket, listed in allowed_s3_locations()
@@ -259,7 +309,9 @@ def _s3_folder(url: str) -> _S3Folder:
         raise S3AccessRefused(f"{location} is not a location this server lets you browse.")
     # The outermost one, so going up stops where nothing is readable any more.
     root = _folder_prefix(min(holding, key=len))
-    return _S3Folder(target=ensure_region(target), bucket=bucket, prefix=prefix, root=root)
+    return _S3Folder(
+        target=ensure_region(target), bucket=bucket, prefix=prefix, root=root, reads=reads
+    )
 
 
 def _first_page(folder: _S3Folder) -> dict:
@@ -295,11 +347,12 @@ def _markers(folder_names: list[str]) -> list[str]:
 # ── GET /projects/s3_dirs ────────────────────────────────────────────────────
 
 
-def list_s3_dirs(url: str | None) -> S3DirListing:
+def list_s3_dirs(url: str | None, storage: RunStorageIn | None = None) -> S3DirListing:
     """The sub-folders of ``url``, or the listed locations without one.
 
     Refusals are ``S3AccessError`` (see :func:`_s3_folder`): the API answers
     them ``{detail, code}``. A prefix that holds nothing lists as empty.
+    ``url`` is read with ``storage`` when given; without ``url`` it is unused.
     """
     if not url:
         return S3DirListing(
@@ -313,7 +366,7 @@ def list_s3_dirs(url: str | None) -> S3DirListing:
             ]
         )
 
-    folder = _s3_folder(url)
+    folder = _s3_folder(url, storage)
     page = _first_page(folder)
     names = _page_folders(folder, page)
     return S3DirListing(
@@ -399,22 +452,27 @@ def _inspection(
 
 
 def inspect_folder(
-    location: str, *, detect: bool = True, request, current_user
+    location: str,
+    *,
+    detect: bool = True,
+    storage: RunStorageIn | None = None,
+    request,
+    current_user,
 ) -> FolderInspection:
     """What ``location`` holds, and, with ``detect``, the template its run fits.
 
     A local folder answers the refusals of ``GET /projects/local_dirs``; an
-    ``s3://`` one those of ``GET /projects/s3_dirs``; anything else is a 422
-    ``location_unsupported``. Detection reads the folder the way
-    ``POST /projects/from_run`` does, so what it names is what the creation
-    would pick.
+    ``s3://`` one those of ``GET /projects/s3_dirs``, read with ``storage``
+    when given; anything else is a 422 ``location_unsupported``. Detection
+    reads the folder the way ``POST /projects/from_run`` does, so what it names
+    is what the creation would pick.
     """
     if _is_s3(location):
-        folder = _s3_folder(location)
+        folder = _s3_folder(location, storage)
         page = _first_page(folder)
         detected = None
         if detect:
-            detected = _detect(_build_data_root(folder.url, _run_folder_read_config()))
+            detected = _detect(_build_data_root(folder.url, folder.reads))
         return _inspection(
             location=folder.url,
             source="s3",
@@ -543,10 +601,10 @@ def _run_of(relative_key: str) -> tuple[str, str] | None:
     return None
 
 
-def _find_s3_runs(location: str) -> FoundRuns:
+def _find_s3_runs(location: str, storage: RunStorageIn | None = None) -> FoundRuns:
     """The run folders below ``location``, from one listing of at most
     :data:`FIND_MAX_KEYS` keys. A run inside another run is not one of them."""
-    folder = _s3_folder(location)
+    folder = _s3_folder(location, storage)
     markers: dict[str, set[str]] = {}
     examined = 0
     truncated = False
@@ -583,16 +641,19 @@ def _find_s3_runs(location: str) -> FoundRuns:
     return FoundRuns(location=folder.url, runs=runs, truncated=truncated, scanned=examined)
 
 
-def find_runs(location: str, *, request, current_user) -> FoundRuns:
+def find_runs(
+    location: str, *, storage: RunStorageIn | None = None, request, current_user
+) -> FoundRuns:
     """The run folders below ``location``: those holding ``pipeline_info/`` or
     ``multiqc/``, the searched folder itself included.
 
-    Same refusals as :func:`inspect_folder`. Below a local folder, the first
-    :data:`FIND_DETECT_RUNS` runs carry the template detected for them; below
-    an ``s3://`` prefix none do, since each would cost a listing of its own.
+    Same refusals as :func:`inspect_folder`, and the same use of ``storage``.
+    Below a local folder, the first :data:`FIND_DETECT_RUNS` runs carry the
+    template detected for them; below an ``s3://`` prefix none do, since each
+    would cost a listing of its own.
     """
     if _is_s3(location):
-        return _find_s3_runs(location)
+        return _find_s3_runs(location, storage)
     if not _is_local_path(location):
         raise _unsupported_location()
     policy, real = _local_folder(location, request=request, current_user=current_user)

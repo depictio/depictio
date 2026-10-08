@@ -21,14 +21,29 @@ then public or refused, never done with the instance credentials. A config
 that exists but cannot be used raises a ``ProjectStorageUnusable`` subclass
 instead of degrading to ``None``, because silently reading a private bucket
 with the wrong credentials is exactly the failure the feature exists to avoid.
+
+Settings can also arrive before their project exists: a run folder in a
+private bucket is browsed, inspected and previewed with the settings typed in
+next to it (:class:`RunStorageIn`, validated by :meth:`RunStorageIn.settings_for`
+exactly as a saved config is), and ``POST /projects/from_run`` stores them on
+the project it creates. Until then they live in the request body only: never
+logged, never answered back, never written anywhere.
 """
 
+import re
 from urllib.parse import urlparse
 
 from bson import ObjectId
 from bson.errors import InvalidId
 from fastapi import HTTPException
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    SecretStr,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.db import (
@@ -44,10 +59,16 @@ from depictio.models.s3_access import (
     S3AccessFailed,
     S3AccessRefused,
     is_instance_bucket,
+    is_missing_prefix,
     probe_bucket,
     project_target,
+    split_s3_url,
 )
 from depictio.models.timestamps import utc_now_str
+
+# With no endpoint the region becomes part of the AWS host name object-store
+# reads from, so it is a plain name: letters, digits, '.', '-' and '_'.
+_REGION_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
 
 class ProjectStorageUnusable(RuntimeError):
@@ -121,18 +142,24 @@ class ProjectStorageConfigIn(BaseModel):
 
     ``bucket`` is required: the storage test probes that bucket and nothing
     else (an endpoint-wide ``list_buckets`` is denied by gateways that scope a
-    key to one bucket). ``secret_access_key`` is optional on update: omitted
-    or null keeps the stored secret, so edits don't require retyping it, as
-    long as the access key ID, the endpoint and the bucket stay the ones it
-    was saved with. An empty ``access_key_id`` means "read without
-    credentials", and drops any stored secret.
+    key to one bucket). An empty ``endpoint_url`` means AWS S3.
+    ``secret_access_key`` is optional on update: omitted or null keeps the
+    stored secret, so edits don't require retyping it, as long as the access
+    key ID, the endpoint and the bucket stay the ones it was saved with. An
+    empty ``access_key_id`` means "read without credentials", and drops any
+    stored secret.
     """
 
     endpoint_url: str
     bucket: str = Field(min_length=1)
     region: str = AWS_DEFAULT_REGION
     access_key_id: str | None = None
-    secret_access_key: str | None = None
+    secret_access_key: str | None = Field(default=None, repr=False)
+
+    @field_validator("endpoint_url", mode="before")
+    @classmethod
+    def _strip_endpoint(cls, value):
+        return value.strip() if isinstance(value, str) else value
 
     @field_validator("bucket", mode="before")
     @classmethod
@@ -143,6 +170,13 @@ class ProjectStorageConfigIn(BaseModel):
     @classmethod
     def _default_region(cls, value):
         return (value.strip() if isinstance(value, str) else value) or AWS_DEFAULT_REGION
+
+    @field_validator("region")
+    @classmethod
+    def _plain_region(cls, value: str) -> str:
+        if not _REGION_NAME.fullmatch(value):
+            raise ValueError("The region must be a plain name, such as eu-west-1.")
+        return value
 
     @model_validator(mode="after")
     def _secret_needs_a_key(self) -> "ProjectStorageConfigIn":
@@ -168,6 +202,73 @@ class StorageTestResult(BaseModel):
     # it sent one (AWS does; the EMBL gateway and SeaweedFS do not). Written
     # back to the stored config when it differs from the configured one.
     detected_region: str | None = None
+
+
+class RunStorageIn(BaseModel):
+    """Storage settings typed in with an ``s3://`` run folder, before its project exists.
+
+    No bucket field: the bucket is the one the location names
+    (:meth:`settings_for`). An empty ``endpoint_url`` means AWS S3, an empty
+    ``region`` the default one. The secret is a ``SecretStr`` so a model that
+    ends up in a log line or a traceback shows it masked.
+    """
+
+    endpoint_url: str | None = None
+    region: str | None = None
+    access_key_id: str | None = None
+    secret_access_key: SecretStr | None = None
+
+    def settings_for(self, location: str) -> ProjectStorageConfigIn:
+        """These settings for the bucket of ``location``, validated as a saved config is.
+
+        Built through :class:`ProjectStorageConfigIn`, so its rules apply as
+        they are, then checked as ``PUT /projects/{id}/storage`` checks before
+        storing: the endpoint gating (400), the instance's own bucket
+        (``S3AccessRefused``), a key without its secret (422). A malformed
+        location is ``S3AccessRefused`` too. Nothing goes out but the DNS
+        lookup of the endpoint gating.
+        """
+        bucket, _key = split_s3_url(location)
+        secret = self.secret_access_key.get_secret_value() if self.secret_access_key else None
+        try:
+            payload = ProjectStorageConfigIn(
+                endpoint_url=self.endpoint_url or "",
+                bucket=bucket,
+                region=self.region or "",
+                access_key_id=self.access_key_id,
+                secret_access_key=secret,
+            )
+        except ValidationError as exc:
+            # The messages only: a validation error's own text repeats its
+            # input, the secret included. ``from None`` keeps it out of any
+            # traceback too.
+            detail = " ".join(
+                str(error["msg"]).removeprefix("Value error, ")
+                for error in exc.errors(
+                    include_url=False, include_context=False, include_input=False
+                )
+            )
+            raise HTTPException(status_code=422, detail=detail) from None
+        _check_storage_settings(payload, has_secret=bool(secret))
+        return payload
+
+
+class RunStorageTestRequest(BaseModel):
+    """Body of POST /projects/storage_test: settings not stored anywhere yet."""
+
+    location: str
+    storage: RunStorageIn
+
+
+def read_settings(payload: ProjectStorageConfigIn) -> ProjectS3Config:
+    """The read-side form of validated settings, as ``project_storage_for`` returns it."""
+    return ProjectS3Config(
+        endpoint_url=payload.endpoint_url,
+        bucket=payload.bucket,
+        region=payload.region,
+        access_key_id=(payload.access_key_id or "").strip(),
+        secret_access_key=payload.secret_access_key or "",
+    )
 
 
 def _normalize_endpoint(url: str) -> str:
@@ -207,8 +308,11 @@ def _storage_endpoint_rejection(endpoint_url: str) -> str | None:
     ``DEPICTIO_REMOTE_URL_ALLOWLIST`` escape hatch): a project-supplied
     endpoint is the same SSRF surface. Shared by the write path (400) and the
     read path (``StorageEndpointRejected``) so both apply the gating in force
-    *now*.
+    *now*. No endpoint at all is AWS S3, whose host boto3 and object-store
+    build from the region: nothing chosen by the project, nothing to gate.
     """
+    if not endpoint_url.strip():
+        return None
     parsed = urlparse(endpoint_url)
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
         return "endpoint_url must be an http(s) URL, e.g. https://s3.example.org"
@@ -299,35 +403,60 @@ def _refuse_stored_secret_for_new_settings(
         )
 
 
+def _check_storage_settings(payload: ProjectStorageConfigIn, *, has_secret: bool) -> str | None:
+    """Refuse settings no read could use; return the access key ID, None for none.
+
+    ``has_secret`` says whether a secret goes with the key, typed in or
+    already stored.
+    """
+    _validate_storage_endpoint(payload.endpoint_url)
+    _refuse_instance_bucket(payload.bucket)
+    access_key_id = (payload.access_key_id or "").strip() or None
+    if access_key_id and not has_secret:
+        # Reads would refuse a key without its secret; say so at save time.
+        raise HTTPException(status_code=422, detail="Enter the secret for this access key.")
+    return access_key_id
+
+
 def _set_project_storage(
     project_id: str, payload: ProjectStorageConfigIn, current_user
 ) -> ProjectStorageConfigOut:
-    from depictio.api.v1.crypto import encrypt_secret
-
     project_dict = _load_project_for_owner(project_id, current_user)
-    _validate_storage_endpoint(payload.endpoint_url)
-    _refuse_instance_bucket(payload.bucket)
-
     project_oid = project_dict["_id"]
     existing = project_storage_collection.find_one({"project_id": project_oid}) or {}
     access_key_id = (payload.access_key_id or "").strip() or None
+    if access_key_id and not payload.secret_access_key and existing.get("secret_encrypted"):
+        # The stored secret is kept for the settings it was saved with only.
+        # Kept across a new key, or a new endpoint or bucket, it would be sent
+        # where its owner never gave it.
+        _refuse_stored_secret_for_new_settings(existing, payload, access_key_id)
+    return _store_project_storage(
+        project_oid, payload, stored_secret=existing.get("secret_encrypted")
+    )
 
+
+def _store_project_storage(
+    project_oid: ObjectId, payload: ProjectStorageConfigIn, *, stored_secret: str | None = None
+) -> ProjectStorageConfigOut:
+    """Check ``payload`` and store it as the project's settings, the secret encrypted.
+
+    ``stored_secret`` is the encrypted secret already stored, kept when the
+    payload carries none. No ownership check: the caller made it, as
+    ``_set_project_storage`` does, or created the project itself.
+    """
+    from depictio.api.v1.crypto import encrypt_secret
+
+    access_key_id = _check_storage_settings(
+        payload, has_secret=bool(payload.secret_access_key or stored_secret)
+    )
     if not access_key_id:
         # No key: the bucket is read without credentials, so no secret either.
         secret_encrypted: str | None = None
     elif payload.secret_access_key:
         secret_encrypted = encrypt_secret(payload.secret_access_key)
     else:
-        # Omitted/empty secret keeps whatever is stored: write-only semantics,
-        # for the settings it was saved with only. Kept across a new key, or a
-        # new endpoint or bucket, an old secret would be sent where its owner
-        # never gave it.
-        secret_encrypted = existing.get("secret_encrypted")
-        if secret_encrypted:
-            _refuse_stored_secret_for_new_settings(existing, payload, access_key_id)
-    if access_key_id and not secret_encrypted:
-        # Reads would refuse a key without its secret; say so at save time.
-        raise HTTPException(status_code=422, detail="Enter the secret for this access key.")
+        # Omitted/empty secret keeps whatever is stored: write-only semantics.
+        secret_encrypted = stored_secret
 
     # Storage writes are rare and owner-driven; ensuring the unique index here
     # (idempotent) covers instances upgraded past the first boot, where the
@@ -488,5 +617,57 @@ def _test_project_storage(project_id: str, current_user) -> StorageTestResult:
     return StorageTestResult(
         success=True,
         message=f"Bucket '{bucket}' is reachable.{region_note}",
+        detected_region=detected_region,
+    )
+
+
+def _test_run_storage(location: str, storage: RunStorageIn) -> StorageTestResult:
+    """Probe the bucket of ``location`` with settings typed in and stored nowhere.
+
+    The probes of :func:`_test_project_storage`, the listing under the
+    location's prefix. Settings no read could use and failed probes answer
+    ``success: false`` with the message a read would get; a malformed
+    location raises ``S3AccessRefused``, since it is the request at fault,
+    not the settings. The detected region is answered, not written anywhere.
+    """
+    from botocore.exceptions import ClientError
+
+    bucket, key = split_s3_url(location)
+    prefix = f"{key.strip('/')}/" if key.strip("/") else ""
+    try:
+        config = read_settings(storage.settings_for(location))
+        target = project_target(config, bucket, prefix, timeout_s=remote_policy().timeout_s)
+    except HTTPException as exc:
+        return StorageTestResult(success=False, message=str(exc.detail))
+    except S3AccessRefused as exc:
+        return StorageTestResult(success=False, message=exc.detail)
+
+    detected_region: str | None = None
+    try:
+        target, detected_region = probe_bucket(target)
+        try:
+            listing = target.client().list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=1)
+        except ClientError as exc:
+            # Gateways that treat a prefix as a path answer an empty one 404.
+            if not is_missing_prefix(exc):
+                raise
+            listing = {}
+    except Exception as exc:
+        failure = S3AccessFailed.from_exception(exc, target)
+        logger.info(
+            f"Storage test failed for {target.location} ({failure.code}): {type(exc).__name__}"
+        )
+        return StorageTestResult(
+            success=False, message=failure.detail, detected_region=detected_region
+        )
+
+    notes = ""
+    if detected_region and detected_region != config.region:
+        notes += f" Its region is {detected_region}."
+    if prefix and not (listing.get("KeyCount") or listing.get("Contents")):
+        notes += f" Nothing is stored under {target.location}."
+    return StorageTestResult(
+        success=True,
+        message=f"Bucket '{bucket}' is reachable.{notes}",
         detected_region=detected_region,
     )

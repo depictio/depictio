@@ -31,6 +31,10 @@ server context. CLI context keeps its order: the project's keys for this
 bucket, public, any other project settings, then the instance credentials of the CLI configuration (kind ``instance``), then the
 ambient chain when that configuration carries no keys.
 
+Storage settings typed in with a request, before the project they are for
+exists (``storage_only``), are the one source after step 2: the location is
+read with them (kind ``project``) or not at all, whatever the bucket lists say.
+
 This module sits under ``depictio.models`` so the CLI-only install can use
 it, which is why it never imports ``depictio.api``: the gateway policy and
 the instance S3 settings come in as parameters (:class:`S3AccessPolicy`,
@@ -627,12 +631,15 @@ def resolve_s3_target(
     project_storage: ProjectS3Config | None,
     instance_s3: InstanceS3 | None,
     policy: S3AccessPolicy,
+    storage_only: bool = False,
 ) -> S3Target:
     """Decide how ``url`` is read. Configuration only: no request goes out.
 
     Raises :class:`S3AccessRefused` when the configuration does not allow the
     read. The order is in the module docstring. ``instance_s3`` is the
     instance's (server) or the CLI configuration's (CLI) S3 settings.
+    ``storage_only`` reads with ``project_storage`` and nothing else, refused
+    without it.
     """
     bucket, key = split_s3_url(url)
     timeout_s = policy.timeout_s
@@ -643,6 +650,10 @@ def resolve_s3_target(
             f"{url} is in the bucket that holds this Depictio instance's own data, which "
             "cannot be read as a data source."
         )
+    if storage_only:
+        if project_storage is None:
+            raise S3AccessRefused(f"{url} cannot be read: no storage settings were given for it.")
+        return project_target(project_storage, bucket, key, timeout_s=timeout_s)
     if project_storage is not None and holds_keys_for(project_storage, bucket):
         return project_target(project_storage, bucket, key, timeout_s=timeout_s)
     if bucket_list_matches(policy.public_s3_buckets, bucket, key):
