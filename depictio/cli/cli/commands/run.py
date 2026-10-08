@@ -233,22 +233,6 @@ def _shorten_scan_pattern(pattern: str | None, locations: list[str]) -> str:
 # Scan modes whose files are remote: a dry run does not list or fetch them.
 _REMOTE_SCAN_MODES = ("url", "s3_prefix", "manifest")
 
-# Where each scan mode names its location, on the data collection itself.
-_SCAN_LOCATION_FIELDS = {"single": "filename", "url": "url", "s3_prefix": "prefix"}
-
-
-def _dc_locations(workflow: dict, dc: dict) -> list[str]:
-    """Every location a resolved data collection would read from."""
-    scan = (dc.get("config") or {}).get("scan") or {}
-    mode = str(scan.get("mode") or "").lower()
-    field = _SCAN_LOCATION_FIELDS.get(mode)
-    if field:
-        value = (scan.get("scan_parameters") or {}).get(field)
-        return [str(value)] if value else []
-    if mode == "recursive":
-        return [str(loc) for loc in (workflow.get("data_location") or {}).get("locations") or []]
-    return []
-
 
 def _remote_indexed_file_tags(resolved_config: dict) -> tuple[list[str], list[str]]:
     """``(required, optional)`` tags of the indexed_file DCs that would read remotely.
@@ -257,13 +241,15 @@ def _remote_indexed_file_tags(resolved_config: dict) -> tuple[list[str], list[st
     location it names is local (a ``--bind`` to a local folder, say): its files
     are mirrored to S3 from local disk, next to their indexes.
     """
+    from depictio.cli.cli.utils.bindings import scan_locations
+
     required: list[str] = []
     optional: list[str] = []
     for wf in resolved_config.get("workflows", []):
         for dc in wf.get("data_collections", []):
             if str((dc.get("config") or {}).get("type", "")).lower() != "indexed_file":
                 continue
-            locations = _dc_locations(wf, dc)
+            locations = scan_locations(wf, dc)
             if locations and not any(is_remote_url(loc) for loc in locations):
                 continue
             (optional if dc.get("optional") else required).append(

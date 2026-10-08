@@ -188,6 +188,45 @@ def _refuse_a_taken_project_name(name: str, current_user) -> None:
         raise HTTPException(status_code=409, detail=_project_taken("name")["message"])
 
 
+def _new_project_document(resolved_config: dict[str, Any], current_user) -> dict[str, Any]:
+    """The document a resolved template is inserted as, owned by ``current_user``.
+
+    With the identity and uniqueness rules of ``POST /projects/create``: a
+    taken name is a 409 (:func:`_refuse_a_taken_project_name`), a config the
+    project model refuses a 422. The caller inserts it; its ``_id`` is the
+    new project's.
+    """
+    from depictio.api.v1.endpoints.projects_endpoints.utils import (
+        validate_workflow_uniqueness_in_project,
+    )
+    from depictio.models.models.links import resolve_link_tag_refs
+    from depictio.models.models.projects import Project
+    from depictio.models.timestamps import utc_now_str
+
+    _refuse_a_taken_project_name(resolved_config["name"], current_user)
+
+    project_config = copy.deepcopy(resolved_config)
+    project_config["permissions"] = {
+        "owners": [{"_id": ObjectId(current_user.id), "email": current_user.email}],
+        "editors": [],
+        "viewers": [],
+    }
+    try:
+        project = Project(**project_config)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Resolved project config invalid: {exc}")
+    validate_workflow_uniqueness_in_project(project)
+
+    create_payload = project.mongo()
+    # Template links name their DCs by tag; store the new DCs' ids next to
+    # them, as the CLI's template sync does, so readers that do not resolve
+    # tags (link cleanup on DC deletion, for one) see real ids.
+    resolve_link_tag_refs(create_payload)
+    create_payload["registration_time"] = utc_now_str()
+    create_payload["last_modified"] = create_payload["registration_time"]
+    return create_payload
+
+
 def _import_template_dashboards(
     dashboard_paths: list[Path],
     *,
@@ -384,36 +423,7 @@ def _create_project_from_manifest(
         report.success = True
         return report
 
-    # Create the project, with the identity and uniqueness rules of POST /projects/create.
-    from depictio.api.v1.endpoints.projects_endpoints.utils import (
-        validate_workflow_uniqueness_in_project,
-    )
-    from depictio.models.models.projects import Project
-    from depictio.models.timestamps import utc_now_str
-
-    _refuse_a_taken_project_name(resolved_config["name"], current_user)
-
-    project_config = copy.deepcopy(resolved_config)
-    project_config["permissions"] = {
-        "owners": [{"_id": ObjectId(current_user.id), "email": current_user.email}],
-        "editors": [],
-        "viewers": [],
-    }
-    try:
-        project = Project(**project_config)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Resolved project config invalid: {exc}")
-    validate_workflow_uniqueness_in_project(project)
-
-    create_payload = project.mongo()
-    # Template links name their DCs by tag; store the new DCs' ids next to
-    # them, as the CLI's template sync does, so readers that do not resolve
-    # tags (link cleanup on DC deletion, for one) see real ids.
-    from depictio.models.models.links import resolve_link_tag_refs
-
-    resolve_link_tag_refs(create_payload)
-    create_payload["registration_time"] = utc_now_str()
-    create_payload["last_modified"] = create_payload["registration_time"]
+    create_payload = _new_project_document(resolved_config, current_user)
     projects_collection.insert_one(create_payload)
     project_oid = create_payload["_id"]
     report.project_id = str(project_oid)

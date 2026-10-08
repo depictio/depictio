@@ -265,7 +265,12 @@ def _preview_recipe_dc(
         if not hits and not source.optional:
             row.missing_sources.append(glob_pattern or path or source.ref)
 
-    row.status = "missing" if row.missing_sources else ("ok" if row.matched else "empty")
+    if row.missing_sources:
+        row.status = "missing"
+    elif row.matched:
+        row.status = "ok"
+    else:
+        row.status = "empty"
     return row
 
 

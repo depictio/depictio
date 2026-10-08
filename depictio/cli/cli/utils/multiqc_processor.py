@@ -29,7 +29,12 @@ from depictio.models.models.multiqc_reports import (
     GENERAL_STATS_ANCHOR,
     GENERAL_STATS_FALLBACK_ANCHORS,
 )
-from depictio.models.s3_access import S3AccessFailed, client_error_code, ensure_region
+from depictio.models.s3_access import (
+    S3AccessFailed,
+    ensure_region,
+    is_missing_object,
+    is_s3_url,
+)
 
 _FETCH_CHUNK_BYTES = 1024 * 1024
 
@@ -198,10 +203,6 @@ def extract_multiqc_metadata(parquet_path: str) -> Dict[str, Any]:
         raise
 
 
-def _is_s3_location(location: str) -> bool:
-    return location[:5].lower() == "s3://"
-
-
 def _is_parseable_multiqc_file(file_path: str) -> bool:
     """Whether a registered file is a MultiQC parquet that can still be read.
 
@@ -211,7 +212,7 @@ def _is_parseable_multiqc_file(file_path: str) -> bool:
     if not file_path.endswith(".parquet"):
         logger.warning(f"Skipping non-parquet file: {file_path}")
         return False
-    if _is_s3_location(file_path):
+    if is_s3_url(file_path):
         return True
     if not Path(file_path).exists():
         rich_print_checked_statement(
@@ -313,7 +314,7 @@ def _report_display_path(location: str) -> str:
     The run is the segment above the ``multiqc`` folder, the same rule for a
     local path and an ``s3://`` URL, whose key splits on ``/`` the same way.
     """
-    parts = PurePosixPath(location).parts if _is_s3_location(location) else Path(location).parts
+    parts = PurePosixPath(location).parts if is_s3_url(location) else Path(location).parts
     name = parts[-1] if parts else location
     for idx, part in enumerate(parts):
         if part == "multiqc" and idx > 0:
@@ -345,10 +346,8 @@ def _download_s3_report(location: str, dest_path: str, CLI_config, max_bytes: in
     try:
         response = target.client().get_object(Bucket=target.bucket, Key=target.key)
     except Exception as exc:
-        if isinstance(exc, ClientError):
-            code, status = client_error_code(exc)
-            if code == "NoSuchKey" or (status == 404 and code != "NoSuchBucket"):
-                raise FileNotFoundError(location) from exc
+        if isinstance(exc, ClientError) and is_missing_object(exc):
+            raise FileNotFoundError(location) from exc
         raise S3AccessFailed.from_exception(exc, target) from exc
 
     declared = response.get("ContentLength")
@@ -786,7 +785,7 @@ def process_multiqc_data_collection(
             location = f.file_location
             if not _is_parseable_multiqc_file(location):
                 continue
-            if not _is_s3_location(location):
+            if not is_s3_url(location):
                 readable.append((location, location))
                 continue
             listed_size = getattr(f, "filesize", -1)

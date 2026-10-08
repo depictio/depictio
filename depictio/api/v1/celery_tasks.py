@@ -3202,6 +3202,17 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
     run_id = payload["run_id"]
     tag = payload["dc_tag"]
 
+    def _close_step(ok: bool, message: str | None) -> dict:
+        """Write this DC's terminal step, close the run if it was the last one,
+        and answer the task's result."""
+        store.set_ingestion_step(
+            run_id,
+            step={"name": tag, "status": "success" if ok else "failed", "detail": message},
+            current_step=None,
+        )
+        _finalize_manifest_refresh_run(run_id)
+        return {"tag": tag, "ok": ok, "message": message}
+
     depends_on = payload.get("depends_on") or []
     if depends_on:
         doc = store.get_ingestion_run(run_id) or {}
@@ -3209,14 +3220,7 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
         if unfinished:
             names = ", ".join(unfinished)
             if self.request.retries >= _DEPENDENCY_MAX_WAITS:
-                message = f"Gave up waiting for {names} to finish."
-                store.set_ingestion_step(
-                    run_id,
-                    step={"name": tag, "status": "failed", "detail": message},
-                    current_step=None,
-                )
-                _finalize_manifest_refresh_run(run_id)
-                return {"tag": tag, "ok": False, "message": message}
+                return _close_step(False, f"Gave up waiting for {names} to finish.")
             if self.request.retries == 0:
                 # Stays "pending": this DC hasn't started, it's queued behind
                 # another one, but the detail tells a polling UI why.
@@ -3234,16 +3238,10 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
         doc = store.get_ingestion_run(run_id) or {}
         statuses = {s.get("name"): s.get("status") for s in doc.get("steps") or []}
         if statuses.get(scan_leader) == "failed":
-            message = (
-                f"Not ingested: the scan of the run folder, done with '{scan_leader}', failed."
+            return _close_step(
+                False,
+                f"Not ingested: the scan of the run folder, done with '{scan_leader}', failed.",
             )
-            store.set_ingestion_step(
-                run_id,
-                step={"name": tag, "status": "failed", "detail": message},
-                current_step=None,
-            )
-            _finalize_manifest_refresh_run(run_id)
-            return {"tag": tag, "ok": False, "message": message}
     # Only a recursive DC carries either key; the others keep the default scan.
     scan_kwargs: dict = {}
     if scan_leader:
@@ -3288,13 +3286,7 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
         logger.error(f"Manifest refresh task crashed for DC '{tag}': {exc}")
         ok, message = False, str(exc)
 
-    store.set_ingestion_step(
-        run_id,
-        step={"name": tag, "status": "success" if ok else "failed", "detail": message},
-        current_step=None,
-    )
-    _finalize_manifest_refresh_run(run_id)
-    return {"tag": tag, "ok": ok, "message": message}
+    return _close_step(ok, message)
 
 
 __all__: list[str] = [

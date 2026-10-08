@@ -48,6 +48,7 @@ from depictio.api.v1.configs.settings_models import local_data_policy
 from depictio.api.v1.endpoints.projects_endpoints.from_run import (
     DetectedTemplate,
     _build_data_root,
+    _detect_run,
     _is_local_path,
     _run_folder_read_config,
     _RunFolderReads,
@@ -76,12 +77,13 @@ from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
 from depictio.models.local_access import LocalDataPolicy, LocalPathRefused
 from depictio.models.logging import logger
 from depictio.models.s3_access import (
-    S3AccessError,
     S3AccessFailed,
     S3AccessRefused,
     S3Target,
     ensure_region,
+    folder_prefix,
     is_instance_bucket,
+    is_s3_url,
     iter_object_pages,
     parse_bucket_list,
     split_s3_url,
@@ -210,10 +212,6 @@ class FoundRuns(BaseModel):
 # ── locations ────────────────────────────────────────────────────────────────
 
 
-def _is_s3(location: str) -> bool:
-    return location[:5].lower() == "s3://"
-
-
 def _unsupported_location() -> CodedHTTPException:
     rule = LOCATION_RULE_LOCAL if local_data_policy() is not None else LOCATION_RULE
     return CodedHTTPException(422, rule, "location_unsupported")
@@ -232,12 +230,6 @@ def _local_folder(location: str, *, request, current_user) -> tuple[LocalDataPol
         return policy, policy.confine(location, want="dir")
     except LocalPathRefused as exc:
         raise CodedHTTPException(404, exc.detail, exc.code) from exc
-
-
-def _folder_prefix(key: str) -> str:
-    """``key`` as a folder prefix: ``""`` for the bucket, else ending in one ``/``."""
-    key = key.strip("/")
-    return f"{key}/" if key else ""
 
 
 def allowed_s3_locations() -> list[tuple[str, str]]:
@@ -284,7 +276,7 @@ class _S3Folder:
         """One level up, None at the listed location it was reached from."""
         if self.prefix == self.root:
             return None
-        return f"s3://{self.bucket}/{_folder_prefix(self.prefix.rstrip('/').rpartition('/')[0])}"
+        return f"s3://{self.bucket}/{folder_prefix(self.prefix.rstrip('/').rpartition('/')[0])}"
 
     def child(self, name: str) -> str:
         return f"{self.url}{name}/"
@@ -307,25 +299,24 @@ def _s3_folder(url: str, storage: RunStorageIn | None = None) -> _S3Folder:
     not apply, and the bucket itself is the root.
     """
     bucket, key = split_s3_url(url)
-    prefix = _folder_prefix(key)
+    prefix = folder_prefix(key)
     location = f"s3://{bucket}/{prefix}"
     if storage is not None:
         reads = _run_folder_read_config(read_settings(storage.settings_for(location)))
         target = remote_fetch.s3_read_target(location, reads)
-        return _S3Folder(
-            target=ensure_region(target), bucket=bucket, prefix=prefix, root="", reads=reads
-        )
-    reads = _run_folder_read_config()
-    target = remote_fetch.s3_read_target(location, reads)
-    holding = [
-        listed
-        for listed_bucket, listed in allowed_s3_locations()
-        if listed_bucket == bucket and (not listed or prefix.startswith(f"{listed}/"))
-    ]
-    if not holding:
-        raise S3AccessRefused(f"{location} is not a location this server lets you browse.")
-    # The outermost one, so going up stops where nothing is readable any more.
-    root = _folder_prefix(min(holding, key=len))
+        root = ""
+    else:
+        reads = _run_folder_read_config()
+        target = remote_fetch.s3_read_target(location, reads)
+        holding = [
+            listed
+            for listed_bucket, listed in allowed_s3_locations()
+            if listed_bucket == bucket and (not listed or prefix.startswith(f"{listed}/"))
+        ]
+        if not holding:
+            raise S3AccessRefused(f"{location} is not a location this server lets you browse.")
+        # The outermost one, so going up stops where nothing is readable any more.
+        root = folder_prefix(min(holding, key=len))
     return _S3Folder(
         target=ensure_region(target), bucket=bucket, prefix=prefix, root=root, reads=reads
     )
@@ -423,7 +414,7 @@ def list_s3_dirs(url: str | None, storage: RunStorageIn | None = None) -> S3DirL
             entries=[
                 LocalDirEntry(
                     name=f"{bucket}/{prefix}" if prefix else bucket,
-                    path=f"s3://{bucket}/{_folder_prefix(prefix)}",
+                    path=f"s3://{bucket}/{folder_prefix(prefix)}",
                     has_children=True,
                 )
                 for bucket, prefix in allowed_s3_locations()
@@ -454,16 +445,7 @@ def _detect(root) -> DetectedTemplate | None:
     """The run in data root ``root`` and the template that fits it, or None when
     no engine recognises it. A read that fails while looking is None too,
     except an S3 refusal or failure, which keeps its own code."""
-    from depictio.cli.cli.utils.run_detection import detect_template_for_root
-
-    try:
-        template_id, info = detect_template_for_root(root)
-    except S3AccessError:
-        raise
-    except (OSError, ValueError) as exc:
-        logger.warning(f"Template detection failed for {root.location}: {exc}")
-        return None
-    return describe_detection(template_id, info)
+    return describe_detection(*_detect_run(root))
 
 
 def _local_children(policy: LocalDataPolicy, folder: str) -> tuple[list[str], list[str], bool]:
@@ -534,7 +516,7 @@ def inspect_folder(
     reads the folder the way ``POST /projects/from_run`` does, so what it names
     is what the creation would pick.
     """
-    if _is_s3(location):
+    if is_s3_url(location):
         folder = _s3_folder(location, storage)
         page = _first_page(folder)
         detected = None
@@ -754,7 +736,7 @@ def find_runs(
     template detected for them; below an ``s3://`` prefix none do, since each
     would cost a listing of its own.
     """
-    if _is_s3(location):
+    if is_s3_url(location):
         return _find_s3_runs(location, storage)
     if not _is_local_path(location):
         raise _unsupported_location()

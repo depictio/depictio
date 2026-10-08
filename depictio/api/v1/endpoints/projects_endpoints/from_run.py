@@ -47,7 +47,6 @@ itself is not: a real run folder is minutes of work, so it goes to workers and
 the caller polls ``GET /projects/refresh_manifest/{run_id}``.
 """
 
-import copy
 import os
 from dataclasses import dataclass
 from typing import Any, Literal
@@ -61,7 +60,7 @@ from depictio.api.v1.db import projects_collection
 from depictio.api.v1.endpoints.projects_endpoints.from_manifest import (
     DashboardImportResult,
     _import_template_dashboards,
-    _refuse_a_taken_project_name,
+    _new_project_document,
     _template_not_found_detail,
     validate_template_id,
 )
@@ -80,7 +79,7 @@ from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
 )
 from depictio.models.local_access import LocalPathRefused
 from depictio.models.logging import logger
-from depictio.models.s3_access import ProjectS3Config, S3AccessError
+from depictio.models.s3_access import ProjectS3Config, S3AccessError, is_s3_url
 
 DATA_ROOT_RULE = (
     "data_root must be an s3:// prefix. The server cannot list a directory on the "
@@ -101,16 +100,6 @@ LOCAL_FOLDERS_OFF = (
 # far past one pipeline run, and most likely a parent folder picked by mistake.
 # Matches the ceiling on one S3 listing (``data_root.DEFAULT_MAX_KEYS``).
 MAX_LOCAL_RUN_FILES = 100_000
-
-# Scan modes whose resolved parameters name a location, and the parameter that
-# holds it. ``manifest`` is deliberately absent: its URL is a document fetched
-# through the SSRF gateway at ingest time, which is that mode's own control,
-# and it is never expected to live under the run folder.
-_SCAN_LOCATION_FIELDS = {
-    "single": "filename",
-    "url": "url",
-    "s3_prefix": "prefix",
-}
 
 
 class FromRunRequest(BaseModel):
@@ -204,6 +193,24 @@ class FromRunDCPreview(BaseModel):
     status: str = "ok"
 
 
+def _report_rows(preview_rows) -> list[FromRunDCPreview]:
+    """``template_preview.DataCollectionPreview`` rows in the report's shape, one per tag."""
+    rows = {
+        row.tag: FromRunDCPreview(
+            data_collection_tag=row.tag,
+            kind=row.kind,
+            mode=row.mode,
+            location=row.location,
+            matched=row.matched,
+            missing_sources=list(row.missing_sources),
+            optional=row.optional,
+            status=row.status,
+        )
+        for row in preview_rows
+    }
+    return list(rows.values())
+
+
 class FromRunReport(BaseModel):
     """Result of a from_run request: the plan, and what was created from it.
 
@@ -235,27 +242,6 @@ class FromRunReport(BaseModel):
     success: bool = False
 
 
-def _dc_locations(workflow: dict[str, Any], dc: dict[str, Any]) -> list[str]:
-    """Every location the resolved data collection would read from.
-
-    Recipe collections are absent on purpose: they have no scan block, and
-    their sources are resolved *through* the data root by the recipe layer, so
-    they cannot name a location of their own.
-    """
-    scan = ((dc.get("config") or {}).get("scan")) or {}
-    mode = str(scan.get("mode") or "").lower()
-    parameters = scan.get("scan_parameters") or {}
-
-    field = _SCAN_LOCATION_FIELDS.get(mode)
-    if field:
-        value = parameters.get(field)
-        return [str(value)] if value else []
-    if mode == "recursive":
-        # A local walk names its bases on the workflow, not on the DC.
-        return [str(loc) for loc in (workflow.get("data_location") or {}).get("locations") or []]
-    return []
-
-
 def _assert_data_collections_confined(config: dict[str, Any], root) -> None:
     """Refuse a resolved template whose data collections reach outside the root.
 
@@ -275,11 +261,18 @@ def _assert_data_collections_confined(config: dict[str, Any], root) -> None:
     Every template on this instance is one the maintainers shipped, so today
     this should never fire. It becomes the primary control the moment uploaded
     template bundles land, which is why it is written now rather than then.
+
+    The locations are those of ``bindings.scan_locations``: a recipe collection
+    names none, and a ``manifest`` one's URL is a document fetched through the
+    SSRF gateway at ingest time, that mode's own control, never expected to
+    live under the run folder.
     """
+    from depictio.cli.cli.utils.bindings import scan_locations
+
     for workflow in config.get("workflows") or []:
         for dc in workflow.get("data_collections") or []:
             tag = dc.get("data_collection_tag") or "?"
-            for location in _dc_locations(workflow, dc):
+            for location in scan_locations(workflow, dc):
                 # ``relative_of`` answering None is the root's own definition of
                 # "not mine": a different bucket, a foreign scheme, or an
                 # absolute path on this container's filesystem.
@@ -327,10 +320,6 @@ def _run_folder_read_config(storage: ProjectS3Config | None = None) -> _RunFolde
     return _RunFolderReads(
         s3_storage=settings.s3, remote_storage_options=storage, storage_only=storage is not None
     )
-
-
-def _is_s3_location(location: str) -> bool:
-    return location[:5].lower() == "s3://"
 
 
 def _is_local_path(data_root: str) -> bool:
@@ -405,7 +394,7 @@ def _build_data_root(
     """
     if _is_local_path(data_root):
         return _build_local_data_root(data_root, request=request, current_user=current_user)
-    if not data_root.lower().startswith("s3://"):
+    if not is_s3_url(data_root):
         rule = DATA_ROOT_RULE_LOCAL if local_data_policy() is not None else DATA_ROOT_RULE
         raise CodedHTTPException(422, rule, "data_root_unsupported")
 
@@ -461,24 +450,33 @@ def _assert_variables_confined(variables: dict[str, str], root) -> None:
             )
 
 
+def _detect_run(root) -> tuple[str | None, Any]:
+    """``run_detection.detect_template_for_root`` on ``root``: the template id
+    and the run's provenance, each None when not found.
+
+    A read that fails while looking is logged and found nothing, except an S3
+    refusal or failure, which propagates with its own code.
+    """
+    from depictio.cli.cli.utils.run_detection import detect_template_for_root
+
+    try:
+        return detect_template_for_root(root)
+    except S3AccessError:
+        raise
+    except (OSError, ValueError) as exc:
+        logger.warning(f"Template detection failed for {root.location}: {exc}")
+        return None, None
+
+
 def _detect_template(root) -> tuple[str, DetectedTemplate]:
     """The template id recognised in ``root``, with what the folder said.
 
     A folder no installed template fits is a 422 coded
     ``template_not_detected``: the caller picks one. A read that fails while
     looking is the same answer, except an S3 refusal or failure, which keeps
-    its own code.
+    its own code (see :func:`_detect_run`).
     """
-    from depictio.cli.cli.utils.run_detection import detect_template_for_root
-
-    try:
-        template_id, info = detect_template_for_root(root)
-    except S3AccessError:
-        raise
-    except (OSError, ValueError) as exc:
-        logger.warning(f"Template detection failed for {root.location}: {exc}")
-        template_id, info = None, None
-
+    template_id, info = _detect_run(root)
     detected = describe_detection(template_id, info) or DetectedTemplate()
     if not template_id:
         if detected.pipeline:
@@ -602,9 +600,9 @@ def _stored_run_folder(project_dict: dict[str, Any]):
     instance's S3 settings and the project's storage settings
     (``project_storage_for``), so the pre-flight reads it exactly as the
     workers will; a folder on this disk only under the active local data
-    policy, confined and size-capped as at creation. Not the caller check of a creation: that one guards which
-    folder becomes a project, and this one already is. The pre-flight reads
-    no more of it than the workers it gates.
+    policy, confined and size-capped as at creation. Not the caller check of
+    a creation: that one guards which folder becomes a project, and this one
+    already is. The pre-flight reads no more of it than the workers it gates.
 
     None when there is no data root (a manifest-driven project, or one not
     made from a template), and for a folder on disk that local folders being
@@ -614,7 +612,7 @@ def _stored_run_folder(project_dict: dict[str, Any]):
     listed.
     """
     data_root = str((project_dict.get("template_origin") or {}).get("data_root") or "")
-    if _is_s3_location(data_root):
+    if is_s3_url(data_root):
         from depictio.api.v1.configs.config import settings
         from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
             project_storage_for,
@@ -665,6 +663,18 @@ def _refresh_preflight(project_dict: dict[str, Any]) -> tuple[str, _Preflight] |
 
     rows, _runs = preview_data_collections(project_dict, root)
     return root.location, _preflight_split(project_dict, rows)
+
+
+def _scan_modes(project_dict: dict[str, Any]) -> dict[str, str]:
+    """``{tag: scan mode}`` of every collection of a project, as its ingestion run
+    records them: ``"recipe"`` for one with no scan block."""
+    modes: dict[str, str] = {}
+    for workflow_dict in project_dict.get("workflows") or []:
+        for dc_dict in workflow_dict.get("data_collections") or []:
+            scan = (dc_dict.get("config") or {}).get("scan") or {}
+            tag = str(dc_dict.get("data_collection_tag") or "")
+            modes[tag] = str(scan.get("mode") or "") or "recipe"
+    return modes
 
 
 def _save_storage_or_roll_back(project_oid: ObjectId, settings_in: ProjectStorageConfigIn) -> None:
@@ -728,9 +738,7 @@ def _create_project_from_run(
             raise HTTPException(status_code=422, detail=str(exc))
 
     storage_settings = (
-        storage.settings_for(data_root)
-        if storage is not None and _is_s3_location(data_root)
-        else None
+        storage.settings_for(data_root) if storage is not None and is_s3_url(data_root) else None
     )
     read_config = _run_folder_read_config(
         read_settings(storage_settings) if storage_settings is not None else None
@@ -788,19 +796,6 @@ def _create_project_from_run(
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=f"Data root preview failed: {exc}")
 
-    rows = {
-        row.tag: FromRunDCPreview(
-            data_collection_tag=row.tag,
-            kind=row.kind,
-            mode=row.mode,
-            location=row.location,
-            matched=row.matched,
-            missing_sources=list(row.missing_sources),
-            optional=row.optional,
-            status=row.status,
-        )
-        for row in preview.data_collections
-    }
     report = FromRunReport(
         project_name=resolved_config.get("name", ""),
         template_id=template_metadata.template_id,
@@ -808,7 +803,7 @@ def _create_project_from_run(
         data_root=root.location,
         detected_runs=list(preview.detected_runs),
         resolved_variables=dict(preview.resolved_variables),
-        data_collections=list(rows.values()),
+        data_collections=_report_rows(preview.data_collections),
         pruned_optional_dcs=list(preview.pruned_optional_dcs),
         truncated=preview.truncated,
         dry_run=dry_run,
@@ -818,30 +813,7 @@ def _create_project_from_run(
         report.success = True
         return report
 
-    # Create the project, with the identity and uniqueness rules of POST /projects/create.
-    from depictio.api.v1.endpoints.projects_endpoints.utils import (
-        validate_workflow_uniqueness_in_project,
-    )
-    from depictio.models.models.projects import Project
-    from depictio.models.timestamps import utc_now_str
-
-    _refuse_a_taken_project_name(resolved_config["name"], current_user)
-
-    project_config = copy.deepcopy(resolved_config)
-    project_config["permissions"] = {
-        "owners": [{"_id": ObjectId(current_user.id), "email": current_user.email}],
-        "editors": [],
-        "viewers": [],
-    }
-    try:
-        project = Project(**project_config)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Resolved project config invalid: {exc}")
-    validate_workflow_uniqueness_in_project(project)
-
-    create_payload = project.mongo()
-    create_payload["registration_time"] = utc_now_str()
-    create_payload["last_modified"] = create_payload["registration_time"]
+    create_payload = _new_project_document(resolved_config, current_user)
     projects_collection.insert_one(create_payload)
     project_oid = create_payload["_id"]
 
@@ -870,13 +842,6 @@ def _create_project_from_run(
     stored = projects_collection.find_one({"_id": project_oid}) or {}
     # The report's rows carry a pruned collection's reason; it has no step.
     preflight = _preflight_split(stored, preview.data_collections)
-    scan_modes: dict[str, str] = {}
-    for workflow_dict in stored.get("workflows") or []:
-        for dc_dict in workflow_dict.get("data_collections") or []:
-            scan = (dc_dict.get("config") or {}).get("scan") or {}
-            tag = str(dc_dict.get("data_collection_tag") or "")
-            scan_modes[tag] = str(scan.get("mode") or "") or "recipe"
-
     if preflight.to_dispatch or preflight.failed or preflight.skipped:
         run_id, all_dispatched, _results = _dispatch_refresh_tasks(
             project_dict=stored,
@@ -885,7 +850,7 @@ def _create_project_from_run(
             preflight_failed=preflight.failed,
             preflight_skipped=preflight.skipped,
             command="from_run",
-            scan_modes=scan_modes,
+            scan_modes=_scan_modes(stored),
             data_root=root.location,
         )
         report.run_id = run_id

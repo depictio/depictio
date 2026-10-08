@@ -62,6 +62,7 @@ from depictio.models.s3_access import (
     ProjectS3Config,
     S3AccessFailed,
     S3AccessRefused,
+    folder_prefix,
     is_instance_bucket,
     is_missing_prefix,
     probe_bucket,
@@ -230,6 +231,10 @@ class RunStorageIn(BaseModel):
     access_key_id: str | None = None
     secret_access_key: SecretStr | None = None
 
+    def _secret(self) -> str:
+        """The secret in clear, ``""`` when none was given."""
+        return self.secret_access_key.get_secret_value() if self.secret_access_key else ""
+
     def require_keys(self) -> None:
         """Refuse settings without an access key or without its secret (422).
 
@@ -239,9 +244,7 @@ class RunStorageIn(BaseModel):
         (``DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS``). The detail is fixed text:
         neither value is echoed.
         """
-        key = (self.access_key_id or "").strip()
-        secret = self.secret_access_key.get_secret_value() if self.secret_access_key else ""
-        if not key or not secret.strip():
+        if not (self.access_key_id or "").strip() or not self._secret().strip():
             raise HTTPException(status_code=422, detail=RUN_STORAGE_KEYS_REQUIRED)
 
     def settings_for(self, location: str) -> ProjectStorageConfigIn:
@@ -256,7 +259,7 @@ class RunStorageIn(BaseModel):
         """
         bucket, _key = split_s3_url(location)
         self.require_keys()
-        secret = self.secret_access_key.get_secret_value() if self.secret_access_key else None
+        secret = self._secret()
         try:
             payload = ProjectStorageConfigIn(
                 endpoint_url=self.endpoint_url or "",
@@ -659,7 +662,7 @@ def _test_run_storage(location: str, storage: RunStorageIn) -> StorageTestResult
     from botocore.exceptions import ClientError
 
     bucket, key = split_s3_url(location)
-    prefix = f"{key.strip('/')}/" if key.strip("/") else ""
+    prefix = folder_prefix(key)
     storage.require_keys()
     try:
         config = read_settings(storage.settings_for(location))

@@ -222,6 +222,15 @@ async def _run_ingest_off_loop(fn, **kwargs):
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
+async def _run_coded_off_loop(fn, *args, **kwargs):
+    """Run a sync helper via ``asyncio.to_thread``, answering a
+    ``CodedHTTPException`` it raises with its ``{detail, code}`` body."""
+    try:
+        return await asyncio.to_thread(fn, *args, **kwargs)
+    except CodedHTTPException as exc:
+        return exc.response()
+
+
 async def _ensure_cli_token_unless_dry_run(current_user, dry_run: bool) -> None:
     """Mint the user's CLI token if missing, unless nothing is going to run.
 
@@ -991,26 +1000,18 @@ async def create_project_from_run(
         raise HTTPException(status_code=401, detail="User not found.")
     # Mirror POST /projects/create's public/demo-mode gate.
     _reject_non_admin_in_public_mode(current_user, "Project creation")
-    if not payload.dry_run:
-        from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
-            _ensure_user_cli_token,
-        )
-
-        await _ensure_user_cli_token(current_user)
-    try:
-        return await asyncio.to_thread(
-            _create_project_from_run,
-            data_root=payload.data_root,
-            template_id=payload.template_id,
-            current_user=current_user,
-            project_name=payload.project_name,
-            variables=payload.variables,
-            dry_run=payload.dry_run,
-            request=request,
-            storage=payload.storage,
-        )
-    except CodedHTTPException as exc:
-        return exc.response()
+    await _ensure_cli_token_unless_dry_run(current_user, payload.dry_run)
+    return await _run_coded_off_loop(
+        _create_project_from_run,
+        data_root=payload.data_root,
+        template_id=payload.template_id,
+        current_user=current_user,
+        project_name=payload.project_name,
+        variables=payload.variables,
+        dry_run=payload.dry_run,
+        request=request,
+        storage=payload.storage,
+    )
 
 
 @projects_endpoint_router.get("/local_dirs", response_model=LocalDirListing)
@@ -1030,12 +1031,9 @@ async def get_local_dirs(
     """
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
-    try:
-        return await asyncio.to_thread(
-            list_local_dirs, path, request=request, current_user=current_user
-        )
-    except CodedHTTPException as exc:
-        return exc.response()
+    return await _run_coded_off_loop(
+        list_local_dirs, path, request=request, current_user=current_user
+    )
 
 
 @projects_endpoint_router.get("/s3_dirs", response_model=S3DirListing)
@@ -1090,12 +1088,9 @@ async def get_folder_inspect(
     """
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
-    try:
-        return await asyncio.to_thread(
-            inspect_folder, location, detect=detect, request=request, current_user=current_user
-        )
-    except CodedHTTPException as exc:
-        return exc.response()
+    return await _run_coded_off_loop(
+        inspect_folder, location, detect=detect, request=request, current_user=current_user
+    )
 
 
 @projects_endpoint_router.post("/folder_inspect", response_model=FolderInspection)
@@ -1113,17 +1108,14 @@ async def post_folder_inspect(
         raise HTTPException(status_code=401, detail="User not found.")
     if payload.storage is not None:
         _reject_non_admin_in_public_mode(current_user, PRIVATE_BUCKET_ACTION)
-    try:
-        return await asyncio.to_thread(
-            inspect_folder,
-            payload.location,
-            detect=payload.detect,
-            storage=payload.storage,
-            request=request,
-            current_user=current_user,
-        )
-    except CodedHTTPException as exc:
-        return exc.response()
+    return await _run_coded_off_loop(
+        inspect_folder,
+        payload.location,
+        detect=payload.detect,
+        storage=payload.storage,
+        request=request,
+        current_user=current_user,
+    )
 
 
 @projects_endpoint_router.get("/find_runs", response_model=FoundRuns)
@@ -1142,12 +1134,9 @@ async def get_find_runs(
     """
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
-    try:
-        return await asyncio.to_thread(
-            find_runs, location, request=request, current_user=current_user
-        )
-    except CodedHTTPException as exc:
-        return exc.response()
+    return await _run_coded_off_loop(
+        find_runs, location, request=request, current_user=current_user
+    )
 
 
 @projects_endpoint_router.post("/find_runs", response_model=FoundRuns)
@@ -1165,16 +1154,13 @@ async def post_find_runs(
         raise HTTPException(status_code=401, detail="User not found.")
     if payload.storage is not None:
         _reject_non_admin_in_public_mode(current_user, PRIVATE_BUCKET_ACTION)
-    try:
-        return await asyncio.to_thread(
-            find_runs,
-            payload.location,
-            storage=payload.storage,
-            request=request,
-            current_user=current_user,
-        )
-    except CodedHTTPException as exc:
-        return exc.response()
+    return await _run_coded_off_loop(
+        find_runs,
+        payload.location,
+        storage=payload.storage,
+        request=request,
+        current_user=current_user,
+    )
 
 
 @projects_endpoint_router.post("/create")
