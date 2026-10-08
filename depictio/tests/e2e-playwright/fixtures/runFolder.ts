@@ -151,6 +151,55 @@ export async function stubByParam(
   return asked;
 }
 
+/** One call to a folder route, as `stubFolderRoute` saw it. */
+export interface FolderCall {
+  method: string;
+  url: string;
+  /** The location asked for: the query parameter of a GET, the body field
+   *  of a POST. */
+  value: string;
+  /** The private bucket's connection details a POST carried, else null. */
+  storage: Record<string, unknown> | null;
+}
+
+/** Answer a folder route and its POST twin (the private-bucket variant,
+ *  whose body carries `storage`): `param` is read from the query of a GET and
+ *  from the JSON body of a POST. `answer` returning null is a 404. Returns
+ *  every call, in order. */
+export async function stubFolderRoute(
+  page: Page,
+  urlPattern: string,
+  param: string,
+  answer: (value: string, storage: Record<string, unknown> | null) => StubAnswer | null,
+): Promise<FolderCall[]> {
+  const calls: FolderCall[] = [];
+  await page.route(urlPattern, async (route: Route) => {
+    const request = route.request();
+    const method = request.method();
+    let value = "";
+    let storage: Record<string, unknown> | null = null;
+    if (method === "POST") {
+      const body = (request.postDataJSON() ?? {}) as Record<string, unknown>;
+      value = typeof body[param] === "string" ? (body[param] as string) : "";
+      storage = (body.storage as Record<string, unknown> | null | undefined) ?? null;
+    } else {
+      value = new URL(request.url()).searchParams.get(param) ?? "";
+    }
+    calls.push({ method, url: request.url(), value, storage });
+    const reply = answer(value, storage) ?? {
+      status: 404,
+      json: { detail: "This folder does not exist.", code: "local_path_missing" },
+    };
+    if (reply.delayMs) await new Promise((resolve) => setTimeout(resolve, reply.delayMs));
+    try {
+      await route.fulfill({ status: reply.status ?? 200, json: reply.json });
+    } catch {
+      // The page cancelled the request meanwhile (a newer selection).
+    }
+  });
+  return calls;
+}
+
 /** Open /projects, launch the create modal and switch to the run tab. */
 export async function openRunTab(page: Page): Promise<void> {
   await page.goto("/projects");

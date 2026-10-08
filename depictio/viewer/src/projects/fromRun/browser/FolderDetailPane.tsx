@@ -2,7 +2,8 @@
  * The right-hand side of the folder browser: what the selected folder holds
  * and what Depictio recognises in it, read with `inspectFolder` on selection
  * (a newer selection cancels the request still in flight). From here the
- * reader can also look for run folders below the selected one.
+ * reader can also look for run folders below the selected one. A folder in a
+ * private bucket is read, and searched, with its connection details.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -32,7 +33,7 @@ import {
   relativeToFolder,
   runTemplateMatch,
 } from 'depictio-react-core';
-import type { FindRunsResult, FolderInspection } from 'depictio-react-core';
+import type { FindRunsResult, FolderInspection, RunStorageIn } from 'depictio-react-core';
 
 import { FlowBadge } from '../FlowBadge';
 import { FolderPath } from '../FolderPath';
@@ -65,6 +66,9 @@ interface FolderDetailPaneProps {
   /** Called with each finished inspection (to badge the tree, and to word
    *  the footer). */
   onInspected: (location: string, result: FolderInspection | null) => void;
+  /** The connection details to read `location` with, when it is in a
+   *  private bucket. */
+  storageFor?: (location: string) => RunStorageIn | null;
 }
 
 const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
@@ -108,6 +112,7 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
   templateTitles,
   onReveal,
   onInspected,
+  storageFor,
 }) => {
   const [inspect, setInspect] = useState<InspectState>({ status: 'loading' });
   const [find, setFind] = useState<FindState | null>(null);
@@ -116,7 +121,7 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
     if (!location) return undefined;
     const controller = new AbortController();
     setInspect({ status: 'loading' });
-    inspectFolder(location, { signal: controller.signal })
+    inspectFolder(location, { signal: controller.signal, storage: storageFor?.(location) ?? null })
       .then((result) => {
         if (controller.signal.aborted) return;
         setInspect({ status: 'ready', result });
@@ -128,7 +133,8 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
         onInspected(location, null);
       });
     return () => controller.abort();
-    // `onInspected` is a callback prop; only the location starts a request.
+    // `onInspected` and `storageFor` are callback props; only the location
+    // starts a request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location]);
 
@@ -136,7 +142,7 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
     if (!location) return;
     const root = location;
     setFind({ status: 'loading', root });
-    findRunFolders(root)
+    findRunFolders(root, { storage: storageFor?.(root) ?? null })
       .then((result) => setFind((cur) => (cur?.root === root ? { status: 'ready', root, result } : cur)))
       .catch((err: Error) =>
         setFind((cur) =>

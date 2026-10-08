@@ -20,6 +20,7 @@ import {
   openRunTab,
   setRunFolderFlags,
   stubByParam,
+  stubFolderRoute,
   StubAnswer,
 } from "@fixtures/runFolder";
 
@@ -570,5 +571,137 @@ test.describe("Browse for a run folder", () => {
     await error.getByRole("button", { name: "Try again" }).click();
     await expect(treeNode(page, YEAR)).toBeVisible();
     await expect(error).toHaveCount(0);
+  });
+
+  test("a private bucket is browsed with its connection details, even where S3 browsing is off", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    const BUCKET = "s3://private-runs/";
+    const PIPELINE = `${BUCKET}ampliseq/`;
+    const RUN = `${PIPELINE}run-7/`;
+    const STORAGE = {
+      endpoint_url: null,
+      region: null,
+      access_key_id: "AKIAE2EPRIVATEKEY",
+      secret_access_key: "e2e-private-secret-value",
+    };
+    const DENIED = {
+      status: 403,
+      json: { detail: "Access to this bucket was denied.", code: "s3_access_denied" },
+    };
+    const LISTINGS: Record<string, StubAnswer> = {
+      [BUCKET]: listing(BUCKET, BUCKET, [entry(PIPELINE)]),
+      [PIPELINE]: listing(PIPELINE, BUCKET, [entry(RUN)]),
+      [RUN]: listing(RUN, BUCKET, [entry(`${RUN}multiqc/`), entry(`${RUN}pipeline_info/`)], {
+        looks_like_run: true,
+      }),
+    };
+    const runRecords = {
+      looks_like_run: true,
+      markers: ["pipeline_info", "multiqc"],
+      folders: { count: 2, names: ["multiqc", "pipeline_info"] },
+      detected: detected(),
+    };
+
+    await setRunFolderFlags(page, { local: false, remote: false });
+    // Every route reads the bucket only with the details.
+    const dirs = await stubFolderRoute(page, "**/api/v1/projects/s3_dirs**", "url", (url, storage) =>
+      storage ? (LISTINGS[url] ?? null) : DENIED,
+    );
+    const inspects = await stubFolderRoute(
+      page,
+      "**/api/v1/projects/folder_inspect**",
+      "location",
+      (location, storage) => {
+        if (!storage) return DENIED;
+        return { json: inspection(location, location === RUN ? runRecords : {}) };
+      },
+    );
+    const finds = await stubFolderRoute(
+      page,
+      "**/api/v1/projects/find_runs**",
+      "location",
+      (location, storage) =>
+        storage
+          ? {
+              json: {
+                location,
+                runs: [
+                  {
+                    location: RUN,
+                    name: "run-7",
+                    relative: "ampliseq/run-7",
+                    markers: ["pipeline_info", "multiqc"],
+                    detected: null,
+                  },
+                ],
+                truncated: false,
+                scanned: 12,
+              },
+            }
+          : DENIED,
+    );
+
+    await loginAsAdmin();
+    await openRunTab(page);
+    const browse = page.locator("[data-testid='run-browse-local']");
+    await expect(browse).toHaveCount(0);
+    await page.locator("[data-testid='run-data-root-input']").fill(RUN);
+
+    // Refused, so the section asks for the details; with them, Browse appears.
+    const section = page.locator("[data-testid='run-private-bucket-section']");
+    await expect(section).toBeVisible({ timeout: 20_000 });
+    await section.locator("[data-testid='run-private-bucket-access-key']").fill(STORAGE.access_key_id);
+    await section
+      .locator("[data-testid='run-private-bucket-secret']")
+      .fill(STORAGE.secret_access_key);
+    await browse.click();
+    const modal = page.locator("[data-testid='browse-modal']");
+    await expect(modal).toBeVisible();
+
+    // The bucket is the S3 root, and the browser opens on the field's folder.
+    await expect(modal.locator("[data-testid='browse-group-s3']")).toBeVisible();
+    await expect(treeNode(page, BUCKET)).toContainText("private-runs");
+    await expect(treeNode(page, RUN)).toHaveAttribute("data-selected", "true");
+    const detail = page.locator("[data-testid='browse-detail']");
+    await expect(detail).toHaveAttribute("data-path", RUN);
+    await expect(detail.locator("[data-testid='browse-detail-run-badge']")).toBeVisible();
+    await expect(detail.locator("[data-testid='browse-detail-pipeline']")).toHaveText(
+      "nf-core/ampliseq",
+    );
+
+    // Searching from the bucket finds the run, and the hit opens on it.
+    await treeNode(page, BUCKET).click();
+    await expect(detail).toHaveAttribute("data-path", BUCKET);
+    await page.locator("[data-testid='browse-find-runs']").click();
+    const results = page.locator("[data-testid='browse-find-results']");
+    await expect(results).toHaveAttribute("data-state", "ready");
+    await results.locator(`[data-testid='browse-find-hit'][data-path='${RUN}']`).click();
+    await expect(treeNode(page, RUN)).toHaveAttribute("data-selected", "true");
+
+    await page.locator("[data-testid='browse-select']").click();
+    await expect(page.locator("[data-testid='run-data-root-input']")).toHaveValue(RUN);
+    await expect(page.locator("[data-testid='run-detection-card']")).toHaveAttribute(
+      "data-state",
+      "ready",
+      { timeout: 20_000 },
+    );
+
+    // The tree, the detail pane and the search read through the POST twins,
+    // the details in the body; the bucket lists of the server were never
+    // asked for, S3 browsing being off.
+    expect(dirs.length).toBeGreaterThan(0);
+    expect(finds).toHaveLength(1);
+    for (const call of [...dirs, ...finds]) {
+      expect(call).toMatchObject({ method: "POST", storage: STORAGE });
+      expect(call.url).not.toContain("?");
+    }
+    expect(dirs.map((call) => call.value)).toEqual(expect.arrayContaining([BUCKET, PIPELINE, RUN]));
+    const inspected = inspects.filter((call) => call.method === "POST");
+    expect(inspected.map((call) => call.value)).toEqual(expect.arrayContaining([RUN, BUCKET]));
+    for (const call of inspected) expect(call.storage).toEqual(STORAGE);
+    // Only the first read of the field, before any details, went without them.
+    expect(inspects.filter((call) => call.method === "GET").map((call) => call.value)).toEqual([RUN]);
   });
 });

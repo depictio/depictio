@@ -116,6 +116,21 @@ export const RunCreatedModal: React.FC<{
             </Text>
           </Alert>
 
+          {report.storage_saved && (
+            <Group gap="xs" wrap="nowrap" align="flex-start" data-testid="run-created-storage-saved">
+              <ThemeIcon variant="light" size="sm" radius="xl" color="teal">
+                <Icon icon="mdi:cloud-lock-outline" width={14} />
+              </ThemeIcon>
+              <Stack gap={0} style={{ minWidth: 0 }}>
+                <Text size="sm">Storage settings saved for this project</Text>
+                <Text size="xs" c="dimmed">
+                  The private bucket&apos;s connection details are used for every read of its
+                  data. Change them in Project settings, Storage.
+                </Text>
+              </Stack>
+            </Group>
+          )}
+
           <Box aria-live="polite" role="status">
             <Group gap="xs" wrap="nowrap">
               {state === 'running' && <Loader size="xs" color={accent.secondary} />}
