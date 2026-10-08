@@ -212,6 +212,8 @@ def test_the_instance_bucket_cannot_back_a_project(mock_db):
 
 def test_the_instance_endpoint_is_exempt_from_host_gating(mock_db, monkeypatch):
     """The compose service URL is private; it is allowed because it is ``settings.s3``'s."""
+    # Importing the CLI app elsewhere in the worker sets DEPICTIO_CONTEXT=CLI.
+    monkeypatch.setenv("DEPICTIO_CONTEXT", "server")
     monkeypatch.setattr(settings.s3, "service_name", "s3-under-test")
     monkeypatch.setattr(settings.s3, "service_port", 9000)
 
