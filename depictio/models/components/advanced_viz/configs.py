@@ -102,6 +102,18 @@ class VolcanoConfig(_BaseVizConfig):
     show_labels: bool = Field(
         default=True, description="Draw text labels on the highlighted points"
     )
+    effect_label: str | None = Field(
+        default=None,
+        max_length=40,
+        description="Volcano x-axis title, e.g. 'Log fold change'. Null shows effect_size_col",
+    )
+    significance_label: str | None = Field(
+        default=None,
+        max_length=40,
+        description=(
+            "Volcano y-axis title, e.g. '-log10 q-value'. Null shows -log10(<significance_col>)"
+        ),
+    )
 
     # --- Switchable views ---------------------------------------------------
     # The same differential-expression table drawn three ways (volcano, MA, QQ),
@@ -241,6 +253,15 @@ class EmbeddingConfig(_BaseVizConfig):
     tsne_n_iter: int = Field(default=1000, ge=250, le=5000)
     pcoa_distance: Literal["bray_curtis"] = Field(default="bray_curtis")
 
+    axis_prefix: str | None = Field(
+        default=None,
+        max_length=12,
+        description=(
+            "Names the dimensions on the axes and in the hover: 'PCo' gives "
+            "PCo1 / PCo2. Null takes the live method's (PC, PCo, UMAP, t-SNE), "
+            "or keeps the column names in precomputed mode."
+        ),
+    )
     show_density: bool = Field(default=False, description="Overlay density contours")
     point_size: int = Field(default=6, ge=1, le=30)
     marker_outline_width: float = Field(

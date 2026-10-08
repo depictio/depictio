@@ -60,6 +60,9 @@ interface VolcanoConfig {
   significance_threshold?: number;
   effect_threshold?: number;
   top_n_labels?: number;
+  /** Volcano axis titles in words; unset, the column names. */
+  effect_label?: string | null;
+  significance_label?: string | null;
   /** MA and QQ view bindings. See deViews.ts for why they live on this config. */
   avg_log_intensity_col?: string | null;
   log2_fold_change_col?: string | null;
@@ -327,8 +330,9 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       ids,
       labels,
       isNegLog10: Boolean(config.significance_is_neg_log10),
-      effectTitle: config.effect_size_col,
+      effectTitle: config.effect_label || config.effect_size_col,
       sigTitle: config.significance_col,
+      sigAxisTitle: config.significance_label || undefined,
       sigThreshold,
       effectThreshold,
       topN,
@@ -644,6 +648,8 @@ function buildVolcano(input: {
   isNegLog10: boolean;
   effectTitle: string;
   sigTitle: string;
+  /** The y axis title; unset, `-log10(<significance column>)`. */
+  sigAxisTitle?: string;
   sigThreshold: number;
   effectThreshold: number;
   topN: number;
@@ -749,7 +755,10 @@ function buildVolcano(input: {
       },
       yaxis: {
         ...plotlyAxisOverrides(input.isDark, input.theme),
-        title: { text: isNegLog10 ? input.sigTitle : `-log10(${input.sigTitle})` },
+        title: {
+          text:
+            input.sigAxisTitle ?? (isNegLog10 ? input.sigTitle : `-log10(${input.sigTitle})`),
+        },
       },
       shapes: [
         { type: 'line' as const, x0: -input.effectThreshold, x1: -input.effectThreshold, yref: 'paper', y0: 0, y1: 1, line: DOTTED_GUIDE },

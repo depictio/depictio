@@ -1,5 +1,14 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Anchor, Divider, List, Stack, Table, Text, Title } from '@mantine/core';
+import {
+  Anchor,
+  Divider,
+  List,
+  Stack,
+  Table,
+  Text,
+  Title,
+  useMantineColorScheme,
+} from '@mantine/core';
 
 import { StoredMetadata, TextValueSpec } from '../api';
 import { useAutofitHeight } from './autofit';
@@ -29,6 +38,7 @@ import {
   useTabLinkResolver,
 } from './tabLinks';
 import { formatTextValue, splitPlaceholders, withStandIns } from './textValues';
+import { textLogoSrc } from './textLogo';
 
 interface TextRendererProps {
   metadata: StoredMetadata;
@@ -817,6 +827,8 @@ const TextRenderer: React.FC<TextRendererProps> = ({
   const body = typeof metadata.body === 'string' ? metadata.body : '';
 
   const hasTitle = rawTitle.trim().length > 0;
+  const { colorScheme } = useMantineColorScheme();
+  const logoSrc = textLogoSrc(metadata.logo, metadata.logo_dark, colorScheme === 'dark');
   const fill = useMemo(
     () => makeFill(metadata.values, liveValues, liveLoading, valueChips),
     [metadata.values, liveValues, liveLoading, valueChips],
@@ -855,7 +867,7 @@ const TextRenderer: React.FC<TextRendererProps> = ({
   useAutofitHeight(
     index,
     contentRef,
-    [rawTitle, body, order, size, alignment, surface, footerPx],
+    [rawTitle, body, order, size, alignment, surface, footerPx, logoSrc],
     // The frame's padding and borders, and a footer, sit outside the measured
     // prose.
     frame.extra || footerPx ? (h) => h + frame.extra + footerPx : undefined,
@@ -908,7 +920,18 @@ const TextRenderer: React.FC<TextRendererProps> = ({
           ta={alignment}
           style={{ wordBreak: 'break-word', margin: 0, lineHeight: 1.15 }}
         >
-          {fill(rawTitle)}
+          {logoSrc ? (
+            // The heading stays a heading: the logo is its content, the title
+            // its accessible name. Sized in `em`, so it takes the title's
+            // height at every level and holds it before the image loads.
+            <img
+              src={logoSrc}
+              alt={rawTitle}
+              style={{ height: '1.15em', width: 'auto', maxWidth: '100%', verticalAlign: 'top' }}
+            />
+          ) : (
+            fill(rawTitle)
+          )}
         </Title>
       ) : placeholder ? (
         <Title

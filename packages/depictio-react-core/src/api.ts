@@ -340,6 +340,10 @@ export interface StoredMetadata {
   surface?: 'none' | 'card' | 'tinted';
   /** Palette name, CSS colour, or `tab:<name>` for that tab's colour. */
   accent?: string;
+  /** Image drawn in place of the title (a pipeline's wordmark), and its
+   *  dark-page variant; see components/textLogo.ts. */
+  logo?: string | null;
+  logo_dark?: string | null;
   /** Live values the title and body cite as `{{name}}`, computed with the
    *  cards (see components/textValues.ts). */
   values?: Record<string, TextValueSpec> | null;

@@ -1505,6 +1505,9 @@ class DashboardDataLite(BaseModel):
                     lite_comp["surface"] = comp["surface"]
                 if comp.get("accent"):
                     lite_comp["accent"] = comp["accent"]
+                for key in ("logo", "logo_dark"):
+                    if comp.get(key):
+                        lite_comp[key] = comp[key]
 
             elif comp_type == "highlight":
                 # The tab's name is what survives a move to another instance;
@@ -1973,6 +1976,8 @@ class DashboardDataLite(BaseModel):
                 full_comp["body"] = comp_dict.get("body", "")
                 full_comp["surface"] = comp_dict.get("surface", "none")
                 full_comp["accent"] = comp_dict.get("accent")
+                full_comp["logo"] = comp_dict.get("logo")
+                full_comp["logo_dark"] = comp_dict.get("logo_dark")
                 # The import resolves each value's `dc` to `dc_id` / `wf_id`.
                 text_values = exportable_text_values(comp_dict.get("values"))
                 if text_values:

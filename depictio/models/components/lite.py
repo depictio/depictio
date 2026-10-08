@@ -1009,6 +1009,26 @@ class TextLiteComponent(BaseLiteComponent):
         "sibling tab's colour. Colours the `card` rule or the `tinted` ground, and a "
         "body's leading `#` heading, which then reads as a headline figure.",
     )
+    logo: str | None = Field(
+        default=None,
+        description="Image drawn in place of the title, e.g. a pipeline's wordmark "
+        "(`/assets/images/workflows/ampliseq.png`). The title stays as its alt text.",
+    )
+    logo_dark: str | None = Field(
+        default=None,
+        description="The logo for a dark page. Unset, a dark page draws the title as "
+        "text: a wordmark in dark ink would vanish on it.",
+    )
+
+    @field_validator("logo", "logo_dark")
+    @classmethod
+    def _logo_is_an_image(cls, v: str | None) -> str | None:
+        if v and not re.match(r"^(/|https://)\S+\.(png|svg|jpe?g|webp)$", v, re.IGNORECASE):
+            raise ValueError(
+                f"logo {v!r} must be an image path (/assets/...) or an https URL "
+                "ending in .png, .svg, .jpg or .webp"
+            )
+        return v
 
     # Text tiles don't bind to a data source — keep these optional/empty.
     workflow_tag: str = Field(default="", description="Unused for text components")
