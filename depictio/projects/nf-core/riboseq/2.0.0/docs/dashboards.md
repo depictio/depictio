@@ -35,16 +35,18 @@ The landing page, at compact width with the filter panel collapsed:
 - **Pipeline**: six steps (clean, P-sites, quantify, efficiency, regulation, ORFs). Each step
   opens the parameters that drive it and the tab that shows its output.
 - **Key figures**: four headline cards, each opening the tab that explains it. Libraries
-  (split by assay), the median frame-0 share of CDS P-sites (with its spread), the genes
-  anota2seq calls regulated (split by mode) and the ORFs either caller reports (split by
-  class). A group and a library filter above them narrow these four only.
+  (split by assay), the median frame-0 share of CDS P-sites (with its spread), the median
+  genes expressed per library (with its spread) and the ORFs either caller reports (split by
+  class). No card reads anota2seq, so a run without `--contrasts` keeps four; regulation is a
+  Findings row and highlight. A group and a library filter above them narrow these four only.
 - **Findings**: result rows whose values are computed under the filters, each with a link
   to its tab: the median frame-0 share, the genes with a translational efficiency of 2 or
   more (pooled over the run, so no sample filter changes it), the genes anota2seq calls
   translation and buffering for the contrasts in view, and the ORFs outside the annotated
   CDS that both callers report. Below them, four figures in two rows, each linking its tab:
-  the start-codon metagene profile beside the efficiency plane, then the fold-change plane
-  beside the caller UpSet. The bar of this section filters by group and contrast.
+  the start-codon metagene profile (its legend hidden) beside the efficiency plane, then the
+  fold-change plane beside the caller UpSet. The bar of this section filters by group and
+  contrast.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
 The persistent `Sample filters` (group, library, assay) sit in the collapsed left panel and
@@ -66,7 +68,7 @@ quality histograms, lengths after trimming, the status checks after rRNA removal
 samtools mapping rate. Its filters read the MultiQC report and the read layout, so they work
 on a run without a design table.
 
-**Ribo-seq QC.** Strip: P-sites assigned (the libraries with the most), the median frame-0
+**Ribo-seq QC.** Strip: P-sites assigned (a distribution over libraries), the median frame-0
 share in the CDS (a box plot), the lowest frame margin (a threshold at 20 points, warning
 under 10) and the median CDS share of P-sites (a gauge). Then the frame composition per
 library (opening on the CDS, a UTR one switch away), the start and stop metagene profiles
@@ -74,31 +76,34 @@ side by side, and the phasing plane beside the footprint length profiles. Collap
 region composition, the library table with its record card, and the region table with the
 share each region would get from its length alone. Filters: frame-0 and CDS-share ranges.
 
-**Sample space.** Strip: the libraries placed (a ring by the sheet's leading factor), genes
-quantified (their share with a gene symbol), and the median genes expressed and median TPM
-per library (box plots). Then the PCA on Salmon TPMs, coloured by the leading factor, any
-sheet column one switch away; a lasso becomes an analysis group. Collapsed: the PCA table
+**Sample space.** Strip: the libraries placed (a ring by the sheet's leading factor), the
+median genes detected per library (a distribution), and the median genes expressed and median
+TPM per library (box plots). Then the PCA on Salmon TPMs, coloured by the leading factor, any
+sheet column one switch away, without centroid marks; a lasso becomes an analysis group. Collapsed: the PCA table
 with the library record beside it. Filter: a genes-expressed range.
 
 **Translational efficiency.** Pooled over every library of the run, so it needs no
-contrast. Strip: the genes both assays reach (their share with a symbol), the median log2
-efficiency (a box plot) and the median Ribo-seq and RNA-seq abundance (distributions). Then
-the plane of Ribo-seq against RNA-seq abundance, coloured by efficiency, with the diagonal
-of equal efficiency. Collapsed: the per-gene table with the gene record beside it. Filters:
+contrast. Strip: the genes both assays reach (spread by the Ribo-seq libraries that see
+them), the median log2 efficiency (a box plot) and the median Ribo-seq and RNA-seq abundance
+(distributions). Then the plane of Ribo-seq against RNA-seq abundance, coloured by
+efficiency, with the diagonal of equal efficiency; it carries no point labels (the top-ranked
+genes are the most abundant, piled at the top of the diagonal), and hover names a gene. Collapsed: the per-gene table with the gene record beside it. Filters:
 an efficiency range and the gene.
 
 **Translational regulation.** Pick a contrast first. Strip: the regulated calls (a ring by
 mode), the translation calls (a share by direction), the median translation effect (a box
 plot) and the smallest translation adjusted p-value (a threshold at anota2seq's 0.15). Then
-the fold-change plane (ribosome-bound against total mRNA, coloured by mode), then the
-translation volcano beside a volcano of any one of the four anota2seq analyses; each has a
-View switch to the QQ plot of its raw p-values. Collapsed: the regulation table with the
+the fold-change plane (ribosome-bound against total mRNA, coloured by mode, the five
+strongest genes labelled), then the translation volcano (unlabelled, since its adjusted p
+plateaus and the top genes share one height) beside a volcano of any one of the four
+anota2seq analyses; each has a View switch to the QQ plot of its raw p-values. Collapsed: the regulation table with the
 gene record beside it, across the four analyses. Filters: contrast, mode, gene and analysis.
 
-**ORF discovery.** Strip: the pooled ORFs (a ring by class), the distinct ORFs Ribo-TISH
-reports (the largest classes), the distinct ORFs RiboCode reports (the richest libraries)
-and the median protein length (a box plot). Then the ORF classes per library, one caller at
-a time, and the UpSet of Ribo-TISH, RiboCode and the annotated CDS. Collapsed: the pooled
+**ORF discovery.** Strip: the pooled ORFs (a ring by class), the ORFs Ribo-TISH and the ORFs
+RiboCode report (each spread by the libraries reporting an ORF) and the median protein length
+(a box plot). All four read the pooled table, so a skipped caller keeps its card and reads 0.
+Then the ORF classes per library, one caller at a time (opening on the first caller the run
+has), and the UpSet of Ribo-TISH, RiboCode and the annotated CDS. Collapsed: the pooled
 table with the ORF record beside it, then each caller's calls per library. Filters: ORF
 class, gene and a protein-length range.
 
@@ -107,10 +112,10 @@ class, gene and a protein-length range.
 | Route | What changes |
 |---|---|
 | No `METADATA_FILE` | No design table, group filters or group breakdowns; the assay and library filters remain. |
-| `--skip_ribowaltz` | No Ribo-seq QC tab, frame-0 card, frame-0 row or start-profile highlight. |
-| No `--contrasts` | No Translational regulation tab, regulated-genes card, contrast filter, regulation row or fold-change highlight. |
-| `--skip_ribotish` or `--skip_ribocode` | That caller's card and table go; the pooled ORF table, the UpSet and the tab stay. |
-| Both ORF callers skipped | No ORF discovery tab, ORFs card, ORF row or UpSet highlight. |
+| `--skip_ribowaltz` | No Ribo-seq QC tab, frame-0 card, frame-0 row or start-profile highlight; the Key figures keep three cards. |
+| No `--contrasts` | No Translational regulation tab, contrast filter, regulation row or fold-change highlight. The Key figures keep four cards. |
+| `--skip_ribotish` or `--skip_ribocode` | That caller's per-library table goes and its card reads 0; the pooled ORF table, the UpSet and the tab stay. |
+| Both ORF callers skipped | No ORF discovery tab, ORFs card, ORF row or UpSet highlight; the Key figures keep three cards. |
 
 The import re-packs the Overview grid after a drop, so a lone highlight takes the full row.
 

@@ -35,14 +35,16 @@ The landing page, at compact width with the filter panel collapsed:
 - **Hero**: what the run is, and a link to the run parameters.
 - **About this dashboard** and **The run**: two cards side by side. The first says what the
   dashboard shows and how to move through it; the second lists the run's facts (samples,
-  contrasts, the test, the cut-offs and the functional method), read from the run
-  parameters and the sample sheet.
+  contrasts, the test, the cut-offs and the number of gene sets GSEA scored), read from the
+  run parameters and the tables.
 - **Pipeline**: five steps (sheet, explore, test, place, enrich). Each step opens the
   parameters that drive it and the tab that shows its output.
 - **Key figures**: four headline cards, each opening the tab that explains it. Samples
-  (split by group), significant calls (split by direction), the calls the annotation places
-  on the genome (split by biotype) and the gene sets enriched at FDR under 0.25 (split by
-  pole). A group and a contrast filter above them narrow these four only.
+  (split by group), the DESeq2 size factor (a box plot), the gene tests that kept an
+  adjusted p (a strip of those under 0.05) and the significant calls (split by direction).
+  All four read tables every route writes, so the row stays four wide without a GTF or
+  GSEA; the placed calls and the enriched sets are Findings rows. A group and a contrast
+  filter above them narrow these four only.
 - **Findings**: result rows whose values are computed under the filters, each with a link
   to its tab: the genes called out of those tested, how many go up and down, the chromosome
   that carries the largest share of the placed calls and the number of enriched gene sets.
@@ -69,47 +71,51 @@ ranking or a share), then at most three open sections; tables and details follow
 
 **Samples.** Strip: the samples (a ring by group), the DESeq2 size factor (a box plot), the
 median variance-stabilised expression per sample (a distribution) and the share of features
-at the matrix floor (a gauge). Then the PCA beside the sample-to-sample distance heatmap
-(`ward`, `Blues`); a lasso on the PCA carries those samples to the other panels. Then the
-expression distribution of every sample on one shared grid, the panel a PCA cannot
-replace: a curve out of the bundle is a library normalised differently. Last, the most
-variable features, row z-scored and clustered both ways; the matrix has no contrast column,
-so the contrast filter does not reach it. Filter: a size-factor range.
+at the matrix floor (a box plot, 0 to 1). Then the PCA, and under it the sample-to-sample
+distance heatmap (`ward`, `Blues`) at full width, since sample ids label both its axes; a
+lasso on the PCA carries those samples to the other panels. Then the expression
+distribution of every sample on one shared grid, the panel a PCA cannot replace: a curve
+out of the bundle is a library normalised differently; hover names a curve, there is no
+legend. Last, the most variable features, row z-scored and clustered both ways. Filter: a
+size-factor range.
 
 **Differential expression.** Pick a contrast first. Strip: the gene tests that kept an
 adjusted p-value (DESeq2's independent filtering removes the rest), the significant calls
 (a share by direction), the median log2 fold change (a box plot, near zero when the
-normalisation is sound) and the best adjusted p-value (a threshold at 0.05, warning at
-0.1). Then the volcano, cut at the pipeline's thresholds (padj 0.05, a two-fold change),
-whose View switch draws the MA plot (`log2_base_mean` on x) or the QQ plot of the raw
-p-values. Then the test diagnostics: the raw p-value histogram per contrast beside a scatter
-pairing the first two contrasts gene by gene (a single-contrast run shows its MA view
-there). Then the strongest calls per contrast beside the effect sizes per biotype.
+normalisation is sound) and the median adjusted p-value (a threshold strip at 0.05). Then
+the volcano, cut at the pipeline's thresholds (padj 0.05, a two-fold change), whose View
+switch draws the MA plot (`log2_base_mean` on x) or the QQ plot of the raw p-values; it
+carries no point labels, since the results hold Ensembl ids only, and hover names a gene.
+Then the test diagnostics: the raw p-value histogram per contrast beside a scatter pairing
+the first two contrasts gene by gene (a single-contrast run shows its MA view there). Then
+the 10 strongest calls per contrast beside the effect sizes per biotype.
 Collapsed: the annotated table with the gene record beside it, then the full DESeq2 table.
 Filters: direction, log2 fold change, significance, expression level and biotype.
 
 **Genome view.** Needs the run's GTF. Strip: the gene tests the annotation places (a
-completeness bar), the placed calls (the busiest chromosomes), the call strength (a box plot
+share by biotype), the placed calls (the busiest chromosomes), the call strength (a box plot
 of -log10 padj) and the biotypes the up and the down calls reach (a ranking). Then the
-Manhattan plot (height -log10 padj, threshold line at 0.05, selectable by gene) and the
+Manhattan plot (height -log10 padj, threshold line at 0.05, the six strongest genes
+labelled, selectable by gene) and the
 lollipop panel: one lane per contrast, one head per gene at its start coordinate, coloured
 by direction and sized by significance. Pick a chromosome before turning the stems on.
 Filters: chromosome, significance and log2 fold change.
 
-**Enrichment.** Needs a GSEA run. Strip: the set reports (a ring by pole), the strongest
+**Enrichment.** Needs a GSEA run. Strip: the set reports (a ring by pole, all four poles
+of two contrasts), the strongest
 absolute normalised enrichment score (a box plot), the median FDR (a threshold at 0.05,
 warning at 0.25) and the median leading-edge share of each set (a gauge). Then the dot plot
 of every set on its normalised enrichment score, sized by the genes found and coloured by
-significance, and the same scores as bars grouped by contrast, which shows whether a set
-moved in both comparisons or one. Collapsed: the GSEA report table. Filters: pole,
+significance, and the same scores as bars grouped by contrast, one bar per set, which
+shows whether a set moved in both comparisons or one. Collapsed: the GSEA report table. Filters: pole,
 significance and set size.
 
 ## Routes and pruning
 
 | Route | What changes |
 |---|---|
-| No `--gtf` | No annotated table: no Genome view tab, placed-calls card, chromosome row or Manhattan highlight; on Differential expression no biotype views, gene record or biotype filter. The full DESeq2 table remains. |
-| `NO_GSEA` | No Enrichment tab, enriched-sets card, gene-set row or dot-plot highlight. |
+| No `--gtf` | No annotated table: no Genome view tab, chromosome row or Manhattan highlight; on Differential expression no biotype views, gene record or biotype filter. The full DESeq2 table remains, and the Key figures keep four cards. |
+| `NO_GSEA` | No Enrichment tab, gene-set row, gene-set line in The run or dot-plot highlight. The Key figures keep four cards. |
 
 The import re-packs the Overview grid after a drop, so a lone highlight takes the full row.
 

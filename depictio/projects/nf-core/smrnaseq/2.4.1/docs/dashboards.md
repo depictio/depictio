@@ -42,10 +42,11 @@ The landing page, at compact width with the filter panel collapsed:
   these four only.
 - **Findings**: result rows whose values are computed under the filters, each with a link to
   its tab: the miRNA share of the median library, the share of miRNA reads the leading miRNA
-  takes, the share of miRNA reads on the reference sequence, and the novel precursors with
-  star-arm reads. Below them, four figures in two rows, each linking its tab: the top miRNAs
-  by group beside the library PCA, then the isomiR composition beside the novel precursor
-  plane. The bar of this section filters by group and sample.
+  takes, the share of miRNA reads trimmed short of the reference 3' end, and the novel
+  precursors with star-arm reads. Below them, four figures in two rows, each linking its tab:
+  the top miRNAs by group beside the library PCA, then the novel precursor plane beside the
+  isomiR composition, which takes the wide tile for its per-library bars and legend. The bar
+  of this section filters by group and sample.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
 The persistent `Sample filters` (the design group, then the sample) sit in the collapsed left
@@ -58,54 +59,59 @@ Overview.
 
 Each child tab opens with a short intro (the method, with a link to its tool, and how to
 read the tab), then a strip of key numbers, each card with its own colour and a secondary
-that reads it (a box plot, a distribution, a gauge, a ranking or a share), then at most three
-open sections; tables and details follow, collapsed.
+that reads it (a box plot, a distribution, a bar out of 100, a ranking or a share), then at
+most three open sections; tables and details follow, collapsed.
 
 **MultiQC.** MultiQC panels only. Open: fastp's filtered reads beside the trimmed read
-length, miRTrace's read QC beside mirtop's isomiR read counts, then samtools' mapping rate
-beside its alignment statistics. Collapsed: the distinct isomiR sequences, the raw FastQC
-counts and adapter content, fastp's base quality, the post-trim FastQC status (MultiQC
-anchors the second FastQC pass as `fastqc-1`) and the mean isomiR read counts. Its own sample
-filter reads the MultiQC report.
+length, miRTrace's read QC beside mirtop's isomiR read counts, then samtools' mapping rate at
+full width. Collapsed: the distinct isomiR sequences, the raw FastQC counts and adapter
+content, fastp's base quality, the post-trim FastQC status (MultiQC anchors the second FastQC
+pass as `fastqc-1`), the mean isomiR read counts and samtools' alignment statistics, one
+violin row per metric and too dense for a half-width tile. Its own sample filter reads the
+MultiQC report.
 
 **Library QC.** miRTrace's view of every library. Strip: the median miRNA share of a library
-(a gauge), the median rRNA share (a box), the reads on miRNAs (the deepest libraries ranked)
+(a bar out of 100), the median rRNA share (a box), the reads on miRNAs (the deepest libraries ranked)
 and the most miRNAs a library reaches at full depth (the libraries ranked). Then the read
 length profile, the miRNA window shaded, beside the complexity curves; the composition bars
-(RNA type, read QC outcome, organism clade); and the parallel coordinates of every
-per-library measure. Collapsed: depth against miRNA share, one point per library coloured by
+(RNA type, read QC outcome, organism clade); and the parallel coordinates of the
+per-library measures (the miRDeep2 counts stay on the record card: a null axis would drop
+every line on a run without miRDeep2). Collapsed: depth against miRNA share, one point per library coloured by
 its main clade, beside the record of the picked library. Filters: miRNA depth, miRNAs
 detected, and the miRNA, rRNA, tRNA and main-clade shares.
 
 **miRNA Expression.** mirtop's counts, scaled to counts per million miRNA reads. Strip: the
-miRNAs with reads (a ring by precursor arm), the miRNA reads (the most expressed miRNAs
-ranked), the median miRNAs at 10 CPM or more per library (a box) and the median number of
-libraries detecting a miRNA (its distribution). Then the clustered heatmap of the most
-variable miRNAs, the boxes of the twelve most expressed miRNAs by group, and the
-mean-variance plane beside the record of the picked miRNA, linked to miRBase. Collapsed: the
+miRNAs with reads (spread by their mean expression), the miRNA reads (split by group), the
+median miRNAs at 10 CPM or more per library (a box) and the median number of libraries
+detecting a miRNA (its distribution). Then the clustered heatmap of the most variable
+miRNAs, the boxes of the twelve most expressed miRNAs by group, and the mean-variance plane,
+unlabelled, beside the record of the picked miRNA, linked to miRBase. Collapsed: the
 miRNA table. Filters: miRNA, mean expression and detection breadth.
 
 **Group Comparison.** Two cards rather than four: the libraries compared (split by group)
 and their miRNA depth (a box), the two things to check before trusting a separation. Then
 the library PCA, coloured by group, where a lasso saves a set of points as a group, and the
 volcano of a Wilcoxon rank-sum test between two groups, corrected for multiple testing. The
-pipeline publishes no model-based test in this release, so the tab presents the volcano as a
+volcano opens on the first two groups of the design column and runs at once. The pipeline
+publishes no model-based test in this release, so the tab presents the volcano as a
 screen. Filters: miRNAs at 10 CPM or more, and the first component.
 
 **isomiRs.** mirtop's isomiR classes. Strip: the median share of a library's miRNA reads on
-the reference sequence (a gauge), the median isomiRs of a miRNA in a library (a box), the
-reference share per miRNA (its distribution) and the most isomiRs one miRNA carries (the
-miRNAs ranked). Then the isomiR composition of each library, opening on the 3' end with the
+the reference sequence (a box), the median isomiRs of an expressed miRNA in a library (its
+distribution), the miRNA reads by 3' end (a ring) and the reads with a non-templated 3'
+addition (the added bases ranked). Then the isomiR composition of each library, opening on the 3' end with the
 other partitions a switch away, and the landscape of isomiR classes over the 40 most
 expressed miRNAs. Collapsed: the landscape table. Filters: isomiR class and reference share.
 
 **Novel miRNAs.** miRDeep2's predictions. Strip: the novel precursors merged across libraries
-(a ring by star-arm reads), the median libraries reporting one (a box), the median best score
-(its distribution) and every call (split into novel and known). Then miRDeep2's
-signal-to-noise curve beside its known-precursor recovery curve, both by score cutoff, and
-the recurrence against score plane beside the record of the picked precursor, linked to the
-UCSC browser on `{GENOME}`. Collapsed: the precursor table and every per-library call.
-Filters: libraries reporting, best score and star-arm reads.
+(a ring by star-arm reads), the median libraries reporting one (a box), the median
+true-positive estimate (its distribution) and every call (split into novel and known). Then
+miRDeep2's signal-to-noise curve beside its known-precursor recovery curve, both by score
+cutoff, and the plane of recurrence against the true-positive estimate beside the record of
+the picked precursor, linked to the UCSC browser on `{GENOME}`. The plane and the strip read
+the estimate rather than the raw score, which is unbounded: one hairpin far above the rest
+flattens every other point. Collapsed: the precursor table and every per-library call.
+Filters: libraries reporting, true-positive estimate and star-arm reads.
 
 ## Routes and pruning
 
@@ -113,7 +119,7 @@ Filters: libraries reporting, best score and star-arm reads.
 |---|---|
 | no `METADATA_FILE` | No design table, group filters or design colours; the figures draw one colour and the group splits fall away. |
 | `SKIP_MULTIQC` | No MultiQC tab, miRTrace cards, length, complexity or composition figures, nor the miRNA share row. |
-| `SKIP_MIRDEEP` | No Novel miRNAs tab, novel key figure, novel row or highlight. |
+| `SKIP_MIRDEEP` | No Novel miRNAs tab, novel key figure, novel row or highlight; the Key figures keep three cards. |
 
 The import re-packs the Overview grid after a drop, so a lone highlight takes the full row.
 The cards and figures on the hub keep working on every route.

@@ -195,9 +195,11 @@ main_dashboard:
     tag: rb-ov-steps
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
-  # Key figures: one card per stage of the funnel, each opening the tab that
-  # explains it. The icon colour is that tab's colour. Libraries is a count
-  # over the sheet (one row per library), so its bar holds parts of a whole.
+  # Key figures: one card per Data & QC or ORF tab, in tab order, each opening
+  # the tab that explains it; the icon colour is that tab's colour. Libraries is
+  # a count over the sheet (one row per library), so its bar holds parts of a
+  # whole. No anota2seq card: a run without --contrasts would leave three on the
+  # row, so regulation is a Findings row and highlight instead.
   - component_type: card
     workflow_tag: riboseq
     data_collection_tag: samples
@@ -239,28 +241,26 @@ main_dashboard:
     title: Frame 0 in CDS (%)
     description: Median share of each Ribo-seq library's CDS P-sites in the annotated frame. A third means no periodicity.
     layout: {x: 2, y: 0, w: 2, h: 2}
-  # One row per contrast and gene, so a count over the regulated rows splits
-  # into the three modes as parts of a whole.
   - component_type: card
     workflow_tag: riboseq
-    data_collection_tag: anota2seq_regulation
-    use: anota2seq/regulation
-    aggregation: count
-    column_name: gene_id
-    column_type: object
-    filter_expr: col('regulation_mode') != 'not regulated'
-    secondary_layout: composition
-    breakdown_col: regulation_mode
+    data_collection_tag: sample_pca
+    use: salmon/sample_pca
+    aggregation: median
+    column_name: genes_expressed
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
-      icon_name: mdi:scale-balance
-      icon_color: indigo
-      caption: calls, by regulatory mode
-      link: tab:Translational regulation
+      icon_name: mdi:chart-bell-curve
+      icon_color: cyan
+      caption: median per library, with its spread
+      link: tab:Sample space
+      decimals: 0
     section: Key figures
-    tag: rb-ov-kf-regulated
-    index: ov-kf-regulated
-    title: Regulated genes
-    description: Genes anota2seq calls regulated, one per contrast. The bar splits them into translation, buffering and mRNA abundance.
+    tag: rb-ov-kf-expressed
+    index: ov-kf-expressed
+    title: Genes expressed
+    description: Genes at 1 TPM or more in a library, the median over the libraries in view, both assays together.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: riboseq
@@ -345,6 +345,8 @@ main_dashboard:
     section: Findings
     source_tab: Ribo-seq QC
     source_component: rq-start-profile
+    # The legend lists every library and takes a third of the tile.
+    hide_legend: true
     caption: One curve per Ribo-seq library; a phased library peaks at the start codon, then every three nucleotides.
     tag: rb-ov-hl-start-profile
     index: ov-hl-start-profile
@@ -755,18 +757,17 @@ tabs:
     aggregation: sum
     column_name: psites
     column_type: int64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
+    # Not ranked by library: run accessions cut to "SRX117..." at card width.
+    secondary_layout: histogram
     display:
       icon_name: mdi:counter
       icon_color: indigo
-      caption: the libraries with the most
+      caption: total; its spread over libraries
     section: Periodicity at a glance
     tag: rb-rq-card-psites
     index: rq-card-psites
     title: P-sites assigned
-    description: P-sites riboWaltz assigned to a transcript region, over the libraries in view.
+    description: P-sites riboWaltz assigned to a transcript region, over the libraries in view. The bars spread the libraries by their own count.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: riboseq
@@ -1051,23 +1052,26 @@ tabs:
     title: Libraries placed
     description: Libraries on the PCA, split by the sheet's leading factor (the assay on a riboseq sheet).
     layout: {x: 0, y: 0, w: 2, h: 2}
+  # Every gene of the merged matrix carries a symbol, so a completeness bar
+  # read 100%: the detected genes per library say more.
   - component_type: card
     workflow_tag: riboseq
-    data_collection_tag: gene_counts
-    use: salmon/merged_gene_counts
-    aggregation: count
-    column_name: gene_name
-    column_type: object
-    secondary_layout: completeness
+    data_collection_tag: sample_pca
+    use: salmon/sample_pca
+    aggregation: median
+    column_name: genes_detected
+    column_type: int64
+    secondary_layout: histogram
     display:
       icon_name: mdi:dna
       icon_color: cyan
-      caption: with a gene symbol
+      caption: median per library, its distribution
+      decimals: 0
     section: Libraries at a glance
     tag: rb-sp-card-genes
     index: sp-card-genes
-    title: Genes quantified
-    description: Genes in the merged Salmon count matrix; the bar shows how many carry a symbol.
+    title: Genes detected
+    description: Genes with a TPM above zero in a library, the median over the libraries in view.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: riboseq
@@ -1116,7 +1120,8 @@ tabs:
     config:
       color_col: group
       point_size: 12
-      show_centroids: true
+      # No centroid marks: a group's centroid label covers its replicates.
+      show_centroids: false
       axis_prefix: PC
       selection_enabled: true
       selection_column: sample_id
@@ -1233,19 +1238,22 @@ tabs:
   - component_type: card
     workflow_tag: riboseq
     data_collection_tag: translational_efficiency
+    # One row per gene, so a count of ribo_libraries counts the genes; the bars
+    # spread them by how many Ribo-seq libraries see them (every gene has a
+    # symbol, so a completeness bar read 100%).
     aggregation: count
-    column_name: gene_name
-    column_type: object
-    secondary_layout: completeness
+    column_name: ribo_libraries
+    column_type: int64
+    secondary_layout: histogram
     display:
       icon_name: mdi:dna
       icon_color: cyan
-      caption: with a gene symbol
+      caption: by the Ribo-seq libraries that see them
     section: Efficiency at a glance
     tag: rb-te-card-genes
     index: te-card-genes
     title: Genes
-    description: Genes both assays reach on average, the ones the efficiency is computed for.
+    description: Genes both assays reach on average, the ones the efficiency is computed for. A gene few Ribo-seq libraries see has a noisy efficiency.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: riboseq
@@ -1319,7 +1327,9 @@ tabs:
       marker_size: 4
       opacity: 0.6
       marker_outline: false
-      top_n_labels: 10
+      # No labels: the top-N are the most abundant genes, piled at the top of
+      # the diagonal, not the efficient ones. Hover names a gene.
+      top_n_labels: 0
       density_threshold: 40000
       selection_enabled: true
       selection_column: gene_id
@@ -1565,7 +1575,8 @@ tabs:
       marker_size: 5
       opacity: 0.7
       marker_outline: false
-      top_n_labels: 10
+      # Five: the Overview highlight draws this tile at a third of the width.
+      top_n_labels: 5
       density_threshold: 40000
       selection_enabled: true
       selection_column: gene_id
@@ -1584,8 +1595,12 @@ tabs:
       label_col: gene_name
       significance_threshold: 0.15
       effect_threshold: 0.263
+      effect_label: Translation effect (log2)
+      significance_label: -log10 adjusted p
+      # The adjusted p plateaus, so the top-ranked genes share one height and
+      # their labels pile: hover names a gene.
       top_n_labels: 15
-      show_labels: true
+      show_labels: false
       p_value_col: translation_pvalue
       view: volcano
       views: [volcano, qq]
@@ -1603,6 +1618,8 @@ tabs:
       label_col: gene_name
       significance_threshold: 0.15
       effect_threshold: 0.263
+      effect_label: Effect (log2)
+      significance_label: -log10 adjusted p
       top_n_labels: 10
       show_labels: true
       p_value_col: pvalue
@@ -1764,47 +1781,45 @@ tabs:
     title: ORFs
     description: ORFs either caller reported in at least one library, split by class.
     layout: {x: 0, y: 0, w: 2, h: 2}
-  # The per-caller tables hold one row per library and ORF: distinct ORFs are
-  # ranked by a parent column, never broken down by their own id.
+  # The caller cards read the pooled table, which survives --skip_ribotish and
+  # --skip_ribocode, so the strip keeps four cards (a skipped caller reads 0).
+  # One row per ORF: a count of the caller's library column counts its ORFs,
+  # and the bars spread them by how many libraries report each one.
   - component_type: card
     workflow_tag: riboseq
-    data_collection_tag: ribotish_orfs
-    use: ribotish/orfs
-    aggregation: nunique
-    column_name: orf_id
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: orf_class
-    top_n_count: 3
+    data_collection_tag: orf_overlap
+    aggregation: count
+    column_name: ribotish_libraries
+    column_type: int64
+    filter_expr: col('ribotish') == 1
+    secondary_layout: histogram
     display:
       icon_name: mdi:magnify-scan
       icon_color: grape
-      caption: distinct ORFs, the largest classes
+      caption: ORFs, by the libraries reporting them
     section: ORFs at a glance
     tag: rb-orf-card-ribotish
     index: orf-card-ribotish
     title: Ribo-TISH
-    description: Distinct ORFs Ribo-TISH reported in the libraries in view.
+    description: ORFs Ribo-TISH reported in at least one library, pooled over the run; 0 when the run skipped it.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: riboseq
-    data_collection_tag: ribocode_orfs
-    use: ribocode/orfs
-    aggregation: nunique
-    column_name: orf_id
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
+    data_collection_tag: orf_overlap
+    aggregation: count
+    column_name: ribocode_libraries
+    column_type: int64
+    filter_expr: col('ribocode') == 1
+    secondary_layout: histogram
     display:
       icon_name: mdi:sine-wave
       icon_color: violet
-      caption: distinct ORFs, the richest libraries
+      caption: ORFs, by the libraries reporting them
     section: ORFs at a glance
     tag: rb-orf-card-ribocode
     index: orf-card-ribocode
     title: RiboCode
-    description: Distinct ORFs RiboCode reported in the libraries in view.
+    description: ORFs RiboCode reported in at least one library, pooled over the run; 0 when the run skipped it.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: riboseq
@@ -1835,7 +1850,9 @@ tabs:
       taxon_col: orf_class
       rank_col: caller
       abundance_col: pct
-      default_rank: RiboCode
+      # No default_rank: a pinned caller the run skipped would draw an empty
+      # chart. Unset, the tile opens on the first caller the table lists
+      # (Ribo-TISH, or RiboCode alone under --skip_ribotish).
       normalise_to_one: true
       sort_by: abundance
       sample_sort: input
@@ -1844,7 +1861,7 @@ tabs:
     tag: rb-orf-classes
     index: orf-classes
     title: ORF classes per library
-    description: Share of each library's ORFs per class. The level switch changes the caller; the annotated CDS dominates, so compare the other classes.
+    description: Share of each library's ORFs per class. The tile opens on Ribo-TISH and the level switch changes the caller; the annotated CDS dominates, so compare the other classes.
     layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
     workflow_tag: riboseq

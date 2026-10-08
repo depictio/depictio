@@ -307,7 +307,10 @@ main_dashboard:
         format: "decimals:1"}
       top_mirna: {dc: mirtop_mirna_counts, column: mirna, aggregation: top, weight: reads}
       top_share: {dc: mirtop_mirna_counts, column: mirna, aggregation: top_share, weight: reads, format: percent}
-      ref_pct: {dc: samples, column: reference_isoform_pct, aggregation: median, filter_expr: "col('mirna_reads') > 0",
+      # The 3' end partition, trimmed class: one row per library, so the
+      # median is the median library. Matched without the quote in "3' end".
+      trim_pct: {dc: mirtop_isomir_composition, column: percent, aggregation: median,
+        filter_expr: "col('rank').str.starts_with('3') & col('rank').str.ends_with('end') & col('taxon').str.ends_with('trimmed')",
         format: "decimals:1"}
       n_novel: {dc: mirdeep2_novel_precursors, column: precursor_id, aggregation: count, format: integer}
       n_star: {dc: mirdeep2_novel_precursors, column: precursor_id, aggregation: count, filter_expr: "col('star_support') == 'yes'",
@@ -315,14 +318,14 @@ main_dashboard:
     body: |
       - **{{mirna_pct}}%** of the median library is miRNA reads – miRTrace [Library QC](tab:Library QC)
       - **{{top_share}}** of the miRNA reads go to {{top_mirna}} – the leading miRNA [Expression](tab:miRNA Expression)
-      - **{{ref_pct}}%** of miRNA reads match the reference in the median library – isomiRs [isomiRs](tab:isomiRs)
+      - **{{trim_pct}}%** of miRNA reads stop short of the reference 3' end in the median library – isomiRs [isomiRs](tab:isomiRs)
       - **{{n_novel}}** novel precursors, {{n_star}} with star-arm reads – miRDeep2 [Novel](tab:Novel miRNAs)
     section: Findings
     tag: sr-ov-findings
     index: ov-findings
     layout: {x: 0, y: 0, w: 8, h: 2}
-  # One highlight per analysis tab, in the order of the tabs. The import drops
-  # a highlight whose source is gone and re-packs the grid.
+  # One highlight per analysis tab. The import drops a highlight whose source
+  # is gone and re-packs the grid.
   - component_type: highlight
     section: Findings
     source_tab: miRNA Expression
@@ -339,6 +342,16 @@ main_dashboard:
     tag: sr-ov-hl-pca
     index: ov-hl-pca
     layout: {x: 5, y: 2, w: 3, h: 5}
+  # The plane reads at w3; the per-library bars and their legend need the
+  # wide slot, so the second row puts the novel plane first.
+  - component_type: highlight
+    section: Findings
+    source_tab: Novel miRNAs
+    source_component: novel-plane
+    caption: One point per novel hairpin; right, found in more libraries; higher, more likely real. Colour marks star-arm reads.
+    tag: sr-ov-hl-novel
+    index: ov-hl-novel
+    layout: {x: 0, y: 7, w: 3, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: isomiRs
@@ -346,14 +359,6 @@ main_dashboard:
     caption: Each library's miRNA reads by 3' end; a library unlike the others is worth a look.
     tag: sr-ov-hl-isomirs
     index: ov-hl-isomirs
-    layout: {x: 0, y: 7, w: 3, h: 5}
-  - component_type: highlight
-    section: Findings
-    source_tab: Novel miRNAs
-    source_component: novel-plane
-    caption: One point per novel hairpin; right, found in more libraries; higher, better scored. Colour marks star-arm reads.
-    tag: sr-ov-hl-novel
-    index: ov-hl-novel
     layout: {x: 3, y: 7, w: 5, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out, and a heading whose
@@ -462,7 +467,7 @@ tabs:
   - name: QC details
     icon: mdi:file-document-outline
     color: gray
-    description: Distinct isomiRs and the remaining FastQC, fastp and mirtop panels
+    description: Distinct isomiRs, samtools' alignment statistics and the other QC panels
     collapsed: true
   components:
   # The tab's intro: the method, with its link, and how to read the tab.
@@ -544,18 +549,7 @@ tabs:
     tag: sr-mqc-samtools-mapped
     title: Reads mapped to the genome
     description: Share of each library's reads placed on the genome.
-    layout: {x: 0, y: 0, w: 4, h: 4}
-  - component_type: multiqc
-    workflow_tag: smrnaseq
-    data_collection_tag: multiqc_data
-    use: multiqc/samtools
-    selected_module: samtools
-    selected_plot: Alignment stats
-    section: Genome mapping
-    tag: sr-mqc-samtools-stats
-    title: Alignment statistics
-    description: Mapped, unmapped and filtered reads per library.
-    layout: {x: 4, y: 0, w: 4, h: 4}
+    layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: multiqc
     workflow_tag: smrnaseq
     data_collection_tag: multiqc_data
@@ -622,6 +616,19 @@ tabs:
     title: Mean isomiR read counts
     description: Mean reads per isomiR type, per library.
     layout: {x: 0, y: 12, w: 8, h: 4}
+  # One violin row per samtools metric: too dense for a half-width tile in the
+  # open section, so it sits here at full width.
+  - component_type: multiqc
+    workflow_tag: smrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/samtools
+    selected_module: samtools
+    selected_plot: Alignment stats
+    section: QC details
+    tag: sr-mqc-samtools-stats
+    title: Alignment statistics
+    description: Mapped, unmapped and filtered reads per library.
+    layout: {x: 0, y: 16, w: 8, h: 4}
 
 - title: Library QC
   subtitle: Is each library a small RNA library, and a clean one?
@@ -770,12 +777,12 @@ tabs:
     column_name: percent
     column_type: float64
     filter_expr: (col('rank') == 'RNA type') & (col('taxon') == 'miRNA')
-    secondary_layout: gauge
+    secondary_layout: coverage
     coverage_max: 100
     display:
       icon_name: mdi:test-tube
       icon_color: teal
-      caption: median share of a library, out of 100
+      caption: median share of a library's reads
       decimals: 1
     section: Libraries at a glance
     tag: sr-lib-card-mirna
@@ -897,6 +904,8 @@ tabs:
     title: Library composition
     description: Stacked to 100 % per library. The Clade level counts detected miRNAs, not reads.
     layout: {x: 0, y: 0, w: 8, h: 5}
+  # A row with a null axis draws no line, so the axes leave out the miRDeep2
+  # counts (null with SKIP_MIRDEEP); the record card below still shows them.
   - component_type: advanced_viz
     workflow_tag: smrnaseq
     data_collection_tag: samples
@@ -913,7 +922,6 @@ tabs:
       - rrna_pct
       - trna_pct
       - reference_isoform_pct
-      - novel_candidates
     section: Library profile
     tag: sr-lib-parcoords
     index: lib-parcoords
@@ -1056,27 +1064,29 @@ tabs:
     index: expr-detection-range
     title: Libraries detecting the miRNA
     layout: {x: 0, y: 6, w: 1, h: 3}
-  # One row per miRNA, so a count over the summary is a count of miRNAs.
+  # One row per miRNA, so a count over the summary is a count of miRNAs. The
+  # arm is null for a miRNA named without -5p/-3p, so no ring by arm: the
+  # strip shows how expression spreads over the miRNAs instead.
   - component_type: card
     workflow_tag: smrnaseq
     data_collection_tag: mirtop_mirna_summary
     use: mirtop/mirna_summary
     aggregation: count
-    column_name: mirna
-    column_type: object
-    secondary_layout: donut
-    breakdown_col: arm
-    top_n_count: 3
+    column_name: mean_log2_cpm
+    column_type: float64
+    secondary_layout: histogram
     display:
       icon_name: mdi:dna
       icon_color: cyan
-      caption: miRNAs, by precursor arm
+      caption: their mean log2(CPM + 1), low to high
     section: Expression at a glance
     tag: sr-expr-card-mirnas
     index: expr-card-mirnas
     title: miRNAs with reads
-    description: miRNAs with at least one read in the run.
+    description: miRNAs with at least one read in the run. The bars spread them by mean expression.
     layout: {x: 0, y: 0, w: 2, h: 2}
+  # miRNA names are cut at a card's label width, so the reads split by group,
+  # the parts of the whole; the top miRNAs are named in the boxes below.
   - component_type: card
     workflow_tag: smrnaseq
     data_collection_tag: mirtop_mirna_counts
@@ -1084,18 +1094,17 @@ tabs:
     aggregation: sum
     column_name: reads
     column_type: int64
-    secondary_layout: top_n
-    breakdown_col: mirna
-    top_n_count: 5
+    secondary_layout: composition
+    breakdown_col: '{GROUP_COL}'
     display:
       icon_name: mdi:chart-bar
       icon_color: blue
-      caption: the most expressed miRNAs
+      caption: reads, by {GROUP_COL_DISPLAY}
     section: Expression at a glance
     tag: sr-expr-card-reads
     index: expr-card-reads
     title: miRNA reads
-    description: Reads assigned to miRNAs over the libraries in view.
+    description: Reads assigned to miRNAs over the libraries in view. The bar splits them by {GROUP_COL_DISPLAY} when a design table was given.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: smrnaseq
@@ -1178,6 +1187,9 @@ tabs:
           hover_data=['sample'],
           labels={'mirna': 'miRNA', 'log2_cpm': 'log2(CPM + 1)', grp: '{GROUP_COL_DISPLAY}'},
       )
+      # The miRNA names say what the axis is: no title, and room for the
+      # slanted names below the boxes.
+      fig.update_xaxes(title_text=None, automargin=True)
       fig.update_layout(margin=dict(t=10), legend={'orientation': 'h', 'y': 1.08})
     selection_enabled: false
     section: Expression by group
@@ -1195,7 +1207,9 @@ tabs:
       y_title: Standard deviation of log2(CPM + 1)
       marker_size: 6
       opacity: 0.7
-      top_n_labels: 10
+      # The best-detected miRNAs are also the most expressed: their labels
+      # piled up at the right edge. The boxes above name the top twelve.
+      top_n_labels: 0
       selection_enabled: true
       selection_column: mirna
       legend_pos: bottom
@@ -1359,7 +1373,9 @@ tabs:
       axis_prefix: PC
       point_size: 12
       show_density: false
-      show_centroids: true
+      # The Overview highlight draws this at w3, where the centroid labels
+      # pile on the points; the colours already say the group.
+      show_centroids: false
       hover_cols: [mirna_reads, mirnas_detected]
       selection_enabled: true
       selection_column: sample
@@ -1381,6 +1397,9 @@ tabs:
       fdr_threshold: 0.05
       log2fc_threshold: 1.0
       top_n_labels: 15
+      # Opens on the first two groups of the design column and runs the test,
+      # so the tile is not blank until a click.
+      auto_run: true
     section: Two-group test
     tag: sr-cmp-volcano
     index: cmp-volcano
@@ -1469,12 +1488,12 @@ tabs:
     column_name: reference_isoform_pct
     column_type: float64
     filter_expr: col('mirna_reads') > 0
-    secondary_layout: gauge
-    coverage_max: 100
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
     display:
       icon_name: mdi:check-decagram
       icon_color: green
-      caption: median share of miRNA reads, out of 100
+      caption: median per library, with its spread
       decimals: 1
     section: isomiRs at a glance
     tag: sr-iso-card-reference
@@ -1482,6 +1501,8 @@ tabs:
     title: Reads on the reference (%)
     description: Median share of a library's miRNA reads that match the reference sequence exactly.
     layout: {x: 0, y: 0, w: 2, h: 2}
+  # A miRNA with no read in a library has no isomiR there: left out, or the
+  # median reads the zeros.
   - component_type: card
     workflow_tag: smrnaseq
     data_collection_tag: mirtop_mirna_counts
@@ -1489,59 +1510,64 @@ tabs:
     aggregation: median
     column_name: isomirs
     column_type: int64
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    filter_expr: col('reads') > 0
+    secondary_layout: histogram
     display:
       icon_name: mdi:shape-outline
       icon_color: indigo
-      caption: median per miRNA and library, with its spread
+      caption: median; the distribution over miRNAs and libraries
       decimals: 0
     section: isomiRs at a glance
     tag: sr-iso-card-isomirs
     index: iso-card-isomirs
     title: isomiRs per miRNA
-    description: Median number of distinct isomiRs of a miRNA in a library.
+    description: Median number of distinct isomiRs of an expressed miRNA in a library.
     layout: {x: 2, y: 0, w: 2, h: 2}
+  # Each partition sums to the library's miRNA reads, so the 3' end classes
+  # are parts of one whole. The rank is matched without the quote in "3' end".
   - component_type: card
     workflow_tag: smrnaseq
-    data_collection_tag: mirtop_mirna_summary
-    use: mirtop/mirna_summary
-    aggregation: median
-    column_name: reference_pct
+    data_collection_tag: mirtop_isomir_composition
+    use: mirtop/isomir_composition
+    aggregation: sum
+    column_name: abundance
     column_type: float64
-    filter_expr: col('total_reads') > 0
-    secondary_layout: histogram
+    filter_expr: col('rank').str.starts_with('3') & col('rank').str.ends_with('end')
+    secondary_layout: donut
+    breakdown_col: taxon
+    top_n_count: 4
     display:
-      icon_name: mdi:dna
-      icon_color: cyan
-      caption: median; the distribution over miRNAs
-      decimals: 1
+      icon_name: mdi:ray-end
+      icon_color: grape
+      caption: reads, by 3' end
+      decimals: 0
     section: isomiRs at a glance
-    tag: sr-iso-card-mirna-reference
-    index: iso-card-mirna-reference
-    title: Reference share per miRNA (%)
-    description: Median share of a miRNA's reads on its reference sequence, over all libraries.
+    tag: sr-iso-card-three-prime
+    index: iso-card-three-prime
+    title: miRNA reads by 3' end
+    description: The miRNA reads of the libraries in view, by how their 3' end compares with the reference.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: smrnaseq
-    data_collection_tag: mirtop_mirna_summary
-    use: mirtop/mirna_summary
-    aggregation: max
-    column_name: max_isomirs
-    column_type: int64
+    data_collection_tag: mirtop_isomir_composition
+    use: mirtop/isomir_composition
+    aggregation: sum
+    column_name: abundance
+    column_type: float64
+    filter_expr: col('rank').str.ends_with('addition') & (col('taxon') != 'No addition')
     secondary_layout: top_n
-    breakdown_col: mirna
+    breakdown_col: taxon
     top_n_count: 3
     display:
-      icon_name: mdi:chart-bell-curve
+      icon_name: mdi:plus-circle-outline
       icon_color: orange
-      caption: the miRNAs with the most variants
+      caption: the bases added most
       decimals: 0
     section: isomiRs at a glance
-    tag: sr-iso-card-max-isomirs
-    index: iso-card-max-isomirs
-    title: Most isomiRs of one miRNA
-    description: The largest number of isomiRs one miRNA carries in one library.
+    tag: sr-iso-card-additions
+    index: iso-card-additions
+    title: Reads with a 3' addition
+    description: miRNA reads carrying non-templated bases at the 3' end, ranked by the base added.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: smrnaseq
@@ -1598,7 +1624,7 @@ tabs:
   - name: Precursor filters
     icon: mdi:filter-variant
     color: red
-    description: Keeps the novel precursors by recurrence, score and star-arm reads
+    description: Keeps the novel precursors by recurrence, true-positive estimate and star arm
   grid_sections:
   - name: Discovery at a glance
     icon: mdi:counter
@@ -1611,7 +1637,7 @@ tabs:
   - name: Precursor detail
     icon: mdi:chart-scatter-plot
     color: orange
-    description: Recurrence against score; pick a precursor to read its record
+    description: Recurrence against the true-positive estimate; pick one to read its record
   - name: Precursor tables
     icon: mdi:table
     color: gray
@@ -1625,7 +1651,7 @@ tabs:
       [miRDeep2](https://github.com/rajewsky-lab/mirdeep2) scores every hairpin the reads
       outline on the genome and estimates its noise from permuted structures. Set a cutoff on
       the calibration curves first: high signal-to-noise while known precursors are still
-      recovered. Then pick a precursor on the plane; recurrent, well scored and with star-arm
+      recovered. Then pick a precursor on the plane; recurrent, likely real and with star-arm
       reads are the credible ones.
     tag: sr-novel-intro
     index: novel-intro
@@ -1649,7 +1675,7 @@ tabs:
     workflow_tag: smrnaseq
     data_collection_tag: mirdeep2_novel_precursors
     interactive_component_type: RangeSlider
-    column_name: max_score
+    column_name: max_true_positive_pct
     column_type: float64
     display:
       icon_name: mdi:trophy
@@ -1658,7 +1684,7 @@ tabs:
     group: Precursors
     tag: sr-novel-filter-score
     index: novel-score-range
-    title: Best miRDeep2 score
+    title: True-positive estimate (%)
     layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: interactive
     workflow_tag: smrnaseq
@@ -1721,19 +1747,19 @@ tabs:
     data_collection_tag: mirdeep2_novel_precursors
     use: mirdeep2/novel_precursors
     aggregation: median
-    column_name: max_score
+    column_name: max_true_positive_pct
     column_type: float64
     secondary_layout: histogram
     display:
       icon_name: mdi:trophy
       icon_color: yellow
       caption: median; the distribution over precursors
-      decimals: 1
+      decimals: 0
     section: Discovery at a glance
     tag: sr-novel-card-score
     index: novel-card-score
-    title: Best miRDeep2 score
-    description: Median of each precursor's best score over the libraries reporting it.
+    title: True-positive estimate (%)
+    description: miRDeep2's estimate that a precursor at its best score is real, from the permuted controls.
     layout: {x: 4, y: 0, w: 2, h: 2}
   # One row per call, library and precursor, so the bar splits the calls.
   - component_type: card
@@ -1788,8 +1814,12 @@ tabs:
     data_collection_tag: mirdeep2_novel_precursors
     use: mirdeep2/novel_support
     config:
+      # The score is unbounded and one hairpin can sit thousands above the
+      # rest, flattening every other point; its true-positive estimate is
+      # bounded at 100.
+      y_col: max_true_positive_pct
       x_title: Libraries reporting the precursor
-      y_title: Best miRDeep2 score
+      y_title: True-positive estimate (%)
       log_y: false
       marker_outline: true
       top_n_labels: 0
@@ -1799,7 +1829,7 @@ tabs:
     section: Precursor detail
     tag: sr-novel-plane
     index: novel-plane
-    title: Recurrence against score
+    title: Recurrence against the true-positive estimate
     description: Size follows the reads summed over libraries; colour, whether any call had star-arm reads.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
