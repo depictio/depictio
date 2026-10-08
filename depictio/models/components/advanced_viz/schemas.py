@@ -706,6 +706,9 @@ _OPTIONAL_ROLES: dict[AdvancedVizKind, dict[str, frozenset[str]]] = {
     "volcano": {
         "label": _STRING,
         "category": _STRING,
+        # Each adds a view to the volcano's View switch: QQ, MA.
+        "p_value": _FLOAT,
+        "avg_log_intensity": _FLOAT,
     },
     "embedding": {
         "dim_3": _FLOAT,
@@ -1696,6 +1699,10 @@ _ROLE_DESCRIPTIONS: dict[str, str] = {
 # level for stacked_taxonomy and as a position in a ranked gene list for GSEA;
 # a single description cannot be right for both. Consulted before the flat map.
 _KIND_ROLE_DESCRIPTIONS: dict[AdvancedVizKind, dict[str, str]] = {
+    "volcano": {
+        "p_value": "Optional raw p-value (0-1): adds a QQ view to the volcano.",
+        "avg_log_intensity": "Optional mean (log) abundance: adds an MA view to the volcano.",
+    },
     "profile": {
         "series": "One curve per distinct value (sample, group, target).",
         "x": "Shared x-axis: distance to a reference point, bin, or length.",

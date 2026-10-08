@@ -80,4 +80,59 @@ describe('parseInlineMarkdown', () => {
       { type: 'link', value: '**bold label**', href: 'https://example.org', external: true },
     ]);
   });
+
+  it('reads a tab: link, spaces, ampersands and parentheses included', () => {
+    expect(parseInlineMarkdown('open [Community](tab:Community & Diversity (16S))')).toEqual([
+      { type: 'text', value: 'open ' },
+      {
+        type: 'link',
+        value: 'Community',
+        href: 'tab:Community & Diversity (16S)',
+        external: false,
+      },
+    ]);
+  });
+});
+
+describe('inline icons', () => {
+  it('reads an icon in image syntax', () => {
+    expect(parseInlineMarkdown('![](icon:mdi:dna) Pipeline')).toEqual([
+      { type: 'icon', name: 'mdi:dna' },
+      { type: 'text', value: ' Pipeline' },
+    ]);
+  });
+
+  it('reads no icon from a real image or a malformed name', () => {
+    for (const input of ['![x](https://example.org/a.png)', '![](icon:MDI DNA)']) {
+      expect(parseInlineMarkdown(input).some((t) => t.type === 'icon')).toBe(false);
+    }
+  });
+});
+
+describe('run parameter links', () => {
+  it('reads params: with and without a search', () => {
+    expect(parseInlineMarkdown('[All parameters](params:)')).toEqual([
+      { type: 'link', value: 'All parameters', href: 'params:', external: false },
+    ]);
+    expect(parseInlineMarkdown('[DADA2](params:dada2)')[0]).toMatchObject({ href: 'params:dada2' });
+  });
+
+  it('keeps a params: link with anything but a plain search as text', () => {
+    expect(parseInlineMarkdown('[x](params:a b)').some((t) => t.type === 'link')).toBe(false);
+  });
+
+  it('draws a colour swatch, labelled by its alt text', () => {
+    expect(parseInlineMarkdown('![Athens](color:#1a4f8f) Athens · ![](color:teal.6) sea')).toEqual([
+      { type: 'swatch', color: '#1a4f8f', label: 'Athens' },
+      { type: 'text', value: ' Athens · ' },
+      { type: 'swatch', color: 'teal.6', label: '' },
+      { type: 'text', value: ' sea' },
+    ]);
+  });
+
+  it('leaves a swatch whose colour is not a hex or a palette name as text', () => {
+    expect(parseInlineMarkdown('![](color:red;x:1)')).toEqual([
+      { type: 'text', value: '![](color:red;x:1)' },
+    ]);
+  });
 });

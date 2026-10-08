@@ -2,6 +2,10 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActionIcon, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { FULLSCREEN_EXIT_ICON, TILE_ACTION_STYLE } from './actionStyles';
+
+const STYLE = TILE_ACTION_STYLE.fullscreen;
+
 interface FullscreenButtonProps {
   /** Element that should enter fullscreen — typically the chrome wrapper's body div. */
   fullscreenRef: React.RefObject<HTMLDivElement | null>;
@@ -42,16 +46,16 @@ const FullscreenButton: React.FC<FullscreenButtonProps> = ({ fullscreenRef }) =>
   }, [fullscreenRef]);
 
   return (
-    <Tooltip label="Toggle fullscreen" withArrow>
+    <Tooltip label={STYLE.label} withArrow>
       <ActionIcon
         variant="subtle"
-        color="indigo"
+        color={STYLE.color}
         size="sm"
         onClick={onClick}
-        aria-label="Toggle fullscreen"
+        aria-label={STYLE.label}
       >
         <Icon
-          icon={isFullscreen ? 'mdi:fullscreen-exit' : 'mdi:fullscreen'}
+          icon={isFullscreen ? FULLSCREEN_EXIT_ICON : STYLE.icon}
           width={16}
           height={16}
         />

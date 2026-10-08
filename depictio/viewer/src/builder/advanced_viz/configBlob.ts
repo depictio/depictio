@@ -78,6 +78,31 @@ export function buildAdvancedVizConfigBlob(
   for (const [list, pattern] of COLUMN_PATTERN_KEYS) {
     if (merged[list] != null) delete merged[pattern];
   }
+  // A tree's summary sized by reads, with the reads table since unbound in the
+  // builder, is drawn sized by tips (the renderer needs the table to do
+  // otherwise), and PhylogeneticConfig refuses the pair outright. Save what is
+  // drawn. Dropped rather than set to `tips` so the preview's own Reads/ASVs
+  // control, which may still say Reads, is the only thing that ever writes it.
+  if (
+    vizKind === 'phylogenetic' &&
+    merged.size_by === 'abundance' &&
+    !merged.abundance_dc_id &&
+    !merged.abundance_dc_tag
+  ) {
+    delete merged.size_by;
+  }
+  // Likewise a summary whose tip metadata was since cleared: the preview falls
+  // back to the full tree (the summary reads its ranks from that table, and
+  // PhylogeneticConfig refuses the pair), so that is what is saved. The tip
+  // metadata is optional; picking none should never block the save.
+  if (
+    vizKind === 'phylogenetic' &&
+    merged.collapse_rank &&
+    !merged.metadata_dc_id &&
+    !merged.metadata_dc_tag
+  ) {
+    delete merged.collapse_rank;
+  }
   return merged;
 }
 
@@ -172,6 +197,27 @@ function extractRoleDerivedFallbacks(
   return fallbacks;
 }
 
+
+/** The data collection whose columns a viz kind's roles bind to.
+ *
+ *  Usually the component's own DC. A phylogenetic viz is the exception: it is
+ *  bound to its tree, a Newick DC that has no table and so no schema (asking
+ *  for one is a 404), while its roles (`taxon`, `color`, `label`) name columns
+ *  of the tip-metadata table (PhylogeneticConfig in configs.py). A tree with no
+ *  metadata table has no columns to bind, which `null` says here.
+ *
+ *  `preset` is the merged preset, overrides included, so the table picked in
+ *  the builder's "Tip metadata" step (PhylogeneticSections.tsx) is
+ *  the one bound against the moment it is picked. */
+export function bindingSchemaDcId(
+  vizKind: string | null | undefined,
+  dcId: string | null,
+  preset: Record<string, unknown> | null,
+): string | null {
+  if (vizKind !== 'phylogenetic') return dcId;
+  const metadataDcId = preset?.metadata_dc_id;
+  return typeof metadataDcId === 'string' && metadataDcId ? metadataDcId : null;
+}
 
 /** The config a component actually renders with: the catalog or previously
  *  saved preset underneath, the author's own Tier-2 edits on top.

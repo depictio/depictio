@@ -50,6 +50,9 @@ const CoverageMetric: React.FC<{
   return (
     <MetricStrip tooltip={tooltip} ariaLabel="Coverage">
       <Meter segments={[{ key: 'covered', share, color: fill }]} />
+      {/* Kept on a headline card too: every strip in a row of key figures
+          is a bar over one line, so the cards' contents stand the same
+          height and their titles line up. */}
       <MetricCaption strong>
         {percent(share)} of {max.toLocaleString()}
       </MetricCaption>

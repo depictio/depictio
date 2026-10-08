@@ -3,6 +3,7 @@ import { Group, Paper, Stack, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { StoredMetadata } from '../../api';
+import { defaultInteractiveTitle, interactiveTitle } from './titles';
 // Loaded here rather than beside either slider: `DepictioRangeSlider` lives in
 // another package and cannot import from this one, and both sliders need the
 // same rule. This module is what every interactive renderer already imports.
@@ -58,23 +59,6 @@ export function titleSize(compact?: boolean): TitleSize {
   return compact ? INTERACTIVE_FRAME.compactTitleSize : INTERACTIVE_FRAME.titleSize;
 }
 
-/** Human label per control type, used to compose a default title. Each
- *  renderer used to spell its own ("MultiSelect on x", "Filter on x",
- *  "Slider on x", "Date range on x"), so four controls over the same kind of
- *  column announced themselves four different ways. */
-const TYPE_LABELS: Record<string, string> = {
-  MultiSelect: 'Select',
-  Select: 'Select',
-  SegmentedControl: 'Select',
-  RangeSlider: 'Range',
-  Slider: 'Value',
-  DatePicker: 'Date range',
-  DateRangePicker: 'Date range',
-  Checkbox: 'Filter',
-  Switch: 'Filter',
-  Timeline: 'Timeline',
-};
-
 /** Fallback icon per control type. Every control gets one so the titles all
  *  start at the same x — an icon on some rows and not others is the most
  *  visible misalignment in a narrow column. */
@@ -91,22 +75,9 @@ const TYPE_ICONS: Record<string, string> = {
   Timeline: 'mdi:timeline-clock-outline',
 };
 
-/** ``{Type} on {column}`` in one consistent shape. Exported so the builder
- *  writes the same string it would have rendered had the author left the title
- *  empty. */
-export function defaultInteractiveTitle(
-  interactiveType: string | undefined,
-  columnName: string | undefined,
-): string {
-  if (!columnName) return '';
-  return `${TYPE_LABELS[interactiveType || ''] || 'Filter'} on ${columnName}`;
-}
-
-/** Author's title, else the default above. */
-export function interactiveTitle(metadata: StoredMetadata): string {
-  if (metadata.title) return metadata.title;
-  return defaultInteractiveTitle(metadata.interactive_component_type, metadata.column_name);
-}
+// The default titles live in a module of their own, free of React, so plain
+// logic (the dashboard search) can name a filter the way it is drawn.
+export { defaultInteractiveTitle, interactiveTitle };
 
 export function interactiveIcon(metadata: StoredMetadata): string {
   return (

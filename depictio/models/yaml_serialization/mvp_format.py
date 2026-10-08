@@ -81,6 +81,11 @@ CARD_STYLING_FIELDS = (
     "icon_color",
     "title_font_size",
     "value_font_size",
+    "icon_style",
+    "caption",
+    "variant",
+    "link",
+    "decimals",
     "metric_theme",
     "background_color",
 )

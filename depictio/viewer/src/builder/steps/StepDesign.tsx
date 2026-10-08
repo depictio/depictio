@@ -3,7 +3,7 @@
  * Used by both CreateComponentPage (final step) and EditComponentPage (only step).
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Button, Center, Group, Paper, Stack, Switch, Text, Title } from '@mantine/core';
+import { Alert, Button, Center, Group, Paper, Stack, Text, ThemeIcon, Title } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
 import { fetchSpecs, upsertComponent } from 'depictio-react-core';
@@ -12,6 +12,7 @@ import type { ColumnSpec } from '../store/useBuilderStore';
 import ComponentBuilder from '../ComponentBuilder';
 import { buildMetadata } from '../buildMetadata';
 import { getComponentTypeMeta } from '../componentTypes';
+import { SwitchField } from '../shared/BuilderSections';
 
 const StepDesign: React.FC = () => {
   const state = useBuilderStore();
@@ -56,9 +57,10 @@ const StepDesign: React.FC = () => {
     if (!state.componentType) return false;
     if (!state.dashboardId || !state.componentId) return false;
     if (state.mode === 'create') {
-      // Text components are stand-alone — no workflow/DC binding required.
-      if (state.componentType !== 'text' && (!state.wfId || !state.dcId))
-        return false;
+      // Text and highlight components are stand-alone — no workflow/DC
+      // binding required (a highlight's figure has its own, on its tab).
+      const unbound = state.componentType === 'text' || state.componentType === 'highlight';
+      if (!unbound && (!state.wfId || !state.dcId)) return false;
     }
     return true;
   }, [state]);
@@ -123,29 +125,26 @@ const StepDesign: React.FC = () => {
         state.componentType !== 'text' &&
         state.componentType !== 'multiqc' && (
           <Paper withBorder radius="md" p="sm" data-testid="builder-filter-banner">
-            <Group justify="space-between" wrap="nowrap">
-              <Group gap="xs" wrap="nowrap">
-                <Icon icon="mdi:filter-variant" width={18} />
-                <Text size="sm">
-                  Previewing with {carriedFilters.length} active dashboard filter
-                  {carriedFilters.length === 1 ? '' : 's'}
-                </Text>
-              </Group>
-              <Switch
-                size="sm"
-                checked={state.applyDashboardFilters}
-                onChange={(e) => state.setApplyDashboardFilters(e.currentTarget.checked)}
-                label="Apply to preview"
-                data-testid="builder-filter-toggle"
-              />
+            <Group gap="sm" wrap="nowrap" align="flex-start">
+              <ThemeIcon variant="light" size="md" radius="md">
+                <Icon icon="mdi:filter-variant" width={16} />
+              </ThemeIcon>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <SwitchField
+                  label={`Previewing with ${carriedFilters.length} active dashboard filter${
+                    carriedFilters.length === 1 ? '' : 's'
+                  }`}
+                  description={
+                    state.applyDashboardFilters
+                      ? "Apply to preview. A heavily filtered preview can be empty — toggle off to preview the full dataset. The saved component always follows the dashboard's live filters."
+                      : "Apply to preview. Off: the preview shows the full dataset. The saved component always follows the dashboard's live filters."
+                  }
+                  checked={state.applyDashboardFilters}
+                  onChange={state.setApplyDashboardFilters}
+                  testId="builder-filter-toggle"
+                />
+              </div>
             </Group>
-            {state.applyDashboardFilters && (
-              <Text size="xs" c="dimmed" mt={4}>
-                A heavily filtered preview can be empty — toggle off to preview the
-                full dataset. The saved component always follows the dashboard's
-                live filters.
-              </Text>
-            )}
           </Paper>
         )}
 

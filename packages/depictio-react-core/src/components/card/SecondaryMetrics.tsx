@@ -59,6 +59,11 @@ interface SecondaryMetricsProps {
   coverageValue?: number | null;
   /** Denominator for ``coverage`` / ``gauge`` — e.g. 44 samples / 11 ORFs. */
   coverageMax?: number | null;
+  /** For a headline card: a composition strip keeps its bar and legend line;
+   *  the rest stays in the tooltip. */
+  minimal?: boolean;
+  /** The card's `decimals`, so numbers in the strip match its value. */
+  decimals?: number;
   /** The card's own column: tells a breakdown by that same column (row counts,
    *  so shares) from a per-group value breakdown. */
   heroColumn?: string | null;
@@ -89,6 +94,8 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
   color,
   coverageValue,
   coverageMax,
+  minimal = false,
+  decimals,
   heroColumn,
 }) => {
   // Categorical layouts — all four read the same ``__breakdown__`` payload and
@@ -108,7 +115,7 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
       return <ConcentrationMetric payload={breakdown} color={color} />;
     }
     if (layout === 'composition') {
-      return <CompositionMetric payload={breakdown} color={color} />;
+      return <CompositionMetric payload={breakdown} color={color} minimal={minimal} />;
     }
     return <DonutMetric payload={breakdown} color={color} />;
   }
@@ -141,15 +148,19 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
       typeof coverageMax === 'number' &&
       coverageMax > 0;
     if (usable) {
-      const Metric = layout === 'gauge' ? GaugeMetric : CoverageMetric;
-      return <Metric value={coverageValue} max={coverageMax} color={color} />;
+      if (layout === 'gauge') {
+        return <GaugeMetric value={coverageValue} max={coverageMax} color={color} />;
+      }
+      return (
+        <CoverageMetric value={coverageValue} max={coverageMax} color={color} />
+      );
     }
     // Fall through to the stat list rather than draw an always-zero bar.
   }
 
   if (layout === 'box_plot') {
     if (!rows.length) return null;
-    return <BoxPlotMetric rows={rows} color={color} />;
+    return <BoxPlotMetric rows={rows} color={color} decimals={decimals} />;
   }
 
   // ``box_plot_stats`` is the one compound aggregation — only BoxPlotMetric

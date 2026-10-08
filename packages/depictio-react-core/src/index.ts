@@ -12,7 +12,8 @@ import './styles/realtime-highlight.css';
 import './plotlyStrictMode';
 
 // Grid + top-level renderer
-export { default as DashboardGrid } from './components/DashboardGrid';
+export { default as DashboardGrid, SectionSummary } from './components/DashboardGrid';
+export type { ComponentSection } from './utils/groupInteractive';
 // Content-aware sizing: the demand channel renderers publish on, and the two
 // predicates a host needs to offer "size this tile to its content" as an action.
 export {
@@ -58,6 +59,32 @@ export { default as TableRenderer } from './components/TableRenderer';
 export { default as ImageRenderer } from './components/ImageRenderer';
 export { default as MapRenderer } from './components/MapRenderer';
 export { default as TextRenderer } from './components/TextRenderer';
+export { default as Glyph, glyphColorVar, isImagePath, isMultiqcIcon, themedIconSrc } from './components/Glyph';
+export { TabLinkContext, tabLinkKey, useTabLinkResolver } from './components/tabLinks';
+export type { TabLinkResolver, TabLinkTarget } from './components/tabLinks';
+export {
+  groupTabs,
+  sameTabGroup,
+  tabGroupNames,
+  tabGroupOf,
+  tabIdsInGroup,
+  tabOrderAfterGroupMove,
+  tabOrderAfterRegroup,
+  tabOrderEntries,
+} from './components/tabGroups';
+export type { EditableTab, GroupableTab, TabGroup } from './components/tabGroups';
+export { tabDisplayName, tabFamilyOf } from './components/tabFamily';
+export type { FamilyTab } from './components/tabFamily';
+export { canCopyToTab, copyComponentToTab } from './components/copyToTab';
+export type { CopyToTabInput } from './components/copyToTab';
+export { parseBlocks } from './components/blockMarkdown';
+export type { Block as MarkdownBlock } from './components/blockMarkdown';
+export { MARKDOWN_CHEATSHEET } from './components/markdownCheatsheet';
+export type {
+  MarkdownExample,
+  MarkdownExampleGroup,
+  MarkdownRendering,
+} from './components/markdownCheatsheet';
 export { default as JBrowseRenderer } from './components/JBrowseRenderer';
 export { default as MultiQCRenderer } from './components/MultiQCRenderer';
 
@@ -72,6 +99,42 @@ export {
   STAT_LIST_LAYOUTS,
 } from './components/card/SecondaryMetrics';
 export type { SecondaryLayout } from './components/card/SecondaryMetrics';
+// Card styles: the grid, the editor and the card builder resolve a card's style
+// against its section's through the same helpers.
+export {
+  CARD_VARIANTS,
+  normalizeCardVariant,
+  resolveCardVariant,
+  withSectionCardVariant,
+  variantForPick,
+  compactKeepsStrip,
+  stripIsMinimal,
+} from './components/cardVariant';
+export type { CardVariant } from './components/cardVariant';
+// Figure styles: same rule, for a figure's `figure_style` and its section's.
+export {
+  FIGURE_STYLES,
+  normalizeFigureStyle,
+  resolveFigureStyle,
+  withSectionFigureStyle,
+  withSectionStyles,
+  figureStyleForPick,
+  figurePlotConfig,
+} from './components/figureStyle';
+export type { FigureStyle } from './components/figureStyle';
+export { default as FigureHeader } from './components/FigureHeader';
+// Highlights: another tab's figure shown again (component_type 'highlight').
+export {
+  canHighlight,
+  findHighlightSource,
+  highlightMetadata,
+  highlightOnTab,
+  highlightSourceRef,
+  highlightStyleRequest,
+  resolveHighlightTab,
+} from './components/highlightTile';
+export type { HighlightOnTabInput, HighlightRef } from './components/highlightTile';
+export type { FigureHeaderProps } from './components/FigureHeader';
 export type {
   HistogramPayload,
   ThresholdPayload,
@@ -121,9 +184,96 @@ export {
   SectionColorContext,
   sectionColorVar,
 } from './components/SectionIcon';
+// The section chrome itself, for surfaces that show a section without a grid
+// behind it (the dashboard Guide's demo).
+export {
+  SectionAccordion,
+  SectionAccordionItem,
+  SectionHeader,
+} from './components/SectionAccordion';
 export { default as TopPanel } from './components/TopPanel';
 export { groupInteractiveComponents } from './utils/groupInteractive';
 export type { InteractiveGroup } from './utils/groupInteractive';
+
+// Filter bars: a grid section drawn as one compact row of its interactive
+// components (`display: 'strip'`, filtering the tab), or a section of tiles
+// with a bar of its own (`filter_bar`, filtering that section only). The
+// placement rules are exported so the apps route those components out of the
+// filter panel by the same predicate the grid uses to draw them, and the
+// scoping rules so every fetch applies the same "which filters reach which
+// component".
+export {
+  EmptyBar,
+  FilterStrip,
+  FilterStripSection,
+  SectionFilterBar,
+} from './components/interactive/strip/FilterStrip';
+export type {
+  FilterStripProps,
+  FilterStripSectionProps,
+  FilterStripVariant,
+  SectionFilterBarProps,
+} from './components/interactive/strip/FilterStrip';
+export {
+  SECTION_BAR_DEFAULT_VISIBLE,
+  barSectionNames,
+  hasSectionBar,
+  isBarMember,
+  isBarSection,
+  isStripSection,
+  partitionBarMembers,
+  sectionBarNames,
+  sectionRuns,
+  stripControlKind,
+  stripLabel,
+  stripShowsIcon,
+  visibleFilterCount,
+} from './components/interactive/strip/stripLayout';
+export type { StripControlKind } from './components/interactive/strip/stripLayout';
+export {
+  NO_FILTER_SCOPES,
+  activeFilterSignature,
+  filtersInScope,
+  mergeFilterScopes,
+  planScopedRequests,
+  scopedFilterIds,
+  sectionFilterScopes,
+  sectionScopeKey,
+} from './filterScope';
+export type { FilterScopes, ScopedRequest } from './filterScope';
+export {
+  MAX_STRIP_CHIPS,
+  MAX_STRIP_SEGMENTS,
+  categoricalDisplay,
+  chipSelectionMode,
+  filterEvent,
+  orderCategoricalOptions,
+  selectedValues,
+  toggleChip,
+} from './components/interactive/categoricalOptions';
+export { useColumnRange, useUniqueValues } from './components/interactive/useInteractiveData';
+
+// Category colours (`DashboardData.category_colors`): one categorical value,
+// one colour, on every surface. The pure resolver is what the figure code
+// shares with the filter bar; the hook binds it to the dashboard and theme.
+export {
+  NEUTRAL_CATEGORY_COLOR,
+  categoryColor,
+  categoryColorMap,
+  dashboardColorway,
+  hasPinnedColors,
+  pinnedCategoryColor,
+  pinnedCategoryDots,
+  sortCategoryValues,
+} from './categoryColors';
+export type { CategoryColorSource } from './categoryColors';
+export {
+  CategoryColorsContext,
+  useCategoryColorMap,
+  useCategoryColorSource,
+  useCategoryDotColors,
+  useCategoryPalette,
+} from './hooks/useCategoryColors';
 export { extractLayoutItems, stripBoxPrefix } from './utils/leftPanelLayout';
 export { countActiveFilters } from './activeFilters';
 export {
@@ -139,6 +289,8 @@ export {
   isPanelResizing,
 } from './utils/panelToggle';
 export type { PanelToggleDetail } from './utils/panelToggle';
+export { OPEN_RUN_PARAMETERS_EVENT, openRunParameters } from './utils/runParameters';
+export type { OpenRunParametersDetail } from './utils/runParameters';
 // Advanced-viz ↔ inspector bridge. Deliberately a separate module from the
 // renderers so importing it doesn't pull in the plotly-heavy lazy chunk.
 export { AdvancedVizInspectorProvider } from './components/advanced_viz/AdvancedVizInspectorBridge';
@@ -151,6 +303,17 @@ export type {
   VizConfigDraftSink,
   VizConfigPatch,
 } from './components/advanced_viz/AdvancedVizConfigDraft';
+// The phylogenetic viz's sources and ranks, for the builder. Pure modules, so
+// the same light-import reasoning applies.
+export {
+  abundanceRankCoverage,
+  phyloSourcePatch,
+  preferredTipMetadata,
+  tipLabelColumn,
+} from './components/advanced_viz/phylo/sources';
+export type { PhyloDcRef, PhyloSource } from './components/advanced_viz/phylo/sources';
+export { orderTaxonomicRanks } from './components/advanced_viz/phylo/view';
+export { rankChoices as phyloRankChoices } from './components/advanced_viz/phylo/view';
 // Dashboard-level default for where advanced-viz controls are drawn. Free of
 // renderer imports, like the two providers above, so the app shell can mount it
 // without pulling the plotly-heavy lazy chunk onto its boot path.
@@ -183,19 +346,30 @@ export {
   FullscreenButton,
   DownloadButton,
   ResetButton,
+  LoadAllButton,
+  SelectionHintAction,
   InspectorProvider,
   useInspectorControl,
   CommentsButton,
   CommentsControlProvider,
   useCommentsControl,
   actionsFor,
+  canDuplicate,
   wrapWithChrome,
+  EDIT_MENU_STYLE,
+  FULLSCREEN_EXIT_ICON,
+  LOAD_ALL_ACTIVE_ICON,
+  TILE_ACTION_STYLE,
 } from './components/chrome';
 export type {
   ComponentChromeProps,
   ChromeAction,
-  InspectorControl,
   CommentsControl,
+  EditMenuStyleKey,
+  InspectorControl,
+  LoadAllState,
+  TileActionStyle,
+  TileActionStyleKey,
   WrapWithChromeOpts,
 } from './components/chrome';
 
@@ -400,6 +574,7 @@ export {
 } from './api';
 export type {
   AdminBrandingState,
+  BulkComputeOptions,
   BrandPreset,
   FloatingComponent,
   FloatingComponentsResponse,
@@ -424,6 +599,7 @@ export type {
   CatalogPreviewPayload,
   BreakdownPayloadDTO,
   CatalogSource,
+  FigureStyleRequest,
 } from './api';
 // Selection-as-filter helpers (Plotly/AG Grid → InteractiveFilter)
 export {
@@ -433,6 +609,7 @@ export {
   clearFiltersBySource,
   hasSelectionFilters,
   enrichFilterWithDcId,
+  supportsSelectionGrouping,
   genomeRegionFilters,
   genomePosFilterIndex,
   regionFromFilters,
@@ -492,6 +669,8 @@ export {
   groupsToFilters,
   groupsRenderPayload,
   nextGroupColor,
+  uniqueGroupName,
+  defaultGroupName,
   readSelectionGroups,
   writeSelectionGroups,
 } from './selectionGroups';
@@ -503,7 +682,12 @@ export type {
   ColorByState,
   GroupingDisplay,
 } from './selectionGroups';
-export { groupBadgeLabel, summarizeGroupStatus } from './groupStatus';
+export {
+  GROUP_DECLINED_REASONS,
+  GROUP_KIND_NOT_SPLIT_REASON,
+  groupBadgeLabel,
+  summarizeGroupStatus,
+} from './groupStatus';
 export type { GroupStatusEntry, GroupStatusSummary } from './groupStatus';
 export { useSelectionGroups } from './hooks/useSelectionGroups';
 export type { SelectionGroupsApi } from './hooks/useSelectionGroups';
@@ -580,9 +764,11 @@ export {
   BrandThemeForm,
   BrandThemePreview,
   PLOT_TEMPLATE_OPTIONS,
+  useBrandScopeAttributes,
   useResolvedBrandTheme,
 } from './components/branding';
 export type {
+  BrandScopeAttributes,
   BrandFormScope,
   BrandThemeFormProps,
   BrandThemePreviewProps,
@@ -604,6 +790,7 @@ export type {
   StoredMetadata,
   DashboardData,
   FilterSectionSpec,
+  CategoryColors,
   DashboardSummary,
   InteractiveFilter,
   InteractiveFilterSource,
@@ -708,6 +895,33 @@ export type { TelemetryConfig } from './telemetry';
 
 export { COMPONENT_TYPE_VISUALS, componentTypeVisual } from './componentTypeMeta';
 export type { ComponentTypeVisual } from './componentTypeMeta';
+
+// Dashboard search: the index and ranking behind the apps' Cmd/Ctrl+K palette,
+// and the request a surface answers by unfolding what hides a component.
+export {
+  boundColumns,
+  buildSpotlightIndex,
+  componentKindLabel,
+  componentTitle,
+  groupSpotlightHits,
+  searchSpotlight,
+  stripMarkdown,
+  SPOTLIGHT_PER_TAB,
+} from './spotlight';
+export type {
+  SpotlightEntry,
+  SpotlightGroup,
+  SpotlightHit,
+  SpotlightSnippet,
+  SpotlightTab,
+  TextRange,
+} from './spotlight';
+export {
+  REVEAL_COMPONENT_EVENT,
+  requestRevealComponent,
+  useRevealComponent,
+} from './reveal';
+export type { RevealComponentDetail } from './reveal';
 export { brandColors } from './brandColors';
 export { catalogToolUrl } from './catalogLinks';
 
@@ -744,6 +958,66 @@ export type {
   ParsedAdminUrl,
 } from './adminUrlState';
 export { Z_LAYERS } from './zLayers';
+// The dashboard Guide: what it says about a tab, read from the dashboard.
+export {
+  buildGuideModel,
+  GUIDE_ACTIONS,
+  GUIDE_EDIT_ACTIONS,
+  resolveGuideSettings,
+  tileActions,
+} from './guide/guideModel';
+export {
+  actionsTileRank,
+  analysisCardRank,
+  analysisFigureRank,
+  analysisSelectableFigureRank,
+  analysisTableRank,
+  demoSectionsOf,
+  familyOrder,
+  figureDrawsGroups,
+  foldableSectionsOf,
+  groupDisplaysOf,
+  hasCards,
+  pickFilterDemo,
+  pickFromFamily,
+  selectionColumnOf,
+  takesSelection,
+} from './guide/demoSources';
+export type {
+  GuideDemoSection,
+  GuideFamilyDoc,
+  GuideFamilyPick,
+  GuideFilterDemoPick,
+} from './guide/demoSources';
+// Tiles drawn a second time elsewhere on the page (the Guide) measure under a
+// scope of their own, so the canvas grid never takes their heights.
+export { AutofitScope } from './components/autofit';
+export {
+  editActionsFor,
+  GUIDE_TILE_TYPES,
+  ownControlsFor,
+  rowActionsFor,
+} from './guide/tileActionCatalog';
+export type {
+  GuideEditAction,
+  GuideOwnControl,
+  GuideRowAction,
+  GuideTileType,
+} from './guide/tileActionCatalog';
+export type {
+  GuideAction,
+  GuideActionKey,
+  GuideEditActionKey,
+  GuideFilterSection,
+  GuideGridSection,
+  GuideModel,
+  GuideModelInput,
+  GuideSelectionKind,
+  GuideSelectionSource,
+  GuideSettings,
+  GuideTab,
+  GuideTabGroup,
+} from './guide/guideModel';
 
 // Datawrapper-style chart annotations: types, Plotly conversion, event capture.
 export * from './annotations';

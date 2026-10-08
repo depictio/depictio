@@ -71,6 +71,12 @@ test('a multi-metric card previews its strip, with no backend call', async ({ pa
   await selectByLabel(page, 'Select your aggregation method').click();
   await page.getByRole('option', { name: 'Average', exact: true }).click();
 
+  // The strip is optional, so its section starts collapsed.
+  await page
+    .getByTestId('builder-section-breakdown')
+    .getByRole('button', { name: /^Breakdown/ })
+    .click();
+
   // Each numeric layout is a `fetchCardMetric` call — the exact path that 404'd.
   for (const layout of [
     'Histogram sparkline',

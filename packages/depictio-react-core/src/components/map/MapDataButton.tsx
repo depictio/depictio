@@ -14,6 +14,8 @@ import {
   mapSelectionFilter,
   mapSelectionValues,
 } from '../../selection';
+import { TILE_ACTION_STYLE } from '../chrome/actionStyles';
+import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
 
 // AG Grid is ~250kB of CSS plus its own chunk, and the map branch of
 // ComponentRenderer is imported eagerly — a static import here would put the
@@ -74,6 +76,10 @@ const MapDataButton: React.FC<MapDataButtonProps> = ({
     isMapSelectionEnabled(metadata, Boolean(onFilterChange)) && Boolean(selectionColumn);
 
   const [opened, setOpened] = useState(false);
+  // Into the fullscreen tile while there is one, as the advanced-viz popover
+  // does: portaled to the page, the table opened where nothing is painted,
+  // and the icon seemed to do nothing.
+  const portalTarget = useFullscreenPortalTarget();
   const [state, setState] = useState<LoadState>({ status: 'idle' });
   const abortRef = useRef<AbortController | null>(null);
   // What the currently-held data was fetched for; only ever set on success.
@@ -128,18 +134,20 @@ const MapDataButton: React.FC<MapDataButtonProps> = ({
       onChange={setOpened}
       onOpen={load}
       onClose={close}
+      portalProps={{ target: portalTarget }}
     >
       <Popover.Target>
         <ActionIcon
           variant={opened ? 'filled' : 'subtle'}
-          color="violet"
+          color={TILE_ACTION_STYLE.data.color}
           size="sm"
           aria-label="Show underlying data"
-          title="Show data"
+          title={TILE_ACTION_STYLE.data.label}
+          data-tile-action="data"
           data-no-drag
           onClick={() => setOpened((v) => !v)}
         >
-          <Icon icon="tabler:table" width={16} height={16} />
+          <Icon icon={TILE_ACTION_STYLE.data.icon} width={16} height={16} />
         </ActionIcon>
       </Popover.Target>
       <Popover.Dropdown

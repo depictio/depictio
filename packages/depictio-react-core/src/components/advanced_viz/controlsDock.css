@@ -1,0 +1,106 @@
+/* Docked viz controls (see controlsDock.ts). Both keep clear of the tile's
+   right edge, where the hover-revealed action column sits over the content. */
+.dpx-viz-dock {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.dpx-viz-dock--right {
+  flex: 0 0 270px;
+  padding: 2px 30px 2px 12px;
+  border-left: 1px solid var(--mantine-color-default-border);
+}
+
+/* Above the plot the controls run as a row: each control keeps its label, the
+   descriptions (which the column has room for) give way. */
+.dpx-viz-dock--top {
+  flex: 0 0 auto;
+  max-height: 45%;
+  padding: 0 30px 8px 2px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+/* The panel's title, small and quiet: it names the panel, it is not a heading
+   of the figure. Above the plot, "More options" sits at its end. */
+.dpx-viz-dock__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.dpx-viz-dock--top .dpx-viz-dock__head {
+  margin-bottom: 2px;
+}
+.dpx-viz-dock__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+}
+
+.dpx-viz-dock--right .dpx-viz-dock__lead {
+  margin-bottom: var(--mantine-spacing-xs);
+}
+.dpx-viz-dock--top .dpx-viz-dock__body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  column-gap: 12px;
+  row-gap: 4px;
+}
+.dpx-viz-dock--top .dpx-viz-dock__lead {
+  flex: 0 0 auto;
+}
+.dpx-viz-dock--top .dpx-viz-dock__body > .dpx-viz-dock__controls {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.dpx-viz-dock--top .dpx-viz-dock__controls > .mantine-Stack-root {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  column-gap: 12px;
+  row-gap: 4px;
+}
+/* Three to a row on a half-width tile. */
+.dpx-viz-dock--top .dpx-viz-dock__controls > .mantine-Stack-root > * {
+  flex: 1 1 136px;
+  min-width: 0;
+  max-width: 220px;
+}
+.dpx-viz-dock--top .dpx-viz-dock__controls > .mantine-Stack-root > .mantine-Divider-root {
+  display: none;
+}
+.dpx-viz-dock--top .mantine-InputWrapper-description,
+.dpx-viz-dock--top .mantine-Switch-description,
+.dpx-viz-dock--top .mantine-Checkbox-description {
+  display: none;
+}
+
+/* Only the first few controls until "More options" is opened. */
+.dpx-viz-dock:not(.is-expanded) .dpx-viz-dock__controls > * > [data-dock-extra] {
+  display: none;
+}
+.dpx-viz-dock__more {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+.dpx-viz-dock__more:hover {
+  color: var(--mantine-color-text);
+}
+.dpx-viz-dock--top .dpx-viz-dock__more {
+  margin: 0;
+  white-space: nowrap;
+}

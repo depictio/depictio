@@ -8,7 +8,6 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Accordion,
   Alert,
   Group,
   Loader,
@@ -17,7 +16,6 @@ import {
   Stack,
   Text,
 } from '@mantine/core';
-import { Icon } from '@iconify/react';
 import {
   fetchFigureParameterDiscovery,
   fetchFigureVisualizationList,
@@ -37,6 +35,8 @@ import {
 import ParameterField from './ParameterField';
 import CrossFilterSection from '../shared/CrossFilterSection';
 import PlacementSection from '../shared/PlacementSection';
+import { BuilderSection, BuilderSections } from '../shared/BuilderSections';
+import FigureStyleSection from './FigureStyleSection';
 
 type CategoryKey = 'core' | 'common' | 'specific' | 'advanced';
 
@@ -44,6 +44,7 @@ interface CategoryDef {
   key: CategoryKey;
   category: FigureParameterCategory;
   title: string;
+  subtitle: string;
   icon: string;
 }
 
@@ -52,21 +53,27 @@ const FIXED_CATEGORIES: CategoryDef[] = [
     key: 'core',
     category: 'core',
     title: 'Core Parameters',
+    subtitle: 'The columns the chart plots',
     icon: 'mdi:cog',
   },
   {
     key: 'common',
     category: 'common',
     title: 'Styling & Layout',
+    subtitle: 'Title, colours, axes, legend and size',
     icon: 'mdi:palette',
   },
   {
     key: 'advanced',
     category: 'advanced',
     title: 'Advanced Options',
+    subtitle: 'Less common parameters of the underlying Plotly call',
     icon: 'mdi:tune',
   },
 ];
+
+/** Open on every mount: the chart type and the columns it plots. */
+const REQUIRED_SECTIONS = ['visualization', 'core'];
 
 interface FigureUIModeProps {
   /** Hide the scatter cross-filter section (e.g. public/demo deployments or
@@ -209,176 +216,161 @@ const FigureUIMode: React.FC<FigureUIModeProps> = ({ hideCrossFilter = false }) 
     return map;
   }, [visuList]);
 
-  return (
-    <Stack gap="md" style={{ padding: '0 4px' }}>
-      <div>
-        <Group gap="xs" align="center" mb={10}>
-          <Icon icon="mdi:chart-line" width={18} height={18} />
-          <Text fw={700} size="md" style={{ fontSize: 16 }}>
-            Visualization Type:
-          </Text>
-        </Group>
-        <Select
-          data={visuOptions}
-          value={visuType}
-          onChange={(v) => {
-            if (v && !v.startsWith('__')) setVisuType(v);
-          }}
-          placeholder="Choose visualization type..."
-          clearable={false}
-          searchable
-          size="md"
-          comboboxProps={{ withinPortal: false }}
-          style={{ width: '100%', fontSize: 14 }}
-          renderOption={({ option }) => {
-            // Group headers (`__group__core`, etc.) are styled flat — no
-            // description, no extra padding. Items get a two-line layout.
-            if (option.value.startsWith('__group__')) {
-              return (
-                <Text size="xs" c="dimmed" fw={600}>
-                  {option.label}
-                </Text>
-              );
-            }
-            const desc = descByType[option.value];
-            return (
-              <Stack gap={2} style={{ width: '100%' }}>
-                <Text size="sm">{option.label.trim()}</Text>
-                {desc && (
-                  <Text size="xs" c="dimmed" lineClamp={2}>
-                    {desc}
-                  </Text>
-                )}
-              </Stack>
-            );
-          }}
-        />
-      </div>
-
-      {loading && (
-        <Group gap="xs">
-          <Loader size="xs" />
-          <Text size="xs" c="dimmed">
-            Loading parameters…
-          </Text>
-        </Group>
-      )}
-
-      {error && (
-        <Alert color="red" title="Couldn’t load parameters">
-          <Text size="xs">{error}</Text>
-        </Alert>
-      )}
-
-      {/* Rendered unconditionally: every item inside guards itself (the
-          spec-driven ones are empty without a spec, Placement hides when the
-          dashboard has no sections), so an accordion with nothing to show
-          collapses to an empty box rather than taking a gate of its own —
-          which is what used to make "Max points" vanish on a spec load
-          failure. */}
-      <Accordion
-        variant="separated"
-        radius="md"
-        multiple
-        defaultValue={['core']}
-      >
-        {FIXED_CATEGORIES.map((c) => {
-          const items = byCategory[c.category];
-          if (!items.length) return null;
+  const visuSelect = (
+    <Select
+      data={visuOptions}
+      value={visuType}
+      onChange={(v) => {
+        if (v && !v.startsWith('__')) setVisuType(v);
+      }}
+      placeholder="Choose visualization type..."
+      clearable={false}
+      searchable
+      comboboxProps={{ withinPortal: false }}
+      style={{ width: '100%' }}
+      renderOption={({ option }) => {
+        // Group headers (`__group__core`, etc.) are styled flat — no
+        // description, no extra padding. Items get a two-line layout.
+        if (option.value.startsWith('__group__')) {
           return (
-            <Accordion.Item key={c.key} value={c.key}>
-              <Accordion.Control
-                icon={<Icon icon={c.icon} width={18} height={18} />}
-              >
-                <Text fw={700} size="sm">
-                  {c.title}
-                </Text>
-              </Accordion.Control>
-              <Accordion.Panel>
-                <Stack gap="sm">
-                  {items.map((p) => (
-                    <ParameterField key={p.name} param={p} />
-                  ))}
-                </Stack>
-              </Accordion.Panel>
-            </Accordion.Item>
+            <Text size="xs" c="dimmed" fw={600}>
+              {option.label}
+            </Text>
           );
-        })}
-
-        {byCategory.specific.length > 0 && (
-          <Accordion.Item value="specific">
-            <Accordion.Control
-              icon={<Icon icon={specificIcon} width={18} height={18} />}
-            >
-              <Text fw={700} size="sm">
-                {specificTitle}
+        }
+        const desc = descByType[option.value];
+        return (
+          <Stack gap={2} style={{ width: '100%' }}>
+            <Text size="sm">{option.label.trim()}</Text>
+            {desc && (
+              <Text size="xs" c="dimmed" lineClamp={2}>
+                {desc}
               </Text>
-            </Accordion.Control>
-            <Accordion.Panel>
-              <Stack gap="sm">
-                {byCategory.specific.map((p) => (
-                  <ParameterField key={p.name} param={p} />
-                ))}
-              </Stack>
-            </Accordion.Panel>
-          </Accordion.Item>
-        )}
+            )}
+          </Stack>
+        );
+      }}
+    />
+  );
 
-        {/* Cross-filtering only carries per-row identity for scatter
-         *  traces (their customdata lines up 1:1 with input rows).
-         *  Aggregated visus — histogram, bar, box, pie — would emit
-         *  per-bin envelopes with no useful filter target, so we hide the
-         *  toggle entirely on those. FigureRenderer + ComponentRenderer
-         *  enforce the same gate defensively for legacy metadata. */}
-        {cachedSpec &&
-          !hideCrossFilter &&
-          (visuType === 'scatter' || visuType === 'scatter_3d') && (
-          <CrossFilterSection
-            enabled={Boolean(config.selection_enabled)}
-            onEnabledChange={(checked) =>
-              patchConfig({ selection_enabled: checked })
+  // Every item below guards itself (the spec-driven ones are empty without a
+  // spec, Placement hides when the dashboard has no sections), so a failed
+  // spec load leaves the sections that do not depend on it, rather than
+  // taking a gate of its own — which is what used to make "Max points"
+  // vanish on a spec load failure.
+  return (
+    <BuilderSections builder="figure" required={REQUIRED_SECTIONS}>
+      <BuilderSection
+        value="visualization"
+        icon="mdi:chart-line"
+        title="Visualization type"
+        subtitle="The kind of chart: scatter, bar, histogram, box…"
+      >
+        <Stack gap="sm">
+          {visuSelect}
+
+          {loading && (
+            <Group gap="xs">
+              <Loader size="xs" />
+              <Text size="xs" c="dimmed">
+                Loading parameters…
+              </Text>
+            </Group>
+          )}
+
+          {error && (
+            <Alert color="red" title="Couldn’t load parameters">
+              <Text size="xs">{error}</Text>
+            </Alert>
+          )}
+        </Stack>
+      </BuilderSection>
+
+      {FIXED_CATEGORIES.map((c) => {
+        const items = byCategory[c.category];
+        if (!items.length) return null;
+        return (
+          <BuilderSection
+            key={c.key}
+            value={c.key}
+            icon={c.icon}
+            title={c.title}
+            subtitle={c.subtitle}
+          >
+            <Stack gap="sm">
+              {items.map((p) => (
+                <ParameterField key={p.name} param={p} />
+              ))}
+            </Stack>
+          </BuilderSection>
+        );
+      })}
+
+      {byCategory.specific.length > 0 && (
+        <BuilderSection
+          value="specific"
+          icon={specificIcon}
+          title={specificTitle}
+          subtitle="Settings only this chart type has"
+        >
+          <Stack gap="sm">
+            {byCategory.specific.map((p) => (
+              <ParameterField key={p.name} param={p} />
+            ))}
+          </Stack>
+        </BuilderSection>
+      )}
+
+      {/* Cross-filtering only carries per-row identity for scatter
+       *  traces (their customdata lines up 1:1 with input rows).
+       *  Aggregated visus — histogram, bar, box, pie — would emit
+       *  per-bin envelopes with no useful filter target, so we hide the
+       *  toggle entirely on those. FigureRenderer + ComponentRenderer
+       *  enforce the same gate defensively for legacy metadata. */}
+      {cachedSpec &&
+        !hideCrossFilter &&
+        (visuType === 'scatter' || visuType === 'scatter_3d') && (
+        <CrossFilterSection
+          enabled={Boolean(config.selection_enabled)}
+          onEnabledChange={(checked) =>
+            patchConfig({ selection_enabled: checked })
+          }
+          column={config.selection_column}
+          onColumnChange={(name) => patchConfig({ selection_column: name })}
+          columnDescription="Column to extract from selected points"
+        />
+      )}
+
+      {isPointPlot && (
+        <BuilderSection
+          value="performance"
+          icon="mdi:speedometer"
+          title="Performance"
+          subtitle="How many points are drawn before downsampling"
+        >
+          <NumberInput
+            label="Max points"
+            description="Downsample above this count (blank = global default). Viewers can still load all points on demand."
+            // min 1: blank means "use the global default"; disabling the cap
+            // entirely is a viewer-side action ("Load all"), not an authoring one.
+            min={1}
+            step={1000}
+            placeholder="Global default"
+            value={typeof config.max_points === 'number' ? config.max_points : ''}
+            onChange={(v) =>
+              patchConfig({ max_points: typeof v === 'number' && v > 0 ? v : null })
             }
-            column={config.selection_column}
-            onColumnChange={(name) => patchConfig({ selection_column: name })}
-            columnDescription="Column to extract from selected points"
           />
-        )}
+        </BuilderSection>
+      )}
 
-        {isPointPlot && (
-          <Accordion.Item value="performance">
-            <Accordion.Control
-              icon={<Icon icon="mdi:speedometer" width={18} height={18} />}
-            >
-              <Text fw={700} size="sm">
-                Performance
-              </Text>
-            </Accordion.Control>
-            <Accordion.Panel>
-              <Stack gap="sm">
-                <NumberInput
-                  label="Max points"
-                  description="Downsample above this count (blank = global default). Viewers can still load all points on demand."
-                  // min 1: blank means "use the global default"; disabling the cap
-                  // entirely is a viewer-side action ("Load all"), not an authoring one.
-                  min={1}
-                  step={1000}
-                  placeholder="Global default"
-                  value={typeof config.max_points === 'number' ? config.max_points : ''}
-                  onChange={(v) =>
-                    patchConfig({ max_points: typeof v === 'number' && v > 0 ? v : null })
-                  }
-                />
-              </Stack>
-            </Accordion.Panel>
-          </Accordion.Item>
-        )}
+      <FigureStyleSection />
 
-        {/* Placement lives in the control column with everything
-            else, not full-width beneath the preview. Self-hiding when the
-            dashboard declares no sections. */}
-        <PlacementSection />
-      </Accordion>
-    </Stack>
+      {/* Placement lives in the control column with everything
+          else, not full-width beneath the preview. Self-hiding when the
+          dashboard declares no sections. */}
+      <PlacementSection />
+    </BuilderSections>
   );
 };
 

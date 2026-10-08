@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Badge,
   Text,
@@ -16,6 +16,13 @@ import {
   StoredMetadata,
   UpsetResult,
 } from '../../api';
+import { useCategoryColorSource } from '../../hooks/useCategoryColors';
+import {
+  advancedVizSelectionColumn,
+  advancedVizSelectionFilter,
+  filtersExcludingOwn,
+  selectionValuesFor,
+} from '../../selection';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import {
   VizControlGroup,
@@ -27,8 +34,23 @@ import {
 } from './controls/VizControls';
 import { namedColumns } from './namedColumns';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
-import { emphasizeUpsetColumn, upsetHoverColumn, withUpsetHoverTargets } from './upsetHover';
+import {
+  colourUpsetSets,
+  inkUpsetForDark,
+  resolveUpsetSetColors,
+  upsetColumnSets,
+  upsetSetNames,
+  withUpsetSetLabelDots,
+} from './upsetFigure';
+import { emphasizeUpsetColumns, upsetHoverColumn, withUpsetHoverTargets } from './upsetHover';
+import {
+  selectedUpsetIntersection,
+  upsetColumnOf,
+  upsetIntersectionKey,
+  upsetIntersectionMembers,
+} from './upsetSelection';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { withRanksInOrder } from './phylo/view';
 import { demandForItems } from './contentDemand';
 
 /** Room one matrix row (one set) needs: the dot, its label and the gap that
@@ -65,15 +87,26 @@ interface UpsetPlotConfig {
   /** Pre-select these columns as annotation tracks on first render. Users
    *  can still add/remove via the MultiSelect — this only seeds the default. */
   default_annotation_cols?: string[] | null;
+  /** The categorical column the sets are values of (e.g. `locality`): the
+   *  sets take its dashboard `category_colors`. Unset, that column is found
+   *  by value (see `resolveUpsetSetColors`). */
+  set_category_column?: string | null;
+  /** Clicking an intersection filters the dashboard to its rows, by the
+   *  values they hold in `selection_column` (see `advancedVizSelectionColumn`). */
+  selection_enabled?: boolean;
+  selection_column?: string | null;
 }
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: UpsetPlotConfig };
   filters: InteractiveFilter[];
   refreshTick?: number;
+  /** Receives the intersection selection. Its absence makes the plot
+   *  read-only (catalog, previews, split panels). */
+  onFilterChange?: (filter: InteractiveFilter) => void;
 }
 
-const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
+const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
   const config = (metadata.config || {}) as UpsetPlotConfig;
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
@@ -130,10 +163,23 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const annotationOptions = useMemo(() => {
     if (!dcSchema) return [] as string[];
     const setCols = new Set(setColumns);
-    return Object.keys(dcSchema).filter((c) => !setCols.has(c));
+    return withRanksInOrder(Object.keys(dcSchema).filter((c) => !setCols.has(c)));
   }, [dcSchema, setColumns]);
 
   const effectiveAnnotationCols = showAnnotations ? annotationCols : [];
+
+  // ---- Intersection selection as a cross-filter ---------------------------
+  // Resolved through selection.ts, so the chrome's capability marker and this
+  // gate cannot disagree. A host with no onFilterChange is read-only.
+  const selectionColumn = onFilterChange ? advancedVizSelectionColumn(metadata) : undefined;
+  // The UpSet must not narrow itself by its own selection: it would redraw as
+  // the one intersection picked, with nothing left to pick instead. Every
+  // other tile still narrows.
+  const filtersForFetch = useMemo(
+    () => filtersExcludingOwn(filters, metadata.index, 'scatter_selection'),
+    [filters, metadata.index],
+  );
+  const filtersKey = JSON.stringify(filtersForFetch);
 
   const [figure, setFigure] = useState<UpsetResult['figure'] | null>(null);
   // One per figure received, as the plot's `uirevision` (see plotLayout).
@@ -175,7 +221,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       show_set_sizes: effectiveShowSetSizes,
       show_values: effectiveShowValues,
       color_intersections_by: colorBy,
-      filter_metadata: filters,
+      filter_metadata: filtersForFetch,
     };
 
     let pollTimer: ReturnType<typeof setTimeout> | undefined;
@@ -236,7 +282,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   }, [
     metadata.wf_id,
     metadata.dc_id,
-    JSON.stringify(filters),
+    filtersKey,
     refreshTick,
     sortBy,
     sortOrder,
@@ -260,7 +306,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
       wfId: metadata.wf_id,
       dcId: metadata.dc_id,
       columns: previewCols,
-      filters,
+      filters: filtersForFetch,
       limitRows: 200,
       vizKind: 'upset_plot',
     })
@@ -273,7 +319,7 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     return () => {
       cancelled = true;
     };
-  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(previewCols), JSON.stringify(filters), refreshTick]);
+  }, [metadata.wf_id, metadata.dc_id, JSON.stringify(previewCols), filtersKey, refreshTick]);
 
   // Memo the controls JSX so its reference is stable — AdvancedVizFrame
   // publishes it via useEffect and a fresh inline JSX every render would
@@ -390,25 +436,116 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
     ],
   );
 
-  const themedData = useMemo(
-    () =>
-      figure
-        ? withUpsetHoverTargets(
-            applyDataTheme(figure.data, isDark, theme) as Record<string, unknown>[],
-            figure.layout as Record<string, unknown>,
-          )
-        : null,
-    [figure, isDark, theme],
+  // ---- Reading the figure ---------------------------------------------------
+  const figureLayout = (figure?.layout ?? null) as Record<string, unknown> | null;
+  const figureData = (figure?.data ?? null) as Record<string, unknown>[] | null;
+  // The sets as drawn (a filter over their names narrows them), and the sets
+  // each intersection joins.
+  const setNames = useMemo(() => (figureLayout ? upsetSetNames(figureLayout) : []), [figureLayout]);
+  const setNamesKey = JSON.stringify(setNames);
+  const columnSets = useMemo(
+    () => (figureData && figureLayout ? upsetColumnSets(figureData, figureLayout) : new Map<number, string[]>()),
+    [figureData, figureLayout],
   );
+
+  // ---- Set colours ------------------------------------------------------------
+  // The dashboard's category colours for the column the sets are values of,
+  // so a site is the same colour here as on every other tile. None found, the
+  // figure stays as the server drew it.
+  const categorySource = useCategoryColorSource();
+  const setColors = useMemo(
+    () =>
+      resolveUpsetSetColors(categorySource, setNames, {
+        column: config.set_category_column,
+        overrides: config.set_colors,
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [categorySource, setNamesKey, config.set_category_column, JSON.stringify(config.set_colors)],
+  );
+
+  // ---- Intersection members ---------------------------------------------------
+  // The rows behind each intersection, read from the matrix under the same
+  // filters the figure was built from (see upsetSelection.ts). Only fetched
+  // when the component selects; null until known, or when the server had to
+  // sample the matrix, since a selection of some of an intersection's rows
+  // would be a wrong answer.
+  const [members, setMembers] = useState<Map<string, string[]> | null>(null);
+  useEffect(() => {
+    setMembers(null);
+    if (!selectionColumn || !metadata.wf_id || !metadata.dc_id || setNames.length === 0) return;
+    let cancelled = false;
+    fetchAdvancedVizData({
+      wfId: metadata.wf_id,
+      dcId: metadata.dc_id,
+      columns: [...setNames.filter((n) => n !== selectionColumn), selectionColumn],
+      filters: filtersForFetch,
+      vizKind: 'upset_plot',
+    })
+      .then((res) => {
+        if (cancelled || res.sampling?.degraded) return;
+        setMembers(upsetIntersectionMembers(res.rows, setNames, selectionColumn));
+      })
+      .catch(() => {
+        /* best-effort: without members the intersections are just not clickable */
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [metadata.wf_id, metadata.dc_id, selectionColumn, setNamesKey, filtersKey, refreshTick]);
+
+  // ---- The selection ----------------------------------------------------------
+  // The dashboard's filter list is the record of what is selected: a Reset
+  // from the chrome or the filter panel clears it there, and the highlight
+  // goes with it. `picked` only says which intersection a standing selection
+  // came from.
+  const [picked, setPicked] = useState<string | null>(null);
+  const ownValues = selectionValuesFor(filters, metadata.index, 'scatter_selection');
+  const selectedKey = selectedUpsetIntersection(picked, ownValues, members);
+  const selectedColumn = upsetColumnOf(columnSets, selectedKey);
+
+  const handleClick = useCallback(
+    (event: { points?: Array<Record<string, unknown>> }) => {
+      if (!onFilterChange || !selectionColumn || !members) return;
+      const column = upsetHoverColumn(event.points?.[0] as any);
+      const sets = column == null ? undefined : columnSets.get(column);
+      if (!sets) return;
+      const key = upsetIntersectionKey(sets);
+      // Clicking the selected intersection again lets it go.
+      if (key === selectedKey) {
+        setPicked(null);
+        onFilterChange(advancedVizSelectionFilter(metadata, selectionColumn, []));
+        return;
+      }
+      const values = members.get(key) ?? [];
+      if (values.length === 0) return;
+      setPicked(key);
+      onFilterChange(advancedVizSelectionFilter(metadata, selectionColumn, values));
+    },
+    [onFilterChange, selectionColumn, members, columnSets, selectedKey, metadata],
+  );
+  const clickable = Boolean(selectionColumn && members);
+
+  // ---- Drawing ------------------------------------------------------------------
+  const themedData = useMemo(() => {
+    if (!figureData || !figureLayout) return null;
+    let data = applyDataTheme(figureData, isDark, theme) as Record<string, unknown>[];
+    if (isDark) {
+      data = inkUpsetForDark(data, figureLayout, {
+        ink: theme.colors.gray[4],
+        empty: theme.colors.dark[4],
+      });
+    }
+    return withUpsetHoverTargets(colourUpsetSets(data, figureLayout, setColors), figureLayout);
+  }, [figureData, figureLayout, isDark, theme, setColors]);
   // Hovering an intersection dims everything outside it, as the UpSet Shiny
-  // app does.
-  const plotData = useMemo(
-    () =>
-      themedData && figure && hoveredColumn != null
-        ? emphasizeUpsetColumn(themedData, figure.layout as Record<string, unknown>, hoveredColumn)
-        : themedData,
-    [themedData, figure, hoveredColumn],
-  );
+  // app does. A selected one stays at full strength through the hover of
+  // another, so both read: what is selected, and what a click would select.
+  const plotData = useMemo(() => {
+    if (!themedData || !figureLayout) return themedData;
+    const kept = [selectedColumn, hoveredColumn].filter((c): c is number => c != null);
+    return kept.length ? emphasizeUpsetColumns(themedData, figureLayout, kept) : themedData;
+  }, [themedData, figureLayout, selectedColumn, hoveredColumn]);
   // plotly-upset bakes its default width=900/height=700 into the figure
   // layout; strip so the chart fills the panel responsively (same fix applied
   // to ComplexHeatmap). applyLayoutTheme retints every axis / legend /
@@ -418,21 +555,42 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   // the reader's zoom and legend toggles through those re-renders.
   const plotLayout = useMemo(
     () =>
-      figure
-        ? applyLayoutTheme(
-            {
-              ...(figure.layout as Record<string, unknown>),
-              width: undefined,
-              height: undefined,
-              autosize: true,
-              uirevision: figureRevision,
-            },
-            isDark,
-            theme,
+      figureLayout
+        ? withUpsetSetLabelDots(
+            applyLayoutTheme(
+              {
+                ...figureLayout,
+                width: undefined,
+                height: undefined,
+                autosize: true,
+                uirevision: figureRevision,
+              },
+              isDark,
+              theme,
+            ) as Record<string, unknown>,
+            setColors,
           )
         : null,
-    [figure, figureRevision, isDark, theme],
+    [figureLayout, figureRevision, isDark, theme, setColors],
   );
+
+  // A pointer over an intersection says it can be clicked. Plotly puts its
+  // drag cursor on the plot area through a class, so the hovered element's
+  // own style is what overrides it.
+  const handleHover = useCallback(
+    (e: { points: Array<Record<string, unknown>>; event?: MouseEvent }) => {
+      const column = upsetHoverColumn(e.points[0] as any);
+      setHoveredColumn(column);
+      const target = e.event?.target as HTMLElement | SVGElement | undefined;
+      if (clickable && target?.style) target.style.cursor = column == null ? '' : 'pointer';
+    },
+    [clickable],
+  );
+  const handleUnhover = useCallback((e: { event?: MouseEvent }) => {
+    setHoveredColumn(null);
+    const target = e.event?.target as HTMLElement | SVGElement | undefined;
+    if (target?.style) target.style.cursor = '';
+  }, []);
 
   // One matrix row per set, under the intersection-bar panel and over any
   // annotation tracks. Only once a figure exists: the set columns are known
@@ -467,8 +625,9 @@ const UpsetRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
         <Plot
           data={plotData as any}
           layout={plotLayout as any}
-          onHover={(e) => setHoveredColumn(upsetHoverColumn(e.points[0] as any))}
-          onUnhover={() => setHoveredColumn(null)}
+          onHover={handleHover as any}
+          onUnhover={handleUnhover as any}
+          onClick={clickable ? (handleClick as any) : undefined}
           useResizeHandler
           style={{ width: '100%', height: '100%' }}
           config={{ displaylogo: false, responsive: true } as any}

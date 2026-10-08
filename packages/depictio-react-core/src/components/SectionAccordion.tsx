@@ -72,12 +72,15 @@ export const SectionAccordionItem: React.FC<{
   actions?: React.ReactNode;
   /** Exactly an `Accordion.Control` followed by an `Accordion.Panel`. */
   children: React.ReactNode;
-}> = ({ value, color, actions, children }) => {
+  /** `appearance: plain`: no frame, no chevron, a heading over its tiles. */
+  plain?: boolean;
+}> = ({ value, color, actions, children, plain = false }) => {
   const [control, panel] = React.Children.toArray(children);
   return (
     <SectionColorContext.Provider value={color ?? null}>
     <Accordion.Item
       value={value}
+      className={plain ? 'is-plain' : undefined}
       style={
         color
           ? ({ '--section-accent': sectionColorVar(color) } as React.CSSProperties)
@@ -109,7 +112,30 @@ export const SectionHeader: React.FC<{
   badge?: React.ReactNode;
   /** Pushed to the far end of the row, e.g. a folded section's metrics. */
   trailing?: React.ReactNode;
-}> = ({ spec, name, badge, trailing }) => (
+}> = ({ spec, name, badge, trailing }) =>
+  spec?.appearance === 'plain' ? (
+    // A plain section is a heading, not a bar: a title at a page heading's
+    // size over its description, the icon a marker before the title. Sized to
+    // be found while scrolling — on a landing page these headings are its
+    // table of contents.
+    <div style={{ minWidth: 0 }}>
+      <Group gap={10} wrap="nowrap" align="center" style={{ minWidth: 0 }}>
+        {spec.icon ? <SectionIcon spec={spec} size={24} /> : null}
+        <Text fw={700} style={{ fontSize: 22, lineHeight: 1.25, letterSpacing: '-0.01em' }}>
+          {name}
+        </Text>
+        {badge}
+      </Group>
+      {spec.description ? (
+        <Text
+          c="dimmed"
+          style={{ fontSize: 15, lineHeight: 1.45, marginTop: 2, paddingLeft: spec.icon ? 34 : 0 }}
+        >
+          {spec.description}
+        </Text>
+      ) : null}
+    </div>
+  ) : (
   <Group justify="space-between" wrap="nowrap" gap="sm" pr="xs" style={{ minWidth: 0 }}>
     {/* The icon goes INSIDE the label, not in `Accordion.Control`'s `icon`
         prop: Mantine renders that prop's node after the label and gives it a

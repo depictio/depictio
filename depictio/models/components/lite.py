@@ -35,6 +35,7 @@ from depictio.models.components.constants import (
     TOP_PANEL_INTERACTIVE_TYPES,
     VISU_TYPES,
 )
+from depictio.models.components.types import CardVariant, FigureStyle
 
 
 class BaseLiteComponent(BaseModel):
@@ -152,6 +153,49 @@ class FigureLiteComponent(BaseLiteComponent):
         "(axis labels, ticks, legend). Unset/1 = default size.",
     )
 
+    # Showcase look (see FigureStyle) and the card header that goes with it.
+    figure_style: FigureStyle | None = Field(
+        default=None,
+        description="How the figure is drawn. Unset takes the style of the grid section "
+        "the figure sits in (`figure_style`), else `default`. `minimal`: the landing-page "
+        "look -- the title in the card header beside an icon badge with the subtitle "
+        "inline, a transparent plot with faint dashed grid lines and no axis lines, small "
+        "grey ticks, the legend in one line under the plot, large markers without "
+        "outlines, tight margins, and the toolbar only on hover. Grouped bars get a "
+        "coloured underline per group.",
+    )
+    subtitle: str | None = Field(
+        default=None,
+        description="A few words after the title in the card header, dimmed "
+        '("relative abundance per sample", "Bray-Curtis"). Drawn by the `minimal` style.',
+    )
+    icon_name: str | None = Field(
+        default=None,
+        description="Iconify id of the badge before the title in the card header "
+        "(`minimal` style), e.g. `mdi:chart-scatter-plot`.",
+    )
+    icon_color: str | None = Field(
+        default=None,
+        description="Colour of the header badge: a Mantine palette name or a CSS colour. "
+        "Unset uses the brand's primary colour.",
+    )
+    hide_legend: bool | None = Field(
+        default=None,
+        description="Draw the figure without its legend, for a tile too small for one. "
+        "Unset keeps the legend the figure has.",
+    )
+    caption: str | None = Field(
+        default=None,
+        description="A line or two under the plot saying how to read it (what a mark is, "
+        "what a filter does to it), in any style.",
+    )
+    link: str | None = Field(
+        default=None,
+        description="The tab this figure summarises, as `tab:<name>`: a landing page's "
+        "figure drawn from an analysis tab's data links back to it, as an icon at the end "
+        "of the card header (`minimal` style) or in the tile's actions.",
+    )
+
     @model_validator(mode="after")
     def validate_figure_constraints(self) -> "FigureLiteComponent":
         """Validate figure-specific cross-field constraints."""
@@ -239,6 +283,46 @@ class CardLiteComponent(BaseLiteComponent):
     title_color: str | None = Field(default=None, description="Title text color")
     title_font_size: str | None = Field(default=None, description="Title font size")
     value_font_size: str | None = Field(default=None, description="Value font size")
+    caption: str | None = Field(
+        default=None,
+        description="One line under the value, in place of the aggregation label "
+        '("(Nunique) · Top 3 = 100%"), which moves to a tooltip on the header. For a '
+        "headline number whose method a reader does not need at first glance.",
+    )
+    icon_style: Literal["watermark", "badge"] | None = Field(
+        default=None,
+        description="`watermark` (default): large faint icon revealed on hover. `badge`: "
+        "small icon on a tint of `icon_color`, always shown beside the title — for a "
+        "row of headline numbers whose icons tie each card to a tab.",
+    )
+    variant: CardVariant | None = Field(
+        default=None,
+        description="How the card is drawn. Unset takes the style of the grid section "
+        "the card sits in (`card_variant`), else `default`: coloured title and value "
+        "over the aggregation label. `headline`: a key-figure card for a landing page. "
+        "The value is drawn large, the icon sits faint on the right at all times, a "
+        "coverage strip shrinks to its bar and a composition strip to its bar and "
+        "legend line (the rest stays in the tooltip). `compact`: a low card, title and "
+        "value on one line when the card is wide enough, no strip beyond a slim bar -- "
+        "for a strip of many small numbers. `minimal`: headline type with no frame, "
+        "shadow or background -- for figures sitting on a tinted section or in prose. "
+        "`accent`: headline type with a rail of the card's colour down its left edge and "
+        "the full strip kept -- to single out a few cards on an analysis tab. `split`: a "
+        "stat tile, the icon in a tinted block on the left and the figure beside it.",
+    )
+    decimals: int | None = Field(
+        default=None,
+        ge=0,
+        le=6,
+        description="Decimal places for a fractional value (default: up to 4, trailing "
+        "zeros dropped). `2` shows a median Shannon of 7.0831 as 7.08.",
+    )
+    link: str | None = Field(
+        default=None,
+        description="Where clicking the card goes: `tab:<name>` for a sibling tab (by its "
+        "displayed name, resolved per instance like a text tile's tab links), or a URL. "
+        "A key figure on a landing page opens the tab that explains it.",
+    )
 
     # Multi-metric layout style.
     #   - ``vertical`` (default): stacked secondary aggregations under the hero
@@ -607,6 +691,18 @@ class InteractiveLiteComponent(BaseLiteComponent):
     custom_color: str | None = Field(default=None, description="Custom accent color")
     icon_name: str | None = Field(default=None, description="Iconify icon name")
 
+    # Filter bar (a grid section with `display: strip`). Ignored elsewhere.
+    strip_label: str | None = Field(
+        default=None,
+        description="Short label shown in a filter bar instead of the title "
+        "(e.g. 'Habitat' for 'Sampling habitat'). Unset uses the title.",
+    )
+    strip_icon: bool | None = Field(
+        default=None,
+        description="Whether a filter bar draws the icon badge before the label. "
+        "Unset means shown.",
+    )
+
     @field_validator("column_type")
     @classmethod
     def validate_column_type(cls, v: str | None) -> str | None:
@@ -768,10 +864,104 @@ class TextLiteComponent(BaseLiteComponent):
         description="Vertical placement of the text block within its tile",
     )
     body: str = Field(default="", description="Optional paragraph below the heading")
+    # A tile on a landing page is a card of its own (a finding, a fact box);
+    # one in a tab's flow is prose between figures. `surface` says which.
+    surface: Literal["none", "card", "tinted"] = Field(
+        default="none",
+        description="`none`: bare prose. `card`: framed like a card; with `accent`, a "
+        "coloured rule on top. `tinted`: on a tint of `accent` (grey without one).",
+    )
+    accent: str | None = Field(
+        default=None,
+        description="Mantine palette name, CSS colour, or `tab:<Tab name>` to borrow a "
+        "sibling tab's colour. Colours the `card` rule or the `tinted` ground, and a "
+        "body's leading `#` heading, which then reads as a headline figure.",
+    )
 
     # Text tiles don't bind to a data source — keep these optional/empty.
     workflow_tag: str = Field(default="", description="Unused for text components")
     data_collection_tag: str = Field(default="", description="Unused for text components")
+
+
+class HighlightLiteComponent(BaseLiteComponent):
+    """A figure from another tab of the dashboard, shown again on this one.
+
+    A landing page's showcase tiles are figures that live on the tab that
+    explains them. A highlight shows one of them without copying it: the
+    figure is drawn from its own definition on its own tab, so an edit there
+    shows here too, and this tile only says how to draw it (style, header,
+    legend). Filters apply to it as to any figure on this tab, and its header
+    links to the tab it comes from.
+
+    The source can be a figure or an advanced visualisation. A figure is
+    restyled (`figure_style`, `minimal` unless set); an advanced
+    visualisation is drawn as it is on its tab.
+
+    Example YAML:
+        - component_type: highlight
+          title: Faith PD per locality
+          subtitle: at the deepest rarefaction depth
+          source_tab: Alpha Diversity
+          source_component: trec-fig-alpha-plateau
+          icon_name: mdi:chart-scatter-plot
+          layout: {x: 0, y: 0, w: 6, h: 7}
+    """
+
+    component_type: Literal["highlight"] = "highlight"
+
+    source_tab: str | None = Field(
+        default=None,
+        description="The tab the figure lives on, by the name its sidebar entry shows "
+        "(the parent tab also answers to the dashboard title). Survives an export to "
+        "another instance, where tab ids change.",
+    )
+    source_dashboard_id: str | None = Field(
+        default=None,
+        description="The tab's dashboard id, which the editor writes. Tried before "
+        "`source_tab`, which takes over when the id is unknown (after a re-import).",
+    )
+    source_component: str = Field(
+        ...,
+        description="The figure on that tab: its `index`, else its title (case and "
+        "spacing ignored). Template figures have a readable index; a figure made in "
+        "the editor is best named by its title, since its index is a UUID that a "
+        "re-import replaces.",
+    )
+    figure_style: FigureStyle | None = Field(
+        default=None,
+        description="Style the figure is drawn in here. Unset: `minimal`, whatever the "
+        "source tab draws it in.",
+    )
+    subtitle: str | None = Field(
+        default=None, description="Dimmed words after the title; unset takes the source's."
+    )
+    icon_name: str | None = Field(
+        default=None, description="Iconify id of the header badge; unset takes the source's."
+    )
+    icon_color: str | None = Field(
+        default=None,
+        description="Mantine palette name or CSS colour of the badge; unset takes the "
+        "source's, else the brand's primary.",
+    )
+    hide_legend: bool | None = Field(
+        default=None, description="Draw the figure without its legend here."
+    )
+    caption: str | None = Field(
+        default=None, description="Lines under the plot; unset takes the source's."
+    )
+
+    # The figure is bound to its data on its own tab; the highlight is not.
+    workflow_tag: str = Field(default="", description="Unused for highlights")
+    data_collection_tag: str = Field(default="", description="Unused for highlights")
+
+    @model_validator(mode="after")
+    def validate_source(self) -> "HighlightLiteComponent":
+        """A highlight needs a tab to look on and a figure to look for."""
+        if not (self.source_tab or "").strip() and not (self.source_dashboard_id or "").strip():
+            raise ValueError("a highlight needs `source_tab` (or `source_dashboard_id`)")
+        if not self.source_component.strip():
+            raise ValueError("a highlight needs `source_component`")
+        return self
 
 
 class TableLiteComponent(BaseLiteComponent):
@@ -1070,6 +1260,7 @@ LiteComponent = (
     | InteractiveLiteComponent
     | TableLiteComponent
     | TextLiteComponent
+    | HighlightLiteComponent
     | ImageLiteComponent
     | MultiQCLiteComponent
     | MapLiteComponent

@@ -45,9 +45,12 @@ import RecordCardRenderer from './RecordCardRenderer';
 import ParallelCoordinatesRenderer from './ParallelCoordinatesRenderer';
 import {
   AdvancedVizDataPopover,
+  AdvancedVizDockToggle,
   AdvancedVizExtrasProvider,
   AdvancedVizSettingsPopover,
 } from './AdvancedVizExtras';
+import { ControlsDockContext, isControlsPlacement } from './controlsDock';
+import type { ControlsDockState } from './controlsDock';
 import type { AdvancedVizExtrasPayload } from './AdvancedVizExtras';
 import { useAdvancedVizInspector } from './AdvancedVizInspectorBridge';
 import {
@@ -80,8 +83,34 @@ import {
   useReportGroupReach,
 } from '../../groupReach';
 import GroupStatusBadge, { GroupStatusBadgeContext } from '../GroupStatusBadge';
+import { useTabLinkResolver } from '../tabLinks';
+import {
+  AdvancedVizShowcaseContext,
+  advancedVizShowcase,
+  tabLinkName,
+} from './advancedVizShowcase';
 
 /** The hover line behind each way an advanced viz ends up "not grouped". */
+/** The viewer's fold of a tile's docked controls, kept per component in this
+ *  browser. Storage can be missing or refuse (a private window): then the
+ *  fold lasts as long as the page. */
+const DOCK_FOLD_KEY = (index: string) => `depictio.vizControls.folded.${index}`;
+function readFolded(index: string): boolean {
+  try {
+    return window.localStorage.getItem(DOCK_FOLD_KEY(index)) === '1';
+  } catch {
+    return false;
+  }
+}
+function writeFolded(index: string, folded: boolean): void {
+  try {
+    if (folded) window.localStorage.setItem(DOCK_FOLD_KEY(index), '1');
+    else window.localStorage.removeItem(DOCK_FOLD_KEY(index));
+  } catch {
+    // Not remembered; the fold still applies to this page.
+  }
+}
+
 const NOT_GROUPED_REASONS: Record<AdvancedVizGroupBadge, () => string[]> = {
   kind: groupKindNotSplitReasons,
   unreachable: groupUnreachableReasons,
@@ -116,6 +145,8 @@ interface AdvancedVizDispatchProps {
  * string and need the same renderer.
  */
 const RENDERERS: Record<string, React.ComponentType<any>> = {
+  // A volcano that binds an MA or QQ view switches between them in place
+  // (see deViews.ts).
   volcano: VolcanoRenderer,
   embedding: EmbeddingRenderer,
   manhattan: ManhattanRenderer,
@@ -196,6 +227,13 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   groupRender,
 }) => {
   const [published, setPublished] = React.useState<AdvancedVizExtrasPayload | null>(null);
+  const [folded, setFolded] = React.useState(() => readFolded(String(metadata.index ?? '')));
+  const toggleFolded = React.useCallback(() => {
+    setFolded((f) => {
+      writeFolded(String(metadata.index ?? ''), !f);
+      return !f;
+    });
+  }, [metadata.index]);
 
   // Forward to the inspector, when the app mounted one. Keyed by component so
   // the panel can show whichever component is selected.
@@ -258,12 +296,18 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
         published.primaryControls ?? published.controls
       );
     if (popoverControls) {
+      // Docked beside or above the plot (a `popover` tile with room for it),
+      // the controls are already on screen: the icon folds them away instead.
       nodes.push(
-        <AdvancedVizSettingsPopover
-          key="settings"
-          controls={popoverControls}
-          headerAction={<ControlsPlacementPicker state={placementState} />}
-        />,
+        published.docked ? (
+          <AdvancedVizDockToggle key="settings" open={!folded} onToggle={toggleFolded} />
+        ) : (
+          <AdvancedVizSettingsPopover
+            key="settings"
+            controls={popoverControls}
+            headerAction={<ControlsPlacementPicker state={placementState} />}
+          />
+        ),
       );
     }
     if (published.data) {
@@ -284,7 +328,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     // controls live is picked in the header of the controls block itself
     // (popover, strip or rail), not from a separate chrome icon.
     return nodes.length ? <>{nodes}</> : null;
-  }, [published, placement, placementState]);
+  }, [published, placement, placementState, folded, toggleFolded]);
 
   const vizKind = (metadata.viz_kind as string) || '';
   const Renderer = RENDERERS[vizKind];
@@ -305,6 +349,16 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   React.useEffect(() => setSplitIneffective(false), [metadata.dc_id, panelKey]);
   const split = Boolean(Renderer) && !splitIneffective && shouldSplitIntoPanels(panels, vizKind);
   const handleIneffective = React.useCallback(() => setSplitIneffective(true), []);
+  // Where a `popover` tile docks its controls (`controls_placement` on the
+  // component, see controlsDock.ts). Split into panels, each would dock its
+  // own copy of the controls: they stay behind the icon instead.
+  const dockPlacement = isControlsPlacement(metadata.controls_placement)
+    ? metadata.controls_placement
+    : null;
+  const dockState = React.useMemo<ControlsDockState>(
+    () => ({ placement: split ? 'popover' : dockPlacement, collapsed: folded }),
+    [split, dockPlacement, folded],
+  );
   // A kind that takes the groups neither as panels nor as colour (see
   // `groupingModeForKind`). Only a Split display asks the question: in the
   // colour overlay every kind is drawn whole with the groups, as before.
@@ -451,6 +505,26 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
     </>
   ) : undefined;
 
+  // The `minimal` style's card header, resolved once for the frame (see
+  // advancedVizShowcase.ts). Null in the default style, which leaves every
+  // renderer's frame exactly as it was.
+  const resolveTab = useTabLinkResolver();
+  const linkedTab = tabLinkName(metadata.link);
+  const sourceTab = linkedTab ? (resolveTab?.(linkedTab) ?? null) : null;
+  const showcase = React.useMemo(
+    () => advancedVizShowcase(metadata, sourceTab),
+    [
+      metadata.figure_style,
+      metadata.subtitle,
+      metadata.icon_name,
+      metadata.icon_color,
+      sourceTab?.href,
+      sourceTab?.label,
+      sourceTab?.icon,
+      sourceTab?.color,
+    ],
+  );
+
   return wrapWithChrome(
     'advanced_viz',
     metadata,
@@ -459,11 +533,15 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
       <ComponentIndexContext.Provider value={metadata.index}>
         <GroupStatusBadgeContext.Provider value={groupBadge}>
           <GroupColouringReportContext.Provider value={reportColouring}>
-            <ControlsPlacementContext.Provider value={placementState}>
-              <AdvancedVizRegionEchoContext.Provider value={regionEcho}>
-                {inner}
-              </AdvancedVizRegionEchoContext.Provider>
-            </ControlsPlacementContext.Provider>
+            <AdvancedVizShowcaseContext.Provider value={showcase}>
+              <ControlsPlacementContext.Provider value={placementState}>
+                <ControlsDockContext.Provider value={dockState}>
+                  <AdvancedVizRegionEchoContext.Provider value={regionEcho}>
+                    {inner}
+                  </AdvancedVizRegionEchoContext.Provider>
+                </ControlsDockContext.Provider>
+              </ControlsPlacementContext.Provider>
+            </AdvancedVizShowcaseContext.Provider>
           </GroupColouringReportContext.Provider>
         </GroupStatusBadgeContext.Provider>
       </ComponentIndexContext.Provider>

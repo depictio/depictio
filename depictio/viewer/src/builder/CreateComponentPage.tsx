@@ -26,7 +26,8 @@ import {
   Title,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { fetchDashboard } from 'depictio-react-core';
+import { BrandScope, fetchDashboard } from 'depictio-react-core';
+import type { BrandTheme } from 'depictio-react-core';
 import { useBuilderStore } from './store/useBuilderStore';
 import type { SourceMode } from './store/useBuilderStore';
 import StepType from './steps/StepType';
@@ -61,11 +62,17 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
   // the project id — resolved once from the dashboard. `undefined` = still
   // loading, `null` = resolved but the dashboard carries no project id.
   const [projectId, setProjectId] = useState<string | null | undefined>(undefined);
+  // The dashboard's brand, so previews draw in the colours the component will
+  // have on the dashboard rather than the instance defaults.
+  const [brandTheme, setBrandTheme] = useState<BrandTheme | null>(null);
 
   useEffect(() => {
     init({ mode: 'create', dashboardId, componentId: newComponentId });
     fetchDashboard(dashboardId)
-      .then((dash) => setProjectId(dash.project_id ?? null))
+      .then((dash) => {
+        setProjectId(dash.project_id ?? null);
+        setBrandTheme(dash.brand_theme ?? dash.inherited_brand_theme ?? null);
+      })
       .catch(() => setProjectId(null));
     return () => reset();
   }, [dashboardId, newComponentId, init, reset]);
@@ -193,6 +200,7 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
       : headerSource.label;
 
   return (
+    <BrandScope theme={brandTheme}>
     <AppShell
       padding="md"
       header={{ height: 50 }}
@@ -404,6 +412,7 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
         </AppShell.Footer>
       )}
     </AppShell>
+    </BrandScope>
   );
 };
 

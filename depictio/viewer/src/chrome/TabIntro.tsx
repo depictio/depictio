@@ -2,25 +2,13 @@ import React from 'react';
 import { Box, Divider, Group, Text, Title, useMantineColorScheme } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { isImagePath, themedIconSrc } from 'depictio-react-core';
 import type { DashboardData, DashboardSummary } from 'depictio-react-core';
-
-/** MultiQC ships its logo as a PNG/SVG path rather than an Iconify name; the
- *  sidebar and the app header both swap it for the SPA-served themed SVG. */
-function isMultiqcIcon(path: string | null | undefined): boolean {
-  if (!path) return false;
-  return /\/assets\/images\/logos\/multiqc(\.png|_icon_(dark|white|color)\.svg)$/i.test(path);
-}
 
 interface TabIntroProps {
   dashboard: DashboardData | null;
   /** The active tab in the sibling family — supplies the name, icon and colour. */
   activeTab?: DashboardSummary | null;
-}
-
-/** True for path-like icon values (PNG/SVG file URLs) rather than Iconify names. */
-function isImagePath(s: string | null | undefined): boolean {
-  if (!s) return false;
-  return /^(\/|https?:\/\/|data:)/.test(s) || /\.(png|svg|jpe?g|webp)$/i.test(s);
 }
 
 /**
@@ -40,14 +28,12 @@ function isImagePath(s: string | null | undefined): boolean {
  * the DASHBOARD's identity line — what the listing card shows under the title
  * — which is a statement about the whole family, not about the tab being read.
  */
-function resolveIconImage(path: string, isDark: boolean): string {
-  if (!isMultiqcIcon(path)) return path;
-  return isDark ? '/dashboard/logos/multiqc_icon_white.svg' : '/dashboard/logos/multiqc_icon_dark.svg';
-}
-
 const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
+  // A tab that opens on its own title (a landing page's study name) opts out:
+  // "Overview" above it would be the largest and least informative line.
+  if (dashboard?.show_tab_header === false) return null;
   const isChildTab = Boolean(activeTab?.parent_dashboard_id ?? dashboard?.parent_dashboard_id);
   // The parent pill carries its own label ("MultiQC"), distinct from the
   // dashboard title the breadcrumb already shows.
@@ -62,33 +48,35 @@ const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
   const iconColor = (activeTab?.tab_icon_color || activeTab?.icon_color) ?? 'gray';
   // Image-path icons (the workflow logos) render as an <img>; dropping them
   // left the MultiQC tab — whose icon is only ever a logo — with a bare title.
-  const iconImageSrc = iconRaw && isImagePath(iconRaw) ? resolveIconImage(iconRaw, isDark) : null;
+  const iconImageSrc = iconRaw && isImagePath(iconRaw) ? themedIconSrc(iconRaw, isDark) : null;
   const showIcon = Boolean(iconRaw);
 
   return (
-    <Box px={6} pt={2} pb={8}>
-      <Group gap={8} align="center" wrap="nowrap">
+    <Box px={0} pt={4} pb={10}>
+      <Group gap={10} align="center" wrap="nowrap">
         {iconImageSrc ? (
           <img
             src={iconImageSrc}
             alt=""
-            width={20}
-            height={20}
+            width={24}
+            height={24}
             style={{ flexShrink: 0, objectFit: 'contain' }}
           />
         ) : (
           iconRaw && (
             <Icon
               icon={iconRaw}
-              width={20}
-              height={20}
+              width={24}
+              height={24}
               color={`var(--mantine-color-${iconColor}-6)`}
               style={{ flexShrink: 0 }}
             />
           )
         )}
         {name && (
-          <Title order={3} fw={700} style={{ minWidth: 0 }}>
+          // The page's own title: the largest heading on the canvas, so a
+          // text tile's heading below it reads as part of the page.
+          <Title order={2} fw={700} style={{ minWidth: 0, lineHeight: 1.2 }}>
             {name}
           </Title>
         )}
@@ -100,7 +88,7 @@ const TabIntro: React.FC<TabIntroProps> = ({ dashboard, activeTab }) => {
           mt={2}
           /* Aligned under the title rather than the icon — the icon is a
              marker for the title, not a bullet for the paragraph. */
-          ml={showIcon ? 28 : 0}
+          ml={showIcon ? 34 : 0}
           style={{ lineHeight: 1.4 }}
         >
           {description}

@@ -3524,6 +3524,14 @@
         ]
       },
       "roles": {
+        "avg_log_intensity": {
+          "description": "Optional mean (log) abundance: adds an MA view to the volcano.",
+          "dtypes": [
+            "Float32",
+            "Float64"
+          ],
+          "required": false
+        },
         "category": {
           "description": "Categorical grouping / annotation.",
           "dtypes": [
@@ -3553,6 +3561,14 @@
           "dtypes": [
             "String",
             "Utf8"
+          ],
+          "required": false
+        },
+        "p_value": {
+          "description": "Optional raw p-value (0-1): adds a QQ view to the volcano.",
+          "dtypes": [
+            "Float32",
+            "Float64"
           ],
           "required": false
         },

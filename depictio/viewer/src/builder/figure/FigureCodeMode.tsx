@@ -247,7 +247,9 @@ const FigureCodeMode: React.FC = () => {
       mode: 'code',
       code_content: codeContent,
     };
-    previewFigure({ metadata: meta })
+    // With the dashboard, the run sees what the saved figure will: its
+    // brand, its colour per category and its section's figure style.
+    previewFigure({ metadata: meta, dashboard_id: state.dashboardId ?? undefined })
       .then((res) => {
         const fig = res.figure;
         if (!fig) {
@@ -610,6 +612,13 @@ const FigureCodeMode: React.FC = () => {
                 <li>
                   <Code>fig</Code> — the Plotly figure your code MUST produce. The
                   preview pane renders <Code>fig</Code> after execution.
+                </li>
+                <li>
+                  <Code>depictio_category_colors</Code> — the dashboard&apos;s colour
+                  per category, <Code>{'{column: {value: colour}}'}</Code>; pass{' '}
+                  <Code>color_discrete_map=depictio_category_colors.get(&apos;site&apos;)</Code>{' '}
+                  to colour a column the way every other figure does. Empty when the
+                  dashboard sets none.
                 </li>
               </ul>
 

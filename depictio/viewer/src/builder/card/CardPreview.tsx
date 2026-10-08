@@ -24,6 +24,7 @@ import { DepictioCard } from 'depictio-components';
 import { useBuilderStore } from '../store/useBuilderStore';
 import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 import PreviewPanel from '../shared/PreviewPanel';
+import { useSectionCardVariant } from '../shared/useSectionCardVariant';
 import { autoCardTitle } from './cardTitle';
 import {
   SecondaryMetrics,
@@ -31,8 +32,11 @@ import {
   fetchBreakdown,
   fetchCardHeroValue,
   fetchCardMetric,
+  compactKeepsStrip,
   isBreakdownLayout,
   isNumericLayout,
+  resolveCardVariant,
+  stripIsMinimal,
   type BreakdownPayloadDTO,
   type InteractiveFilter,
   type SecondaryLayout,
@@ -289,6 +293,11 @@ const CardPreview: React.FC = () => {
     title_color?: string;
     icon_name?: string;
     title_font_size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+    variant?: string | null;
+    caption?: string | null;
+    decimals?: number | null;
+    link?: string | null;
+    description?: string | null;
   };
   const cols = useBuilderStore((s) => s.cols);
   const dcId = useBuilderStore((s) => s.dcId);
@@ -300,6 +309,8 @@ const CardPreview: React.FC = () => {
     () => cardScopedFilters(allPreviewFilters, { follow_region_filter: followRegion }),
     [allPreviewFilters, followRegion],
   );
+  // Drawn the way the grid will: the card's own style, else its section's.
+  const sectionVariant = useSectionCardVariant();
 
   const layout: SecondaryLayout = config.secondary_layout ?? 'vertical';
   // Hooks must run unconditionally, so this sits above the early return for an
@@ -365,7 +376,23 @@ const CardPreview: React.FC = () => {
     previewFilters.length > 0 && filteredHero !== undefined && filteredHero !== null
       ? filteredHero
       : staticValue;
-  const value = formatValue(rawValue);
+  const decimals = typeof config.decimals === 'number' ? config.decimals : undefined;
+  const value = formatValue(rawValue, decimals);
+  const variant = resolveCardVariant(config.variant, sectionVariant);
+  // Same header text as the saved card (ComponentRenderer): a caption takes
+  // the aggregation label's line, and the label moves to the header tooltip
+  // beside the author's description.
+  const caption = config.caption?.trim() || '';
+  const description = config.description?.trim() || '';
+  const aggLabel = `(${config.aggregation.charAt(0).toUpperCase()}${config.aggregation.slice(1)})`;
+  const headerTooltip =
+    description || caption ? (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {description ? <span>{description}</span> : null}
+        {caption ? <span style={{ opacity: description ? 0.75 : 1 }}>{aggLabel}</span> : null}
+      </div>
+    ) : undefined;
+  const linkTarget = config.link?.trim() || '';
 
   const effectiveTitle =
     (config.title && config.title.trim()) ||
@@ -405,9 +432,11 @@ const CardPreview: React.FC = () => {
     }
   }
 
+  // Same rule as the saved card (ComponentRenderer): a compact card keeps only
+  // a single-bar strip.
   const showStrip =
-    stripRows.length > 0 ||
-    typeof coverageMax === 'number';
+    (variant !== 'compact' || compactKeepsStrip(layout)) &&
+    (stripRows.length > 0 || typeof coverageMax === 'number');
   // Only box_plot still estimates (quartiles aren't precomputed). The
   // categorical strips now show server-computed numbers, so claiming they are
   // estimates would be the inaccurate statement.
@@ -462,6 +491,9 @@ const CardPreview: React.FC = () => {
             title_color={config.title_color}
             title_font_size={config.title_font_size ?? 'md'}
             value_font_size="xl"
+            variant={variant}
+            aggregation_description={caption || aggLabel}
+            header_tooltip={headerTooltip}
             secondaryStrip={
               showStrip ? (
                 <SecondaryMetrics
@@ -469,6 +501,8 @@ const CardPreview: React.FC = () => {
                   layout={layout}
                   coverageValue={coverageValue}
                   coverageMax={coverageMax}
+                  minimal={stripIsMinimal(variant)}
+                  decimals={decimals}
                   heroColumn={config.column_name}
                 />
               ) : undefined
@@ -478,6 +512,12 @@ const CardPreview: React.FC = () => {
             <Text size="10" c="dimmed" ta="center" mt={2} style={{ fontSize: 10 }}>
               Preview values are estimated; the saved card recomputes from the
               live data.
+            </Text>
+          ) : null}
+          {linkTarget ? (
+            <Text size="10" c="dimmed" ta="center" mt={2} style={{ fontSize: 10 }}>
+              Clicking the card opens{' '}
+              {linkTarget.startsWith('tab:') ? `the “${linkTarget.slice(4)}” tab` : linkTarget}.
             </Text>
           ) : null}
           {breakdownHint || numericHint ? (
@@ -491,11 +531,14 @@ const CardPreview: React.FC = () => {
   );
 };
 
-function formatValue(v: unknown): string {
+function formatValue(v: unknown, decimals?: number): string {
   if (v == null) return '—';
   if (typeof v === 'number') {
     if (!Number.isFinite(v)) return '—';
     if (Number.isInteger(v)) return v.toLocaleString('en-US');
+    // The author's `decimals`, kept as written (7.10, not 7.1) the way the
+    // saved card keeps it.
+    if (decimals !== undefined) return v.toFixed(decimals);
     return v.toLocaleString('en-US', { maximumFractionDigits: 2 });
   }
   if (typeof v === 'boolean') return v ? 'true' : 'false';

@@ -158,6 +158,25 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   );
 
   const gridApiRef = useRef<GridApi | null>(null);
+
+  // A selection cleared from outside the grid — saved as a group, "Reset all"
+  // in the panel — has to untick the rows too, or they stay checked with no
+  // filter behind them, and the next tick re-emits them. The figure renderer
+  // clears its drawn lasso the same way. `deselectAll` re-emits an empty
+  // selection, which is already the state.
+  const hasOwnSelection = filters.some(
+    (f) =>
+      f.index === metadata.index &&
+      f.source === 'table_selection' &&
+      Array.isArray(f.value) &&
+      f.value.length > 0,
+  );
+  const hadOwnSelection = useRef(hasOwnSelection);
+  useEffect(() => {
+    if (hadOwnSelection.current && !hasOwnSelection) gridApiRef.current?.deselectAll();
+    hadOwnSelection.current = hasOwnSelection;
+  }, [hasOwnSelection]);
+
   // Stable ref to current filters so the IDatasource closure always reads the
   // latest value without us having to recreate the datasource on every render.
   const filtersRef = useRef<InteractiveFilter[]>(filtersForFetch);

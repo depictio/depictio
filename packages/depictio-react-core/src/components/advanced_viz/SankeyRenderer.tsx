@@ -23,7 +23,11 @@ import {
   dispatchSankey,
   pollSankey,
 } from '../../api';
+import { stableColorMap } from '../../colors';
+import { useCategoryColorSource, useCategoryPalette } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
+import { isUnassigned, lineageShade, unassignedGrey } from './hierarchyColors';
+import { pinnedPalette } from './phylo/palette';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 
@@ -92,7 +96,7 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
   type ColorMode = NonNullable<SankeyConfig['color_mode']>;
   const [sortMode, setSortMode] = usePersistedVizControl<SortMode>(metadata, 'sort_mode', 'total_flow');
   const [colorMode, setColorMode] = usePersistedVizControl<ColorMode>(metadata, 'color_mode', 'source');
-  const [linkOpacity, setLinkOpacity] = usePersistedVizControl(metadata, 'link_opacity', 0.5);
+  const [linkOpacity, setLinkOpacity] = usePersistedVizControl(metadata, 'link_opacity', 0.4);
   const [minLinkValue, setMinLinkValue] = usePersistedVizControl(metadata, 'min_link_value', 0);
   const [showNodeLabels, setShowNodeLabels] = usePersistedVizControl(metadata, 'show_node_labels', true);
   const [stepFilters, setStepFilters] = useState<Record<string, string[]>>({});
@@ -252,8 +256,11 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
   ]);
 
   /** Categorical palette pulled from Mantine theme — same swatches used by the
-   *  Coverage track renderer so the two viz feel consistent in either scheme. */
-  const palette = useMemo<string[]>(
+   *  Coverage track renderer so the two viz feel consistent in either scheme.
+   *  The dashboard's colorway (its brand's) comes first when it has one. */
+  const categorySource = useCategoryColorSource();
+  const categoryPalette = useCategoryPalette();
+  const themePalette = useMemo<string[]>(
     () => [
       theme.colors.blue[5],
       theme.colors.orange[5],
@@ -269,6 +276,10 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
       theme.colors.indigo[5],
     ],
     [theme.colors],
+  );
+  const palette = useMemo<string[]>(
+    () => (categoryPalette && categoryPalette.length ? [...categoryPalette] : themePalette),
+    [categoryPalette, themePalette],
   );
 
   // Client-side recolour + opacity tweak on the server-built sankey figure.
@@ -291,18 +302,59 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
     // Step-colour map keyed by node step_index so each level gets a distinct
     // tint when colorMode='step'. Nodes within a step share a hue.
     const stepHues = result.step_cols.map((_, i) => palette[i % palette.length]);
-    const nodeColors = nodes.map((n, i) => {
-      if (colorMode === 'step') return stepHues[n.step_index] ?? palette[0];
-      // 'source' and 'target' both fall back to a per-node hash when colouring
-      // nodes themselves — Plotly only uses link.color for actual flows. We
-      // keep node colours stable across modes for visual continuity.
-      return palette[i % palette.length];
+
+    // Every node wears its lineage's colour: a first-step value its own (the
+    // dashboard's colour for that column when it pins one, a Kingdom, say),
+    // anything after it the colour of the first-step value most of its flow
+    // comes from, lighter at each step. A phylum then reads as part of its
+    // kingdom instead of as one more of forty hues. Unclassified is grey.
+    const firstStep = result.step_cols[0];
+    const rootValues = nodes.filter((n) => n.step_index === 0).map((n) => n.label);
+    const rootColours = stableColorMap(
+      stepOptions[firstStep]?.length ? stepOptions[firstStep] : rootValues,
+      palette,
+      pinnedPalette(categorySource, null, firstStep),
+    );
+    const inflow = new Map<number, Array<{ from: number; value: number }>>();
+    link.source.forEach((src, i) => {
+      const list = inflow.get(link.target[i]) ?? [];
+      list.push({ from: src, value: Number(link.value[i]) || 0 });
+      inflow.set(link.target[i], list);
     });
+    const rootOf = new Map<number, number>();
+    const findRoot = (i: number, guard = 0): number => {
+      const hit = rootOf.get(i);
+      if (hit != null) return hit;
+      const incoming = inflow.get(i);
+      let root = i;
+      if (incoming?.length && guard < 32) {
+        const main = incoming.reduce((a, b) => (b.value > a.value ? b : a));
+        root = findRoot(main.from, guard + 1);
+      }
+      rootOf.set(i, root);
+      return root;
+    };
+    const grey = unassignedGrey(isDark);
+    const placeInStep = new Map<number, number>();
+    const perStep = new Map<number, number>();
+    nodes.forEach((n, i) => {
+      const k = perStep.get(n.step_index) ?? 0;
+      placeInStep.set(i, k);
+      perStep.set(n.step_index, k + 1);
+    });
+    const lineageColour = nodes.map((n, i) => {
+      if (isUnassigned(n.label)) return grey;
+      const root = nodes[findRoot(i)];
+      if (!root || isUnassigned(root.label)) return grey;
+      return lineageShade(rootColours.get(root.label), n.step_index, placeInStep.get(i) ?? 0, isDark);
+    });
+    const nodeColors = nodes.map((n, i) =>
+      colorMode === 'step' ? (stepHues[n.step_index] ?? palette[0]) : lineageColour[i],
+    );
 
     function baseColorFor(src: number, tgt: number): string {
       if (colorMode === 'step') return stepHues[nodes[src]?.step_index ?? 0] ?? palette[0];
-      const idx = colorMode === 'target' ? tgt : src;
-      return palette[idx % palette.length];
+      return lineageColour[colorMode === 'target' ? tgt : src];
     }
 
     const linkColors = link.source.map((src, i) =>
@@ -357,7 +409,11 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
         ...(trace.node as object),
         label: nodeLabels,
         color: nodeColors,
-        line: { color: isDark ? theme.colors.dark[5] : theme.colors.gray[0], width: 0.5 },
+        // Slim bars with air between them: the flows carry the picture, the
+        // nodes only mark where they meet.
+        thickness: 12,
+        pad: 14,
+        line: { width: 0 },
         // Per-node hover shows the rank → taxon and the total flow through
         // the node. Plotly substitutes `%{value}` with the summed in/out flow
         // it computed when laying out the trace.
@@ -387,14 +443,17 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
         paper_bgcolor: 'rgba(0,0,0,0)',
         autosize: true,
         font: {
-          size: 12,
+          size: 11,
           color: isDark ? theme.colors.gray[2] : theme.colors.gray[8],
         },
+        margin: { l: 8, r: 8, t: 8, b: 8 },
       },
     };
   }, [
     result,
     palette,
+    categorySource,
+    stepOptions,
     colorMode,
     linkOpacity,
     showNodeLabels,
@@ -405,9 +464,10 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
     config.value_format,
   ]);
 
-  // Encoding tier: how many steps the flow runs through, how the nodes are
-  // ordered and what the link colour means. Opacity, labels, the minimum link
-  // and the per-step value filters are the second tier.
+  // Encoding tier: how many steps the flow runs through, what the link colour
+  // means and how the nodes are ordered, most used first (a docked panel shows
+  // the first few, see DockedControls). Opacity, labels, the minimum link and
+  // the per-step value filters are the second tier.
   const primaryControls = useMemo(
     () => (
       <>
@@ -431,6 +491,16 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
           />
         ) : null}
         <VizSegmented
+          label="Colour links by"
+          value={colorMode}
+          onChange={(v) => setColorMode(v as typeof colorMode)}
+          data={[
+            { value: 'source', label: 'Lineage' },
+            { value: 'target', label: 'Target' },
+            { value: 'step', label: 'Step' },
+          ]}
+        />
+        <VizSegmented
           label="Sort nodes"
           value={sortMode}
           onChange={(v) => setSortMode(v as typeof sortMode)}
@@ -438,16 +508,6 @@ const SankeyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => 
             { value: 'total_flow', label: 'By flow' },
             { value: 'alphabetical', label: 'A–Z' },
             { value: 'input', label: 'Input' },
-          ]}
-        />
-        <VizSegmented
-          label="Colour links by"
-          value={colorMode}
-          onChange={(v) => setColorMode(v as typeof colorMode)}
-          data={[
-            { value: 'source', label: 'Source' },
-            { value: 'target', label: 'Target' },
-            { value: 'step', label: 'Step' },
           ]}
         />
       </>

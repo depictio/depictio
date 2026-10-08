@@ -1,0 +1,61 @@
+import React, { useMemo } from 'react';
+import {
+  groupTabs,
+  isImagePath,
+  TabLinkContext,
+  tabLinkKey,
+  useBranding,
+} from 'depictio-react-core';
+import type { DashboardSummary, TabLinkResolver, TabLinkTarget } from 'depictio-react-core';
+
+import { dashboardHref } from '../dashboards/lib/dashboardLinks';
+import { resolveTabColor, resolveTabIcon } from './Sidebar';
+
+/**
+ * Lets text bodies link to a sibling tab by name (`[label](tab:Name)`).
+ *
+ * Mounted inside `BrandScope` so a link takes the same icon and colour the
+ * sidebar pill of that tab shows, brand defaults included. A tab answers to
+ * its displayed name; the parent also answers to the dashboard title. Every
+ * tab also answers to its dashboard id, which is how a highlight that the
+ * editor made finds its tab again after a rename.
+ */
+const TabLinkProvider: React.FC<{
+  tabs: DashboardSummary[];
+  /** The editor links to the tab's editor, so an author stays in edit mode. */
+  mode?: 'view' | 'edit';
+  children: React.ReactNode;
+}> = ({ tabs, mode = 'view', children }) => {
+  const brand = useBranding();
+  const resolve = useMemo<TabLinkResolver>(() => {
+    const byKey = new Map<string, TabLinkTarget>();
+    // The group as the sidebar heads it, so a tab spelling it differently
+    // still lands under the same name.
+    const groupOf = new Map<string, string | null>();
+    for (const section of groupTabs(tabs)) {
+      for (const d of section.tabs) groupOf.set(d.dashboard_id, section.group);
+    }
+    for (const d of tabs) {
+      const isParent = !d.parent_dashboard_id;
+      const label = (isParent ? d.main_tab_name || d.title : d.title) || '';
+      const image = d.tab_icon && isImagePath(d.tab_icon) ? d.tab_icon : null;
+      const target: TabLinkTarget = {
+        href: dashboardHref(d.dashboard_id, mode),
+        dashboardId: d.dashboard_id,
+        label,
+        icon: image ?? resolveTabIcon(d, isParent),
+        color: resolveTabColor(d, isParent, brand),
+        description: d.subtitle?.trim() || null,
+        group: groupOf.get(d.dashboard_id) ?? null,
+      };
+      for (const name of [label, d.title, d.dashboard_id]) {
+        const key = name ? tabLinkKey(name) : '';
+        if (key && !byKey.has(key)) byKey.set(key, target);
+      }
+    }
+    return (name: string) => byKey.get(tabLinkKey(name)) ?? null;
+  }, [tabs, brand, mode]);
+  return <TabLinkContext.Provider value={resolve}>{children}</TabLinkContext.Provider>;
+};
+
+export default TabLinkProvider;

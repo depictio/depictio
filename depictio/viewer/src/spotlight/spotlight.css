@@ -1,0 +1,47 @@
+/* The dashboard search palette (SpotlightPalette.tsx). Theme tokens only, so
+ * light and dark come from Mantine. */
+
+/* The field is the palette's header: a rule under it rather than a box round
+ * it, as in Spotlight. */
+.depictio-spotlight-input {
+  height: 56px;
+  font-size: var(--mantine-font-size-lg);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.depictio-spotlight-results {
+  max-height: min(60vh, 460px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 6px 6px;
+}
+
+.depictio-spotlight-row {
+  display: block;
+  padding: 7px 10px;
+  border-radius: var(--mantine-radius-md);
+  color: inherit;
+  text-decoration: none;
+}
+.depictio-spotlight-row[data-active] {
+  background: var(--mantine-primary-color-light);
+}
+
+/* The matched part of a title or snippet: bolder and in the primary colour,
+ * not a highlighter swatch, so a row with several matches stays readable. */
+.depictio-spotlight-mark {
+  background: none;
+  color: var(--mantine-primary-color-light-color);
+  font-weight: 700;
+  padding: 0;
+}
+
+.depictio-spotlight-footer {
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+/* The ring a search result lands with: the Guide's "Show me" ring, pulsing
+ * twice in the shorter time it stays (focus.ts). */
+.depictio-guide-ring.is-spotlight {
+  animation-duration: 750ms;
+}

@@ -35,10 +35,36 @@ export function formatCardNumber(v: number): string {
   return v.toExponential(2);
 }
 
+const DECIMAL_FORMATS = new Map<number, Intl.NumberFormat>();
+
+/**
+ * A number at an author's `decimals`, kept as written (7.10, not 7.1) so a row
+ * of figures lines up. Integers are left whole; thousands separators as in
+ * `formatCardNumber`.
+ */
+export function formatDecimals(v: number, decimals: number): string {
+  if (!Number.isFinite(v)) return '—';
+  if (Number.isInteger(v)) return fixed(0).format(v);
+  const digits = Math.min(20, Math.max(0, Math.round(decimals)));
+  let f = DECIMAL_FORMATS.get(digits);
+  if (!f) {
+    f = new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    });
+    DECIMAL_FORMATS.set(digits, f);
+  }
+  return f.format(v);
+}
+
 /** Rendering for a stat list or an axis anchor. */
-export function formatSecondary(v: unknown): string {
+export function formatSecondary(v: unknown, decimals?: number): string {
   if (v === null || v === undefined) return '—';
-  if (typeof v === 'number') return formatCardNumber(v);
+  if (typeof v === 'number') {
+    // The card's own `decimals`, so the strip agrees with the value above it.
+    if (typeof decimals === 'number') return formatDecimals(v, decimals);
+    return formatCardNumber(v);
+  }
   return String(v);
 }
 

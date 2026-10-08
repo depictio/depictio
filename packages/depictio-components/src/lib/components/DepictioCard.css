@@ -76,3 +76,156 @@
     height: 96px;
   }
 }
+
+/* ``variant: headline`` — the icon rests on the card instead of appearing on
+   hover: a landing page's key figures are read at a glance, and the mark is
+   what tells one card from the next. Kept faint and sized to the value so it
+   anchors the card without competing with the number. Declared after the
+   container query so its placement wins at every width. */
+.depictio-card-icon--rest,
+.depictio-card:hover .depictio-card-icon--rest {
+  /* Top-right of the content box (the card renders it there), level with
+     the title. */
+  opacity: 0.32;
+  top: 16px;
+  right: 16px;
+  transform: none;
+}
+
+.depictio-card-icon--rest svg,
+.depictio-card .depictio-card-icon--rest svg {
+  width: 44px;
+  height: 44px;
+}
+
+/* The headline body keeps clear of the resting icon. `!important` because the
+   card section's own padding is an inline style. */
+.depictio-card-clear-icon {
+  padding-right: 72px !important;
+}
+
+/* A headline card too narrow for both (a phone's pair of key figures): the
+   title gets the room back. With the icon in place it wrapped in one card of
+   the pair and not the other, and the two values no longer lined up. */
+@container depictio-card (max-width: 220px) {
+  .depictio-card-icon--rest,
+  .depictio-card:hover .depictio-card-icon--rest {
+    display: none;
+  }
+
+  .depictio-card-clear-icon {
+    padding-right: 1rem !important;
+  }
+}
+
+/* A card with a `link` (wrapped in .depictio-card-link by the renderer):
+   lifted on hover like a tab tile, so a key figure reads as a way in. */
+.depictio-card-link {
+  cursor: pointer;
+}
+
+.depictio-card-link .depictio-card {
+  transition:
+    border-color 120ms ease-out,
+    box-shadow 120ms ease-out,
+    transform 120ms ease-out;
+}
+
+.depictio-card-link:hover .depictio-card {
+  border-color: var(--mantine-color-default-border) !important;
+  box-shadow: var(--mantine-shadow-md) !important;
+  transform: translateY(-1px);
+}
+
+.depictio-card-link:hover .depictio-card-icon--rest {
+  opacity: 0.6;
+}
+
+/* ``variant: compact`` — title and value on one line, the value pushed to the
+   far edge so the two never read as one string. Below ~220px (a strip of
+   eight cards to a row) there is no room for both on a line, and the pair
+   stacks tight instead of wrapping the title a word at a time. */
+.depictio-card-compact-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+@container depictio-card (min-width: 220px) {
+  .depictio-card-compact-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+}
+
+/* ``variant: minimal`` — no frame and no shadow, so the figure sits on
+   whatever is behind it. The border stays (transparent) rather than going:
+   the 1.5px it takes is what keeps a minimal card's text level with a headline
+   card's beside it. */
+.depictio-card.depictio-card--minimal {
+  border-color: transparent !important;
+  box-shadow: none;
+}
+
+/* A linked minimal card has no frame to lift: a faint wash marks it as a way
+   in instead. ``!important`` because its background is an inline style. */
+.depictio-card-link:hover .depictio-card--minimal {
+  border-color: transparent !important;
+  box-shadow: none !important;
+  background-color: var(--mantine-color-default-hover) !important;
+}
+
+/* ``variant: accent`` — a headline card singled out: a rail of the card's
+   colour down its left edge and a faint wash of it fading in from that edge.
+   ``color-mix`` against transparent keeps the wash a tint of whatever the
+   card sits on, so it reads in light and dark alike. The card clips its
+   overflow, so the rail follows the rounded corners. */
+.depictio-card--accent {
+  background-image: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--depictio-card-accent) 9%, transparent),
+    transparent 65%
+  );
+}
+
+.depictio-card--accent::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--depictio-card-accent);
+  pointer-events: none;
+}
+
+/* ``variant: split`` — the stat tile's icon block: a rounded square tinted
+   with the icon's own colour (set as ``color`` on the block). */
+.depictio-card-split-icon {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+
+/* The caption sits under the value column, not under the block: the block's
+   width plus the gap beside it. */
+.depictio-card-split-indent {
+  padding-left: 64px;
+}
+
+/* Too narrow for block and figure side by side (eight to a row): the block
+   goes and the column takes the room, rather than the value wrapping. */
+@container depictio-card (max-width: 200px) {
+  .depictio-card-split-icon {
+    display: none;
+  }
+
+  .depictio-card-split-indent {
+    padding-left: 0;
+  }
+}

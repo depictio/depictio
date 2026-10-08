@@ -145,6 +145,41 @@ class VolcanoConfig(_BaseVizConfig):
     show_ci: bool = Field(default=True, description="QQ view: shade the 95% null CI band")
     show_identity: bool = Field(default=True, description="QQ view: draw the y = x line")
     point_size: int = Field(default=5, ge=1, le=30, description="QQ view: marker size")
+    # An MA view from a table of its own, in the MA plot's canonical columns
+    # (feature_id, avg_log_intensity, log2_fold_change, significance, label),
+    # for a test whose table has no mean abundance.
+    ma_wf_id: str | None = Field(default=None, description="Workflow id of the MA table DC")
+    ma_dc_id: str | None = Field(default=None, description="Data-collection id of the MA table DC")
+    ma_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the MA table DC (resolved to ids at import)",
+    )
+    # The name ``view`` had on this branch before the views were merged with
+    # main's: still accepted, and read as ``view`` when that is not given.
+    default_view: Literal["volcano", "ma", "qq"] = Field(
+        default="volcano",
+        description="The view drawn first: volcano, MA or QQ (an older name for `view`)",
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _default_view_is_view(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("default_view") and "view" not in data:
+            data = {**data, "view": data["default_view"]}
+        return data
+
+    @model_validator(mode="after")
+    def _views_are_bound(self) -> VolcanoConfig:
+        if self.default_view == "qq" and not self.p_value_col:
+            raise ValueError("default_view: qq reads the raw p-values: bind p_value_col")
+        if self.default_view == "ma" and not (
+            self.avg_log_intensity_col or self.ma_dc_id or self.ma_dc_tag
+        ):
+            raise ValueError(
+                "default_view: ma needs the mean abundance: bind avg_log_intensity_col, "
+                "or an MA table with ma_dc_tag (or ma_dc_id)"
+            )
+        return self
 
 
 class EmbeddingConfig(_BaseVizConfig):
@@ -785,6 +820,43 @@ class UpsetPlotConfig(_BaseVizConfig):
         default=True,
         description="Master toggle for the set-size bars and annotation tracks",
     )
+    set_category_column: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "The categorical column the sets are values of: the column the matrix "
+            "was pivoted on (``locality``, ``habitat``). The set-size bars, the "
+            "matrix dots and, with ``color_intersections_by='set'``, the bar of "
+            "each single-set intersection take that column's dashboard "
+            "``category_colors``, so a set is the same colour here as on every "
+            "other tile. Null finds the column by value: the one "
+            "``category_colors`` column that pins every set drawn. A set with no "
+            "colour there keeps the plain look, and ``set_colors`` wins per set."
+        ),
+    )
+
+    # --- Selection as a cross-filter ---------------------------------------
+    # Off by default, same reasoning as EmbeddingConfig.
+    selection_enabled: bool = Field(
+        default=False,
+        description=(
+            "Let a click on an intersection (its bar or its matrix column) emit "
+            "a dashboard filter on the rows it counts, as a lasso does on a "
+            "scatter. Clicking it again, or the tile's Reset selection, clears "
+            "it. Requires ``selection_column``."
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Column of the matrix whose values the selection emits: the values "
+            "the intersection's rows hold there. The filter narrows every tile "
+            "whose data has a column of that name (and those linked to it), so "
+            "pick the identifier the other tiles share: a taxon's ``Phylum`` "
+            "rather than a lineage string only the matrix carries."
+        ),
+    )
 
     @field_validator("set_columns_pattern")
     @classmethod
@@ -800,6 +872,22 @@ class UpsetPlotConfig(_BaseVizConfig):
             )
         return self
 
+    @model_validator(mode="after")
+    def _selection_names_its_column(self) -> UpsetPlotConfig:
+        # Nothing else in the config names the matrix's element column, so an
+        # opt-in without one would validate, persist, and do nothing.
+        if self.selection_enabled and not self.selection_column:
+            raise ValueError(
+                "selection_enabled needs selection_column: the column whose values "
+                "a clicked intersection emits as the filter"
+            )
+        if self.selection_column and self.set_columns and self.selection_column in self.set_columns:
+            raise ValueError(
+                f"selection_column {self.selection_column!r} is one of the set columns; "
+                "it must name the elements (a 0/1 membership column selects nothing)"
+            )
+        return self
+
 
 class PhylogeneticConfig(_BaseVizConfig):
     """Phylogenetic tree (Microreact-style) — Newick tree + tip metadata.
@@ -808,6 +896,38 @@ class PhylogeneticConfig(_BaseVizConfig):
     DCPhylogenyConfig). Tip annotations (group / habitat / clade label /
     clinical metadata) live in a regular Table DC and are joined to tip
     labels at render time via the `taxon_col` column.
+
+    `collapse_rank` draws the same component as a summary instead: one tip per
+    value of that tip-metadata column, the top `top_n` by share, optionally
+    sized by reads from an abundance table that has a column named like the
+    rank. The component builder writes the same keys (its "Tree and tip
+    metadata" and "Read shares" sections, and the preview's View switch), so
+    a summary built there and this one are the same config. Example YAML::
+
+        - component_type: advanced_viz
+          workflow_tag: ampliseq
+          data_collection_tag: phylogenetic_tree_canonical
+          viz_kind: phylogenetic
+          config:
+            viz_kind: phylogenetic
+            tree_wf_id: 646b0f3c1e4a2d7f8e5b8ca3  # placeholders, rewritten from
+            tree_dc_id: 646b0f3c1e4a2d7f8e5b8cdb  # tree_dc_tag at import
+            tree_dc_tag: phylogenetic_tree_canonical
+            metadata_dc_tag: phylogenetic_tree_metadata_canonical
+            color_col: Kingdom
+            extra_color_cols: [Phylum, Class, Order]  # what Collapse to offers
+            collapse_rank: Phylum                     # unset: the full tree
+            top_n: 10
+            size_by: abundance                        # default: tips
+            abundance_dc_tag: taxonomy_rel_abundance  # has a Phylum column
+            abundance_split_col: locality             # one column of dots per site
+            split_scale: shared                       # or row: each lineage's own spread
+
+    The `*_dc_tag` keys name DCs of the component's own workflow and are
+    resolved to the `*_wf_id` / `*_dc_id` pair at import, overwriting whatever
+    ids the YAML carries; a DC of another workflow is bound by its ids alone.
+    `tree_wf_id` / `tree_dc_id` are required even beside `tree_dc_tag`, which
+    is why a template ships placeholder ids for the import to replace.
     """
 
     viz_kind: Literal["phylogenetic"] = "phylogenetic"
@@ -879,6 +999,104 @@ class PhylogeneticConfig(_BaseVizConfig):
     show_internal_labels: bool = Field(
         default=False, description="Annotate internal nodes with their labels"
     )
+
+    # Summary mode: the tree collapsed to one tip per value of a rank, for a
+    # landing tile. Unset, the component draws the full tree as before.
+    collapse_rank: str | None = Field(
+        default=None,
+        description=(
+            "Tip-metadata column to collapse the tree to (e.g. 'Phylum'): one tip per "
+            "value, placed at the largest clade whose classified tips all carry it, "
+            "drawn as a cladogram. Unset draws the full tree."
+        ),
+    )
+    top_n: int = Field(
+        default=10,
+        ge=1,
+        le=60,
+        description="Summary mode: how many values of collapse_rank to draw, by share",
+    )
+    size_by: Literal["tips", "abundance"] = Field(
+        default="tips",
+        description=(
+            "Summary mode: what a tip's dot measures — its share of the tree's tips "
+            "(ASVs), or its mean share of a sample's reads from the abundance table"
+        ),
+    )
+    show_shares: bool | None = Field(
+        default=None,
+        description=(
+            "Summary mode: print each lineage's share (%) beside it. Unset, shown "
+            "only when sized by reads"
+        ),
+    )
+    # Abundance source for size_by="abundance": a long table with one row per
+    # (sample, taxon) carrying the collapse_rank column and a relative abundance.
+    abundance_wf_id: str | None = Field(
+        default=None, description="Workflow id of the abundance table DC"
+    )
+    abundance_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the abundance table DC"
+    )
+    abundance_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the abundance table DC (resolved to ids at import)",
+    )
+    abundance_col: str = Field(
+        default="rel_abundance",
+        description="Abundance column: a sample's relative abundance of the row's taxon",
+    )
+    abundance_sample_col: str = Field(
+        default="sample",
+        description=(
+            "Sample column of the abundance table: a share is the mean over samples of "
+            "a sample's share. A table without it has its abundance column summed instead"
+        ),
+    )
+    abundance_split_col: str | None = Field(
+        default=None,
+        description=(
+            "Abundance-table column (e.g. a site) to break each share down by, drawn as "
+            "a strip of dots beside the tips"
+        ),
+    )
+    show_split: bool = Field(
+        default=True,
+        description=(
+            "Summary mode: draw the abundance_split_col strip. Off keeps the column for "
+            "when the viewer switches it back on"
+        ),
+    )
+    split_scale: Literal["shared", "row"] = Field(
+        default="shared",
+        description=(
+            "Summary mode: the strip's dot area on the one scale every dot shares, or "
+            "relative to each lineage's largest value, to show where it is concentrated"
+        ),
+    )
+    show_tip_dots: bool = Field(
+        default=True,
+        description="Summary mode: draw a dot sized by the lineage's share at each tip",
+    )
+
+    @model_validator(mode="after")
+    def _summary_is_coherent(self) -> PhylogeneticConfig:
+        # The summary's own settings (`size_by`, `top_n`, `abundance_split_col`)
+        # are allowed without `collapse_rank`: the full tree ignores them, and a
+        # tree switched from its summary to the full tree keeps them, so that
+        # switching back (the View control in the viz's settings) returns the
+        # summary as it was. What is refused is a summary that cannot be drawn.
+        if self.collapse_rank and not (self.metadata_dc_id or self.metadata_dc_tag):
+            raise ValueError(
+                "collapse_rank reads the rank from the tip metadata: bind it with "
+                "metadata_dc_tag (or metadata_dc_id)"
+            )
+        if self.size_by == "abundance" and not (self.abundance_dc_id or self.abundance_dc_tag):
+            raise ValueError(
+                "size_by: abundance needs the abundance table: bind it with "
+                "abundance_dc_tag (or abundance_dc_id)"
+            )
+        return self
 
 
 class MAConfig(_BaseVizConfig):
@@ -1319,7 +1537,7 @@ class SankeyConfig(_BaseVizConfig):
     # Display defaults — editable from the Settings popover.
     sort_mode: Literal["alphabetical", "total_flow", "input"] = Field(default="total_flow")
     color_mode: Literal["source", "target", "step"] = Field(default="source")
-    link_opacity: float = Field(default=0.5, ge=0.05, le=1.0)
+    link_opacity: float = Field(default=0.4, ge=0.05, le=1.0)
     min_link_value: float = Field(
         default=0.0,
         ge=0.0,

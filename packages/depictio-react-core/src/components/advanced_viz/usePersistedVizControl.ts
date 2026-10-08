@@ -53,11 +53,23 @@ export function usePersistedVizControl<T>(
   configKey: string,
   fallback: T,
 ): [T, (next: T) => void] {
-  const [value, setValue] = useState<T>(
-    () =>
-      ((metadata.config as Record<string, unknown> | undefined)?.[configKey] as T | undefined) ??
-      fallback,
-  );
+  const configured = (metadata.config as Record<string, unknown> | undefined)?.[configKey] as
+    | T
+    | undefined;
+  const [value, setValue] = useState<T>(() => configured ?? fallback);
+
+  // Follow the config when it changes under the control. In the builder the
+  // form can write the same key the preview's control does (a tree's View step
+  // and the switch in its settings), and the preview stays mounted; seeded once,
+  // the control kept showing the old value. Adjusted during render, not in an
+  // effect, so no frame shows the stale one. Only a change counts: a dashboard's
+  // config never changes, so a viewer's local pick there is kept.
+  const configuredKey = JSON.stringify(configured ?? null);
+  const [seenKey, setSeenKey] = useState(configuredKey);
+  if (configuredKey !== seenKey) {
+    setSeenKey(configuredKey);
+    setValue(configured ?? fallback);
+  }
 
   // A ref rather than deps: the setter keeps one identity for the life of the
   // renderer, so the `controls` useMemo that closes over it is not invalidated

@@ -22,6 +22,9 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, projects_collection
 from depictio.api.v1.endpoints.comments_endpoints.cascade import delete_threads_for_dashboards
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
+    effective_category_colors,
+    family_brand_theme,
+    family_category_colors,
     get_child_tabs,
     get_parent_dashboard_title,
     load_dashboards_from_db,
@@ -57,7 +60,11 @@ from depictio.api.v1.services.card_metrics import (
 from depictio.api.v1.services.card_metrics import (
     numeric_layout_payload as _numeric_layout_payload,
 )
-from depictio.api.v1.services.figure.figure_builder import merge_dashboard_brand_theme
+from depictio.api.v1.services.figure.figure_builder import (
+    merge_category_colors,
+    merge_dashboard_brand_theme,
+)
+from depictio.api.v1.services.figure.style_presets import figure_style_payload
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.branding import BrandTheme
 from depictio.models.models.dashboards import DashboardData, DashboardDataLite
@@ -319,6 +326,15 @@ async def get_dashboard(
     if parent_title:
         dashboard_dict["parent_dashboard_title"] = parent_title
 
+    # A child tab without its own brand is drawn in its main tab's. Sent apart
+    # from `brand_theme` so the editor's next save doesn't write a copy of it
+    # into this tab, which would then miss later changes to the main tab's.
+    if not dashboard_dict.get("brand_theme"):
+        dashboard_dict["inherited_brand_theme"] = family_brand_theme(dashboard_dict)
+    # Same rule for category colours: the main tab's, sent apart from the tab's
+    # own so a save never freezes a copy of them here.
+    dashboard_dict["inherited_category_colors"] = family_category_colors(dashboard_dict)
+
     # Surface the project's realtime config so the React viewer can decide
     # whether to mount the RealtimeIndicator. A project without
     # ``realtime.enabled = true`` should never show live-update UI.
@@ -440,6 +456,15 @@ async def init_dashboard(
     parent_title = get_parent_dashboard_title(dashboard_dict)
     if parent_title:
         dashboard_dict["parent_dashboard_title"] = parent_title
+
+    # A child tab without its own brand is drawn in its main tab's. Sent apart
+    # from `brand_theme` so the editor's next save doesn't write a copy of it
+    # into this tab, which would then miss later changes to the main tab's.
+    if not dashboard_dict.get("brand_theme"):
+        dashboard_dict["inherited_brand_theme"] = family_brand_theme(dashboard_dict)
+    # Same rule for category colours: the main tab's, sent apart from the tab's
+    # own so a save never freezes a copy of them here.
+    dashboard_dict["inherited_category_colors"] = family_category_colors(dashboard_dict)
 
     response = {
         "dashboard": dashboard_dict,
@@ -605,6 +630,11 @@ async def save_dashboard(
     # it to `dashboard_id`, matching the `_id == dashboard_id` invariant the
     # import paths call out as CRITICAL (see the YAML/JSON import routes).
     save_payload.pop("_id", None)
+
+    # Read-time only: a child tab's main-tab brand, resolved on every GET.
+    # Stored, it would freeze a copy that later changes to the main tab miss.
+    save_payload.pop("inherited_brand_theme", None)
+    save_payload.pop("inherited_category_colors", None)
 
     # `creation_time` is write-once: the client round-trips the whole dashboard
     # document, so trusting its payload would let a save clobber (or invent) the
@@ -909,10 +939,10 @@ async def update_tab(
     current_user: User = Depends(get_user_or_anonymous),
 ):
     """
-    Update tab properties (title, icon, icon_color, main_tab_name).
+    Update tab properties (title, icon, icon_color, group, main_tab_name).
 
     For main tabs, you can also update main_tab_name.
-    For child tabs, you can update title, tab_icon, and tab_icon_color.
+    For child tabs, you can update title, tab_icon, tab_icon_color and tab_group.
 
     Args:
         dashboard_id: The dashboard/tab ID to update
@@ -920,7 +950,10 @@ async def update_tab(
             - title: New tab title (for child tabs or dashboard title for main tabs)
             - tab_icon: Icon name (e.g., "mdi:chart-bar")
             - tab_icon_color: Color for the icon
+            - tab_group: Sidebar category name; null or blank ungroups the tab
             - main_tab_name: Custom name for the main tab (main tabs only)
+            - show_guide: Offer the Guide page for the whole dashboard (main tabs only)
+            - guide_intro: Author note (markdown) atop the Guide (main tabs only)
 
     Returns:
         Updated dashboard information
@@ -955,6 +988,10 @@ async def update_tab(
         update_fields["tab_icon"] = data["tab_icon"]
     if "tab_icon_color" in data:
         update_fields["tab_icon_color"] = data["tab_icon_color"]
+    if "tab_group" in data:
+        # Stored as None rather than "" so an emptied field ungroups the tab
+        # instead of opening a group with no name.
+        update_fields["tab_group"] = str(data["tab_group"] or "").strip() or None
 
     # main_tab_name can only be set on main tabs
     if "main_tab_name" in data:
@@ -964,6 +1001,22 @@ async def update_tab(
                 detail="main_tab_name can only be set on main tabs, not child tabs.",
             )
         update_fields["main_tab_name"] = data["main_tab_name"]
+
+    # The Guide is a property of the whole dashboard, and the viewer reads it
+    # from the main tab — so that is the only document it is written to. A
+    # targeted patch rather than the full-document save, because the editor can
+    # change it from any tab, not only from the main one.
+    guide_fields = {"show_guide", "guide_intro"} & data.keys()
+    if guide_fields:
+        if not dashboard.get("is_main_tab", True):
+            raise HTTPException(
+                status_code=400,
+                detail="show_guide and guide_intro can only be set on main tabs.",
+            )
+        if "show_guide" in data:
+            update_fields["show_guide"] = data["show_guide"] is not False
+        if "guide_intro" in data:
+            update_fields["guide_intro"] = str(data["guide_intro"] or "")
 
     if not update_fields:
         raise HTTPException(status_code=400, detail="No valid fields provided for update.")
@@ -1164,6 +1217,7 @@ async def get_tabs(
         "main_tab_name": main_tab.get("main_tab_name"),
         "tab_icon": main_tab.get("tab_icon"),
         "tab_icon_color": main_tab.get("tab_icon_color"),
+        "tab_group": main_tab.get("tab_group"),
         # Dashboard's own icon and color (for main tab to inherit)
         "icon": main_tab.get("icon", "mdi:view-dashboard"),
         "icon_color": main_tab.get("icon_color", "orange"),
@@ -2896,10 +2950,17 @@ async def render_figure_endpoint(
          "groups": [{name, column_name, values, color}], "color_by_group": bool,
          "color_by_column": {"column_name": str, "color_map": {value: "#rrggbb"}},
          "grouping_display": "color" | "facet",
-         "include_other": bool}
+         "include_other": bool,
+         "style": {"figure_style": "default" | "minimal",
+                   "header_title": bool, "hide_legend": bool}}
 
     ``full_load`` (default False) bypasses the point-plot row cap so the client
     can explicitly render every point on demand (slow on large datasets).
+
+    ``style`` (optional) overrides the figure's own look: a highlight drawing
+    this figure on another tab sends its own style and header. Without it the
+    figure's ``figure_style`` applies, else its grid section's (see
+    ``figure_style_payload``).
 
     ``groups`` + ``color_by_group`` (optional) ask for the figure to be colored
     by the caller's selection groups (issue #89); ``color_by_column`` asks for
@@ -2982,13 +3043,17 @@ async def render_figure_endpoint(
     # body re-coerces wf_id back to ObjectId for `load_deltatable_lite`.
     dc_config = component.get("dc_config") or {}
     mode = component.get("mode", "ui")
+    category_colors = effective_category_colors(dashboard_data)
     metadata = {
         "wf_id": str(wf_id),
         "dc_id": str(dc_id),
         "dc_config": convert_objectid_to_str(dc_config),
         "visu_type": component.get("visu_type", "scatter"),
-        "dict_kwargs": merge_dashboard_brand_theme(
-            dashboard_data.get("brand_theme"), component.get("dict_kwargs") or {}
+        "dict_kwargs": merge_category_colors(
+            category_colors,
+            merge_dashboard_brand_theme(
+                family_brand_theme(dashboard_data), component.get("dict_kwargs") or {}
+            ),
         ),
         "mode": mode,
         "code_content": component.get("code_content", ""),
@@ -3032,7 +3097,12 @@ async def render_figure_endpoint(
         "filter_metadata": filter_metadata,
         "theme": theme,
         "full_load": full_load,
+        # The figure's own style, else its section's; a highlight drawing this
+        # figure on another tab asks for its own through `style`.
+        "style": figure_style_payload(component, dashboard_data, request.get("style")),
     }
+    if category_colors:
+        payload["category_colors"] = category_colors
     if color_by_group:
         payload["groups"] = group_defs
         payload["color_by_group"] = True
@@ -3894,6 +3964,15 @@ def get_cross_tab_components(
     persistent_sections: list[dict[str, Any]] = []
     for tab in tabs:
         metas = tab.get("stored_metadata") or []
+        # Grid sections with a filter bar -- drawn as one (`display: strip`) or
+        # carrying their own (`filter_bar: true`) -- hold the interactive
+        # components that name them, which therefore leave the filter panel's
+        # namespace on this tab.
+        bar_names = {
+            spec.get("name")
+            for spec in tab.get("grid_sections") or []
+            if spec.get("display") == "strip" or spec.get("filter_bar")
+        }
         for kind, spec_field in (("grid", "grid_sections"), ("filter", "filter_sections")):
             for spec in tab.get(spec_field) or []:
                 if not spec.get("persistent"):
@@ -3904,9 +3983,13 @@ def get_cross_tab_components(
                         continue
                     # Same membership rule as the viewer's `isFilterMember`:
                     # interactive components live in filter sections, everything
-                    # else in grid sections. Floating maps are excluded — they
-                    # already fan out through `floating`.
-                    is_filter = meta.get("component_type") == "interactive"
+                    # else in grid sections -- except interactive components of
+                    # a filter bar, which are grid members. Floating maps are
+                    # excluded — they already fan out through `floating`.
+                    is_filter = (
+                        meta.get("component_type") == "interactive"
+                        and meta.get("section") not in bar_names
+                    )
                     if is_filter != (kind == "filter"):
                         continue
                     if meta.get("component_type") == "map" and meta.get("placement") == "floating":
@@ -6810,6 +6893,7 @@ async def export_dashboard_as_json(
             "main_tab_name": dashboard_doc.get("main_tab_name"),
             "tab_icon": dashboard_doc.get("tab_icon"),
             "tab_icon_color": dashboard_doc.get("tab_icon_color"),
+            "tab_group": dashboard_doc.get("tab_group"),
             "stored_metadata": dashboard_doc.get("stored_metadata", []),
             "stored_layout_data": dashboard_doc.get("stored_layout_data", []),
         },
@@ -6944,6 +7028,7 @@ async def import_dashboard_from_json(
         "main_tab_name": dashboard_data.get("main_tab_name"),
         "tab_icon": dashboard_data.get("tab_icon"),
         "tab_icon_color": dashboard_data.get("tab_icon_color"),
+        "tab_group": dashboard_data.get("tab_group"),
         "stored_metadata": dashboard_data.get("stored_metadata", []),
         "stored_layout_data": dashboard_data.get("stored_layout_data", []),
         "stored_children_data": dashboard_data.get("stored_children_data", []),

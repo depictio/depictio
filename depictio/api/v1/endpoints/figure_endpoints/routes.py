@@ -126,8 +126,9 @@ async def preview_figure(
         }
 
     ``dashboard_id``, when supplied, pulls that dashboard's ``brand_theme``
-    defaults into the preview so it matches what the saved component will
-    render (#397).
+    defaults and ``category_colors`` into the preview so it matches what the
+    saved component will render (#397), and its grid sections' figure style.
+    ``style`` (optional) overrides the style, as on ``render_figure``.
     """
     metadata = request.get("metadata") or {}
     filters = request.get("filters") or []
@@ -137,11 +138,20 @@ async def preview_figure(
     if not metadata or metadata.get("component_type") != "figure":
         raise HTTPException(status_code=400, detail="metadata must be a figure component.")
 
+    dashboard_doc = None
+    category_colors = None
     if preview_dashboard_id:
         from bson import ObjectId
 
         from depictio.api.v1.db import dashboards_collection
-        from depictio.api.v1.services.figure.figure_builder import merge_dashboard_brand_theme
+        from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
+            effective_category_colors,
+            family_brand_theme,
+        )
+        from depictio.api.v1.services.figure.figure_builder import (
+            merge_category_colors,
+            merge_dashboard_brand_theme,
+        )
 
         try:
             dashboard_doc = dashboards_collection.find_one(
@@ -149,11 +159,14 @@ async def preview_figure(
             )
         except Exception:
             dashboard_doc = None
-        if dashboard_doc and dashboard_doc.get("brand_theme"):
+        brand_theme = family_brand_theme(dashboard_doc) if dashboard_doc else None
+        category_colors = effective_category_colors(dashboard_doc) if dashboard_doc else None
+        if brand_theme or category_colors:
             metadata = {
                 **metadata,
-                "dict_kwargs": merge_dashboard_brand_theme(
-                    dashboard_doc["brand_theme"], metadata.get("dict_kwargs") or {}
+                "dict_kwargs": merge_category_colors(
+                    category_colors,
+                    merge_dashboard_brand_theme(brand_theme, metadata.get("dict_kwargs") or {}),
                 ),
             }
 
@@ -175,7 +188,18 @@ async def preview_figure(
     offload = settings.celery.offload_preview
     response.headers["X-Celery-Path"] = "offloaded" if offload else "inline"
 
-    payload = {"metadata": metadata, "filter_metadata": filter_metadata, "theme": theme}
+    from depictio.api.v1.services.figure.style_presets import figure_style_payload
+
+    payload = {
+        "metadata": metadata,
+        "filter_metadata": filter_metadata,
+        "theme": theme,
+        # The style the saved figure will take: its own, else its section's on
+        # the dashboard it is previewed for.
+        "style": figure_style_payload(metadata, dashboard_doc, request.get("style")),
+    }
+    if category_colors:
+        payload["category_colors"] = category_colors
     try:
         return await offload_or_run(
             build_figure_preview_task,

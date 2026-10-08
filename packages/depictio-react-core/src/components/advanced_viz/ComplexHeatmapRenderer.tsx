@@ -25,6 +25,7 @@ import {
   VizSwitch,
 } from './controls/VizControls';
 import { namedColumns } from './namedColumns';
+import { withRanksInOrder } from './phylo/view';
 import { applyDataTheme, applyLayoutTheme } from './plotlyTheme';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { demandForItems } from './contentDemand';
@@ -273,7 +274,7 @@ const ComplexHeatmapRenderer: React.FC<Props> = ({ metadata, filters, refreshTic
     }
     // Always include current selections even if schema-fetch failed.
     for (const c of rowAnnotationCols) if (!opts.includes(c)) opts.push(c);
-    return opts;
+    return withRanksInOrder(opts);
   }, [schema, config.index_column, valueColumns, rowAnnotationCols]);
 
   // What the column-annotation picker shows selected: the requested columns

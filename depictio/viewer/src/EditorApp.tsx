@@ -29,7 +29,9 @@ import React, {
 } from 'react';
 import {
   ActionIcon,
+  Anchor,
   AppShell,
+  Badge,
   Button,
   Center,
   Drawer,
@@ -47,6 +49,8 @@ import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
+import TabLinkProvider from './chrome/TabLinkProvider';
+import { setContentWidthScope, useContentMaxWidth } from './hooks/useContentWidthPref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
@@ -63,9 +67,17 @@ import {
   fetchDashboard,
   fetchAllDashboards,
   bulkComputeCards,
+  canCopyToTab,
+  canHighlight,
+  copyComponentToTab,
   createTab,
   deleteTab,
+  groupTabs,
+  highlightOnTab,
   reorderTabs,
+  tabDisplayName,
+  tabLinkKey,
+  tabGroupNames,
   updateTab,
   DashboardGrid,
   FilterPanel,
@@ -97,6 +109,18 @@ import {
   SelectionGroupsPanel,
   SaveGroupContext,
   BrandScope,
+  buildGuideModel,
+  resolveGuideSettings,
+  CategoryColorsContext,
+  barSectionNames,
+  filtersInScope,
+  hasSectionBar,
+  isBarMember,
+  isBarSection,
+  isStripSection,
+  mergeFilterScopes,
+  planScopedRequests,
+  sectionFilterScopes,
   AdvancedVizConfigDraftProvider,
   AdvancedVizPlacementDefaultProvider,
 } from 'depictio-react-core';
@@ -105,6 +129,7 @@ import type {
   DashboardPermissions,
   DashboardSummary,
   BrandTheme,
+  FilterScopes,
   FilterSectionSpec,
   PersistentSection,
   InteractiveFilter,
@@ -124,11 +149,16 @@ import GroupingHeaderControl, {
 import SectionsModal from './components/sections/SectionsModal';
 import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
 import type { SectionKind, SectionOp } from './components/sections/sectionMutations';
-import { Header, Sidebar, SettingsDrawer, TabIntro, TabModal } from './chrome';
-import type { TabModalSubmitPayload } from './chrome';
+import { Header, Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal } from './chrome';
+import type { TabDefaults, TabModalSubmitPayload } from './chrome';
+import { useTabGroupActions } from './chrome/useTabGroupActions';
 import NotesFooter from './components/NotesFooter';
+import { dashboardHref } from './dashboards/lib/dashboardLinks';
 import './chrome/chrome.css';
 import { usePageTitle } from './branding';
+import { DashboardGuide, useGuideRoute } from './guide';
+import { DashboardSpotlight } from './spotlight';
+import type { GuideAuthorSettings, SettingsSectionKey } from './chrome/SettingsDrawer';
 import { focusComponent } from './lib/focusComponent';
 
 const API_BASE = '/depictio/api/v1';
@@ -237,7 +267,19 @@ const EditorApp: React.FC = () => {
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const [searchOpened, { open: openSearch, close: closeSearch }] = useDisclosure(false);
+  // The section the settings open on when something asks for one (the Guide's
+  // "Open Your view"); unset, they open on the one last visited.
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionKey | undefined>();
+  const openSettingsAt = useCallback(
+    (section?: SettingsSectionKey) => {
+      setSettingsSection(section);
+      openSettings();
+    },
+    [openSettings],
+  );
   const contentScaleStyle = useContentScaleStyle();
+  const contentMaxWidth = useContentMaxWidth();
   // Bumped after a plot_theme save lands so figure components refetch and pick
   // up the new dashboard-level template/colorway (the server reads plot_theme
   // from the DB at render time, so the request body doesn't change).
@@ -265,6 +307,8 @@ const EditorApp: React.FC = () => {
     mode: 'create' | 'edit';
     target: DashboardSummary | null;
     submitting: boolean;
+    /** Create mode: the Group the new tab is prefilled with. */
+    group?: string | null;
   }>({ open: false, mode: 'create', target: null, submitting: false });
 
   const dashboardId = extractDashboardId();
@@ -381,13 +425,36 @@ const EditorApp: React.FC = () => {
       .finally(() => setLoading(false));
   }, [dashboardId]);
 
-  // Bulk-compute card values when filters change (mirrors App.tsx)
+  // Section-bar scopes, as the viewer builds them (App.tsx): which filters
+  // reach only their own section's components.
+  const filterScopes = useMemo(
+    () =>
+      mergeFilterScopes(
+        sectionFilterScopes(dashboard?.stored_metadata, dashboard?.grid_sections),
+        ...crossTab.persistentSections
+          .filter(
+            (s) =>
+              s.kind === 'grid' && s.owner_dashboard_id !== dashboardId && hasSectionBar(s.spec),
+          )
+          .map((s) =>
+            sectionFilterScopes(
+              s.components.map((c) => c.metadata),
+              [s.spec],
+              s.owner_dashboard_id,
+            ),
+          ),
+      ),
+    [dashboard?.stored_metadata, dashboard?.grid_sections, crossTab.persistentSections, dashboardId],
+  );
+
+  // Bulk-compute card values when filters change (mirrors App.tsx, one request
+  // per distinct filter set so a section bar narrows its own cards only).
   useEffect(() => {
     if (!dashboard || !dashboardId) return;
-    const cardIds = (dashboard.stored_metadata || [])
+    const cards = (dashboard.stored_metadata || [])
       .filter((m) => m.component_type === 'card')
-      .map((m) => m.index);
-    if (cardIds.length === 0) return;
+      .map((m) => ({ id: m.index, scope: typeof m.section === 'string' ? m.section : null }));
+    if (cards.length === 0) return;
 
     const timer = setTimeout(() => {
       setCardsLoading(true);
@@ -396,25 +463,38 @@ const EditorApp: React.FC = () => {
       // snapping to ``…``. See App.tsx for the matching change.
       if (bulkCtrl.current) bulkCtrl.current.abort();
       bulkCtrl.current = new AbortController();
-      bulkComputeCards(
-        dashboardId,
-        combinedFilters,
-        cardIds,
-        groupsApi.bulkOptions,
-        // See App.tsx: prevents a slow superseded compare-on response from
-        // overwriting a newer one.
-        bulkCtrl.current.signal,
+      const signal = bulkCtrl.current.signal;
+      Promise.all(
+        planScopedRequests(cards, combinedFilters, filterScopes).map((req) =>
+          bulkComputeCards(
+            dashboardId,
+            req.filters,
+            req.ids,
+            groupsApi.bulkOptions,
+            // See App.tsx: prevents a slow superseded compare-on response from
+            // overwriting a newer one.
+            signal,
+          ),
+        ),
       )
-        .then((res) => {
-          setCardValues(res.values);
-          setCardSecondaryValues(res.secondary_values || {});
+        .then((responses) => {
+          const values: Record<string, unknown> = {};
+          const secondary: Record<string, Record<string, unknown>> = {};
+          for (const res of responses) {
+            Object.assign(values, res.values);
+            Object.assign(secondary, res.secondary_values || {});
+          }
+          setCardValues(values);
+          setCardSecondaryValues(secondary);
         })
         .catch((err) => {
           if (err?.name !== 'AbortError') {
             console.warn('[EditorApp] bulk-compute failed:', err);
           }
         })
-        .finally(() => setCardsLoading(false));
+        .finally(() => {
+          if (!signal.aborted) setCardsLoading(false);
+        });
     }, 250);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -422,6 +502,7 @@ const EditorApp: React.FC = () => {
     dashboard,
     dashboardId,
     stableFilterKey(combinedFilters),
+    filterScopes,
     // Undefined while compare is off, so group edits don't refire the fetch.
     JSON.stringify(groupsApi.bulkOptions ?? null),
   ]);
@@ -814,6 +895,41 @@ const EditorApp: React.FC = () => {
     [dashboardId, applyDashboard],
   );
 
+  // The width preference is per tab, opening at the author's
+  // `content_width_default` until the reader picks one, as in the viewer.
+  useEffect(() => {
+    setContentWidthScope(dashboardId ?? null, dashboard?.content_width_default);
+  }, [dashboardId, dashboard?.content_width_default]);
+
+  /**
+   * The tab's display defaults from the settings drawer: page width, filter
+   * panel and tab header. Dashboard-level settings like funnel filtering, so
+   * the same save-now path: apply optimistically, POST the full document.
+   * The brand theme's targeted PATCH takes a brand theme and nothing else.
+   */
+  const handleTabDefaultsChange = useCallback(
+    async (patch: TabDefaults) => {
+      if (!dashboardId) return;
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const next = { ...cur, ...patch };
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      applyDashboard(next);
+      setSaveStatus('saving');
+      try {
+        await saveDashboard(dashboardId, next);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('[EditorApp] tab defaults save failed:', err);
+        setSaveStatus('error');
+      }
+    },
+    [dashboardId, applyDashboard],
+  );
+
   /**
    * Persist the dashboard-wide default placement of advanced-viz controls.
    * Same save-now pattern as the funnel toggle; a tile that states its own
@@ -1044,8 +1160,20 @@ const EditorApp: React.FC = () => {
     () => interactiveComponents.filter((m) => m.placement === 'top'),
     [interactiveComponents],
   );
+  // Grid sections with a filter bar (App.tsx draws the same split): their
+  // interactive components render in the grid, not in the filter panel.
+  const barNames = useMemo(
+    () => barSectionNames(dashboard?.grid_sections as FilterSectionSpec[] | undefined),
+    [dashboard?.grid_sections],
+  );
+  const barComponents = useMemo(
+    () => interactiveComponents.filter((m) => isBarMember(m, barNames)),
+    [interactiveComponents, barNames],
+  );
   const leftComponents = useMemo(() => {
-    const own = interactiveComponents.filter((m) => m.placement !== 'top');
+    const own = interactiveComponents.filter(
+      (m) => m.placement !== 'top' && !isBarMember(m, barNames),
+    );
     const seen = new Set(own.map((m) => m.index));
     // Controls fanned out from a sibling tab's persistent filter section, same
     // as the viewer does: their renderers fetch options by dc_id/column, not by
@@ -1055,7 +1183,7 @@ const EditorApp: React.FC = () => {
       .flatMap((s) => s.components.map((c) => c.metadata))
       .filter((m) => !seen.has(m.index) && m.placement !== 'top');
     return foreign.length ? [...own, ...foreign] : own;
-  }, [interactiveComponents, foreignFilterSections]);
+  }, [interactiveComponents, foreignFilterSections, barNames]);
   // Section chrome for the panel — own specs plus the foreign persistent ones,
   // own winning a name clash. Distinct from the `filterSections` memo below,
   // which feeds the ⋮ "Move to section" menus and must stay own-only: a
@@ -1108,13 +1236,41 @@ const EditorApp: React.FC = () => {
   // A section is edited from where it is seen: its header carries the same "…"
   // a component's chrome does. Named sections only — the unsectioned bucket has
   // no header to host it.
-  const renderGridSectionAction = (sectionName: string | null) =>
-    sectionName === null ? null : (
+  const renderGridSectionAction = (sectionName: string | null) => {
+    if (sectionName === null) return null;
+    const action = (
       <SectionActionButton
         label={`Edit “${sectionName}”`}
         onActivate={() => openSectionEditor('grid', sectionName)}
       />
     );
+    // A persistent section this tab owns but excludes: the viewer leaves it
+    // out here, the editor keeps it so it can still be edited. Marked, so the
+    // author doesn't wonder why readers of this tab never see it.
+    const spec = ((dashboard?.grid_sections as FilterSectionSpec[] | undefined) || []).find(
+      (s) => s.name === sectionName,
+    );
+    const here = activeTab ? tabLinkKey(tabDisplayName(activeTab)) : '';
+    const hiddenHere = Boolean(
+      here && spec?.persistent && spec.exclude_tabs?.some((t) => tabLinkKey(t) === here),
+    );
+    if (!hiddenHere) return action;
+    return (
+      <Group gap={6} wrap="nowrap">
+        <Tooltip
+          label="Excluded from this tab: readers see it on the dashboard's other tabs only. Shown here so it can be edited."
+          withArrow
+          multiline
+          w={260}
+        >
+          <Badge size="sm" variant="light" color="gray" leftSection={<Icon icon="mdi:eye-off-outline" width={12} />}>
+            Hidden on this tab
+          </Badge>
+        </Tooltip>
+        {action}
+      </Group>
+    );
+  };
   // Filter names and dc_ids are resolved against the family, not just this
   // tab: a fanned-out control has no entry in this dashboard's metadata, so
   // the active-filter summary would fall back to the raw column name.
@@ -1132,6 +1288,30 @@ const EditorApp: React.FC = () => {
   const filterSections = useMemo(
     () => dashboard?.filter_sections ?? [],
     [dashboard?.filter_sections],
+  );
+  // A filter can also move into a filter bar — a grid section shown as a
+  // strip, or a section of tiles with a bar of its own — and a tile cannot
+  // join a strip, so the two menus split the bars between them. A bar wins a
+  // name clash with a filter section: a component naming that section is
+  // drawn in the bar (see `isBarMember`).
+  const stripSpecs = useMemo(
+    () =>
+      ((dashboard?.grid_sections as FilterSectionSpec[] | undefined) ?? [])
+        .filter(isBarSection)
+        .map((s) => (s.icon ? s : { ...s, icon: 'mdi:tune-variant' })),
+    [dashboard?.grid_sections],
+  );
+  const filterMoveSections = useMemo(() => {
+    if (stripSpecs.length === 0) return filterSections;
+    const bars = new Set(stripSpecs.map((s) => s.name));
+    return [...filterSections.filter((s) => !bars.has(s.name)), ...stripSpecs];
+  }, [filterSections, stripSpecs]);
+  const tileMoveSections = useMemo(
+    () =>
+      ((dashboard?.grid_sections as FilterSectionSpec[] | undefined) ?? []).filter(
+        (s) => !isStripSection(s),
+      ),
+    [dashboard?.grid_sections],
   );
   // How many controls move together, per component. Precomputed once instead of
   // per overlay so the callback below can depend on this rather than on the
@@ -1160,7 +1340,7 @@ const EditorApp: React.FC = () => {
         onDelete={handleDeleteComponent}
         onDuplicate={handleDuplicateComponent}
         componentType={component.component_type}
-        sections={filterSections}
+        sections={filterMoveSections}
         currentSection={component.section ?? null}
         onMoveToSection={handleMoveToSection}
         groupSize={filterGroupSizes.get(component.index) ?? 1}
@@ -1170,7 +1350,7 @@ const EditorApp: React.FC = () => {
       dashboardId,
       handleDeleteComponent,
       handleDuplicateComponent,
-      filterSections,
+      filterMoveSections,
       handleMoveToSection,
       filterGroupSizes,
       ownComponentIndices,
@@ -1221,6 +1401,133 @@ const EditorApp: React.FC = () => {
     () => tabSiblings.find((d) => d.dashboard_id === dashboardId) || null,
     [tabSiblings, dashboardId],
   );
+  // The family's existing groups, offered when a tab is created or edited.
+  const tabGroupOptions = useMemo(() => tabGroupNames(tabSiblings), [tabSiblings]);
+  // The names `exclude_tabs` matches against, offered by the section form.
+  const tabNames = useMemo(() => tabSiblings.map(tabDisplayName), [tabSiblings]);
+  // Where a component's "Copy to tab…" can send it: every other tab.
+  const copyTargets = useMemo(
+    () => tabSiblings.filter((d) => d.dashboard_id !== dashboardId),
+    [tabSiblings, dashboardId],
+  );
+
+  /**
+   * Copy to tab: add a copy of the component to a sibling tab's document and
+   * save that tab. The target is fetched fresh rather than taken from any
+   * cache, and saved through the same `/save` this tab uses; this tab's own
+   * document is not touched, so a pending layout save here is unaffected.
+   */
+  const handleCopyToTab = useCallback(
+    async (componentId: string, targetId: string) => {
+      const cur = dashboardRef.current;
+      const source = cur?.stored_metadata?.find((m) => m.index === componentId);
+      const targetTab = tabSiblings.find((d) => d.dashboard_id === targetId);
+      if (!cur || !source || !targetTab) return;
+      const targetName = tabDisplayName(targetTab);
+      const newId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : fallbackUuid();
+      try {
+        const target = await fetchDashboard(targetId);
+        const { dashboard: next, component } = copyComponentToTab({
+          source,
+          sourceLayoutData: cur.right_panel_layout_data,
+          target,
+          newId,
+        });
+        await saveDashboard(targetId, next);
+        notifications.show({
+          color: 'teal',
+          title: `Copied to “${targetName}”`,
+          message: (
+            <Stack gap={2}>
+              <Text size="sm">
+                {component.section
+                  ? `At the bottom of its “${component.section}” section there.`
+                  : next.grid_sections?.length
+                    ? // Unsectioned tiles are drawn above a tab's sections.
+                      'Above that tab’s sections, in none of them: “Move to section” there files it.'
+                    : 'At the bottom of that tab.'}
+              </Text>
+              <Anchor href={dashboardHref(targetId, 'edit')} size="sm" fw={600}>
+                Open “{targetName}”
+              </Anchor>
+            </Stack>
+          ),
+          autoClose: 6000,
+        });
+      } catch (err) {
+        console.error('[EditorApp] copy to tab failed:', err);
+        notifications.show({
+          color: 'red',
+          title: `Copy to “${targetName}” failed`,
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 5000,
+        });
+      }
+    },
+    [tabSiblings],
+  );
+
+  /**
+   * Highlight on: add a highlight of the figure to another tab, a reference
+   * that renders the figure from this tab rather than a copy of it. Fetched
+   * and saved like a copy; this tab's document is not touched.
+   */
+  const handleHighlightOnTab = useCallback(
+    async (componentId: string, targetId: string) => {
+      const cur = dashboardRef.current;
+      const source = cur?.stored_metadata?.find((m) => m.index === componentId);
+      const targetTab = tabSiblings.find((d) => d.dashboard_id === targetId);
+      const sourceTab = tabSiblings.find((d) => d.dashboard_id === dashboardId);
+      if (!cur || !source || !targetTab || !dashboardId) return;
+      const targetName = tabDisplayName(targetTab);
+      const newId =
+        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+          ? crypto.randomUUID()
+          : fallbackUuid();
+      try {
+        const target = await fetchDashboard(targetId);
+        const { dashboard: next } = highlightOnTab({
+          source,
+          sourceComponents: cur.stored_metadata,
+          sourceDashboardId: dashboardId,
+          sourceTabName: sourceTab ? tabDisplayName(sourceTab) : cur.title ?? '',
+          sourceLayoutData: cur.right_panel_layout_data,
+          target,
+          newId,
+        });
+        await saveDashboard(targetId, next);
+        notifications.show({
+          color: 'teal',
+          title: `Highlighted on “${targetName}”`,
+          message: (
+            <Stack gap={2}>
+              <Text size="sm">
+                {next.grid_sections?.length
+                  ? 'Above that tab’s sections: “Move to section” there files it, its menu’s Edit sets its title and style.'
+                  : 'At the bottom of that tab. Its menu’s Edit sets its title and style.'}
+              </Text>
+              <Anchor href={dashboardHref(targetId, 'edit')} size="sm" fw={600}>
+                Open “{targetName}”
+              </Anchor>
+            </Stack>
+          ),
+          autoClose: 6000,
+        });
+      } catch (err) {
+        console.error('[EditorApp] highlight on tab failed:', err);
+        notifications.show({
+          color: 'red',
+          title: `Highlight on “${targetName}” failed`,
+          message: err instanceof Error ? err.message : String(err),
+          autoClose: 5000,
+        });
+      }
+    },
+    [tabSiblings, dashboardId],
+  );
   const parentTab = useMemo(
     () => tabSiblings.find((d) => !d.parent_dashboard_id) || null,
     [tabSiblings],
@@ -1231,6 +1538,16 @@ const EditorApp: React.FC = () => {
     // Mirrors App.tsx: group filters narrow the dashboard too.
     groupsApi.deactivateAllGroupFilters();
   }, [groupsApi.deactivateAllGroupFilters]);
+  // A bar's "Reset" (App.tsx): its own controls' values go, nothing else.
+  const handleResetFilterIndices = useCallback((indices: string[]) => {
+    const drop = new Set(indices);
+    setFilters((prev) => prev.filter((f) => !(drop.has(f.index) && f.source === undefined)));
+  }, []);
+  // The tab-wide filters, for what sits in no section (the maps).
+  const tabFilters = useMemo(
+    () => filtersInScope(combinedFilters, filterScopes, null),
+    [combinedFilters, filterScopes],
+  );
 
   // Filter-active groups as removable active-filter summary rows.
   const groupSummaryRows = groupsApi.summaryRows;
@@ -1403,14 +1720,23 @@ const EditorApp: React.FC = () => {
     }
   }, []);
 
-  const openCreateTabModal = useCallback(() => {
+  const openCreateTabModal = useCallback((group?: string | null) => {
     setTabModalState({
       open: true,
       mode: 'create',
       target: null,
       submitting: false,
+      group: group ?? null,
     });
   }, []);
+
+  // Tab groups: the sidebar's group menus, "+ New group" and a tab's "Move to
+  // group". Persisted as tab patches + a reorder, then the list refreshes.
+  const tabGroupActions = useTabGroupActions({
+    tabs: tabSiblings,
+    refresh: refreshTabList,
+    openCreateTab: openCreateTabModal,
+  });
 
   const openEditTabModal = useCallback((tab: DashboardSummary) => {
     setTabModalState({
@@ -1444,6 +1770,7 @@ const EditorApp: React.FC = () => {
             title: payload.title,
             tab_icon: payload.tab_icon,
             tab_icon_color: payload.tab_icon_color,
+            tab_group: payload.tab_group,
           });
           notifications.show({
             color: 'teal',
@@ -1550,23 +1877,27 @@ const EditorApp: React.FC = () => {
   const handleMoveTab = useCallback(
     async (tab: DashboardSummary, direction: 'up' | 'down') => {
       // Build the new ordering by swapping `tab` with its neighbor in the
-      // child-only list. The main tab keeps tab_order=0 and isn't part of
-      // the reorder payload.
-      const children = (
-        tabSiblings.length
-          ? tabSiblings
-          : allDashboards.filter(
-              (d) => d.parent_dashboard_id === tab.parent_dashboard_id,
-            )
-      ).filter((t) => t.parent_dashboard_id);
-      const idx = children.findIndex((c) => c.dashboard_id === tab.dashboard_id);
-      if (idx === -1) return;
+      // child-only list, as the sidebar shows it: grouped, so the neighbor is
+      // the one above or below in the same group, and a move renumbers the
+      // whole list in that order (which also gathers a group an author had
+      // interleaved). The main tab keeps tab_order=0 and isn't part of the
+      // reorder payload.
+      const family = tabSiblings.length
+        ? tabSiblings
+        : allDashboards.filter((d) => d.parent_dashboard_id === tab.parent_dashboard_id);
+      const sections = groupTabs(family).map((section) =>
+        section.tabs.filter((t) => t.parent_dashboard_id),
+      );
+      const section = sections.find((ts) =>
+        ts.some((c) => c.dashboard_id === tab.dashboard_id),
+      );
+      if (!section) return;
+      const idx = section.findIndex((c) => c.dashboard_id === tab.dashboard_id);
       const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-      if (swapIdx < 0 || swapIdx >= children.length) return;
+      if (swapIdx < 0 || swapIdx >= section.length) return;
 
-      const reordered = [...children];
-      [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
-      const tabOrders = reordered.map((c, i) => ({
+      [section[idx], section[swapIdx]] = [section[swapIdx], section[idx]];
+      const tabOrders = sections.flat().map((c, i) => ({
         dashboard_id: c.dashboard_id,
         tab_order: i + 1,
       }));
@@ -1675,17 +2006,21 @@ const EditorApp: React.FC = () => {
   // action renderer and `groupRender`: it reads both.
   const topSectionsHost =
     topGridSections.length > 0 ? (
-      <PersistentSectionsHost
-        sections={topGridSections}
-        familyId={crossTab.familyId}
-        slot="top"
-        filters={filters}
-        onFilterChange={handleFilterChange}
-        groupRender={groupRender}
-        bulkOptions={groupsApi.bulkOptions}
-        renderSectionActions={renderPersistentSectionAction}
-        autofit={dashboard?.autofit !== false}
-      />
+      <div>
+        <PersistentSectionsHost
+          sections={topGridSections}
+          familyId={crossTab.familyId}
+          slot="top"
+          filters={filters}
+          filterScopes={filterScopes}
+          onResetBarFilters={handleResetFilterIndices}
+          onFilterChange={handleFilterChange}
+          groupRender={groupRender}
+          bulkOptions={groupsApi.bulkOptions}
+          renderSectionActions={renderPersistentSectionAction}
+          autofit={dashboard?.autofit !== false}
+        />
+      </div>
     ) : null;
 
   // The panel's list also holds the persistent sections a sibling tab owns.
@@ -1756,6 +2091,148 @@ const EditorApp: React.FC = () => {
     }
   }, [dashboardId]);
 
+  // ---- Guide --------------------------------------------------------------
+  // The same page the viewer offers, plus the author's switch for it. Both
+  // settings live on the main tab, for the whole family.
+  const guideSettings = useMemo(
+    () => resolveGuideSettings(dashboard, tabSiblings),
+    [dashboard, tabSiblings],
+  );
+  const guide = useGuideRoute(Boolean(dashboard) && !loading && !error && guideSettings.enabled);
+  const editorComponents = useMemo(
+    () => [...cardComponents, ...otherComponents],
+    [cardComponents, otherComponents],
+  );
+  const guideModel = useMemo(
+    () =>
+      guide.open && dashboard
+        ? buildGuideModel({
+            tabs: tabSiblings,
+            currentId: dashboardId,
+            components: editorComponents,
+            gridSections: dashboard.grid_sections as FilterSectionSpec[] | undefined,
+            fannedOutSections: foreignGridSections,
+            panelComponents: leftComponents,
+            panelSections: panelFilterSections,
+            floating: crossTab.floating,
+            // The header's own condition for the Analysis button.
+            analysisAvailable: Boolean(dashboard),
+            inspector: Boolean(inspectorControl),
+            mode: 'edit',
+          })
+        : null,
+    [
+      guide.open,
+      dashboard,
+      tabSiblings,
+      dashboardId,
+      editorComponents,
+      foreignGridSections,
+      leftComponents,
+      panelFilterSections,
+      crossTab.floating,
+      inspectorControl,
+    ],
+  );
+  const openGuideFromSidebar = useCallback(() => {
+    guide.openGuide();
+    if (isNarrow && mobileOpened) toggleMobile();
+  }, [guide, isNarrow, mobileOpened, toggleMobile]);
+  const closeGuideFromSidebar = useCallback(() => {
+    guide.closeGuide();
+    if (isNarrow && mobileOpened) toggleMobile();
+  }, [guide, isNarrow, mobileOpened, toggleMobile]);
+  useEffect(() => {
+    if (guide.open) setAnalysisOpen(false);
+  }, [guide.open]);
+  // Before the dashboard search lands on something of this tab: as in the
+  // viewer, the Guide and a phone's tab list cover the canvas, and a filter
+  // lives in a drawer on a phone.
+  const uncoverForSearch = useCallback(
+    (index: string | null) => {
+      if (guide.open) guide.closeGuide();
+      if (isNarrow && mobileOpened) toggleMobile();
+      if (index && isNarrow && leftComponents.some((m) => m.index === index)) openFilterDrawer();
+    },
+    [guide, isNarrow, mobileOpened, toggleMobile, leftComponents, openFilterDrawer],
+  );
+  /** Before the search leaves for another tab, which is a full page load: save
+   *  what the debounce still holds, and wait for it, or a layout change made a
+   *  moment ago leaves with the page. A failed save keeps the author here. */
+  const saveBeforeLeaving = useCallback(async (): Promise<boolean> => {
+    if (!dashboardId || !saveTimer.current) return true;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = null;
+    const cur = dashboardRef.current;
+    if (!cur) return true;
+    setSaveStatus('saving');
+    try {
+      await saveDashboard(dashboardId, cur);
+      setSaveStatus('saved');
+      return true;
+    } catch (err) {
+      console.error('[EditorApp] save before leaving the tab failed:', err);
+      setSaveStatus('error');
+      notifications.show({
+        color: 'red',
+        title: "Couldn't save this tab",
+        message: 'Your last change is not saved yet, so you are still on this tab.',
+      });
+      return false;
+    }
+  }, [dashboardId]);
+
+  /**
+   * The Guide's author settings, from the settings' Guide section. They are
+   * the main tab's: there, the full-document save every tab default takes;
+   * from a child tab, the targeted tab patch on the main tab, shown at once in
+   * the family list the Guide reads them from and refetched if it fails.
+   */
+  const handleGuideSettingsChange = useCallback(
+    async (patch: Partial<GuideAuthorSettings>) => {
+      if (!dashboardId) return;
+      const cur = dashboardRef.current;
+      if (!cur) return;
+      const parentId =
+        typeof cur.parent_dashboard_id === 'string' ? cur.parent_dashboard_id : null;
+      const mainId = parentId || dashboardId;
+      setAllDashboards((prev) =>
+        prev.map((d) => (d.dashboard_id === mainId ? { ...d, ...patch } : d)),
+      );
+      setSaveStatus('saving');
+      if (!parentId) {
+        const next = { ...cur, ...patch };
+        if (saveTimer.current) {
+          clearTimeout(saveTimer.current);
+          saveTimer.current = null;
+        }
+        applyDashboard(next);
+        try {
+          await saveDashboard(dashboardId, next);
+          setSaveStatus('saved');
+        } catch (err) {
+          console.error('[EditorApp] guide settings save failed:', err);
+          setSaveStatus('error');
+        }
+        return;
+      }
+      try {
+        await updateTab(mainId, patch);
+        setSaveStatus('saved');
+      } catch (err) {
+        console.error('[EditorApp] guide settings save failed:', err);
+        setSaveStatus('error');
+        notifications.show({
+          color: 'red',
+          title: "Couldn't save the Guide settings",
+          message: err instanceof Error ? err.message : String(err),
+        });
+        void refreshTabList();
+      }
+    },
+    [dashboardId, applyDashboard, refreshTabList],
+  );
+
   return (
     <>
     <InspectorProviders control={inspectorControl}>
@@ -1767,7 +2244,13 @@ const EditorApp: React.FC = () => {
     <SaveGroupContext.Provider value={saveGroupApi}>
     {/* Same scoping as the viewer, so an editor sees the override they are
         editing without it escaping into the rest of the app. */}
-    <BrandScope theme={dashboard?.brand_theme}>
+    <BrandScope theme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}>
+    {/* The viewer's `category_colors` scope, so a filter bar's chips take the
+        colours readers will see. */}
+    <CategoryColorsContext.Provider value={dashboard}>
+    {/* Tab links in text resolve here too, so the canvas shows them as the
+        viewer does rather than as plain text. */}
+    <TabLinkProvider tabs={tabSiblings} mode="edit">
     <AppShell
       header={{ height: 50 }}
       navbar={{
@@ -1790,9 +2273,10 @@ const EditorApp: React.FC = () => {
           desktopOpened={desktopOpened}
           onToggleMobile={toggleMobile}
           onToggleDesktop={toggleDesktop}
-          onOpenSettings={openSettings}
+          onOpenSettings={() => openSettingsAt()}
           onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
           filterCount={countActiveFilters(filters) + groupSummaryRows.length}
+          onOpenSearch={dashboard ? openSearch : undefined}
           cardsLoading={cardsLoading}
           mode="edit"
           onAddComponent={handleAddComponent}
@@ -1850,11 +2334,27 @@ const EditorApp: React.FC = () => {
           tabs={tabSiblings}
           activeId={dashboardId}
           mode="edit"
-          onAddTab={openCreateTabModal}
+          onAddTab={() => openCreateTabModal()}
           onEditTab={openEditTabModal}
           onDeleteTab={handleDeleteTab}
           onMoveTab={handleMoveTab}
-          brandTheme={dashboard?.brand_theme}
+          onRenameGroup={tabGroupActions.onRenameGroup}
+          onMoveGroup={tabGroupActions.onMoveGroup}
+          onAddTabToGroup={tabGroupActions.onAddTabToGroup}
+          onUngroup={tabGroupActions.onUngroup}
+          onNewGroup={tabGroupActions.onNewGroup}
+          onMoveTabToGroup={tabGroupActions.onMoveTabToGroup}
+          brandTheme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}
+          guide={
+            guideSettings.enabled && dashboard
+              ? {
+                  open: guide.open,
+                  href: guide.href,
+                  onOpen: openGuideFromSidebar,
+                  onClose: closeGuideFromSidebar,
+                }
+              : undefined
+          }
         />
       </AppShell.Navbar>
 
@@ -1960,8 +2460,9 @@ const EditorApp: React.FC = () => {
                   footer={
                     <MapPanelDock
                       panel={mapPanel}
-                      // Docked maps render data: include group filters.
-                      filters={combinedFilters}
+                      // Docked maps render data: include group filters (the
+                      // tab's; a section bar's stay with its section).
+                      filters={tabFilters}
                       onFilterChange={handleFilterChange}
                       renderEditActions={renderMapPanelEditActions}
                     />
@@ -1977,11 +2478,24 @@ const EditorApp: React.FC = () => {
               />
             )}
             <Box
-              px={4}
-              py={4}
               data-tour-id="editor-grid"
               data-testid="dashboard-content"
+              // Under the Guide: kept mounted for when it closes; the filter
+              // panel stays beside it (see App.tsx).
+              aria-hidden={guide.open || undefined}
               style={{
+                visibility: guide.open ? 'hidden' : undefined,
+                // The same page width as the viewer, so the author lays the
+                // tab out at the width its readers get. Padding goes here
+                // rather than as `px`/`py` props: Mantine writes those as
+                // paddingLeft/Right, which beat this paddingInline.
+                padding: 4,
+                ...(contentMaxWidth !== null
+                  ? {
+                      paddingInline: `max(4px, calc((100% - ${contentMaxWidth}px) / 2))`,
+                      transition: 'padding 200ms ease',
+                    }
+                  : null),
                 height: '100%',
                 minWidth: 0,
                 overflowY: 'auto',
@@ -1999,9 +2513,15 @@ const EditorApp: React.FC = () => {
                 dashboardId={dashboardId!}
                 cardComponents={cardComponents}
                 otherComponents={otherComponents}
+                barComponents={barComponents}
                 layoutData={dashboard.right_panel_layout_data}
                 gridSections={dashboard.grid_sections}
+                tileMoveSections={tileMoveSections}
                 filters={combinedFilters}
+                controlFilters={filters}
+                filterScopes={filterScopes}
+                onResetFilters={handleResetFilterIndices}
+                renderStripItemOverlay={renderFilterItemOverlay}
                 groupRender={groupRender}
                 onFilterChange={handleFilterChange}
                 cardValues={cardValues}
@@ -2010,6 +2530,9 @@ const EditorApp: React.FC = () => {
                 onLayoutChange={handleRightLayoutChange}
                 onDeleteComponent={handleDeleteComponent}
                 onDuplicateComponent={handleDuplicateComponent}
+                copyTargets={copyTargets}
+                onCopyToTab={handleCopyToTab}
+                onHighlightOnTab={handleHighlightOnTab}
                 onAddComponent={handleAddComponent}
                 activeHighlight={activeHighlight}
                 onMoveToSection={handleMoveToSection}
@@ -2021,17 +2544,21 @@ const EditorApp: React.FC = () => {
                 refreshTick={plotThemeTick}
               />
               {bottomGridSections.length > 0 && (
-                <PersistentSectionsHost
-                  sections={bottomGridSections}
-                  familyId={crossTab.familyId}
-                  slot="bottom"
-                  filters={filters}
-                  onFilterChange={handleFilterChange}
-                  groupRender={groupRender}
-                  bulkOptions={groupsApi.bulkOptions}
-                  renderSectionActions={renderPersistentSectionAction}
-                  autofit={dashboard?.autofit !== false}
-                />
+                <div>
+                  <PersistentSectionsHost
+                    sections={bottomGridSections}
+                    familyId={crossTab.familyId}
+                    slot="bottom"
+                    filters={filters}
+                    filterScopes={filterScopes}
+                    onResetBarFilters={handleResetFilterIndices}
+                    onFilterChange={handleFilterChange}
+                    groupRender={groupRender}
+                    bulkOptions={groupsApi.bulkOptions}
+                    renderSectionActions={renderPersistentSectionAction}
+                    autofit={dashboard?.autofit !== false}
+                  />
+                </div>
               )}
             </Box>
           </div>
@@ -2087,20 +2614,39 @@ const EditorApp: React.FC = () => {
             />
           </Drawer>
         )}
-        {dashboard && dashboardId && !inspectorEnabled && (
-          <NotesFooter
+        {/* Fixed furniture above the Guide's layer, hidden with the canvas. */}
+        <div style={guide.open ? { visibility: 'hidden' } : undefined}>
+          {dashboard && dashboardId && !inspectorEnabled && (
+            <NotesFooter
+              dashboardId={dashboardId}
+              initialContent={(dashboard.notes_content as string) ?? ''}
+              permissions={dashboard.permissions as DashboardPermissions | undefined}
+            />
+          )}
+          {dashboard && dashboardId && (
+            <MapPanelSurface
+              panel={mapPanel}
+              // Floating maps render data: include group filters (the tab's).
+              filters={tabFilters}
+              onFilterChange={handleFilterChange}
+              renderEditActions={renderMapPanelEditActions}
+            />
+          )}
+        </div>
+        {guide.open && guideModel && dashboard && dashboardId && (
+          <DashboardGuide
+            model={guideModel}
             dashboardId={dashboardId}
-            initialContent={(dashboard.notes_content as string) ?? ''}
-            permissions={dashboard.permissions as DashboardPermissions | undefined}
-          />
-        )}
-        {dashboard && dashboardId && (
-          <MapPanelSurface
-            panel={mapPanel}
-            // Floating maps render data: include group filters.
-            filters={combinedFilters}
-            onFilterChange={handleFilterChange}
-            renderEditActions={renderMapPanelEditActions}
+            dashboard={dashboard}
+            components={editorComponents}
+            tabs={tabSiblings}
+            persistentSections={crossTab.persistentSections}
+            dashboardName={parentTab?.title || dashboard.title || 'Dashboard'}
+            tabName={guideModel.tabs.current?.label ?? dashboard.title ?? 'the tab'}
+            intro={guideSettings.intro}
+            mode="edit"
+            onClose={guide.closeGuide}
+            onOpenYourView={() => openSettingsAt('view')}
           />
         )}
       </AppShell.Main>
@@ -2120,12 +2666,39 @@ const EditorApp: React.FC = () => {
         onToggleAutofit={handleToggleAutofit}
         onChangeBrandTheme={handleBrandThemeChange}
         onUploadLogo={handleUploadLogo}
+        onChangeTabDefaults={handleTabDefaultsChange}
+        guide={{
+          // Read whether or not the Guide is on: the switch is how it comes
+          // back.
+          settings: { show_guide: guideSettings.enabled, guide_intro: guideSettings.intro },
+          onChange: handleGuideSettingsChange,
+        }}
+        initialSection={settingsSection}
+      />
+      {/* Opens on a dashboard's `params:` links. */}
+      <RunParametersHost dashboard={dashboard} />
+      {/* Cmd/Ctrl+K and the header's magnifier: search every tab, landing in
+          the editor of the tab a result is on. */}
+      <DashboardSpotlight
+        opened={searchOpened}
+        onOpen={openSearch}
+        onClose={closeSearch}
+        tabs={tabSiblings}
+        currentId={dashboardId}
+        dashboard={dashboard}
+        mode="edit"
+        ready={Boolean(dashboard) && !loading && !error}
+        onBeforeFocus={uncoverForSearch}
+        onBeforeLeave={saveBeforeLeaving}
       />
 
+      {tabGroupActions.modals}
       <TabModal
         opened={tabModalState.open}
         mode={tabModalState.mode}
         tab={tabModalState.target}
+        groupOptions={tabGroupOptions}
+        initialGroup={tabModalState.group}
         onClose={closeTabModal}
         onSubmit={handleTabModalSubmit}
         submitting={tabModalState.submitting}
@@ -2148,8 +2721,12 @@ const EditorApp: React.FC = () => {
         onOp={handleSectionOp}
         onClose={handleCloseSectionModal}
         onManageAll={handleManageAllSections}
+        tabNames={tabNames}
+        currentTabName={activeTab ? tabDisplayName(activeTab) : undefined}
       />
     </AppShell>
+    </TabLinkProvider>
+    </CategoryColorsContext.Provider>
     </BrandScope>
     </SaveGroupContext.Provider>
     </AdvancedVizPlacementDefaultProvider>
@@ -2172,9 +2749,21 @@ interface RightComponentGridProps {
   dashboardId: string;
   cardComponents: StoredMetadata[];
   otherComponents: StoredMetadata[];
+  /** Interactive components drawn in a filter bar (a grid section with
+   *  `display: 'strip'` or `filter_bar`). They take no grid cell. */
+  barComponents: StoredMetadata[];
   layoutData: unknown;
   gridSections?: FilterSectionSpec[];
+  /** The grid sections a tile can move into: every section but the bars. */
+  tileMoveSections: FilterSectionSpec[];
   filters: InteractiveFilter[];
+  /** The filter state the bars' controls show, without the group filters. */
+  controlFilters: InteractiveFilter[];
+  /** Section-bar scopes (`filterScope.ts`), and a bar's "Reset". */
+  filterScopes: FilterScopes;
+  onResetFilters: (indices: string[]) => void;
+  /** The ⋮ menu of each filter in a bar — the filter panel's own. */
+  renderStripItemOverlay: (metadata: StoredMetadata) => React.ReactNode;
   onFilterChange: (filter: InteractiveFilter) => void;
   cardValues: Record<string, unknown>;
   cardSecondaryValues: Record<string, Record<string, unknown>>;
@@ -2182,6 +2771,11 @@ interface RightComponentGridProps {
   onLayoutChange: (newLayout: Layout[]) => void;
   onDeleteComponent: (componentId: string) => void;
   onDuplicateComponent: (componentId: string) => void;
+  /** Sibling tabs a component can be copied to, and the copy itself. */
+  copyTargets: DashboardSummary[];
+  onCopyToTab: (componentId: string, targetDashboardId: string) => void;
+  /** Adds a highlight of a figure to another tab (same targets as a copy). */
+  onHighlightOnTab: (componentId: string, targetDashboardId: string) => void;
   onAddComponent: () => void;
   activeHighlight?: ActiveHighlight | null;
   groupRender?: GroupRenderState;
@@ -2216,9 +2810,15 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   dashboardId,
   cardComponents,
   otherComponents,
+  barComponents,
   layoutData,
   gridSections,
+  tileMoveSections,
   filters,
+  controlFilters,
+  filterScopes,
+  onResetFilters,
+  renderStripItemOverlay,
   onFilterChange,
   cardValues,
   cardSecondaryValues,
@@ -2226,6 +2826,9 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onLayoutChange,
   onDeleteComponent,
   onDuplicateComponent,
+  copyTargets,
+  onCopyToTab,
+  onHighlightOnTab,
   onAddComponent,
   activeHighlight,
   groupRender,
@@ -2238,8 +2841,8 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   refreshTick,
 }) => {
   const allComponents = useMemo(
-    () => [...cardComponents, ...otherComponents],
-    [cardComponents, otherComponents],
+    () => [...cardComponents, ...otherComponents, ...barComponents],
+    [cardComponents, otherComponents, barComponents],
   );
 
   if (allComponents.length === 0) {
@@ -2290,6 +2893,9 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       gridSections={gridSections}
       beforeSections={beforeSections}
       filters={filters}
+      controlFilters={controlFilters}
+      filterScopes={filterScopes}
+      onResetFilters={onResetFilters}
       onFilterChange={onFilterChange}
       cardValues={cardValues}
       cardSecondaryValues={cardSecondaryValues}
@@ -2302,6 +2908,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
       editMode={true}
       renderSectionActions={renderSectionActions}
       onLayoutChange={onLayoutChange}
+      renderStripItemOverlay={renderStripItemOverlay}
       autofit={autofit}
       onTileFixed={onTileFixed}
       renderItemOverlay={(componentId, metadata) => (
@@ -2312,11 +2919,15 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
           onDelete={onDeleteComponent}
           onDuplicate={onDuplicateComponent}
           componentType={metadata.component_type}
-          sections={gridSections}
+          sections={tileMoveSections}
           currentSection={metadata.section ?? null}
           onMoveToSection={onMoveToSection}
           fontScale={typeof metadata.font_scale === 'number' ? metadata.font_scale : undefined}
           onFontScale={onComponentFontScale}
+          copyTargets={canCopyToTab(metadata) ? copyTargets : undefined}
+          onCopyToTab={onCopyToTab}
+          highlightTargets={canHighlight(metadata) ? copyTargets : undefined}
+          onHighlightOnTab={onHighlightOnTab}
           fit={metadata.fit === 'auto' || metadata.fit === 'fixed' ? metadata.fit : undefined}
           onResetFit={autofit === false ? undefined : onResetFit}
         />

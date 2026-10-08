@@ -19,14 +19,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Autocomplete,
-  Card,
   Center,
   ColorInput,
-  Fieldset,
   SegmentedControl,
   Select,
   Stack,
-  Switch,
   Text,
   TextInput,
 } from '@mantine/core';
@@ -45,6 +42,8 @@ import { useBuilderStore } from '../store/useBuilderStore';
 import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 import ColumnSelect from '../shared/ColumnSelect';
 import DesignShell from '../shared/DesignShell';
+import { BuilderSection, BuilderSections, Field, SwitchField } from '../shared/BuilderSections';
+import PlacementSection from '../shared/PlacementSection';
 import PreviewPanel from '../shared/PreviewPanel';
 import { inputMethodsForType } from '../aggFunctions';
 
@@ -118,6 +117,10 @@ interface InteractiveConfig {
   group?: string;
   placement?: string;
   show_marks?: boolean;
+  // Only read when the control sits in a filter bar (a grid section shown as
+  // a strip): a shorter name than the title, and whether the icon badge shows.
+  strip_label?: string;
+  strip_icon?: boolean;
   /** RangeSlider only: draw the column's histogram above the slider. */
   show_histogram?: boolean;
 }
@@ -322,145 +325,200 @@ const InteractiveBuilder: React.FC = () => {
   }, [config.placement, supportsTop, patchConfig]);
 
   const form = (
-    <Card withBorder shadow="sm" p="md" radius="md">
-      <Stack gap="sm">
-        <TextInput
-          label="Interactive component title"
-          value={config.title ?? ''}
-          onChange={(e) => patchConfig({ title: e.currentTarget.value })}
-          leftSection={<Icon icon="mdi:format-title" width={14} />}
-        />
+    <BuilderSections builder="interactive" required={['control']}>
+      <BuilderSection
+        value="control"
+        icon="mdi:tune-variant"
+        title="Control"
+        subtitle="The column it filters and the kind of control"
+      >
+        <Stack gap="md">
+          <TextInput
+            label="Interactive component title"
+            value={config.title ?? ''}
+            onChange={(e) => patchConfig({ title: e.currentTarget.value })}
+            leftSection={<Icon icon="mdi:format-title" width={14} />}
+          />
 
-        <ColumnSelect
-          label="Select your column"
-          value={config.column_name}
-          onChange={(name, type) =>
-            patchConfig({ column_name: name, column_type: type })
-          }
-          required
-        />
+          <ColumnSelect
+            label="Select your column"
+            value={config.column_name}
+            onChange={(name, type) =>
+              patchConfig({ column_name: name, column_type: type })
+            }
+            required
+          />
 
-        <Select
-          label="Select your interactive component"
-          placeholder={
-            !config.column_type
-              ? 'Pick a column first'
-              : variants.length === 0
-                ? 'No interactive controls for this column type'
-                : 'Pick a control type'
-          }
-          data={variants.map((v) => ({ value: v.value, label: v.label }))}
-          value={selected ?? null}
-          onChange={(val) => patchConfig({ interactive_component_type: val })}
-          leftSection={
-            <Icon
-              icon={VARIANT_ICONS[selected ?? ''] || 'bx:slider-alt'}
-              width={14}
-            />
-          }
-          disabled={!config.column_type || variants.length === 0}
-          allowDeselect={false}
-        />
-
-        <ColorInput
-          label="Color"
-          description="Component color (leave empty for auto theme)"
-          value={config.color ?? ''}
-          onChange={(val) => patchConfig({ color: val })}
-          format="hex"
-          placeholder="Auto (follows theme)"
-          swatches={[
-            '#9966cc', // purple
-            '#228be6', // blue
-            '#15aabf', // teal
-            '#40c057', // green
-            '#fab005', // yellow
-            '#fd7e14', // orange
-            '#e6779f', // pink
-            '#fa5252', // red
-            '#7950f2', // violet
-            '#000000', // black
-          ]}
-        />
-
-        <Select
-          label="Icon"
-          description="Select an icon for your component"
-          data={ICON_OPTIONS}
-          value={config.icon_name ?? 'bx:slider-alt'}
-          onChange={(val) =>
-            patchConfig({ icon_name: val ?? 'bx:slider-alt' })
-          }
-          searchable
-          clearable={false}
-          leftSection={
-            <Icon
-              icon={config.icon_name || 'bx:slider-alt'}
-              width={14}
-            />
-          }
-        />
-
-        <Fieldset legend="Panel placement" variant="filled" radius="md">
-          <Stack gap="sm">
-            <Text size="xs" c="dimmed">
-              Groups stack a few related controls inside one compact card, within
-              whichever section this control belongs to. Leave it empty to render
-              the control on its own.
-            </Text>
-
-            <Autocomplete
-              label="Group"
-              description="Controls sharing a group render together in one collapsible card"
-              placeholder="No group"
-              data={groupOptions}
-              value={config.group ?? ''}
-              onChange={(val) => patchConfig({ group: val })}
-              leftSection={<Icon icon="mdi:card-multiple-outline" width={14} />}
-              clearable
-            />
-
-            <div>
-              <Text size="sm" fw={500} mb={4}>
-                Placement
-              </Text>
-              <SegmentedControl
-                fullWidth
-                size="xs"
-                value={config.placement === 'top' ? 'top' : 'left'}
-                onChange={(val) => patchConfig({ placement: val })}
-                data={[
-                  { value: 'left', label: 'Left panel' },
-                  { value: 'top', label: 'Bottom strip', disabled: !supportsTop },
-                ]}
+          <Select
+            label="Select your interactive component"
+            placeholder={
+              !config.column_type
+                ? 'Pick a column first'
+                : variants.length === 0
+                  ? 'No interactive controls for this column type'
+                  : 'Pick a control type'
+            }
+            data={variants.map((v) => ({ value: v.value, label: v.label }))}
+            value={selected ?? null}
+            onChange={(val) => patchConfig({ interactive_component_type: val })}
+            leftSection={
+              <Icon
+                icon={VARIANT_ICONS[selected ?? ''] || 'bx:slider-alt'}
+                width={14}
               />
-              {!supportsTop && (
-                <Text size="xs" c="dimmed" mt={4}>
-                  The full-width strip is reserved for the Timeline control.
-                </Text>
-              )}
-            </div>
+            }
+            disabled={!config.column_type || variants.length === 0}
+            allowDeselect={false}
+          />
+        </Stack>
+      </BuilderSection>
 
-            {supportsMarks && (
-              <Switch
-                label="Show tick marks"
-                description="Leave off inside a group for a denser panel"
-                checked={config.show_marks === true}
-                onChange={(e) => patchConfig({ show_marks: e.currentTarget.checked })}
+      <BuilderSection
+        value="appearance"
+        icon="mdi:palette-outline"
+        title="Colour & icon"
+        subtitle="How the control is tinted and the icon beside its title"
+      >
+        <Stack gap="md">
+          <ColorInput
+            label="Color"
+            description="Component color (leave empty for auto theme)"
+            value={config.color ?? ''}
+            onChange={(val) => patchConfig({ color: val })}
+            format="hex"
+            placeholder="Auto (follows theme)"
+            swatches={[
+              '#9966cc', // purple
+              '#228be6', // blue
+              '#15aabf', // teal
+              '#40c057', // green
+              '#fab005', // yellow
+              '#fd7e14', // orange
+              '#e6779f', // pink
+              '#fa5252', // red
+              '#7950f2', // violet
+              '#000000', // black
+            ]}
+          />
+
+          <Select
+            label="Icon"
+            description="Select an icon for your component"
+            data={ICON_OPTIONS}
+            value={config.icon_name ?? 'bx:slider-alt'}
+            onChange={(val) =>
+              patchConfig({ icon_name: val ?? 'bx:slider-alt' })
+            }
+            searchable
+            clearable={false}
+            leftSection={
+              <Icon
+                icon={config.icon_name || 'bx:slider-alt'}
+                width={14}
               />
-            )}
-            {supportsHistogram && (
-              <Switch
-                label="Show histogram"
-                description="Draw the column's distribution above the slider handles"
-                checked={config.show_histogram === true}
-                onChange={(e) => patchConfig({ show_histogram: e.currentTarget.checked })}
-              />
-            )}
-          </Stack>
-        </Fieldset>
-      </Stack>
-    </Card>
+            }
+          />
+        </Stack>
+      </BuilderSection>
+
+      {/* Its own section rather than a sub-heading of the colours: these two
+          fields only exist for the bar, and say so in their title. */}
+      <BuilderSection
+        value="filter-bar"
+        icon="mdi:tune-variant"
+        title="In a filter bar"
+        subtitle="How the control reads when it sits in a bar on the dashboard"
+      >
+        <Stack gap="md">
+          <Text size="xs" c="dimmed">
+            Used when this control’s section is a filter bar, or a section’s own bar (see
+            Placement). In the filter panel it shows its title and icon as usual.
+          </Text>
+
+          <TextInput
+            label="Short label in the bar"
+            description="Replaces the title in the bar, where room is short (“City” for “Sampling city”). The title stays one hover away."
+            placeholder={config.title?.trim() || 'Same as the title'}
+            value={config.strip_label ?? ''}
+            onChange={(e) => patchConfig({ strip_label: e.currentTarget.value })}
+            maxLength={40}
+          />
+
+          <SwitchField
+            label="Show icon badge"
+            description="The control’s icon in a small coloured square before the label. Off, the label keeps its place in line with the others."
+            checked={config.strip_icon !== false}
+            onChange={(checked) => patchConfig({ strip_icon: checked })}
+          />
+        </Stack>
+      </BuilderSection>
+
+      <PlacementSection />
+
+      <BuilderSection
+        value="panel"
+        icon="mdi:card-multiple-outline"
+        title="Panel layout"
+        subtitle="Grouping with other controls, panel position, tick marks, histogram"
+      >
+        <Stack gap="md">
+          <Text size="xs" c="dimmed">
+            Groups stack a few related controls inside one compact card, within
+            whichever section this control belongs to. Leave it empty to render
+            the control on its own.
+          </Text>
+
+          <Autocomplete
+            label="Group"
+            description="Controls sharing a group render together in one collapsible card"
+            placeholder="No group"
+            data={groupOptions}
+            value={config.group ?? ''}
+            onChange={(val) => patchConfig({ group: val })}
+            leftSection={<Icon icon="mdi:card-multiple-outline" width={14} />}
+            clearable
+          />
+
+          <Field
+            label="Position"
+            description={
+              supportsTop
+                ? 'In the left filter panel, or the full-width strip under the dashboard.'
+                : 'In the left filter panel. The full-width strip is reserved for the Timeline control.'
+            }
+          >
+            <SegmentedControl
+              fullWidth
+              size="xs"
+              value={config.placement === 'top' ? 'top' : 'left'}
+              onChange={(val) => patchConfig({ placement: val })}
+              data={[
+                { value: 'left', label: 'Left panel' },
+                { value: 'top', label: 'Bottom strip', disabled: !supportsTop },
+              ]}
+            />
+          </Field>
+
+          {supportsMarks && (
+            <SwitchField
+              label="Show tick marks"
+              description="Leave off inside a group for a denser panel"
+              checked={config.show_marks === true}
+              onChange={(checked) => patchConfig({ show_marks: checked })}
+            />
+          )}
+
+          {supportsHistogram && (
+            <SwitchField
+              label="Show histogram"
+              description="Draw the column's distribution above the slider handles"
+              checked={config.show_histogram === true}
+              onChange={(checked) => patchConfig({ show_histogram: checked })}
+            />
+          )}
+        </Stack>
+      </BuilderSection>
+    </BuilderSections>
   );
 
   return <DesignShell formSlot={form} previewSlot={<InteractivePreview />} />;

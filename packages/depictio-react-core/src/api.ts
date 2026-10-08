@@ -295,7 +295,30 @@ export interface StoredMetadata {
   value_font_size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   icon_name?: string;
   icon_color?: string;
+  /** `badge`: icon on a tint, beside the title. Default: hover watermark. */
+  icon_style?: 'watermark' | 'badge';
+  /** Cards: one line under the value, replacing the aggregation label.
+   *  Figures: a line or two under the plot saying how to read it. */
+  caption?: string;
+  /** Click target: `tab:<name>` for a sibling tab, or a URL. */
+  link?: string;
+  /** Decimal places for a fractional card value. */
+  decimals?: number;
+  /** How the card is drawn (see `CardVariant` in components/cardVariant.ts).
+   *  Unset takes its grid section's `card_variant`. `headline`: large value,
+   *  resting icon mark, bar-only strip. `compact`: a low card, title and value
+   *  on one line. `minimal`: headline type with no frame or background.
+   *  `accent`: headline type on a coloured left rail, full strip. `split`: a
+   *  stat tile, icon block left and the figure beside it. Typed
+   *  as a string too: stored metadata is not validated on read, so a value the
+   *  viewer does not know has to be expected (and drawn as `default`). */
+  variant?: 'default' | 'headline' | 'compact' | 'minimal' | 'accent' | 'split' | (string & {});
   metric_theme?: string;
+  // Text
+  /** Frame of a text tile: bare prose, a card, or a tinted panel. */
+  surface?: 'none' | 'card' | 'tinted';
+  /** Palette name, CSS colour, or `tab:<name>` for that tab's colour. */
+  accent?: string;
   parent_index?: string;
   // Interactive
   interactive_component_type?: string;
@@ -327,12 +350,35 @@ export interface StoredMetadata {
    *  When omitted, the renderer defaults to visible for ungrouped components and
    *  hidden for components inside a group (compact mode). */
   show_marks?: boolean;
+  /** Filter bar only (a grid section with `display: 'strip'`): the short label
+   *  shown instead of the title. */
+  strip_label?: string | null;
+  /** Filter bar only: whether the icon badge precedes the label. Unset = shown. */
+  strip_icon?: boolean | null;
   /** RangeSlider only: draw the column's histogram above the slider. */
   show_histogram?: boolean;
   /** Per-component font-size multiplier (figures: scales the whole Plotly
    *  layout font — axis labels, ticks, legend). Multiplies the dashboard-wide
    *  content scale; 1/undefined = no override. */
   font_scale?: number;
+  /** Figures: how the tile is drawn (see `FigureStyle` in
+   *  components/figureStyle.ts). Unset takes its grid section's
+   *  `figure_style`. `minimal`: the title in a card header with an icon badge
+   *  and an inline subtitle, the plot restyled server-side. */
+  figure_style?: 'default' | 'minimal' | (string & {});
+  /** Figures: a few dimmed words after the title in the `minimal` header. */
+  subtitle?: string;
+  /** Figures: draw without the legend. */
+  hide_legend?: boolean;
+  /** Advanced viz: where the viz controls sit (see
+   *  components/advanced_viz/controlsDock.ts). Unset: `auto`. */
+  controls_placement?: 'auto' | 'right' | 'top' | 'popover' | null;
+  /** Highlights (`component_type: 'highlight'`): the tab the figure shown
+   *  lives on, by name and by id, and the figure on it, by index or title.
+   *  See components/highlight.ts. */
+  source_tab?: string;
+  source_dashboard_id?: string;
+  source_component?: string;
   // Table
   /** Column allowlist for table components — when non-empty, only these
    *  columns are rendered (empty / undefined = show all columns). */
@@ -364,7 +410,32 @@ export interface FilterSectionSpec {
    *  including the one that owns it. Unset means 'top'. Ignored unless
    *  `persistent` is set. */
   pin?: 'top' | 'bottom' | null;
+  /** Tabs (displayed names) a persistent section is not shown on. */
+  exclude_tabs?: string[] | null;
+  /** `plain`: a light heading, always open, no frame (grid sections). */
+  appearance?: 'box' | 'plain' | null;
+  /** Grid sections: the style every card in the section is drawn in unless
+   *  the card sets its own `variant`. Unset leaves each card to its own. */
+  card_variant?: 'default' | 'headline' | 'compact' | 'minimal' | 'accent' | 'split' | null;
+  /** Grid sections: `strip` draws the section as a filter bar — the
+   *  interactive components naming it leave the filter panel and render as one
+   *  compact row. Unset (or `grid`) is one tile each on the grid. */
+  display?: 'grid' | 'strip' | null;
+  /** Grid sections of tiles: a filter bar of the section's own, under its
+   *  heading. The interactive components naming the section render there, and
+   *  their values narrow only this section's tiles (see `filterScope.ts`).
+   *  Ignored on a `display: 'strip'` section. */
+  filter_bar?: boolean | null;
+  /** How many filters a bar shows before its "More filters" toggle. Unset: 2
+   *  on a section's own bar, every filter on a `display: 'strip'` bar. */
+  visible_filters?: number | null;
+  /** Grid sections: the style every figure in the section is drawn in unless
+   *  the figure sets its own `figure_style`. */
+  figure_style?: 'default' | 'minimal' | null;
 }
+
+/** Column name → categorical value → CSS colour. See `categoryColors.ts`. */
+export type CategoryColors = Record<string, Record<string, string>>;
 
 export interface DashboardData {
   _id?: string;
@@ -378,13 +449,36 @@ export interface DashboardData {
   /** Ordering + icons for the left panel's filter sections. */
   filter_sections?: FilterSectionSpec[];
   grid_sections?: FilterSectionSpec[];
+  /** Fixed colours per categorical value (column → value → colour), so one
+   *  category reads the same in a filter bar, a figure and a card. Unset on
+   *  dashboards that pin none. Resolve through `categoryColor`. */
+  category_colors?: CategoryColors | null;
+  /** A child tab's main-tab `category_colors`, resolved by the server on read
+   *  and never saved back. The tab's own map is laid over it. */
+  inherited_category_colors?: CategoryColors | null;
   /** Funnel filtering (issue #939): on by default, authors opt out per
    *  dashboard. Absent on payloads cached before the field existed, which is
    *  why every reader tests `!== false` rather than `Boolean(...)`. */
   funnel_filtering?: boolean;
+  /** Initial left filter panel state before the viewer has toggled it. */
+  filter_panel_default?: 'open' | 'collapsed';
+  /** Page width the tab opens at before the viewer picks one. */
+  content_width_default?: 'full' | 'wide' | 'comfortable' | 'compact';
+  /** False: no tab name above the canvas (a tab that opens on its own title). */
+  show_tab_header?: boolean;
+  /** The Guide page: offered unless the main tab sets this to false. Only the
+   *  main tab's value counts (see `resolveGuideSettings`). */
+  show_guide?: boolean;
+  /** Author note (markdown) atop the Guide; the main tab's. */
+  guide_intro?: string;
+  /** Sidebar category of a child tab; null when ungrouped. */
+  tab_group?: string | null;
   /** Per-dashboard brand override (#397): logo, palette, surfaces and figure
    *  defaults. Unset fields inherit the instance branding. */
   brand_theme?: BrandTheme | null;
+  /** A child tab without its own `brand_theme`: its main tab's, resolved by
+   *  the server on read and never saved back. */
+  inherited_brand_theme?: BrandTheme | null;
   /** Project-level realtime config — only when ``enabled === true`` should
    *  the viewer mount the WebSocket subscription / live-updates indicator. */
   project_realtime?: { enabled: boolean; debounce_ms: number };
@@ -520,6 +614,8 @@ export async function fetchCrossTabComponents(
 export interface DashboardSummary {
   dashboard_id: string;
   title?: string;
+  /** One line on what the tab shows; tab tiles fall back to it. */
+  subtitle?: string;
   parent_dashboard_id?: string | null;
   project_id?: string;
   /** Order within parent (0 = main tab). Mirrors the Dash sort key. */
@@ -529,8 +625,14 @@ export interface DashboardSummary {
   /** Tab-specific fields. Dash precedence: `tab_icon || icon`, `tab_icon_color || icon_color`. */
   tab_icon?: string;
   tab_icon_color?: string;
+  /** Sidebar category of a child tab; absent or null when ungrouped. */
+  tab_group?: string | null;
   icon?: string;
   icon_color?: string;
+  /** The Guide's settings, meaningful on the main tab's entry only. Absent
+   *  from servers that predate them, which reads as "Guide on, no intro". */
+  show_guide?: boolean;
+  guide_intro?: string;
 }
 
 export async function fetchAllDashboards(): Promise<DashboardSummary[]> {
@@ -980,6 +1082,18 @@ export interface RenderFigureOptions {
   display?: GroupingDisplay;
   /** Groups mode only: false drops ungrouped ("Other") rows from figures. */
   showOther?: boolean;
+  /** Draw the figure in this style rather than its own (a highlight showing a
+   *  figure from another tab). Sent only when set. */
+  style?: FigureStyleRequest;
+}
+
+/** The `style` override of a render request; see `figure_style_payload` in
+ *  depictio/api/v1/services/figure/style_presets.py. */
+export interface FigureStyleRequest {
+  figure_style?: 'default' | 'minimal';
+  /** The card header shows the title, so the plot drops its own. */
+  header_title?: boolean;
+  hide_legend?: boolean;
 }
 
 export async function renderFigure(
@@ -1008,6 +1122,7 @@ export async function renderFigure(
   if (Object.keys(groupBody).length > 0 && options?.display === 'facet') {
     groupBody.grouping_display = 'facet';
   }
+  if (options?.style) groupBody.style = options.style;
   const res = await authFetch(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
@@ -2086,8 +2201,13 @@ export interface UpdateTabPayload {
   title?: string;
   tab_icon?: string;
   tab_icon_color?: string;
+  /** Null ungroups the tab; leaving the key out keeps its group. */
+  tab_group?: string | null;
   /** Only allowed on main tabs — backend rejects with 400 for child tabs. */
   main_tab_name?: string;
+  /** The Guide's settings, for the whole dashboard. Main tabs only. */
+  show_guide?: boolean;
+  guide_intro?: string;
 }
 
 export async function updateTab(
@@ -2140,7 +2260,7 @@ export async function reorderTabs(
  */
 export async function createTab(
   parentDashboardId: string,
-  fields: { title: string; tab_icon?: string; tab_icon_color?: string },
+  fields: { title: string; tab_icon?: string; tab_icon_color?: string; tab_group?: string | null },
 ): Promise<string> {
   const parent = await fetchDashboard(parentDashboardId);
   const siblings = await fetchAllDashboards();
@@ -2170,6 +2290,7 @@ export async function createTab(
     tab_order: nextOrder,
     tab_icon: fields.tab_icon ?? null,
     tab_icon_color: fields.tab_icon_color ?? null,
+    tab_group: fields.tab_group ?? null,
   };
 
   const res = await authFetch(`${API_BASE}/dashboards/save/${newId}`, {
@@ -2338,8 +2459,11 @@ export interface FigurePreviewRequest {
   filters?: InteractiveFilter[];
   theme?: 'light' | 'dark';
   /** Owning dashboard — lets the server fold the dashboard's `brand_theme`
-   *  figure defaults into the preview so it matches the saved render. */
+   *  figure defaults, its `category_colors` and its sections' figure style into
+   *  the preview so it matches the saved render. */
   dashboard_id?: string;
+  /** Style override, as on `renderFigure`. */
+  style?: FigureStyleRequest;
 }
 
 export async function previewFigure(

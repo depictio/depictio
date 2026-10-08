@@ -19,7 +19,7 @@ Component Architecture:
 
 import re
 from pathlib import Path
-from typing import Any, ClassVar, Literal, Optional
+from typing import Any, ClassVar, Literal, Optional, get_args
 
 import yaml
 from pydantic import (
@@ -34,6 +34,7 @@ from pydantic import (
 from depictio.models.components.lite import (
     CardLiteComponent,
     FigureLiteComponent,
+    HighlightLiteComponent,
     ImageLiteComponent,
     InteractiveLiteComponent,
     LiteComponent,
@@ -41,6 +42,7 @@ from depictio.models.components.lite import (
     MultiQCLiteComponent,
     TableLiteComponent,
 )
+from depictio.models.components.types import CardVariant, FigureStyle
 from depictio.models.logging import logger
 from depictio.models.models.base import MongoModel, PyObjectId, convert_objectid_to_str
 from depictio.models.models.branding import BrandTheme
@@ -120,8 +122,35 @@ def _parse_component_lines(raw_msg: str) -> list[dict[str, Any]]:
 # ============================================================================
 
 
+# A figure's look and card header (see FigureLiteComponent), carried through
+# import and export as they are.
+FIGURE_DISPLAY_FIELDS: tuple[str, ...] = (
+    "figure_style",
+    "subtitle",
+    "icon_name",
+    "icon_color",
+    "hide_legend",
+    "link",
+    "caption",
+)
+
+# An advanced visualisation's own display keys, beside the figure ones.
+ADVANCED_VIZ_DISPLAY_FIELDS: tuple[str, ...] = (*FIGURE_DISPLAY_FIELDS, "controls_placement")
+
+# Where a highlight's figure lives (see HighlightLiteComponent).
+HIGHLIGHT_SOURCE_FIELDS: tuple[str, ...] = (
+    "source_tab",
+    "source_dashboard_id",
+    "source_component",
+)
+
+# Component types bound to no data collection of their own: neither export nor
+# import gives them a workflow or a collection.
+UNBOUND_COMPONENT_TYPES: frozenset[str] = frozenset({"text", "highlight"})
+
+
 class FilterSectionSpec(BaseModel):
-    """Presentation of one left-panel filter section.
+    """Presentation of one left-panel filter section, or one grid section.
 
     Only needed to override a section's defaults. A section named by a
     component's ``section`` field but absent from ``filter_sections`` still
@@ -135,6 +164,29 @@ class FilterSectionSpec(BaseModel):
           - name: Quality
             icon: mdi:check-decagram
             collapsed: true
+
+    Filters can also sit on the dashboard itself, as a compact bar, in two
+    ways. Both take the interactive components whose ``section`` names the grid
+    section, and those leave the left filter panel:
+
+    - ``display: strip`` draws the grid section as a filter bar. Its filters
+      join the tab's filters, like the panel's: they narrow every component on
+      the tab whose data has the column (directly or through a link).
+    - ``filter_bar: true`` gives a grid section of tiles a bar of its own, under
+      its heading. Its filters narrow that section's tiles only; the rest of the
+      tab, the filter panel and the other tabs ignore them.
+
+    ``visible_filters`` caps how many filters a bar shows before a "More
+    filters" toggle (unset: 2 on a section's own bar, all on a filter bar)::
+
+        grid_sections:
+          - name: Key figures
+            filter_bar: true
+            visible_filters: 2
+        components:
+          - tag: city
+            component_type: interactive
+            section: Key figures   # drawn in that section's bar, filters it only
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -170,6 +222,59 @@ class FilterSectionSpec(BaseModel):
         "wherever the viewer lands. 'bottom' is what a reference block (a raw-data "
         "table, a legend) usually wants: present everywhere without preceding the "
         "tab's own introduction. Ignored unless `persistent` is set.",
+    )
+    appearance: Literal["box", "plain"] = Field(
+        default="box",
+        description="`box` (default): a bordered, foldable section with a header bar. "
+        "`plain`: a light heading over the tiles, always open, no frame -- for a "
+        "landing page whose tiles carry their own cards. Grid sections only.",
+    )
+    exclude_tabs: list[str] | None = Field(
+        default=None,
+        description="Tabs (by displayed name, the owning tab included) a persistent "
+        "section is not shown on. A landing tab that already summarises the sample "
+        "sheet does not need it pinned under its own key figures. Ignored unless "
+        "`persistent` is set.",
+    )
+    card_variant: CardVariant | None = Field(
+        default=None,
+        description="The style every card in this section is drawn in, unless the card "
+        "sets its own `variant`: one setting turns a row of key figures into headline "
+        "(or compact, or minimal) cards, and a card added to the section later "
+        "matches them without being told. Unset leaves each card to its own `variant`. "
+        "Grid sections only.",
+    )
+    display: Literal["grid", "strip"] | None = Field(
+        default=None,
+        description="How a grid section lays out its members. Unset or `grid`: one tile "
+        "each on the dashboard grid. `strip`: a filter bar -- the interactive "
+        "components naming this section leave the left filter panel and render as one "
+        "compact row of controls (label, chips or a thin slider, dividers between), "
+        "ignoring their grid coordinates. Their values filter the whole tab, as the "
+        "panel's do. Any non-interactive members still render as tiles below the bar. "
+        "Grid sections only.",
+    )
+    filter_bar: bool | None = Field(
+        default=None,
+        description="Give this grid section a filter bar of its own: the interactive "
+        "components naming it leave the left filter panel and render as one compact row "
+        "under the section's heading, and their values narrow only this section's tiles "
+        "(cards, figures, tables, maps). The rest of the tab and the other tabs ignore "
+        "them. Ignored on a `display: strip` section and in `filter_sections`.",
+    )
+    visible_filters: int | None = Field(
+        default=None,
+        ge=1,
+        description="How many filters a bar shows before a 'More filters' toggle, which "
+        "unfolds the rest in place. Unset: 2 on a section's own bar (`filter_bar`), "
+        "every filter on a `display: strip` bar. Bars only.",
+    )
+    figure_style: FigureStyle | None = Field(
+        default=None,
+        description="The style every figure in this section is drawn in, unless the "
+        "figure sets its own `figure_style`: `minimal` gives a row of figures the "
+        "landing-page look (title and icon in the card header, faint grid, legend under "
+        "the plot). Unset leaves each figure to its own style. Grid sections only.",
     )
 
 
@@ -244,6 +349,14 @@ class DashboardDataLite(BaseModel):
         default=None, description="Icon for child tabs (e.g., 'mdi:chart-bar')"
     )
     tab_icon_color: str | None = Field(default=None, description="Color for tab icon")
+    # A dashboard with a dozen tabs reads better in categories (context, then
+    # analysis, then QC) than as one flat list. Tabs naming the same group are
+    # listed together under it in the sidebar; the main tab is never grouped.
+    tab_group: str | None = Field(
+        default=None,
+        description="Sidebar category for a child tab (e.g. 'Analysis'). Tabs naming the "
+        "same group are listed together under that heading; unset means ungrouped.",
+    )
 
     # Dashboard display icon (shown on the management page card)
     icon: str | None = Field(default=None, description="Dashboard icon identifier")
@@ -263,6 +376,42 @@ class DashboardDataLite(BaseModel):
         "components that no longer lead to a non-empty result set are "
         "visually distinguished, and the cascading restriction can be "
         "inspected in a funnel overview.",
+    )
+    # Where the left filter panel starts on a viewer's first visit. A landing
+    # tab that is mostly prose reads better without the panel; once the viewer
+    # toggles it, their choice is remembered per dashboard family and wins.
+    filter_panel_default: Literal["open", "collapsed"] = Field(
+        default="open",
+        description="Initial state of the left filter panel before the viewer "
+        "has toggled it ('open' or 'collapsed').",
+    )
+    # The page width a tab opens at before the viewer has picked one. A landing
+    # page of cards and prose reads better at a reading width than stretched
+    # across a wide screen; the viewer's own choice, once made, wins.
+    # A landing tab whose first text tile is titled (the study's own name) does
+    # not need "Overview" set above it as well.
+    show_tab_header: bool = Field(
+        default=True,
+        description="Show the tab's name (and subtitle) above its canvas. Off for a "
+        "tab whose content opens on its own title.",
+    )
+    content_width_default: Literal["full", "wide", "comfortable", "compact"] = Field(
+        default="full",
+        description="Initial page width before the viewer has picked one: 'full', "
+        "'wide' (1600px), 'comfortable' (1240px) or 'compact' (1080px).",
+    )
+    # The built-in Guide page (how to move around, filter and read the
+    # dashboard), opened from the sidebar and the header. On by default; read
+    # from the main tab, so it holds for the whole tab family.
+    show_guide: bool = Field(
+        default=True,
+        description="Offer the Guide page in the sidebar and the header. Read from the "
+        "main tab for the whole dashboard.",
+    )
+    guide_intro: str = Field(
+        default="",
+        description="Optional author note (markdown) shown at the top of the Guide. Read "
+        "from the main tab.",
     )
 
     # Where advanced-viz tiles draw their controls, dashboard-wide. A default,
@@ -300,7 +449,19 @@ class DashboardDataLite(BaseModel):
     grid_sections: list[FilterSectionSpec] = Field(
         default_factory=list,
         description="Optional presentation for the main grid's sections. Same shape "
-        "as `filter_sections`, applied to non-interactive components.",
+        "as `filter_sections`, applied to non-interactive components -- and to the "
+        "interactive components of a section with `display: strip` (a filter bar) or "
+        "`filter_bar: true` (the section's own filters).",
+    )
+    # Category colours (column -> value -> colour), so one category is drawn in
+    # one colour everywhere: a filter bar's chip dots, a figure's points, a
+    # bar's underline. Shared contract between the filter bar and the figures.
+    category_colors: dict[str, dict[str, str]] | None = Field(
+        default=None,
+        description="Optional fixed colours per categorical value, keyed by column name "
+        "then value (e.g. `locality: {Athens: '#1c7ed6'}`). Values not listed fall back "
+        "to the dashboard brand's colorway in the order of the column's values, then to "
+        "a neutral grey.",
     )
 
     # Dashboard-level brand override (#397). Same shape as the instance
@@ -320,6 +481,7 @@ class DashboardDataLite(BaseModel):
     # Map component_type string → typed Lite model for domain validation
     _COMPONENT_TYPE_MAP: ClassVar[dict[str, type[BaseModel]]] = {
         "figure": FigureLiteComponent,
+        "highlight": HighlightLiteComponent,
         "card": CardLiteComponent,
         "interactive": InteractiveLiteComponent,
         "table": TableLiteComponent,
@@ -434,6 +596,7 @@ class DashboardDataLite(BaseModel):
         "tab_order",
         "tab_icon",
         "tab_icon_color",
+        "tab_group",
         "is_main_tab",
         "parent_dashboard_tag",
         "icon",
@@ -441,10 +604,16 @@ class DashboardDataLite(BaseModel):
         "icon_variant",
         "workflow_system",
         "funnel_filtering",
+        "filter_panel_default",
+        "content_width_default",
+        "show_tab_header",
+        "show_guide",
+        "guide_intro",
         "advanced_viz_controls",
         "autofit",
         "filter_sections",
         "grid_sections",
+        "category_colors",
         "brand_theme",
     ]
 
@@ -481,15 +650,23 @@ class DashboardDataLite(BaseModel):
             "main_tab_name": "",
             "tab_icon": "",
             "tab_icon_color": "",
+            "tab_group": "",
             "icon": "mdi:view-dashboard",
             "icon_color": "orange",
             "icon_variant": "filled",
+            "filter_panel_default": "open",
+            "content_width_default": "full",
+            "guide_intro": "",
         }
         for field, default in default_value_fields.items():
             if not data.get(field) or data.get(field) == default:
                 data.pop(field, None)
         if data.get("is_main_tab", True) is True:
             data.pop("is_main_tab", None)
+        if data.get("show_tab_header", True) is True:
+            data.pop("show_tab_header", None)
+        if data.get("show_guide", True) is True:
+            data.pop("show_guide", None)
         if data.get("tab_order", 0) == 0:
             data.pop("tab_order", None)
         if not data.get("workflow_system") or data.get("workflow_system") == "none":
@@ -659,6 +836,13 @@ class DashboardDataLite(BaseModel):
         Sentinels are replaced by comment lines via ``_apply_section_comments()``.
         """
         comp_type = comp.get("component_type", "")
+        if comp_type == "advanced_viz" and isinstance(comp.get("config"), dict):
+            comp = {
+                **comp,
+                "config": DashboardDataLite._exportable_viz_config(
+                    comp.get("viz_kind"), comp["config"]
+                ),
+            }
 
         # Per-type mandatory field sets
         _MANDATORY_COMMON: set[str] = {"component_type", "workflow_tag", "data_collection_tag"}
@@ -968,7 +1152,7 @@ class DashboardDataLite(BaseModel):
             # from a leftover `dc_config` produced a component the import could
             # not resolve — there is no `workflow_tag` to resolve it against — so
             # every text component was silently dropped on the way back in.
-            if comp_type == "text":
+            if comp_type in UNBOUND_COMPONENT_TYPES:
                 workflow_tag = ""
                 data_collection_tag = ""
 
@@ -994,12 +1178,12 @@ class DashboardDataLite(BaseModel):
             )
 
             # Log warning if mandatory tags are missing
-            if comp_type != "text" and not workflow_tag:
+            if comp_type not in UNBOUND_COMPONENT_TYPES and not workflow_tag:
                 logger.warning(
                     f"Component {tag} (type: {comp_type}) missing workflow_tag. "
                     f"Component has wf_id: {comp.get('wf_id') is not None}"
                 )
-            if comp_type != "text" and not data_collection_tag:
+            if comp_type not in UNBOUND_COMPONENT_TYPES and not data_collection_tag:
                 logger.warning(
                     f"Component {tag} (type: {comp_type}) missing data_collection_tag. "
                     f"Component has dc_id: {comp.get('dc_id') is not None}"
@@ -1052,6 +1236,11 @@ class DashboardDataLite(BaseModel):
 
             if comp.get("title"):
                 lite_comp["title"] = comp["title"]
+            # The prose behind the title (its hover). `to_full` reads it back
+            # for every type, so leaving it out here lost it on a round trip.
+            description = comp.get("description")
+            if isinstance(description, str) and description.strip():
+                lite_comp["description"] = description
 
             if comp_type == "figure":
                 lite_comp["visu_type"] = comp.get("visu_type", "scatter")
@@ -1070,6 +1259,11 @@ class DashboardDataLite(BaseModel):
                     lite_comp["max_points"] = comp["max_points"]
                 if comp.get("font_scale") and comp["font_scale"] != 1:
                     lite_comp["font_scale"] = comp["font_scale"]
+                # The figure's look and card header. Left out when unset, so a
+                # figure that follows its section exports no key.
+                for field in FIGURE_DISPLAY_FIELDS:
+                    if comp.get(field):
+                        lite_comp[field] = comp[field]
 
             elif comp_type == "card":
                 lite_comp["aggregation"] = comp.get("aggregation", "")
@@ -1092,6 +1286,11 @@ class DashboardDataLite(BaseModel):
                         "title_color",
                         "title_font_size",
                         "value_font_size",
+                        "icon_style",
+                        "caption",
+                        "variant",
+                        "link",
+                        "decimals",
                     ],
                 )
                 if display:
@@ -1114,7 +1313,13 @@ class DashboardDataLite(BaseModel):
                     lite_comp["default_range"] = default_state["default_range"]
                 elif default_state.get("default_value") is not None:
                     lite_comp["default_value"] = default_state["default_value"]
-                display = collect_display_fields(comp, ["title_size", "custom_color", "icon_name"])
+                display = collect_display_fields(
+                    comp, ["title_size", "custom_color", "icon_name", "strip_label"]
+                )
+                # `strip_icon` defaults to on, so only its `False` is a setting —
+                # and the truthiness filter above would drop exactly that.
+                if comp.get("strip_icon") is False:
+                    display["strip_icon"] = False
                 if display:
                     lite_comp["display"] = display
 
@@ -1192,6 +1397,47 @@ class DashboardDataLite(BaseModel):
                     if comp.get(field) is not None:
                         lite_comp[field] = comp[field]
 
+            elif comp_type == "text":
+                # The mirror of `to_full`'s text branch. Without it an export
+                # kept a text tile's title and nothing else: no body, no level.
+                if comp.get("order", 1) != 1:
+                    lite_comp["order"] = comp["order"]
+                if comp.get("alignment", "left") != "left":
+                    lite_comp["alignment"] = comp["alignment"]
+                if comp.get("vertical_alignment", "center") != "center":
+                    lite_comp["vertical_alignment"] = comp["vertical_alignment"]
+                if comp.get("body"):
+                    lite_comp["body"] = comp["body"]
+                if comp.get("surface", "none") != "none":
+                    lite_comp["surface"] = comp["surface"]
+                if comp.get("accent"):
+                    lite_comp["accent"] = comp["accent"]
+
+            elif comp_type == "highlight":
+                # The tab's name is what survives a move to another instance;
+                # its id is written only when there is no name to go by.
+                for field in HIGHLIGHT_SOURCE_FIELDS:
+                    if field == "source_dashboard_id" and comp.get("source_tab"):
+                        continue
+                    if comp.get(field):
+                        lite_comp[field] = str(comp[field])
+                for field in FIGURE_DISPLAY_FIELDS:
+                    if comp.get(field):
+                        lite_comp[field] = comp[field]
+
+            elif comp_type == "advanced_viz":
+                # `to_full` reads both back; without them the tile came back as
+                # an advanced_viz of no kind, which no renderer draws.
+                config = comp.get("config") or {}
+                viz_kind = comp.get("viz_kind") or config.get("viz_kind")
+                if viz_kind:
+                    lite_comp["viz_kind"] = viz_kind
+                if config:
+                    lite_comp["config"] = dict(config)
+                for field in ADVANCED_VIZ_DISPLAY_FIELDS:
+                    if comp.get(field):
+                        lite_comp[field] = comp[field]
+
             elif comp_type == "multiqc":
                 # MultiQC parameters - export only if present in DB
                 if comp.get("selected_module"):
@@ -1216,7 +1462,13 @@ class DashboardDataLite(BaseModel):
             # "declared nowhere, sorted by first appearance".
             filter_sections=dashboard_data.get("filter_sections") or [],
             grid_sections=dashboard_data.get("grid_sections") or [],
+            category_colors=dashboard_data.get("category_colors") or None,
             funnel_filtering=bool(dashboard_data.get("funnel_filtering", True)),
+            filter_panel_default=dashboard_data.get("filter_panel_default") or "open",
+            content_width_default=dashboard_data.get("content_width_default") or "full",
+            show_tab_header=dashboard_data.get("show_tab_header", True) is not False,
+            show_guide=dashboard_data.get("show_guide", True) is not False,
+            guide_intro=dashboard_data.get("guide_intro") or "",
             advanced_viz_controls=dashboard_data.get("advanced_viz_controls") or "popover",
             autofit=bool(dashboard_data.get("autofit", True)),
             brand_theme=cls._exportable_brand_theme(dashboard_data.get("brand_theme")),
@@ -1226,6 +1478,7 @@ class DashboardDataLite(BaseModel):
             main_tab_name=dashboard_data.get("main_tab_name"),
             tab_icon=dashboard_data.get("tab_icon"),
             tab_icon_color=dashboard_data.get("tab_icon_color"),
+            tab_group=dashboard_data.get("tab_group"),
             # Dashboard display icon fields
             icon=dashboard_data.get("icon"),
             icon_color=dashboard_data.get("icon_color"),
@@ -1234,6 +1487,39 @@ class DashboardDataLite(BaseModel):
             # parent_dashboard_tag is not set here - it needs to be resolved separately
             # during export by looking up the parent dashboard title
         )
+
+    @staticmethod
+    def _exportable_viz_config(viz_kind: str | None, config: dict[str, Any]) -> dict[str, Any]:
+        """An advanced viz's config as a YAML author would write it.
+
+        A parsed config carries every field, defaults included; written out
+        as is, a tile's two meaningful settings drown in a page of defaults. Keys left at their
+        model default are dropped (the import puts them back), required ones
+        and `viz_kind` are kept. A config its model does not accept (an unknown
+        kind, a key the model lacks) is written untouched: the import only puts
+        the defaults back for a config it can validate.
+        """
+        from depictio.models.components.advanced_viz.configs import VizConfig
+
+        models = {m.model_fields["viz_kind"].default: m for m in get_args(get_args(VizConfig)[0])}
+        model = models.get(viz_kind or config.get("viz_kind"))
+        if model is None:
+            return dict(config)
+        try:
+            model.model_validate({**config, "viz_kind": model.model_fields["viz_kind"].default})
+        except ValidationError:
+            return dict(config)
+        # The kind goes first: the import discriminates the config on it.
+        out: dict[str, Any] = {"viz_kind": model.model_fields["viz_kind"].default}
+        for key, value in config.items():
+            field = model.model_fields[key]
+            if key == "viz_kind":
+                continue
+            if field.is_required():
+                out[key] = value
+            elif value != field.get_default(call_default_factory=True):
+                out[key] = value
+        return out
 
     def to_full(self) -> dict[str, Any]:
         """Convert lite format back to full dashboard dict.
@@ -1308,11 +1594,18 @@ class DashboardDataLite(BaseModel):
             "main_tab_name": self.main_tab_name,
             "tab_icon": self.tab_icon,
             "tab_icon_color": self.tab_icon_color,
+            "tab_group": self.tab_group,
             # Left-panel section presentation, carried through so the viewer can
             # order sections and render their icons.
             "filter_sections": [s.model_dump() for s in self.filter_sections],
             "grid_sections": [s.model_dump() for s in self.grid_sections],
+            "category_colors": self.category_colors,
             "funnel_filtering": self.funnel_filtering,
+            "filter_panel_default": self.filter_panel_default,
+            "content_width_default": self.content_width_default,
+            "show_tab_header": self.show_tab_header,
+            "show_guide": self.show_guide,
+            "guide_intro": self.guide_intro,
             "advanced_viz_controls": self.advanced_viz_controls,
             "autofit": self.autofit,
             "brand_theme": self.brand_theme.model_dump(exclude_none=True)
@@ -1377,6 +1670,9 @@ class DashboardDataLite(BaseModel):
                         "font_scale": comp_dict.get("font_scale"),
                     }
                 )
+                for field in FIGURE_DISPLAY_FIELDS:
+                    if comp_dict.get(field) is not None:
+                        full_comp[field] = comp_dict[field]
 
             elif comp_type == "card":
                 full_comp.update(
@@ -1410,8 +1706,14 @@ class DashboardDataLite(BaseModel):
                     "title_color",
                     "title_font_size",
                     "value_font_size",
+                    "icon_style",
+                    "caption",
+                    "variant",
+                    "link",
+                    "decimals",
                 ]:
-                    if comp_dict.get(f):
+                    # `decimals: 0` is a real setting, not an empty one.
+                    if comp_dict.get(f) or (f == "decimals" and comp_dict.get(f) == 0):
                         full_comp[f] = comp_dict[f]
 
             elif comp_type == "interactive":
@@ -1446,9 +1748,11 @@ class DashboardDataLite(BaseModel):
                         "slider_mode": comp_dict.get("slider_mode"),
                     }
                 )
-                for f in ["title_size", "custom_color", "icon_name"]:
+                for f in ["title_size", "custom_color", "icon_name", "strip_label"]:
                     if comp_dict.get(f):
                         full_comp[f] = comp_dict[f]
+                if comp_dict.get("strip_icon") is not None:
+                    full_comp["strip_icon"] = bool(comp_dict["strip_icon"])
 
             elif comp_type == "table":
                 full_comp.update(
@@ -1549,6 +1853,17 @@ class DashboardDataLite(BaseModel):
                     cfg = {**cfg, "viz_kind": viz_kind}
                 full_comp["viz_kind"] = viz_kind
                 full_comp["config"] = cfg
+                # The card header, as a figure carries it (see from_full).
+                for field in ADVANCED_VIZ_DISPLAY_FIELDS:
+                    if comp_dict.get(field) is not None:
+                        full_comp[field] = comp_dict[field]
+
+            elif comp_type == "highlight":
+                # Rendered by HighlightBlock.tsx, which looks the figure up on
+                # its tab; nothing here binds to data.
+                for field in (*HIGHLIGHT_SOURCE_FIELDS, *FIGURE_DISPLAY_FIELDS):
+                    if comp_dict.get(field) is not None:
+                        full_comp[field] = comp_dict[field]
 
             elif comp_type == "text":
                 # Section-header text tile: TextRenderer.tsx reads `order` (H1-H6),
@@ -1563,6 +1878,8 @@ class DashboardDataLite(BaseModel):
                 full_comp["alignment"] = comp_dict.get("alignment", "left")
                 full_comp["vertical_alignment"] = comp_dict.get("vertical_alignment", "center")
                 full_comp["body"] = comp_dict.get("body", "")
+                full_comp["surface"] = comp_dict.get("surface", "none")
+                full_comp["accent"] = comp_dict.get("accent")
 
             full_components.append(full_comp)
 
@@ -1683,9 +2000,22 @@ class DashboardData(MongoModel):
     # sections existed, which renders exactly as it did then.
     filter_sections: list[FilterSectionSpec] = []
     grid_sections: list[FilterSectionSpec] = []
+    # Column -> value -> colour. None for dashboards that pin no colours, which
+    # then draw categories from the brand colorway exactly as before.
+    category_colors: dict[str, dict[str, str]] | None = None
     # Funnel filtering (issue #939). On by default; authors opt out per
     # dashboard from the settings drawer.
     funnel_filtering: bool = True
+    # Initial left-panel state before the viewer has toggled it.
+    filter_panel_default: Literal["open", "collapsed"] = "open"
+    # Initial page width before the viewer has picked one.
+    content_width_default: Literal["full", "wide", "comfortable", "compact"] = "full"
+    # Whether the tab's name is drawn above its canvas.
+    show_tab_header: bool = True
+    # The Guide page and its author note. Read from the main tab for the
+    # whole family; a child tab's own copy is ignored.
+    show_guide: bool = True
+    guide_intro: str = ""
     # Dashboard-wide default for where advanced-viz tiles draw their controls.
     # `popover` for every dashboard saved before this existed, which is what
     # they already did; a tile's own `controls_placement` still wins.
@@ -1761,11 +2091,18 @@ class DashboardData(MongoModel):
     main_tab_name: Optional[str] = None  # Custom name for main tab (defaults to "Main" if None)
     tab_icon: Optional[str] = None  # Icon for child tabs (e.g., "mdi:chart-bar")
     tab_icon_color: Optional[str] = None  # Color for tab icon
+    tab_group: Optional[str] = None  # Sidebar category for child tabs (None = ungrouped)
     parent_dashboard_title: Optional[str] = (
         None  # Populated at runtime for child tabs (header display)
     )
     project_realtime: Optional[dict] = (
         None  # Populated at runtime from the parent project's realtime config
+    )
+    inherited_brand_theme: Optional[dict] = (
+        None  # Populated at runtime for a child tab: its main tab's brand_theme
+    )
+    inherited_category_colors: Optional[dict] = (
+        None  # Populated at runtime for a child tab: its main tab's category_colors
     )
     # Stable origin of an imported dashboard (e.g. "nf-core/rnaseq:dashboards/base.yaml"),
     # set by the YAML import so a refresh finds the dashboard it made even after a

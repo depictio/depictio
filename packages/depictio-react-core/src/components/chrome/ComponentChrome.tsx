@@ -19,19 +19,17 @@ import ClearSelectionButton from './ClearSelectionButton';
 import SaveGroupAction, { SaveGroupContext, SelectionHintAction } from './SaveGroupAction';
 import { supportsSelectionGrouping } from '../../selection';
 import { useGroupingColorVar } from '../../selectionGroups';
+import { actionsFor, type ChromeAction as TypeChromeAction } from './chromeActions';
+import { TILE_ACTION_STYLE } from './actionStyles';
+import { resolveFigureStyle } from '../figureStyle';
 import './chrome.css';
 
-export type ChromeAction =
-  | 'inspect'
-  | 'comments'
-  | 'annotate'
-  | 'catalog'
-  | 'description'
-  | 'metadata'
-  | 'fullscreen'
-  | 'download'
-  | 'reset'
-  | 'drag';
+export { actionsFor };
+
+/** Every action the chrome draws: the per-type ones (`actionsFor`, the table
+ *  the Guide also reads), plus those that depend on the viewer rather than on
+ *  the component type. */
+export type ChromeAction = TypeChromeAction | 'comments' | 'annotate';
 
 export interface ComponentChromeProps {
   metadata: StoredMetadata;
@@ -78,39 +76,6 @@ export interface ComponentChromeProps {
    * action is its own component with its own hard-coded `size`.
    */
   compact?: boolean;
-}
-
-/** View-accessible action visibility per component type. Mirrors the
- *  view-accessible subset of `_create_component_buttons` in
- *  `depictio/dash/layouts/edit.py:236-428`. ``reset`` is always last in the
- *  list so the chrome can hide it when ``onResetFilter`` isn't provided. */
-export function actionsFor(componentType: string): ChromeAction[] {
-  switch (componentType) {
-    case 'figure':
-    case 'map':
-      return ['metadata', 'fullscreen', 'reset'];
-    case 'multiqc':
-      return ['metadata', 'fullscreen'];
-    case 'table':
-      return ['metadata', 'fullscreen', 'download', 'reset'];
-    case 'interactive':
-      return ['metadata', 'reset'];
-    case 'advanced_viz':
-      // metadata + fullscreen + reset. Download is dropped — advanced viz
-      // export is handled by the Settings popover (Newick export for trees,
-      // PNG snapshots are out-of-scope for the multi-trace plotly figures).
-      // The Settings + Show-data ActionIcons are injected via extraActions
-      // from ComponentRenderer's advanced_viz dispatch.
-      return ['metadata', 'fullscreen', 'reset'];
-    case 'card':
-    case 'image':
-    case 'jbrowse':
-      return ['metadata'];
-    case 'text':
-      return ['metadata'];
-    default:
-      return ['metadata'];
-  }
 }
 
 /** Action-row orientation per component type. Mirrors `button_configs` in
@@ -205,10 +170,14 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
    * for a label and its control, and neither can grow a paragraph.
    *
    * advanced_viz is excluded because its renderers already print the same text
-   * as a subtitle under the title, so the icon would only offer a second copy.
+   * as a subtitle under the title, so the icon would only offer a second copy —
+   * except in the `minimal` style, whose header shows the short `subtitle`
+   * instead and would otherwise lose the prose.
    */
   const description = typeof metadata.description === 'string' ? metadata.description.trim() : '';
-  const hasDescription = Boolean(description) && componentType !== 'advanced_viz';
+  const hasDescription =
+    Boolean(description) &&
+    (componentType !== 'advanced_viz' || resolveFigureStyle(metadata.figure_style) === 'minimal');
   // Sits directly before `metadata` (always first in `actionsFor`): both answer
   // "what is this component", the prose one before the structured one.
   if (hasDescription) actions.push('description');
@@ -296,11 +265,11 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           >
             <ActionIcon
               variant="subtle"
-              color="teal"
+              color={TILE_ACTION_STYLE.description.color}
               size="sm"
               aria-label={`About this component: ${description}`}
             >
-              <Icon icon="mdi:text-box-outline" width={16} height={16} />
+              <Icon icon={TILE_ACTION_STYLE.description.icon} width={16} height={16} />
             </ActionIcon>
           </Tooltip>
         );
@@ -373,9 +342,15 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   const groupingActions = extraChildren.filter(isGroupingAction);
   const otherActions = extraChildren.filter((c) => !isGroupingAction(c));
 
-  const wrapAction = (child: React.ReactNode, key: string, extraClass = '') => (
+  const wrapAction = (
+    child: React.ReactNode,
+    key: string,
+    extraClass = '',
+    tileAction?: string,
+  ) => (
     <span
       key={key}
+      data-tile-action={tileAction}
       // The escape from the hover-only default has to live on THIS span, not on
       // the action inside it: the rule that hides the row targets
       // `.depictio-component-actions > *`, and `opacity` applies to the whole
@@ -397,12 +372,18 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           <ClearSelectionButton onClear={onResetFilter} count={selectionCount} />,
           'clear-selection',
           ' depictio-clear-selection',
+          // The Guide's legend knows it as the tile's reset.
+          'reset',
         )
       : null;
 
   return (
     <div
       ref={fullscreenRef as React.RefObject<HTMLDivElement>}
+      // Finds the component on the page by its index, wherever it is drawn —
+      // a grid tile, the filter panel, a filter bar, a section pinned from
+      // another tab. The dashboard search scrolls to and rings what this marks.
+      data-component-index={metadata.index}
       className={
         'depictio-component-chrome' +
         (isFullscreenActive ? ' fullscreen-active' : '') +
@@ -441,6 +422,7 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
             child != null && React.isValidElement(child) && child.type === SelectionHintAction
               ? ' depictio-selection-hint'
               : '',
+            'group',
           ),
         )}
         {/* Drag handle sits alongside the other action icons. drag is gated
@@ -455,16 +437,17 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           // bubble up.
           <span
             className="react-grid-dragHandle depictio-drag-handle"
+            data-tile-action="drag"
             style={{ display: 'inline-flex', alignItems: 'center' }}
           >
             <ActionIcon
               variant="subtle"
-              color="gray"
+              color={TILE_ACTION_STYLE.drag.color}
               size="sm"
-              aria-label="Drag to move"
+              aria-label={TILE_ACTION_STYLE.drag.label}
               tabIndex={-1}
             >
-              <Icon icon="mdi:dots-grid" width={16} height={16} />
+              <Icon icon={TILE_ACTION_STYLE.drag.icon} width={16} height={16} />
             </ActionIcon>
           </span>
         )}
@@ -480,6 +463,10 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
           return (
             <span
               key={a}
+              // Names the action for anything pointing at it from outside
+              // the row (the Guide's legend rings the icon it describes).
+              // The renderers' own actions carry the same attribute.
+              data-tile-action={a}
               className={
                 'dgl-no-drag' +
                 (isPersistentComments ? ' depictio-comments-persistent' : '') +

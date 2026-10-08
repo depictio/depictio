@@ -24,6 +24,7 @@ from pydantic import TypeAdapter
 from depictio.models.components.advanced_viz.configs import (
     EmbeddingConfig,
     ManhattanConfig,
+    UpsetPlotConfig,
     VizConfig,
 )
 
@@ -49,7 +50,7 @@ def _kinds_handled_in_typescript() -> set[str]:
 
 
 def test_selection_is_off_by_default():
-    for config in (EmbeddingConfig(), ManhattanConfig()):
+    for config in (EmbeddingConfig(), ManhattanConfig(), UpsetPlotConfig()):
         assert config.selection_enabled is False
         assert config.selection_column is None
 
@@ -68,6 +69,11 @@ def test_opted_in_configs_round_trip():
             "viz_kind": "manhattan",
             "selection_enabled": True,
             "selection_column": "mutation_label",
+        },
+        {
+            "viz_kind": "upset_plot",
+            "selection_enabled": True,
+            "selection_column": "Phylum",
         },
     ):
         parsed = VIZ_CONFIG.validate_python(blob)

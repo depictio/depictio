@@ -1,12 +1,18 @@
 import React, { lazy, Suspense, useContext, useRef } from 'react';
-import { useMantineTheme } from '@mantine/core';
+import { ActionIcon, Tooltip, useMantineTheme } from '@mantine/core';
+import { Icon } from '@iconify/react';
 import { DepictioCard } from 'depictio-components';
 import type { GridApi } from 'ag-grid-community';
 
-import { InteractiveFilter, StoredMetadata } from '../api';
+import { FigureStyleRequest, InteractiveFilter, StoredMetadata } from '../api';
 import { useAutofitHeight } from './autofit';
+import { compactKeepsStrip, resolveCardVariant, stripIsMinimal } from './cardVariant';
 import ImageRenderer from './ImageRenderer';
 import TextRenderer from './TextRenderer';
+import { useTabLinkResolver } from './tabLinks';
+import type { TabLinkTarget } from './tabLinks';
+import HighlightBlock from './HighlightBlock';
+import { describeAggregation } from './card/describe';
 import LazyMount, { CellPlaceholder } from './LazyMount';
 import MultiSelectRenderer from './interactive/MultiSelectRenderer';
 import RangeSliderRenderer from './interactive/RangeSliderRenderer';
@@ -21,9 +27,11 @@ import SecondaryMetrics, {
   breakdownHasShares,
   type SecondaryLayout,
 } from './card/SecondaryMetrics';
-import { formatCardNumber } from './card/metrics/format';
+import { formatCardNumber, formatDecimals } from './card/metrics/format';
 import { wrapWithChrome } from './chrome';
+import { resolveFigureStyle } from './figureStyle';
 import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
+import { TILE_ACTION_STYLE } from './chrome/actionStyles';
 import SaveGroupAction, {
   SaveGroupContext,
   SelectionHintAction,
@@ -34,6 +42,7 @@ import { SectionColorContext } from './SectionIcon';
 import {
   cardScopedFilters,
   isMapSelectionEnabled,
+  isSourceFilterActive,
   ownSelection,
   supportsSelectionGrouping,
 } from '../selection';
@@ -248,6 +257,50 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
         extraActions={chromeExtras}
         showDragHandle={showDragHandle}
       />
+    );
+  }
+
+  if (metadata.component_type === 'highlight' && dashboardId) {
+    // Another tab's figure, looked up there and drawn here with this tab's
+    // filters. A figure goes through FigureBlock, rendered by the server from
+    // its own tab in the highlight's style; an advanced visualisation is drawn
+    // as on its tab, its header's link to that tab in the chrome.
+    return (
+      <HighlightBlock metadata={metadata} extraActions={extraActions} showDragHandle={showDragHandle}>
+        {({ metadata: shown, renderSource, styleRequest, sourceLink }) =>
+          shown.component_type === 'advanced_viz' ? (
+            <LazyMount>
+              <AdvancedVizDispatch
+                metadata={shown}
+                filters={filters}
+                refreshTick={refreshTick}
+                extraActions={
+                  <>
+                    {sourceLink && <SourceTabAction link={sourceLink} />}
+                    {extraActions}
+                  </>
+                }
+                showDragHandle={showDragHandle}
+                groupRender={groupRender}
+              />
+            </LazyMount>
+          ) : (
+            <FigureBlock
+              dashboardId={dashboardId}
+              metadata={shown}
+              filters={filters}
+              refreshTick={refreshTick}
+              activeHighlight={activeHighlight}
+              groupRender={groupRender}
+              extraActions={extraActions}
+              showDragHandle={showDragHandle}
+              renderSource={renderSource}
+              styleRequest={styleRequest}
+              sourceLink={sourceLink}
+            />
+          )
+        }
+      </HighlightBlock>
     );
   }
 
@@ -568,6 +621,10 @@ const FigureBlock: React.FC<{
   groupRender?: GroupRenderState;
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
+  /** A highlight's figure: rendered from its own tab, in the given style. */
+  renderSource?: { dashboardId: string; componentId: string };
+  styleRequest?: FigureStyleRequest;
+  sourceLink?: TabLinkTarget | null;
 }> = ({
   dashboardId,
   metadata,
@@ -578,8 +635,22 @@ const FigureBlock: React.FC<{
   groupRender,
   extraActions,
   showDragHandle,
+  renderSource,
+  styleRequest,
+  sourceLink,
 }) => {
   const [loadAllState, setLoadAllState] = React.useState<LoadAllState | null>(null);
+  // A figure that summarises another tab (`link: tab:<name>`) links to it the
+  // way a highlight links to the tab its figure comes from.
+  const resolveTab = useTabLinkResolver();
+  const ownLink =
+    typeof metadata.link === 'string' && metadata.link.startsWith('tab:')
+      ? (resolveTab?.(metadata.link.slice(4)) ?? null)
+      : null;
+  const headerLink = sourceLink ?? ownLink;
+  // Without the minimal header, the link sits in the tile's actions.
+  const actionLink =
+    !sourceLink && ownLink && resolveFigureStyle(metadata.figure_style) !== 'minimal' ? ownLink : null;
   // Only scatter / scatter_3d traces carry the per-row customdata we need for
   // meaningful cross-filter selection. Aggregated visus (histogram, box, bar,
   // pie, …) would emit per-bin envelopes — hide the reset affordance there so
@@ -599,9 +670,10 @@ const FigureBlock: React.FC<{
       : undefined;
   const sourceFilterActive = isSourceFilterActive(filters, metadata.index, 'scatter_selection');
   const combinedExtras =
-    loadAllState || extraActions ? (
+    loadAllState || actionLink || extraActions ? (
       <>
         {loadAllState && <LoadAllButton state={loadAllState} />}
+        {actionLink && <SourceTabAction link={actionLink} />}
         {extraActions}
       </>
     ) : undefined;
@@ -619,6 +691,9 @@ const FigureBlock: React.FC<{
         activeHighlight={activeHighlight}
         groupRender={groupRender}
         onLoadAllState={setLoadAllState}
+        renderSource={renderSource}
+        styleRequest={styleRequest}
+        sourceLink={headerLink}
       />
     </Suspense>,
     {
@@ -631,25 +706,23 @@ const FigureBlock: React.FC<{
   );
 };
 
-/** A filter is "source-active" for this component when an entry exists with
- *  matching `index`, the expected `source` discriminator, and a non-empty
- *  value (avoid false-positives for filters that were emitted then cleared
- *  but kept in the array with `value: []`). */
-function isSourceFilterActive(
-  filters: InteractiveFilter[],
-  componentIndex: string,
-  expectedSource: InteractiveFilter['source'],
-): boolean {
-  for (const f of filters) {
-    if (f.index !== componentIndex) continue;
-    if (f.source !== expectedSource) continue;
-    const v = f.value;
-    if (v == null) continue;
-    if (Array.isArray(v) && v.length === 0) continue;
-    return true;
-  }
-  return false;
-}
+/** The chrome's link to the tab a highlighted visualisation comes from. A
+ *  highlighted figure carries the same link in its card header instead. */
+const SourceTabAction: React.FC<{ link: TabLinkTarget }> = ({ link }) => (
+  <Tooltip label={`Open in ${link.label}`} withArrow openDelay={300}>
+    <ActionIcon
+      component="a"
+      href={link.href}
+      variant="subtle"
+      size="sm"
+      aria-label={`Open in ${link.label}`}
+      data-testid="highlight-source-action"
+      data-tile-action="source"
+    >
+      <Icon icon={TILE_ACTION_STYLE.source.icon} width={15} />
+    </ActionIcon>
+  </Tooltip>
+);
 
 /**
  * The card's frame, which the tile has to pay for on top of the content: 1.5px
@@ -672,7 +745,7 @@ const CardRenderer: React.FC<{
     loading && value == null
       ? '…'
       : value != null
-      ? formatValue(value)
+      ? formatValue(value, typeof metadata.decimals === 'number' ? metadata.decimals : undefined)
       : '—';
 
   // Preserve the YAML-declared order; fall back to the keys returned by the
@@ -735,7 +808,15 @@ const CardRenderer: React.FC<{
     orderedSecondary.length > 0 ||
     ((metadata.secondary_layout === 'coverage' || metadata.secondary_layout === 'gauge') &&
       coverageMax !== null);
-  const showSecondaryMetrics = !groupCompareRich && hasSecondaryContent;
+  // The grid has already folded the section's `card_variant` into `variant`
+  // (see DashboardGrid), so this only has to tell a known style from noise.
+  const variant = resolveCardVariant(metadata.variant);
+  // A compact card is one line of numbers: it keeps a strip only when the strip
+  // is a single bar. The rest of the breakdown is still one hover away in the
+  // header tooltip, and switching the card back to another style restores it.
+  const stripFitsVariant =
+    variant !== 'compact' || compactKeepsStrip(metadata.secondary_layout as string | undefined);
+  const showSecondaryMetrics = !groupCompareRich && hasSecondaryContent && stripFitsVariant;
   // The compact one-line header (value beside the title) buys height for a
   // group-comparison strip, which stacks a row per group and would otherwise
   // not fit. A plain secondary view — a box plot, a donut, a top-N list — is a
@@ -752,6 +833,9 @@ const CardRenderer: React.FC<{
   // own dedicated row inside the secondary strip. Restructures vertical
   // density: instead of stacking ``(Count) / Top 3 cover 83% of N / bar 1 / …``
   // we get ``(Count · Top 3 = 83%) / bar 1 / …``.
+  const caption =
+    typeof metadata.caption === 'string' && metadata.caption.trim() ? metadata.caption.trim() : '';
+
   const aggDesc = (() => {
     if (!metadata.aggregation) return undefined;
     const base = `(${capitalize(metadata.aggregation)})`;
@@ -780,6 +864,30 @@ const CardRenderer: React.FC<{
     return base;
   })();
 
+  // The hover on the title: what the figure is (the author's description) and
+  // how it was computed — the line under the value says it as "(Median)", and
+  // when a caption takes that line the hover is the only place it is said.
+  const description =
+    typeof metadata.description === 'string' && metadata.description.trim()
+      ? metadata.description.trim()
+      : '';
+  const how = [
+    describeAggregation(metadata.aggregation, metadata.column_name),
+    // What the visible line adds after its " · ": a top-N share, a % of total.
+    aggDesc?.includes(' · ') ? aggDesc.slice(aggDesc.indexOf(' · ') + 3) : null,
+    filterApplied ? 'filters applied' : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const howHidden = compactHeader || Boolean(caption);
+  const headerTooltip =
+    description || (howHidden && how) ? (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {description ? <span>{description}</span> : null}
+        {howHidden && how ? <span style={{ opacity: description ? 0.75 : 1 }}>{how}</span> : null}
+      </div>
+    ) : undefined;
+
   // Cards size the grid to themselves, the way text tiles size it to their
   // prose. The height an author picked is a guess made against the content the
   // card had then, and a card that later gains a breakdown (a group-by, a top-N
@@ -796,6 +904,18 @@ const CardRenderer: React.FC<{
   // card to signal "refreshing". 0.6 opacity is enough to read as stale
   // without flicker. Brief transitions smooth out the dim/restore swing.
   const dimming = loading && value != null;
+  // `link`: a key figure opens the tab (or page) that explains it. A `tab:`
+  // target resolves like a text tile's tab links; unknown here (the editor
+  // preview, a tab this instance lacks) it stays a plain card.
+  const resolveTab = useTabLinkResolver();
+  const rawLink = typeof metadata.link === 'string' ? metadata.link.trim() : '';
+  const linkTarget = rawLink.startsWith('tab:') ? resolveTab?.(rawLink.slice(4)) ?? null : null;
+  const href = linkTarget
+    ? linkTarget.href
+    : /^(https?:\/\/|\/)/.test(rawLink)
+      ? rawLink
+      : null;
+  const external = Boolean(href && /^https?:\/\//.test(href));
   // A card with no colour of its own takes its section's, so the cards of a
   // section read as one group. Outside a section it stays neutral.
   // Resolved to the theme's hex, not a CSS variable: the secondary strip
@@ -806,22 +926,22 @@ const CardRenderer: React.FC<{
   const iconColor =
     (metadata.icon_color as string | undefined) ||
     (sectionColor ? theme.colors[sectionColor]?.[6] : undefined);
-  return (
-    <div
-      style={{
-        opacity: dimming ? 0.6 : 1,
-        transition: 'opacity 120ms ease-out',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
+  const wrapperStyle: React.CSSProperties = {
+    opacity: dimming ? 0.6 : 1,
+    transition: 'opacity 120ms ease-out',
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+  };
+  const card = (
       <DepictioCard
         contentRef={contentRef}
         title={metadata.title || inferCardTitle(metadata)}
         value={displayValue}
         icon_name={metadata.icon_name}
         icon_color={iconColor}
+        icon_style={metadata.icon_style === 'badge' ? 'badge' : 'watermark'}
+        variant={variant}
         title_color={metadata.title_color}
         background_color={metadata.background_color}
         title_font_size={metadata.title_font_size || 'md'}
@@ -830,9 +950,11 @@ const CardRenderer: React.FC<{
         // beside the title) and the aggregation description moves into a
         // hover tooltip on that header — both rows yield their height to the
         // strip below.
-        aggregation_description={compactHeader ? undefined : aggDesc}
+        // An author's caption takes the description line; the aggregation it
+        // displaces is still one hover away on the header.
+        aggregation_description={compactHeader ? undefined : caption || aggDesc}
         inline_header={compactHeader}
-        header_tooltip={compactHeader ? aggDesc : undefined}
+        header_tooltip={headerTooltip}
         filter_applied={filterApplied}
         secondaryStrip={
           showSecondaryMetrics || groupCompare !== undefined ? (
@@ -849,6 +971,8 @@ const CardRenderer: React.FC<{
                   color={iconColor || (metadata.title_color as string | undefined) || null}
                   coverageValue={typeof value === 'number' ? value : null}
                   coverageMax={coverageMax}
+                  minimal={stripIsMinimal(variant)}
+                  decimals={typeof metadata.decimals === 'number' ? metadata.decimals : undefined}
                   heroColumn={metadata.column_name}
                 />
               )}
@@ -863,7 +987,20 @@ const CardRenderer: React.FC<{
           ) : undefined
         }
       />
-    </div>
+  );
+  return href ? (
+    <a
+      href={href}
+      target={external ? '_blank' : undefined}
+      rel={external ? 'noopener noreferrer' : undefined}
+      className="depictio-card-link"
+      title={linkTarget ? `Open ${linkTarget.label}` : undefined}
+      style={{ ...wrapperStyle, color: 'inherit', textDecoration: 'none' }}
+    >
+      {card}
+    </a>
+  ) : (
+    <div style={wrapperStyle}>{card}</div>
   );
 };
 
@@ -881,8 +1018,12 @@ function capitalize(s: string): string {
 }
 
 /** Exported alongside `inferCardTitle`, and for the same reason. Numbers get
- *  thousands separators and magnitude-aware rounding (`formatCardNumber`). */
-export function formatValue(v: unknown): string | number {
-  if (typeof v === 'number') return formatCardNumber(v);
+ *  thousands separators and magnitude-aware rounding (`formatCardNumber`); an
+ *  author's `decimals` is a display choice, kept as written (7.10, not 7.1) so
+ *  a row of figures lines up (`formatDecimals`). */
+export function formatValue(v: unknown, decimals?: number): string | number {
+  if (typeof v === 'number') {
+    return decimals !== undefined ? formatDecimals(v, decimals) : formatCardNumber(v);
+  }
   return String(v);
 }

@@ -155,3 +155,18 @@ ColumnType = Literal[
 
 # Figure mode (UI-based or code-based)
 FigureMode = Literal["ui", "code"]
+
+# How a metric card is drawn. Shared by a card's own `variant` and a grid
+# section's `card_variant` (the style its cards take unless they set one), so
+# the two can never drift apart. Mirrored by CARD_VARIANTS in
+# packages/depictio-react-core/src/components/cardVariant.ts.
+CardVariant = Literal["default", "headline", "compact", "minimal", "accent", "split"]
+
+# How a figure tile is drawn. `minimal` is the landing-page look: the title in
+# the card header with an icon badge and an inline subtitle, a transparent plot
+# with faint dashed grid lines, the legend in one line under the plot, large
+# markers. Shared by a figure's own `figure_style` and a grid section's
+# `figure_style`, like CardVariant. Mirrored by FIGURE_STYLES in
+# packages/depictio-react-core/src/components/figureStyle.ts and in
+# depictio/api/v1/services/figure/style_presets.py.
+FigureStyle = Literal["default", "minimal"]

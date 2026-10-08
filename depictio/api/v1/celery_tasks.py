@@ -106,7 +106,13 @@ def build_figure_preview(payload: dict) -> dict:
             "selection_column"  (optional, render only),
           },
           "filter_metadata": [...],     # cleaned filters list
-          "theme": "light" | "dark"
+          "theme": "light" | "dark",
+          "style": {                    # optional, see `figure_style_payload`
+            "figure_style": "default" | "minimal",
+            "header_title": bool,       # the card header shows the title
+            "hide_legend": bool,
+          },
+          "category_colors": {column: {value: colour}},  # optional
         }
 
     Returns:
@@ -488,7 +494,12 @@ def build_figure_preview(payload: dict) -> dict:
             df,
             theme,
             "viewer",
-            extra_globals=code_group_globals(code_group_kwargs, code_group_by),
+            # The dashboard's colour per category rides along, for code that
+            # wants the colours every other tile uses: `color_discrete_map=
+            # depictio_category_colors.get("locality")`.
+            extra_globals=code_group_globals(
+                code_group_kwargs, code_group_by, payload.get("category_colors")
+            ),
         )
         if not ok:
             # `process_code_mode_figure` returns `(False, error_fig, None)` when
@@ -518,6 +529,17 @@ def build_figure_preview(payload: dict) -> dict:
             )
         if detected:
             visu_type = detected
+        if ok:
+            from depictio.api.v1.services.figure.figure_builder import recolor_code_figure
+
+            # Code that names no colours still draws each category the way
+            # every other tile does.
+            recolor_code_figure(
+                fig,
+                payload.get("category_colors"),
+                code_content,
+                grouped=bool(code_group_kwargs.get("color_discrete_map")),
+            )
     else:
         # Render path uses `selection_*`; preview path doesn't pass them. The
         # underlying helper takes both as kwargs with safe defaults, so always
@@ -548,6 +570,25 @@ def build_figure_preview(payload: dict) -> dict:
         fig_dict = json.loads(fig.to_json())
     else:
         fig_dict = fig
+
+    # The figure's style preset, last: it restyles whatever the build produced
+    # (UI, code or aggregation path) on top of the theme and brand templates.
+    style = payload.get("style") or {}
+    if isinstance(style, dict) and isinstance(fig_dict, dict) and not code_error:
+        from depictio.api.v1.services.figure.style_presets import apply_figure_style
+
+        try:
+            fig_dict = apply_figure_style(
+                fig_dict,
+                style.get("figure_style"),
+                theme=theme,
+                header_title=bool(style.get("header_title")),
+                hide_legend=bool(style.get("hide_legend")),
+                category_colors=payload.get("category_colors") or None,
+            )
+        except Exception as exc:  # a style never costs the figure
+            logger.warning(f"celery_tasks.build_figure_preview: figure style skipped: {exc}")
+
     if isinstance(fig_dict, dict) and "layout" in fig_dict:
         fig_dict["layout"].setdefault("uirevision", "persistent")
 

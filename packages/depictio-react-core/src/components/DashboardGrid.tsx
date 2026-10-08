@@ -5,6 +5,10 @@ import {
   GRID_COL_COUNTS,
   GRID_MAX_COLS,
   GRID_WIDEST_BREAKPOINT,
+  breakpointForWidth,
+  phoneLayout,
+  scaleLayout,
+  toSplitRows,
 } from '../gridConfig';
 import type { Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
@@ -19,12 +23,13 @@ import {
   PanelToggleDetail,
   isPanelResizing,
 } from '../utils/panelToggle';
-import { Accordion, Button, Group, Paper, Text } from '@mantine/core';
+import { Accordion, Badge, Button, Group, Paper, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { collapsedSectionKeys, sectionComponents } from '../utils/groupInteractive';
 import type { ComponentSection } from '../utils/groupInteractive';
 import { extractLayoutItems, stripBoxPrefix } from '../utils/leftPanelLayout';
 import { useCollapseState } from '../hooks/useCollapseState';
+import { useRevealComponent } from '../reveal';
 import { resolveSectionColor, sectionColorVar } from './SectionIcon';
 import {
   applyAccordionValue,
@@ -33,6 +38,17 @@ import {
   SectionHeader,
 } from './SectionAccordion';
 import ComponentRenderer, { formatValue, inferCardTitle } from './ComponentRenderer';
+import { FilterStripSection, SectionFilterBar } from './interactive/strip/FilterStrip';
+import {
+  barSectionNames,
+  hasSectionBar,
+  isBarMember,
+  isStripSection,
+  sectionRuns,
+} from './interactive/strip/stripLayout';
+import { isFilterActive } from '../activeFilters';
+import { filtersInScope, sectionFilterScopes, type FilterScopes } from '../filterScope';
+import { withSectionStyles } from './figureStyle';
 import { usePreannouncedDefaultRegions } from './advanced_viz/genomespy/defaultRegionGate';
 import {
   fitLayoutHeights,
@@ -40,6 +56,7 @@ import {
   useAutofitHeights,
   GRID_ROW_GAP_PX,
   GRID_ROW_PX,
+  SPLIT_ROW_PX,
 } from './autofit';
 import {
   applyRecordPanels,
@@ -133,6 +150,37 @@ interface DashboardGridProps {
    * from where it is seen.
    */
   renderSectionActions?: (sectionName: string | null) => React.ReactNode;
+  /**
+   * Editor-only per-filter actions for the members of a filter bar (a grid
+   * section with `display: 'strip'`). Separate from `renderItemOverlay`
+   * because a filter's menu offers the filter sections and bars it can move
+   * to, not the grid's tile sections.
+   */
+  renderStripItemOverlay?: (metadata: StoredMetadata) => React.ReactNode;
+  /**
+   * The filters a filter bar's controls display, when they should differ from
+   * `filters`. The apps hand the grid a debounced copy (and with group filters
+   * folded in) so figures don't refetch per keystroke; a control has to show a
+   * click at once, as the filter panel's do.
+   */
+  controlFilters?: InteractiveFilter[];
+  /**
+   * Which filters belong to a section's own bar (`filterScope.ts`). A cell in
+   * section S is handed the tab's filters plus S's bar filters, and no other
+   * section's. The apps pass the family-wide map (a bar fanned out from a
+   * sibling tab scopes its filters away from this grid too); without it the
+   * grid derives the map from its own sections.
+   */
+  filterScopes?: FilterScopes;
+  /** Clears the given filters (by index): a bar's "Reset". */
+  onResetFilters?: (indices: string[]) => void;
+  /**
+   * Where the sections' fold state is kept. Defaults to the dashboard's own
+   * key, so a reader's folds survive a reload. `null` keeps it in memory: a
+   * grid drawing the dashboard's sections somewhere else (the Guide) must not
+   * fold or unfold them on the dashboard.
+   */
+  collapseStorageKey?: string | null;
 }
 
 /**
@@ -143,19 +191,10 @@ interface DashboardGridProps {
  * scaling it. A half-width tile (w 4 of 8) therefore stays w 4 and becomes a
  * full row at `sm` (4 of 4), so the same dashboard read as half-width in one
  * surface and full-width in another purely because their containers sit either
- * side of a breakpoint. Scaling proportionally keeps a half-width tile half a
- * row everywhere, while still degrading to fewer, wider columns on a phone.
- *
- * Scale the column EDGES, never `x` and `w` separately: rounding each of those
- * on its own lets a row that tiled exactly at `lg` stop tiling. Four `w: 2`
- * cards at x 0/2/4/6 scale to widths 2/2/2/2 at `md` (6 columns) but to x
- * 0/2/3/4, so the last three overlap, and react-grid-layout then breaks the row
- * apart to resolve the collision. Rounding the shared edge once gives both
- * neighbours the same answer, so a boundary that coincided still coincides.
+ * side of a breakpoint. Scaling proportionally (`scaleLayout`) keeps a
+ * half-width tile half a row everywhere, while still degrading to fewer, wider
+ * columns on a phone.
  */
-// Grid geometry, mirrored by the ResponsiveGridLayout props below. Lives in
-// `autofit` because every grid that shows fitted tiles converts against it.
-
 /** One layout per breakpoint, proportionally rescaled from the `lg` one.
  *  Exported because every grid that shows stored tiles needs it: handing
  *  react-grid-layout only `lg` lets it generate the narrower breakpoints
@@ -163,21 +202,11 @@ interface DashboardGridProps {
  *  neighbour, which vertical compaction then pushes onto its own row — two
  *  half-width tables stack instead of sitting side by side. */
 export function responsiveLayouts(lg: Layout[]): Record<string, Layout[]> {
-  const scale = (cols: number) =>
-    lg.map((item) => {
-      const edge = (v: number) => Math.round((v * cols) / GRID_MAX_COLS);
-      // Every tile keeps at least one column, so a row with more tiles than the
-      // breakpoint has columns still collides — there is no honest way to fit
-      // five cards into two columns, and the grid stacks them instead.
-      const x = Math.min(cols - 1, Math.max(0, edge(item.x)));
-      const right = Math.min(cols, Math.max(x + 1, edge(item.x + item.w)));
-      return { ...item, x, w: right - x };
-    });
   return {
     lg,
-    md: scale(GRID_COL_COUNTS.md),
-    sm: scale(GRID_COL_COUNTS.sm),
-    xs: scale(GRID_COL_COUNTS.xs),
+    md: scaleLayout(lg, GRID_COL_COUNTS.md),
+    sm: scaleLayout(lg, GRID_COL_COUNTS.sm),
+    xs: phoneLayout(lg, GRID_COL_COUNTS.xs),
   };
 }
 
@@ -215,7 +244,26 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   gridSections,
   beforeSections,
   renderSectionActions,
+  renderStripItemOverlay,
+  controlFilters,
+  filterScopes,
+  onResetFilters,
+  collapseStorageKey,
 }) => {
+  // Filter-bar members ride along in `metadataList` so they bucket into their
+  // section, but they are drawn by the bar and never laid out on the grid:
+  // their coordinates (if any) live in the left panel's layout, and an item
+  // without one here would be auto-placed — and then persisted by the editor.
+  const barNames = useMemo(() => barSectionNames(gridSections), [gridSections]);
+  const onGrid = useCallback((m: StoredMetadata) => !isBarMember(m, barNames), [barNames]);
+  const gridMetadata = useMemo(() => metadataList.filter(onGrid), [metadataList, onGrid]);
+  const scopes = useMemo(
+    () => filterScopes ?? sectionFilterScopes(metadataList, gridSections),
+    [filterScopes, metadataList, gridSections],
+  );
+  // What a bar's controls show and count as active: the instant copy.
+  const shownFilters = controlFilters ?? filters;
+
   // A locus navigator below the fold sits behind LazyMount and cannot announce
   // its default region before the tracks above the fold fetch, so the layout
   // announces it from the stored config (`defaultRegionGate.ts`).
@@ -225,8 +273,8 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // array on every render (a panel toggle, a collapse click) would invalidate
   // the memoised grid cells and re-render every Plotly figure on the dashboard.
   const layouts = useMemo(
-    () => normalizeLayout(metadataList, layoutData, isDraggable || isResizable, false),
-    [metadataList, layoutData, isDraggable, isResizable],
+    () => normalizeLayout(gridMetadata, layoutData, isDraggable || isResizable, false),
+    [gridMetadata, layoutData, isDraggable, isResizable],
   );
 
   // Measure our own container so the grid never overflows the parent pane.
@@ -367,7 +415,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     [gridSections],
   );
   const sectionCollapse = useCollapseState(
-    `grid-section-collapsed:${dashboardId}`,
+    collapseStorageKey === undefined ? `grid-section-collapsed:${dashboardId}` : collapseStorageKey,
     sectionsCollapsedByDefault,
   );
 
@@ -450,6 +498,17 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openSectionKeys.join(' ')]);
 
+  // The dashboard search, asking for a component in a folded section: open it,
+  // as a click on its header would, and the effect above mounts its grid. A
+  // plain section never folds and a filter bar has no fold, so neither has
+  // anything to open.
+  useRevealComponent((index) => {
+    const section = sections.find((s) => s.members.some((m) => m.index === index));
+    if (!section?.sectionName) return;
+    if (section.spec?.appearance === 'plain' || isStripSection(section.spec)) return;
+    if (!sectionCollapse.isOpen(section.key)) sectionCollapse.setAll([section.key], false);
+  });
+
   // The inset probe is a section's grid, so the first measurement can only
   // happen once one has rendered — and again whenever the set of them changes,
   // since a dashboard can go from no sections to some without the wrapper
@@ -459,7 +518,6 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     measureRef.current();
   }, [sections, renderedSections]);
 
-  const breakpointRef = useRef<string>('lg');
   // Latest grid order per section, so a drag in one section can be merged with
   // the others' current positions into the single flat array we persist.
   const sectionLayoutsRef = useRef<Map<string, Layout[]>>(new Map());
@@ -471,6 +529,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // below, too large and the tile is mostly blank. The renderers measure what
   // they actually need and we turn that into rows here.
   const autoHeights = useAutofitHeights();
+  // Nothing a read-only grid lays out is ever persisted, which is what lets it
+  // fit tiles to their content and count in half rows.
+  const readOnly = !(isDraggable || isResizable);
 
   // The height each tile is stored with, and which of them follow their
   // content. Both are needed on the way back out: what the editor renders is
@@ -494,7 +555,8 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   const resizedByHand = useRef<Set<string>>(new Set());
 
   const baseLayoutForSection = useCallback(
-    (members: StoredMetadata[], fitted = true): Layout[] => {
+    (allMembers: StoredMetadata[], spec?: FilterSectionSpec, fitted = true): Layout[] => {
+      const members = allMembers.filter(onGrid);
       const ids = new Set(members.map((m) => m.index));
       const mine = layouts.filter((l) => ids.has(l.i));
       // `y` is stored per dashboard, not per section, so a section whose members
@@ -506,13 +568,21 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // Convert each measured height into rows before packing, so the packing
       // closes up around the real sizes. GRID_ROW_PX / GRID_ROW_GAP_PX mirror
       // the `rowHeight` and vertical `margin` handed to ResponsiveGridLayout
-      // below.
+      // below; a read-only grid counts in half rows (gridConfig's ROW_SPLIT,
+      // SPLIT_ROW_PX) so a fitted tile stops within half a row of its content.
       // Runs in the editor too, so the author sizes tiles against what the
       // reader will see. What the editor must never do is persist a fitted
       // height: `handleSectionLayoutChange` puts the stored heights back before
       // anything reaches `onLayoutChange`, and a tile the user resizes by hand
-      // leaves autofit altogether (`fit: fixed`).
-      const sized = fitLayoutHeights(members, mine, autoHeights, fitted && autofit);
+      // leaves autofit altogether (`fit: fixed`). A read-only grid persists
+      // nothing at all.
+      // Cards are fitted in the style they are drawn in, their section's
+      // included: a row of compact cards is the one row of cards that may
+      // shrink (see `fitLayoutHeights`).
+      const styled = members.map((m) => withSectionStyles(m, spec));
+      const sized = readOnly
+        ? fitLayoutHeights(styled, toSplitRows(mine), autoHeights, fitted && autofit, SPLIT_ROW_PX)
+        : fitLayoutHeights(styled, mine, autoHeights, fitted && autofit);
       const packed = compactVerticallyForStatic(sized);
       // Lone-row widening runs HERE, against the section's own members — never
       // against the flat union, where co-authored rows from sibling sections
@@ -520,9 +590,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // Gated on `mine`, i.e. the section's positions as stored: an item the
       // author left alone on its row keeps its width, only one that lost a
       // neighbour gets widened.
-      return isDraggable || isResizable ? packed : widenLoneRows(packed, rowMateSet(mine));
+      return readOnly ? widenLoneRows(packed, rowMateSet(mine)) : packed;
     },
-    [layouts, isDraggable, isResizable, autoHeights, autofit],
+    [layouts, readOnly, autoHeights, autofit, onGrid],
   );
 
   // Record cards laid out as their source's side panel (`recordPanelLayout.ts`).
@@ -534,7 +604,8 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     const byCard = new Map<string, RecordSidePanel>();
     if (!panelsEnabled || recordLinks.size === 0) return byCard;
     for (const section of sections) {
-      for (const panel of findSidePanels(baseLayoutForSection(section.members), recordLinks)) {
+      const base = baseLayoutForSection(section.members, section.spec);
+      for (const panel of findSidePanels(base, recordLinks)) {
         byCard.set(panel.cardId, panel);
       }
     }
@@ -604,8 +675,8 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   }, [foldSignature]);
 
   const layoutsForSection = useCallback(
-    (members: StoredMetadata[], fitted = true): Layout[] => {
-      const base = baseLayoutForSection(members, fitted);
+    (members: StoredMetadata[], spec?: FilterSectionSpec, fitted = true): Layout[] => {
+      const base = baseLayoutForSection(members, spec, fitted);
       if (sidePanels.size === 0) return base;
       const panels = findSidePanels(base, recordLinks).filter((p) => sidePanels.has(p.cardId));
       return applyRecordPanels(base, panels, (cardId) => !recordPanelState.expanded(cardId));
@@ -614,12 +685,16 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   );
 
   const handleSectionLayoutChange = useCallback(
-    (sectionKey: string, current: Layout[]) => {
-      // `onLayoutChange` also fires on a breakpoint switch, carrying the
-      // narrowed layout. Persisting that would silently overwrite the desktop
-      // arrangement with its 2-column fallback the first time someone opened
-      // the dashboard on a small screen.
-      if (breakpointRef.current !== GRID_WIDEST_BREAKPOINT) return;
+    (sectionKey: string, current: Layout[], width: number) => {
+      // `onLayoutChange` also fires on a breakpoint switch, and on mount,
+      // carrying the narrowed layout. Persisting that would silently overwrite
+      // the desktop arrangement with its 2-column fallback the first time
+      // someone opened the editor on a small screen. The breakpoint is the
+      // grid's width's (see `breakpointForWidth`).
+      if (breakpointForWidth(width) !== GRID_WIDEST_BREAKPOINT) return;
+      // A read-only grid counts in half rows: what it reports is not a layout
+      // that could be stored.
+      if (readOnly) return;
       // What react-grid-layout hands back carries the FITTED heights, because
       // that is what it was rendered with. Persisting those would freeze one
       // reader's viewport into the dashboard and make the next content change
@@ -652,7 +727,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
         // the heights it is stored with, not at the ones its content asked for.
         const sectionLayout =
           sectionLayoutsRef.current.get(section.key) ??
-          baseLayoutForSection(section.members, false);
+          baseLayoutForSection(section.members, section.spec, false);
 
         let sectionBottom = 0;
         for (const item of sectionLayout) {
@@ -663,19 +738,20 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       }
       onLayoutChange?.(merged);
     },
-    [onLayoutChange, baseLayoutForSection, sections, autofittedIds, storedHeights],
+    [onLayoutChange, baseLayoutForSection, sections, readOnly, autofittedIds, storedHeights],
   );
 
   /** A height the user dragged to outranks anything the content asks for, so
    *  the tile leaves autofit. A drag moves the tile without resizing it and is
    *  deliberately not a gesture here. Neither is a resize below the widest
-   *  breakpoint: `handleSectionLayoutChange` never persists that layout, so
-   *  pinning the tile there would save `fit: fixed` without the height that
-   *  justified it, and the tile would lose autofit at its old stored height. */
+   *  breakpoint (the grid's width's, as in `handleSectionLayoutChange`): that
+   *  layout is never persisted, so pinning the tile there would save
+   *  `fit: fixed` without the height that justified it, and the tile would lose
+   *  autofit at its old stored height. */
   const handleResizeStop = useCallback(
-    (_layout: Layout[], oldItem: Layout, newItem: Layout) => {
+    (oldItem: Layout, newItem: Layout, width: number) => {
       if (!onTileFixed || newItem.h === oldItem.h) return;
-      if (breakpointRef.current !== GRID_WIDEST_BREAKPOINT) return;
+      if (breakpointForWidth(width) !== GRID_WIDEST_BREAKPOINT) return;
       resizedByHand.current.add(newItem.i);
       onTileFixed(newItem.i, newItem.h);
     },
@@ -695,6 +771,17 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // React re-rendered every Plotly figure and AG Grid on the dashboard to reach
   // the one cell that actually changed. Item geometry is RGL's business and
   // travels through `layouts`, not through these children.
+  // The filters each section's cells see: the tab's, plus the section's own
+  // bar's (see `filterScope.ts`). The same array as `filters` wherever nothing
+  // is scoped away, so a dashboard without section bars renders as before.
+  const filtersBySection = useMemo(() => {
+    const byKey = new Map<string, InteractiveFilter[]>();
+    for (const section of sections) {
+      byKey.set(section.key, filtersInScope(filters, scopes, section.sectionName ?? null));
+    }
+    return byKey;
+  }, [sections, filters, scopes]);
+
   const cellsBySection = useMemo(() => {
     const byKey = new Map<string, { id: string; node: React.ReactNode }[]>();
     // The renderer inside a cell that drives a record side panel: wrapped so
@@ -706,9 +793,10 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
         node
       );
     for (const section of sections) {
+      const sectionFilters = filtersBySection.get(section.key) ?? filters;
       byKey.set(
         section.key,
-        section.members.map((m) => ({ id: m.index, node: (
+        section.members.filter(onGrid).map((m) => ({ id: m.index, node: (
           // Outer div = the cloned target react-resizable injects the
           // resize-handle <span>s into. It must NOT clip overflow or the
           // top-edge handles (nw/n/ne) get sliced off — the inner div clips
@@ -736,8 +824,8 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
                 // by the source's cell), so only the unfolded card is here.
                 <ComponentRenderer
                   dashboardId={dashboardId}
-                  metadata={m}
-                  filters={filters}
+                  metadata={withSectionStyles(m, section.spec)}
+                  filters={sectionFilters}
                   onFilterChange={onFilterChange}
                   refreshTick={refreshTick}
                   activeHighlight={activeHighlight}
@@ -754,8 +842,12 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
               ) : panelSource(m, (
                 <ComponentRenderer
                   dashboardId={dashboardId}
-                  metadata={m}
-                  filters={filters}
+                  // A card or figure that sets no style of its own takes its section's.
+                  // Resolved here, where the section is known, rather than
+                  // written onto the card: a card added to the section later, or
+                  // a section restyled later, follows without a migration.
+                  metadata={withSectionStyles(m, section.spec)}
+                  filters={sectionFilters}
                   onFilterChange={onFilterChange}
                   cardValue={cardValues?.[m.index]}
                   cardSecondaryValues={cardSecondaryValues?.[m.index]}
@@ -777,6 +869,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     sections,
     dashboardId,
     filters,
+    filtersBySection,
     onFilterChange,
     cardValues,
     cardSecondaryValues,
@@ -788,41 +881,49 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     renderItemOverlay,
     editMode,
     isDraggable,
+    onGrid,
     recordLinks,
     recordSources,
   ]);
 
+  // Explicit width rather than `WidthProvider`: that HOC installs its own
+  // window listener, which would fight `lockedWidthRef` and undo the
+  // panel-transition sync above. Sectioned grids sit inside the section box
+  // and get the room left inside it; the unsectioned bucket has no box and
+  // spans the wrapper.
+  // A filter bar's other members sit under the bar, outside any section box.
+  const gridWidth = (section: ComponentSection) =>
+    section.sectionName && !isStripSection(section.spec)
+      ? Math.max(100, containerWidth - sectionInset)
+      : containerWidth;
+
   const renderGrid = (section: ComponentSection) =>
-    section.members.length === 0 ? (
-      // Only reachable in edit mode (`includeEmpty`). Without a body a freshly
+    !section.members.some(onGrid) ? (
+      // Only shown in edit mode (`includeEmpty`). Without a body a freshly
       // created section is an accordion item that opens onto nothing, which
-      // reads as broken rather than as empty.
-      <Paper withBorder radius="md" p="lg" bg="var(--mantine-color-default-hover)">
-        <Text size="sm" c="dimmed" ta="center">
-          No components yet — move one here from its ⋮ menu, or pick this section
-          while creating one.
-        </Text>
-      </Paper>
+      // reads as broken rather than as empty. A section holding only its bar's
+      // filters has no tiles either, and readers see just the bar.
+      editMode ? (
+        <Paper withBorder radius="md" p="lg" bg="var(--mantine-color-default-hover)">
+          <Text size="sm" c="dimmed" ta="center">
+            No components yet — move one here from its ⋮ menu, or pick this section
+            while creating one.
+          </Text>
+        </Paper>
+      ) : null
     ) : (
     <ResponsiveGridLayout
       className="layout"
-      layouts={responsiveLayouts(layoutsForSection(section.members))}
+      layouts={responsiveLayouts(layoutsForSection(section.members, section.spec))}
       // Shared geometry (see gridConfig.ts): `lg` keeps the authoring 8-column
       // grid down to narrow content widths so opening the panels shrinks
       // components instead of wrapping them; fewer columns are a phone-only
       // fallback.
       breakpoints={GRID_BREAKPOINTS}
       cols={GRID_COL_COUNTS}
-      onBreakpointChange={(bp) => {
-        breakpointRef.current = bp;
-      }}
-      rowHeight={GRID_ROW_PX}
-      // Explicit width rather than `WidthProvider`: that HOC installs its own
-      // window listener, which would fight `lockedWidthRef` and undo the
-      // panel-transition sync above. Sectioned grids sit inside the section box
-      // and get the room left inside it; the unsectioned bucket has no box and
-      // spans the wrapper.
-      width={section.sectionName ? Math.max(100, containerWidth - sectionInset) : containerWidth}
+      // Half rows when read-only: the unit `layoutsForSection` counts in.
+      rowHeight={readOnly ? SPLIT_ROW_PX : GRID_ROW_PX}
+      width={gridWidth(section)}
       // Asymmetric grid gap: horizontal stays at 12 px (visual breathing room
       // between side-by-side cards / plots) but vertical drops to 4 px so
       // stacked rows feel tightly packed — short text intros, Manhattan→
@@ -832,7 +933,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       isDraggable={isDraggable}
       isResizable={isResizable}
       compactType="vertical"
-      onLayoutChange={(current) => handleSectionLayoutChange(section.key, current)}
+      onLayoutChange={(current) =>
+        handleSectionLayoutChange(section.key, current, gridWidth(section))
+      }
       // Live-resize: Plotly's useResizeHandler and AG Grid only listen to
       // the WINDOW ``resize`` event, not container size changes. While the
       // user is dragging a resize handle the cell DIM changes but the
@@ -848,7 +951,9 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       // prop, then `onLayoutMaybeChanged`), which is what lets the merge tell
       // this tile's new height apart from every other tile's fitted one on
       // that pass.
-      onResizeStop={handleResizeStop}
+      onResizeStop={(_layout, oldItem, newItem) =>
+        handleResizeStop(oldItem, newItem, gridWidth(section))
+      }
       // Drag is gated to a dedicated handle (see ComponentChrome's
       // `react-grid-dragHandle` action). Cells themselves are NOT draggable
       // — the user can interact with content (Plotly modebar, AG Grid
@@ -880,16 +985,80 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   // Drives one button rather than a pair: "collapse all" until nothing is open,
   // then "expand all". A single control can't be in the dead state where the
   // one you want is the one already applied.
-  const anySectionOpen = named.some((s) => sectionCollapse.isOpen(s.key));
+  // Plain sections have no fold, so they neither count nor get the button.
+  const isPlain = (s: ComponentSection) => s.spec?.appearance === 'plain';
+  // A filter bar is neither: no header, no fold.
+  const isStrip = (s: ComponentSection) => isStripSection(s.spec);
+  const foldable = named.filter((s) => !isPlain(s) && !isStrip(s));
+  const anySectionOpen = foldable.some((s) => sectionCollapse.isOpen(s.key));
 
+  // A bar's "Reset": clears its own controls, and only those.
+  const resetFor = (members: StoredMetadata[]) =>
+    onResetFilters ? () => onResetFilters(members.map((m) => m.index)) : undefined;
+
+  const renderStripSection = (section: ComponentSection) => {
+    const rest = section.members.filter(onGrid);
+    const members = section.members.filter((m) => !onGrid(m));
+    return (
+      <FilterStripSection
+        key={section.key}
+        name={section.sectionName ?? ''}
+        spec={section.spec}
+        members={members}
+        filters={shownFilters}
+        onFilterChange={onFilterChange}
+        onReset={resetFor(members)}
+        editMode={editMode}
+        actions={editMode ? renderSectionActions?.(section.sectionName ?? null) : undefined}
+        renderItemActions={editMode ? renderStripItemOverlay : undefined}
+        rest={rest.length > 0 ? renderGrid(section) : null}
+      />
+    );
+  };
+
+  // A section's own bar, drawn under its heading; its filters reach this
+  // section's cells only (`filtersBySection`).
+  const renderSectionBar = (section: ComponentSection) => {
+    if (!hasSectionBar(section.spec)) return null;
+    const members = section.members.filter((m) => !onGrid(m));
+    return (
+      <SectionFilterBar
+        name={section.sectionName ?? ''}
+        spec={section.spec}
+        members={members}
+        filters={shownFilters}
+        onFilterChange={onFilterChange}
+        onReset={resetFor(members)}
+        editMode={editMode}
+        renderItemActions={editMode ? renderStripItemOverlay : undefined}
+      />
+    );
+  };
+
+  // Filter bars break the accordion: each renders on its own, and the
+  // sections between two bars share one accordion as before.
   const renderSections = (list: ComponentSection[]) =>
+    list.length === 0
+      ? null
+      : sectionRuns(list, isStrip).map((run) =>
+          run.strip
+            ? renderStripSection(run.section)
+            : renderAccordion(run.sections),
+        );
+
+  const renderAccordion = (list: ComponentSection[]) =>
     list.length === 0 ? null : (
       <SectionAccordion
-        value={list.filter((s) => sectionCollapse.isOpen(s.key)).map((s) => s.key)}
+        key={list[0].key}
+        // A plain section has no fold: always open, and left out of the
+        // persisted collapse state.
+        value={list
+          .filter((s) => isPlain(s) || sectionCollapse.isOpen(s.key))
+          .map((s) => s.key)}
         onChange={(open) =>
           applyAccordionValue(
             open,
-            list.map((s) => s.key),
+            list.filter((s) => !isPlain(s)).map((s) => s.key),
             sectionCollapse,
           )
         }
@@ -900,26 +1069,32 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
             value={section.key}
             color={resolveSectionColor(section.spec?.color, section.sectionName)}
             actions={renderSectionActions?.(section.sectionName ?? null)}
+            plain={isPlain(section)}
           >
             <Accordion.Control>
               <SectionHeader
                 spec={section.spec}
                 name={section.sectionName}
+                badge={<SectionFilteredBadge section={section} filters={shownFilters} onGrid={onGrid} />}
                 // Only while folded: expanded, these numbers are already on
                 // screen as the cards themselves. Folding a section must not
                 // cost you the figures it was showing.
                 trailing={
-                  !sectionCollapse.isOpen(section.key) ? (
-                    <SectionSummary section={section} cardValues={cardValues} />
+                  !isPlain(section) && !sectionCollapse.isOpen(section.key) ? (
+                    <SectionSummary
+                      section={{ ...section, members: section.members.filter(onGrid) }}
+                      cardValues={cardValues}
+                    />
                   ) : undefined
                 }
               />
             </Accordion.Control>
             <Accordion.Panel>
+              {renderSectionBar(section)}
               {/* Plain wrapper so the width available inside the section box
                   can be read off the DOM — see `sectionInset`. Absent until
                   the section has been opened once: see `renderedSections`. */}
-              {renderedSections.has(section.key) && (
+              {(isPlain(section) || renderedSections.has(section.key)) && (
                 <div data-section-grid>{renderGrid(section)}</div>
               )}
             </Accordion.Panel>
@@ -936,7 +1111,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       style={{ width: '100%', overflowX: 'hidden' }}
     >
       {leadBucket && renderGrid(leadBucket)}
-      {named.length > 0 && (
+      {foldable.length > 0 && (
         <Group justify="flex-end" mb={4}>
           <Button
             variant="subtle"
@@ -947,7 +1122,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
             }
             onClick={() =>
               sectionCollapse.setAll(
-                named.map((s) => s.key),
+                foldable.map((s) => s.key),
                 anySectionOpen,
               )
             }
@@ -976,6 +1151,45 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
 
 export default DashboardGrid;
 
+/**
+ * "Filtered", beside the heading of a section whose own bar is narrowing it:
+ * the cue that these tiles show a subset, and that the rest of the tab does
+ * not. Nothing for a section without a bar, or with its bar at rest.
+ */
+const SectionFilteredBadge: React.FC<{
+  section: ComponentSection;
+  filters: InteractiveFilter[];
+  onGrid: (m: StoredMetadata) => boolean;
+}> = ({ section, filters, onGrid }) => {
+  if (!hasSectionBar(section.spec)) return null;
+  const bar = new Set(section.members.filter((m) => !onGrid(m)).map((m) => m.index));
+  const active = filters.filter(
+    (f) => bar.has(f.index) && f.source === undefined && isFilterActive(f),
+  ).length;
+  if (active === 0) return null;
+  return (
+    <Tooltip
+      label={`${active} filter${active === 1 ? '' : 's'} of this section's bar narrow${
+        active === 1 ? 's' : ''
+      } these tiles. The rest of the tab is not affected.`}
+      withArrow
+      multiline
+      w={260}
+    >
+      <Badge
+        size="sm"
+        variant="light"
+        radius="sm"
+        leftSection={<Icon icon="mdi:filter-variant" width={12} height={12} />}
+        style={{ flexShrink: 0, pointerEvents: 'auto' }}
+        data-testid="section-filtered-badge"
+      >
+        Filtered
+      </Badge>
+    </Tooltip>
+  );
+};
+
 /** How many metric chips a folded section header shows before it gives up and
  *  falls back to a plain count. Four fits a narrow viewport without wrapping. */
 const SUMMARY_CHIP_LIMIT = 4;
@@ -992,7 +1206,10 @@ const SUMMARY_CHIP_LIMIT = 4;
 export const SectionSummary: React.FC<{
   section: ComponentSection;
   cardValues?: Record<string, unknown>;
-}> = ({ section, cardValues }) => {
+  /** The same cards computed without filters. Where a value differs, the
+   *  chip reads "14 / 85": how much of the whole the filters leave. */
+  baseValues?: Record<string, unknown>;
+}> = ({ section, cardValues, baseValues }) => {
   const cards = section.members.filter(
     (m) => m.component_type === 'card' && cardValues?.[m.index] !== undefined,
   );
@@ -1037,6 +1254,13 @@ export const SectionSummary: React.FC<{
             </Text>
             <Text size="md" fw={700} lh={1.2} style={{ whiteSpace: 'nowrap' }}>
               {formatValue(cardValues?.[m.index])}
+              {baseValues?.[m.index] !== undefined &&
+              baseValues[m.index] !== cardValues?.[m.index] ? (
+                <Text span size="sm" fw={500} c="dimmed">
+                  {' / '}
+                  {formatValue(baseValues[m.index])}
+                </Text>
+              ) : null}
             </Text>
           </div>
         </Group>

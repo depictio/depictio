@@ -78,6 +78,9 @@ interface MapRendererProps {
   };
 }
 
+/** Below this tile width a map floats its legend over the basemap. */
+const NARROW_MAP_PX = 560;
+
 /**
  * Renders a Plotly map component (px.scatter_map / density_map / choropleth_map).
  * Mirrors FigureRenderer: server returns a Plotly figure dict via
@@ -89,6 +92,7 @@ interface MapRendererProps {
  * choropleth shapes are non-point geometries that Plotly's selection events
  * don't cover, mirroring Dash's behavior.
  */
+
 const MapRenderer: React.FC<MapRendererProps> = ({
   dashboardId,
   metadata,
@@ -255,12 +259,10 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     if (userMovedRef.current || !fitSpec || !boxSize) return;
     // Plotly's margins come off the container before the map subplot gets what
     // is left, so the fit has to be against the drawing area rather than the
-    // div. On a titled grid tile that is a 30px strip, which on a short panel
-    // would be a real slice of the height.
+    // div. The top margin is always given back (see the layout below).
     const margin = (figure?.layout?.margin as Record<string, unknown>) || {};
     const width = boxSize.width - numberOr(margin.l, 0) - numberOr(margin.r, 0);
-    const height =
-      boxSize.height - (bare ? 0 : numberOr(margin.t, 30)) - numberOr(margin.b, 0);
+    const height = boxSize.height - numberOr(margin.b, 0);
     if (width < 1 || height < 1) return;
     const next = computeMapFit(fitSpec, width, height);
     // The last fit is mirrored in a ref rather than read out of state, so the
@@ -271,7 +273,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     const applied: AppliedFit = { ...next, revision: `fit-${fitRevRef.current}` };
     appliedFitRef.current = applied;
     setAppliedFit(applied);
-  }, [fitSpec, boxSize, figure, bare]);
+  }, [fitSpec, boxSize, figure]);
 
   /** Plotly reports every user pan / zoom / rotate through relayout, keyed
    *  under the map subplot. Our own re-fits go through props and reach the map
@@ -478,6 +480,12 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   }, [onSettingsNode, settingsNode]);
   useEffect(() => () => onSettingsNode?.(null), [onSettingsNode]);
 
+  // A legend beside the map takes a column of its own, which a narrow tile (a
+  // phone, a half-width tile on a small screen) cannot spare: the fit, which
+  // only knows the container, then crops the outermost points. Narrow tiles
+  // float it over the map the way a bare host always does.
+  const floatLegend = bare || (boxSize !== null && boxSize.width < NARROW_MAP_PX);
+
   const layout = useMemo<Record<string, unknown>>(() => {
     const base: Record<string, unknown> = {
       ...((figure?.layout as Record<string, unknown>) || {}),
@@ -485,18 +493,17 @@ const MapRenderer: React.FC<MapRendererProps> = ({
       margin: {
         l: 0,
         r: 0,
-        t: 30,
         b: 0,
         ...((figure?.layout?.margin as Record<string, unknown>) || {}),
-        // A bare host already shows the title in its own header, so the figure
-        // gives that strip back to the map instead of repeating it. This has to
-        // land AFTER the server's margin: `render_map` reserves 30px whenever
-        // the component has a title, which on a docked map was a fifth of the
-        // height held open for a title Plotly is never asked to draw.
-        ...(bare ? { t: 0 } : {}),
+        // The title is always drawn above the figure — by a bare host's own
+        // header, or by this component's — so the figure gives its strip back
+        // to the map instead of repeating it. This has to land AFTER the
+        // server's margin: `render_map` reserves 30px and sets a Plotly title
+        // whenever the component has one, which read as the name twice.
+        t: 0,
       },
     };
-    if (bare) base.title = undefined;
+    base.title = undefined;
     if (selectionEnabled && !base.dragmode) {
       // Respect a YAML-level ``selection_mode`` ('lasso' | 'select' | 'pan').
       // Default 'lasso' matches the Dash map component default.
@@ -515,7 +522,8 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     // rather than something to reconcile against a stashed GUI edit.
     base.selectionrevision = selectedKey || 'none';
 
-    // Float the legend over the map instead of beside it — bare hosts only.
+    // Float the legend over the map instead of beside it — bare hosts and
+    // narrow tiles only.
     //
     // Plotly's default vertical legend sits at x=1.02 — outside the plot area —
     // and `expandMargin` (components/legend/draw.js) turns that into a right
@@ -528,10 +536,10 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     // of the plot area, and with a zero top margin the two land on top of each
     // other. Bottom-right belongs to the basemap credit.
     //
-    // A grid tile is not short of width, so it keeps Plotly's own placement at
-    // full size: the 10px plate is a trade the panel makes and a full-width map
-    // has no reason to.
-    if (bare) {
+    // A wide grid tile is not short of width, so it keeps Plotly's own
+    // placement at full size: the 10px plate is a trade a narrow tile makes and
+    // a full-width map has no reason to.
+    if (floatLegend) {
       const srcLegend = (figure?.layout?.legend as Record<string, unknown>) || {};
       base.legend = {
         ...srcLegend,
@@ -558,12 +566,12 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     // Plotly Express always routes map colour through `layout.coloraxis`, so
     // there is no per-trace colour bar to chase here.
     const coloraxis = figure?.layout?.coloraxis as Record<string, unknown> | undefined;
-    if (coloraxis && (bare || !showLegend)) {
+    if (coloraxis && (floatLegend || !showLegend)) {
       const cb = (coloraxis.colorbar as Record<string, unknown>) || {};
       base.coloraxis = {
         ...coloraxis,
         ...(showLegend ? {} : { showscale: false }),
-        ...(bare
+        ...(floatLegend
           ? {
               colorbar: {
                 ...cb,
@@ -611,7 +619,7 @@ const MapRenderer: React.FC<MapRendererProps> = ({
     selectionEnabled,
     metadata.selection_mode,
     refreshTick,
-    bare,
+    floatLegend,
     selectedKey,
     showLegend,
     overlayPlate,

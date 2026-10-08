@@ -20,6 +20,7 @@ import AdvancedVizFrame from './AdvancedVizFrame';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
 import { usePersistedVizControl } from './usePersistedVizControl';
+import { withRanksInOrder } from './phylo/view';
 import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragment } from './plotlyTheme';
 import { demandForPx } from './contentDemand';
 
@@ -80,6 +81,27 @@ const PALETTE = [
   '#1c7ed6', '#e64980', '#fab005', '#37b24d', '#7048e8', '#f76707',
   '#0ca678', '#d6336c', '#15aabf', '#fd7e14', '#82c91e', '#ae3ec9',
 ];
+
+/** Runs of equal consecutive values, by position. */
+function categoryRuns(values: readonly string[]): { value: string; start: number; end: number }[] {
+  const runs: { value: string; start: number; end: number }[] = [];
+  values.forEach((v, i) => {
+    const last = runs[runs.length - 1];
+    if (last && last.value === v && last.end === i - 1) last.end = i;
+    else runs.push({ value: v, start: i, end: i });
+  });
+  return runs;
+}
+
+/** Dark or light text, whichever reads on a fill. */
+function textOn(fill: string | undefined): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(String(fill ?? '').trim());
+  if (!m) return '#212529';
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255);
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const lum = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return lum < 0.4 ? '#ffffff' : '#212529';
+}
 
 const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) => {
   const { colorScheme } = useMantineColorScheme();
@@ -213,8 +235,11 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     const ranks = (rows[config.rank_col] || []).map((v) => String(v ?? '')) as string[];
     const ab = (rows[config.abundance_col] || []) as number[];
 
-    const allRanks = Array.from(new Set(ranks));
-    const activeRank = rank || allRanks[0] || null;
+    const seen = Array.from(new Set(ranks));
+    // Root to leaf in the picker; unset, the rank stays the one the table
+    // lists first, as before.
+    const allRanks = withRanksInOrder(seen);
+    const activeRank = rank || seen[0] || null;
 
     // Filter to active rank, then aggregate (sample × taxon → abundance).
     const cellTotals = new Map<string, Map<string, number>>(); // sample -> taxon -> abundance
@@ -302,6 +327,12 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     // so a strip told nothing about which category a colour stood for.
     const strips = (config.annotation_strips ?? []).filter((s) => s && s.column);
     const stripTraces: Record<string, unknown>[] = [];
+    // A strip's categories were legend entries after the taxa, one legend
+    // holding two keys that read as one. A strip whose categories each hold a
+    // block wide enough is labelled on itself instead; the others get a key
+    // of their own above the plot.
+    const stripLabels: Record<string, unknown>[] = [];
+    let stripKey = false;
     const stripAxes: Record<string, unknown> = {};
     const STRIP_BAND = 0.045; // each strip occupies ~4.5% of paper height
     const STRIP_GAP = 0.012;
@@ -366,20 +397,48 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
           yaxis: axis,
           hovertemplate: `%{x}<br>${label}: %{customdata}<extra></extra>`,
         });
-        // Legend entries for the strip's categories, grouped under its label.
-        categories.forEach((c) =>
-          stripTraces.push({
-            type: 'scatter',
-            mode: 'markers',
-            x: [null],
-            y: [null],
-            name: c,
-            legendgroup: `strip-${strip.column}`,
-            legendgrouptitle: { text: label },
-            marker: { color: stripPalette.get(c), symbol: 'square', size: 10 },
-            hoverinfo: 'skip',
-          }),
-        );
+        const runs = categoryRuns(values);
+        const minRun = Math.max(2, Math.ceil(values.length * 0.12));
+        const longest = new Map<string, { start: number; end: number }>();
+        for (const r of runs) {
+          const best = longest.get(r.value);
+          if (!best || r.end - r.start > best.end - best.start) longest.set(r.value, r);
+        }
+        const labelled = categories.every((c) => {
+          const r = longest.get(c);
+          return r != null && r.end - r.start + 1 >= minRun;
+        });
+        if (labelled) {
+          for (const c of categories) {
+            const r = longest.get(c)!;
+            stripLabels.push({
+              xref: 'x',
+              yref: axis,
+              // A category axis places numbers by position: the run's middle.
+              x: (r.start + r.end) / 2,
+              y: 0,
+              text: c,
+              showarrow: false,
+              font: { size: 10, color: textOn(stripPalette.get(c)) },
+            });
+          }
+        } else {
+          stripKey = true;
+          categories.forEach((c) =>
+            stripTraces.push({
+              type: 'scatter',
+              mode: 'markers',
+              x: [null],
+              y: [null],
+              name: c,
+              legend: 'legend2',
+              legendgroup: `strip-${strip.column}`,
+              legendgrouptitle: { text: label },
+              marker: { color: stripPalette.get(c), symbol: 'square', size: 10 },
+              hoverinfo: 'skip',
+            }),
+          );
+        }
       });
     }
 
@@ -393,7 +452,8 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         layout: {
           ...plotlyThemeFragment(isDark, theme),
           barmode: 'stack' as const,
-          margin: { l: 60, r: 20, t: 30, b: 70 },
+          margin: { l: 60, r: 20, t: stripKey ? 44 : 30, b: 70 },
+          annotations: stripLabels,
           xaxis: {
             ...plotlyAxisOverrides(isDark, theme),
             title: { text: config.sample_id_col },
@@ -428,7 +488,24 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
                 ...(logY ? { type: 'log' as const } : {}),
               },
           showlegend: showLegend,
-          legend: { orientation: 'h', y: -0.25 },
+          // The taxa's key, titled with the rank they are.
+          legend: {
+            orientation: 'h',
+            y: -0.25,
+            title: { text: `${activeRank ?? 'Taxon'} ` },
+          },
+          ...(stripKey
+            ? {
+                legend2: {
+                  orientation: 'h',
+                  x: 1,
+                  xanchor: 'right',
+                  y: 1,
+                  yanchor: 'bottom',
+                  font: { size: 10 },
+                },
+              }
+            : {}),
           autosize: true,
         },
       },
@@ -439,8 +516,9 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   // Memoised so AdvancedVizFrame's `extras` useMemo stays stable — an unmemoised
   // element re-fires the frame's publish effect and loops it against
   // ComponentRenderer's setState ("Maximum update depth exceeded").
-  // Encoding tier: rank, sample order, how many taxa survive the pooling, and
-  // whether the bars are read as proportions. Change one of those and it is a
+  // Encoding tier: rank, how many taxa survive the pooling, sample order, and
+  // whether the bars are read as proportions. Most used first: a docked panel
+  // shows the first few (DockedControls). Change one of those and it is a
   // different figure; the legend and the log scale only change how it looks.
   const primaryControls = useMemo(
     () => (
@@ -452,6 +530,13 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
           data={allRanks}
           clearable
         />
+        <VizNumberInput
+          label="Top-N taxa"
+          value={topN}
+          onChange={(v) => setTopN(Math.max(1, Number(v) || 20))}
+          min={1}
+          max={50}
+        />
         <VizSelect
           label="Sort samples"
           value={sampleSort}
@@ -462,13 +547,6 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
             { value: 'first_taxon', label: 'Top taxon' },
           ]}
           allowDeselect={false}
-        />
-        <VizNumberInput
-          label="Top-N taxa"
-          value={topN}
-          onChange={(v) => setTopN(Math.max(1, Number(v) || 20))}
-          min={1}
-          max={50}
         />
         <VizSwitch
           checked={normalise}

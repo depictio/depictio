@@ -90,8 +90,10 @@ const RunProvenanceCard: React.FC<{
    *  so the modal doesn't stack two headings. The entry count and the source
    *  file list stay either way — they are per-run facts, not decoration. */
   withHeading?: boolean;
-}> = ({ groups, files, withCard = true, withHeading = true }) => {
-  const [query, setQuery] = useState('');
+  /** Search to open on, e.g. from a dashboard's `params:dada2` link. */
+  initialQuery?: string;
+}> = ({ groups, files, withCard = true, withHeading = true, initialQuery = '' }) => {
+  const [query, setQuery] = useState(initialQuery);
   // Unset parameters are hidden by default: half of an nf-core params file is
   // keys the run never touched, and a page of `null` buries the decisions that
   // were actually made. The switch is the escape hatch — nothing is dropped at

@@ -1,20 +1,13 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useMemo } from 'react';
 import { CompactControlSlot, DepictioMultiSelect } from 'depictio-components';
 import ComponentSkeleton from '../ComponentSkeleton';
 
-import {
-  fetchUniqueValues,
-  InteractiveFilter,
-  StoredMetadata,
-} from '../../api';
+import { InteractiveFilter, StoredMetadata } from '../../api';
 import { useAvailableSet, useFunnelState } from '../../availableValues';
+import { orderCategoricalOptions } from './categoricalOptions';
 import { FunnelAvailabilityBadge, FunnelOptionMarker } from './funnelDecorations';
 import { INTERACTIVE_FRAME, InteractiveFrame, InteractiveTitle } from './frame';
-
-// Module-level cache for unique-values fetches. Keyed by `${dcId}|${column}`.
-// Cleared on page reload — adequate for the MVP; a longer-lived cache (TTL +
-// invalidation on filter-column upload) can come later.
-const uniqueValuesCache = new Map<string, Promise<string[]>>();
+import { useUniqueValues } from './useInteractiveData';
 
 const MultiSelectRenderer: React.FC<{
   metadata: StoredMetadata;
@@ -23,39 +16,13 @@ const MultiSelectRenderer: React.FC<{
   /** Compact rendering — drops the frame, relies on the parent group's card. */
   compact?: boolean;
 }> = ({ metadata, filters, onChange, compact }) => {
-  const [options, setOptions] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    if (!metadata.dc_id || !metadata.column_name) {
-      setLoading(false);
-      return;
-    }
-    // filter_expr varies the option set, so include it in the cache key.
-    const cacheKey = `${metadata.dc_id}|${metadata.column_name}|${metadata.filter_expr || ''}`;
-    let p = uniqueValuesCache.get(cacheKey);
-    if (!p) {
-      p = fetchUniqueValues(metadata.dc_id, metadata.column_name, metadata.filter_expr);
-      uniqueValuesCache.set(cacheKey, p);
-    }
-    p.then((values) => {
-      if (mountedRef.current) setOptions(values);
-    })
-      .catch((err) => {
-        console.warn('[MultiSelectRenderer] fetchUniqueValues failed:', err);
-        // Remove from cache on error so next mount retries.
-        uniqueValuesCache.delete(cacheKey);
-      })
-      .finally(() => {
-        if (mountedRef.current) setLoading(false);
-      });
-
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [metadata.dc_id, metadata.column_name, metadata.filter_expr]);
+  // Shared with every other control on the same column (see useInteractiveData).
+  // A failed fetch leaves the select empty rather than replacing it.
+  const { data: options, loading } = useUniqueValues(
+    metadata.dc_id,
+    metadata.column_name,
+    metadata.filter_expr,
+  );
 
   const selected =
     (filters.find((f) => f.index === metadata.index)?.value as string[]) || [];
@@ -69,22 +36,15 @@ const MultiSelectRenderer: React.FC<{
   // a locale-aware natural compare so `Sample_2` sorts before `Sample_10`.
   const availableSet = useAvailableSet(metadata.dc_id, metadata.column_name, metadata.index);
   const funnel = useFunnelState(metadata.index);
-  const optionItems = useMemo(() => {
-    const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
-    if (!availableSet) {
-      return [...options]
-        .sort((a, b) => collator.compare(a, b))
-        .map((v) => ({ value: v, label: v }));
-    }
-    return [...options]
-      .sort((a, b) => {
-        const aAvail = availableSet.has(a);
-        const bAvail = availableSet.has(b);
-        if (aAvail !== bAvail) return aAvail ? -1 : 1;
-        return collator.compare(a, b);
-      })
-      .map((v) => ({ value: v, label: v, disabled: !availableSet.has(v) }));
-  }, [options, availableSet]);
+  const optionItems = useMemo(
+    () =>
+      orderCategoricalOptions(options, availableSet).map((v) =>
+        availableSet
+          ? { value: v, label: v, disabled: !availableSet.has(v) }
+          : { value: v, label: v },
+      ),
+    [options, availableSet],
+  );
 
   // Skeleton on first load so this widget matches the rest of the dashboard's
   // loading treatment instead of flashing an empty select. Framed like the

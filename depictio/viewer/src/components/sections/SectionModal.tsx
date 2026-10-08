@@ -12,9 +12,10 @@
  * way back, and `SectionsModal` closes while it is open — a modal on top of a
  * modal is not a stack anyone wants to navigate.
  */
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Badge, Button, Group, Modal, Stack, Title } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { interactiveTitle, stripLabel } from 'depictio-react-core';
 import type { DashboardData, FilterSectionSpec } from 'depictio-react-core';
 
 import SectionForm from './SectionForm';
@@ -46,6 +47,10 @@ export interface SectionModalProps {
   /** Shown as "Manage all sections" when the manager is where this came from
    *  (or simply where the user would go next). Omitted ⇒ no such action. */
   onManageAll?: () => void;
+  /** Displayed names of the dashboard's tabs, for a persistent section's
+   *  excluded tabs, and the name of the tab being edited. */
+  tabNames?: string[];
+  currentTabName?: string;
 }
 
 const SectionModal: React.FC<SectionModalProps> = ({
@@ -56,6 +61,8 @@ const SectionModal: React.FC<SectionModalProps> = ({
   onOp,
   onClose,
   onManageAll,
+  tabNames,
+  currentTabName,
 }) => {
   const editing = target !== null;
   const [draftKind, setDraftKind] = useState<SectionKind>(kind);
@@ -75,6 +82,23 @@ const SectionModal: React.FC<SectionModalProps> = ({
     : [];
 
   const handleChange = useCallback((next: FilterSectionSpec | null) => setSpec(next), []);
+
+  // The filters naming this grid section: what its bar would hold. Footer
+  // filters (`placement: 'top'`) keep their own place whatever the section.
+  const filterLabels = useMemo(
+    () =>
+      target && draftKind === 'grid'
+        ? (dashboard?.stored_metadata ?? [])
+            .filter(
+              (m) =>
+                m.component_type === 'interactive' &&
+                m.section === target.name &&
+                m.placement !== 'top',
+            )
+            .map((m) => stripLabel(m, interactiveTitle(m)))
+        : [],
+    [dashboard?.stored_metadata, target, draftKind],
+  );
 
   const submit = () => {
     if (!spec) return;
@@ -137,6 +161,9 @@ const SectionModal: React.FC<SectionModalProps> = ({
             onKindChange={editing ? undefined : setDraftKind}
             taken={taken}
             onChange={handleChange}
+            tabNames={tabNames}
+            currentTabName={currentTabName}
+            filterLabels={filterLabels}
           />
         )}
 

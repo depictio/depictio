@@ -3,17 +3,10 @@ import { CompactControlSlot, DepictioRangeSlider } from 'depictio-components';
 import { Tooltip } from '@mantine/core';
 import ComponentSkeleton from '../ComponentSkeleton';
 
-import {
-  ColumnRange,
-  fetchAdvancedVizData,
-  fetchColumnRange,
-  InteractiveFilter,
-  StoredMetadata,
-} from '../../api';
+import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import { InteractiveFrame, InteractiveTitle, interactiveAccent, interactiveAccentRaw } from './frame';
-import { buildNumericScale, formatSliderValue } from './numericScale';
-
-const rangeCache = new Map<string, Promise<ColumnRange>>();
+import { buildNumericScale, formatSliderValue, rangeSliderBounds } from './numericScale';
+import { useColumnRange } from './useInteractiveData';
 
 /** Bars in the distribution sparkline. Enough to show a mode and a tail inside
  *  the Filters panel's width, few enough that each bar stays a bar. */
@@ -144,43 +137,9 @@ const RangeSliderRenderer: React.FC<{
    *  visual frame. */
   compact?: boolean;
 }> = ({ metadata, filters, onChange, compact }) => {
-  const [bounds, setBounds] = useState<{
-    min: number;
-    max: number;
-    dtype?: string | null;
-    unique?: number | null;
-  } | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!metadata.dc_id || !metadata.column_name) {
-      setLoading(false);
-      return;
-    }
-    const cacheKey = `${metadata.dc_id}|${metadata.column_name}`;
-    let p = rangeCache.get(cacheKey);
-    if (!p) {
-      p = fetchColumnRange(metadata.dc_id, metadata.column_name);
-      rangeCache.set(cacheKey, p);
-    }
-    let cancelled = false;
-    p.then((res) => {
-      if (cancelled) return;
-      const min = typeof res.min === 'number' ? res.min : 0;
-      const max = typeof res.max === 'number' ? res.max : 100;
-      setBounds({ min, max, dtype: res.dtype, unique: res.unique });
-    })
-      .catch((err) => {
-        console.warn('[RangeSliderRenderer] fetchColumnRange failed:', err);
-        rangeCache.delete(cacheKey);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [metadata.dc_id, metadata.column_name]);
+  // Shared with the filter bar's slider on the same column (useInteractiveData).
+  const { data: range, loading } = useColumnRange(metadata.dc_id, metadata.column_name);
+  const bounds = useMemo(() => rangeSliderBounds(range), [range]);
 
   // Opt-in, so a slider that says nothing keeps exactly the layout it had.
   const showHistogram = (metadata as { show_histogram?: boolean }).show_histogram === true;

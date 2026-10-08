@@ -33,6 +33,29 @@ import { useResolvedBrandTheme } from './useResolvedBrandTheme';
  */
 const SCOPE_CLASS = 'depictio-dashboard-brand';
 
+/** What an element needs to pick up the scope's CSS variables. */
+export interface BrandScopeAttributes {
+  className: string;
+  'data-mantine-color-scheme': 'light' | 'dark';
+}
+
+const BrandScopeAttributesContext = React.createContext<BrandScopeAttributes | null>(null);
+
+/**
+ * The attributes that put an element inside the enclosing `BrandScope`, or
+ * null outside one (or when the dashboard has no override).
+ *
+ * The scope's variables are emitted on a wrapper class, so they reach only
+ * DOM descendants of that wrapper. A Mantine Drawer, Modal or Popover is
+ * portaled to `<body>`: it still sees the scoped theme through React context,
+ * but none of the CSS variables, so its primary colour falls back to the
+ * instance one. Spreading these on the portaled root (`className` /
+ * `data-mantine-color-scheme`) brings it back into the scope.
+ */
+export function useBrandScopeAttributes(): BrandScopeAttributes | null {
+  return React.useContext(BrandScopeAttributesContext);
+}
+
 const ScopedProvider: React.FC<{ theme: BrandTheme; children: React.ReactNode }> = ({
   theme,
   children,
@@ -51,22 +74,30 @@ const ScopedProvider: React.FC<{ theme: BrandTheme; children: React.ReactNode }>
     [resolved],
   );
 
+  const scheme = colorScheme === 'dark' ? 'dark' : 'light';
+  const attributes = React.useMemo<BrandScopeAttributes>(
+    () => ({ className: SCOPE_CLASS, 'data-mantine-color-scheme': scheme }),
+    [scheme],
+  );
+
   return (
     <BrandingContext.Provider value={resolved}>
-      <div
-        className={SCOPE_CLASS}
-        data-mantine-color-scheme={colorScheme === 'dark' ? 'dark' : 'light'}
-        style={{ display: 'contents' }}
-      >
-        <MantineProvider
-          theme={mantineTheme}
-          cssVariablesResolver={cssVariablesResolver}
-          cssVariablesSelector={`.${SCOPE_CLASS}`}
-          getRootElement={() => undefined}
+      <BrandScopeAttributesContext.Provider value={attributes}>
+        <div
+          className={SCOPE_CLASS}
+          data-mantine-color-scheme={scheme}
+          style={{ display: 'contents' }}
         >
-          {children}
-        </MantineProvider>
-      </div>
+          <MantineProvider
+            theme={mantineTheme}
+            cssVariablesResolver={cssVariablesResolver}
+            cssVariablesSelector={`.${SCOPE_CLASS}`}
+            getRootElement={() => undefined}
+          >
+            {children}
+          </MantineProvider>
+        </div>
+      </BrandScopeAttributesContext.Provider>
     </BrandingContext.Provider>
   );
 };

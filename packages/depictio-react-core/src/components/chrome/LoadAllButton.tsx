@@ -2,6 +2,10 @@ import React from 'react';
 import { ActionIcon, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { LOAD_ALL_ACTIVE_ICON, TILE_ACTION_STYLE } from './actionStyles';
+
+const STYLE = TILE_ACTION_STYLE.loadAll;
+
 /** Reported by figure / table renderers so the chrome can offer a "load
  *  everything" toggle consistently across component types. ``null`` (no state)
  *  means the component isn't reduced and has nothing to expand. */
@@ -32,14 +36,15 @@ const LoadAllButton: React.FC<{ state: LoadAllState }> = ({ state }) => {
     <Tooltip label={label} withArrow>
       <ActionIcon
         variant={state.full ? 'filled' : 'subtle'}
-        color="gray"
+        color={STYLE.color}
         size="sm"
         loading={state.loading}
         onClick={state.toggle}
         aria-label={state.full ? 'Back to reduced view' : `Load all ${state.noun}`}
+        data-tile-action="loadAll"
       >
         <Icon
-          icon={state.full ? 'mdi:arrow-collapse-vertical' : 'mdi:database-arrow-down'}
+          icon={state.full ? LOAD_ALL_ACTIVE_ICON : STYLE.icon}
           width={16}
           height={16}
         />

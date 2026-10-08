@@ -113,6 +113,7 @@ def get_child_tabs(parent_dashboard_id: PyObjectId) -> list[dict[str, Any]]:
         "tab_order": 1,
         "tab_icon": 1,
         "tab_icon_color": 1,
+        "tab_group": 1,
         "is_main_tab": 1,
         "parent_dashboard_id": 1,
         # Include icon fields for fallback inheritance
@@ -191,6 +192,68 @@ def get_parent_dashboard_title(dashboard_dict: dict) -> str | None:
     return parent_dashboard.get("title", "Dashboard")
 
 
+def family_brand_theme(dashboard_dict: dict) -> dict | None:
+    """The brand a tab is drawn in: its own override, else its main tab's.
+
+    A brand is set once for a dashboard, on its main tab, and its child tabs
+    have none of their own. Without this a child tab drew in the instance
+    defaults while its main tab showed the dashboard's brand. Resolved at read
+    time rather than copied into each tab, so a later change on the main tab
+    reaches every tab; a child's own override still wins.
+    """
+    own = dashboard_dict.get("brand_theme")
+    if own:
+        return own
+    parent_id = dashboard_dict.get("parent_dashboard_id")
+    if not parent_id:
+        return None
+    parent = dashboards_collection.find_one(
+        {"dashboard_id": ObjectId(str(parent_id))},
+        {"brand_theme": 1},
+    )
+    return (parent or {}).get("brand_theme") or None
+
+
+def family_category_colors(dashboard_dict: dict) -> dict | None:
+    """A child tab's main-tab ``category_colors``, for read-time inheritance.
+
+    Category colours are declared once, on the main tab, and have to hold on
+    every tab: a filter bar fanned out to a sibling tab, or a figure there,
+    must draw "Athens" in the colour the main tab gave it. Returned apart from
+    the tab's own map (the client lays its own over it, per column and value)
+    so a save never writes a copy into the child that would miss later edits.
+    """
+    parent_id = dashboard_dict.get("parent_dashboard_id")
+    if not parent_id:
+        return None
+    parent = dashboards_collection.find_one(
+        {"dashboard_id": ObjectId(str(parent_id))},
+        {"category_colors": 1},
+    )
+    return (parent or {}).get("category_colors") or None
+
+
+def effective_category_colors(dashboard_dict: dict) -> dict[str, dict[str, str]] | None:
+    """The colour per category a tab draws in: the main tab's, with the tab's own
+    laid over it per column and value.
+
+    ``category_colors`` maps a column to its values' colours
+    (``{"locality": {"Athens": "#1a4f8f", …}}``), so a category keeps one
+    colour on every tile of every tab. Figures are rendered server side, so
+    they need the merged map the client builds from ``category_colors`` and
+    ``inherited_category_colors``. Read with ``.get``: the field is optional
+    on the stored document.
+    """
+    merged: dict[str, dict[str, str]] = {}
+    for layer in (family_category_colors(dashboard_dict), dashboard_dict.get("category_colors")):
+        if not isinstance(layer, dict):
+            continue
+        for column, values in layer.items():
+            if isinstance(values, dict) and values:
+                merged.setdefault(column, {}).update(values)
+    return merged or None
+
+
 def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_tabs=False):
     """Load dashboards from MongoDB with project-based permissions."""
     projection = {
@@ -217,6 +280,11 @@ def load_dashboards_from_db(owner, admin_mode=False, user=None, include_child_ta
         "main_tab_name": 1,
         "tab_icon": 1,
         "tab_icon_color": 1,
+        "tab_group": 1,
+        # The Guide's settings live on the main tab; a child tab reads them
+        # from the main tab's entry in this list.
+        "show_guide": 1,
+        "guide_intro": 1,
     }
     if admin_mode:
         projection["stored_metadata"] = 1

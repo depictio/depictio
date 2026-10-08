@@ -5,6 +5,7 @@ import {
   Anchor,
   Badge,
   Code,
+  Collapse,
   CopyButton,
   Divider,
   Group,
@@ -16,6 +17,7 @@ import {
   Text,
   TextInput,
   Tooltip,
+  UnstyledButton,
   ActionIcon,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
@@ -53,6 +55,54 @@ function formatTimestamp(raw: string): string {
 function pickOwnerEmail(dashboard: DashboardData | null): string | null {
   const perms = dashboard?.permissions as { owners?: Array<{ email?: string }> } | undefined;
   return perms?.owners?.[0]?.email ?? null;
+}
+
+/** The run provenance a project's `template_origin` carries, flattened for
+ *  display; empty when the project was not built from a template run. */
+export function readRunProvenance(templateOrigin: unknown): {
+  entries: ProvenanceEntryLike[];
+  files: string[];
+} {
+  const origin = templateOrigin as {
+    run_provenance?: Array<{
+      source?: string;
+      key?: string;
+      value?: string;
+      group?: string;
+      highlight?: boolean;
+    }>;
+    run_provenance_files?: unknown;
+  } | null;
+  const entries = Array.isArray(origin?.run_provenance)
+    ? origin.run_provenance
+        .filter((e) => e && e.key)
+        .map((e) => ({
+          source: String(e.source ?? ''),
+          key: String(e.key),
+          value: String(e.value ?? ''),
+          group: String(e.group ?? 'Other'),
+          highlight: Boolean(e.highlight),
+        }))
+    : [];
+  const files = Array.isArray(origin?.run_provenance_files)
+    ? origin.run_provenance_files.map(String)
+    : [];
+  return { entries, files };
+}
+
+/** Re-group the flat entry list the way the report's endpoint already does —
+ *  consecutive runs of the same group, in collection order. */
+export function groupRunProvenance(
+  entries: ProvenanceEntryLike[],
+): Array<{ group: string; entries: ProvenanceEntryLike[] }> {
+  const out: Array<{ group: string; entries: ProvenanceEntryLike[] }> = [];
+  for (const e of entries) {
+    const name = e.group || 'Other';
+    const last = out[out.length - 1];
+    if (last && last.group === name) last.entries.push(e);
+    else out.push({ group: name, entries: [e] });
+  }
+  return out;
 }
 
 /**
@@ -119,33 +169,8 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
   // The run-provenance keys the template flagged as highlights — the primer /
   // truncation / filtering settings a reader needs to interpret the dashboard.
   // The complete listing lives in the ingestion report; this is the digest.
-  const runProvenance: ProvenanceEntryLike[] = (() => {
-    const origin = projectTemplateOrigin as {
-      run_provenance?: Array<{
-        source?: string;
-        key?: string;
-        value?: string;
-        group?: string;
-        highlight?: boolean;
-      }>;
-    } | null;
-    if (!origin || !Array.isArray(origin.run_provenance)) return [];
-    return origin.run_provenance
-      .filter((e) => e && e.key)
-      .map((e) => ({
-        source: String(e.source ?? ''),
-        key: String(e.key),
-        value: String(e.value ?? ''),
-        group: String(e.group ?? 'Other'),
-        highlight: Boolean(e.highlight),
-      }));
-  })();
-
-  const runProvenanceFiles: string[] = (() => {
-    const origin = projectTemplateOrigin as { run_provenance_files?: unknown } | null;
-    const files = origin?.run_provenance_files;
-    return Array.isArray(files) ? files.map(String) : [];
-  })();
+  const { entries: runProvenance, files: runProvenanceFiles } =
+    readRunProvenance(projectTemplateOrigin);
 
   return (
     <Stack gap="md">
@@ -276,12 +301,9 @@ const DashboardInfoBody: React.FC<DashboardInfoBodyProps> = ({ dashboard, active
         )}
       </Stack>
 
-      <Divider label="Identifiers" labelPosition="left" my="xs" />
-
-      <Stack gap="xs">
-        {dashboardId && <CopyableId label="Dashboard ID" value={dashboardId} />}
-        {projectId && <CopyableId label="Project ID" value={projectId} />}
-      </Stack>
+      {(dashboardId || projectId) && (
+        <IdentifiersBlock dashboardId={dashboardId} projectId={projectId} />
+      )}
     </Stack>
   );
 };
@@ -306,6 +328,45 @@ const MetaRow: React.FC<MetaRowProps> = ({ icon, color, label, value }) => (
     </Stack>
   </Group>
 );
+
+/**
+ * Dashboard / project IDs, folded by default: technical detail for someone
+ * filing an issue or calling the API, not something a reader needs on every
+ * open. Local state, so the drawer and the inspector's Info tab each start
+ * folded.
+ */
+const IdentifiersBlock: React.FC<{ dashboardId: string | null; projectId: string | null }> = ({
+  dashboardId,
+  projectId,
+}) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <Stack gap="xs" data-testid="dashboard-identifiers">
+      <UnstyledButton
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        data-testid="dashboard-identifiers-toggle"
+      >
+        <Divider
+          labelPosition="left"
+          my={4}
+          label={
+            <Group gap={4} wrap="nowrap">
+              <Icon icon={open ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={14} />
+              <span>Identifiers</span>
+            </Group>
+          }
+        />
+      </UnstyledButton>
+      <Collapse in={open}>
+        <Stack gap="xs">
+          {dashboardId && <CopyableId label="Dashboard ID" value={dashboardId} />}
+          {projectId && <CopyableId label="Project ID" value={projectId} />}
+        </Stack>
+      </Collapse>
+    </Stack>
+  );
+};
 
 const CopyableId: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <Group gap="xs" wrap="nowrap" align="center">
@@ -353,18 +414,7 @@ const RunParameters: React.FC<{
   const [modalOpen, setModalOpen] = useState(false);
   const highlights = useMemo(() => entries.filter((e) => e.highlight), [entries]);
 
-  // Re-group the flat entry list the way the report's endpoint already does —
-  // consecutive runs of the same group, in collection order.
-  const groups = useMemo(() => {
-    const out: Array<{ group: string; entries: ProvenanceEntryLike[] }> = [];
-    for (const e of entries) {
-      const name = e.group || 'Other';
-      const last = out[out.length - 1];
-      if (last && last.group === name) last.entries.push(e);
-      else out.push({ group: name, entries: [e] });
-    }
-    return out;
-  }, [entries]);
+  const groups = useMemo(() => groupRunProvenance(entries), [entries]);
 
   return (
     <>
@@ -427,37 +477,61 @@ const RunParameters: React.FC<{
         </Accordion.Item>
       </Accordion>
 
-      <Modal
+      <RunParametersModal
         opened={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={<RunParametersTitle template={template} />}
-        // Centre the title on the dialog's own axis. Mantine lays the header
-        // out as title-then-close with asymmetric padding, so a title box that
-        // merely grows still ends up short of centre by half the button. Take
-        // the button out of the flow instead and the title box is the header.
-        styles={{
-          header: { position: 'relative', justifyContent: 'center', paddingRight: 16 },
-          title: { flex: 1, marginRight: 0 },
-          close: { position: 'absolute', top: 12, right: 12 },
-        }}
-        size="xl"
-        // Above the Settings drawer that opened it.
-        zIndex={Z_LAYERS.nestedOverlay}
-        scrollAreaComponent={ScrollArea.Autosize}
-      >
-        <Stack gap="sm">
-          <ProvenanceOriginNote template={template} />
-          <RunProvenanceCard
-            groups={groups}
-            files={files}
-            withCard={false}
-            withHeading={false}
-          />
-        </Stack>
-      </Modal>
+        template={template}
+        groups={groups}
+        files={files}
+      />
     </>
   );
 };
+
+/**
+ * Every parameter the run recorded, in a dialog: the Settings drawer's "All
+ * parameters" and a dashboard's own `params:` links (RunParametersHost) open
+ * the same one.
+ */
+export const RunParametersModal: React.FC<{
+  opened: boolean;
+  onClose: () => void;
+  template: ParsedTemplate | null;
+  groups: Array<{ group: string; entries: ProvenanceEntryLike[] }>;
+  files: string[];
+  /** Pre-filled search, e.g. `dada2` from a `params:dada2` link. */
+  initialQuery?: string;
+}> = ({ opened, onClose, template, groups, files, initialQuery }) => (
+  <Modal
+    opened={opened}
+    onClose={onClose}
+    title={<RunParametersTitle template={template} />}
+    // Centre the title on the dialog's own axis. Mantine lays the header
+    // out as title-then-close with asymmetric padding, so a title box that
+    // merely grows still ends up short of centre by half the button. Take
+    // the button out of the flow instead and the title box is the header.
+    styles={{
+      header: { position: 'relative', justifyContent: 'center', paddingRight: 16 },
+      title: { flex: 1, marginRight: 0 },
+      close: { position: 'absolute', top: 12, right: 12 },
+    }}
+    size="xl"
+    // Above the Settings drawer that may have opened it.
+    zIndex={Z_LAYERS.nestedOverlay}
+    scrollAreaComponent={ScrollArea.Autosize}
+  >
+    <Stack gap="sm">
+      <ProvenanceOriginNote template={template} />
+      <RunProvenanceCard
+        groups={groups}
+        files={files}
+        withCard={false}
+        withHeading={false}
+        initialQuery={initialQuery}
+      />
+    </Stack>
+  </Modal>
+);
 
 /**
  * Modal header for the run parameters: the pipeline's brand mark, then the

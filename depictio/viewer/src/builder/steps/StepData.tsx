@@ -99,7 +99,11 @@ const StepData: React.FC = () => {
         // canonical viz schemas (volcano / embedding / manhattan / stacked
         // taxonomy). Compatibility is enforced column-by-column inside
         // AdvancedVizBuilder, not at the DC-type level.
-        return ['table'];
+        //
+        // Plus phylogeny DCs: the phylogenetic kind is bound to its Newick
+        // tree, which has no table, and with tables only a tree could not be
+        // built here at all, only written in YAML.
+        return ['table', 'phylogeny'];
       default:
         return null;
     }

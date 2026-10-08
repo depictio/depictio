@@ -44,6 +44,17 @@ DISPATCH = ADVANCED_VIZ / "AdvancedVizDispatch.tsx"
 # the matching `view` (see the retired-kinds comment in the dispatch).
 LEGACY_KIND_ALIASES = {"ancombc_differentials"} | set(_KIND_ALIASES)
 
+# Renderers that hand part of a kind to another module, which reads the same
+# config. The phylogenetic renderer draws the summary view (`collapse_rank`) in
+# its own module; its keys are the kind's keys as much as the full tree's are.
+# A volcano is dispatched to the router that switches it to its MA and QQ
+# views, and drawn by VolcanoRenderer; the views' own controls are mapped back
+# onto volcano keys in diffViews.ts.
+COMPANION_SOURCES = {
+    "phylogenetic": ["PhyloSummaryRenderer"],
+    "volcano": ["VolcanoRenderer"],
+}
+
 
 def _kind_to_model() -> dict[str, type]:
     """Derive kind -> config model from the discriminated union itself."""
@@ -80,6 +91,14 @@ def _code(path: Path) -> str:
     return re.sub(r"^import .*$", "", src, flags=re.MULTILINE)
 
 
+def _kind_code(kind: str) -> str:
+    """Comment-stripped source of every module that reads `kind`'s config."""
+    paths = [KIND_SOURCES[kind]] + [
+        ADVANCED_VIZ / f"{name}.tsx" for name in COMPANION_SOURCES.get(kind, [])
+    ]
+    return "\n".join(_code(path) for path in paths)
+
+
 VIZ_CONFIG = TypeAdapter(VizConfig)
 KIND_MODELS = _kind_to_model()
 KIND_SOURCES = _kind_to_source()
@@ -91,12 +110,19 @@ def test_every_dispatched_kind_has_a_model_and_a_source():
     assert set(KIND_MODELS) == set(KIND_SOURCES) - LEGACY_KIND_ALIASES
     missing = [k for k, path in KIND_SOURCES.items() if not path.exists()]
     assert not missing, f"dispatch names renderers that do not exist: {missing}"
+    companions = [
+        name
+        for names in COMPANION_SOURCES.values()
+        for name in names
+        if not (ADVANCED_VIZ / f"{name}.tsx").exists()
+    ]
+    assert not companions, f"companion renderers that do not exist: {companions}"
 
 
 @pytest.mark.parametrize("kind", CHECKED_KINDS)
 def test_renderer_only_reads_config_keys_the_model_declares(kind: str):
     model = KIND_MODELS[kind]
-    reads = set(re.findall(r"\bconfig\.([a-z_][a-z0-9_]*)\b", _code(KIND_SOURCES[kind])))
+    reads = set(re.findall(r"\bconfig\.([a-z_][a-z0-9_]*)\b", _kind_code(kind)))
     unknown = sorted(k for k in reads if k not in model.model_fields)
     assert not unknown, (
         f"{kind}: the renderer reads config keys with no field on "
@@ -115,7 +141,7 @@ def test_persisted_controls_survive_their_model(kind: str):
     """
     # A call is the identifier followed by a type argument or an open paren,
     # which is what separates it from a prose mention.
-    body = _code(KIND_SOURCES[kind])
+    body = _kind_code(kind)
     calls = len(re.findall(r"\busePersistedVizControl\s*[<(]", body))
     keys = re.findall(r"usePersistedVizControl[^(]*\(\s*metadata,\s*'([a-z_0-9]+)'", body)
     assert len(keys) == calls, (

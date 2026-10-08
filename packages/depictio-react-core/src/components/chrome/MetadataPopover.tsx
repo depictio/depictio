@@ -4,6 +4,9 @@ import { Icon } from '@iconify/react';
 
 import { StoredMetadata } from '../../api';
 import MetadataBody from './MetadataBody';
+import { TILE_ACTION_STYLE } from './actionStyles';
+
+const STYLE = TILE_ACTION_STYLE.metadata;
 
 interface MetadataPopoverProps {
   metadata: StoredMetadata;
@@ -25,14 +28,14 @@ const MetadataPopover: React.FC<MetadataPopoverProps> = ({ metadata }) => {
   return (
     <Popover position="bottom-end" withArrow shadow="md" width={380}>
       <Popover.Target>
-        <Tooltip label="Component metadata" withArrow>
+        <Tooltip label={STYLE.label} withArrow>
           <ActionIcon
             variant="subtle"
-            color="cyan"
+            color={STYLE.color}
             size="sm"
-            aria-label="Component metadata"
+            aria-label={STYLE.label}
           >
-            <Icon icon="mdi:information-outline" width={16} height={16} />
+            <Icon icon={STYLE.icon} width={16} height={16} />
           </ActionIcon>
         </Tooltip>
       </Popover.Target>

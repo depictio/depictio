@@ -7,13 +7,15 @@
  * Execute result.
  */
 import React, { Suspense, useEffect } from 'react';
-import { Accordion, Box, Center, Loader, SegmentedControl, Stack, Tooltip } from '@mantine/core';
+import { Box, Center, Loader, SegmentedControl, Stack, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { useBuilderStore } from '../store/useBuilderStore';
 import { useDashboardAccess } from '../../hooks/useDashboardAccess';
 import CrossFilterSection from '../shared/CrossFilterSection';
+import { BuilderSections } from '../shared/BuilderSections';
 import FigureUIMode from './FigureUIMode';
 import FigurePreview from './FigurePreview';
+import FigureStyleSection from './FigureStyleSection';
 import StickyPreview from '../shared/StickyPreview';
 
 const FigureCodeMode = React.lazy(() => import('./FigureCodeMode'));
@@ -131,19 +133,26 @@ const FigureBuilder: React.FC = () => {
              *  is taken by the editor, so the section sits under the preview
              *  instead, in the same column directly below the chart, easy to
              *  reach without the eyes leaving the preview area. Gated to
-             *  scatter-like visus only (see supportsCrossFilter above). */}
-            {figureMode === 'code' && supportsCrossFilter && (
-              <Accordion variant="separated" radius="md" multiple mt="sm">
-                <CrossFilterSection
-                  enabled={Boolean(config.selection_enabled)}
-                  onEnabledChange={(checked) =>
-                    patchConfig({ selection_enabled: checked })
-                  }
-                  column={config.selection_column}
-                  onColumnChange={(name) => patchConfig({ selection_column: name })}
-                  columnDescription="Column to extract from selected points"
-                />
-              </Accordion>
+             *  scatter-like visus only (see supportsCrossFilter above). The
+             *  card header & style section joins it there for the same
+             *  reason. */}
+            {figureMode === 'code' && (
+              <Box mt="sm">
+                <BuilderSections builder="figure-code" required={[]}>
+                  {supportsCrossFilter && (
+                    <CrossFilterSection
+                      enabled={Boolean(config.selection_enabled)}
+                      onEnabledChange={(checked) =>
+                        patchConfig({ selection_enabled: checked })
+                      }
+                      column={config.selection_column}
+                      onColumnChange={(name) => patchConfig({ selection_column: name })}
+                      columnDescription="Column to extract from selected points"
+                    />
+                  )}
+                  <FigureStyleSection />
+                </BuilderSections>
+              </Box>
             )}
           </StickyPreview>
         </Box>

@@ -7,7 +7,12 @@
  * so no Pydantic validation regressions on POST /dashboards/save.
  */
 import type { StoredMetadata } from 'depictio-react-core';
-import { defaultInteractiveTitle, readMultiqcSelection } from 'depictio-react-core';
+import {
+  defaultInteractiveTitle,
+  normalizeCardVariant,
+  normalizeFigureStyle,
+  readMultiqcSelection,
+} from 'depictio-react-core';
 import type { BuilderState } from './store/useBuilderStore';
 import { autoCardTitle } from './card/cardTitle';
 import { buildAdvancedVizConfigBlob, mergedPresetConfig } from './advanced_viz/configBlob';
@@ -58,6 +63,8 @@ export function buildMetadata(state: BuilderState): StoredMetadata {
       return buildText(state, base, existing);
     case 'advanced_viz':
       return buildAdvancedViz(state, base, existing);
+    case 'highlight':
+      return buildHighlight(state, base, existing);
     default:
       return { ...existing, ...base };
   }
@@ -99,6 +106,7 @@ function buildCard(
       | 'completeness'
       | 'attrition';
     breakdown_col?: string | null;
+    trend_col?: string | null;
     coverage_max?: number | null;
     top_n_count?: number;
     threshold_value?: number | null;
@@ -109,6 +117,11 @@ function buildCard(
     title_color?: string;
     icon_name?: string;
     title_font_size?: string;
+    variant?: string | null;
+    caption?: string | null;
+    decimals?: number | null;
+    link?: string | null;
+    description?: string | null;
   }>(state.config);
   const title =
     (c.title && c.title.trim()) ||
@@ -129,6 +142,8 @@ function buildCard(
     aggregations: (c.aggregations ?? null) as unknown as string[] | undefined,
     secondary_layout: c.secondary_layout ?? 'vertical',
     breakdown_col: (c.breakdown_col ?? null) as unknown as string | undefined,
+    // The trend layout's ordered axis; without it a trend card renders no line.
+    trend_col: (c.trend_col ?? null) as unknown as string | undefined,
     coverage_max: (c.coverage_max ?? null) as unknown as number | undefined,
     top_n_count: typeof c.top_n_count === 'number' ? c.top_n_count : 3,
     // QC layouts. Same ``null``-not-``undefined`` rule as the block above: the
@@ -141,6 +156,46 @@ function buildCard(
     title_color: c.title_color || '',
     icon_name: c.icon_name || 'mdi:chart-line',
     title_font_size: (c.title_font_size as 'xs' | 'sm' | 'md' | 'lg' | 'xl') || 'md',
+    // Display block. Set after `...existing` even when empty: undefined drops
+    // the key, so clearing a field in the form clears it on the saved card
+    // rather than letting the previous value ride through.
+    // Any known style, `default` included: the builder only stores `default`
+    // to opt a card out of its section's style. An unknown value is dropped
+    // rather than saved as a style no renderer draws.
+    variant: normalizeCardVariant(c.variant) ?? undefined,
+    caption: c.caption?.trim() || undefined,
+    decimals: typeof c.decimals === 'number' ? c.decimals : undefined,
+    link: c.link?.trim() || undefined,
+    description: c.description?.trim() || undefined,
+  };
+}
+
+/**
+ * The tile's look, as the "Card header & style" section sets it: the same in
+ * both modes, since it sits on the metadata rather than in the Plotly kwargs.
+ * Every key is written, an empty field as undefined, so clearing a field in
+ * the builder clears it on the saved figure instead of `existing` keeping it.
+ */
+function figureDisplay(config: unknown): Partial<StoredMetadata> {
+  const c = as<{
+    title?: string;
+    subtitle?: string;
+    figure_style?: string | null;
+    icon_name?: string | null;
+    icon_color?: string | null;
+    hide_legend?: boolean | null;
+    link?: string | null;
+    caption?: string | null;
+  }>(config);
+  return {
+    title: c.title?.trim() || undefined,
+    subtitle: c.subtitle?.trim() || undefined,
+    figure_style: normalizeFigureStyle(c.figure_style) ?? undefined,
+    icon_name: c.icon_name || undefined,
+    icon_color: c.icon_color || undefined,
+    hide_legend: c.hide_legend ? true : undefined,
+    link: c.link?.trim() || undefined,
+    caption: c.caption?.trim() || undefined,
   };
 }
 
@@ -159,10 +214,12 @@ function buildFigure(
     max_points?: number | null;
   }>(state.config);
   const maxPoints = typeof c.max_points === 'number' ? c.max_points : null;
+  const display = figureDisplay(state.config);
   if (state.figureMode === 'code') {
     return {
       ...existing,
       ...base,
+      ...display,
       mode: 'code',
       code_content: state.codeContent,
       visu_type: state.visuType, // hint for renderers
@@ -175,6 +232,7 @@ function buildFigure(
   return {
     ...existing,
     ...base,
+    ...display,
     mode: 'ui',
     visu_type: state.visuType,
     dict_kwargs: state.dictKwargs,
@@ -201,6 +259,8 @@ function buildInteractive(
     group?: string;
     placement?: string;
     show_marks?: boolean;
+    strip_label?: string;
+    strip_icon?: boolean;
     show_histogram?: boolean;
   }>(state.config);
   // Mirror Dash design_interactive: the form surfaces only the basics, no
@@ -233,6 +293,10 @@ function buildInteractive(
     group: c.group?.trim() || undefined,
     placement,
     show_marks: c.show_marks,
+    // Filter-bar display: both stored only when they differ from the default
+    // (the title; the badge shown), so components outside a bar stay clean.
+    strip_label: c.strip_label?.trim() || undefined,
+    strip_icon: c.strip_icon === false ? false : undefined,
     // Authored in YAML rather than in the form (`InteractiveComponent.
     // show_histogram`), so the builder's job here is only to carry it through:
     // `loadExisting` seeds the config bag from the stored metadata, and
@@ -314,6 +378,34 @@ function buildImage(
   };
 }
 
+/**
+ * A highlight: where its figure lives, and the look it draws it with (the
+ * same fields as a figure's, each unset to follow the figure). No binding of
+ * its own: the figure has it, on its tab.
+ */
+function buildHighlight(
+  state: BuilderState,
+  base: StoredMetadata,
+  existing: Record<string, unknown>,
+): StoredMetadata {
+  const c = as<{
+    source_tab?: string | null;
+    source_dashboard_id?: string | null;
+    source_component?: string | null;
+  }>(state.config);
+  return {
+    ...existing,
+    ...base,
+    ...figureDisplay(state.config),
+    wf_id: undefined,
+    dc_id: undefined,
+    project_id: undefined,
+    source_tab: c.source_tab?.trim() || undefined,
+    source_dashboard_id: c.source_dashboard_id?.trim() || undefined,
+    source_component: c.source_component?.trim() || undefined,
+  };
+}
+
 function buildText(
   state: BuilderState,
   base: StoredMetadata,
@@ -325,7 +417,10 @@ function buildText(
     alignment?: string;
     vertical_alignment?: string;
     body?: string;
+    surface?: string;
+    accent?: string;
   }>(state.config);
+  const surface = c.surface === 'card' || c.surface === 'tinted' ? c.surface : 'none';
   return {
     ...existing,
     ...base,
@@ -344,6 +439,10 @@ function buildText(
         ? c.vertical_alignment
         : 'center',
     body: c.body ?? '',
+    surface,
+    // An unframed tile draws no accent, so one left over from a framed draft
+    // would persist a setting that does nothing.
+    accent: surface !== 'none' ? c.accent?.trim() || undefined : undefined,
   };
 }
 
@@ -358,6 +457,7 @@ function buildAdvancedViz(
     preset_config?: Record<string, unknown> | null;
     config?: Record<string, unknown> | null;
     viz_overrides?: Record<string, unknown> | null;
+    controls_placement?: StoredMetadata['controls_placement'];
   }>(state.config);
   // `preset_config` (catalog add) and `config` (edit-mode rehydration of a saved
   // component) both carry viz-control extras the role mapping can't express;
@@ -373,6 +473,8 @@ function buildAdvancedViz(
     ...base,
     viz_kind: c.viz_kind,
     config: buildAdvancedVizConfigBlob(c.viz_kind, c.column_mapping || {}, preset),
+    // Where the viz controls sit; unset (auto) is left out.
+    ...('controls_placement' in c ? { controls_placement: c.controls_placement || null } : {}),
   };
 }
 

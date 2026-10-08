@@ -24,11 +24,47 @@ export function mapSelectionValues(
   filters: InteractiveFilter[],
   componentIndex: string,
 ): string[] {
+  return selectionValuesFor(filters, componentIndex, 'map_selection') ?? [];
+}
+
+/**
+ * The values a component's own selection holds, read back out of the filter
+ * list, or `null` when it has none standing.
+ *
+ * A component that strips its own selection before fetching keeps no other
+ * record of it, so this is how it repaints the highlight — and how it notices
+ * a Reset made elsewhere (the chrome, the panel's "clear selections").
+ */
+export function selectionValuesFor(
+  filters: InteractiveFilter[],
+  componentIndex: string,
+  source: InteractiveFilterSource,
+): string[] | null {
   for (const f of filters) {
-    if (f.index !== componentIndex || f.source !== 'map_selection') continue;
-    if (Array.isArray(f.value)) return f.value.map((v) => String(v));
+    if (f.index !== componentIndex || f.source !== source) continue;
+    if (Array.isArray(f.value) && f.value.length > 0) return f.value.map((v) => String(v));
   }
-  return [];
+  return null;
+}
+
+/** A filter is "source-active" for this component when an entry exists with
+ *  matching `index`, the expected `source` discriminator, and a non-empty
+ *  value (avoid false-positives for filters that were emitted then cleared
+ *  but kept in the array with `value: []`). Drives the chrome's Reset. */
+export function isSourceFilterActive(
+  filters: InteractiveFilter[],
+  componentIndex: string,
+  expectedSource: InteractiveFilter['source'],
+): boolean {
+  for (const f of filters) {
+    if (f.index !== componentIndex) continue;
+    if (f.source !== expectedSource) continue;
+    const v = f.value;
+    if (v == null) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -82,9 +118,9 @@ export function isMapSelectionEnabled(metadata: StoredMetadata, hasHandler: bool
  * The DC column an advanced_viz component emits its selection on, or
  * `undefined` when it cannot emit one at all.
  *
- * Only a few viz kinds carry a per-row (or per-curve) identity to select on;
- * every other kind aggregates (bins, taxa, intersections) and would emit an
- * envelope pointing at nothing. Each is opt-in per component, so a shipped
+ * Only a few viz kinds carry a per-row (or per-curve) identity to select on,
+ * or, for the UpSet, a known set of rows behind each bar; every other kind
+ * aggregates (bins, taxa) and would emit an envelope pointing at nothing. Each is opt-in per component, so a shipped
  * dashboard keeps the drag behaviour it has today until its YAML asks for the
  * lasso.
  *
@@ -139,6 +175,13 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
         typeof config.label_col === 'string' && config.label_col ? config.label_col : undefined;
       return named ?? labelCol;
     }
+    case 'upset_plot':
+      // A clicked intersection selects the rows it counts, by the value they
+      // hold in this column. Nothing else in the config names the matrix's
+      // element column, and the right one is not even that: it is the column
+      // the other tiles' data shares (a taxon's Phylum, say, where the matrix
+      // keys taxa by a lineage string no other table carries).
+      return named;
     case 'genome_chord': {
       // A chord is one named link between two loci, so its label is the
       // identifier. The two chromosome columns are a grouping and the positions
@@ -150,6 +193,24 @@ export function advancedVizSelectionColumn(metadata: StoredMetadata): string | u
     default:
       return undefined;
   }
+}
+
+/** Kinds that read their drawn selection back out of the filter list. */
+const CHROME_RESET_KINDS = new Set(['upset_plot']);
+
+/**
+ * Whether the tile's chrome offers "Reset selection" for an advanced_viz.
+ *
+ * Only for a kind that draws its selection from the filter list, so clearing
+ * the filter clears the highlight too. The scatter kinds keep Plotly's own
+ * lasso, which a Reset from the chrome would leave drawn over points that no
+ * longer filter anything; they clear by a double-click in the plot.
+ */
+export function advancedVizChromeReset(metadata: StoredMetadata): boolean {
+  return (
+    CHROME_RESET_KINDS.has(typeof metadata.viz_kind === 'string' ? metadata.viz_kind : '') &&
+    advancedVizSelectionColumn(metadata) !== undefined
+  );
 }
 
 /**
@@ -606,8 +667,9 @@ export function enrichFilterWithDcId(
  * - `table`  — row selection is opt-in per component.
  * - `map`    — see `isMapSelectionEnabled` (choropleth is excluded).
  * - `image`  — a gallery selects thumbnails, which requires an image column.
- * - `advanced_viz`: see `advancedVizSelectionColumn`, i.e. the embedding and
- *   Manhattan scatters, each opt-in and each needing a resolvable column.
+ * - `advanced_viz`: see `advancedVizSelectionColumn`, i.e. the embedding,
+ *   Manhattan, profile and scatter plots and the UpSet's intersections, each
+ *   opt-in and each needing a resolvable column.
  *
  * `hasHandler` folds in the caller's "is anyone listening" check, so read-only
  * hosts (catalog, project previews) advertise nothing.

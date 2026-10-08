@@ -38,6 +38,7 @@ import { splitFigureByGroups } from './groupSplit';
 import { useSelectionRevision } from './selectionGesture';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
+import { usePlotSelectionReset } from '../usePlotSelectionReset';
 
 type ComputeMethod = 'pca' | 'umap' | 'tsne' | 'pcoa';
 
@@ -785,13 +786,11 @@ const EmbeddingRenderer: React.FC<Props> = ({
         font: { color: textColor },
         margin: actuallyRender3D ? { l: 0, r: 0, t: 8, b: 0 } : { l: 40, r: 12, t: 12, b: 40 },
         // Plotly wipes UI state — the drawn lasso and every trace's
-        // `selectedpoints` — on each `Plotly.react`, and `applyDataTheme`
-        // hands the wrapper a fresh trace array on every render, so one
-        // happens as soon as the emitted selection lands back in
-        // `filters`. Without a stable `uirevision` the lasso the user has
-        // just drawn disappears the instant it takes effect. Keyed on
-        // `refreshTick` like FigureRenderer: a realtime tick still
-        // repaints, a filter change does not.
+        // `selectedpoints` — on each `Plotly.react`. Without a stable
+        // `uirevision` a redraw while a lasso stands (the plot's props are
+        // held steady below, but a redraw still comes with a new figure)
+        // drops it. Keyed on `refreshTick` like FigureRenderer: a realtime
+        // tick still repaints, a filter change does not.
         uirevision: `tick-${refreshTick ?? 0}`,
         // The selected points are keyed separately, so an outside clear (the
         // selection saved as a group, or removed from the filter summary)
@@ -873,7 +872,12 @@ const EmbeddingRenderer: React.FC<Props> = ({
   // Whether any point matched, for the dispatch's "not grouped" badge.
   useReportGroupColouring(groupRender, figure, groupedFigure);
 
-  // Themed once per figure so the annotation layer can memoise on them.
+  // Held steady across renders: `Plot` redraws whenever its data, layout or
+  // config is a new object, and a redraw that follows a lasso's own echo
+  // re-runs Plotly's selection against a layout without it, emitting an empty
+  // selection that clears the filter just made. Any re-render of the parent
+  // (a card loading, a filter elsewhere) used to be such a redraw. Themed once
+  // per figure also lets the annotation layer memoise on them.
   const plotData = useMemo(
     () => (groupedFigure ? applyDataTheme(groupedFigure.data, isDark, theme) : null),
     [groupedFigure, isDark, theme],
@@ -1228,6 +1232,9 @@ const EmbeddingRenderer: React.FC<Props> = ({
     if (!selectionEnabled) return;
     emitSelection([]);
   };
+  // A selection cleared from outside (the chrome's reset, a group saved from
+  // it) takes its box and its dimmed points with it.
+  const gdRef = usePlotSelectionReset(filters, metadata.index);
 
   return (
     <AdvancedVizFrame
@@ -1242,18 +1249,24 @@ const EmbeddingRenderer: React.FC<Props> = ({
       dataColumns={requiredCols}
       badges={annotations.badges}
     >
-      {groupedFigure ? (
+      {plotData && plotLayout ? (
         <>
           <AdvancedVizPlot
             data={annotations.data as any}
             layout={annotations.layout as any}
             useResizeHandler
-            style={{ width: '100%', height: '100%' }}
-            config={{ displaylogo: false, responsive: true } as any}
+            style={PLOT_STYLE}
+            config={PLOT_CONFIG}
             {...annotations.plotProps({
               onSelected: selectionEnabled ? handleSelected : undefined,
               onClick: selectionEnabled ? handleClick : undefined,
               onDeselect: selectionEnabled ? handleDeselect : undefined,
+              onInitialized: (_fig, gd) => {
+                gdRef.current = gd as HTMLElement;
+              },
+              onUpdate: (_fig, gd) => {
+                gdRef.current = gd as HTMLElement;
+              },
             })}
           />
           {annotations.toolbar}
@@ -1262,5 +1275,8 @@ const EmbeddingRenderer: React.FC<Props> = ({
     </AdvancedVizFrame>
   );
 };
+
+const PLOT_STYLE: React.CSSProperties = { width: '100%', height: '100%' };
+const PLOT_CONFIG = { displaylogo: false, responsive: true } as any;
 
 export default EmbeddingRenderer;

@@ -1,0 +1,795 @@
+/*
+ * The filter bar: filters in equal columns, a thin rule between columns.
+ *
+ * Alignment is the point of the layout. The bar is a CSS grid of equal tracks
+ * (`auto-fit`, so it takes as many columns as fit and collapses the rest), and
+ * each filter inside it is a grid of its own: [badge][label][control]. Because
+ * the tracks are equal, the rules between filters land at the same x on every
+ * row; because every label cell stacks all of the bar's labels invisibly (see
+ * `__sizer` in FilterStrip.tsx), every label column is as wide as the widest
+ * label, so the labels start, and the controls start, on one line too.
+ *
+ * The rules are each filter's own `::before`, drawn in the middle of the gap
+ * before it. The first column's falls outside the grid and is clipped by
+ * `__clip` (`overflow-x: clip`, which unlike `hidden` leaves the vertical axis
+ * visible for the chips' shadow and the slider readout), so a row never opens
+ * on a stray line.
+ *
+ * Under 560px of room (440px in a section's smaller bar) a filter stacks its
+ * control under its label, one filter per row with a rule between rows: beside
+ * the label, a three-chip track would be too narrow for its chips.
+ */
+
+.depictio-filter-strip {
+  /* The gap between columns; its rule sits in the middle. */
+  --strip-gap: 28px;
+  --strip-row-gap: 12px;
+  --strip-control-height: 40px;
+  /* A column is never narrower than this. Mirrored in the container queries
+     below, which cannot read a custom property: two columns need
+     2 × 420 + 28 = 868px. */
+  --strip-item-min: 420px;
+  --strip-badge: 32px;
+  --strip-label-max: 200px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  column-gap: 20px;
+  row-gap: 10px;
+  padding: 16px 20px;
+  background: var(--mantine-color-body);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-lg);
+  box-shadow: var(--mantine-shadow-xs);
+  /* Queried by the aside, which drops under the filters on a narrow bar. */
+  container: depictio-strip / inline-size;
+}
+
+/* A section's own bar: part of the section's heading block rather than a card
+   of its own, so a hairline frame, no shadow, and everything a size smaller.
+   Two columns need 2 × 380 + 24 = 784px. */
+.depictio-filter-strip[data-variant='section'] {
+  --strip-gap: 24px;
+  --strip-row-gap: 10px;
+  --strip-control-height: 36px;
+  --strip-item-min: 380px;
+  --strip-badge: 26px;
+  --strip-label-max: 180px;
+  column-gap: 16px;
+  padding: 8px 12px;
+  background: transparent;
+  border-radius: var(--mantine-radius-md);
+  box-shadow: none;
+}
+
+.depictio-filter-strip__clip {
+  flex: 1 1 var(--strip-item-min);
+  min-width: 0;
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
+.depictio-filter-strip[data-variant='card'] .depictio-filter-strip__clip {
+  container: depictio-strip-card / inline-size;
+}
+
+.depictio-filter-strip[data-variant='section'] .depictio-filter-strip__clip {
+  container: depictio-strip-section / inline-size;
+}
+
+.depictio-filter-strip__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--strip-item-min)), 1fr));
+  column-gap: var(--strip-gap);
+  row-gap: var(--strip-row-gap);
+}
+
+/* ------------------------------------------------------------------- item */
+
+.depictio-filter-strip__item {
+  position: relative;
+  display: grid;
+  /* label, control */
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 14px;
+  min-width: 0;
+  min-height: var(--strip-control-height);
+}
+
+.depictio-filter-strip[data-badges='true'] .depictio-filter-strip__item {
+  /* badge, label, control */
+  grid-template-columns: var(--strip-badge) auto minmax(0, 1fr);
+}
+
+.depictio-filter-strip[data-variant='section'] .depictio-filter-strip__item {
+  column-gap: 10px;
+}
+
+.depictio-filter-strip__item::before {
+  content: '';
+  position: absolute;
+  inset-block: 2px;
+  inset-inline-start: calc(var(--strip-gap) / -2 - 0.5px);
+  border-inline-start: 1px solid var(--mantine-color-default-border);
+  pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ label */
+
+.depictio-filter-strip__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--strip-badge);
+  height: var(--strip-badge);
+  border-radius: 9px;
+  background: var(--strip-accent);
+  color: var(--mantine-color-white);
+}
+
+.depictio-filter-strip__badge[data-empty] {
+  background: none;
+}
+
+.depictio-filter-strip[data-variant='section'] .depictio-filter-strip__badge {
+  border-radius: 7px;
+}
+
+.depictio-filter-strip[data-variant='section'] .depictio-filter-strip__badge svg {
+  width: 16px;
+  height: 16px;
+}
+
+.depictio-filter-strip__label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: var(--strip-label-max);
+}
+
+.depictio-filter-strip__name-box {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.depictio-filter-strip__name,
+.depictio-filter-strip__sizer {
+  grid-area: 1 / 1;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.depictio-filter-strip[data-variant='section'] .depictio-filter-strip__name,
+.depictio-filter-strip[data-variant='section'] .depictio-filter-strip__sizer {
+  font-size: 14px;
+}
+
+.depictio-filter-strip__name {
+  color: var(--mantine-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Every label of the bar, stacked in one column with no height: it widens the
+   cell to the widest label without taking any room or being seen. */
+.depictio-filter-strip__sizer {
+  display: flex;
+  flex-direction: column;
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.depictio-filter-strip__control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+/* ------------------------------------------------------------------ aside */
+
+.depictio-filter-strip__aside {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  margin-inline-start: auto;
+  min-height: var(--strip-control-height);
+}
+
+.depictio-filter-strip__more,
+.depictio-filter-strip__reset {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--mantine-radius-md);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.depictio-filter-strip__more {
+  color: var(--mantine-color-text);
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+}
+
+.depictio-filter-strip__more:hover {
+  background: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
+}
+
+.depictio-filter-strip__reset {
+  padding-inline: 8px;
+  color: var(--mantine-color-dimmed);
+}
+
+.depictio-filter-strip__reset:hover {
+  color: var(--mantine-color-text);
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+}
+
+.depictio-filter-strip__more:focus-visible,
+.depictio-filter-strip__reset:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 1px;
+}
+
+.depictio-filter-strip__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-4));
+}
+
+.depictio-filter-strip__count[data-hidden] {
+  visibility: hidden;
+}
+
+/* "More filters" and "Fewer filters" in one cell, as wide as the wider. */
+.depictio-filter-strip__more-label {
+  display: grid;
+}
+
+.depictio-filter-strip__more-label > span {
+  grid-area: 1 / 1;
+}
+
+.depictio-filter-strip__more-label > span[data-shown='false'] {
+  visibility: hidden;
+}
+
+.depictio-filter-strip__more {
+  position: relative;
+}
+
+/* How many folded filters are set: a bubble on the button's corner, so it
+   takes no room in the row. */
+.depictio-filter-strip__active-count {
+  position: absolute;
+  top: -6px;
+  inset-inline-end: -6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--mantine-color-white);
+  background: var(--mantine-primary-color-filled);
+  box-shadow: 0 0 0 2px var(--mantine-color-body);
+}
+
+.depictio-filter-strip__reset[data-hidden] {
+  visibility: hidden;
+}
+
+/* A narrow bar puts the aside on a line of its own, under the filters: there
+   it reserves no room for a Reset that is not offered. */
+@container depictio-strip (max-width: 699px) {
+  .depictio-filter-strip__aside {
+    flex-basis: 100%;
+    justify-content: flex-end;
+    min-height: 0;
+  }
+
+  .depictio-filter-strip__reset[data-hidden] {
+    display: none;
+  }
+}
+
+/* ------------------------------------------------------------------- chips */
+
+.depictio-strip-track {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  min-height: var(--strip-control-height);
+  padding: 4px;
+  border-radius: var(--mantine-radius-md);
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+}
+
+/* Up to three values: a segmented control. Equal segments, as wide as the
+   dropdowns beside it, a hairline between two unpressed ones as in Mantine's.
+   A segment is never narrower than its value: in a narrow cell the segments
+   give up being equal before a name is cut. */
+.depictio-strip-segments {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(max-content, 1fr);
+  width: 100%;
+  max-width: 360px;
+}
+
+.depictio-strip-segments .depictio-strip-chip {
+  position: relative;
+  padding-inline: 10px;
+}
+
+.depictio-strip-segments .depictio-strip-chip + .depictio-strip-chip::before {
+  content: '';
+  position: absolute;
+  inset-block: 7px;
+  inset-inline-start: -1.5px;
+  width: 1px;
+  background: light-dark(var(--mantine-color-gray-3), var(--mantine-color-dark-4));
+  transition: opacity 120ms ease;
+}
+
+.depictio-strip-segments .depictio-strip-chip[aria-pressed='true']::before,
+.depictio-strip-segments .depictio-strip-chip[aria-pressed='true'] + .depictio-strip-chip::before {
+  opacity: 0;
+}
+
+.depictio-strip-chip {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  padding: 4px 14px;
+  border-radius: calc(var(--mantine-radius-md) - 2px);
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: var(--mantine-color-dimmed);
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease;
+}
+
+.depictio-filter-strip[data-variant='section'] .depictio-strip-chip {
+  padding: 3px 11px;
+  gap: 7px;
+  font-size: 13px;
+}
+
+.depictio-strip-chip:hover {
+  color: var(--mantine-color-text);
+}
+
+.depictio-strip-chip[aria-pressed='true'] {
+  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-4));
+  color: var(--mantine-color-text);
+  font-weight: 600;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.depictio-strip-chip:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 1px;
+}
+
+.depictio-strip-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* The value's colour (`chipCategoryDots`): the dashboard's for the column, or
+   the colorway's for a column short enough to give every value its own. */
+.depictio-strip-chip__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--chip-color);
+}
+
+/* Unselected chips dim their dot with their label, so the selected ones are
+   the only full-strength colour in the row once something is picked. */
+.depictio-strip-track[data-has-selection='true']
+  .depictio-strip-chip[aria-pressed='false']
+  .depictio-strip-chip__dot,
+.depictio-strip-picker__list[data-has-selection='true']
+  .depictio-strip-chip[aria-pressed='false']
+  .depictio-strip-chip__dot {
+  opacity: 0.45;
+}
+
+/* The picker, for a column with too many values for a track of chips.
+   Closed, it is the track itself, holding "All N" or the picked values. */
+.depictio-strip-picker {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  max-width: 360px;
+  min-height: var(--strip-control-height);
+  padding: 4px 10px 4px 4px;
+  border-radius: var(--mantine-radius-md);
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+  cursor: pointer;
+}
+
+.depictio-strip-picker:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 1px;
+}
+
+.depictio-strip-picker__values {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.depictio-strip-picker__values .depictio-strip-chip {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  cursor: inherit;
+}
+
+.depictio-strip-picker__values .depictio-strip-chip > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.depictio-strip-picker__all,
+.depictio-strip-picker__more {
+  padding: 0 10px;
+  font-size: var(--mantine-font-size-sm);
+  font-weight: 500;
+  color: var(--mantine-color-dimmed);
+  white-space: nowrap;
+}
+
+.depictio-strip-picker__more {
+  padding: 0 6px;
+}
+
+.depictio-strip-picker__chevron {
+  flex: none;
+  color: var(--mantine-color-dimmed);
+  transition: transform 150ms ease;
+}
+
+.depictio-strip-picker[aria-expanded='true'] .depictio-strip-picker__chevron {
+  transform: rotate(180deg);
+}
+
+/* Open: the values one per line, a tick on the picked ones. */
+.depictio-strip-picker__dropdown {
+  min-width: 260px;
+}
+
+.depictio-strip-picker__list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.depictio-strip-picker__list .depictio-strip-chip {
+  justify-content: flex-start;
+  min-width: 0;
+  color: var(--mantine-color-text);
+  box-shadow: none;
+}
+
+/* A short column: each value a pill in its colour, filled with a tint of it
+   once picked. */
+.depictio-strip-picker__list[data-variant='chips'] .depictio-strip-chip {
+  padding: 6px 12px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: 999px;
+}
+
+.depictio-strip-picker__list[data-variant='chips'] .depictio-strip-chip:hover {
+  background: light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6));
+}
+
+.depictio-strip-picker__list[data-variant='chips'] .depictio-strip-chip[aria-pressed='true'] {
+  border-color: var(--chip-color, var(--mantine-primary-color-filled));
+  background: color-mix(
+    in srgb,
+    var(--chip-color, var(--mantine-primary-color-filled)) 14%,
+    var(--mantine-color-body)
+  );
+}
+
+/* A long column: plain rows, as in a select's dropdown. */
+.depictio-strip-picker__list[data-variant='list'] {
+  gap: 1px;
+}
+
+.depictio-strip-picker__list[data-variant='list'] .depictio-strip-chip {
+  padding: 7px 10px;
+  border-radius: var(--mantine-radius-sm);
+  font-weight: 400;
+}
+
+.depictio-strip-picker__list[data-variant='list'] .depictio-strip-chip:hover {
+  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
+}
+
+.depictio-strip-picker__list[data-variant='list'] .depictio-strip-chip[aria-pressed='true'] {
+  font-weight: 600;
+  background: var(--mantine-primary-color-light);
+}
+
+.depictio-strip-chip__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.depictio-strip-chip__tick {
+  flex: none;
+  margin-inline-start: auto;
+  color: var(--mantine-primary-color-filled);
+  visibility: hidden;
+}
+
+.depictio-strip-chip[aria-pressed='true'] .depictio-strip-chip__tick {
+  visibility: visible;
+}
+
+.depictio-strip-picker__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 4px 0;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--mantine-color-dimmed);
+}
+
+.depictio-strip-picker__clear {
+  all: unset;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--mantine-primary-color-filled);
+}
+
+.depictio-strip-picker__clear:hover {
+  text-decoration: underline;
+}
+
+/* ----------------------------------------------------------------- sliders */
+
+.depictio-strip-slider {
+  flex: 1 1 auto;
+  min-width: 80px;
+  max-width: 360px;
+}
+
+/* Half a thumb of room at each end, so a thumb resting on an end stays inside
+   the bar's clip when the slider starts a row (always, on a phone). */
+.depictio-filter-strip__item[data-kind='range'] .depictio-filter-strip__control,
+.depictio-filter-strip__item[data-kind='slider'] .depictio-filter-strip__control {
+  padding-inline: 8px;
+}
+
+.depictio-strip-slider .depictio-strip-slider__thumb {
+  background-color: var(--mantine-color-body);
+  border-width: 2px;
+  border-color: var(--strip-accent);
+}
+
+.depictio-strip-slider .depictio-strip-slider__bar {
+  background-color: var(--strip-accent);
+}
+
+/* The current values: shown while the slider is in use or narrowed, quiet
+   otherwise. Positioned under the track so showing them moves nothing. Kept
+   within the slider's own width, which stops short of a wide column. */
+.depictio-strip-readout {
+  position: absolute;
+  inset-inline-start: 8px;
+  width: min(calc(100% - 16px), 360px);
+  top: calc(50% + 12px);
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--mantine-color-dimmed);
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.depictio-filter-strip__item:hover .depictio-strip-readout,
+.depictio-filter-strip__item:focus-within .depictio-strip-readout,
+.depictio-filter-strip__item[data-active='true'] .depictio-strip-readout {
+  opacity: 1;
+}
+
+/* ------------------------------------------------------- where bars sit */
+
+/* A section's own bar, between its heading and its tiles. */
+.depictio-section-filter-bar {
+  margin-bottom: 14px;
+}
+
+.depictio-strip-section__edit-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-inline: 4px;
+}
+
+.depictio-strip-section + .depictio-section-accordion,
+.depictio-section-accordion + .depictio-strip-section,
+.depictio-strip-section + .depictio-strip-section {
+  margin-top: var(--mantine-spacing-sm);
+}
+
+.depictio-strip-section__rest {
+  margin-top: var(--mantine-spacing-sm);
+}
+
+/* ------------------------------------------------------------------ phone */
+
+/* Label above control, one filter per row, a rule between rows (every item
+   starts a row here, so the column rules are all clipped). */
+@container depictio-strip-card (max-width: 559px) {
+  .depictio-filter-strip .depictio-filter-strip__item[data-kind] {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 8px;
+  }
+
+  .depictio-filter-strip[data-badges='true'] .depictio-filter-strip__item[data-kind] {
+    grid-template-columns: var(--strip-badge) minmax(0, 1fr);
+  }
+
+  .depictio-filter-strip__item[data-kind] .depictio-filter-strip__control {
+    grid-column: 1 / -1;
+  }
+
+  /* A switch stays beside its label; alone under it, it reads as a stray. */
+  .depictio-filter-strip__item[data-kind='toggle'] .depictio-filter-strip__control {
+    grid-column: auto;
+    justify-content: flex-end;
+  }
+
+  .depictio-filter-strip .depictio-filter-strip__item[data-kind='toggle'] {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .depictio-filter-strip[data-badges='true'] .depictio-filter-strip__item[data-kind='toggle'] {
+    grid-template-columns: var(--strip-badge) auto minmax(0, 1fr);
+  }
+
+  .depictio-filter-strip__item + .depictio-filter-strip__item {
+    padding-top: var(--strip-row-gap);
+    border-top: 1px solid var(--mantine-color-default-border);
+  }
+
+  .depictio-filter-strip__item[data-kind='range'],
+  .depictio-filter-strip__item[data-kind='slider'] {
+    padding-bottom: 12px;
+  }
+
+  .depictio-filter-strip__label {
+    max-width: none;
+  }
+
+  .depictio-strip-slider,
+  .depictio-strip-picker {
+    max-width: none;
+  }
+
+  .depictio-strip-readout {
+    width: calc(100% - 16px);
+  }
+}
+
+/* The same, for a section's own bar, whose smaller type fits a label beside
+   its chips down to 440px. Container queries cannot share a rule list across
+   two names, hence the repetition. */
+@container depictio-strip-section (max-width: 439px) {
+  .depictio-filter-strip .depictio-filter-strip__item[data-kind] {
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 8px;
+  }
+
+  .depictio-filter-strip[data-badges='true'] .depictio-filter-strip__item[data-kind] {
+    grid-template-columns: var(--strip-badge) minmax(0, 1fr);
+  }
+
+  .depictio-filter-strip__item[data-kind] .depictio-filter-strip__control {
+    grid-column: 1 / -1;
+  }
+
+  .depictio-filter-strip__item[data-kind='toggle'] .depictio-filter-strip__control {
+    grid-column: auto;
+    justify-content: flex-end;
+  }
+
+  .depictio-filter-strip .depictio-filter-strip__item[data-kind='toggle'] {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .depictio-filter-strip[data-badges='true'] .depictio-filter-strip__item[data-kind='toggle'] {
+    grid-template-columns: var(--strip-badge) auto minmax(0, 1fr);
+  }
+
+  .depictio-filter-strip__item + .depictio-filter-strip__item {
+    padding-top: var(--strip-row-gap);
+    border-top: 1px solid var(--mantine-color-default-border);
+  }
+
+  .depictio-filter-strip__item[data-kind='range'],
+  .depictio-filter-strip__item[data-kind='slider'] {
+    padding-bottom: 12px;
+  }
+
+  .depictio-filter-strip__label {
+    max-width: none;
+  }
+
+  .depictio-strip-slider,
+  .depictio-strip-picker {
+    max-width: none;
+  }
+
+  .depictio-strip-readout {
+    width: calc(100% - 16px);
+  }
+}

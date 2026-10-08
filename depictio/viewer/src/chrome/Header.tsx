@@ -6,6 +6,8 @@ import { Icon } from '@iconify/react';
 import type { BrandTheme, DashboardData, DashboardSummary } from 'depictio-react-core';
 import PoweredBy from './PoweredBy';
 import { useFeedbackLink } from '../feedback';
+import { searchShortcutLabel } from '../spotlight/shortcut';
+import { dashboardLinkClickHandler } from '../dashboards/lib/dashboardLinks';
 
 /** True for path-like icon values (PNG/SVG file URLs) — these came from the
  *  Dash YAML and aren't valid Iconify names. */
@@ -88,12 +90,14 @@ interface HeaderProps {
   /** Active filter count, badged on the filters button so a filtered dashboard
    *  never looks unfiltered on a phone. */
   filterCount?: number;
+  /** Opens the dashboard search. The button is omitted without it. */
+  onOpenSearch?: () => void;
 }
 
 /**
  * Replaces the contents of `<AppShell.Header>`. Three regions:
  *   Left:  Burgers + active-tab icon + dashboard title (with parent breadcrumb)
- *   Right: PoweredBy | Edit | Settings (Reset lives in the Filters panel now).
+ *   Right: PoweredBy | Search | Edit | Settings (Reset lives in the Filters panel now).
  *
  * Visual parity with `depictio/dash/layouts/header.py:design_header`.
  */
@@ -117,6 +121,7 @@ const Header: React.FC<HeaderProps> = ({
   titleExtras,
   onOpenFilters,
   filterCount = 0,
+  onOpenSearch,
 }) => {
   const { colorScheme } = useMantineColorScheme();
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
@@ -281,6 +286,26 @@ const Header: React.FC<HeaderProps> = ({
       {/* Right region — colors mirror depictio/dash/layouts/header.py */}
       <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
         <PoweredBy withRightBorder />
+        {/* Search leads the actions: it is how a reader finds their way round
+            the dashboard, before doing anything to it. An icon, as the
+            feedback link at the far end is, with the tooltip naming it and
+            the shortcut that does the same; on a phone, where there is no
+            shortcut, it is the only way in, so it stays at every width. */}
+        {onOpenSearch && (
+          <Tooltip label={`Search this dashboard (${searchShortcutLabel()})`} withArrow>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="md"
+              onClick={onOpenSearch}
+              aria-label="Search this dashboard"
+              aria-keyshortcuts="Meta+K Control+K"
+              data-testid="dashboard-search"
+            >
+              <Icon icon="mdi:magnify" width={22} />
+            </ActionIcon>
+          </Tooltip>
+        )}
         {/* One Add menu rather than a button per thing that can be added: the
             two entries name what appears, and the menu stays add-only. An
             existing section is edited from the "…" on its own header. */}
@@ -390,9 +415,25 @@ const Header: React.FC<HeaderProps> = ({
           variant="filled"
           size="xs"
           onClick={onOpenSettings}
+          visibleFrom="sm"
         >
           Settings
         </Button>
+        {/* Below `sm` the row is already wider than a phone, and the search
+            icon adds to it: Settings drops its label there to pay for it, the
+            gear alone being as recognisable as the word. */}
+        <Tooltip label="Settings" withArrow>
+          <ActionIcon
+            color="gray"
+            variant="filled"
+            size="md"
+            onClick={onOpenSettings}
+            hiddenFrom="sm"
+            aria-label="Settings"
+          >
+            <Icon icon="ic:baseline-settings" width={16} />
+          </ActionIcon>
+        </Tooltip>
         {/* An aside, not an action on the dashboard, so it is an icon rather
             than a sixth button: findable by someone who wants to say something,
             without competing with Edit / Save / Settings. It sits past the
@@ -403,9 +444,9 @@ const Header: React.FC<HeaderProps> = ({
             reason an icon can stand alone here. The same link is repeated as a
             labelled row in the Settings drawer for anyone who goes looking
             rather than reacting. */}
+        {feedback && <Divider orientation="vertical" my={6} />}
         {feedback && (
           <>
-            <Divider orientation="vertical" my={6} />
             <Tooltip label={feedback.label} withArrow>
               <ActionIcon
                 component="a"

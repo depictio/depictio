@@ -56,10 +56,23 @@ import {
   SaveGroupContext,
   BrandScope,
   Z_LAYERS,
+  tabLinkKey,
+  buildGuideModel,
+  resolveGuideSettings,
+  CategoryColorsContext,
+  barSectionNames,
+  filtersInScope,
+  hasSectionBar,
+  isBarMember,
+  isBarSection,
+  mergeFilterScopes,
+  planScopedRequests,
+  sectionFilterScopes,
   AdvancedVizPlacementDefaultProvider,
 } from 'depictio-react-core';
 import type {
   DashboardData,
+  FilterSectionSpec,
   DashboardPermissions,
   DashboardSummary,
   CrossTabComponentsResponse,
@@ -84,9 +97,11 @@ const ingestionBannerKey = (projectId: string) =>
  *  enough that a single deliberate change still feels immediate. */
 const FILTER_DEBOUNCE_MS = 250;
 import { notifications } from '@mantine/notifications';
-import { Header, Sidebar, SettingsDrawer, TabIntro } from './chrome';
+import { Header, Sidebar, RunParametersHost, SettingsDrawer, TabIntro } from './chrome';
+import TabLinkProvider from './chrome/TabLinkProvider';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
+import { setContentWidthScope, useContentMaxWidth } from './hooks/useContentWidthPref';
 import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
@@ -103,6 +118,9 @@ import NotesFooter from './components/NotesFooter';
 import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
 import { usePageTitle } from './branding';
+import { DashboardGuide, useGuideRoute } from './guide';
+import { DashboardSpotlight } from './spotlight';
+import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 
 /**
  * Top-level SPA. Layout:
@@ -207,7 +225,19 @@ const App: React.FC = () => {
   const [cardsLoading, setCardsLoading] = useState(false);
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [settingsOpened, { open: openSettings, close: closeSettings }] = useDisclosure(false);
+  const [searchOpened, { open: openSearch, close: closeSearch }] = useDisclosure(false);
+  // The section the settings open on when something asks for one (the Guide's
+  // "Open Your view"); unset, they open on the one last visited.
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionKey | undefined>();
+  const openSettingsAt = useCallback(
+    (section?: SettingsSectionKey) => {
+      setSettingsSection(section);
+      openSettings();
+    },
+    [openSettings],
+  );
   const contentScaleStyle = useContentScaleStyle();
+  const contentMaxWidth = useContentMaxWidth();
   const { user: currentUser, inspectorEnabled } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
   // `control` is null while the flag is off, so no provider value reaches the
@@ -292,6 +322,7 @@ const App: React.FC = () => {
   const [filterPanelOpened, toggleFilterPanel] = useFilterPanelOpen(
     panelScopeId,
     filterPanelWidth + FILTER_PANEL_RESIZER_WIDTH - FILTER_PANEL_RAIL_WIDTH,
+    dashboard?.filter_panel_default === 'collapsed',
   );
   // Below `sm` the panel would leave the content column unusable, so it moves
   // into a drawer opened from the header. `getInitialValueInEffect: false`
@@ -383,18 +414,47 @@ const App: React.FC = () => {
   // fetch via ``DashboardGrid`` → ``ComponentRenderer``.
   const [refreshTick, setRefreshTick] = useState(0);
 
+  // Which filters belong to a section's own bar, and so reach that section's
+  // components only (see `filterScope.ts`): this tab's section bars, plus those
+  // of the persistent sections its siblings fan out here. Every fetch below
+  // goes through it — the grid's cells, the cards, the funnel, the maps.
+  const filterScopes = useMemo(
+    () =>
+      mergeFilterScopes(
+        sectionFilterScopes(dashboard?.stored_metadata, dashboard?.grid_sections),
+        ...crossTab.persistentSections
+          .filter(
+            (s) =>
+              s.kind === 'grid' && s.owner_dashboard_id !== dashboardId && hasSectionBar(s.spec),
+          )
+          .map((s) =>
+            sectionFilterScopes(
+              s.components.map((c) => c.metadata),
+              [s.spec],
+              s.owner_dashboard_id,
+            ),
+          ),
+      ),
+    [dashboard?.stored_metadata, dashboard?.grid_sections, crossTab.persistentSections, dashboardId],
+  );
+
   // Bulk-compute card values whenever the settled filter changes.
   //
   // The debounce used to live here as a local `setTimeout`; it now comes from
   // `deferredFilters`, shared with every other component. Keeping a second one
   // stacked on top would have delayed cards by twice as long as the figures
   // next to them, so they'd visibly lag behind the rest of the dashboard.
+  //
+  // One request per distinct filter set: a card in a section with a bar of its
+  // own is computed under that bar's filters, every other card without them
+  // (`planScopedRequests`). With no section bar filtering, that is the single
+  // request it always was.
   useEffect(() => {
     if (!dashboard || !dashboardId) return;
-    const cardIds = (dashboard.stored_metadata || [])
+    const cards = (dashboard.stored_metadata || [])
       .filter((m) => m.component_type === 'card')
-      .map((m) => m.index);
-    if (cardIds.length === 0) return;
+      .map((m) => ({ id: m.index, scope: typeof m.section === 'string' ? m.section : null }));
+    if (cards.length === 0) return;
 
     setCardsLoading(true);
     // Keep the previous card values mounted while the new bulk-compute
@@ -403,29 +463,43 @@ const App: React.FC = () => {
     // snap every card back to ``…`` on every keystroke / drag step.
     if (bulkCtrl.current) bulkCtrl.current.abort();
     bulkCtrl.current = new AbortController();
-    bulkComputeCards(
-      dashboardId,
-      deferredFilters,
-      cardIds,
-      groupsApi.bulkOptions,
-      // Wired to the abort above: without it a slow superseded response (e.g.
-      // compare-on forces real Delta loads) could land after a fast newer one
-      // and resurrect stale card strips.
-      bulkCtrl.current.signal,
+    const signal = bulkCtrl.current.signal;
+    Promise.all(
+      planScopedRequests(cards, deferredFilters, filterScopes).map((req) =>
+        bulkComputeCards(
+          dashboardId,
+          req.filters,
+          req.ids,
+          groupsApi.bulkOptions,
+          // Wired to the abort above: without it a slow superseded response
+          // (e.g. compare-on forces real Delta loads) could land after a fast
+          // newer one and resurrect stale card strips.
+          signal,
+        ),
+      ),
     )
-      .then((res) => {
-        setCardValues(res.values);
-        setCardSecondaryValues(res.secondary_values || {});
+      .then((responses) => {
+        const values: Record<string, unknown> = {};
+        const secondary: Record<string, Record<string, unknown>> = {};
+        for (const res of responses) {
+          Object.assign(values, res.values);
+          Object.assign(secondary, res.secondary_values || {});
+        }
+        setCardValues(values);
+        setCardSecondaryValues(secondary);
       })
       .catch((err) => {
         if (err?.name !== 'AbortError') console.warn('[App] bulk-compute failed:', err);
       })
-      .finally(() => setCardsLoading(false));
+      .finally(() => {
+        if (!signal.aborted) setCardsLoading(false);
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     dashboard,
     dashboardId,
     deferredFilterKey,
+    filterScopes,
     refreshTick,
     // Undefined while compare is off, so group edits don't refire the fetch.
     JSON.stringify(groupsApi.bulkOptions ?? null),
@@ -436,21 +510,70 @@ const App: React.FC = () => {
     () => new Set(crossTab.floating.map((c) => c.metadata.index)),
     [crossTab.floating],
   );
+  // Grid sections with a filter bar (drawn as one, or carrying their own):
+  // their interactive components render in the grid, not in the filter panel.
+  const barNames = useMemo(
+    () => barSectionNames(dashboard?.grid_sections as FilterSectionSpec[] | undefined),
+    [dashboard?.grid_sections],
+  );
   const persistentFilterIndices = useMemo(
     () =>
-      new Set(
-        crossTab.persistentSections
+      new Set([
+        ...crossTab.persistentSections
           .filter((s) => s.kind === 'filter')
           .flatMap((s) => s.components.map((c) => c.metadata.index)),
-      ),
-    [crossTab.persistentSections],
+        // A persistent filter bar's controls are filters on every tab too. The
+        // fan-out lists them under their grid section; this tab's own are added
+        // here as well, so they persist even against a server that predates
+        // filter bars and so does not list them.
+        ...crossTab.persistentSections
+          .filter((s) => s.kind === 'grid' && isBarSection(s.spec))
+          .flatMap((s) => s.components.map((c) => c.metadata))
+          .filter((m) => m.component_type === 'interactive')
+          .map((m) => m.index),
+        ...(dashboard?.stored_metadata ?? [])
+          .filter((m) => {
+            if (!isBarMember(m, barNames)) return false;
+            const spec = (dashboard?.grid_sections ?? []).find((g) => g.name === m.section);
+            return Boolean(spec?.persistent);
+          })
+          .map((m) => m.index),
+      ]),
+    [crossTab.persistentSections, dashboard, barNames],
   );
   // Persistent sections owned by *other* tabs. The current tab's own persistent
   // sections render natively (grid ones in DashboardGrid, filter ones in the
   // panel) — fanning them out too would draw them twice.
+  // The width preference is per tab, opening at the author's
+  // `content_width_default` until the viewer picks one.
+  useEffect(() => {
+    setContentWidthScope(dashboardId ?? null, dashboard?.content_width_default);
+  }, [dashboardId, dashboard?.content_width_default]);
+  // The tab's displayed name, which `exclude_tabs` lists: the parent answers to
+  // its main-tab label, a child to its title.
+  const currentTabKey = useMemo(() => {
+    if (!dashboard) return '';
+    const mainName = (dashboard as { main_tab_name?: unknown }).main_tab_name;
+    const name = dashboard.parent_dashboard_id
+      ? dashboard.title
+      : (typeof mainName === 'string' && mainName) || dashboard.title;
+    return name ? tabLinkKey(name) : '';
+  }, [dashboard]);
+  const excludedHere = useCallback(
+    (spec: FilterSectionSpec | null | undefined) =>
+      Boolean(
+        currentTabKey &&
+          spec?.persistent &&
+          spec.exclude_tabs?.some((t) => tabLinkKey(t) === currentTabKey),
+      ),
+    [currentTabKey],
+  );
   const foreignPersistentSections = useMemo(
-    () => crossTab.persistentSections.filter((s) => s.owner_dashboard_id !== dashboardId),
-    [crossTab.persistentSections, dashboardId],
+    () =>
+      crossTab.persistentSections.filter(
+        (s) => s.owner_dashboard_id !== dashboardId && !excludedHere(s.spec),
+      ),
+    [crossTab.persistentSections, dashboardId, excludedHere],
   );
   const foreignFilterSections = useMemo(
     () => foreignPersistentSections.filter((s) => s.kind === 'filter'),
@@ -523,6 +646,33 @@ const App: React.FC = () => {
       setFilters((prev) => mergeFiltersBySource(prev, enriched));
     },
     [summaryMetadata],
+  );
+
+  // A bar's "Reset": its own controls go back to their declared defaults, as
+  // "Reset all" does for the whole tab; everything else stays.
+  const handleResetFilterIndices = useCallback(
+    (indices: string[]) => {
+      const drop = new Set(indices);
+      const barMetadata = summaryMetadata.filter((m) => drop.has(m.index));
+      setFilters((prev) =>
+        withInteractiveDefaults(
+          prev.filter((f) => !(drop.has(f.index) && f.source === undefined)),
+          barMetadata,
+        ),
+      );
+    },
+    [summaryMetadata],
+  );
+  // What filters the tab as a whole: everything but the section bars'. For the
+  // components that sit in no section — the floating and docked maps, the
+  // funnel overview.
+  const tabFilters = useMemo(
+    () => filtersInScope(combinedFilters, filterScopes, null),
+    [combinedFilters, filterScopes],
+  );
+  const tabDeferredFilters = useMemo(
+    () => filtersInScope(deferredFilters, filterScopes, null),
+    [deferredFilters, filterScopes],
   );
 
   /**
@@ -742,7 +892,9 @@ const App: React.FC = () => {
     [interactiveComponents],
   );
   const leftComponents = useMemo(() => {
-    const own = interactiveComponents.filter((m) => m.placement !== 'top');
+    const own = interactiveComponents.filter(
+      (m) => m.placement !== 'top' && !isBarMember(m, barNames),
+    );
     const seen = new Set(own.map((m) => m.index));
     // Controls fanned out from sibling tabs' persistent filter sections render
     // as ordinary panel rows: their renderers fetch options by dc_id/column,
@@ -751,7 +903,12 @@ const App: React.FC = () => {
       .flatMap((s) => s.components.map((c) => c.metadata))
       .filter((m) => !seen.has(m.index) && m.placement !== 'top');
     return foreign.length ? [...own, ...foreign] : own;
-  }, [interactiveComponents, foreignFilterSections]);
+  }, [interactiveComponents, foreignFilterSections, barNames]);
+  // The filter bars' controls, drawn by the grid in their section.
+  const barComponents = useMemo(
+    () => interactiveComponents.filter((m) => isBarMember(m, barNames)),
+    [interactiveComponents, barNames],
+  );
   // Section chrome for the panel: the tab's own specs plus the foreign
   // persistent ones its fanned-out controls belong to. Own specs win on a name
   // clash — the members bucket by name either way.
@@ -797,17 +954,23 @@ const App: React.FC = () => {
   // Declared here, below `groupRender` and `handleFilterChange`: it reads both.
   const topSectionsHost =
     topGridSections.length > 0 ? (
-      <PersistentSectionsHost
-        sections={topGridSections}
-        familyId={crossTab.familyId}
-        slot="top"
-        filters={deferredFilters}
-        onFilterChange={handleFilterChange}
-        refreshTick={refreshTick}
-        groupRender={groupRender}
-        bulkOptions={groupsApi.bulkOptions}
-        autofit={dashboard?.autofit !== false}
-      />
+      <div>
+        <PersistentSectionsHost
+          sections={topGridSections}
+          familyId={crossTab.familyId}
+          slot="top"
+          filters={deferredFilters}
+          controlFilters={filters}
+          filterScopes={filterScopes}
+          onFilterChange={handleFilterChange}
+          refreshTick={refreshTick}
+          groupRender={groupRender}
+          bulkOptions={groupsApi.bulkOptions}
+          onResetFilters={handleResetAllFilters}
+          onResetBarFilters={handleResetFilterIndices}
+          autofit={dashboard?.autofit !== false}
+        />
+      </div>
     ) : null;
 
   // The Grouping panel's body. Mounted once, inside the header "Analysis"
@@ -858,9 +1021,24 @@ const App: React.FC = () => {
   // View mode uses the SAME DashboardGrid + saved-layout source as the editor;
   // only `editMode`/`isDraggable`/`isResizable` differ. Identical visual output
   // for any given dashboard, regardless of which URL the user lands on.
+  // A persistent section this tab owns but is excluded from (`exclude_tabs`)
+  // drops out here: the owner draws its own sections natively, not through the
+  // cross-tab host that filters the foreign ones.
+  const excludedOwnSections = useMemo(
+    () =>
+      new Set(
+        ((dashboard?.grid_sections as FilterSectionSpec[] | undefined) || [])
+          .filter((s) => excludedHere(s))
+          .map((s) => s.name),
+      ),
+    [dashboard, excludedHere],
+  );
   const rightComponents = useMemo(
-    () => [...cardComponents, ...otherComponents],
-    [cardComponents, otherComponents],
+    () =>
+      [...cardComponents, ...otherComponents, ...barComponents].filter(
+        (m) => !(typeof m.section === 'string' && excludedOwnSections.has(m.section)),
+      ),
+    [cardComponents, otherComponents, barComponents, excludedOwnSections],
   );
 
   // Same count the panel badges, hoisted so the narrow-screen header button can
@@ -916,13 +1094,78 @@ const App: React.FC = () => {
     ],
   );
 
+  // ---- Guide --------------------------------------------------------------
+  // On unless the author turned it off on the main tab. Its page is drawn over
+  // the canvas, which stays mounted underneath (see guide/guide.css).
+  const guideSettings = useMemo(
+    () => resolveGuideSettings(dashboard, tabSiblings),
+    [dashboard, tabSiblings],
+  );
+  const guide = useGuideRoute(Boolean(dashboard) && !loading && !error && guideSettings.enabled);
+  const guideModel = useMemo(
+    () =>
+      guide.open && dashboard
+        ? buildGuideModel({
+            tabs: tabSiblings,
+            currentId: dashboardId,
+            components: rightComponents,
+            gridSections: dashboard.grid_sections as FilterSectionSpec[] | undefined,
+            fannedOutSections: foreignGridSections,
+            panelComponents: leftComponents,
+            panelSections: panelFilterSections,
+            floating: crossTab.floating,
+            // The header's own condition for the Analysis button.
+            analysisAvailable: Boolean(dashboard),
+            inspector: Boolean(inspectorControl),
+            mode: 'view',
+          })
+        : null,
+    [
+      guide.open,
+      dashboard,
+      tabSiblings,
+      dashboardId,
+      rightComponents,
+      foreignGridSections,
+      leftComponents,
+      panelFilterSections,
+      crossTab.floating,
+      inspectorControl,
+    ],
+  );
+  // On a phone the sidebar is an overlay: leave it open over the Guide and the
+  // Guide is behind it.
+  const openGuideFromSidebar = useCallback(() => {
+    guide.openGuide();
+    if (isNarrow && mobileOpened) toggleMobile();
+  }, [guide, isNarrow, mobileOpened, toggleMobile]);
+  const closeGuideFromSidebar = useCallback(() => {
+    guide.closeGuide();
+    if (isNarrow && mobileOpened) toggleMobile();
+  }, [guide, isNarrow, mobileOpened, toggleMobile]);
+  // The Analysis panel is docked beside the canvas: the Guide takes its place.
+  useEffect(() => {
+    if (guide.open) setAnalysisOpen(false);
+  }, [guide.open]);
+  // Before the dashboard search lands on something of this tab: the Guide and,
+  // on a phone, the tab list both cover the canvas, and a filter lives in a
+  // drawer there.
+  const uncoverForSearch = useCallback(
+    (index: string | null) => {
+      if (guide.open) guide.closeGuide();
+      if (isNarrow && mobileOpened) toggleMobile();
+      if (index && isNarrow && leftComponents.some((m) => m.index === index)) openFilterDrawer();
+    },
+    [guide, isNarrow, mobileOpened, toggleMobile, leftComponents, openFilterDrawer],
+  );
+
   return (
     <AvailableFilterValuesProvider
       dashboardMetadata={summaryMetadata}
       projectId={dashboard?.project_id}
       funnel={
         dashboardId
-          ? { enabled: funnelEnabled, dashboardId, filters: deferredFilters }
+          ? { enabled: funnelEnabled, dashboardId, filters: deferredFilters, scopes: filterScopes }
           : undefined
       }
     >
@@ -935,7 +1178,11 @@ const App: React.FC = () => {
       <SaveGroupContext.Provider value={saveGroupApi}>
       {/* A dashboard that overrides the instance branding retints its own page
           and nothing else — /dashboards and /admin stay on the instance look. */}
-      <BrandScope theme={dashboard?.brand_theme}>
+      <BrandScope theme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}>
+      {/* `category_colors` for the filter bar's chips and anything else that
+          colours a category: one value, one colour, on every surface. */}
+      <CategoryColorsContext.Provider value={dashboard}>
+      <TabLinkProvider tabs={tabSiblings}>
       {/* Editors and owners only: for anyone else the provider renders its
           children alone, so no comment badge, button or drawer appears. */}
       <CommentsProvider
@@ -967,9 +1214,10 @@ const App: React.FC = () => {
           desktopOpened={desktopOpened}
           onToggleMobile={toggleMobile}
           onToggleDesktop={toggleDesktop}
-          onOpenSettings={openSettings}
+          onOpenSettings={() => openSettingsAt()}
           onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
           filterCount={activeFilterCount}
+          onOpenSearch={dashboard ? openSearch : undefined}
           cardsLoading={cardsLoading}
           isOwner={isOwner}
           titleExtras={
@@ -1025,7 +1273,21 @@ const App: React.FC = () => {
       </AppShell.Header>
 
       <AppShell.Navbar p="md" data-tour-id="sidebar">
-        <Sidebar tabs={tabSiblings} activeId={dashboardId} brandTheme={dashboard?.brand_theme} />
+        <Sidebar
+          tabs={tabSiblings}
+          activeId={dashboardId}
+          brandTheme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}
+          guide={
+            guideSettings.enabled && dashboard
+              ? {
+                  open: guide.open,
+                  href: guide.href,
+                  onOpen: openGuideFromSidebar,
+                  onClose: closeGuideFromSidebar,
+                }
+              : undefined
+          }
+        />
       </AppShell.Navbar>
 
       <AppShell.Main
@@ -1202,8 +1464,9 @@ const App: React.FC = () => {
                       panel={mapPanel}
                       // Docked maps render data, so they must see active group
                       // filters too (instant copy: group toggles are single
-                      // clicks, no debounce needed).
-                      filters={combinedFilters}
+                      // clicks, no debounce needed). Tab-wide only: a section
+                      // bar's filters stay with its section.
+                      filters={tabFilters}
                       onFilterChange={handleFilterChange}
                       refreshTick={refreshTick}
                     />
@@ -1219,10 +1482,23 @@ const App: React.FC = () => {
               />
             )}
             <Box
-              px={4}
-              py={4}
               data-testid="dashboard-content"
+              // Under the Guide: kept mounted (and its figures loaded) for when
+              // the Guide closes, but neither painted nor in the focus order.
+              // Only the canvas: the filter panel stays on screen beside the
+              // Guide, so its "Show me" rings the real panel in place.
+              aria-hidden={guide.open || undefined}
               style={{
+                visibility: guide.open ? 'hidden' : undefined,
+                // Page-width preference: the canvas centres in what the
+                // filter panel leaves, the panel staying by the sidebar.
+                padding: 4,
+                ...(contentMaxWidth !== null
+                  ? {
+                      paddingInline: `max(4px, calc((100% - ${contentMaxWidth}px) / 2))`,
+                      transition: 'padding 200ms ease',
+                    }
+                  : null),
                 height: '100%',
                 minWidth: 0,
                 overflowY: 'auto',
@@ -1291,6 +1567,9 @@ const App: React.FC = () => {
                     gridSections={dashboard.grid_sections}
                     beforeSections={topSectionsHost}
                     filters={deferredFilters}
+                    controlFilters={filters}
+                    filterScopes={filterScopes}
+                    onResetFilters={handleResetFilterIndices}
                     onFilterChange={handleFilterChange}
                     cardValues={cardValues}
                     cardSecondaryValues={cardSecondaryValues}
@@ -1306,17 +1585,23 @@ const App: React.FC = () => {
                 )}
               </Box>
               {bottomGridSections.length > 0 && (
-                <PersistentSectionsHost
-                  sections={bottomGridSections}
-                  familyId={crossTab.familyId}
-                  slot="bottom"
-                  filters={deferredFilters}
-                  onFilterChange={handleFilterChange}
-                  refreshTick={refreshTick}
-                  groupRender={groupRender}
-                  bulkOptions={groupsApi.bulkOptions}
-                  autofit={dashboard?.autofit !== false}
-                />
+                <div style={{ flexShrink: 0 }}>
+                  <PersistentSectionsHost
+                    sections={bottomGridSections}
+                    familyId={crossTab.familyId}
+                    slot="bottom"
+                    filters={deferredFilters}
+                    controlFilters={filters}
+                    filterScopes={filterScopes}
+                    onResetBarFilters={handleResetFilterIndices}
+                    onFilterChange={handleFilterChange}
+                    refreshTick={refreshTick}
+                    groupRender={groupRender}
+                    bulkOptions={groupsApi.bulkOptions}
+                    onResetFilters={handleResetAllFilters}
+                    autofit={dashboard?.autofit !== false}
+                  />
+                </div>
               )}
             </Box>
           </div>
@@ -1384,25 +1669,45 @@ const App: React.FC = () => {
             opened={funnelViewOpen}
             onClose={() => setFunnelViewOpen(false)}
             dashboardId={dashboardId}
-            filters={deferredFilters}
+            filters={tabDeferredFilters}
             groups={groupsApi.groups}
           />
         )}
-        {dashboard && dashboardId && !inspectorEnabled && (
-          <NotesFooter
+        {/* The page's fixed furniture sits above the Guide's layer; hidden
+            with the canvas while the Guide is up. */}
+        <div style={guide.open ? { visibility: 'hidden' } : undefined}>
+          {dashboard && dashboardId && !inspectorEnabled && (
+            <NotesFooter
+              dashboardId={dashboardId}
+              initialContent={(dashboard.notes_content as string) ?? ''}
+              permissions={dashboard.permissions as DashboardPermissions | undefined}
+            />
+          )}
+          {dashboard && dashboardId && (
+            <MapPanelSurface
+              panel={mapPanel}
+              // Floating maps render data: give them group filters too (see the
+              // docked MapPanelDock above), and the tab's only.
+              filters={tabFilters}
+              onFilterChange={handleFilterChange}
+              refreshTick={refreshTick}
+            />
+          )}
+        </div>
+        {guide.open && guideModel && dashboard && dashboardId && (
+          <DashboardGuide
+            model={guideModel}
             dashboardId={dashboardId}
-            initialContent={(dashboard.notes_content as string) ?? ''}
-            permissions={dashboard.permissions as DashboardPermissions | undefined}
-          />
-        )}
-        {dashboard && dashboardId && (
-          <MapPanelSurface
-            panel={mapPanel}
-            // Floating maps render data: give them group filters too (see the
-            // docked MapPanelDock above).
-            filters={combinedFilters}
-            onFilterChange={handleFilterChange}
-            refreshTick={refreshTick}
+            dashboard={dashboard}
+            components={rightComponents}
+            tabs={tabSiblings}
+            persistentSections={crossTab.persistentSections}
+            dashboardName={parentTab?.title || dashboard.title || 'Dashboard'}
+            tabName={guideModel.tabs.current?.label ?? dashboard.title ?? 'the tab'}
+            intro={guideSettings.intro}
+            mode="view"
+            onClose={guide.closeGuide}
+            onOpenYourView={() => openSettingsAt('view')}
           />
         )}
       </AppShell.Main>
@@ -1417,9 +1722,26 @@ const App: React.FC = () => {
         opened={settingsOpened}
         onClose={closeSettings}
         dashboard={dashboard}
+        initialSection={settingsSection}
+      />
+      {/* Opens on a dashboard's `params:` links. */}
+      <RunParametersHost dashboard={dashboard} />
+      {/* Cmd/Ctrl+K and the header's magnifier: search every tab. */}
+      <DashboardSpotlight
+        opened={searchOpened}
+        onOpen={openSearch}
+        onClose={closeSearch}
+        tabs={tabSiblings}
+        currentId={dashboardId}
+        dashboard={dashboard}
+        mode="view"
+        ready={Boolean(dashboard) && !loading && !error}
+        onBeforeFocus={uncoverForSearch}
       />
     </AppShell>
       </CommentsProvider>
+      </TabLinkProvider>
+      </CategoryColorsContext.Provider>
       </BrandScope>
       </SaveGroupContext.Provider>
       </AdvancedVizPlacementDefaultProvider>

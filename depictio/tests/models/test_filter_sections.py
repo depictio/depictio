@@ -172,17 +172,18 @@ class TestToFullPassthrough:
             filter_sections=[{"name": "Quality", "icon": "mdi:check-decagram", "color": "teal"}],
         )
         full = dash.to_full()
-        assert full["filter_sections"] == [
-            {
-                "name": "Quality",
-                "icon": "mdi:check-decagram",
-                "color": "teal",
-                "description": None,
-                "collapsed": False,
-                "persistent": False,
-                "pin": "top",
-            }
-        ]
+        (section,) = full["filter_sections"]
+        # The section's own fields and its defaults; later section options
+        # (appearance, display...) ride along without changing these.
+        assert {
+            "name": "Quality",
+            "icon": "mdi:check-decagram",
+            "color": "teal",
+            "description": None,
+            "collapsed": False,
+            "persistent": False,
+            "pin": "top",
+        }.items() <= section.items()
 
     def test_dashboard_without_sections_is_unchanged(self):
         """The additive guarantee: no section anywhere, nothing new to render."""

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import Plotly from 'plotly.js';
 import {
   ActionIcon,
@@ -42,35 +42,24 @@ import { computeLayout, descendants, type Layout } from './phylo/layout';
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { pruneToTips } from './phylo/prune';
 import { cladeExtent, collapseNodes } from './phylo/collapse';
+import { PHYLO_PALETTE, pinnedPalette } from './phylo/palette';
+import { useCategoryColorSource } from '../../hooks/useCategoryColors';
+import type { PhylogeneticConfig } from './phylo/config';
+import PhyloSummaryRenderer from './PhyloSummaryRenderer';
+import PhyloViewSwitch from './PhyloViewSwitch';
+import {
+  nextSummaryRank,
+  rankChoices,
+  summaryBlocker,
+  withRanksInOrder,
+  type PhyloView,
+} from './phylo/view';
 import {
   buildTreeSelectionFilter,
   collectSubtreeTaxa,
   findSubtreeRootByLeafSet,
   treeSelectionValues,
 } from './phylo/subtree';
-
-interface PhylogeneticConfig {
-  tree_wf_id: string;
-  tree_dc_id: string;
-  metadata_wf_id?: string | null;
-  metadata_dc_id?: string | null;
-  taxon_col?: string;
-  color_col?: string | null;
-  label_col?: string | null;
-  /** Extra metadata columns to fetch alongside color_col / label_col, so
-   *  they show up in the "Colour by" Select. Use for taxonomic ranks on
-   *  ASV trees (Kingdom / Phylum / Class / Order / Family / Genus / Species). */
-  extra_color_cols?: string[] | null;
-  /** Per-column palette overrides for the "Colour by" selector. Shape:
-   *  ``{column_name: {category_value: hex}}``. Lets dashboards pin domain
-   *  palettes (e.g. dominant_habitat → Set1) consistently across tiles. */
-  category_palettes?: Record<string, Record<string, string>> | null;
-  default_layout?: Layout;
-  ladderize?: boolean;
-  show_metadata_strip?: boolean;
-  show_branch_lengths?: boolean;
-  show_internal_labels?: boolean;
-}
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: PhylogeneticConfig };
@@ -85,16 +74,7 @@ interface Props {
 
 // Muted publication-friendly palette for categorical tip colouring, used
 // when the deployment states no brand of its own.
-const PALETTE = [
-  '#4C72B0',
-  '#DD8452',
-  '#55A868',
-  '#C44E52',
-  '#8172B3',
-  '#937860',
-  '#DA8BC3',
-  '#8C8C8C',
-];
+const PALETTE = PHYLO_PALETTE;
 
 /** Cap on numeric branch-length labels. Labelling every branch is what made
  *  the toggle unusable: on anything past a few dozen tips the numbers overlap
@@ -151,7 +131,13 @@ const LAYOUTS: Array<{ value: Layout; label: string }> = [
   { value: 'hierarchical', label: 'Hier' },
 ];
 
-const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFilterChange }) => {
+const PhyloTreeRenderer: React.FC<Props & { view: PhyloView }> = ({
+  metadata,
+  filters,
+  refreshTick,
+  onFilterChange,
+  view,
+}) => {
   const { colorScheme } = useMantineColorScheme();
   const theme = useMantineTheme();
   const palette = resolveCategoricalPalette(theme, PALETTE);
@@ -209,6 +195,15 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   // by this popover: routed through the Tier-2 channel it would be classified
   // role-derived and silently dropped on the way to the saved config.
   const [colorCol, setColorCol] = useState<string | null>(config.color_col ?? null);
+  // The builder can bind (or rebind) the colour role while this preview stays
+  // mounted, and the state above only read it on mount: the tree stayed one
+  // colour after "color → Kingdom". Follow the binding when it changes, during
+  // render rather than in an effect so no frame is drawn with the stale one.
+  const [boundColorCol, setBoundColorCol] = useState<string | null>(config.color_col ?? null);
+  if ((config.color_col ?? null) !== boundColorCol) {
+    setBoundColorCol(config.color_col ?? null);
+    setColorCol(config.color_col ?? null);
+  }
   const [highlightedRootId, setHighlightedRootId] = useState<number | null>(null);
   // Zoom/pan is off by default: Plotly's drag-to-zoom-box steals every drag
   // and there was no way back except double-click. Toggled on, drag pans and
@@ -331,7 +326,19 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     return () => {
       cancelled = true;
     };
-  }, [config.tree_dc_id, config.metadata_wf_id, config.metadata_dc_id, JSON.stringify(fetchFilters), refreshTick]);
+    // The columns fetched are part of the request: the builder can add a rank
+    // column or rebind the colour while this preview stays mounted.
+  }, [
+    config.tree_dc_id,
+    config.metadata_wf_id,
+    config.metadata_dc_id,
+    config.taxon_col,
+    config.color_col,
+    config.label_col,
+    JSON.stringify(config.extra_color_cols ?? []),
+    JSON.stringify(fetchFilters),
+    refreshTick,
+  ]);
 
   // ---- Tree object (memo) -------------------------------------------------
   const tree = useMemo<PhyloTree | null>(() => {
@@ -382,6 +389,7 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     [tipMeta],
   );
 
+  const categorySource = useCategoryColorSource();
   const scaleForColumn = useMemo(() => {
     const cache = new Map<string, StableColorMap>();
     return (col: string): StableColorMap => {
@@ -396,12 +404,12 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       const built = stableColorMap(
         col === colorCol && colorUniverse ? colorUniverse : universe,
         palette,
-        (config.category_palettes || {})[col] || null,
+        pinnedPalette(categorySource, config.category_palettes, col),
       );
       cache.set(col, built);
       return built;
     };
-  }, [tree, valueAt, colorCol, colorUniverse, palette, config.category_palettes]);
+  }, [tree, valueAt, colorCol, colorUniverse, palette, categorySource, config.category_palettes]);
 
   const tipColors = useMemo<{ colorByTip: Map<string, string> }>(() => {
     const colorByTip = new Map<string, string>();
@@ -1227,7 +1235,11 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     viewRef.current = { stamp: viewStampRef.current, x: [...xr], y: [...yr] };
   };
 
-  const safeIndex = String(metadata.index).replace(/[^A-Za-z0-9_-]/g, '-');
+  // Per instance too: the same tree drawn twice on a page (the Guide shows
+  // the dashboard's own components beside the canvas) must not find, zoom or
+  // restyle the other copy.
+  const instance = useId().replace(/[^A-Za-z0-9_-]/g, '');
+  const safeIndex = `${String(metadata.index).replace(/[^A-Za-z0-9_-]/g, '-')}-${instance}`;
   const plotDivId = `phylo-plot-${safeIndex}`;
   const rootId = `phylo-root-${safeIndex}`;
   // The Settings content is rendered by the chrome, outside this component's
@@ -1451,7 +1463,10 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
   const colorOptions: { value: string; label: string }[] = useMemo(() => {
     if (!metaCols || metaCols.length === 0) return [];
     const taxonCol = config.taxon_col || 'taxon';
-    return metaCols.filter((c) => c !== taxonCol).map((c) => ({ value: c, label: c }));
+    return withRanksInOrder(metaCols.filter((c) => c !== taxonCol)).map((c) => ({
+      value: c,
+      label: c,
+    }));
   }, [metaCols, config.taxon_col]);
 
   const exportSelectedNewick = () => {
@@ -1468,23 +1483,13 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     URL.revokeObjectURL(url);
   };
 
-  // Encoding tier: the tree layout, what the tip colour means, the ordering of
-  // the clades and the tip search. Everything below decorates the same tree.
+  // Encoding tier: the view (full tree or summary), what the tip colour means,
+  // the tip search, the tree layout and the ordering of the clades. Everything
+  // below decorates the same tree. Most used first: a docked panel shows the
+  // first few (DockedControls).
   const primaryControls = (
     <>
-      <VizControlGroup title="Layout">
-        <VizSegmented
-          label="Mode"
-          data={LAYOUTS}
-          value={layout}
-          onChange={(v) => setLayout(v as Layout)}
-        />
-        <VizSwitch
-          checked={doLadderise}
-          onChange={(e) => setDoLadderise(e.currentTarget.checked)}
-          label="Ladderise"
-        />
-      </VizControlGroup>
+      <PhyloViewSwitch view={view} />
       <VizControlGroup title="Tips">
         {colorOptions.length > 0 ? (
           <VizSelect
@@ -1504,6 +1509,19 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
             onChange={(e) => setSearch(e.currentTarget.value)}
           />
         </VizInlineField>
+      </VizControlGroup>
+      <VizControlGroup title="Layout">
+        <VizSegmented
+          label="Mode"
+          data={LAYOUTS}
+          value={layout}
+          onChange={(v) => setLayout(v as Layout)}
+        />
+        <VizSwitch
+          checked={doLadderise}
+          onChange={(e) => setDoLadderise(e.currentTarget.checked)}
+          label="Ladderise"
+        />
       </VizControlGroup>
     </>
   );
@@ -2169,6 +2187,63 @@ const PhylogeneticRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
         </div>
       </div>
     </AdvancedVizFrame>
+  );
+};
+
+/**
+ * The tree, or its summary. `collapse_rank` turns the component into the
+ * one-tip-per-lineage view of `PhyloSummaryRenderer`, built for a landing
+ * tile; unset, it is the full interactive tree, unchanged. Two components
+ * rather than a branch inside one, because they share no state: the summary
+ * has none of the tree's selection, collapse, focus or zoom.
+ *
+ * Which one is drawn is a Tier-2 control like any other, switched from either
+ * renderer's settings, and so it is held here rather than in either of them: a
+ * renderer cannot unmount itself in favour of the other, and the config prop
+ * only changes once the switch has been saved. Seeded from `collapse_rank` and
+ * persisted through the same hook as every other control, so in the builder
+ * preview the switch is saved with the component and on a dashboard it stays a
+ * way of looking at the tile.
+ *
+ * The rank last collapsed to is remembered across a visit to the full tree, so
+ * Summary, Full tree, Summary comes back to the same lineages.
+ */
+const PhylogeneticRenderer: React.FC<Props> = (props) => {
+  const { metadata } = props;
+  const config = (metadata.config || {}) as PhylogeneticConfig;
+  const [rank, persistRank] = usePersistedVizControl<string | null>(metadata, 'collapse_rank', null);
+  const [remembered, setRemembered] = useState<string | null>(config.collapse_rank || null);
+  const setRank = React.useCallback(
+    (next: string | null) => {
+      if (next) setRemembered(next);
+      persistRank(next);
+    },
+    [persistRank],
+  );
+  const view = useMemo<PhyloView>(() => {
+    const choices = rankChoices(config, rank ?? remembered);
+    const blocker = summaryBlocker(config, choices);
+    return {
+      // A rank the config cannot draw a summary for (the tip metadata was
+      // cleared in the builder, say) shows the full tree, with the switch
+      // saying why, rather than the summary's error in place of the tile.
+      rank: blocker ? null : rank,
+      choices,
+      blocker,
+      summaryRank: nextSummaryRank(choices, remembered),
+      setRank,
+    };
+  }, [config, rank, remembered, setRank]);
+
+  return view.rank ? (
+    <PhyloSummaryRenderer
+      metadata={props.metadata}
+      filters={props.filters}
+      refreshTick={props.refreshTick}
+      view={view}
+    />
+  ) : (
+    <PhyloTreeRenderer {...props} view={view} />
   );
 };
 

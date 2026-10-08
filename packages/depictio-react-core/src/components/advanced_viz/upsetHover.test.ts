@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   emphasizeUpsetColumn,
+  emphasizeUpsetColumns,
   UPSET_DIMMED_OPACITY as DIM,
   upsetHoverColumn,
   withUpsetHoverTargets,
@@ -76,6 +77,26 @@ describe('emphasizeUpsetColumn', () => {
     expect(degreeOneBars).not.toHaveProperty('marker');
     expect(edgeAB).not.toBe(edgeA_B);
     expect(edgeA_B).not.toHaveProperty('opacity');
+  });
+});
+
+describe('emphasizeUpsetColumns', () => {
+  it('keeps a selected and a hovered intersection both at full strength', () => {
+    const [twoBars, oneBars, , edgeAB, edgeAC, filled, sizes] = emphasizeUpsetColumns(figure, layout, [2, 1]);
+    expect(markerOpacity(twoBars)).toEqual([DIM, 1]);
+    expect(markerOpacity(oneBars)).toEqual([1]);
+    expect(markerOpacity(filled)).toEqual([DIM, DIM, 1, 1, 1]);
+    expect([edgeAB.opacity, edgeAC.opacity]).toEqual([DIM, 1]);
+    // A & C and B: every set is joined by one of them.
+    expect(markerOpacity(sizes)).toEqual([1, 1, 1]);
+  });
+
+  it('is the figure itself when nothing is emphasised', () => {
+    expect(emphasizeUpsetColumns(figure, layout, [])).toBe(figure);
+  });
+
+  it('agrees with the one-column form', () => {
+    expect(emphasizeUpsetColumns(figure, layout, [0])).toEqual(emphasizeUpsetColumn(figure, layout, 0));
   });
 });
 
