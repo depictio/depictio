@@ -64,11 +64,18 @@ RUN groupadd -g ${GID} depictio && \
 # ---- Dependency layer (cached across code + version changes) ----
 # Install third-party deps + the editable in-tree packages WITHOUT the
 # depictio project itself (--no-install-project). This expensive layer is
-# keyed only on the lockfile + packages/, so editing application source — or
-# the per-release version churn in pyproject/VERSION — no longer reinstalls
-# every dependency. packages/ rarely changes, so it stays cached too.
+# keyed only on the lockfile + the two in-tree Python packages, so editing
+# application source — or the per-release version churn in pyproject/VERSION —
+# no longer reinstalls every dependency. Those packages rarely change, so it
+# stays cached too.
 COPY --chown=depictio:depictio pyproject.toml uv.lock* ./
-COPY --chown=depictio:depictio packages ./packages/
+# Only the two Python packages [tool.uv.sources] installs from the checkout.
+# The rest of packages/ is the JS workspace (depictio-react-core and co.),
+# edited by most front-end changes: copied here, it re-ran this whole layer
+# (and the browser download below it) for a change no Python dep can see.
+# It lands with the source in the project layer instead.
+COPY --chown=depictio:depictio packages/plotly-complexheatmap ./packages/plotly-complexheatmap/
+COPY --chown=depictio:depictio packages/plotly-upset ./packages/plotly-upset/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev --extra server \
     || uv sync --no-install-project --no-dev --extra server
@@ -79,6 +86,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # re-run this fast step, not the dependency install above.
 COPY --chown=depictio:depictio VERSION ./
 COPY --chown=depictio:depictio depictio ./depictio/
+COPY --chown=depictio:depictio packages ./packages/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra server || uv sync --no-dev --extra server
 
