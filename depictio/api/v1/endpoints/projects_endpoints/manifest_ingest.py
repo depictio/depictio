@@ -435,6 +435,8 @@ def _run_dc_ingest(
 
     target = next((dc for dc in workflow.data_collections if str(dc.id) == dc_id), None)
     if scan:
+        from celery.exceptions import SoftTimeLimitExceeded
+
         wanted = set(scan_dc_ids or []) | {dc_id}
         walked = [
             dc
@@ -485,6 +487,11 @@ def _run_dc_ingest(
                         command_parameters={"sync_files": True} if sync_files else {},
                     )
                 error = _scan_failure(scan_result)
+            except SoftTimeLimitExceeded:
+                # The task's time is up: not one collection's failure, and
+                # what is left of the scans would only be cut off by the hard
+                # limit, with no step closed.
+                raise
             except Exception as exc:
                 # The other collections are still scanned: a follower is
                 # failed by its own scan, never by another one's. This one's

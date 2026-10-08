@@ -19,6 +19,7 @@ import time
 from typing import Any, Sequence
 
 from bson import ObjectId
+from celery.exceptions import SoftTimeLimitExceeded
 
 from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.config import settings
@@ -3102,6 +3103,12 @@ _DEPENDENCY_WAIT_SECONDS = 10
 _DEPENDENCY_MAX_WAITS = 180
 
 
+def _leader_scanned(steps: list[dict], scan_leader: str, dc_id: str) -> bool:
+    """Whether the step of ``scan_leader`` records the scan of collection ``dc_id``."""
+    leader = next((s for s in steps if s.get("name") == scan_leader), {})
+    return dc_id in (leader.get("scans") or {})
+
+
 def _unfinished_dependencies(steps: list[dict], depends_on: list[str]) -> list[str]:
     """The names in ``depends_on`` whose step hasn't reached a terminal status.
 
@@ -3231,9 +3238,18 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
         store.set_ingestion_step(run_id, step=_step("running"), current_step=tag)
 
     depends_on = payload.get("depends_on") or []
+    scan_leader = payload.get("scan_leader")
     if depends_on:
         doc = store.get_ingestion_run(run_id) or {}
-        unfinished = _unfinished_dependencies(doc.get("steps") or [], depends_on)
+        steps = doc.get("steps") or []
+        waiting_on = depends_on
+        if scan_leader and _leader_scanned(steps, scan_leader, payload["dc_id"]):
+            # The leader is depended on for its scan alone (a run-registering
+            # collection reads no other collection's table): once this DC's
+            # scan is recorded, its processing does not wait for the leader's
+            # own, nor for the leader's scans of the others.
+            waiting_on = [dep for dep in depends_on if dep != scan_leader]
+        unfinished = _unfinished_dependencies(steps, waiting_on)
         if unfinished:
             names = ", ".join(unfinished)
             if self.request.retries >= _DEPENDENCY_MAX_WAITS:
@@ -3248,7 +3264,6 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
                 )
             raise self.retry(countdown=_DEPENDENCY_WAIT_SECONDS)
 
-    scan_leader = payload.get("scan_leader")
     if scan_leader:
         # The leader's scan registered this DC's files too. If that scan failed
         # there is nothing to process, and saying so beats an empty-table
@@ -3307,6 +3322,11 @@ def manifest_refresh_dc_task(self, payload: dict) -> dict:
         # detail is the step's message, the code goes to the worker log.
         logger.error(f"Manifest refresh for DC '{tag}' failed on S3 ({exc.code}): {exc.detail}")
         ok, message = False, exc.detail
+    except SoftTimeLimitExceeded:
+        # Closed while there is time left, rather than cut off by the hard
+        # limit with the step still "running".
+        logger.error(f"Manifest refresh for DC '{tag}' ran past its time limit.")
+        ok, message = False, "Stopped: this collection's refresh ran past its time limit."
     except Exception as exc:  # noqa: BLE001 - any crash is a per-DC failure
         logger.error(f"Manifest refresh task crashed for DC '{tag}': {exc}")
         ok, message = False, str(exc)
