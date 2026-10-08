@@ -29,6 +29,7 @@ import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../webglBudget';
 import { useUiScale } from '../uiScale';
 import { useContentDemand } from './autofit';
+import { usePlotlyFollowsBox } from './usePlotlyFollowsBox';
 import RefetchOverlay from './RefetchOverlay';
 import ComponentSkeleton from './ComponentSkeleton';
 import { useReportLoadStatus } from './DashboardLoadingProvider';
@@ -238,6 +239,9 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   // height a reader wants (scatter, line), and ignored altogether unless the
   // component opts in with `layout: {fit: auto}`, figures default to `fixed`.
   useContentDemand(metadata.index, renderMeta?.content_demand ?? null);
+  // That demand resizes the tile without resizing the window.
+  const plotBoxRef = useRef<HTMLDivElement | null>(null);
+  usePlotlyFollowsBox(plotBoxRef, figure !== null);
 
   // Report load status to the dashboard registry. Off-screen → pending (null);
   // once we have a figure it stays "ready" through any refetch overlay.
@@ -620,7 +624,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
         </Stack>
       )}
       {figure && (
-        <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        <div ref={plotBoxRef} style={{ flex: 1, minHeight: 0, position: 'relative' }}>
           <Plot
             data={annotations.data as any[]}
             layout={annotations.layout}

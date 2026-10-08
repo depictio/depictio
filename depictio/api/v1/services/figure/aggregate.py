@@ -924,6 +924,10 @@ _DEMAND_CHROME_PX = 110
 _DEMAND_PER_CATEGORY_PX = 44
 # Facet strip title, once per row of panels beyond the first.
 _DEMAND_FACET_TITLE_PX = 24
+# A vertical legend's entry, and its title. Four groups split by eleven phyla
+# are four bars beside an eleven-line legend: the legend sets the height.
+_DEMAND_PER_LEGEND_ENTRY_PX = 20
+_DEMAND_LEGEND_TITLE_PX = 24
 # Counting stops here: past it the answer is "taller than any tile", which the
 # clamp settles anyway, and the loop is walking raw trace values.
 _DEMAND_MAX_CATEGORIES = 64
@@ -949,6 +953,31 @@ def _categorical_values(fig_dict: dict[str, Any]) -> int:
             if len(seen) >= _DEMAND_MAX_CATEGORIES:
                 return len(seen)
     return len(seen)
+
+
+def _vertical_legend_entries(fig_dict: dict[str, Any]) -> int:
+    """How many lines the figure's legend takes, when it is a column.
+
+    Zero for a hidden or horizontal legend: a horizontal one wraps across the
+    width and says little about the height. Entries are counted as Plotly
+    draws them, one per named trace shown in the legend.
+    """
+    layout = fig_dict.get("layout")
+    layout = layout if isinstance(layout, dict) else {}
+    legend = layout.get("legend")
+    if layout.get("showlegend") is False:
+        return 0
+    if isinstance(legend, dict) and legend.get("orientation") == "h":
+        return 0
+    names: set[str] = set()
+    for trace in fig_dict.get("data") or []:
+        if not isinstance(trace, dict) or trace.get("showlegend") is False:
+            continue
+        name = trace.get("name")
+        if name:
+            names.add(str(name))
+    # Plotly hides the legend of a single trace unless asked to show it.
+    return len(names) if len(names) > 1 else 0
 
 
 def _facet_rows(fig_dict: dict[str, Any]) -> int:
@@ -998,6 +1027,10 @@ def figure_content_demand(visu_type: str, fig_dict: Any) -> dict[str, int] | Non
     height = _DEMAND_CHROME_PX + facets * per_facet
     if facets > 1:
         height += facets * _DEMAND_FACET_TITLE_PX
+    entries = _vertical_legend_entries(fig_dict)
+    if entries:
+        legend = _DEMAND_LEGEND_TITLE_PX + entries * _DEMAND_PER_LEGEND_ENTRY_PX
+        height = max(height, _DEMAND_CHROME_PX + legend)
     rows = math.ceil((height + _GRID_ROW_GAP_PX) / (_GRID_ROW_PX + _GRID_ROW_GAP_PX))
     return {"rows": max(1, rows)}
 

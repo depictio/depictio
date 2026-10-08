@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
+import { useElementSize } from '@mantine/hooks';
 import Plot from 'react-plotly.js';
 import {
   VizControlGroup,
@@ -31,12 +32,21 @@ import { demandForPx } from './contentDemand';
  *  proportions stays readable in once the tilted sample labels and the axis
  *  title have taken their share. */
 const TAXONOMY_PLOT_PX = 300;
-/** One wrapped row of the horizontal legend under the plot. */
-const LEGEND_ROW_PX = 22;
-/** Legend entries that fit on one row at a typical tile width. */
-const LEGEND_PER_ROW = 4;
-/** One annotation strip, matching the 22 px the figure's margins reserve. */
+/** One entry of the legend, a column right of the plot at 10 px: under the
+ *  plot it fought the tilted sample labels for the same band. */
+const LEGEND_ITEM_PX = 16;
+/** The legend's title and its padding. */
+const LEGEND_CHROME_PX = 30;
+/** One annotation strip: tall enough for its 10 px labels. */
 const STRIP_BAND_PX = 22;
+/** Between a strip and the bars (or the next strip), so the strip's name and
+ *  the bars' top tick do not touch. */
+const STRIP_GAP_PX = 8;
+/** What the figure spends outside the plot area: the top margin and, below,
+ *  the tilted sample labels and the axis title. */
+const PLOT_CHROME_PX = 150;
+/** The frame's own header above the figure: title and row count. */
+const FRAME_HEADER_PX = 60;
 
 /** Generic per-sample categorical annotation strip drawn above/below the
  *  stacked bars. Reusable across any viz with a sample axis when the DC
@@ -124,6 +134,14 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   const [sampleSort, setSampleSort] = usePersistedVizControl<SampleSort>(metadata, 'sample_sort', 'input');
   const [showLegend, setShowLegend] = usePersistedVizControl(metadata, 'show_legend', true);
   const [logY, setLogY] = usePersistedVizControl(metadata, 'log_y', false);
+
+  // The strips are drawn as fractions of the plot area, so they are sized from
+  // the box: a fixed share was a 13 px band in a short tile, too thin for its
+  // labels. Rounded so a sub-pixel reflow does not rebuild the figure.
+  const { ref: plotBoxRef, height: plotBoxPx } = useElementSize();
+  const plotAreaPx = Math.max(120, plotBoxPx - PLOT_CHROME_PX);
+  const stripBand = Math.round(Math.min(0.15, STRIP_BAND_PX / plotAreaPx) * 1000) / 1000;
+  const stripGap = Math.round(Math.min(0.05, STRIP_GAP_PX / plotAreaPx) * 1000) / 1000;
 
   // Stable taxon→colour universe so a habitat filter doesn't shuffle the
   // top-N taxon colours. Pulled from the DC's unique values for taxon_col;
@@ -340,9 +358,8 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     const stripLabels: Record<string, unknown>[] = [];
     let stripKey = false;
     const stripAxes: Record<string, unknown> = {};
-    const STRIP_BAND = 0.045; // each strip occupies ~4.5% of paper height
-    const STRIP_GAP = 0.012;
-    const step = STRIP_BAND + STRIP_GAP;
+    const STRIP_BAND = stripBand;
+    const step = stripBand + stripGap;
     const nTop = strips.filter((s) => s.position === 'top').length;
     const nBottom = strips.length - nTop;
     const barDomain: [number, number] = [nBottom * step, 1 - nTop * step];
@@ -393,6 +410,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
           zeroline: false,
           ticks: '',
           tickfont: { size: 10, color: isDark ? '#ced4da' : '#495057' },
+          automargin: true,
         };
         stripTraces.push({
           type: 'heatmap',
@@ -463,12 +481,15 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
         layout: {
           ...plotlyThemeFragment(isDark, theme),
           barmode: 'stack' as const,
-          margin: { l: 60, r: 20, t: stripKey ? 44 : 30, b: 70 },
+          // Automargins: the tilted sample ids, the strip names and the legend
+          // take what they need instead of a guess that clipped them.
+          margin: { l: 60, r: 20, t: stripKey ? 44 : 30, b: 30 },
           annotations: stripLabels,
           xaxis: {
             ...plotlyAxisOverrides(isDark, theme),
-            title: { text: config.sample_id_col },
+            title: { text: 'Sample' },
             tickangle: -45,
+            automargin: true,
             // Pinned to the bottom of the plot area, below any bottom strip,
             // and to the bars' sample order so the strips line up with them.
             anchor: 'free' as const,
@@ -499,11 +520,16 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
                 ...(logY ? { type: 'log' as const } : {}),
               },
           showlegend: showLegend,
-          // The taxa's key, titled with the rank they are.
+          // The taxa's key, titled with the rank they are, in a column right of
+          // the plot: under it, it collided with the tilted sample labels.
           legend: {
-            orientation: 'h',
-            y: -0.25,
+            orientation: 'v',
+            x: 1.02,
+            xanchor: 'left',
+            y: 1,
+            yanchor: 'top',
             title: { text: `${activeRank ?? 'Taxon'} ` },
+            font: { size: 10 },
           },
           ...(stripKey
             ? {
@@ -522,7 +548,7 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
       },
       allRanks,
     };
-  }, [rows, config, rank, topN, normalise, sampleSort, showLegend, logY, isDark, theme, taxonUniverse, categorySource]);
+  }, [rows, config, rank, topN, normalise, sampleSort, showLegend, logY, isDark, theme, taxonUniverse, categorySource, stripBand, stripGap]);
 
   // Memoised so AdvancedVizFrame's `extras` useMemo stays stable — an unmemoised
   // element re-fires the frame's publish effect and loops it against
@@ -590,15 +616,20 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   );
 
   // Vertical bars, so the sample count is the tile's width problem, not its
-  // height: the demand is the plot area plus whatever the legend and the
-  // annotation strips take off it.
+  // height: the demand is the plot area, or the legend's column when that is
+  // taller (it only has the plot area's height), plus what the annotation
+  // strips take off it.
   const contentDemand = useMemo(
     () =>
       figure
         ? demandForPx(
-            TAXONOMY_PLOT_PX +
-              (showLegend ? Math.ceil(seriesCount / LEGEND_PER_ROW) * LEGEND_ROW_PX : 0) +
-              stripCount * STRIP_BAND_PX,
+            Math.max(
+              TAXONOMY_PLOT_PX,
+              showLegend
+                ? FRAME_HEADER_PX + PLOT_CHROME_PX + LEGEND_CHROME_PX + seriesCount * LEGEND_ITEM_PX
+                : 0,
+            ) +
+              stripCount * (STRIP_BAND_PX + STRIP_GAP_PX),
           )
         : undefined,
     [figure, showLegend, seriesCount, stripCount],
@@ -651,14 +682,16 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     >
       {figure ? (
         <>
-          <Plot
-            data={annotations.data as any}
-            layout={annotations.layout as any}
-            useResizeHandler
-            style={{ width: '100%', height: '100%' }}
-            config={{ displaylogo: false, responsive: true } as any}
-            {...annotations.plotProps()}
-          />
+          <div ref={plotBoxRef} style={{ width: '100%', height: '100%' }}>
+            <Plot
+              data={annotations.data as any}
+              layout={annotations.layout as any}
+              useResizeHandler
+              style={{ width: '100%', height: '100%' }}
+              config={{ displaylogo: false, responsive: true } as any}
+              {...annotations.plotProps()}
+            />
+          </div>
           {annotations.toolbar}
         </>
       ) : null}
