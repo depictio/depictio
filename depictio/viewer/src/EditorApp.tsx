@@ -124,8 +124,11 @@ import {
   sectionFilterScopes,
   AdvancedVizConfigDraftProvider,
   AdvancedVizPlacementDefaultProvider,
+  DataVersionProvider,
+  dataVersionBody,
 } from 'depictio-react-core';
 import type {
+  DataVersionPins,
   DashboardData,
   DashboardPermissions,
   DashboardSummary,
@@ -154,6 +157,10 @@ import { Header, Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal 
 import type { TabDefaults, TabModalSubmitPayload } from './chrome';
 import { useTabGroupActions } from './chrome/useTabGroupActions';
 import VersionHistoryDrawer from './versions/VersionHistoryDrawer';
+import ComponentVersionModal from './versions/ComponentVersionModal';
+import { useVersionHistory } from './versions/useVersionHistory';
+import DataVersionBanner from './versions/DataVersionBanner';
+import { collectDataCollections } from './versions/useDatasetHistories';
 import NotesFooter from './components/NotesFooter';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
 import './chrome/chrome.css';
@@ -371,7 +378,45 @@ const EditorApp: React.FC = () => {
     if (!isNarrow) closeFilterDrawer();
   }, [isNarrow, closeFilterDrawer]);
 
+  // Component-level history. Loaded once here rather than per modal open, so
+  // the per-cell action can hide itself on a dashboard with no versions
+  // instead of opening onto an empty pane.
+  const [historyComponent, setHistoryComponent] = useState<StoredMetadata | null>(null);
+  const { versions: familyVersions, loading: versionsLoading } = useVersionHistory(
+    dashboardId,
+    Boolean(dashboardId),
+  );
+
   const bulkCtrl = useRef<AbortController | null>(null);
+
+  // Data time travel: view-state only, never persisted, cleared by a reload.
+  // The viewer only ever pins a `?version=` preview; choosing data is here.
+  const [dataPins, setDataPins] = useState<DataVersionPins>({});
+  const [asOfVersionId, setAsOfVersionId] = useState<string | null>(null);
+  const [asOfLabel, setAsOfLabel] = useState<string | null>(null);
+  const [asOfUnresolved, setAsOfUnresolved] = useState<string[]>([]);
+  const versionBody = useMemo(
+    () => dataVersionBody({ asOfVersionId, pins: dataPins }),
+    [asOfVersionId, dataPins],
+  );
+  const versionKey = JSON.stringify(versionBody);
+  const timeTravelling = Object.keys(versionBody).length > 0;
+  const pinnedLabels = useMemo(() => {
+    const byId = new Map(
+      collectDataCollections(dashboard?.stored_metadata).map((c) => [c.dcId, c.label]),
+    );
+    return Object.entries(dataPins)
+      .filter(([, v]) => typeof v === 'number')
+      .map(([dcId, version]) => ({
+        label: byId.get(dcId) ?? dcId,
+        version: version as number,
+      }));
+  }, [dataPins, dashboard?.stored_metadata]);
+  const clearDataVersions = useCallback(() => {
+    setDataPins({});
+    setAsOfVersionId(null);
+    setAsOfUnresolved([]);
+  }, []);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Latest dashboard ref so the debounced save uses fresh state. We update
   // it synchronously alongside setDashboard via `applyDashboard` — relying on
@@ -410,6 +455,28 @@ const EditorApp: React.FC = () => {
     },
     [applyDashboard],
   );
+
+  /** Open component history for one tile (grid or filter panel).
+   *
+   * The overlay knows only the component id, since that is what the grid keys
+   * on; the modal needs the whole stored metadata to render the component as
+   * it is *now* for the compare view. Resolved here rather than passed down,
+   * so the grid does not have to carry the dashboard document.
+   */
+  const handleOpenComponentHistory = useCallback(
+    (componentId: string) => {
+      const found = (dashboardRef.current?.stored_metadata || []).find(
+        (m) => String(m.index) === String(componentId),
+      );
+      if (found) setHistoryComponent(found);
+    },
+    [],
+  );
+
+  // Withheld on a dashboard with no recorded versions, which hides the menu
+  // item: an action that can only open an empty pane is worse than none.
+  const openComponentHistory =
+    familyVersions.length > 0 ? handleOpenComponentHistory : undefined;
 
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
 
@@ -506,6 +573,8 @@ const EditorApp: React.FC = () => {
             // See App.tsx: prevents a slow superseded compare-on response from
             // overwriting a newer one.
             signal,
+            // Cards follow the data pins like every other renderer.
+            versionBody,
           ),
         ),
       )
@@ -537,6 +606,7 @@ const EditorApp: React.FC = () => {
     filterScopes,
     // Undefined while compare is off, so group edits don't refire the fetch.
     JSON.stringify(groupsApi.bulkOptions ?? null),
+    versionKey,
   ]);
 
   // Mirror the live filters into the per-tab store so they survive the
@@ -1379,6 +1449,10 @@ const EditorApp: React.FC = () => {
         currentSection={component.section ?? null}
         onMoveToSection={handleMoveToSection}
         groupSize={filterGroupSizes.get(component.index) ?? 1}
+        // Filters need history as much as charts do: a dropdown that became a
+        // segmented control keeps its title and column, so its history is the
+        // only place the change is visible at all.
+        onOpenHistory={openComponentHistory}
       />
     ),
     [
@@ -1389,6 +1463,7 @@ const EditorApp: React.FC = () => {
       handleMoveToSection,
       filterGroupSizes,
       ownComponentIndices,
+      openComponentHistory,
     ],
   );
 
@@ -2077,6 +2152,28 @@ const EditorApp: React.FC = () => {
     );
   };
 
+  /**
+   * Reload the family after a restore landed on the server.
+   *
+   * Cancels the pending debounced save first. Without that, a drag from just
+   * before the restore fires ~500 ms later and POSTs the *pre-restore* state
+   * back over the freshly restored document — the dashboard visibly reverts a
+   * moment after the success notification, which reads as "restore did not
+   * work". The layout listeners also fire on remount with the new layout,
+   * which `layoutsEqual` then correctly treats as a no-op.
+   */
+  const handleRestored = useCallback(() => {
+    if (!dashboardId) return;
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    setSaveStatus('idle');
+    void fetchDashboard(dashboardId)
+      .then(applyDashboard)
+      .catch(() => undefined);
+  }, [dashboardId, applyDashboard]);
+
   /** Force-save: cancel any pending debounce and POST current state now.
    *  Mirrors depictio/dash/layouts/save.py:save_dashboard_minimal — uses
    *  Mantine notifications for success/failure feedback (no persistent header
@@ -2270,6 +2367,8 @@ const EditorApp: React.FC = () => {
 
   return (
     <>
+    {/* Renderers read their pin from here, as in the viewer's preview. */}
+    <DataVersionProvider asOfVersionId={asOfVersionId} pins={dataPins}>
     <InspectorProviders control={inspectorControl}>
     {/* Tier-2 viz controls an author touches here are written back onto the
         component's config; the dashboard-wide default decides where every
@@ -2420,6 +2519,19 @@ const EditorApp: React.FC = () => {
           transition: 'padding-right 250ms ease',
         }}
       >
+        {/* Louder here than in the viewer by consequence: this surface saves,
+            and a chart edited against data you did not realise was historical
+            is the mistake worth preventing. Saving still writes only layout
+            and component config — never data — but the point is that you know
+            what you were looking at. */}
+        {timeTravelling && (
+          <DataVersionBanner
+            pinned={pinnedLabels}
+            asOfLabel={asOfLabel}
+            unresolved={asOfUnresolved}
+            onClear={clearDataVersions}
+          />
+        )}
         {loading && (
           <Group p="lg">
             <Loader size="sm" />
@@ -2590,6 +2702,7 @@ const EditorApp: React.FC = () => {
                 onResetFit={handleResetFit}
                 autofit={dashboard?.autofit !== false}
                 refreshTick={plotThemeTick}
+                onOpenComponentHistory={openComponentHistory}
               />
               {bottomGridSections.length > 0 && (
                 <div>
@@ -2750,10 +2863,36 @@ const EditorApp: React.FC = () => {
         dashboardId={dashboardId ?? null}
         canEdit={isOwner}
         canDelete={isOwner}
-        onRestored={() => {
-          if (!dashboardId) return;
-          void fetchDashboard(dashboardId).then(applyServerDashboard).catch(() => undefined);
+        onRestored={handleRestored}
+        // The dataset picker lives here and not in the viewer: re-pointing a
+        // dashboard at older data is an editing act. It only changes what is
+        // *displayed* (a save writes layout and component config, never
+        // data), but a banner still says so, because editing a chart against
+        // data you did not realise was historical is the mistake worth
+        // preventing.
+        dashboardMetadata={dashboard?.stored_metadata}
+        dataPins={dataPins}
+        onDataPinsChange={setDataPins}
+        asOfVersionId={asOfVersionId}
+        onAsOfChange={(versionId, label, unresolved) => {
+          setAsOfVersionId(versionId);
+          setAsOfLabel(label);
+          setAsOfUnresolved(unresolved ?? []);
+          if (versionId) setDataPins({});
         }}
+      />
+
+      <ComponentVersionModal
+        opened={historyComponent !== null}
+        onClose={() => setHistoryComponent(null)}
+        metadata={historyComponent}
+        dashboardId={dashboardId ?? null}
+        versions={familyVersions}
+        loadingVersions={versionsLoading}
+        // Restoring one component writes, so it is offered only here and only
+        // to someone who could edit the dashboard anyway.
+        canRestore={isOwner}
+        onRestored={handleRestored}
       />
 
       <TabModal
@@ -2795,6 +2934,7 @@ const EditorApp: React.FC = () => {
     </AdvancedVizPlacementDefaultProvider>
     </AdvancedVizConfigDraftProvider>
     </InspectorProviders>
+    </DataVersionProvider>
     </>
   );
 };
@@ -2858,6 +2998,8 @@ interface RightComponentGridProps {
   autofit?: boolean;
   /** Bumped when the dashboard plot theme changes, so figures refetch. */
   refreshTick?: number;
+  /** Absent when the dashboard has no versions, which hides the menu item. */
+  onOpenComponentHistory?: (componentId: string) => void;
 }
 
 /**
@@ -2902,6 +3044,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
   onResetFit,
   autofit,
   refreshTick,
+  onOpenComponentHistory,
 }) => {
   const allComponents = useMemo(
     () => [...cardComponents, ...otherComponents, ...barComponents],
@@ -2993,6 +3136,7 @@ const RightComponentGrid: React.FC<RightComponentGridProps> = ({
           onHighlightOnTab={onHighlightOnTab}
           fit={metadata.fit === 'auto' || metadata.fit === 'fixed' ? metadata.fit : undefined}
           onResetFit={autofit === false ? undefined : onResetFit}
+          onOpenHistory={onOpenComponentHistory}
         />
       )}
     />

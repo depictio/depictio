@@ -1,27 +1,34 @@
 /**
- * "You are looking at an old version" bar.
+ * "You are looking at a past version" bar.
  *
  * Sticky and full-bleed rather than an inline block, so it does not disturb
  * the viewer's `height: 100%` grid math, and deliberately **not dismissible**:
- * it changes the meaning of everything below it, so dismissing it would leave
- * a dashboard that silently misrepresents itself.
+ * a preview renders through the same components as the live dashboard, which
+ * is what makes it trustworthy and also what makes it indistinguishable at a
+ * glance. Dismissing the bar would leave a dashboard that silently
+ * misrepresents itself.
  *
- * Read-only, like the viewer it sits in: restoring a version is an edit, and
- * time-travel writes live in the editor's version history. An editor gets a
- * link there instead.
+ * It also states how much of the past is actually on screen. Layout and
+ * components come from the version (the server overlays them), and the data
+ * is pinned to what the version recorded (`previewDataRequest`), but only for
+ * collections whose data version was stamped. Anything else reads current
+ * data, and saying so is the difference between a reproducible view and one
+ * that merely looks it.
  */
 
 import React from 'react';
-import { Alert, Button, Group, Text, Tooltip } from '@mantine/core';
+import { Alert, Button, Group, Stack, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
-import { Z_LAYERS, type DashboardPreviewInfo } from 'depictio-react-core';
+import { Z_LAYERS } from 'depictio-react-core';
+import type { DashboardPreviewInfo } from 'depictio-react-core';
 
-import { absTime, relTime } from './format';
+import { absTime, dataCoverage, relTime } from './format';
 
 interface VersionPreviewBannerProps {
   preview: DashboardPreviewInfo;
-  /** The dashboard's editor, for someone who may edit it. Omitted otherwise. */
-  editHref?: string | null;
+  /** Shown only to someone who could actually carry the restore out. */
+  canRestore?: boolean;
+  onRestore?: () => void;
 }
 
 function describe(preview: DashboardPreviewInfo): string {
@@ -35,6 +42,24 @@ function describe(preview: DashboardPreviewInfo): string {
   return parts.join(' · ');
 }
 
+/** Which parts of the screen belong to the version, and which are current. */
+function describeData(kinds: Record<string, number> | null | undefined): string {
+  // A server that sends no coverage: say what is certain and no more.
+  if (!kinds) {
+    return 'Layout and components are from this version; data is pinned wherever this version recorded it.';
+  }
+  const { pinned, total } = dataCoverage(kinds);
+  if (total === 0) return 'Layout and components are from this version.';
+  const plural = total === 1 ? '' : 's';
+  if (pinned === total) {
+    return `Layout, components and data are all from this version (${total} data collection${plural}).`;
+  }
+  if (pinned === 0) {
+    return 'Layout and components are from this version; the data shown is current.';
+  }
+  return `Layout and components are from this version. ${pinned} of ${total} data collections are pinned to the data of the time; the rest read current data.`;
+}
+
 /** Drop the `version` param, keeping everything else about the URL intact. */
 function exitPreview(): void {
   const url = new URL(window.location.href);
@@ -42,7 +67,11 @@ function exitPreview(): void {
   window.location.assign(url.toString());
 }
 
-const VersionPreviewBanner: React.FC<VersionPreviewBannerProps> = ({ preview, editHref }) => (
+const VersionPreviewBanner: React.FC<VersionPreviewBannerProps> = ({
+  preview,
+  canRestore = false,
+  onRestore,
+}) => (
   <Alert
     color="yellow"
     variant="filled"
@@ -52,41 +81,39 @@ const VersionPreviewBanner: React.FC<VersionPreviewBannerProps> = ({ preview, ed
     data-testid="version-banner"
   >
     <Group justify="space-between" align="center" wrap="nowrap" gap="sm">
-      <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
-        <Tooltip
-          label={preview.created_at ? absTime(preview.created_at) : 'unknown time'}
-          withArrow
-          withinPortal
-        >
-          <Text size="sm" fw={600} truncate>
-            {describe(preview)}
+      <Stack gap={2} style={{ minWidth: 0 }}>
+        <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+          <Tooltip
+            label={preview.created_at ? absTime(preview.created_at) : 'unknown time'}
+            withArrow
+            withinPortal
+          >
+            <Text size="sm" fw={600} truncate>
+              {describe(preview)}
+            </Text>
+          </Tooltip>
+          {preview.pinned && <Icon icon="mdi:pin" width={15} aria-label="pinned" />}
+          <Text size="xs" style={{ opacity: 0.85 }} visibleFrom="sm">
+            · read-only
           </Text>
-        </Tooltip>
-        {preview.pinned && (
-          <Icon icon="mdi:pin" width={15} aria-label="pinned" />
-        )}
-        {/* Only the dashboard document is overlaid: every chart is still
-            rendered from today's component definition and today's data. */}
-        <Text size="xs" style={{ opacity: 0.85 }} visibleFrom="sm">
-          Read-only. The layout is from this version; charts and data are current.
+        </Group>
+        <Text size="xs" style={{ opacity: 0.85 }} data-testid="version-banner-data">
+          {describeData(preview.data_version_kinds)}
         </Text>
-      </Group>
+      </Stack>
 
       <Group gap={8} wrap="nowrap">
-        {editHref && (
-          <Tooltip label="Restore it from Version history in the editor" withArrow>
-            <Button
-              component="a"
-              href={editHref}
-              size="xs"
-              variant="white"
-              color="yellow"
-              leftSection={<Icon icon="mdi:pencil" width={14} />}
-              data-testid="version-banner-edit"
-            >
-              Open in editor
-            </Button>
-          </Tooltip>
+        {canRestore && onRestore && (
+          <Button
+            size="xs"
+            variant="white"
+            color="yellow"
+            leftSection={<Icon icon="mdi:backup-restore" width={14} />}
+            onClick={onRestore}
+            data-testid="version-banner-restore"
+          >
+            Restore
+          </Button>
         )}
         <Button
           size="xs"

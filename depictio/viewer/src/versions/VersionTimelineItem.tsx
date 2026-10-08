@@ -8,11 +8,11 @@
  */
 
 import React from 'react';
-import { ActionIcon, Badge, Group, Menu, Stack, Text, Timeline, Tooltip } from '@mantine/core';
+import { ActionIcon, Badge, Group, Menu, Stack, Text, Timeline } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import type { DashboardVersionSummary } from 'depictio-react-core';
 
-import { absTime, dataCoverageLabel, kindMeta, relTime, saveSpanLabel, versionTitle } from './format';
+import { absDateTime, dataCoverageLabel, kindMeta, relTime, saveSpanLabel, versionTitle } from './format';
 
 interface VersionTimelineItemProps {
   version: DashboardVersionSummary;
@@ -25,6 +25,12 @@ interface VersionTimelineItemProps {
   onRename: (version: DashboardVersionSummary) => void;
   onRestore: (version: DashboardVersionSummary) => void;
   onDelete: (version: DashboardVersionSummary) => void;
+  /** Show this version's *data* without touching the layout. Absent in hosts
+   *  that cannot time travel (the read-only viewer), where the option would
+   *  be dead. */
+  onUseData?: (version: DashboardVersionSummary) => void;
+  /** True when this version's data is the one currently on screen. */
+  dataActive?: boolean;
 }
 
 const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
@@ -38,10 +44,15 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
   onRename,
   onRestore,
   onDelete,
+  onUseData,
+  dataActive = false,
 }) => {
   const meta = kindMeta(version.kind);
   const span = saveSpanLabel(version);
   const coverage = dataCoverageLabel(version.data_version_kinds || {});
+  // Only a version that recorded a Delta commit can be travelled to. Offering
+  // it otherwise would promise a pin the backend has to decline.
+  const hasPinnableData = (version.data_version_kinds?.delta ?? 0) > 0;
 
   return (
     <Timeline.Item
@@ -69,6 +80,11 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
                 Restored
               </Badge>
             )}
+            {dataActive && (
+              <Badge size="xs" variant="filled" color="yellow">
+                Data
+              </Badge>
+            )}
           </Group>
 
           <Menu position="bottom-end" withinPortal width={190}>
@@ -92,6 +108,21 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
               >
                 Preview
               </Menu.Item>
+              {onUseData && (
+                <Menu.Item
+                  leftSection={
+                    <Icon
+                      icon={dataActive ? 'mdi:database-check' : 'mdi:database-clock-outline'}
+                      width={14}
+                    />
+                  }
+                  onClick={() => onUseData(version)}
+                  disabled={!hasPinnableData}
+                  data-testid="version-use-data"
+                >
+                  {dataActive ? 'Back to current data' : 'Use this data'}
+                </Menu.Item>
+              )}
               <Menu.Item
                 leftSection={
                   <Icon icon={version.pinned ? 'mdi:pin-off' : 'mdi:pin'} width={14} />
@@ -133,20 +164,27 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
         </Group>
       }
       data-testid="version-timeline-item"
+      lineVariant="solid"
     >
-      <Stack gap={2}>
+      <Stack gap={1}>
         <Group gap={6} wrap="nowrap">
-          <Tooltip label={absTime(version.created_at)} withArrow withinPortal>
-            <Text size="xs" c="dimmed">
-              {relTime(version.created_at)}
-            </Text>
-          </Tooltip>
-          {version.author_email && (
-            <Text size="xs" c="dimmed" truncate>
-              · {version.author_email}
-            </Text>
-          )}
+          {/* Full date and time, not just the clock. Relative time answers "how
+              long ago" at a glance, but choosing between a day's worth of
+              autosaves needs the wall clock, and choosing between months needs
+              the date — the day-group heading scrolls out of view. */}
+          <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+            {absDateTime(version.created_at)}
+          </Text>
+          <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+            · {relTime(version.created_at)}
+          </Text>
         </Group>
+
+        {version.author_email && (
+          <Text size="xs" c="dimmed" truncate>
+            {version.author_email}
+          </Text>
+        )}
 
         <Group gap={6} wrap="nowrap">
           <Text size="xs" c="dimmed">

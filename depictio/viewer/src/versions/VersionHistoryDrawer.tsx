@@ -14,13 +14,16 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   Alert,
+  Badge,
   Box,
   Button,
+  Collapse,
   Divider,
   Drawer,
   Group,
   Loader,
   Modal,
+  Paper,
   ScrollArea,
   Stack,
   Text,
@@ -32,17 +35,22 @@ import { Icon } from '@iconify/react';
 import {
   createDashboardVersion,
   deleteDashboardVersion,
+  fetchDashboardVersion,
   pinDashboardVersion,
   renameDashboardVersion,
   restoreDashboardVersion,
   unpinDashboardVersion,
   type DashboardVersionSummary,
+  type DataVersionPins,
+  type StoredMetadata,
 } from 'depictio-react-core';
 
 import { groupByDay, versionTitle } from './format';
+import DatasetVersionPicker from './DatasetVersionPicker';
 import VersionCompatibilityPanel from './VersionCompatibilityPanel';
 import VersionTimelineItem from './VersionTimelineItem';
 import { useVersionHistory } from './useVersionHistory';
+import './versions.css';
 
 interface VersionHistoryDrawerProps {
   opened: boolean;
@@ -53,8 +61,37 @@ interface VersionHistoryDrawerProps {
   /** Owner-level rights: delete. Erasing history is the one action a restore
    *  cannot undo, so it is gated harder than the rest. */
   canDelete?: boolean;
+  /** Whether to offer naming the current state. Defaults to `canEdit`.
+   *  The viewer withholds it while previewing a version: that button captures
+   *  the *live* dashboard, but the screen behind it is showing a past one, so
+   *  it would read as "name what I'm looking at" and do something else. */
+  canSnapshot?: boolean;
+  /** Where Preview opens. The editor uses a new tab so unsaved state is never
+   *  disturbed; the viewer navigates in place, since it holds no unsaved work
+   *  and stacking a tab per version examined gets old fast. */
+  previewTarget?: 'new-tab' | 'same-tab';
   /** Called after a restore lands so the host can refetch the dashboard. */
   onRestored?: () => void;
+
+  // ── Data time travel ──────────────────────────────────────────────────
+  // Absent in hosts that cannot time travel (the read-only viewer), where the
+  // whole section is hidden rather than shown inert.
+  /** Components of the dashboard on screen — used to find its collections. */
+  dashboardMetadata?: StoredMetadata[];
+  /** Per-collection Delta pins currently applied. */
+  dataPins?: DataVersionPins;
+  onDataPinsChange?: (pins: DataVersionPins) => void;
+  /** Stored version whose data stamps are driving the view, if any. */
+  asOfVersionId?: string | null;
+  /** `label` is for the banner, so it can name the version rather than say
+   *  "historical"; `unresolved` names the collections that version recorded
+   *  no data version for, which the banner reports because they keep showing
+   *  current data. Called with (null, null, []) to return to current data. */
+  onAsOfChange?: (
+    versionId: string | null,
+    label: string | null,
+    unresolved?: string[],
+  ) => void;
 }
 
 type PendingAction =
@@ -62,7 +99,22 @@ type PendingAction =
   | { type: 'pin'; version: DashboardVersionSummary }
   | { type: 'restore'; version: DashboardVersionSummary }
   | { type: 'delete'; version: DashboardVersionSummary }
+  | { type: 'snapshot' }
   | null;
+
+/** The version a pending action targets, or null for the snapshot action —
+ *  which names the *current* state and so has no version to point at. Keeps
+ *  the union's narrowing in one place instead of at each of its six readers. */
+function pendingVersion(pending: PendingAction): DashboardVersionSummary | null {
+  return pending && pending.type !== 'snapshot' ? pending.version : null;
+}
+
+/** Display name of the version a confirm modal is about. Empty while the modal
+ *  is closing, when `pending` has already been cleared but the fade is running. */
+function pendingTitle(pending: PendingAction): string {
+  const version = pendingVersion(pending);
+  return version ? versionTitle(version) : '';
+}
 
 const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
   opened,
@@ -70,8 +122,16 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
   dashboardId,
   canEdit = false,
   canDelete = false,
+  canSnapshot,
+  previewTarget = 'new-tab',
   onRestored,
+  dashboardMetadata,
+  dataPins,
+  onDataPinsChange,
+  asOfVersionId,
+  onAsOfChange,
 }) => {
+  const showSnapshot = canSnapshot ?? canEdit;
   const { versions, currentVersionId, total, loading, error, reload } = useVersionHistory(
     dashboardId,
     opened,
@@ -88,16 +148,21 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
     setLabelDraft('');
   }, []);
 
-  /** `restored` marks a restore, the one action that changes the dashboard
-   *  itself: only then does the host refetch it, since that replaces the
-   *  editor's document and resets its user-action gate. */
+  /**
+   * Run a mutating action, then refresh the timeline.
+   *
+   * `reloadsDashboard` is opt-in rather than the default: pin, rename and
+   * delete change only the ledger, and refetching the dashboard for those
+   * would discard the editor's unsaved in-memory state for no reason. Only a
+   * restore actually changes what the dashboard *is*.
+   */
   const run = useCallback(
-    async (work: () => Promise<string>, { restored = false } = {}) => {
+    async (work: () => Promise<string>, opts: { reloadsDashboard?: boolean } = {}) => {
       setBusy(true);
       try {
         const message = await work();
         await reload();
-        if (restored) onRestored?.();
+        if (opts.reloadsDashboard) onRestored?.();
         notifications.show({ color: 'teal', title: 'Version history', message });
         closeModal();
       } catch (err) {
@@ -113,15 +178,59 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
     [reload, onRestored, closeModal],
   );
 
-  const handlePreview = useCallback((version: DashboardVersionSummary) => {
-    // The viewer honours ?version=; opening a new tab leaves the editor's
-    // unsaved state untouched.
-    window.open(
-      `/dashboard/${version.family_id}?version=${version.version_id}`,
-      '_blank',
-      'noopener',
-    );
-  }, []);
+  const handlePreview = useCallback(
+    (version: DashboardVersionSummary) => {
+      // Preview the tab the user is *on*, not the family's main tab. A version
+      // covers the whole family, so `family_id` is always the main tab's id —
+      // opening that would silently move a user previewing "Tab 3" onto a
+      // different tab and show them content they did not ask about.
+      const target = dashboardId || version.family_id;
+      // The viewer renders `?version=` read-only, behind an unmissable banner.
+      const href = `/dashboard/${target}?version=${version.version_id}`;
+      if (previewTarget === 'same-tab') {
+        window.location.href = href;
+      } else {
+        // A new tab, so the editor's unsaved state is left untouched.
+        window.open(href, '_blank', 'noopener');
+      }
+    },
+    [dashboardId, previewTarget],
+  );
+
+  // Toggling: picking the version already driving the view returns to current
+  // data, so the same row both enters and leaves time travel. One affordance,
+  // no separate "stop" the user has to find.
+  const [datasetsOpen, setDatasetsOpen] = useState(false);
+  const toggleDatasets = useCallback(() => setDatasetsOpen((v) => !v), []);
+  const pinnedCount = Object.values(dataPins ?? {}).filter(
+    (v) => typeof v === 'number',
+  ).length;
+
+  const handleUseData = useCallback(
+    async (version: DashboardVersionSummary) => {
+      if (!onAsOfChange) return;
+      if (version.version_id === asOfVersionId) {
+        onAsOfChange(null, null, []);
+        return;
+      }
+      // Fetch the detail for its stamps: the summary carries only a count by
+      // kind, and the banner needs to name the collections that will keep
+      // showing current data. A failure here must not block the pin — the
+      // backend resolves the stamps regardless, so the worst case is a
+      // less specific banner.
+      let unresolved: string[] = [];
+      try {
+        const detail = await fetchDashboardVersion(version.version_id);
+        unresolved = (detail.data_collections || [])
+          .filter((stamp) => stamp.version_kind !== 'delta')
+          .map((stamp) => stamp.data_collection_tag || String(stamp.dc_id));
+      } catch {
+        unresolved = [];
+      }
+      onAsOfChange(version.version_id, versionTitle(version), unresolved);
+    },
+    [onAsOfChange, asOfVersionId],
+  );
 
   const handleTogglePin = useCallback(
     (version: DashboardVersionSummary) => {
@@ -140,11 +249,9 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
 
   const handleSnapshot = useCallback(() => {
     if (!dashboardId) return;
-    void run(async () => {
-      const created = await createDashboardVersion(dashboardId, null);
-      return `Saved version v${created.seq}.`;
-    });
-  }, [dashboardId, run]);
+    setLabelDraft('');
+    setPending({ type: 'snapshot' });
+  }, [dashboardId]);
 
   const body = (() => {
     if (loading && versions.length === 0) {
@@ -170,19 +277,27 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
     }
 
     return (
-      <Stack gap="lg">
+      <Stack gap="md">
         {groups.map((group) => (
           <Box key={group.label}>
             <Divider
               labelPosition="left"
-              mb="xs"
+              mb={6}
               label={
                 <Text size="xs" c="dimmed" fw={600}>
                   {group.label}
                 </Text>
               }
             />
-            <Timeline active={-1} bulletSize={20} lineWidth={2}>
+            {/* Density overrides live in versions.css — the rule being beaten
+                is a `:not(:first-of-type)` selector, which Mantine's inline
+                `styles` prop cannot express. */}
+            <Timeline
+              active={-1}
+              bulletSize={16}
+              lineWidth={2}
+              className="depictio-version-timeline"
+            >
               {group.versions.map((version) => (
                 <VersionTimelineItem
                   key={version.version_id}
@@ -199,6 +314,8 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
                   }}
                   onRestore={(v) => setPending({ type: 'restore', version: v })}
                   onDelete={(v) => setPending({ type: 'delete', version: v })}
+                  onUseData={onAsOfChange ? handleUseData : undefined}
+                  dataActive={version.version_id === asOfVersionId}
                 />
               ))}
             </Timeline>
@@ -227,34 +344,142 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
           </Group>
         }
         data-testid="version-drawer"
+        // Fill the drawer's height so the list runs to the bottom edge.
+        //
+        // Mantine's drawer body is a plain block sized to its content, so the
+        // timeline had no height to fill; the previous `mah: calc(100vh -
+        // 260px)` was a guess at the chrome above it and always stopped short.
+        // A flex column delegates that measurement to the browser instead.
+        // `minHeight: 0` is what lets the inner ScrollArea shrink rather than
+        // grow past the viewport — the usual reason a nested scroller quietly
+        // refuses to scroll.
+        styles={{
+          content: { display: 'flex', flexDirection: 'column' },
+          body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' },
+        }}
       >
-        <Stack gap="md">
-          {canEdit && (
-            <Button
-              variant="light"
-              size="xs"
-              leftSection={<Icon icon="mdi:content-save-plus" width={14} />}
-              onClick={handleSnapshot}
-              loading={busy}
-              data-testid="version-snapshot"
-            >
-              Save a version now
-            </Button>
+        <Stack gap="md" style={{ flex: 1, minHeight: 0 }}>
+          {showSnapshot && (
+            <Paper withBorder radius="md" p="sm" bg="var(--mantine-color-body)">
+              <Group justify="space-between" wrap="nowrap" gap="sm" align="center">
+                <Stack gap={2} style={{ minWidth: 0 }}>
+                  <Text size="sm" fw={600}>
+                    Bookmark this state
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    Saving already records a version. Give the current one a name
+                    so it stays findable and is never cleaned up.
+                  </Text>
+                </Stack>
+                <Button
+                  variant="light"
+                  size="xs"
+                  leftSection={<Icon icon="mdi:bookmark-plus-outline" width={14} />}
+                  onClick={handleSnapshot}
+                  disabled={busy}
+                  data-testid="version-snapshot"
+                  style={{ flexShrink: 0 }}
+                >
+                  Name it
+                </Button>
+              </Group>
+            </Paper>
           )}
-          <ScrollArea.Autosize mah="calc(100vh - 220px)" type="hover">
-            {body}
-          </ScrollArea.Autosize>
+          {/* Plain ScrollArea, not `.Autosize`: Autosize wraps its child in an
+              `overflow: auto` box that grows to fit content, which is the
+              opposite of filling a fixed pane and would leave the drawer's own
+              scrollbar competing with this one. */}
+          <ScrollArea
+            style={{ flex: 1, minHeight: 0 }}
+            type="hover"
+            // Reserve the gutter rather than overlaying it. Mantine's default
+            // floating scrollbar sits on top of the content, which lands
+            // exactly on each row's action menu and makes it unclickable at
+            // the moment the user is scrolling to reach it.
+            offsetScrollbars
+            scrollbarSize={8}
+          >
+            <Stack gap="md">
+              {/* Dataset versions sit *above* the timeline because they answer
+                  the coarser question — which data — while the timeline
+                  answers which layout. Collapsed by default so the common
+                  case (browsing layout history) is unchanged, and because
+                  opening it is what triggers the history fetches. */}
+              {onDataPinsChange && (
+                <Box>
+                  <Group
+                    justify="space-between"
+                    wrap="nowrap"
+                    gap="xs"
+                    style={{ cursor: 'pointer' }}
+                    onClick={toggleDatasets}
+                    data-testid="dataset-versions-toggle"
+                  >
+                    <Group gap={6} wrap="nowrap">
+                      <Icon icon="mdi:database-clock-outline" width={15} />
+                      <Text size="sm" fw={600}>
+                        Dataset version
+                      </Text>
+                      {pinnedCount > 0 && (
+                        <Badge size="xs" color="yellow" variant="filled">
+                          {pinnedCount}
+                        </Badge>
+                      )}
+                    </Group>
+                    <Icon
+                      icon={datasetsOpen ? 'tabler:chevron-up' : 'tabler:chevron-down'}
+                      width={15}
+                    />
+                  </Group>
+                  <Collapse in={datasetsOpen}>
+                    <Stack gap="xs" pt="xs">
+                      <Text size="xs" c="dimmed">
+                        Draw this dashboard from an earlier state of its data.
+                        Nothing is saved — reloading returns to current data.
+                      </Text>
+                      <DatasetVersionPicker
+                        metadata={dashboardMetadata}
+                        active={datasetsOpen}
+                        pins={dataPins ?? {}}
+                        onPinsChange={onDataPinsChange}
+                      />
+                    </Stack>
+                  </Collapse>
+                  <Divider mt="md" />
+                </Box>
+              )}
+              {body}
+            </Stack>
+          </ScrollArea>
         </Stack>
       </Drawer>
 
-      {/* Naming a version — used for both pin and rename. */}
+      {/* Naming a version — shared by snapshot, pin and rename, because all
+          three ask the same question and differ only in what they do with the
+          answer. */}
       <Modal
-        opened={pending?.type === 'pin' || pending?.type === 'rename'}
+        opened={
+          pending?.type === 'pin' ||
+          pending?.type === 'rename' ||
+          pending?.type === 'snapshot'
+        }
         onClose={closeModal}
-        title={pending?.type === 'pin' ? 'Pin this version' : 'Rename version'}
+        title={
+          pending?.type === 'snapshot'
+            ? 'Name the current state'
+            : pending?.type === 'pin'
+              ? 'Pin this version'
+              : 'Rename version'
+        }
         centered
       >
         <Stack gap="md">
+          {pending?.type === 'snapshot' && (
+            <Text size="sm" c="dimmed">
+              A named version is kept indefinitely and never folds into a later
+              autosave, so it stays exactly as it is now.
+            </Text>
+          )}
           {pending?.type === 'pin' && (
             <Text size="sm" c="dimmed">
               Pinned versions are never removed by retention, and later autosaves
@@ -276,10 +501,22 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
             <Button
               size="xs"
               loading={busy}
+              disabled={pending?.type === 'snapshot' && !labelDraft.trim()}
               onClick={() => {
                 if (!pending) return;
-                const version = pending.version;
                 const label = labelDraft.trim() || null;
+
+                if (pending.type === 'snapshot') {
+                  if (!dashboardId || !label) return;
+                  void run(async () => {
+                    const created = await createDashboardVersion(dashboardId, label);
+                    return `Saved “${label}” as v${created.seq}.`;
+                  });
+                  return;
+                }
+
+                const version = pendingVersion(pending);
+                if (!version) return;
                 if (pending.type === 'pin') {
                   void run(async () => {
                     await pinDashboardVersion(version.version_id, label);
@@ -293,7 +530,11 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
                 }
               }}
             >
-              {pending?.type === 'pin' ? 'Pin' : 'Rename'}
+              {pending?.type === 'snapshot'
+                ? 'Save'
+                : pending?.type === 'pin'
+                  ? 'Pin'
+                  : 'Rename'}
             </Button>
           </Group>
         </Stack>
@@ -308,9 +549,9 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
         <Stack gap="md">
           <Text size="sm">
             This replaces the dashboard's current content with{' '}
-            <strong>{pending ? versionTitle(pending.version) : ''}</strong>.
+            <strong>{pendingTitle(pending)}</strong>.
           </Text>
-          <VersionCompatibilityPanel versionId={pending?.version.version_id ?? null} />
+          <VersionCompatibilityPanel versionId={pendingVersion(pending)?.version_id ?? null} />
           <Alert color="blue" variant="light" icon={<Icon icon="mdi:information" width={16} />}>
             The current state is saved as a version first, so you can undo this.
             Access permissions are never changed by a restore.
@@ -325,18 +566,15 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
               loading={busy}
               data-testid="version-restore-confirm"
               onClick={() => {
-                if (!pending) return;
-                const version = pending.version;
-                void run(
-                  async () => {
-                    const result = await restoreDashboardVersion(version.version_id);
-                    const bits = [`Restored ${versionTitle(version)}`];
-                    if (result.tabs_created) bits.push(`${result.tabs_created} tab(s) recreated`);
-                    if (result.tabs_deleted) bits.push(`${result.tabs_deleted} tab(s) removed`);
-                    return `${bits.join(' · ')}.`;
-                  },
-                  { restored: true },
-                );
+                const version = pendingVersion(pending);
+                if (!version) return;
+                void run(async () => {
+                  const result = await restoreDashboardVersion(version.version_id);
+                  const bits = [`Restored ${versionTitle(version)}`];
+                  if (result.tabs_created) bits.push(`${result.tabs_created} tab(s) recreated`);
+                  if (result.tabs_deleted) bits.push(`${result.tabs_deleted} tab(s) removed`);
+                  return `${bits.join(' · ')}.`;
+                }, { reloadsDashboard: true });
               }}
             >
               Restore
@@ -353,7 +591,7 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
       >
         <Stack gap="md">
           <Text size="sm">
-            <strong>{pending ? versionTitle(pending.version) : ''}</strong> will be removed
+            <strong>{pendingTitle(pending)}</strong> will be removed
             permanently.
           </Text>
           <Alert color="red" variant="light" icon={<Icon icon="mdi:alert" width={16} />}>
@@ -369,8 +607,8 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
               loading={busy}
               data-testid="version-delete-confirm"
               onClick={() => {
-                if (!pending) return;
-                const version = pending.version;
+                const version = pendingVersion(pending);
+                if (!version) return;
                 void run(async () => {
                   await deleteDashboardVersion(version.version_id, version.pinned);
                   return `Deleted ${versionTitle(version)}.`;

@@ -22,6 +22,9 @@ import {
   bulkComputeCards,
   hasLiveValues,
   AvailableFilterValuesProvider,
+  DataVersionProvider,
+  dataVersionBody,
+  restoreDashboardVersion,
   DashboardGrid,
   FilterPanel,
   FunnelView,
@@ -86,6 +89,7 @@ import type {
   CommentViewState,
 } from 'depictio-react-core';
 import { parseTemplateOrigin } from './projects/template';
+import { exitPreview, extractPreviewVersionId, previewDataRequest } from './versions/preview';
 
 /** localStorage key for the dismissed ingestion banner, scoped per project so
  *  the dismissal sticks across the dashboard's sibling tabs. */
@@ -123,7 +127,6 @@ import { DashboardGuide, useGuideRoute } from './guide';
 import { DashboardSpotlight } from './spotlight';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
-import { dashboardHref } from './dashboards/lib/dashboardLinks';
 
 /**
  * Top-level SPA. Layout:
@@ -251,7 +254,7 @@ const App: React.FC = () => {
   const dashboardId = extractDashboardId();
   // Read once per mount: a tab switch is a full navigation, so this cannot
   // change without remounting.
-  const previewVersionId = extractVersionId();
+  const previewVersionId = extractPreviewVersionId();
   // Edit affordances are gated on this rather than `isOwner`: editing a past
   // version makes no sense, and the editor would autosave it over the live
   // dashboard. House style is visible-but-disabled, which the Header's
@@ -347,7 +350,43 @@ const App: React.FC = () => {
     if (!isNarrow) closeFilterDrawer();
   }, [isNarrow, closeFilterDrawer]);
 
+  // Data time travel, read-only in the viewer.
+  //
+  // Choosing which data to draw from is an editing act and lives in the
+  // editor. The one case the viewer owns is a `?version=` preview: the server
+  // overlays the version's content, and every render request then has to carry
+  // that version's data pins and component definitions too, or the preview is
+  // a past layout drawn through today's definitions over today's numbers.
+  // `previewDataRequest` is null for the live dashboard, which keeps every
+  // request byte-identical to what it was without this feature.
+  const previewRequest = useMemo(() => previewDataRequest(dashboard), [dashboard]);
+  // Request fragment + a stable dependency key. The key has to reach every
+  // fetch effect: without it the body would change while the effect never
+  // re-ran, leaving stale numbers under a new label.
+  const versionBody = useMemo(
+    () => (previewRequest ? dataVersionBody(previewRequest) : {}),
+    [previewRequest],
+  );
+  const versionKey = JSON.stringify(versionBody);
+
   const bulkCtrl = useRef<AbortController | null>(null);
+
+  /** Restore straight from the preview banner, then drop back to the live view.
+   *  A full navigation rather than a state update: a restore can add or remove
+   *  whole tabs, so every derived list on this page is stale afterwards. */
+  const handleRestorePreview = useCallback(async () => {
+    if (!previewVersionId) return;
+    try {
+      await restoreDashboardVersion(previewVersionId);
+      exitPreview();
+    } catch (err) {
+      notifications.show({
+        color: 'red',
+        title: 'Restore failed',
+        message: err instanceof Error ? err.message : 'Could not restore this version',
+      });
+    }
+  }, [previewVersionId]);
 
   // Ingestion-health banner: for template-derived dashboards, surface a
   // prominent prompt when a required data collection was not found during
@@ -359,7 +398,12 @@ const App: React.FC = () => {
   // Keep the browser tab title in sync with the dashboard name.
   usePageTitle(dashboard?.title || dashboardId);
 
-  // Fetch dashboard + tab list in parallel
+  // Fetch dashboard + tab list in parallel.
+  //
+  // With `?version=<id>` the server overlays that version's content onto the
+  // live document (identity and access stay live), so every component path
+  // below is unchanged. Read-only by construction: Edit is withheld while a
+  // version is previewed.
   useEffect(() => {
     if (!dashboardId) {
       setError('No dashboard ID in URL. Expected /dashboard/<id>.');
@@ -487,6 +531,9 @@ const App: React.FC = () => {
           // (e.g. compare-on forces real Delta loads) could land after a fast
           // newer one and resurrect stale card strips.
           signal,
+          // A `?version=` preview computes cards from the version's data and
+          // definitions, like every other renderer under DataVersionProvider.
+          versionBody,
         ),
       ),
     )
@@ -515,6 +562,7 @@ const App: React.FC = () => {
     refreshTick,
     // Undefined while compare is off, so group edits don't refire the fetch.
     JSON.stringify(groupsApi.bulkOptions ?? null),
+    versionKey,
   ]);
 
 
@@ -1183,6 +1231,13 @@ const App: React.FC = () => {
           : undefined
       }
     >
+      {/* Every renderer reads its pin from here rather than taking it as a
+          prop: the fetch happens deep in the shared component package, and
+          the decision is made up here. */}
+      <DataVersionProvider
+        asOfVersionId={previewRequest?.asOfVersionId}
+        componentOverrides={previewRequest?.componentOverrides}
+      >
       <DashboardLoadingProvider>
       <InspectorProviders control={inspectorControl}>
       {/* Dashboard-wide default for where advanced-viz tiles draw their
@@ -1322,7 +1377,8 @@ const App: React.FC = () => {
         {dashboard?.preview && (
           <VersionPreviewBanner
             preview={dashboard.preview}
-            editHref={isOwner && dashboardId ? dashboardHref(dashboardId, 'edit') : null}
+            canRestore={isOwner}
+            onRestore={handleRestorePreview}
           />
         )}
         {ingestionHealth &&
@@ -1566,7 +1622,7 @@ const App: React.FC = () => {
                           {canEditNow && ' Start editing to add visualizations, tables, and more.'}
                         </Text>
                       </Stack>
-                      {canEditNow && (
+                      {isOwner && (
                         <Button
                           component="a"
                           href={`/dashboard-edit/${dashboardId}`}
@@ -1697,10 +1753,10 @@ const App: React.FC = () => {
         {/* The page's fixed furniture sits above the Guide's layer; hidden
             with the canvas while the Guide is up. */}
         <div style={guide.open ? { visibility: 'hidden' } : undefined}>
-          {/* Unmounted while previewing. It would start from the snapshot's
-              notes, and `saveDashboardNotes` writes the editor's text onto the
-              live dashboard it re-reads, so a save here would put a past
-              version's notes over the live ones. */}
+          {/* Unmounted while previewing. NotesFooter saves through
+              `saveDashboardNotes`, which re-reads the dashboard and POSTs it to
+              /save: during a preview that read returns the *snapshot*, so an
+              edit here would write a past version's content over the live one. */}
           {dashboard && dashboardId && !inspectorEnabled && !previewVersionId && (
             <NotesFooter
               dashboardId={dashboardId}
@@ -1772,6 +1828,7 @@ const App: React.FC = () => {
       </AdvancedVizPlacementDefaultProvider>
       </InspectorProviders>
       </DashboardLoadingProvider>
+      </DataVersionProvider>
     </AvailableFilterValuesProvider>
   );
 };
@@ -1784,14 +1841,6 @@ function extractDashboardId(): string | null {
   const path = window.location.pathname;
   const match = path.match(/\/dashboard\/([^/?#]+)/);
   return match?.[1] || null;
-}
-
-/** The version being previewed, from `?version=`. Same idiom as the
- *  walkthrough's `no-walkthrough` check. The dashboard-id regex above already
- *  stops at `?`, so the two never interfere. */
-function extractVersionId(): string | null {
-  if (typeof window === 'undefined') return null;
-  return new URLSearchParams(window.location.search).get('version');
 }
 
 function stableFilterKey(filters: InteractiveFilter[]): string {

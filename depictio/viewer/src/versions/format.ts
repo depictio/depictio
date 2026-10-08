@@ -1,40 +1,56 @@
 /**
  * Presentation helpers for the version timeline.
+ *
+ * Timestamp parsing goes through `lib/datetime` rather than a local copy: the
+ * API serialises naive UTC, and `parseServerTimestamp` is the one place that
+ * reads it as such. A second definition would drift.
  */
 
 import type { DashboardVersionSummary } from 'depictio-react-core';
 
-/** Parse a backend ISO timestamp to epoch ms.
- *
- *  The API stamps naive UTC (`utc_now_naive`) and serialises it without an
- *  offset, so an offset-less value has to be read as UTC. Otherwise JS treats
- *  it as local time and a fresh version reads hours off for anyone not on
- *  UTC. */
+import {
+  formatDateTimeVerbose,
+  formatRelative,
+  parseServerTimestamp,
+} from '../lib/datetime';
+
+/** Parse a backend timestamp to epoch ms; NaN when it is not one. */
 export function parseTs(iso?: string | null): number {
-  if (!iso) return NaN;
-  const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);
-  return new Date(hasTz ? iso : `${iso}Z`).getTime();
+  const d = parseServerTimestamp(iso);
+  return d ? d.getTime() : NaN;
 }
 
-/** Compact relative time — "3m ago", "2d ago". */
+/** Compact relative time: "just now", "3m ago", "2d ago". */
 export function relTime(iso?: string | null): string {
-  if (!iso) return '—';
-  const then = parseTs(iso);
-  if (Number.isNaN(then)) return '—';
-  const secs = Math.max(0, Math.round((Date.now() - then) / 1000));
-  if (secs < 60) return `${secs}s ago`;
-  const mins = Math.round(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.round(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.round(hrs / 24)}d ago`;
+  return formatRelative(iso);
 }
 
-/** Exact local date and time, for the tooltip behind a relative label. */
+/** Exact local date and time (with the UTC value), for the tooltip behind a
+ *  relative label. */
 export function absTime(iso?: string | null): string {
+  return formatDateTimeVerbose(iso, '—');
+}
+
+/**
+ * Full date and time for one version, e.g. "29 Jul 2026, 14:32:07".
+ *
+ * A time of day alone is right for a live log where every row is from today.
+ * A version timeline spans months, and a bare "14:32:07" against a version
+ * from March is actively misleading: the day-group heading is easy to scroll
+ * past, and the row is what gets read when choosing what to restore.
+ */
+export function absDateTime(iso?: string | null): string {
   const ms = parseTs(iso);
   if (Number.isNaN(ms)) return '—';
-  return new Date(ms).toLocaleString(undefined, { hour12: false });
+  return new Date(ms).toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
 }
 
 /** Day bucket label: "Today" / "Yesterday" / "3 Mar 2026". */
@@ -95,6 +111,14 @@ export function kindMeta(kind: string) {
   return KIND_META[kind] ?? { icon: 'mdi:circle-small', color: 'gray', label: kind };
 }
 
+/** How many of a version's data collections have a reproducible data version
+ *  (a Delta commit, a manifest or an asset hash), out of how many in total. */
+export function dataCoverage(kinds: Record<string, number>): { pinned: number; total: number } {
+  const total = Object.values(kinds).reduce((a, b) => a + b, 0);
+  const pinned = (kinds.delta ?? 0) + (kinds.manifest ?? 0) + (kinds.asset ?? 0);
+  return { pinned, total };
+}
+
 /**
  * One-line summary of how reproducible a version's data is.
  *
@@ -103,10 +127,9 @@ export function kindMeta(kind: string) {
  * the split rather than implying uniform fidelity.
  */
 export function dataCoverageLabel(kinds: Record<string, number>): string | null {
-  const total = Object.values(kinds).reduce((a, b) => a + b, 0);
+  const { pinned, total } = dataCoverage(kinds);
   if (!total) return null;
 
-  const pinned = (kinds.delta ?? 0) + (kinds.manifest ?? 0) + (kinds.asset ?? 0);
   if (pinned === 0) return `${total} data collection${total === 1 ? '' : 's'} · live data`;
   if (pinned === total) return `${total} data collection${total === 1 ? '' : 's'} pinned`;
   return `${pinned} of ${total} data collections pinned`;
