@@ -2443,6 +2443,7 @@ def register_run_command(app: typer.Typer):
                     "glob is listed remotely. Example: "
                     "--bind samples=s3://my-bucket/run42/*.samples.csv"
                 ),
+                rich_help_panel=PROJECT_PANEL,
             ),
         ] = [],
         dashboard: Annotated[
