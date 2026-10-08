@@ -21,8 +21,8 @@ import { normalizeFigureStyle } from './figureStyle';
 import type { TabLinkResolver, TabLinkTarget } from './tabLinks';
 import { tabLinkKey } from './tabLinks';
 
-/** What a highlight can show: a server-rendered figure, which it restyles, or
- *  an advanced visualisation, drawn as on its tab. */
+/** What a highlight can show: a server-rendered figure, or an advanced
+ *  visualisation, both drawn in the highlight's style. */
 const HIGHLIGHTABLE_TYPES = new Set(['figure', 'advanced_viz']);
 
 export function canHighlight(m: Pick<StoredMetadata, 'component_type'>): boolean {
@@ -126,10 +126,11 @@ export function highlightMetadata(highlight: StoredMetadata, source: StoredMetad
     caption: text(highlight.caption) || source.caption,
     font_scale: highlight.font_scale ?? source.font_scale,
   };
-  if (source.component_type === 'figure') {
-    merged.figure_style = normalizeFigureStyle(highlight.figure_style) ?? 'minimal';
-    merged.selection_enabled = false;
-  }
+  // Both kinds read as the landing page's tile. An advanced visualisation in
+  // the `minimal` style also keeps its controls behind the icon (controlsDock.ts):
+  // docked on a half-width tile, they would take the room the plot needs.
+  merged.figure_style = normalizeFigureStyle(highlight.figure_style) ?? 'minimal';
+  if (source.component_type === 'figure') merged.selection_enabled = false;
   // The source's tag names the source; two components answering to it would
   // make the copy look like the original to anything that looks tags up.
   delete (merged as Record<string, unknown>).tag;

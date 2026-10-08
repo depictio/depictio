@@ -264,7 +264,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     // Another tab's figure, looked up there and drawn here with this tab's
     // filters. A figure goes through FigureBlock, rendered by the server from
     // its own tab in the highlight's style; an advanced visualisation is drawn
-    // as on its tab, its header's link to that tab in the chrome.
+    // client-side in that style, its link to the source tab in the chrome.
     return (
       <HighlightBlock metadata={metadata} extraActions={extraActions} showDragHandle={showDragHandle}>
         {({ metadata: shown, renderSource, styleRequest, sourceLink }) =>
@@ -274,12 +274,17 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
                 metadata={shown}
                 filters={filters}
                 refreshTick={refreshTick}
+                // The `minimal` header links the source tab itself; any other
+                // style keeps the link in the chrome.
                 extraActions={
                   <>
-                    {sourceLink && <SourceTabAction link={sourceLink} />}
+                    {sourceLink && resolveFigureStyle(shown.figure_style) !== 'minimal' && (
+                      <SourceTabAction link={sourceLink} />
+                    )}
                     {extraActions}
                   </>
                 }
+                sourceLink={sourceLink}
                 showDragHandle={showDragHandle}
                 groupRender={groupRender}
               />

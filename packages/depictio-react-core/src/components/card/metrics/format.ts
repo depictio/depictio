@@ -94,9 +94,10 @@ export function percent(share: number, digits = 0): string {
   return `${(share * 100).toFixed(digits)}%`;
 }
 
-/** Convert a hex colour ("#FF7F00" or "FF7F00") to an `rgba(...)` string with
- *  the given alpha. Returns a teal fallback for invalid input, which is the
- *  accent cards without an explicit colour have always used. */
+/** Convert a hex colour ("#FF7F00" or "FF7F00"), an rgb()/rgba() colour or a
+ *  Mantine palette name to a colour with the given alpha. Returns a teal
+ *  fallback for anything else, which is the accent cards without an explicit
+ *  colour have always used. */
 export function hexWithAlpha(hex: string | null | undefined, alpha: number): string {
   const fallback = `rgba(69,184,172,${alpha})`;
   if (!hex || typeof hex !== 'string') return fallback;
@@ -106,6 +107,12 @@ export function hexWithAlpha(hex: string | null | undefined, alpha: number): str
   // drew the intended gray.
   const rgba = hex.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
   if (rgba) return `rgba(${rgba[1]},${rgba[2]},${rgba[3]},${alpha})`;
+  // A Mantine palette name (`orange`, `grape`, a theme's own `brandPrimary`):
+  // the colour a card's icon takes, so its strip takes it too, in either scheme.
+  if (/^[a-zA-Z][a-zA-Z0-9]*$/.test(hex.trim())) {
+    const pct = Math.round(alpha * 100);
+    return `color-mix(in srgb, var(--mantine-color-${hex.trim()}-filled) ${pct}%, transparent)`;
+  }
   const cleaned = hex.replace('#', '').trim();
   if (cleaned.length !== 6 || !/^[0-9a-fA-F]{6}$/.test(cleaned)) return fallback;
   const r = parseInt(cleaned.slice(0, 2), 16);

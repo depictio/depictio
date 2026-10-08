@@ -32,6 +32,14 @@ export interface AdvancedVizShowcase {
 
 export const AdvancedVizShowcaseContext = createContext<AdvancedVizShowcase | null>(null);
 
+/** The component's `caption`: how to read the plot, drawn under it by the
+ *  frame as FigureRenderer draws a figure's. Empty for none. */
+export const AdvancedVizCaptionContext = createContext<string>('');
+
+export function useAdvancedVizCaption(): string {
+  return useContext(AdvancedVizCaptionContext);
+}
+
 export function useAdvancedVizShowcase(): AdvancedVizShowcase | null {
   return useContext(AdvancedVizShowcaseContext);
 }

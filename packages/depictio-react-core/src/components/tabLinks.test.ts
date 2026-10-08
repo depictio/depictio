@@ -69,6 +69,13 @@ describe('balancedColumns', () => {
     expect(balancedColumns(3, 940, 220, 12)).toBe(3);
   });
 
+  it('keeps a short group tile-sized rather than stretching it', () => {
+    expect(balancedColumns(1, 940, 220, 12)).toBe(3);
+    expect(balancedColumns(2, 940, 220, 12)).toBe(3);
+    // Only two fit: two columns, not three.
+    expect(balancedColumns(1, 470, 220, 12)).toBe(2);
+  });
+
   it('falls back to one column when nothing fits', () => {
     expect(balancedColumns(4, 150, 220, 12)).toBe(1);
   });

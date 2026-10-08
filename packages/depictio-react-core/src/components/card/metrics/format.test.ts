@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatCardNumber, formatSecondary } from './format';
+import { formatCardNumber, formatSecondary, hexWithAlpha } from './format';
 import { breakdownHasShares } from './types';
 
 describe('formatCardNumber', () => {
@@ -43,5 +43,20 @@ describe('breakdownHasShares', () => {
     expect(breakdownHasShares({ column: 'lineage', breakdown_kind: 'nunique' }, 'lineage')).toBe(
       true,
     );
+  });
+});
+
+describe('hexWithAlpha', () => {
+  it('takes a hex colour, an rgb() colour and a Mantine palette name', () => {
+    expect(hexWithAlpha('#ff7f00', 0.5)).toBe('rgba(255,127,0,0.5)');
+    expect(hexWithAlpha('rgb(1, 2, 3)', 0.3)).toBe('rgba(1,2,3,0.3)');
+    expect(hexWithAlpha('grape', 0.85)).toBe(
+      'color-mix(in srgb, var(--mantine-color-grape-filled) 85%, transparent)',
+    );
+  });
+
+  it('falls back to teal for anything else', () => {
+    expect(hexWithAlpha('var(--x)', 1)).toBe('rgba(69,184,172,1)');
+    expect(hexWithAlpha(null, 1)).toBe('rgba(69,184,172,1)');
   });
 });

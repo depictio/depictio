@@ -206,10 +206,10 @@ describe('highlightMetadata', () => {
     expect(m.hide_legend).toBe(true);
   });
 
-  it('leaves an advanced visualisation as it is', () => {
+  it('draws an advanced visualisation in the highlight style too', () => {
     const m = highlightMetadata(highlight, rarefaction);
     expect(m.component_type).toBe('advanced_viz');
-    expect(m.figure_style).toBeUndefined();
+    expect(m.figure_style).toBe('minimal');
     expect(m.index).toBe('hl-1');
   });
 });

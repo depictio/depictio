@@ -193,17 +193,26 @@ export function buildDepictioTheme(options: DepictioThemeOptions = {}) {
   const brand = options.brand ?? null;
   const colors = brand ? paletteOverrides(brand) : {};
   const hasPrimary = !!colors[BRAND_PALETTES.primary];
+  const primaryColor = hasPrimary
+    ? BRAND_PALETTES.primary
+    : isMantinePaletteName(brand?.primary)
+      ? (brand!.primary as string)
+      : 'blue';
+  // YAML names the instance's primary colour `brandPrimary` (a template's
+  // `tab_icon_color: brandPrimary`), so the palette exists on an unbranded
+  // instance too, as the stock primary. Unregistered, every
+  // `--mantine-color-brandPrimary-*` was unset: a filled tab pill went clear.
+  if (!hasPrimary) {
+    const stock = DEFAULT_THEME.colors as Record<string, MantineColorsTuple>;
+    colors[BRAND_PALETTES.primary] = stock[primaryColor] ?? stock.blue;
+  }
 
   return createTheme({
     fontFamily: brand?.font_family || DEFAULT_FONT_FAMILY,
     fontFamilyMonospace: 'Menlo, Monaco, Consolas, "Courier New", monospace',
     defaultRadius: (brand?.default_radius as 'xs' | 'sm' | 'md' | 'lg' | 'xl') || 'md',
-    primaryColor: hasPrimary
-      ? BRAND_PALETTES.primary
-      : isMantinePaletteName(brand?.primary)
-        ? (brand!.primary as string)
-        : 'blue',
-    ...(Object.keys(colors).length ? { colors } : {}),
+    primaryColor,
+    colors,
     // The resolved brand rides along on the theme so anything holding a
     // `MantineTheme` can reach it — the Plotly renderers in particular, which
     // are handed a theme but no context, and which must follow a nested

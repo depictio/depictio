@@ -83,8 +83,9 @@ import {
   useReportGroupReach,
 } from '../../groupReach';
 import GroupStatusBadge, { GroupStatusBadgeContext } from '../GroupStatusBadge';
-import { useTabLinkResolver } from '../tabLinks';
+import { useTabLinkResolver, type TabLinkTarget } from '../tabLinks';
 import {
+  AdvancedVizCaptionContext,
   AdvancedVizShowcaseContext,
   advancedVizShowcase,
   tabLinkName,
@@ -130,6 +131,9 @@ interface AdvancedVizDispatchProps {
   onFilterChange?: (filter: InteractiveFilter) => void;
   extraActions?: React.ReactNode;
   showDragHandle?: boolean;
+  /** The tab a highlight's source lives on: the header links it in the
+   *  `minimal` style, as a figure highlight's does. Wins over `link`. */
+  sourceLink?: TabLinkTarget | null;
   /** Dashboard-wide analysis grouping. Renderers whose points map one-to-one
    *  onto rows apply it to their finished figure with `splitFigureByGroups`;
    *  the aggregating ones (UpSet, sunburst, stacked taxonomy) ignore it,
@@ -224,6 +228,7 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   refreshTick,
   extraActions,
   showDragHandle,
+  sourceLink,
   groupRender,
 }) => {
   const [published, setPublished] = React.useState<AdvancedVizExtrasPayload | null>(null);
@@ -510,7 +515,8 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
   // renderer's frame exactly as it was.
   const resolveTab = useTabLinkResolver();
   const linkedTab = tabLinkName(metadata.link);
-  const sourceTab = linkedTab ? (resolveTab?.(linkedTab) ?? null) : null;
+  const sourceTab = sourceLink ?? (linkedTab ? (resolveTab?.(linkedTab) ?? null) : null);
+  const caption = typeof metadata.caption === 'string' ? metadata.caption.trim() : '';
   const showcase = React.useMemo(
     () => advancedVizShowcase(metadata, sourceTab),
     [
@@ -534,13 +540,15 @@ const AdvancedVizDispatch: React.FC<AdvancedVizDispatchProps> = ({
         <GroupStatusBadgeContext.Provider value={groupBadge}>
           <GroupColouringReportContext.Provider value={reportColouring}>
             <AdvancedVizShowcaseContext.Provider value={showcase}>
-              <ControlsPlacementContext.Provider value={placementState}>
-                <ControlsDockContext.Provider value={dockState}>
-                  <AdvancedVizRegionEchoContext.Provider value={regionEcho}>
-                    {inner}
-                  </AdvancedVizRegionEchoContext.Provider>
-                </ControlsDockContext.Provider>
-              </ControlsPlacementContext.Provider>
+              <AdvancedVizCaptionContext.Provider value={caption}>
+                <ControlsPlacementContext.Provider value={placementState}>
+                  <ControlsDockContext.Provider value={dockState}>
+                    <AdvancedVizRegionEchoContext.Provider value={regionEcho}>
+                      {inner}
+                    </AdvancedVizRegionEchoContext.Provider>
+                  </ControlsDockContext.Provider>
+                </ControlsPlacementContext.Provider>
+              </AdvancedVizCaptionContext.Provider>
             </AdvancedVizShowcaseContext.Provider>
           </GroupColouringReportContext.Provider>
         </GroupStatusBadgeContext.Provider>

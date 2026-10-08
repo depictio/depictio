@@ -19,7 +19,7 @@ import {
   type AdvancedVizExtrasPayload,
   type TierAnnotation,
 } from './AdvancedVizExtras';
-import { useAdvancedVizShowcase } from './advancedVizShowcase';
+import { useAdvancedVizCaption, useAdvancedVizShowcase } from './advancedVizShowcase';
 import { CARD_FRAME } from '../cardFrame';
 import FigureHeader from '../FigureHeader';
 import { ControlsDockContext, ControlsLeadContext, resolveDock } from './controlsDock';
@@ -418,6 +418,28 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
     return () => observer.disconnect();
   }, [inlineLayout]);
 
+  // The caption under the plot takes height the content demand does not
+  // count, so it is measured and added like the strip.
+  const caption = useAdvancedVizCaption();
+  const captionRef = useRef<HTMLDivElement | null>(null);
+  const [captionHeight, setCaptionHeight] = useState(0);
+  useEffect(() => {
+    const node = captionRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') {
+      setCaptionHeight(0);
+      return;
+    }
+    const measureHeight = () =>
+      setCaptionHeight((prev) => {
+        const next = Math.round(node.getBoundingClientRect().height);
+        return Math.abs(prev - next) < 2 ? prev : next;
+      });
+    measureHeight();
+    const observer = new ResizeObserver(measureHeight);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [caption]);
+
   // The strip, the rail, the dock and the badge rows all take room from the
   // plot slot without the window moving, which is the only resize Plotly
   // listens to.
@@ -431,30 +453,34 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   useEffect(() => {
     if (!componentIndex || demandRows === undefined) return;
     const stacked = inlineLayout === 'header' || inlineLayout === 'rail-below';
+    const stackedHeight = (stacked ? inlineHeight : 0) + captionHeight;
     const extraRows =
-      stacked && inlineHeight > 0
-        ? Math.ceil(inlineHeight / (GRID_ROW_PX + GRID_ROW_GAP_PX))
-        : 0;
+      stackedHeight > 0 ? Math.ceil(stackedHeight / (GRID_ROW_PX + GRID_ROW_GAP_PX)) : 0;
     publishContentDemand(autofitScope + String(componentIndex), {
       rows: demandRows + extraRows,
     });
-  }, [autofitScope, componentIndex, demandRows, inlineLayout, inlineHeight]);
+  }, [autofitScope, componentIndex, demandRows, inlineLayout, inlineHeight, captionHeight]);
 
   // One dim line saying what is on screen. Derived from the reduction the
   // renderer already publishes unless it passed something better.
   // The rows the renderer handed the data popover, as the count to echo when
   // nothing was sampled, which is most tiles, most of the time.
   const dataRowCount = dataRows ? (Object.values(dataRows)[0]?.length ?? 0) : 0;
-  const echoText = useMemo(
-    () =>
-      selectionEcho({
-        echo,
-        reduction: redPresent ? { displayed: redDisplayed, total: redTotal, full: redFull } : null,
-        rows: dataRowCount,
-        region: regionEcho,
-      }),
-    [echo, redPresent, redDisplayed, redTotal, redFull, dataRowCount, regionEcho],
-  );
+  // A landing tile (`minimal`) reads like the figures beside it, which print
+  // no row count: it keeps a sample or a region, never the full count.
+  const isShowcase = Boolean(showcase);
+  const echoText = useMemo(() => {
+    const sampled = redPresent && !redFull && redDisplayed < redTotal;
+    return selectionEcho({
+      echo,
+      reduction:
+        redPresent && (sampled || !isShowcase)
+          ? { displayed: redDisplayed, total: redTotal, full: redFull }
+          : null,
+      rows: isShowcase ? null : dataRowCount,
+      region: regionEcho,
+    });
+  }, [echo, redPresent, redDisplayed, redTotal, redFull, dataRowCount, regionEcho, isShowcase]);
 
   // Tier counts (volcano UP/DN/NS, …). When ``tierAnnotation.selectedOrder``
   // is provided, that's the source of truth for which tier is "highlighted" —
@@ -696,6 +722,20 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
             </div>
           ) : null}
         </div>
+        {caption ? (
+          // How to read the plot, under it, as on a figure.
+          <div ref={captionRef} style={{ flex: 'none' }}>
+            <Text
+              size="xs"
+              c="dimmed"
+              mt={6}
+              style={{ lineHeight: 1.45, whiteSpace: 'pre-line' }}
+              data-testid="advanced-viz-caption"
+            >
+              {caption}
+            </Text>
+          </div>
+        ) : null}
       </Paper>
     </ErrorBoundary>
   );
