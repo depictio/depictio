@@ -39,13 +39,13 @@ The landing page, at compact width with the filter panel collapsed:
   opens the parameters that drive it and the tab that shows its output.
 - **Key figures**: four headline cards, each opening the tab that explains it. Samples (split
   by condition), input reads and clones (each summed, with the spread per sample) and the
-  median fraction of input reads that reach the annotated repertoire. A condition and a
-  sample filter above them narrow these four only.
+  sequences per clone (each sample's mean clone size, the median over samples). A condition
+  and a sample filter above them narrow these four only.
 - **Findings**: result rows whose values are computed under the filters, each with a link to
-  its tab: the most used V family and its share of the sequences, the median Shannon
-  diversity in effective clones, the clones seen in more than one sample (counted over all
-  samples, as the clone sets are narrowed by sample column rather than by row) and the clone
-  size class that holds most sequences. Below them, four figures in two rows, each linking
+  its tab: the most used V family and its share of the sequences, the median effective number
+  of clones (Hill diversity at q = 1, after rarefying), the clones seen in more than one
+  sample (counted over all samples, as the clone sets are narrowed by sample column rather
+  than by row) and the clone size class that holds most sequences. Below them, four figures in two rows, each linking
   its tab: the V family composition per sample beside the Hill diversity profile, then the
   clones by number of samples holding them beside the clonal homeostasis sunburst. The bar
   of this section filters by condition and subject.
@@ -68,11 +68,13 @@ checks. Amplicons of one receptor locus show high duplication and a narrow GC ba
 Its own sample filter reads the MultiQC report.
 
 **Sequence Processing.** Strip: input reads, with the share kept through each pRESTO step
-(quality, pairing, UMI consensus, assembly, duplicates), and the median retention per sample
-with its spread. Then the read-fate Sankey (losses peel off into a Lost lane; its depth
-control adds the Change-O steps), and per sample the sequences left at each step (log scale,
-one line per sample) beside the retention bars. The counts table is collapsed. Filters: input
-reads and retention ranges.
+(quality, pairing, UMI consensus, assembly, duplicates), and the reads per sample with their
+spread. Then the read-fate Sankey (losses peel off into a Lost lane, flows coloured by the
+step they reach; its depth control adds the Change-O steps), and per sample the sequences left
+at each step (log scale, one line per sample) beside the sequences each sample keeps per
+1,000 input reads. UMI consensus and duplicate collapsing merge many reads into one sequence,
+so that ratio is no share of reads kept. The counts table is collapsed. Filters: input reads
+and sequences per input read.
 
 **V Gene Usage.** Strip: distinct V genes (ranked by family), annotated sequences split by V
 family, the largest share one family takes in a sample (with every family's spread) and the
@@ -89,16 +91,18 @@ sample. Both collections read the AIRR rearrangement table through two version-l
 in `recipes/`, which load only the columns they need. Filters: CDR3 length and locus.
 
 **Clonal Diversity.** Strip: clones (with the share the three largest samples hold) and the
-median Shannon diversity with its spread. Then the Hill diversity profile (one curve per
-sample against the order q, with alakazam's bootstrap band), the ranked Hill number at one
-named order beside richness against evenness, and clones against sequencing depth on log axes
-(point size: mean clone size). Collapsed: the clone definition (the SHazaM distance threshold
+median effective number of clones (Hill diversity at q = 1, the exponential of Shannon
+entropy, on repertoires rarefied to a common depth) with its spread. Then the Hill diversity
+profile (one curve per sample against the order q, with alakazam's bootstrap band), the
+ranked Hill number at one named order beside richness against evenness, and clones against
+sequencing depth on log axes (point size: mean clone size). Collapsed: the clone definition (the SHazaM distance threshold
 and its sensitivity per subject, cards and table) and the per-sample repertoire summary.
 Filters: a clone count range and the diversity order (default "q = 1, Shannon"), which narrows
 the ranked bars only.
 
 **Clonal Expansion.** Strip: clones as a ring by size class, sequences split by size class,
-the median share of a sample's largest clone and the median clone size with its distribution.
+the median share of a sample's largest clone (as a fraction) and the size of the largest clone
+with every clone's size as a histogram (most clones hold one sequence).
 Then the rank-abundance curves with their bootstrap bands, and the clonal homeostasis sunburst
 (subject, sample, size class). Filter: size class.
 
@@ -116,14 +120,16 @@ tiles and rows that pointed at it; the import re-packs the Overview grid after a
 
 | Route | What changes |
 |---|---|
-| `ASSEMBLED_MODE` (`--mode assembled`) | No Sequence Processing tab; the input reads and reads retained Key figures drop. |
+| `ASSEMBLED_MODE` (`--mode assembled`) | No Sequence Processing tab; the input reads Key figure drops. |
 | `SKIP_REPORT` | No V Gene Usage tab, V family row or V composition highlight. |
-| `SKIP_CLONAL_ANALYSIS` | No Clonality tabs, clones Key figure, Shannon, sharing or size class rows, nor their highlights; CDR3 & Pairing goes too, as its tables come from the clonal analysis. |
+| `SKIP_CLONAL_ANALYSIS` | No Clonality tabs, clones or sequences per clone Key figures, diversity, sharing or size class rows, nor their highlights; CDR3 & Pairing goes too, as its tables come from the clonal analysis. |
 | `SKIP_THRESHOLD_REPORT` | No clone definition cards or table. |
 | `SKIP_MULTIQC` | No MultiQC tab. |
 
 No collection but the sample sheet survives every route, so the Key figures read the
-collections of the default fastq route and a pruned route leaves fewer than four cards.
+collections of the default fastq route: `--mode assembled` leaves three cards and
+`--skip_clonal_analysis` two. Filling those slots needs alternate collections that exist on
+that route only, which the template does not declare yet.
 
 ## Colours
 

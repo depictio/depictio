@@ -6,7 +6,8 @@
 # Processing tab; --skip_report drops the V gene tables; --skip_clonal_analysis
 # drops every clonal table, and the clonal tabs go with them. No collection other
 # than the sample sheet survives every route, so the Key figures read the
-# collections of the default fastq route.
+# collections of the default fastq route: --mode assembled leaves three cards,
+# --skip_clonal_analysis two.
 main_dashboard:
   title: nf-core/airrflow
   subtitle: Immune receptor repertoires, from reads to the clones that expand and are shared
@@ -229,27 +230,29 @@ main_dashboard:
     title: Clones
     description: Clones over the samples in view. The box shows how many each sample holds.
     layout: {x: 4, y: 0, w: 2, h: 2}
-  # retention is per sample, so the median is of samples, not of reads.
+  # sequences_per_clone is each sample's mean clone size, so the median is of
+  # samples. The pRESTO retention ratio is not a Key figure: consensus and
+  # collapsing merge reads, so it is no share of reads kept.
   - component_type: card
     workflow_tag: airrflow
-    data_collection_tag: sequence_counts
-    use: enchantr/sequence_counts
+    data_collection_tag: repertoire_summary
+    use: enchantr/repertoire_summary
     aggregation: median
-    column_name: retention
+    column_name: sequences_per_clone
     column_type: float64
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
     display:
-      icon_name: mdi:filter-outline
-      icon_color: indigo
-      caption: median fraction of input reads kept
-      link: tab:Sequence Processing
-      decimals: 3
+      icon_name: mdi:trending-up
+      icon_color: blue
+      caption: mean clone size, the median sample
+      link: tab:Clonal Expansion
+      decimals: 1
     section: Key figures
-    tag: airr-ov-kf-retention
-    index: ov-kf-retention
-    title: Reads retained
-    description: Median fraction of each sample's reads still represented in its annotated repertoire.
+    tag: airr-ov-kf-clone-size
+    index: ov-kf-clone-size
+    title: Sequences per clone
+    description: Each sample's sequences over its clones, the median over samples. Near 1, most clones hold one sequence.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Findings filter bar: the group, then the subject the clones are defined in.
   - component_type: interactive
@@ -298,7 +301,7 @@ main_dashboard:
       sc_share: {dc: clone_sizes, column: size_class, aggregation: top_share, weight: seq_count, format: percent}
     body: |
       - **{{vf_share}}** of the sequences use {{vf_top}} – the most used V family [V Gene Usage](tab:V Gene Usage)
-      - **{{shannon}}** median Shannon diversity, in clones – one value per sample [Clonal Diversity](tab:Clonal Diversity)
+      - **{{shannon}}** effective clones in the median sample, Hill diversity at q = 1 – after rarefying to a common depth [Clonal Diversity](tab:Clonal Diversity)
       - **{{n_shared}}** of {{n_clones}} clones appear in more than one sample – all samples [Clone Sharing](tab:Clone Sharing)
       - **{{sc_share}}** of the sequences sit in {{sc_top}} clones – the largest size class [Clonal Expansion](tab:Clonal Expansion)
     section: Findings
@@ -610,7 +613,7 @@ tabs:
   - name: Processing at a glance
     icon: mdi:counter
     color: indigo
-    description: Input reads and the share that reaches the annotated repertoire
+    description: Input reads, what each step keeps, and how deep each sample was sequenced
   - name: Where the reads go
     icon: mdi:chart-timeline-variant
     color: indigo
@@ -618,7 +621,7 @@ tabs:
   - name: Per sample
     icon: mdi:chart-line
     color: indigo
-    description: Sequences left at each step, and the retention of each sample
+    description: Sequences left at each step, and the sequences each sample keeps per 1,000 reads
   - name: Counts table
     icon: mdi:table
     color: gray
@@ -631,8 +634,8 @@ tabs:
       [pRESTO](https://presto.readthedocs.io) filters, pairs and assembles the reads into UMI
       consensus sequences, and [Change-O](https://changeo.readthedocs.io) annotates them with
       [IgBLAST](https://ncbi.github.io/igblast/). The Sankey follows the reads step by step,
-      the ones that stop at a step peeling off into the Lost lane. The lines below show where
-      one sample loses more than the rest.
+      losses peeling off into the Lost lane. Consensus and collapsing merge reads, so counts
+      fall steeply there by design.
     tag: airr-seq-intro
     index: seq-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -663,7 +666,7 @@ tabs:
     section: Processing filters
     tag: airr-seq-filter-retention
     index: seq-retention-range
-    title: Retention
+    title: Sequences per input read
     layout: {x: 0, y: 3, w: 1, h: 3}
   # The pRESTO steps only: the Change-O ones are missing on a --skip_report run.
   - component_type: card
@@ -685,25 +688,27 @@ tabs:
     title: Input reads
     description: Read pairs entering pRESTO, then what is left after quality, pairing, consensus, assembly and duplicates.
     layout: {x: 0, y: 0, w: 4, h: 2}
+  # Depth per sample, not the retention ratio: retention is sequences over reads
+  # after consensus and collapsing, no share of reads kept, and a card prints it
+  # as a bare fraction. The bars below show it per 1,000 reads.
   - component_type: card
     workflow_tag: airrflow
     data_collection_tag: sequence_counts
     use: enchantr/sequence_counts
     aggregation: median
-    column_name: retention
-    column_type: float64
+    column_name: sequences
+    column_type: int64
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
     display:
-      icon_name: mdi:filter-outline
+      icon_name: mdi:chart-bell-curve
       icon_color: orange
       caption: median per sample, with its spread
-      decimals: 3
     section: Processing at a glance
-    tag: airr-seq-card-retention
-    index: seq-card-retention
-    title: Retention
-    description: Fraction of each sample's input reads still represented at the last step.
+    tag: airr-seq-card-depth
+    index: seq-card-depth
+    title: Reads per sample
+    description: Read pairs entering pRESTO in each sample. A sample far below the box had too little depth.
     layout: {x: 4, y: 0, w: 4, h: 2}
   - component_type: advanced_viz
     workflow_tag: airrflow
@@ -716,7 +721,7 @@ tabs:
       available_step_cols: [input, quality, paired, consensus, assembled, representative, productive, collapsed]
       depth: 6
       sort_mode: total_flow
-      color_mode: source
+      color_mode: target
       link_opacity: 0.45
     section: Where the reads go
     tag: airr-seq-sankey
@@ -758,18 +763,20 @@ tabs:
     visu_type: bar
     mode: code
     code_content: |-
-      # Each sample's retention, highest first. Coloured by subject, or by
-      # Analysis mode's groups when it has some.
+      # Each sample's retention, highest first, as sequences at the last step per
+      # 1,000 input reads: consensus and collapsing merge reads, so this is a
+      # ratio, not a share of reads kept. Coloured by subject, or by Analysis
+      # mode's groups when it has some.
       kw = depictio_group_kwargs or {'color': 'subject_id', 'color_discrete_map': depictio_category_colors.get('subject_id') or {}}
-      d = df.sort('retention', descending=True)
-      fig = px.bar(d.to_pandas(), x='sample_id', y='retention', labels={'sample_id': '', 'retention': 'Input reads retained', 'subject_id': 'Subject'}, **kw)
-      fig.update_yaxes(tickformat='.1%')
+      d = df.with_columns((pl.col('retention') * 1000).alias('per_1000')).sort('per_1000', descending=True)
+      fig = px.bar(d.to_pandas(), x='sample_id', y='per_1000', hover_name='sample_id', labels={'sample_id': '', 'per_1000': 'Sequences per 1,000 reads', 'subject_id': 'Subject'}, **kw)
+      fig.update_yaxes(tickformat='.1f')
       fig.update_layout(margin=dict(t=10))
     section: Per sample
     tag: airr-seq-fig-retention
     index: seq-retention-bars
-    title: Retention per sample
-    description: Share of each sample's input reads still represented at the last step.
+    title: Sequences kept per 1,000 reads
+    description: Sequences at the last step for every 1,000 input reads. Many reads merge into one sequence, so this sits far below the reads that pass.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
     workflow_tag: airrflow
@@ -1153,7 +1160,7 @@ tabs:
   - name: Diversity at a glance
     icon: mdi:counter
     color: teal
-    description: Clones over the samples in view, and the median Shannon diversity
+    description: Clones over the samples in view, and the median effective number of clones
   - name: Diversity profile
     icon: mdi:chart-line
     color: teal
@@ -1252,13 +1259,13 @@ tabs:
     display:
       icon_name: mdi:chart-bell-curve
       icon_color: cyan
-      caption: median per sample, with its spread
+      caption: Hill diversity at q = 1, the median sample
       decimals: 0
     section: Diversity at a glance
     tag: airr-div-card-shannon
     index: div-card-shannon
-    title: Shannon diversity
-    description: Hill diversity at q = 1, in effective clones, on the rarefied repertoire.
+    title: Effective clones
+    description: Hill diversity at q = 1 (the exponential of Shannon entropy), in clones of equal size, after rarefying every sample to a common depth.
     layout: {x: 4, y: 0, w: 4, h: 2}
   - component_type: advanced_viz
     workflow_tag: airrflow
@@ -1274,7 +1281,7 @@ tabs:
       x_title: Diversity order q
       y_title: Hill diversity (clones)
       band_opacity: 0.15
-      legend_pos: right
+      legend_pos: bottom
     section: Diversity profile
     tag: airr-div-profile
     index: div-profile
@@ -1502,7 +1509,7 @@ tabs:
     display:
       icon_name: mdi:trending-up
       icon_color: orange
-      caption: median per sample, with its spread
+      caption: fraction of a sample's sequences, the median sample
       decimals: 3
     section: Expansion at a glance
     tag: airr-exp-card-top-clone
@@ -1510,23 +1517,25 @@ tabs:
     title: Top clone share
     description: Share of a sample's sequences its largest clone holds.
     layout: {x: 4, y: 0, w: 2, h: 2}
+  # The largest clone, not the median one: most clones hold a single sequence,
+  # so a median clone size sits at 1 on every run.
   - component_type: card
     workflow_tag: airrflow
     data_collection_tag: clone_sizes
     use: enchantr/clone_sizes
-    aggregation: median
+    aggregation: max
     column_name: seq_count
     column_type: int64
     secondary_layout: histogram
     display:
       icon_name: mdi:ruler
       icon_color: indigo
-      caption: median sequences per clone, with its distribution
+      caption: sequences, with every clone's size below
     section: Expansion at a glance
     tag: airr-exp-card-clone-size
     index: exp-card-clone-size
-    title: Clone size
-    description: Median sequences per clone. The long right tail is the expanded clones.
+    title: Largest clone
+    description: Sequences in the largest clone of the samples in view. The histogram shows every clone's size; the long right tail is the expanded clones.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: airrflow
@@ -1537,9 +1546,9 @@ tabs:
       y_title: Relative abundance
       log_x: true
       log_y: true
-      band_opacity: 0.18
+      band_opacity: 0.08
       line_width: 1.6
-      legend_pos: right
+      legend_pos: bottom
       selection_enabled: true
       selection_column: sample_id
     section: Rank abundance
@@ -1676,6 +1685,7 @@ tabs:
       d = df.group_by('n_samples').agg(pl.len().alias('clones')).sort('n_samples').with_columns(pl.col('n_samples').cast(pl.Utf8))
       fig = px.bar(d.to_pandas(), x='n_samples', y='clones', text='clones', log_y=True, labels={'n_samples': 'Samples holding the clone', 'clones': 'Clones'})
       fig.update_traces(textposition='outside', cliponaxis=False)
+      fig.update_xaxes(type='category')
       fig.update_layout(margin=dict(t=10))
     section: Clones by sharing
     tag: airr-share-fig-bars

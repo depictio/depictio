@@ -99,9 +99,10 @@ with the called cells marked.
 
 **Library QC.** Strip: reads in cells, sequencing saturation and reads on the transcriptome
 as levels out of 100 (a one-sample run still reads them), and reads per cell with the samples
-counted against the 20 000 10x recommends. Then each library metric (saturation, reads in
+counted against the 20,000 10x recommends. Then each library metric (saturation, reads in
 cells, valid barcodes, Q30 on the RNA read, mapped to the transcriptome) as a dot coloured by
-its verdict beside the 10x cut-off, and the mapping breakdown by region, grouped rather than
+its verdict beside the 10x cut-off (a grey tick, its colour declared in `category_colors`
+under `status`), and the mapping breakdown by region, grouped rather than
 stacked because `antisense` overlaps `exonic` and `intronic` by Cell Ranger's own definition.
 Collapsed: the checks table and every column of Cell Ranger's metrics summary. Filters: the
 check verdict and the mapping region.
@@ -128,8 +129,10 @@ mitochondrial share. Filters: failing rule and top-20 gene share.
 
 **Embeddings.** Strip: cells on the map (with the share the five largest clusters hold), the
 genes scored for dispersion as a ring of those selected for the PCA, the first principal
-component's share of the variance (the line follows the next ones) and the dispersion
-distribution. Then the UMAP by cluster, and the same UMAP bound to
+component's share of the variance (the line follows the next ones) and the genes whose
+normalised dispersion passes 0.5 (the Seurat and Scanpy default; the dispersion is centred
+per expression bin, so its median is 0 on every run), with their dispersions as a histogram.
+Then the UMAP by cluster, and the same UMAP bound to
 `cellranger_cell_expression`, where every panel gene is a column of the colour menu (it opens
 coloured by cluster; no gene is hardcoded). Collapsed: the t-SNE, the mean expression against
 dispersion scatter and the variance per component. Cell Ranger's `features_selected.csv`
@@ -138,8 +141,10 @@ could normalise from the others, not variable from non-variable genes. Filters: 
 share and normalised dispersion.
 
 **Clusters.** Strip: cells (with the share the five largest clusters hold), the flagged share
-per cluster, cells by cell-cycle phase and the share of each cluster's cells CellBender also
-calls. Then the cells per cluster with the flagged ones stacked on top, the cluster QC
+of the highest cluster with every cluster counted against 5% and 10%, cells by cell-cycle
+phase, and the share of the lowest cluster's cells CellBender also calls, with every cluster
+counted against 95% and 90%. Most clusters flag no cell and CellBender keeps nearly every
+cell, so a median would sit at 0 and 100 on every run. Then the cells per cluster with the flagged ones stacked on top, the cluster QC
 profile (median UMIs, median genes, mitochondrial, flagged and CellBender shares, each row
 coloured by its z-score across clusters and printed with the cluster's own value), and the
 cell cycle: S against G2/M score per cell beside the phase mix of each cluster. Collapsed: the
@@ -152,8 +157,8 @@ gene; the larger positive score wins, otherwise G1. Filters: cells per cluster a
 recur across clusters) and their median log2 fold change, up-regulated markers only. Then the
 dot plot (dot size the share of the cluster's cells expressing the gene, colour its mean),
 and the volcano (volcano view only: these are Cell Ranger's top-ranked markers per cluster,
-not a genome-wide test, so a QQ plot has no null to compare against) beside the strongest
-marker of each cluster. Collapsed: the markers cell by cell as violins (one panel per gene;
+not a genome-wide test, so a QQ plot has no null to compare against; the five strongest
+genes are named) beside the strongest marker of each cluster. Collapsed: the markers cell by cell as violins (one panel per gene;
 the gene filter narrows them to one), the marker table with a gene record beside it, and the
 marker expression table. The record's Ensembl link uses the species-agnostic
 `https://www.ensembl.org/Multi/Search/Results?q={gene_id}` search. Filters: the clustering

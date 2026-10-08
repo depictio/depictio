@@ -32,10 +32,13 @@ main_dashboard:
       low_genes: '#e8590c'
       high_top20: '#ae3ec9'
       high_mito: '#e03131'
+    # '10x cut-off' is no status value: it colours the cut-off ticks of the
+    # library checks figure, which reads it from here.
     status:
       pass: '#2f9e44'
       warn: '#f08c00'
       fail: '#e03131'
+      '10x cut-off': '#868e96'
     phase:
       G1: '#74c0fc'
       S: '#fab005'
@@ -700,7 +703,7 @@ tabs:
     display:
       icon_name: mdi:chart-bell-curve
       icon_color: indigo
-      caption: median, samples against 20 000
+      caption: median, 10x expects 20,000 or more
     section: Libraries at a glance
     tag: sc-lq-card-depth
     index: lq-card-depth
@@ -761,10 +764,14 @@ tabs:
       names = {'sequencing_saturation': 'Sequencing saturation', 'fraction_reads_in_cells': 'Reads in cells', 'valid_barcodes': 'Valid barcodes', 'q30_rna': 'Q30 bases, RNA read', 'confidently_mapped_transcriptome': 'Mapped to transcriptome'}
       d = df.with_columns(pl.col('metric').replace(names).alias('check')).sort('check')
       cuts = d.group_by('check').agg(pl.col('threshold').first()).sort('check')
-      fig = px.scatter(d.to_pandas(), x='value', y='check', color='status', hover_name='sample', color_discrete_map=depictio_category_colors.get('status') or {}, category_orders={'status': ['pass', 'warn', 'fail']}, labels={'value': 'Value', 'check': '', 'status': 'Verdict'})
+      colors = depictio_category_colors.get('status') or {}
+      fig = px.scatter(d.to_pandas(), x='value', y='check', color='status', hover_name='sample', color_discrete_map=colors, category_orders={'status': ['pass', 'warn', 'fail']}, labels={'value': 'Value', 'check': '', 'status': 'Verdict'})
       fig.update_traces(marker=dict(size=12))
-      fig.add_scatter(x=cuts.get_column('threshold').to_list(), y=cuts.get_column('check').to_list(), mode='markers', marker=dict(symbol='line-ns-open', size=24, color='#868e96', line=dict(width=3)), name='10x cut-off')
+      fig.add_scatter(x=cuts.get_column('threshold').to_list(), y=cuts.get_column('check').to_list(), mode='markers', marker=dict(symbol='line-ns-open', size=24, color=colors.get('10x cut-off'), line=dict(width=3)), name='10x cut-off')
       fig.update_xaxes(tickformat='.0%', range=[0, 1.02])
+      # A single-panel code figure gets no automargin of its own: without it
+      # the check names are cut at the left edge.
+      fig.update_yaxes(automargin=True)
       fig.update_layout(margin=dict(t=10))
     section: Against 10x's guidance
     tag: sc-lq-fig-checks
@@ -1506,20 +1513,23 @@ tabs:
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_hvg_dispersion
     use: cellranger/hvg_dispersion
-    aggregation: median
+    # A count above a cut-off, not the median: the normalised dispersion is
+    # centred per expression bin, so its median is 0 by construction.
+    aggregation: count
     column_name: normalized_dispersion
     column_type: float64
+    filter_expr: "col('normalized_dispersion') > 0.5"
     secondary_layout: histogram
     display:
       icon_name: mdi:chart-bell-curve
       icon_color: grape
-      caption: median per gene, with the distribution
-      decimals: 2
+      caption: above 0.5, with their dispersions
+      decimals: 1
     section: Maps at a glance
     tag: sc-em-card-dispersion
     index: em-card-dispersion
-    title: Dispersion
-    description: How much more a gene varies than genes of its mean expression. The PCA reads the most dispersed.
+    title: Dispersed genes
+    description: Genes whose normalised dispersion passes 0.5, the Seurat and Scanpy default for a variable gene. They vary more than genes of their mean expression.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: scrnaseq
@@ -1689,21 +1699,25 @@ tabs:
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cluster_summary
     use: cellranger/cluster_summary
-    aggregation: median
+    # The worst cluster against a band: most clusters flag no cell, so a median
+    # sits at 0 on every run.
+    aggregation: max
     column_name: pct_flagged
     column_type: float64
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    secondary_layout: threshold
+    threshold_value: 5
+    threshold_direction: max
+    threshold_warn: 10
     display:
       icon_name: mdi:alert-outline
       icon_color: red
-      caption: median over clusters, with the spread
+      caption: the highest cluster; clusters against 5% and 10%
       decimals: 1
     section: Clusters at a glance
     tag: sc-cl-card-flagged
     index: cl-card-flagged
     title: Flagged share (%)
-    description: Share of each cluster's cells the MAD rules flag. An outlier box is a cluster to check.
+    description: Share of a cluster's cells the MAD rules flag, for the highest cluster. Past 10%, the cluster may be damaged cells rather than a cell type.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: scrnaseq
@@ -1729,21 +1743,25 @@ tabs:
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cluster_summary
     use: cellranger/cluster_summary
-    aggregation: median
+    # A score that sits at 100 on most clusters: the lowest cluster against a
+    # band, not a full gauge.
+    aggregation: min
     column_name: pct_cellbender_cell
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 100
+    secondary_layout: threshold
+    threshold_value: 95
+    threshold_direction: min
+    threshold_warn: 90
     display:
       icon_name: mdi:waves
       icon_color: teal
-      caption: median over clusters, cells CellBender keeps
+      caption: the lowest cluster; clusters against 95% and 90%
       decimals: 1
     section: Clusters at a glance
     tag: sc-cl-card-cellbender
     index: cl-card-cellbender
     title: Kept by CellBender (%)
-    description: Share of each cluster's cells CellBender also calls a cell, the median over clusters.
+    description: Share of a cluster's cells CellBender also calls a cell, for the lowest cluster. A cluster CellBender drops is likely ambient RNA.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: figure
     workflow_tag: scrnaseq
@@ -1785,6 +1803,7 @@ tabs:
       raw = d.select([pl.col(c).round(1).alias(names[c]) for c in have])
       fig = go.Figure(go.Heatmap(z=z.to_pandas().T.values, x=d.get_column('graphclust').to_list(), y=[names[c] for c in have], text=raw.to_pandas().T.values, texttemplate='%{text}', colorscale='RdBu', reversescale=True, zmid=0, colorbar=dict(title='z-score')))
       fig.update_xaxes(title_text='Cluster', type='category')
+      fig.update_yaxes(automargin=True)
       fig.update_layout(margin=dict(t=10))
     section: Cluster QC profile
     tag: sc-cl-fig-profile
@@ -1987,14 +2006,14 @@ tabs:
     use: cellranger/cluster_volcano
     config:
       views: [volcano]
-      top_n_labels: 10
+      top_n_labels: 5
       effect_label: log2 fold change, cluster vs rest
       significance_label: -log10 adjusted p-value
     section: Differential expression
     tag: sc-mk-volcano
     index: mk-volcano
     title: Marker volcano
-    description: One point per gene and cluster, coloured by cluster; the top genes are named.
+    description: One point per gene and cluster, coloured by direction; the five strongest genes are named.
     layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: figure
     workflow_tag: scrnaseq
