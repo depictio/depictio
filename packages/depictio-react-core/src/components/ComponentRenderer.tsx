@@ -929,13 +929,16 @@ const CardRenderer: React.FC<{
   const external = Boolean(href && /^https?:\/\//.test(href));
   // A card with no colour of its own takes its section's, so the cards of a
   // section read as one group. Outside a section it stays neutral.
-  // Resolved to the theme's hex, not a CSS variable: the secondary strip
-  // derives its tints from the colour's channels and falls back to teal on
-  // anything it cannot parse.
+  // A palette name, the card's or its section's, is resolved to the theme's
+  // hex, not a CSS variable: the secondary strip derives its tints from the
+  // colour's channels and falls back to teal on anything it cannot parse. Left
+  // as a name, `grape` is no CSS colour (the icon drew black) and `cyan` or
+  // `lime` drew the CSS keyword, not the theme's shade.
   const sectionColor = useContext(SectionColorContext);
   const theme = useMantineTheme();
+  const ownColor = metadata.icon_color as string | undefined;
   const iconColor =
-    (metadata.icon_color as string | undefined) ||
+    (ownColor ? (theme.colors[ownColor]?.[6] ?? ownColor) : undefined) ||
     (sectionColor ? theme.colors[sectionColor]?.[6] : undefined);
   const wrapperStyle: React.CSSProperties = {
     opacity: dimming ? 0.6 : 1,
