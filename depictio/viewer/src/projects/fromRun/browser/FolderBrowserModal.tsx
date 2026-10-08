@@ -456,8 +456,8 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
               <Group gap={6} wrap="nowrap" align="flex-start" data-testid="browse-not-run-hint">
                 <Icon icon="mdi:information-outline" width={14} style={{ flexShrink: 0, marginTop: 2 }} />
                 <Text size="xs" c="dimmed">
-                  This folder does not look like a run folder (no pipeline_info or multiqc
-                  folder in it). You can still select it.
+                  This folder does not look like a run folder (no pipeline_info folder or
+                  MultiQC report in it). You can still select it.
                 </Text>
               </Group>
             )}

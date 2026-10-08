@@ -326,7 +326,7 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
             <Text size="sm" c="dimmed" data-testid="browse-detail-not-recognised">
               {result.looks_like_run
                 ? 'This folder holds run records, but none of them names a pipeline Depictio knows.'
-                : 'No run records here: a run folder holds a pipeline_info or multiqc folder.'}
+                : 'No run records here: a run folder holds a pipeline_info folder or a MultiQC report.'}
             </Text>
           )}
 
