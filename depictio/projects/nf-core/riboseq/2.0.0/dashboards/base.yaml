@@ -1,125 +1,754 @@
 version: 1
-# nf-core/riboseq 2.0.0: Ribo-seq quality, translational regulation and ORF discovery.
+# nf-core/riboseq 2.0.0: ribosome profiling, translational efficiency,
+# translational regulation and ORF discovery. Every rule this file follows is
+# written out in depictio/projects/nf-core/RULES.md.
 #
-# Funnel: MultiQC (are the libraries usable?) -> Ribo-seq QC (do the
-# footprints come from translating ribosomes?) -> Sample space (do the
-# libraries group by assay and design?) -> Translational regulation (which
-# genes change translation between conditions, and how?) -> Translational
-# efficiency (which genes are translated above or below their mRNA level?) ->
-# ORF discovery (which ORFs are translated, and do the callers agree?).
+# Funnel: Data & QC (MultiQC, Ribo-seq QC, Sample space), then Translation
+# (efficiency pooled over the run, then regulation per contrast), then ORFs.
 #
-# Two sections ride every tab: `Run at a glance` (four run-size cards, pinned
-# top, open) and `Sample sheet` (pinned top, collapsed). The persistent sample
-# filters read the sample sheet hub, which template.yaml links to every
-# per-library collection; the group filter reads the optional design table
-# (METADATA_FILE) and disappears with it.
+# Routes: a run without --contrasts writes no anota2seq tables, one with
+# --skip_ribowaltz no riboWaltz tables, --skip_ribotish / --skip_ribocode drop
+# one ORF caller, and a run without METADATA_FILE has no design table.
+# template.yaml prunes those collections; the tabs, cards, value rows and
+# highlights bound to them go with them, and the import re-packs the Overview.
 main_dashboard:
   title: nf-core/riboseq
-  subtitle: "nf-core/riboseq 2.0.0: Ribo-seq and RNA-seq QC, translational regulation, translational efficiency and ORF discovery"
+  subtitle: Ribosome footprints and mRNA, from read QC to the ORFs being translated
   project_tag: Ribo-seq Translation Analysis
-  main_tab_name: MultiQC
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family: figures, advanced viz
+  # and filter chips all colour a value the same way.
+  category_colors:
+    '{GROUP_COL}': auto
+    # The sample space's leading factor (the assay on a riboseq sheet).
+    group: auto
+    type:
+      rnaseq: '#2a78d6'
+      riboseq: '#eb6834'
+      tiseq: '#1baf7a'
+    # Frame 0 is the signal; the two other frames are the background.
+    frame:
+      Frame 0: '#e34948'
+      Frame 1: '#adb5bd'
+      Frame 2: '#868e96'
+    region:
+      5' UTR: '#eda100'
+      CDS: '#1baf7a'
+      3' UTR: '#4a3aa7'
+    regulation_mode:
+      translation: '#e34948'
+      buffering: '#4a3aa7'
+      mRNA abundance: '#eda100'
+      not regulated: '#adb5bd'
+    # anota2seq_regulation writes `none`, anota2seq_results `not significant`.
+    direction:
+      up: '#e34948'
+      down: '#2a78d6'
+      none: '#adb5bd'
+      not significant: '#adb5bd'
+    orf_class:
+      Annotated CDS: '#2a78d6'
+      N-terminal variant: '#4a3aa7'
+      Upstream ORF: '#eb6834'
+      Downstream ORF: '#1baf7a'
+      Internal ORF: '#eda100'
+      Novel ORF: '#e34948'
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. The
+  # library and assay filters read the sample sheet, the hub template.yaml links
+  # to every per-library collection; the group filter reads the optional design
+  # table and goes with it.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab that reads per-library data
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab rather than on an analysis tab: a run that prunes
+  # that tab would take a persistent section declared there with it.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: The run's sample sheet and the optional design table, narrowed by the sample filters
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the group filter leads the Key figures
+  # bar, and the library filter shares the sample sheet with the first card,
+  # which is what the Guide demos.
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: metadata
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Key figures
+    tag: rb-ov-kf-group
+    index: ov-kf-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+      strip_label: Library
+    section: Key figures
+    tag: rb-ov-kf-library
+    index: ov-kf-library
+    title: Library
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  - component_type: text
+    title: nf-core/riboseq
+    order: 1
+    body: >
+      Ribosome footprints and total mRNA from the same samples, read gene by gene: are the
+      footprints phased, which genes change translation and which ORFs are translated.
+      [Run parameters](params:)
+    tag: rb-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/riboseq profiles ribosome footprints (Ribo-seq) beside total mRNA (RNA-seq), checks that the footprints come from translating ribosomes and compares the two assays gene by gene. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab that reads per-library data: narrow the libraries once and those tabs follow. A bar above a section narrows that section only.
+    tag: rb-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash. The contrasts line goes with the anota2seq tables.
+  - component_type: text
+    surface: card
+    values:
+      libraries: {dc: samples, column: sample, aggregation: nunique, format: integer}
+      contrasts: {dc: anota2seq_regulation, column: contrast, aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:flask-outline) **Libraries** {{libraries}}
+      - ![](icon:mdi:compare-horizontal) **Contrasts** {{contrasts}}
+      - ![](icon:mdi:filter-remove-outline) **rRNA removal** {{param:ribo_removal_tool}}
+      - ![](icon:mdi:dna) **Aligners** {{param:aligner}} · {{param:pseudo_aligner}}
+      - ![](icon:mdi:scale-balance) **Efficiency** {{param:translational_efficiency_method}}
+    tag: rb-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the family's colour (the header's), not the theme's blue.
+  - component_type: text
+    surface: card
+    accent: green
+    body: |
+      ### Six steps from footprints to ORFs
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:filter-remove-outline) **Clean** Adapters trimmed, rRNA removed by {{param:ribo_removal_tool}} · [Settings](params:ribo_removal) · [MultiQC](tab:MultiQC)
+      2. ![](icon:mdi:waves) **P-sites** riboWaltz offsets and periodicity · [Settings](params:ribowaltz) · [Ribo-seq QC](tab:Ribo-seq QC)
+      3. ![](icon:mdi:dna) **Quantify** Salmon per gene, both assays · [Settings](params:pseudo_aligner) · [Sample space](tab:Sample space)
+      4. ![](icon:mdi:scale-balance) **Efficiency** Footprints over mRNA, per gene · [Settings](params:te_) · [Efficiency](tab:Translational efficiency)
+      5. ![](icon:mdi:compare-horizontal) **Regulation** anota2seq per contrast · [Settings](params:translational_efficiency) · [Regulation](tab:Translational regulation)
+      6. ![](icon:mdi:set-merge) **ORFs** Ribo-TISH and RiboCode · [Settings](params:orf) · [ORF discovery](tab:ORF discovery)
+      :::
+    tag: rb-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. The icon colour is that tab's colour. Libraries is a count
+  # over the sheet (one row per library), so its bar holds parts of a whole.
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: samples
+    aggregation: count
+    column_name: sample
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: type
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: orange
+      caption: in the sample sheet, by assay
+      link: tab:MultiQC
+    section: Key figures
+    tag: rb-ov-kf-libraries
+    index: ov-kf-libraries
+    title: Libraries
+    description: Libraries in the sample sheet. The bar splits them by assay, Ribo-seq against RNA-seq.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: ribowaltz_summary
+    use: ribowaltz/library_summary
+    aggregation: median
+    column_name: frame0_cds_pct
+    column_type: float64
+    filter_expr: col('psites') > 0
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:waves
+      icon_color: grape
+      caption: median per Ribo-seq library
+      link: tab:Ribo-seq QC
+      decimals: 1
+    section: Key figures
+    tag: rb-ov-kf-frame0
+    index: ov-kf-frame0
+    title: Frame 0 in CDS (%)
+    description: Median share of each Ribo-seq library's CDS P-sites in the annotated frame. A third means no periodicity.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  # One row per contrast and gene, so a count over the regulated rows splits
+  # into the three modes as parts of a whole.
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: anota2seq_regulation
+    use: anota2seq/regulation
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('regulation_mode') != 'not regulated'
+    secondary_layout: composition
+    breakdown_col: regulation_mode
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: indigo
+      caption: calls, by regulatory mode
+      link: tab:Translational regulation
+    section: Key figures
+    tag: rb-ov-kf-regulated
+    index: ov-kf-regulated
+    title: Regulated genes
+    description: Genes anota2seq calls regulated, one per contrast. The bar splits them into translation, buffering and mRNA abundance.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: orf_overlap
+    aggregation: count
+    column_name: orf_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: orf_class
+    display:
+      icon_name: mdi:set-merge
+      icon_color: pink
+      caption: pooled over libraries, by class
+      link: tab:ORF discovery
+    section: Key figures
+    tag: rb-ov-kf-orfs
+    index: ov-kf-orfs
+    title: ORFs
+    description: ORFs either caller reported in at least one library. The bar splits them by class.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the group, then the contrast the regulation row and
+  # its highlight are read on.
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: metadata
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: '{GROUP_COL_DISPLAY}'
+    section: Findings
+    tag: rb-ov-findings-group
+    index: ov-findings-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: anota2seq_regulation
+    interactive_component_type: MultiSelect
+    column_name: contrast
+    column_type: object
+    display:
+      icon_name: mdi:compare-horizontal
+      custom_color: indigo
+      strip_label: Contrast
+    section: Findings
+    tag: rb-ov-findings-contrast
+    index: ov-findings-contrast
+    title: Contrast
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one data collection, so the import
+  # removes a row with its data. The efficiency and ORF rows are pooled over
+  # the run, so the sample filters do not change them.
+  - component_type: text
+    surface: card
+    values:
+      frame0: {dc: ribowaltz_summary, column: frame0_cds_pct, aggregation: median, filter_expr: "col('psites') > 0",
+        format: 'decimals:1'}
+      te_high: {dc: translational_efficiency, column: gene_id, aggregation: nunique, filter_expr: "col('log2_te') >= 1",
+        format: integer}
+      te_genes: {dc: translational_efficiency, column: gene_id, aggregation: nunique, format: integer}
+      n_transl: {dc: anota2seq_regulation, column: gene_id, aggregation: nunique, filter_expr: "col('regulation_mode') == 'translation'",
+        format: integer}
+      n_buffer: {dc: anota2seq_regulation, column: gene_id, aggregation: nunique, filter_expr: "col('regulation_mode') == 'buffering'",
+        format: integer}
+      n_new: {dc: orf_overlap, column: orf_id, aggregation: nunique, filter_expr: "(col('annotated_cds') == 0) & (col('ribotish') == 1) & (col('ribocode') == 1)",
+        format: integer}
+    body: |
+      - **{{frame0}}%** of CDS P-sites sit in the annotated frame – median per Ribo-seq library [Ribo-seq QC](tab:Ribo-seq QC)
+      - **{{te_high}}** of {{te_genes}} genes have a translational efficiency of 2 or more – pooled over the run [Efficiency](tab:Translational efficiency)
+      - **{{n_transl}}** genes change translation, **{{n_buffer}}** are buffered – anota2seq, contrasts in view [Regulation](tab:Translational regulation)
+      - **{{n_new}}** ORFs outside the annotated CDS are called by both Ribo-TISH and RiboCode – the best supported [ORFs](tab:ORF discovery)
+    section: Findings
+    tag: rb-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per tab with a result, in the order of the rows above: the
+  # metagene profile stands for Ribo-seq QC, the run's first question.
+  - component_type: highlight
+    section: Findings
+    source_tab: Ribo-seq QC
+    source_component: rq-start-profile
+    caption: One curve per Ribo-seq library; a phased library peaks at the start codon, then every three nucleotides.
+    tag: rb-ov-hl-start-profile
+    index: ov-hl-start-profile
+    layout: {x: 0, y: 2, w: 5, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Translational efficiency
+    source_component: te-plane
+    caption: One point per gene; above the diagonal, more footprints than its mRNA level predicts.
+    tag: rb-ov-hl-te-plane
+    index: ov-hl-te-plane
+    layout: {x: 5, y: 2, w: 3, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Translational regulation
+    source_component: tr-fold-change-plane
+    caption: One point per gene and contrast, coloured by mode; off the diagonal, translation changes on its own.
+    tag: rb-ov-hl-fold-change
+    index: ov-hl-fold-change
+    layout: {x: 0, y: 6, w: 3, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: ORF discovery
+    source_component: orf-caller-upset
+    caption: ORFs per combination of callers and annotation; the bars without the annotated CDS are new ORFs.
+    tag: rb-ov-hl-orf-upset
+    index: ov-hl-orf-upset
+    layout: {x: 3, y: 6, w: 5, h: 4}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers. A tab the run does not have is left out, and a heading whose
+  # tabs are all missing is hidden.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+      - [Ribo-seq QC](tab:Ribo-seq QC)
+      - [Sample space](tab:Sample space)
+
+      ### Translation
+      - [Translational efficiency](tab:Translational efficiency)
+      - [Translational regulation](tab:Translational regulation)
+
+      ### ORFs
+      - [ORF discovery](tab:ORF discovery)
+    section: How to read this dashboard
+    tag: rb-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the group first.
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: metadata
+    interactive_component_type: MultiSelect
+    column_name: '{GROUP_COL}'
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: rb-filter-group
+    index: sample-filters-group
+    title: '{GROUP_COL_DISPLAY}'
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: rb-filter-library
+    index: sample-filters-library
+    title: Library
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: type
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: orange
+    section: Sample filters
+    group: Sample scope
+    tag: rb-filter-assay
+    index: sample-filters-assay
+    title: Assay
+    layout: {x: 0, y: 5, w: 1, h: 2}
+  # Row selection feeds the Analysis panel. The design table goes with
+  # METADATA_FILE.
+  - component_type: table
+    workflow_tag: riboseq
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Sample sheet
+    tag: rb-sample-sheet
+    index: sample-sheet
+    title: Sample sheet
+    description: One row per library, its assay and the design columns the sheet declares.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: riboseq
+    data_collection_tag: metadata
+    row_selection_enabled: true
+    row_selection_column: '{METADATA_ID_COL}'
+    section: Sample sheet
+    tag: rb-design-table
+    index: design-table
+    title: Design table
+    description: The optional design table; its first annotation column is the group the filters read.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+tabs:
+- title: MultiQC
+  subtitle: Did the reads survive trimming, rRNA removal and alignment?
+  tab_group: Data & QC
+  tab_order: 1
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
   tab_icon_color: orange
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
+  # Bound to multiqc_data and the sample sheet, both present on every route.
   filter_sections:
-  - name: Sample scope
-    icon: mdi:filter-variant
+  - name: MultiQC report
+    icon: mdi:file-document-outline
     color: orange
-    description: Which libraries, assays and groups every tab is about
-    persistent: true
-    pin: top
-  - name: Library layout
-    icon: mdi:tune
-    color: gray
-    description: Narrow the MultiQC panels to one read layout
+    description: Samples as the MultiQC report names them, and the read layout
   grid_sections:
-  - name: Run at a glance
-    icon: mdi:counter
-    color: teal
-    description: The size and design of the run, on every tab
-    persistent: true
-    pin: top
-  - name: Sample sheet
-    icon: mdi:table-account
-    color: teal
-    description: The run's own sample sheet and the optional design table, on every tab
-    collapsed: true
-    persistent: true
-    pin: top
   - name: Read quality
     icon: mdi:chart-bell-curve
-    color: blue
-    description: Raw reads, and the same reads after trimming and rRNA removal
-  - name: rRNA depletion
-    icon: mdi:filter-variant
-    color: red
-    description: How much of each library SortMeRNA matched to ribosomal RNA
-  - name: Alignment and quantification
+    color: orange
+    description: Raw reads, then the same reads after trimming and rRNA removal
+  - name: rRNA and alignment
     icon: mdi:dna
-    color: indigo
-    description: What STAR placed on the genome and what Salmon quantified
+    color: orange
+    description: The reads SortMeRNA matched to rRNA, then what STAR placed on the genome
   - name: Footprint quality
     icon: mdi:ruler
-    color: grape
-    description: Reading-frame proportions and footprint lengths as Ribo-TISH measured them
-  - name: More MultiQC panels
-    icon: mdi:chart-box-outline
+    color: orange
+    description: Reading-frame proportions and footprint lengths, as Ribo-TISH measured them
+  - name: QC details
+    icon: mdi:file-document-outline
     color: gray
-    description: The remaining FastQC and alignment panels of the report
+    description: The remaining FastQC, samtools and Salmon panels
     collapsed: true
   components:
-  # ------------------------------------------------------------ run at a glance
-  - component_type: card
-    tag: rb-card-libraries
-    section: Run at a glance
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [MultiQC](https://multiqc.info) gathers FastQC on the raw, trimmed and rRNA-filtered
+      reads with the SortMeRNA, STAR, Salmon and Ribo-TISH reports. Footprints are short, so
+      Ribo-seq libraries show heavy adapter content and a large rRNA share: compare them with
+      each other, not with RNA-seq.
+    tag: rb-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
     workflow_tag: riboseq
-    data_collection_tag: samples
-    aggregation: nunique
+    data_collection_tag: multiqc_data
+    interactive_component_type: MultiSelect
     column_name: sample
     column_type: object
-    secondary_layout: donut
-    breakdown_col: type
-    display: {icon_name: 'mdi:test-tube', title_font_size: xl, value_font_size: xl}
-    title: Libraries by assay
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: rb-card-contrasts
-    section: Run at a glance
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+    section: MultiQC report
+    tag: rb-mqc-filter-sample
+    index: mqc-sample-filter
+    title: Sample ID
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
     workflow_tag: riboseq
-    data_collection_tag: anota2seq_regulation
-    use: anota2seq/regulation
-    aggregation: nunique
-    column_name: contrast
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: read_type
     column_type: object
-    secondary_layout: donut
-    breakdown_col: contrast
-    display: {icon_name: 'mdi:scale-balance', title_font_size: xl, value_font_size: xl}
-    title: Contrasts
-    title_size: sm
-    title_align: left
-    layout: {x: 2, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: rb-card-genes
-    section: Run at a glance
+    display:
+      icon_name: mdi:tune
+      custom_color: gray
+    section: MultiQC report
+    tag: rb-mqc-filter-read-type
+    index: mqc-read-type-filter
+    title: Read layout
+    layout: {x: 0, y: 3, w: 1, h: 2}
+  - component_type: multiqc
     workflow_tag: riboseq
-    data_collection_tag: gene_counts
-    use: salmon/merged_gene_counts
-    aggregation: count
-    column_name: gene_name
-    column_type: object
-    secondary_layout: completeness
-    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
-    title: Genes quantified
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 0, w: 2, h: 2}
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    section: Read quality
+    tag: rb-mqc-fastqc-raw-counts
+    title: Raw sequence counts
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: riboseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Adapter Content
+    section: Read quality
+    tag: rb-mqc-fastqc-raw-adapters
+    title: Raw adapter content
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: riboseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc-2
+    selected_plot: Sequence Counts
+    section: Read quality
+    tag: rb-mqc-fastqc-filtered-counts
+    title: Sequence counts after rRNA removal
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: riboseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc-2
+    selected_plot: Sequence Length Distribution
+    section: Read quality
+    tag: rb-mqc-fastqc-filtered-length
+    title: Read length after rRNA removal
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: riboseq
+    data_collection_tag: multiqc_data
+    use: multiqc/sortmerna
+    selected_module: sortmerna
+    selected_plot: sortmerna-section-1
+    section: rRNA and alignment
+    tag: rb-mqc-sortmerna
+    title: Reads matched to rRNA databases
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: riboseq
+    data_collection_tag: multiqc_data
+    use: multiqc/star
+    selected_module: star
+    selected_plot: Summary Statistics
+    section: rRNA and alignment
+    tag: rb-mqc-star-summary
+    title: STAR alignment summary
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: riboseq
+    data_collection_tag: multiqc_data
+    use: multiqc/ribotish
+    selected_module: ribotish
+    selected_plot: Reading Frame Proportions
+    section: Footprint quality
+    tag: rb-mqc-ribotish-frames
+    title: Reading frame proportions
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: riboseq
+    data_collection_tag: multiqc_data
+    use: multiqc/ribotish
+    selected_module: ribotish
+    selected_plot: Read Length Distribution
+    section: Footprint quality
+    tag: rb-mqc-ribotish-length
+    title: Footprint length distribution
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: riboseq
+    data_collection_tag: multiqc_data
+    use: multiqc/salmon
+    selected_module: salmon
+    selected_plot: salmon-section-1
+    section: QC details
+    tag: rb-mqc-salmon
+    title: Salmon fragment length distribution
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: riboseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Quality Histograms
+    section: QC details
+    tag: rb-mqc-fastqc-raw-quality
+    title: Raw per-base quality
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: riboseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc-1
+    selected_plot: Sequence Length Distribution
+    section: QC details
+    tag: rb-mqc-fastqc-trimmed-length
+    title: Read length after trimming
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: riboseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc-2
+    selected_plot: Status Checks
+    section: QC details
+    tag: rb-mqc-fastqc-filtered-status
+    title: FastQC status after rRNA removal
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: riboseq
+    data_collection_tag: multiqc_data
+    use: multiqc/samtools
+    selected_module: samtools
+    selected_plot: Percent mapped
+    section: QC details
+    tag: rb-mqc-samtools-mapped
+    title: Percent mapped
+    layout: {x: 0, y: 8, w: 8, h: 4}
+# --skip_ribowaltz prunes every riboWaltz collection, and the tab with them.
+- title: Ribo-seq QC
+  subtitle: Do the footprints come from translating ribosomes?
+  tab_group: Data & QC
+  tab_order: 2
+  tab_icon: mdi:waves
+  tab_icon_color: grape
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  # The library summary links to the other riboWaltz views, so a band picked
+  # here narrows every tile of the tab.
+  filter_sections:
+  - name: Ribo-seq filters
+    icon: mdi:filter-variant
+    color: grape
+    description: Narrows the Ribo-seq views to libraries inside a phasing or CDS band
+  grid_sections:
+  - name: Periodicity at a glance
+    icon: mdi:counter
+    color: grape
+    description: How well the Ribo-seq libraries are phased, and where their P-sites fall
+  - name: Reading frame
+    icon: mdi:chart-bar
+    color: grape
+    description: Share of each library's P-sites in the three frames, per transcript region
+  - name: Metagene profiles
+    icon: mdi:chart-line
+    color: grape
+    description: P-site signal around the start and the stop codon
+  - name: Libraries
+    icon: mdi:chart-scatter-plot
+    color: grape
+    description: Each library's phasing against its CDS share, and its footprint lengths
+  - name: Library detail
+    icon: mdi:table
+    color: gray
+    description: P-sites per region, and every riboWaltz readout of the library picked
+    collapsed: true
+  components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [riboWaltz](https://github.com/LabTranslationalArchitectomics/riboWaltz) places the
+      P-site of each footprint and checks that it steps one codon at a time. Look for a
+      frame-0 share well above a third in the CDS and P-sites enriched in the CDS; a library
+      that fails both is not reporting translation.
+    tag: rb-rq-intro
+    index: rq-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: ribowaltz_summary
+    interactive_component_type: RangeSlider
+    column_name: frame0_cds_pct
+    column_type: float64
+    display:
+      icon_name: mdi:waves
+      custom_color: grape
+    section: Ribo-seq filters
+    group: Phasing
+    tag: rb-rq-filter-frame0
+    index: rq-frame0-filter
+    title: Frame 0 in CDS (%)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: ribowaltz_summary
+    interactive_component_type: RangeSlider
+    column_name: cds_pct
+    column_type: float64
+    display:
+      icon_name: mdi:dna
+      custom_color: teal
+    section: Ribo-seq filters
+    group: Phasing
+    tag: rb-rq-filter-cds
+    index: rq-cds-filter
+    title: P-sites in CDS (%)
+    layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: card
-    tag: rb-card-psites
-    section: Run at a glance
     workflow_tag: riboseq
     data_collection_tag: ribowaltz_summary
     use: ribowaltz/library_summary
@@ -129,419 +758,38 @@ main_dashboard:
     secondary_layout: top_n
     breakdown_col: sample
     top_n_count: 3
-    display: {icon_name: 'mdi:waves', title_font_size: xl, value_font_size: xl}
+    display:
+      icon_name: mdi:counter
+      icon_color: indigo
+      caption: the libraries with the most
+    section: Periodicity at a glance
+    tag: rb-rq-card-psites
+    index: rq-card-psites
     title: P-sites assigned
-    title_size: sm
-    title_align: left
-    layout: {x: 6, y: 0, w: 2, h: 2}
-
-  # --------------------------------------------------------------- sample sheet
-  - component_type: text
-    tag: rb-sheet-intro
-    section: Sample sheet
-    workflow_tag: riboseq
-    data_collection_tag: samples
-    title: What the run was told about each library
-    title_size: sm
-    title_align: left
-    order: 1
-    alignment: left
-    body: >
-      Every column of the pipeline's input sheet except the FASTQ paths, with
-      the assay type of each library. The design table below it, when the run
-      was given one, holds the grouping the group filter reads.
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: table
-    tag: rb-table-samples
-    section: Sample sheet
-    workflow_tag: riboseq
-    data_collection_tag: samples
-    row_selection_enabled: true
-    row_selection_column: sample
-    title: Sample sheet
-    description: One row per library, its assay type and the design columns the sheet declares.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 4}
-  - component_type: table
-    tag: rb-table-metadata
-    section: Sample sheet
-    workflow_tag: riboseq
-    data_collection_tag: metadata
-    row_selection_enabled: true
-    row_selection_column: '{METADATA_ID_COL}'
-    title: Design table
-    description: The optional design table, one row per library; its first annotation column is the group the filter reads.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 5, w: 8, h: 4}
-
-  # --------------------------------------------------------------- read quality
-  - component_type: text
-    tag: rb-qc-reads-intro
-    section: Read quality
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    title: Reads before and after preprocessing
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) ran
-      on the raw reads and again after trimming and rRNA removal. Ribo-seq
-      footprints are short, so a long raw read length with heavy adapter
-      content is expected for those libraries.
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: multiqc
-    tag: rb-qc-fastqc-raw-counts
-    section: Read quality
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    use: multiqc/fastqc
-    selected_module: fastqc
-    selected_plot: Sequence Counts
-    title: Raw sequence counts
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 5}
-  - component_type: multiqc
-    tag: rb-qc-fastqc-raw-adapters
-    section: Read quality
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    use: multiqc/fastqc
-    selected_module: fastqc
-    selected_plot: Adapter Content
-    title: Raw adapter content
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 5}
-  - component_type: multiqc
-    tag: rb-qc-fastqc-filtered-counts
-    section: Read quality
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    use: multiqc/fastqc
-    selected_module: fastqc-2
-    selected_plot: Sequence Counts
-    title: Sequence counts after rRNA removal
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 6, w: 4, h: 5}
-  - component_type: multiqc
-    tag: rb-qc-fastqc-filtered-length
-    section: Read quality
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    use: multiqc/fastqc
-    selected_module: fastqc-2
-    selected_plot: Sequence Length Distribution
-    title: Read length after rRNA removal
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 6, w: 4, h: 5}
-
-  # -------------------------------------------------------------- rRNA depletion
-  - component_type: text
-    tag: rb-qc-rrna-intro
-    section: rRNA depletion
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    title: How much rRNA each library carried
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Ribo-seq libraries often keep a large rRNA share even after depletion,
-      which caps the footprints left to map. Compare the Ribo-seq libraries
-      with each other rather than with the RNA-seq ones.
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: multiqc
-    tag: rb-qc-sortmerna
-    section: rRNA depletion
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    use: multiqc/sortmerna
-    selected_module: sortmerna
-    selected_plot: sortmerna-section-1
-    title: Reads matched to rRNA databases
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 1, w: 8, h: 5}
-
-  # ------------------------------------------------ alignment and quantification
-  - component_type: text
-    tag: rb-qc-align-intro
-    section: Alignment and quantification
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    title: What STAR placed and what Salmon counted
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      A low uniquely mapped share points at leftover rRNA or contamination; a
-      high multimapping share at repeats. Salmon quantifies both assays on
-      the same transcriptome, which is what the sample space and the
-      efficiency tabs compare.
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: multiqc
-    tag: rb-qc-star-summary
-    section: Alignment and quantification
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    use: multiqc/star
-    selected_module: star
-    selected_plot: Summary Statistics
-    title: STAR alignment summary
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 5}
-  - component_type: multiqc
-    tag: rb-qc-salmon
-    section: Alignment and quantification
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    use: multiqc/salmon
-    selected_module: salmon
-    selected_plot: salmon-section-1
-    title: Salmon fragment length distribution
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 5}
-
-  # ---------------------------------------------------------- footprint quality
-  - component_type: text
-    tag: rb-qc-ribotish-intro
-    section: Footprint quality
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    title: Ribo-TISH on the footprint libraries
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [Ribo-TISH](https://github.com/zhpn1024/ribotish) measures, per footprint
-      length, how strongly the reads favour one reading frame. The riboWaltz
-      view of the same question is on the Ribo-seq QC tab.
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: multiqc
-    tag: rb-qc-ribotish-frames
-    section: Footprint quality
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    use: multiqc/ribotish
-    selected_module: ribotish
-    selected_plot: Reading Frame Proportions
-    title: Reading frame proportions
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 1, w: 4, h: 5}
-  - component_type: multiqc
-    tag: rb-qc-ribotish-length
-    section: Footprint quality
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    use: multiqc/ribotish
-    selected_module: ribotish
-    selected_plot: Read Length Distribution
-    title: Footprint length distribution
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 1, w: 4, h: 5}
-
-  # -------------------------------------------------------- more MultiQC panels
-  - component_type: multiqc
-    tag: rb-qc-fastqc-raw-quality
-    section: More MultiQC panels
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    use: multiqc/fastqc
-    selected_module: fastqc
-    selected_plot: Sequence Quality Histograms
-    title: Raw per-base quality
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 0, w: 4, h: 5}
-  - component_type: multiqc
-    tag: rb-qc-fastqc-trimmed-length
-    section: More MultiQC panels
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    use: multiqc/fastqc
-    selected_module: fastqc-1
-    selected_plot: Sequence Length Distribution
-    title: Read length after trimming
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 0, w: 4, h: 5}
-  - component_type: multiqc
-    tag: rb-qc-fastqc-filtered-status
-    section: More MultiQC panels
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    use: multiqc/fastqc
-    selected_module: fastqc-2
-    selected_plot: Status Checks
-    title: FastQC status after rRNA removal
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 5, w: 4, h: 5}
-  - component_type: multiqc
-    tag: rb-qc-samtools-mapped
-    section: More MultiQC panels
-    workflow_tag: riboseq
-    data_collection_tag: multiqc_data
-    use: multiqc/samtools
-    selected_module: samtools
-    selected_plot: Percent mapped
-    title: Percent mapped
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 5, w: 4, h: 5}
-
-  # ------------------------------------------------------------------ left panel
-  - component_type: interactive
-    tag: rb-filter-sample
-    index: rb-sample-filter
-    section: Sample scope
-    group: Libraries
-    workflow_tag: riboseq
-    data_collection_tag: samples
-    interactive_component_type: MultiSelect
-    column_name: sample
-    column_type: object
-    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:test-tube'}
-    placement: left
-    title: Library
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: rb-filter-type
-    index: rb-type-filter
-    section: Sample scope
-    group: Libraries
-    workflow_tag: riboseq
-    data_collection_tag: samples
-    interactive_component_type: MultiSelect
-    column_name: type
-    column_type: object
-    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:shape-outline'}
-    placement: left
-    title: Assay
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
-    tag: rb-filter-group
-    index: rb-group-filter
-    section: Sample scope
-    group: Libraries
-    workflow_tag: riboseq
-    data_collection_tag: metadata
-    interactive_component_type: MultiSelect
-    column_name: '{GROUP_COL}'
-    column_type: object
-    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:account-group-outline'}
-    placement: left
-    title: '{GROUP_COL_DISPLAY}'
-    layout: {x: 0, y: 6, w: 1, h: 3}
-  - component_type: interactive
-    tag: rb-filter-read-type
-    index: rb-read-type-filter
-    section: Library layout
-    group: Layout
-    workflow_tag: riboseq
-    data_collection_tag: samples
-    interactive_component_type: MultiSelect
-    column_name: read_type
-    column_type: object
-    display: {title_size: md, custom_color: '#607D8B', icon_name: 'mdi:tune'}
-    placement: left
-    title: Read layout
-    layout: {x: 0, y: 9, w: 1, h: 3}
-
-tabs:
-# ============================================================== Ribo-seq QC
-- title: Ribo-seq QC
-  subtitle: Whether the footprints come from translating ribosomes, per Ribo-seq library
-  tab_order: 1
-  tab_icon: mdi:waves
-  tab_icon_color: grape
-  icon: /assets/images/workflows/nf-core.png
-  icon_color: green
-  workflow_system: nf-core
-  filter_sections:
-  - name: Library quality
-    icon: mdi:tune
-    color: grape
-    description: Narrow the Ribo-seq views to libraries inside a phasing or CDS band
-  grid_sections:
-  - name: Periodicity at a glance
-    icon: mdi:counter
-    color: grape
-    description: How well each Ribo-seq library is phased and where its P-sites fall
-  - name: Reading frame
-    icon: mdi:chart-bar
-    color: grape
-    description: Share of the P-sites in each reading frame, per library and region
-  - name: Footprint length
-    icon: mdi:ruler
-    color: violet
-    description: Read-length distribution of the footprints riboWaltz kept
-  - name: Metagene profiles
-    icon: mdi:chart-line
-    color: violet
-    description: P-site signal around the start and stop codons
-  - name: P-site regions
-    icon: mdi:chart-donut
-    color: pink
-    description: P-site share per transcript region
-  - name: Library detail
-    icon: mdi:information-outline
-    color: grape
-    description: Pick a library on the phasing plane and read its record
-  - name: Library rows
-    icon: mdi:table
-    color: gray
-    description: The per-library quality table behind the tab
-    collapsed: true
-  components:
-  - component_type: text
-    tag: rb-rq-intro
-    section: Periodicity at a glance
-    workflow_tag: riboseq
-    data_collection_tag: ribowaltz_summary
-    title: Do the footprints step one codon at a time?
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Look for a frame-0 share well above a third in the CDS and a CDS share
-      above the length expectation. A library that fails both is not
-      reporting translation.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    description: P-sites riboWaltz assigned to a transcript region, over the libraries in view.
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: rb-rq-card-frame0
-    section: Periodicity at a glance
     workflow_tag: riboseq
     data_collection_tag: ribowaltz_summary
     use: ribowaltz/library_summary
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
     column_name: frame0_cds_pct
     column_type: float64
-    display: {icon_name: 'mdi:waves', title_font_size: xl, value_font_size: xl}
-    title: Frame 0 share in CDS (%)
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rb-rq-card-bias
+    filter_expr: col('psites') > 0
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:waves
+      icon_color: grape
+      caption: median, with its spread
+      decimals: 1
     section: Periodicity at a glance
+    tag: rb-rq-card-frame0
+    index: rq-card-frame0
+    title: Frame 0 in CDS (%)
+    description: Median share of each library's CDS P-sites in the annotated frame; a third is no periodicity.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: riboseq
     data_collection_tag: ribowaltz_summary
     use: ribowaltz/library_summary
@@ -552,48 +800,39 @@ tabs:
     threshold_value: 20
     threshold_direction: min
     threshold_warn: 10
-    display: {icon_name: 'mdi:alert-outline', title_font_size: xl, value_font_size: xl}
-    title: Weakest frame margin (points)
-    title_size: sm
-    title_align: left
-    layout: {x: 2, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rb-rq-card-cds
+    display:
+      icon_name: mdi:alert-outline
+      icon_color: orange
+      caption: lowest; libraries at 20 points or more pass
+      decimals: 1
     section: Periodicity at a glance
+    tag: rb-rq-card-margin
+    index: rq-card-margin
+    title: Frame margin (points)
+    description: Frame-0 share minus the larger of the two other frames, for the weakest library in view.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: riboseq
     data_collection_tag: ribowaltz_summary
     use: ribowaltz/library_summary
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
     column_name: cds_pct
     column_type: float64
-    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
-    title: P-sites in CDS (%)
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rb-rq-card-length
+    filter_expr: col('psites') > 0
+    secondary_layout: gauge
+    coverage_max: 100
+    display:
+      icon_name: mdi:dna
+      icon_color: teal
+      caption: median share, 0 to 100
+      decimals: 1
     section: Periodicity at a glance
-    workflow_tag: riboseq
-    data_collection_tag: ribowaltz_summary
-    use: ribowaltz/library_summary
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: modal_length
-    column_type: int64
-    display: {icon_name: 'mdi:ruler', title_font_size: xl, value_font_size: xl}
-    title: Modal footprint length (nt)
-    title_size: sm
-    title_align: left
-    layout: {x: 6, y: 1, w: 2, h: 2}
-
+    tag: rb-rq-card-cds
+    index: rq-card-cds
+    title: P-sites in CDS (%)
+    description: Median share of each library's P-sites that fall in the coding sequence.
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
-    tag: rb-rq-av-frames
-    index: rb-rq-av-frames
-    section: Reading frame
     workflow_tag: riboseq
     data_collection_tag: ribowaltz_frames
     use: ribowaltz/frame_composition
@@ -602,35 +841,14 @@ tabs:
       normalise_to_one: true
       sort_by: abundance
       sample_sort: input
-      top_n: 12
-      controls_placement: header
+      top_n: 8
+    section: Reading frame
+    tag: rb-rq-frames
+    index: rq-frames
     title: P-sites per reading frame
-    description: Share of each library's P-sites in the three frames. The tile opens on the CDS; switch the level to a UTR to see the unphased background.
-    title_size: h3
-    layout: {x: 0, y: 0, w: 8, h: 7}
-
+    description: Share of each library's P-sites in the three frames. The tile opens on the CDS; the level switch shows a UTR, the unphased background.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
-    tag: rb-rq-av-length
-    index: rb-rq-av-length
-    section: Footprint length
-    workflow_tag: riboseq
-    data_collection_tag: ribowaltz_length
-    use: ribowaltz/length_profile
-    config:
-      x_title: Read length (nt)
-      y_title: Share of reads (%)
-      line_width: 1.5
-      legend_pos: right
-      controls_placement: header
-    title: Footprint length per library
-    description: One curve per Ribo-seq library. Monosome footprints form one narrow peak; a second peak or a broad shoulder is worth checking.
-    title_size: h3
-    layout: {x: 0, y: 0, w: 8, h: 6}
-
-  - component_type: advanced_viz
-    tag: rb-rq-av-start
-    index: rb-rq-av-start
-    section: Metagene profiles
     workflow_tag: riboseq
     data_collection_tag: ribowaltz_metaprofile_start
     use: ribowaltz/start_profile
@@ -641,15 +859,13 @@ tabs:
       y_title: P-site signal (%)
       line_width: 1.5
       legend_pos: right
-      controls_placement: header
+    section: Metagene profiles
+    tag: rb-rq-start-profile
+    index: rq-start-profile
     title: P-sites around the start codon
     description: A phased library peaks at the start codon and repeats every three nucleotides along the CDS.
-    title_size: h3
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
-    tag: rb-rq-av-stop
-    index: rb-rq-av-stop
-    section: Metagene profiles
     workflow_tag: riboseq
     data_collection_tag: ribowaltz_metaprofile_stop
     use: ribowaltz/stop_profile
@@ -660,40 +876,19 @@ tabs:
       y_title: P-site signal (%)
       line_width: 1.5
       legend_pos: right
-      controls_placement: header
+    section: Metagene profiles
+    tag: rb-rq-stop-profile
+    index: rq-stop-profile
     title: P-sites around the stop codon
     description: The three-nucleotide pattern should run up to the stop codon and fade after it, where ribosomes release.
-    title_size: h3
-    layout: {x: 0, y: 6, w: 8, h: 6}
-
+    layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
-    tag: rb-rq-av-regions
-    index: rb-rq-av-regions
-    section: P-site regions
-    workflow_tag: riboseq
-    data_collection_tag: ribowaltz_psite_region
-    use: ribowaltz/region_composition
-    config:
-      normalise_to_one: true
-      sort_by: abundance
-      sample_sort: input
-      top_n: 12
-      controls_placement: header
-    title: P-sites per transcript region
-    description: Share of each library's P-sites in the 5' UTR, CDS and 3' UTR. The expected share from transcript length alone is in the table below the tab.
-    title_size: h3
-    layout: {x: 0, y: 0, w: 8, h: 6}
-
-  - component_type: advanced_viz
-    tag: rb-rq-av-phasing
-    index: rb-rq-av-phasing
-    section: Library detail
     workflow_tag: riboseq
     data_collection_tag: ribowaltz_summary
     use: ribowaltz/phasing_plane
     config:
       x_title: P-sites in CDS (%)
-      y_title: Frame 0 share in CDS (%)
+      y_title: Frame 0 in CDS (%)
       reference_line: horizontal
       reference_value: 33.3
       reference_highlight: above
@@ -701,131 +896,220 @@ tabs:
       selection_enabled: true
       selection_column: sample
       legend_pos: bottom
-      controls_placement: header
+    section: Libraries
+    tag: rb-rq-phasing
+    index: rq-phasing-plane
     title: Phasing against CDS share
-    description: One point per Ribo-seq library, sized by P-sites. The line is one third, the share of a library with no periodicity. Click a point to open its record.
-    title_size: h3
-    layout: {x: 0, y: 0, w: 5, h: 8}
+    description: One point per Ribo-seq library, sized by P-sites. The line is one third, the share of a library with no periodicity.
+    layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
-    tag: rb-rq-av-record
-    index: rb-rq-av-record
+    workflow_tag: riboseq
+    data_collection_tag: ribowaltz_length
+    use: ribowaltz/length_profile
+    config:
+      x_title: Read length (nt)
+      y_title: Share of reads (%)
+      line_width: 1.5
+      legend_pos: right
+    section: Libraries
+    tag: rb-rq-length
+    index: rq-length-profile
+    title: Footprint length per library
+    description: Monosome footprints form one narrow peak; a second peak or a broad shoulder is worth checking.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: riboseq
+    data_collection_tag: ribowaltz_psite_region
+    use: ribowaltz/region_composition
+    config:
+      normalise_to_one: true
+      sort_by: abundance
+      sample_sort: input
+      top_n: 8
     section: Library detail
+    tag: rb-rq-regions
+    index: rq-regions
+    title: P-sites per transcript region
+    description: Share of each library's P-sites in the 5' UTR, CDS and 3' UTR. The share expected from length alone is in the region table below.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  # Master and detail: a picked row (or a point on the phasing plane) is the
+  # selection the record card follows.
+  - component_type: table
+    workflow_tag: riboseq
+    data_collection_tag: ribowaltz_summary
+    use: ribowaltz/library_summary
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Library detail
+    tag: rb-rq-table-summary
+    index: rq-table-summary
+    title: Ribo-seq library quality
+    description: One row per Ribo-seq library with every riboWaltz readout of this tab.
+    layout: {x: 0, y: 5, w: 5, h: 6}
+  - component_type: advanced_viz
     workflow_tag: riboseq
     data_collection_tag: ribowaltz_summary
     use: ribowaltz/library_record
     config:
       id_col: sample
       selection_source: any
-      linked_component: rb-rq-av-phasing
+      linked_component: rb-rq-table-summary
       sections:
         Library: [sample, psites]
         Periodicity: [frame0_cds_pct, frame_bias]
         Regions: [cds_pct, utr5_pct, utr3_pct, cds_enrichment]
         Footprints: [modal_length, length_iqr]
+    section: Library detail
+    tag: rb-rq-record
+    index: rq-record
     title: Library record
-    description: The picked Ribo-seq library as a fact panel.
-    title_size: h3
-    layout: {x: 5, y: 0, w: 3, h: 8}
-
+    description: The library picked in the table or on the phasing plane, as a fact panel.
+    layout: {x: 5, y: 5, w: 3, h: 6}
   - component_type: table
-    tag: rb-rq-table-summary
-    section: Library rows
-    workflow_tag: riboseq
-    data_collection_tag: ribowaltz_summary
-    use: ribowaltz/library_summary
-    row_selection_enabled: true
-    row_selection_column: sample
-    title: Ribo-seq library quality
-    description: One row per Ribo-seq library with every riboWaltz readout of this tab.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 5}
-  - component_type: table
-    tag: rb-rq-table-regions
-    section: Library rows
     workflow_tag: riboseq
     data_collection_tag: ribowaltz_psite_region
     use: ribowaltz/psite_region
     row_selection_enabled: true
     row_selection_column: sample
+    section: Library detail
+    tag: rb-rq-table-regions
+    index: rq-table-regions
     title: P-site regions against the length expectation
     description: Observed and expected share per region; enrichment above 1 in the CDS is what protected footprints look like.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 5, w: 8, h: 5}
-
-  - component_type: interactive
-    tag: rb-rq-filter-frame0
-    index: rb-rq-frame0-filter
-    section: Library quality
-    group: Phasing
-    workflow_tag: riboseq
-    data_collection_tag: ribowaltz_summary
-    interactive_component_type: RangeSlider
-    column_name: frame0_cds_pct
-    column_type: float64
-    display: {title_size: md, custom_color: '#7B1FA2', icon_name: 'mdi:waves'}
-    placement: left
-    title: Frame 0 share in CDS (%)
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: rb-rq-filter-cds
-    index: rb-rq-cds-filter
-    section: Library quality
-    group: Phasing
-    workflow_tag: riboseq
-    data_collection_tag: ribowaltz_summary
-    interactive_component_type: RangeSlider
-    column_name: cds_pct
-    column_type: float64
-    display: {title_size: md, custom_color: '#AB47BC', icon_name: 'mdi:dna'}
-    placement: left
-    title: P-sites in CDS (%)
-    layout: {x: 0, y: 3, w: 1, h: 3}
-
-# ============================================================== Sample space
+    layout: {x: 0, y: 11, w: 8, h: 6}
 - title: Sample space
-  subtitle: How the RNA-seq and Ribo-seq libraries group on their Salmon expression
-  tab_order: 2
+  subtitle: Do the libraries separate by assay first, then by design?
+  tab_group: Data & QC
+  tab_order: 3
   tab_icon: mdi:chart-scatter-plot
   tab_icon_color: cyan
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: Library expression
-    icon: mdi:tune
+  - name: Expression filters
+    icon: mdi:filter-variant
     color: cyan
-    description: Narrow to libraries inside a gene-detection band
+    description: Narrows the libraries to a gene-expression band
   grid_sections:
+  - name: Libraries at a glance
+    icon: mdi:counter
+    color: cyan
+    description: How many libraries were placed, and how many genes each expresses
   - name: Sample space
     icon: mdi:chart-scatter-plot
     color: cyan
-    description: Where the libraries sit on the leading principal components; lasso a point to read its record beside the PCA
+    description: The libraries on the leading principal components of their Salmon TPMs
   - name: Library rows
     icon: mdi:table
     color: gray
-    description: The per-library PCA coordinates and expression summary
+    description: Each library's PCA coordinates and expression summary, and its record
     collapsed: true
   components:
+  # The tab's intro: the method, with its link, and how to read the tab.
   - component_type: text
+    order: 1
+    body: >
+      [Salmon](https://salmon.readthedocs.io) quantifies both assays on the same
+      transcriptome, and the PCA places each library on its log2 TPMs. The first component
+      usually splits RNA-seq from Ribo-seq; read the next ones, or colour by a design column,
+      for the groups within each assay.
     tag: rb-sp-intro
-    section: Sample space
+    index: sp-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
     workflow_tag: riboseq
     data_collection_tag: sample_pca
-    title: Do the libraries separate by assay first, then by design?
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The first component usually splits RNA-seq from Ribo-seq libraries;
-      look at the next ones for the design groups within each assay.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    interactive_component_type: RangeSlider
+    column_name: genes_expressed
+    column_type: int64
+    display:
+      icon_name: mdi:dna
+      custom_color: cyan
+    section: Expression filters
+    tag: rb-sp-filter-expressed
+    index: sp-expressed-filter
+    title: Genes expressed
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  # One row per library, so a count splits into the groups as parts of a whole.
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: sample_pca
+    use: salmon/sample_pca
+    aggregation: count
+    column_name: sample_id
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: group
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: violet
+      caption: one point each, by group
+    section: Libraries at a glance
+    tag: rb-sp-card-libraries
+    index: sp-card-libraries
+    title: Libraries placed
+    description: Libraries on the PCA, split by the sheet's leading factor (the assay on a riboseq sheet).
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: gene_counts
+    use: salmon/merged_gene_counts
+    aggregation: count
+    column_name: gene_name
+    column_type: object
+    secondary_layout: completeness
+    display:
+      icon_name: mdi:dna
+      icon_color: cyan
+      caption: with a gene symbol
+    section: Libraries at a glance
+    tag: rb-sp-card-genes
+    index: sp-card-genes
+    title: Genes quantified
+    description: Genes in the merged Salmon count matrix; the bar shows how many carry a symbol.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: sample_pca
+    use: salmon/sample_pca
+    aggregation: median
+    column_name: genes_expressed
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: teal
+      caption: median per library, with its spread
+      decimals: 0
+    section: Libraries at a glance
+    tag: rb-sp-card-expressed
+    index: sp-card-expressed
+    title: Genes expressed
+    description: Genes at 1 TPM or more in a library, the median over the libraries in view.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: sample_pca
+    use: salmon/sample_pca
+    aggregation: median
+    column_name: median_tpm
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:sigma
+      icon_color: blue
+      caption: median per library, with its spread
+      decimals: 2
+    section: Libraries at a glance
+    tag: rb-sp-card-tpm
+    index: sp-card-tpm
+    title: Median TPM
+    description: Median TPM over the genes each library detects, the median over the libraries in view.
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
-    tag: rb-sp-av-pca
-    index: rb-sp-av-pca
-    section: Sample space
     workflow_tag: riboseq
     data_collection_tag: sample_pca
     use: salmon/pca
@@ -833,18 +1117,29 @@ tabs:
       color_col: group
       point_size: 12
       show_centroids: true
+      axis_prefix: PC
       selection_enabled: true
       selection_column: sample_id
       legend_pos: right
-      controls_placement: header
-    title: Library PCA on Salmon TPMs
-    description: One point per library, coloured by the sheet's most factor-like column. Colour-by lists every sheet column, so a design factor is one pick away; lasso points to read them in the record beside it and filter the linked panels.
-    title_size: h3
-    layout: {x: 0, y: 1, w: 5, h: 7}
-  - component_type: advanced_viz
-    tag: rb-sp-av-record
-    index: rb-sp-av-record
     section: Sample space
+    tag: rb-sp-pca
+    index: sp-pca
+    title: Library PCA on Salmon TPMs
+    description: One point per library, coloured by the sheet's leading factor; colour by any other sheet column from the controls. A lasso filters the linked panels.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: riboseq
+    data_collection_tag: sample_pca
+    use: salmon/sample_pca
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    section: Library rows
+    tag: rb-sp-table
+    index: sp-table
+    title: Library PCA and expression summary
+    description: One row per library, the sheet columns included.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
     workflow_tag: riboseq
     data_collection_tag: sample_pca
     viz_kind: record_card
@@ -852,323 +1147,22 @@ tabs:
       viz_kind: record_card
       id_col: sample_id
       selection_source: any
-      linked_component: rb-sp-av-pca
+      linked_component: rb-sp-table
       sections:
         Library: [sample_id, group]
         Expression: [genes_detected, genes_expressed, median_tpm]
         Position: [dim_1, dim_2, dim_3]
-    title: Library record
-    description: The library lassoed in the PCA beside it (or selected in the library rows) as a fact panel, with its position on the first three components.
-    title_size: h3
-    layout: {x: 5, y: 1, w: 3, h: 7}
-  - component_type: table
-    tag: rb-sp-table-pca
     section: Library rows
-    workflow_tag: riboseq
-    data_collection_tag: sample_pca
-    use: salmon/sample_pca
-    row_selection_enabled: true
-    row_selection_column: sample_id
-    title: Library PCA and expression summary
-    description: One row per library, the sheet columns included.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 5}
-  - component_type: interactive
-    tag: rb-sp-filter-expressed
-    index: rb-sp-expressed-filter
-    section: Library expression
-    group: Expression
-    workflow_tag: riboseq
-    data_collection_tag: sample_pca
-    interactive_component_type: RangeSlider
-    column_name: genes_expressed
-    column_type: int64
-    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:dna'}
-    placement: left
-    title: Genes expressed
-    layout: {x: 0, y: 0, w: 1, h: 3}
-
-# ================================================= Translational regulation
-- title: Translational regulation
-  subtitle: Which genes change translation between conditions, and through which mode, per anota2seq contrast
-  tab_order: 3
-  tab_icon: mdi:scale-balance
-  tab_icon_color: indigo
-  icon: /assets/images/workflows/nf-core.png
-  icon_color: green
-  workflow_system: nf-core
-  filter_sections:
-  - name: Regulation scope
-    icon: mdi:filter-variant
-    color: indigo
-    description: Which contrast, regulatory modes and genes the regulation panels cover
-  grid_sections:
-  - name: Regulation at a glance
-    icon: mdi:counter
-    color: indigo
-    description: How many genes each mode holds and how large the changes are
-  - name: Fold-change plane
-    icon: mdi:chart-scatter-plot
-    color: indigo
-    description: Total mRNA change against ribosome-bound mRNA change, per gene
-  - name: Significance
-    icon: mdi:chart-scatter-plot
-    color: blue
-    description: Effect against significance for the translation analysis and for each anota2seq analysis
-  - name: Gene detail
-    icon: mdi:information-outline
-    color: indigo
-    description: Select a gene in the regulation table to read it across the four anota2seq analyses in the record beside it
-  components:
-  - component_type: text
-    tag: rb-tr-intro
-    section: Regulation at a glance
-    workflow_tag: riboseq
-    data_collection_tag: anota2seq_regulation
-    title: Translation, buffering or mRNA abundance?
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Pick a contrast first. Translation genes change ribosome loading beyond
-      their mRNA change, buffered genes change mRNA without it, and mRNA
-      abundance genes move both together.
-    layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: card
-    tag: rb-tr-card-modes
-    section: Regulation at a glance
-    workflow_tag: riboseq
-    data_collection_tag: anota2seq_regulation
-    use: anota2seq/regulation
-    aggregation: nunique
-    column_name: gene_id
-    column_type: object
-    secondary_layout: donut
-    breakdown_col: regulation_mode
-    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
-    title: Genes by regulatory mode
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rb-tr-card-translation
-    section: Regulation at a glance
-    workflow_tag: riboseq
-    data_collection_tag: anota2seq_regulation
-    use: anota2seq/regulation
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: translation_effect
-    column_type: float64
-    display: {icon_name: 'mdi:scale-balance', title_font_size: xl, value_font_size: xl}
-    title: Translation effect (log2)
-    title_size: sm
-    title_align: left
-    layout: {x: 2, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rb-tr-card-total
-    section: Regulation at a glance
-    workflow_tag: riboseq
-    data_collection_tag: anota2seq_regulation
-    use: anota2seq/regulation
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: total_mrna_lfc
-    column_type: float64
-    display: {icon_name: 'mdi:chart-bell-curve', title_font_size: xl, value_font_size: xl}
-    title: Total mRNA change (log2)
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rb-tr-card-translated
-    section: Regulation at a glance
-    workflow_tag: riboseq
-    data_collection_tag: anota2seq_regulation
-    use: anota2seq/regulation
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: translated_mrna_lfc
-    column_type: float64
-    display: {icon_name: 'mdi:waves', title_font_size: xl, value_font_size: xl}
-    title: Ribosome-bound mRNA change (log2)
-    title_size: sm
-    title_align: left
-    layout: {x: 6, y: 1, w: 2, h: 2}
-
-  - component_type: advanced_viz
-    tag: rb-tr-av-plane
-    index: rb-tr-av-plane
-    section: Fold-change plane
-    workflow_tag: riboseq
-    data_collection_tag: anota2seq_regulation
-    use: anota2seq/fold_change_plane
-    config:
-      x_title: Total mRNA change (log2)
-      y_title: Ribosome-bound mRNA change (log2)
-      reference_line: diagonal
-      marker_size: 5
-      opacity: 0.7
-      marker_outline: false
-      top_n_labels: 10
-      density_threshold: 40000
-      selection_enabled: true
-      selection_column: gene_id
-      legend_pos: bottom
-      controls_placement: header
-    title: Ribosome-bound against total mRNA change
-    description: One point per gene, coloured by regulatory mode. Genes on the diagonal change through mRNA level; genes off it change translation. Click a point to open its record.
-    title_size: h3
-    layout: {x: 0, y: 0, w: 8, h: 8}
-
-  - component_type: advanced_viz
-    tag: rb-tr-av-volcano
-    index: rb-tr-av-volcano
-    section: Significance
-    workflow_tag: riboseq
-    data_collection_tag: anota2seq_regulation
-    use: anota2seq/translation_volcano
-    config:
-      label_col: gene_name
-      significance_threshold: 0.15
-      effect_threshold: 0.263
-      top_n_labels: 15
-      show_labels: true
-      p_value_col: translation_pvalue
-      view: volcano
-      views: [volcano, qq]
-      controls_placement: header
-    title: Translation effect against significance
-    description: -log10 adjusted p of the translation analysis against its effect, with the QQ view of the raw p-values in the header switch. The dashed lines are anota2seq's default cut-offs, adjusted p 0.15 and a 1.2-fold change.
-    title_size: h3
-    layout: {x: 0, y: 0, w: 8, h: 7}
-  - component_type: advanced_viz
-    tag: rb-tr-av-analysis-volcano
-    index: rb-tr-av-analysis-volcano
-    section: Significance
-    workflow_tag: riboseq
-    data_collection_tag: anota2seq_results
-    use: anota2seq/analysis_volcano
-    config:
-      label_col: gene_name
-      significance_threshold: 0.15
-      effect_threshold: 0.263
-      top_n_labels: 10
-      show_labels: true
-      p_value_col: pvalue
-      view: volcano
-      views: [volcano, qq]
-      controls_placement: header
-    title: Each anota2seq analysis
-    description: The same plot for one analysis at a time; pick total mRNA, ribosome-bound mRNA, translation or buffering with the analysis filter.
-    title_size: h3
-    layout: {x: 0, y: 7, w: 8, h: 7}
-
-  - component_type: table
-    tag: rb-tr-table-regulation
-    section: Gene detail
-    workflow_tag: riboseq
-    data_collection_tag: anota2seq_regulation
-    use: anota2seq/regulation
-    row_selection_enabled: true
-    row_selection_column: gene_id
-    title: Regulatory mode per gene
-    description: One row per contrast and gene; select a row to read it in the record beside it and carry it to the efficiency tab.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 5, h: 7}
-  - component_type: advanced_viz
-    tag: rb-tr-av-record
-    index: rb-tr-av-record
-    section: Gene detail
-    workflow_tag: riboseq
-    data_collection_tag: anota2seq_regulation
-    use: anota2seq/gene_record
-    config:
-      id_col: gene_id
-      title_col: gene_name
-      selection_source: any
-      linked_component: rb-tr-table-regulation
-      sections:
-        Gene: [gene_name, gene_id, contrast, regulation_mode, direction]
-        Total mRNA: [total_mrna_lfc, total_mrna_padj]
-        Ribosome-bound mRNA: [translated_mrna_lfc, translated_mrna_padj]
-        Translation: [translation_effect, translation_padj]
-        Buffering: [buffering_effect, buffering_padj]
-      link_templates:
-        gene_id: "https://www.ensembl.org/id/{value}"
-    title: Gene record
-    description: The gene selected in the table beside it, or picked on the fold-change plane, across the four analyses. Ensembl resolves the stable identifier for any species.
-    title_size: h3
-    layout: {x: 5, y: 0, w: 3, h: 7}
-
-  - component_type: interactive
-    tag: rb-tr-filter-contrast
-    index: rb-tr-contrast-filter
-    section: Regulation scope
-    group: Regulation
-    workflow_tag: riboseq
-    data_collection_tag: anota2seq_regulation
-    interactive_component_type: MultiSelect
-    column_name: contrast
-    column_type: object
-    display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:scale-balance'}
-    placement: left
-    title: Contrast
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: rb-tr-filter-mode
-    index: rb-tr-mode-filter
-    section: Regulation scope
-    group: Regulation
-    workflow_tag: riboseq
-    data_collection_tag: anota2seq_regulation
-    use: anota2seq/regulation
-    interactive_component_type: MultiSelect
-    column_name: regulation_mode
-    column_type: object
-    display: {title_size: md, custom_color: '#5C6BC0', icon_name: 'mdi:shape-outline'}
-    placement: left
-    title: Regulatory mode
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
-    tag: rb-tr-filter-gene
-    index: rb-tr-gene-filter
-    section: Regulation scope
-    group: Regulation
-    workflow_tag: riboseq
-    data_collection_tag: anota2seq_regulation
-    interactive_component_type: MultiSelect
-    column_name: gene_name
-    column_type: object
-    display: {title_size: md, custom_color: '#7986CB', icon_name: 'mdi:dna'}
-    placement: left
-    title: Gene
-    layout: {x: 0, y: 6, w: 1, h: 3}
-  - component_type: interactive
-    tag: rb-tr-filter-analysis
-    index: rb-tr-analysis-filter
-    section: Regulation scope
-    group: Analysis
-    workflow_tag: riboseq
-    data_collection_tag: anota2seq_results
-    use: anota2seq/results
-    interactive_component_type: Select
-    column_name: analysis
-    column_type: object
-    display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:chart-scatter-plot'}
-    placement: left
-    title: anota2seq analysis
-    layout: {x: 0, y: 9, w: 1, h: 3}
-
-# ================================================= Translational efficiency
+    tag: rb-sp-record
+    index: sp-record
+    title: Library record
+    description: The library picked in the table or lassoed on the PCA, with its position on the first three components.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+# Pooled over the run, so it needs no contrast; it reads the in-frame P-site
+# counts and the sample sheet, and goes with them.
 - title: Translational efficiency
-  subtitle: Which genes are translated above or below their mRNA level, pooled over the run
+  subtitle: Which genes carry more ribosomes than their mRNA level predicts?
+  tab_group: Translation
   tab_order: 4
   tab_icon: mdi:chart-line
   tab_icon_color: teal
@@ -1176,10 +1170,10 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: Efficiency scope
-    icon: mdi:tune
+  - name: Efficiency filters
+    icon: mdi:filter-variant
     color: teal
-    description: Narrow to genes inside a translational efficiency band, or to named genes
+    description: Narrows the genes to an efficiency band, or to named genes
   grid_sections:
   - name: Efficiency at a glance
     icon: mdi:counter
@@ -1188,92 +1182,127 @@ tabs:
   - name: Efficiency plane
     icon: mdi:chart-scatter-plot
     color: teal
-    description: Ribo-seq against RNA-seq abundance, per gene; click or lasso a gene on the plane to read its record beside it
-  - name: Gene rows
+    description: Ribo-seq against RNA-seq abundance, one point per gene
+  - name: Gene detail
     icon: mdi:table
     color: gray
-    description: One row per gene, selectable
+    description: Every gene's abundance in each assay, and the record of the one picked
     collapsed: true
   components:
+  # The tab's intro: the method, with its link, and how to read the tab.
   - component_type: text
+    order: 1
+    body: >
+      Translational efficiency is a gene's Ribo-seq abundance over its RNA-seq abundance, in
+      counts per million pooled over every library of the run. Genes above the diagonal carry
+      more ribosomes than their mRNA level predicts; the test between conditions is on
+      [Translational regulation](tab:Translational regulation).
     tag: rb-te-intro
-    section: Efficiency at a glance
+    index: te-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
     workflow_tag: riboseq
     data_collection_tag: translational_efficiency
-    title: Translated more or less than the mRNA predicts
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Efficiency is the Ribo-seq over the RNA-seq abundance of a gene, pooled
-      over all libraries. Genes above the diagonal carry more ribosomes than
-      their mRNA level predicts.
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    interactive_component_type: RangeSlider
+    column_name: log2_te
+    column_type: float64
+    display:
+      icon_name: mdi:scale-balance
+      custom_color: teal
+    section: Efficiency filters
+    group: Genes
+    tag: rb-te-filter-te
+    index: te-te-filter
+    title: Translational efficiency (log2)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: translational_efficiency
+    interactive_component_type: MultiSelect
+    column_name: gene_name
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: cyan
+    section: Efficiency filters
+    group: Genes
+    tag: rb-te-filter-gene
+    index: te-gene-filter
+    title: Gene
+    layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: card
-    tag: rb-te-card-genes
-    section: Efficiency at a glance
     workflow_tag: riboseq
     data_collection_tag: translational_efficiency
     aggregation: count
     column_name: gene_name
     column_type: object
     secondary_layout: completeness
-    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
-    title: Genes in view
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rb-te-card-te
+    display:
+      icon_name: mdi:dna
+      icon_color: cyan
+      caption: with a gene symbol
     section: Efficiency at a glance
+    tag: rb-te-card-genes
+    index: te-card-genes
+    title: Genes
+    description: Genes both assays reach on average, the ones the efficiency is computed for.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: riboseq
     data_collection_tag: translational_efficiency
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
     column_name: log2_te
     column_type: float64
-    display: {icon_name: 'mdi:scale-balance', title_font_size: xl, value_font_size: xl}
-    title: Translational efficiency (log2)
-    title_size: sm
-    title_align: left
-    layout: {x: 2, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rb-te-card-ribo
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: teal
+      caption: median over genes, with its spread
+      decimals: 2
     section: Efficiency at a glance
+    tag: rb-te-card-te
+    index: te-card-te
+    title: Efficiency (log2)
+    description: Median log2 of Ribo-seq CPM over RNA-seq CPM; 0 is a gene translated in line with its mRNA.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: riboseq
     data_collection_tag: translational_efficiency
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
     column_name: log2_ribo_cpm
     column_type: float64
-    display: {icon_name: 'mdi:waves', title_font_size: xl, value_font_size: xl}
-    title: Ribo-seq log2(CPM + 1)
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rb-te-card-rna
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:waves
+      icon_color: grape
+      caption: median, its distribution over genes
+      decimals: 2
     section: Efficiency at a glance
+    tag: rb-te-card-ribo
+    index: te-card-ribo
+    title: Ribo-seq log2(CPM + 1)
+    description: Median footprint abundance of the genes in view.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: riboseq
     data_collection_tag: translational_efficiency
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
     column_name: log2_rna_cpm
     column_type: float64
-    display: {icon_name: 'mdi:chart-bell-curve', title_font_size: xl, value_font_size: xl}
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: blue
+      caption: median, its distribution over genes
+      decimals: 2
+    section: Efficiency at a glance
+    tag: rb-te-card-rna
+    index: te-card-rna
     title: RNA-seq log2(CPM + 1)
-    title_size: sm
-    title_align: left
-    layout: {x: 6, y: 1, w: 2, h: 2}
-
+    description: Median mRNA abundance of the genes in view.
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
-    tag: rb-te-av-plane
-    index: rb-te-av-plane
-    section: Efficiency plane
     workflow_tag: riboseq
     data_collection_tag: translational_efficiency
     viz_kind: scatter_xy
@@ -1295,16 +1324,24 @@ tabs:
       selection_enabled: true
       selection_column: gene_id
       legend_pos: bottom
-      controls_placement: header
-    title: Ribo-seq against RNA-seq abundance
-    description: One point per gene detected in either assay, coloured by log2 efficiency. The diagonal is equal efficiency; click a point to read it in the record beside it.
-    title_size: h3
-    layout: {x: 0, y: 0, w: 5, h: 8}
-
-  - component_type: advanced_viz
-    tag: rb-te-av-record
-    index: rb-te-av-record
     section: Efficiency plane
+    tag: rb-te-plane
+    index: te-plane
+    title: Ribo-seq against RNA-seq abundance
+    description: One point per gene, coloured by log2 efficiency. The diagonal is equal efficiency; a picked point opens its record in Gene detail.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: riboseq
+    data_collection_tag: translational_efficiency
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    section: Gene detail
+    tag: rb-te-table
+    index: te-table
+    title: Translational efficiency per gene
+    description: Mean CPM per assay, their log2 ratio and the libraries detecting each gene.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
     workflow_tag: riboseq
     data_collection_tag: translational_efficiency
     viz_kind: record_card
@@ -1313,7 +1350,7 @@ tabs:
       id_col: gene_id
       title_col: gene_name
       selection_source: any
-      linked_component: rb-te-av-plane
+      linked_component: rb-te-table
       sections:
         Gene: [gene_name, gene_id]
         Efficiency: [log2_te]
@@ -1321,173 +1358,474 @@ tabs:
         Ribo-seq: [ribo_cpm, log2_ribo_cpm, ribo_libraries]
       link_templates:
         gene_id: "https://www.ensembl.org/id/{value}"
+    section: Gene detail
+    tag: rb-te-record
+    index: te-record
     title: Gene record
-    description: The gene picked on the plane beside it (or selected in the gene rows), with its abundance in each assay and its efficiency.
-    title_size: h3
-    layout: {x: 5, y: 0, w: 3, h: 8}
-
-  - component_type: table
-    tag: rb-te-table
-    section: Gene rows
-    workflow_tag: riboseq
-    data_collection_tag: translational_efficiency
-    row_selection_enabled: true
-    row_selection_column: gene_id
-    title: Translational efficiency per gene
-    description: Mean CPM per assay, their log2 ratio and the libraries detecting each gene.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 6}
-
+    description: The gene picked in the table or on the plane, with its abundance in each assay and its efficiency.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+# A run without --contrasts writes no anota2seq tables; the tab goes with them.
+- title: Translational regulation
+  subtitle: Which genes change translation between conditions, and through which mode?
+  tab_group: Translation
+  tab_order: 5
+  tab_icon: mdi:scale-balance
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Regulation filters
+    icon: mdi:filter-variant
+    color: indigo
+    description: Pick a contrast first, then narrow the modes, the genes or the analysis
+  grid_sections:
+  - name: Regulation at a glance
+    icon: mdi:counter
+    color: indigo
+    description: Regulated calls by mode and direction, and how strong the translation effect is
+  - name: Fold-change plane
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: Total mRNA change against ribosome-bound mRNA change, one point per gene
+  - name: Significance
+    icon: mdi:chart-scatter-plot
+    color: indigo
+    description: The translation analysis beside any one of the four anota2seq analyses
+  - name: Gene detail
+    icon: mdi:table
+    color: gray
+    description: Each gene's regulatory mode, and its record across the four analyses
+    collapsed: true
+  components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [anota2seq](https://bioconductor.org/packages/anota2seq) compares ribosome-bound with
+      total mRNA between two conditions and sorts each gene into translation, buffering or
+      mRNA abundance. Pick a contrast on the left first: every number on this tab depends on
+      it.
+    tag: rb-tr-intro
+    index: tr-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: interactive
-    tag: rb-te-filter-te
-    index: rb-te-te-filter
-    section: Efficiency scope
-    group: Efficiency
     workflow_tag: riboseq
-    data_collection_tag: translational_efficiency
-    interactive_component_type: RangeSlider
-    column_name: log2_te
-    column_type: float64
-    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:scale-balance'}
-    placement: left
-    title: Translational efficiency (log2)
-    layout: {x: 0, y: 0, w: 1, h: 3}
+    data_collection_tag: anota2seq_regulation
+    interactive_component_type: MultiSelect
+    column_name: contrast
+    column_type: object
+    display:
+      icon_name: mdi:compare-horizontal
+      custom_color: indigo
+    section: Regulation filters
+    group: Regulation
+    tag: rb-tr-filter-contrast
+    index: tr-contrast-filter
+    title: Contrast
+    layout: {x: 0, y: 0, w: 1, h: 2}
   - component_type: interactive
-    tag: rb-te-filter-gene
-    index: rb-te-gene-filter
-    section: Efficiency scope
-    group: Efficiency
     workflow_tag: riboseq
-    data_collection_tag: translational_efficiency
+    data_collection_tag: anota2seq_regulation
+    use: anota2seq/regulation
+    interactive_component_type: MultiSelect
+    column_name: regulation_mode
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: grape
+    section: Regulation filters
+    group: Regulation
+    tag: rb-tr-filter-mode
+    index: tr-mode-filter
+    title: Regulatory mode
+    layout: {x: 0, y: 2, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: anota2seq_regulation
     interactive_component_type: MultiSelect
     column_name: gene_name
     column_type: object
-    display: {title_size: md, custom_color: '#26A69A', icon_name: 'mdi:dna'}
-    placement: left
+    display:
+      icon_name: mdi:dna
+      custom_color: cyan
+    section: Regulation filters
+    group: Regulation
+    tag: rb-tr-filter-gene
+    index: tr-gene-filter
     title: Gene
-    layout: {x: 0, y: 3, w: 1, h: 3}
-
-# ============================================================ ORF discovery
+    layout: {x: 0, y: 5, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: anota2seq_results
+    use: anota2seq/results
+    interactive_component_type: Select
+    column_name: analysis
+    column_type: object
+    display:
+      icon_name: mdi:chart-scatter-plot
+      custom_color: blue
+    section: Regulation filters
+    group: Analysis
+    tag: rb-tr-filter-analysis
+    index: tr-analysis-filter
+    title: anota2seq analysis
+    layout: {x: 0, y: 8, w: 1, h: 2}
+  # Calls are rows (one per contrast and gene), so a count over them splits
+  # into modes and directions as parts of a whole.
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: anota2seq_regulation
+    use: anota2seq/regulation
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('regulation_mode') != 'not regulated'
+    secondary_layout: donut
+    breakdown_col: regulation_mode
+    display:
+      icon_name: mdi:chart-donut
+      icon_color: indigo
+      caption: calls, by mode
+    section: Regulation at a glance
+    tag: rb-tr-card-regulated
+    index: tr-card-regulated
+    title: Regulated
+    description: Genes called regulated, one per contrast, split into translation, buffering and mRNA abundance.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: anota2seq_regulation
+    use: anota2seq/regulation
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('regulation_mode') == 'translation'
+    secondary_layout: composition
+    breakdown_col: direction
+    display:
+      icon_name: mdi:trending-up
+      icon_color: red
+      caption: calls, up and down
+    section: Regulation at a glance
+    tag: rb-tr-card-translation
+    index: tr-card-translation
+    title: Translation
+    description: Genes whose ribosome loading changes beyond their mRNA change, by direction of the effect.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: anota2seq_regulation
+    use: anota2seq/regulation
+    aggregation: median
+    column_name: translation_effect
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: grape
+      caption: median over genes, with its spread
+      decimals: 2
+    section: Regulation at a glance
+    tag: rb-tr-card-effect
+    index: tr-card-effect
+    title: Translation effect (log2)
+    description: Change in ribosome-bound mRNA not explained by total mRNA, over the genes in view.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: anota2seq_regulation
+    use: anota2seq/regulation
+    aggregation: min
+    column_name: translation_padj
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.15
+    threshold_direction: max
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: orange
+      caption: smallest; genes at or under 0.15 pass
+      decimals: 3
+    section: Regulation at a glance
+    tag: rb-tr-card-padj
+    index: tr-card-padj
+    title: Best adjusted p
+    description: Smallest adjusted p-value of the translation analysis, against anota2seq's default cut-off of 0.15.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: riboseq
+    data_collection_tag: anota2seq_regulation
+    use: anota2seq/fold_change_plane
+    config:
+      x_title: Total mRNA change (log2)
+      y_title: Ribosome-bound mRNA change (log2)
+      reference_line: diagonal
+      marker_size: 5
+      opacity: 0.7
+      marker_outline: false
+      top_n_labels: 10
+      density_threshold: 40000
+      selection_enabled: true
+      selection_column: gene_id
+      legend_pos: bottom
+    section: Fold-change plane
+    tag: rb-tr-plane
+    index: tr-fold-change-plane
+    title: Ribosome-bound against total mRNA change
+    description: One point per gene, coloured by regulatory mode. On the diagonal, the mRNA level drives the change; off it, translation does.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: riboseq
+    data_collection_tag: anota2seq_regulation
+    use: anota2seq/translation_volcano
+    config:
+      label_col: gene_name
+      significance_threshold: 0.15
+      effect_threshold: 0.263
+      top_n_labels: 15
+      show_labels: true
+      p_value_col: translation_pvalue
+      view: volcano
+      views: [volcano, qq]
+    section: Significance
+    tag: rb-tr-volcano
+    index: tr-translation-volcano
+    title: Translation effect against significance
+    description: The translation analysis; the View switch draws the QQ plot of its raw p-values. The dashed lines are anota2seq's defaults, adjusted p 0.15 and a 1.2-fold change.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: riboseq
+    data_collection_tag: anota2seq_results
+    use: anota2seq/analysis_volcano
+    config:
+      label_col: gene_name
+      significance_threshold: 0.15
+      effect_threshold: 0.263
+      top_n_labels: 10
+      show_labels: true
+      p_value_col: pvalue
+      view: volcano
+      views: [volcano, qq]
+    section: Significance
+    tag: rb-tr-analysis-volcano
+    index: tr-analysis-volcano
+    title: Each anota2seq analysis
+    description: The same plot for one analysis at a time; pick total mRNA, ribosome-bound mRNA, translation or buffering with the analysis filter.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: table
+    workflow_tag: riboseq
+    data_collection_tag: anota2seq_regulation
+    use: anota2seq/regulation
+    row_selection_enabled: true
+    row_selection_column: gene_id
+    section: Gene detail
+    tag: rb-tr-table
+    index: tr-table
+    title: Regulatory mode per gene
+    description: One row per contrast and gene; a picked row opens its record beside it.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: riboseq
+    data_collection_tag: anota2seq_regulation
+    use: anota2seq/gene_record
+    config:
+      id_col: gene_id
+      title_col: gene_name
+      selection_source: any
+      linked_component: rb-tr-table
+      sections:
+        Gene: [gene_name, gene_id, contrast, regulation_mode, direction]
+        Total mRNA: [total_mrna_lfc, total_mrna_padj]
+        Ribosome-bound mRNA: [translated_mrna_lfc, translated_mrna_padj]
+        Translation: [translation_effect, translation_padj]
+        Buffering: [buffering_effect, buffering_padj]
+      link_templates:
+        gene_id: "https://www.ensembl.org/id/{value}"
+    section: Gene detail
+    tag: rb-tr-record
+    index: tr-record
+    title: Gene record
+    description: The gene picked in the table or on the fold-change plane, across the four analyses.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+# --skip_ribotish and --skip_ribocode each drop one caller; the pooled ORF
+# table survives either, so the tab goes only when both are skipped.
 - title: ORF discovery
-  subtitle: Which ORFs the Ribo-seq libraries translate, by class, and where Ribo-TISH and RiboCode agree
-  tab_order: 5
+  subtitle: Which ORFs are translated, and do Ribo-TISH and RiboCode agree?
+  tab_group: ORFs
+  tab_order: 6
   tab_icon: mdi:set-merge
   tab_icon_color: pink
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: ORF scope
+  - name: ORF filters
     icon: mdi:filter-variant
     color: pink
-    description: Which ORF classes, genes and protein lengths the ORF panels cover
+    description: Narrows the ORFs by class, gene and protein length
   grid_sections:
   - name: ORFs at a glance
     icon: mdi:counter
     color: pink
-    description: How many ORFs each caller reported and how long they are
+    description: How many ORFs each caller reported, of which class and length
   - name: ORF classes per library
     icon: mdi:chart-bar
     color: pink
     description: The share of each ORF class per library, for each caller
   - name: Caller agreement
     icon: mdi:set-merge
-    color: red
+    color: pink
     description: Which ORFs one caller, both, or the annotation support
   - name: ORF detail
-    icon: mdi:information-outline
-    color: pink
-    description: Select an ORF in the pooled table to read its record beside it
-  - name: ORF rows
     icon: mdi:table
     color: gray
-    description: Each caller's per-library calls
+    description: The pooled ORFs with the record of the one picked
+    collapsed: true
+  - name: Calls per library
+    icon: mdi:table
+    color: gray
+    description: Each caller's calls, one row per library and ORF
     collapsed: true
   components:
+  # The tab's intro: the method, with its link, and how to read the tab.
   - component_type: text
-    tag: rb-orf-intro
-    section: ORFs at a glance
-    workflow_tag: riboseq
-    data_collection_tag: orf_overlap
-    title: Known coding sequences and new ORFs
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
+    order: 1
     body: >
-      Ribo-TISH and RiboCode call ORFs from different signals, keyed here by
-      their stop codon. ORFs outside the annotated CDS that both callers
-      report are the best supported new candidates.
+      [Ribo-TISH](https://github.com/zhpn1024/ribotish) and
+      [RiboCode](https://github.com/xryanglab/RiboCode) call translated ORFs from different
+      signals, compared here on their stop codon. ORFs outside the annotated CDS that both
+      callers report are the best supported new candidates.
+    tag: rb-orf-intro
+    index: orf-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: card
-    tag: rb-orf-card-pooled
-    section: ORFs at a glance
+  - component_type: interactive
     workflow_tag: riboseq
     data_collection_tag: orf_overlap
-    aggregation: nunique
+    interactive_component_type: MultiSelect
+    column_name: orf_class
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: pink
+    section: ORF filters
+    group: ORFs
+    tag: rb-orf-filter-class
+    index: orf-class-filter
+    title: ORF class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: orf_overlap
+    interactive_component_type: MultiSelect
+    column_name: gene_name
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: cyan
+    section: ORF filters
+    group: ORFs
+    tag: rb-orf-filter-gene
+    index: orf-gene-filter
+    title: Gene
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: riboseq
+    data_collection_tag: orf_overlap
+    interactive_component_type: RangeSlider
+    column_name: aa_length
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      custom_color: indigo
+    section: ORF filters
+    group: ORFs
+    tag: rb-orf-filter-length
+    index: orf-length-filter
+    title: Protein length (aa)
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  # One row per ORF, so a count splits into the classes as parts of a whole.
+  - component_type: card
+    workflow_tag: riboseq
+    data_collection_tag: orf_overlap
+    aggregation: count
     column_name: orf_id
     column_type: object
     secondary_layout: donut
     breakdown_col: orf_class
-    display: {icon_name: 'mdi:set-merge', title_font_size: xl, value_font_size: xl}
-    title: ORFs, both callers pooled
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rb-orf-card-ribotish
+    display:
+      icon_name: mdi:set-merge
+      icon_color: pink
+      caption: pooled over libraries, by class
     section: ORFs at a glance
+    tag: rb-orf-card-pooled
+    index: orf-card-pooled
+    title: ORFs
+    description: ORFs either caller reported in at least one library, split by class.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  # The per-caller tables hold one row per library and ORF: distinct ORFs are
+  # ranked by a parent column, never broken down by their own id.
+  - component_type: card
     workflow_tag: riboseq
     data_collection_tag: ribotish_orfs
     use: ribotish/orfs
     aggregation: nunique
     column_name: orf_id
     column_type: object
-    secondary_layout: donut
+    secondary_layout: top_n
     breakdown_col: orf_class
-    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
-    title: Ribo-TISH ORFs
-    title_size: sm
-    title_align: left
-    layout: {x: 2, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rb-orf-card-ribocode
+    top_n_count: 3
+    display:
+      icon_name: mdi:magnify-scan
+      icon_color: grape
+      caption: distinct ORFs, the largest classes
     section: ORFs at a glance
+    tag: rb-orf-card-ribotish
+    index: orf-card-ribotish
+    title: Ribo-TISH
+    description: Distinct ORFs Ribo-TISH reported in the libraries in view.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: riboseq
     data_collection_tag: ribocode_orfs
     use: ribocode/orfs
     aggregation: nunique
     column_name: orf_id
     column_type: object
-    secondary_layout: donut
-    breakdown_col: orf_class
-    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
-    title: RiboCode ORFs
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 1, w: 2, h: 2}
-  - component_type: card
-    tag: rb-orf-card-length
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display:
+      icon_name: mdi:sine-wave
+      icon_color: violet
+      caption: distinct ORFs, the richest libraries
     section: ORFs at a glance
+    tag: rb-orf-card-ribocode
+    index: orf-card-ribocode
+    title: RiboCode
+    description: Distinct ORFs RiboCode reported in the libraries in view.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: riboseq
-    data_collection_tag: ribocode_orfs
-    use: ribocode/orfs
+    data_collection_tag: orf_overlap
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
     column_name: aa_length
     column_type: int64
-    display: {icon_name: 'mdi:ruler', title_font_size: xl, value_font_size: xl}
-    title: RiboCode protein length (aa)
-    title_size: sm
-    title_align: left
-    layout: {x: 6, y: 1, w: 2, h: 2}
-
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:ruler
+      icon_color: indigo
+      caption: median, with its spread
+      decimals: 0
+    section: ORFs at a glance
+    tag: rb-orf-card-length
+    index: orf-card-length
+    title: Protein length (aa)
+    description: Median length of the pooled ORFs, the longest either caller reported.
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
-    tag: rb-orf-av-classes
-    index: rb-orf-av-classes
-    section: ORF classes per library
     workflow_tag: riboseq
     data_collection_tag: orf_calls
     viz_kind: stacked_taxonomy
@@ -1501,17 +1839,14 @@ tabs:
       normalise_to_one: true
       sort_by: abundance
       sample_sort: input
-      top_n: 12
-      controls_placement: header
+      top_n: 8
+    section: ORF classes per library
+    tag: rb-orf-classes
+    index: orf-classes
     title: ORF classes per library
-    description: Share of each library's ORFs per class. The level switch changes the caller; the annotated CDS dominates, so the other classes are the ones to compare.
-    title_size: h3
-    layout: {x: 0, y: 0, w: 8, h: 7}
-
+    description: Share of each library's ORFs per class. The level switch changes the caller; the annotated CDS dominates, so compare the other classes.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
-    tag: rb-orf-av-upset
-    index: rb-orf-av-upset
-    section: Caller agreement
     workflow_tag: riboseq
     data_collection_tag: orf_overlap
     viz_kind: upset_plot
@@ -1524,27 +1859,24 @@ tabs:
       show_set_sizes: true
       color_intersections_by: degree
       default_annotation_cols: [orf_class]
+    section: Caller agreement
+    tag: rb-orf-upset
+    index: orf-caller-upset
     title: ORFs per caller and annotation
     description: Each bar counts the ORFs in one combination of Ribo-TISH, RiboCode and the annotated CDS. New ORFs both callers report sit in the bar without the annotation.
-    title_size: h3
-    layout: {x: 0, y: 0, w: 8, h: 7}
-
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
-    tag: rb-orf-table-pooled
-    section: ORF detail
     workflow_tag: riboseq
     data_collection_tag: orf_overlap
     row_selection_enabled: true
     row_selection_column: orf_id
-    title: ORFs pooled over libraries
-    description: One row per ORF with the caller support; select a row to read it in the record beside it and narrow the per-library tables in the ORF rows section.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 5, h: 7}
-  - component_type: advanced_viz
-    tag: rb-orf-av-record
-    index: rb-orf-av-record
     section: ORF detail
+    tag: rb-orf-table-pooled
+    index: orf-table-pooled
+    title: ORFs pooled over libraries
+    description: One row per ORF with its caller support; a picked row opens its record and narrows the per-library calls.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
     workflow_tag: riboseq
     data_collection_tag: orf_overlap
     viz_kind: record_card
@@ -1560,74 +1892,31 @@ tabs:
         Support: [ribotish, ribocode, annotated_cds, ribotish_libraries, ribocode_libraries]
       link_templates:
         gene_id: "https://www.ensembl.org/id/{value}"
+    section: ORF detail
+    tag: rb-orf-record
+    index: orf-record
     title: ORF record
-    description: The ORF selected in the pooled table beside it, its gene and which caller reported it in how many libraries.
-    title_size: h3
-    layout: {x: 5, y: 0, w: 3, h: 7}
+    description: The ORF picked in the table, its gene and which caller reported it in how many libraries.
+    layout: {x: 5, y: 0, w: 3, h: 6}
   - component_type: table
-    tag: rb-orf-table-ribotish
-    section: ORF rows
     workflow_tag: riboseq
     data_collection_tag: ribotish_orfs
     use: ribotish/orfs
     row_selection_enabled: false
+    section: Calls per library
+    tag: rb-orf-table-ribotish
+    index: orf-table-ribotish
     title: Ribo-TISH calls per library
     description: One row per library and ORF with the Ribo-TISH initiation type and frame-test q-value.
-    title_size: h3
-    title_align: left
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
-    tag: rb-orf-table-ribocode
-    section: ORF rows
     workflow_tag: riboseq
     data_collection_tag: ribocode_orfs
     use: ribocode/orfs
     row_selection_enabled: false
+    section: Calls per library
+    tag: rb-orf-table-ribocode
+    index: orf-table-ribocode
     title: RiboCode calls per library
     description: One row per library and ORF with the RiboCode type, frame-0 P-sites and adjusted p-value.
-    title_size: h3
-    title_align: left
     layout: {x: 0, y: 6, w: 8, h: 6}
-
-  - component_type: interactive
-    tag: rb-orf-filter-class
-    index: rb-orf-class-filter
-    section: ORF scope
-    group: ORFs
-    workflow_tag: riboseq
-    data_collection_tag: orf_overlap
-    interactive_component_type: MultiSelect
-    column_name: orf_class
-    column_type: object
-    display: {title_size: md, custom_color: '#D81B60', icon_name: 'mdi:shape-outline'}
-    placement: left
-    title: ORF class
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: rb-orf-filter-gene
-    index: rb-orf-gene-filter
-    section: ORF scope
-    group: ORFs
-    workflow_tag: riboseq
-    data_collection_tag: orf_overlap
-    interactive_component_type: MultiSelect
-    column_name: gene_name
-    column_type: object
-    display: {title_size: md, custom_color: '#EC407A', icon_name: 'mdi:dna'}
-    placement: left
-    title: Gene
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
-    tag: rb-orf-filter-length
-    index: rb-orf-length-filter
-    section: ORF scope
-    group: ORFs
-    workflow_tag: riboseq
-    data_collection_tag: orf_overlap
-    interactive_component_type: RangeSlider
-    column_name: aa_length
-    column_type: int64
-    display: {title_size: md, custom_color: '#F06292', icon_name: 'mdi:ruler'}
-    placement: left
-    title: Protein length (aa)
-    layout: {x: 0, y: 6, w: 1, h: 3}
