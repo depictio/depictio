@@ -1,4 +1,4 @@
-"""Data Manifest contract — the remote-data entry point.
+"""Data Manifest contract: the remote-data entry point.
 
 A manifest is a flat index of remote files: one entry per file, keyed by a
 canonical entity/sample ``id`` and a ``type`` whose value is a data collection
@@ -7,7 +7,7 @@ the stability rules that matter here:
 
 - URLs are absolute (``s3://`` or ``https://``; ``http://`` only behind
   ``DEPICTIO_REMOTE_ALLOW_HTTP``).
-- The schema is closed — ``extra`` is the only open field.
+- The schema is closed: ``extra`` is the only open field.
 - ``version`` gates schema evolution.
 - An entry listed twice (same ``id``, ``type`` and ``url``) is refused.
 """
@@ -37,7 +37,7 @@ def is_remote_url(value: str) -> bool:
     """True if ``value`` is a remote location Depictio can ingest from.
 
     Scheme matching is case-insensitive (RFC 3986). Plain ``http://`` counts
-    only when ``DEPICTIO_REMOTE_ALLOW_HTTP`` is set — checked lazily so tests
+    only when ``DEPICTIO_REMOTE_ALLOW_HTTP`` is set, checked lazily so tests
     and airgapped deployments can opt in per-process.
     """
     lowered = value.lower()
@@ -166,7 +166,7 @@ class DataManifest(BaseModel):
     ) -> "DataManifest":
         """Parse a CSV manifest. Required columns: ``id``, ``type``, ``url``.
 
-        ``run`` is optional; any other column is folded into ``extra`` — the
+        ``run`` is optional; any other column is folded into ``extra``, the
         CSV affordance for the contract's single open field. ``field_map``
         remaps non-canonical column names onto the contract, keyed by
         canonical name (e.g. ``{"id": "sample", "url": "path"}``). Column
@@ -252,6 +252,19 @@ def _as_text(content: str | bytes) -> str:
     if isinstance(content, bytes):
         return content.decode("utf-8-sig")
     return content.removeprefix("﻿")
+
+
+def manifest_field_map(
+    *, id_field: str, type_field: str, url_field: str, run_field: str | None
+) -> dict[str, str]:
+    """The ``field_map`` for a manifest's column names, ``run`` only when one is named.
+
+    Keyed by canonical field, as ``DataManifest.from_csv`` / ``from_json`` take it.
+    """
+    field_map = {"id": id_field, "type": type_field, "url": url_field}
+    if run_field:
+        field_map["run"] = run_field
+    return field_map
 
 
 def _resolve_field_map(field_map: dict[str, str] | None) -> dict[str, str]:

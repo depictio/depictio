@@ -1007,19 +1007,35 @@ def load_project_file(path: str, project_name: str | None = None) -> dict:
     return config
 
 
-def _bound_project_file(path: str, project_name: str | None, bind: list[str]) -> dict:
-    """The project file as ``load_project_file`` reads it, with each ``--bind`` applied."""
-    config = load_project_file(path, project_name)
+def _apply_bind_flags(config: dict, bind: list[str], *, check_unbound: bool = False) -> None:
+    """Apply each ``--bind`` to ``config`` in place, printing what it bound.
+
+    ``check_unbound`` also fails on a template variable deferred for --bind
+    (``resolve_template(allow_missing_vars=True)``) that no binding replaced.
+    A ``BindingError`` is printed and exits with code 1.
+    """
     if not bind:
-        return config
-    from depictio.cli.cli.utils.bindings import BindingError, apply_bindings
+        return
+    from depictio.cli.cli.utils.bindings import (
+        BindingError,
+        apply_bindings,
+        assert_no_unbound_vars,
+    )
 
     try:
         for note in apply_bindings(config, list(bind)):
             rich_print_checked_statement(f"Bound {note}", "info")
+        if check_unbound:
+            assert_no_unbound_vars(config)
     except BindingError as exc:
         rich_print_checked_statement(str(exc), "error")
         raise typer.Exit(code=1)
+
+
+def _bound_project_file(path: str, project_name: str | None, bind: list[str]) -> dict:
+    """The project file as ``load_project_file`` reads it, with each ``--bind`` applied."""
+    config = load_project_file(path, project_name)
+    _apply_bind_flags(config, bind)
     return config
 
 
@@ -1642,20 +1658,7 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
             # --bind overrides the template author's scan choice per DC.
             # Applied after resolution so it wins over {DATA_ROOT} / {MANIFEST_URL}
             # substitution rather than being overwritten by it.
-            if bind:
-                from depictio.cli.cli.utils.bindings import (
-                    BindingError,
-                    apply_bindings,
-                    assert_no_unbound_vars,
-                )
-
-                try:
-                    for note in apply_bindings(template_resolved_config, list(bind)):
-                        rich_print_checked_statement(f"Bound {note}", "info")
-                    assert_no_unbound_vars(template_resolved_config)
-                except BindingError as exc:
-                    rich_print_checked_statement(str(exc), "error")
-                    raise typer.Exit(code=1)
+            _apply_bind_flags(template_resolved_config, bind, check_unbound=True)
 
             # An optional manifest DC the manifest lists nothing for is left
             # out here, as POST /projects/from_manifest does, rather than

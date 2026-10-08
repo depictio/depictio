@@ -7956,7 +7956,7 @@ async def import_dashboard_from_yaml(
     Returns:
         Created/updated dashboard information including dashboard_id
     """
-    # Public/demo mode hard-blocks imports — visitors are auto-minted temp
+    # Public/demo mode hard-blocks imports: visitors are auto-minted temp
     # users that pass `get_current_user`, so the frontend disable on the
     # Import tab is the only client-side gate. Mirror it here.
     if settings.auth.is_public_mode:
@@ -8072,7 +8072,7 @@ def dashboard_yaml_content(dashboard_doc: dict, project_name: str, child_tabs: l
     The shared core of ``GET /dashboards/{id}/yaml``, also used by the
     template exporter (``/projects/{id}/export_template``) so exported
     bundles and one-off dashboard exports can never drift apart. Enrichment
-    converts wf/dc ObjectIds to portable tags — the exact inverse of what
+    converts wf/dc ObjectIds to portable tags, the exact inverse of what
     ``_resolve_workflow_tags`` re-binds at import time.
     """
     # Single dashboard export (no children or is a child tab itself)

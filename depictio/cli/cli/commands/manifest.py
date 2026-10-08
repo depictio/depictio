@@ -22,8 +22,6 @@ from typing import Annotated, Optional
 import typer
 from rich.console import Console
 
-from depictio.models.models.manifest import is_remote_url
-
 app = typer.Typer()
 console = Console()
 
@@ -60,14 +58,14 @@ def _read_table(path: Path) -> tuple[list[str], list[dict]]:
     delimiter = "\t" if path.suffix.lower() in (".tsv", ".tab") else ","
     first_line = text.splitlines()[0]
     if delimiter not in first_line:
-        # Extension lied (or there is none) — fall back to whichever separator
+        # Extension lied (or there is none): fall back to whichever separator
         # actually appears in the header.
         for candidate in ("\t", ",", ";"):
             if candidate in first_line:
                 delimiter = candidate
                 break
     reader = csv.DictReader(text.splitlines(), delimiter=delimiter)
-    rows = [row for row in reader]
+    rows = list(reader)
     if not reader.fieldnames:
         raise typer.BadParameter(f"Could not read a header row from {path}")
     return list(reader.fieldnames), rows
@@ -76,10 +74,10 @@ def _read_table(path: Path) -> tuple[list[str], list[dict]]:
 def _looks_like_file(value: str) -> bool:
     if not value:
         return False
-    lowered = value.lower()
-    if "://" in lowered or "/" in lowered:
+    # A slash makes it a path or a URL, whatever its extension.
+    if "/" in value:
         return True
-    return any(lowered.endswith(ext) for ext in _FILE_HINTS)
+    return value.lower().endswith(_FILE_HINTS)
 
 
 def _detect_id_column(fieldnames: list[str]) -> str:
@@ -188,12 +186,15 @@ def from_table(
             value = (row.get(column) or "").strip()
             if not value:
                 # A blank cell is a legitimately absent file (single-end reads),
-                # not an error — just no entry for that role.
+                # not an error: just no entry for that role.
                 continue
-            url = value if is_remote_url(value) or "://" in value else None
-            if url is None:
+            if "://" in value:
+                # Already a URL, kept as written: its scheme is checked when the
+                # manifest is read.
+                url = value
+            else:
                 url = f"{prefix}/{value.removeprefix('./')}" if prefix else value
-                if not is_remote_url(url) and "://" not in url:
+                if "://" not in url:
                     local_examples.append(value)
             entry = {"id": entity, "type": column, "url": url}
             if run_col:
@@ -220,10 +221,10 @@ def from_table(
         out.write_text(json.dumps(entries, indent=2) + "\n")
     else:
         with out.open("w", newline="") as handle:
+            # An entry without "run" gets an empty cell (DictWriter's restval).
             writer = csv.DictWriter(handle, fieldnames=["id", "type", "url", "run"])
             writer.writeheader()
-            for entry in entries:
-                writer.writerow({**{"run": None}, **entry})
+            writer.writerows(entries)
 
     types = sorted({e["type"] for e in entries})
     console.print(f"[green]✓ {len(entries)} entries from {len(rows)} rows -> {out}[/green]")

@@ -19,6 +19,19 @@ def _is_url(value: str) -> bool:
     return "://" in value
 
 
+def _validated_local_location(location: str) -> str:
+    """A local data location once its placeholders are expanded (CLI context only).
+
+    A file passes as-is: a local manifest is a valid location, since it lists
+    the actual sources. Anything else is a scan root and must be an existing
+    directory (``DirectoryPath``).
+    """
+    path = Path(location)
+    if path.is_file():
+        return str(path)
+    return DirectoryPath(path=str(path)).path
+
+
 class WorkflowDataLocation(MongoModel):
     structure: str
     locations: list[str]
@@ -67,14 +80,7 @@ class WorkflowDataLocation(MongoModel):
                         )
                     # Replace the placeholder with the actual value
                     location = location.replace(f"{{{match}}}", env_value)
-                # A local manifest file is a valid data location (it lists the
-                # actual sources) — only directories go through the scan-root
-                # existence validation.
-                if Path(location).is_file():
-                    validated.append(str(Path(location)))
-                    continue
-                # Validate the expanded local path (existence check)
-                validated.append(DirectoryPath(path=str(Path(location))).path)
+                validated.append(_validated_local_location(location))
 
             return validated
         else:
@@ -159,14 +165,8 @@ class WorkflowRun(MongoModel):
                 # Replace the placeholder with the actual value
                 location = location.replace(f"{{{match}}}", env_value)
 
-            # A manifest run records the manifest itself as its location, and a
-            # manifest is a file. Only require a *directory* when the location is
-            # actually a scan root.
-            if Path(location).is_file():
-                return str(Path(location))
-
-            # Validate the expanded paths if in CLI context
-            return DirectoryPath(path=str(Path(location))).path
+            # A manifest run records the manifest itself as its location.
+            return _validated_local_location(location)
         else:
             return value
 

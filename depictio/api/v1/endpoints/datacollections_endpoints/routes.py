@@ -400,7 +400,7 @@ async def create_data_collection_from_upload(
 
 
 class CreateDCFromURLRequest(BaseModel):
-    """Body of POST /create_from_url — remote-URL twin of the upload form."""
+    """Body of POST /create_from_url: the remote-URL twin of the upload form."""
 
     project_id: str
     name: str
@@ -424,7 +424,7 @@ async def create_data_collection_from_url(
     """Create a data collection from a remote s3:// or https:// URL.
 
     Mirrors the ``/create_from_upload`` pipeline (scan + process via the CLI
-    helpers) for a remote URL instead of an uploaded file — no CLI needed on
+    helpers) for a remote URL instead of an uploaded file, no CLI needed on
     the client side. The URL is validated by the SSRF gateway
     (depictio/api/v1/remote_fetch.py) before anything is fetched; column
     validation for lat/lon happens at process time.

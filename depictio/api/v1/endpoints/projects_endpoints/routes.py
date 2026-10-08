@@ -222,6 +222,21 @@ async def _run_ingest_off_loop(fn, **kwargs):
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
 
 
+async def _ensure_cli_token_unless_dry_run(current_user, dry_run: bool) -> None:
+    """Mint the user's CLI token if missing, unless nothing is going to run.
+
+    The in-process CLI helpers call back into the API with the user's stored
+    token; a dry run only plans, so it needs none.
+    """
+    if dry_run:
+        return
+    from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+        _ensure_user_cli_token,
+    )
+
+    await _ensure_user_cli_token(current_user)
+
+
 def _reject_non_admin_in_public_mode(current_user, action: str) -> None:
     """Public/demo-mode gate shared by the project-mutating manifest routes.
 
@@ -738,12 +753,7 @@ async def ingest_manifest(
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
     _reject_non_admin_in_public_mode(current_user, "Manifest ingestion")
-    if not payload.dry_run:
-        from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
-            _ensure_user_cli_token,
-        )
-
-        await _ensure_user_cli_token(current_user)
+    await _ensure_cli_token_unless_dry_run(current_user, payload.dry_run)
     return await _run_ingest_off_loop(
         _ingest_manifest_into_project,
         project_id=payload.project_id,
@@ -762,24 +772,21 @@ async def refresh_manifest(
     payload: RefreshManifestRequest,
     current_user=Depends(get_user_or_anonymous),
 ):
-    """Re-fetch and re-ingest a project's manifest-backed data collections.
+    """Re-scan and re-ingest a project's data collections in place.
 
-    Overwrite-with-report semantics: File records sync to the manifest's
-    current entries (``sync_files`` beats the identity-hash skip) and each
-    Delta table is rebuilt from the resulting file set. A DC whose manifest
-    no longer lists its type is reported failed and left untouched.
-    ``dry_run=true`` reports what would refresh (per-DC entry counts) without
-    touching any data.
+    Covers every data collection the server can read again: any remote
+    source (manifest, url, s3_prefix), and a local one whose path is visible
+    from the server. Overwrite-with-report semantics: File records sync to
+    the source's current files (``sync_files`` beats the identity-hash skip)
+    and each Delta table is rebuilt from the resulting file set. A manifest
+    DC whose manifest no longer lists its type is reported failed and left
+    untouched. ``dry_run=true`` reports what would refresh (per-DC entry
+    counts for manifest DCs) without touching any data.
     """
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
     _reject_non_admin_in_public_mode(current_user, "Manifest refresh")
-    if not payload.dry_run:
-        from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
-            _ensure_user_cli_token,
-        )
-
-        await _ensure_user_cli_token(current_user)
+    await _ensure_cli_token_unless_dry_run(current_user, payload.dry_run)
     return await _run_ingest_off_loop(
         _refresh_manifest_in_project,
         project_id=payload.project_id,
@@ -844,7 +851,7 @@ async def export_project_template(
 
 @projects_endpoint_router.get("/{project_id}/storage", response_model=ProjectStorageConfigOut)
 async def get_project_storage(project_id: str, current_user=Depends(get_user_or_anonymous)):
-    """Storage config of a project (secret never returned — only ``has_secret``)."""
+    """Storage config of a project (the secret is never returned, only ``has_secret``)."""
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
     return await asyncio.to_thread(_get_project_storage, project_id, current_user)
@@ -912,7 +919,7 @@ async def test_run_storage(
 async def list_project_templates(current_user=Depends(get_user_or_anonymous)):
     """List the project templates shipped with this instance.
 
-    Backs the builder UI's template picker — the ``manifest_capable`` flag
+    Backs the builder UI's template picker: the ``manifest_capable`` flag
     marks templates usable with ``POST /projects/from_manifest``. Purely
     filesystem-derived; template YAMLs that fail to parse are skipped.
     """
@@ -939,12 +946,7 @@ async def create_project_from_manifest(
         raise HTTPException(status_code=401, detail="User not found.")
     # Mirror POST /projects/create's public/demo-mode gate.
     _reject_non_admin_in_public_mode(current_user, "Project creation")
-    if not payload.dry_run:
-        from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
-            _ensure_user_cli_token,
-        )
-
-        await _ensure_user_cli_token(current_user)
+    await _ensure_cli_token_unless_dry_run(current_user, payload.dry_run)
     return await asyncio.to_thread(
         _create_project_from_manifest,
         manifest_url=payload.manifest_url,

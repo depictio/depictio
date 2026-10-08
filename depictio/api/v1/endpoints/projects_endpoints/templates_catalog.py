@@ -41,7 +41,7 @@ class TemplateInfo(BaseModel):
     name: str
     description: str | None = None
     version: str | None = None
-    # True when at least one DC uses scan.mode manifest — only these templates
+    # True when at least one DC uses scan.mode manifest: only these templates
     # can back the "create from manifest" flow.
     manifest_capable: bool = False
     # True when the template reads a run folder: it resolves against
@@ -156,7 +156,7 @@ def list_templates_catalog() -> TemplateCatalog:
     """Scan the shipped templates and describe each one for the picker UI.
 
     Templates that fail to load are skipped with a warning rather than
-    failing the whole listing — one broken fixture must not blank the picker.
+    failing the whole listing: one broken fixture must not blank the picker.
     Only the bundled projects roots are walked, never the repository or
     site-packages around them.
     """

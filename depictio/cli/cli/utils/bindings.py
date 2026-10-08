@@ -1,7 +1,7 @@
 """``--bind TAG=LOCATION``: point one data collection at where its data actually is.
 
 The user names a *location*; the scan mode is inferred from its shape. That is
-the whole point — a template author's choice of scan mode should not dictate
+the whole point: a template author's choice of scan mode should not dictate
 where the person instantiating it is allowed to keep data.
 
     /scratch/run42/*.csv     -> recursive  (local walk, glob on the basename)
@@ -34,7 +34,6 @@ if TYPE_CHECKING:
     from depictio.cli.cli.utils.data_root import DataRoot
 
 GLOB_CHARS = ("*", "?", "[")
-REMOTE_SCHEMES = ("s3://", "http://", "https://")
 
 # Scan modes that already name a remote location. A remote data root has
 # nothing to add to them, so they are left exactly as the template wrote them.
@@ -87,14 +86,12 @@ def id_regex_from_glob(pattern: str) -> str | None:
     wildcards there is no defensible answer as to which one is the id, and a
     wrong join key is worse than none.
     """
-    import re as _re
-
     if pattern.count("*") != 1 or "?" in pattern or "[" in pattern:
         return None
     head, _, tail = pattern.partition("*")
     if not head and not tail:
         return None
-    return f"^{_re.escape(head)}([^/]+?){_re.escape(tail)}$"
+    return f"^{re.escape(head)}([^/]+?){re.escape(tail)}$"
 
 
 def infer_scan(location: str, existing_scan: dict | None = None) -> tuple[dict, str | None]:
@@ -151,7 +148,7 @@ def infer_scan(location: str, existing_scan: dict | None = None) -> tuple[dict, 
     path = Path(location).expanduser()
     if path.is_dir():
         # Directory with no glob: keep whatever pattern the template already
-        # declared for this DC — the user is repointing the root, not
+        # declared for this DC: the user is repointing the root, not
         # redefining what counts as a match. Only fall back to "everything"
         # when there is no prior pattern to preserve.
         pattern = ".*"
@@ -302,7 +299,7 @@ def assert_no_unbound_vars(config: dict) -> None:
 
     Only ``workflows`` is checked: that is what drives scanning and ingestion.
     ``template_origin`` is provenance recorded for the DB, and a variable that
-    was never provided legitimately shows up there — as its original ``{VAR}``
+    was never provided legitimately shows up there, as its original ``{VAR}``
     placeholder, which is what this restores.
     """
     found = _find_sentinels(config.get("workflows"))
@@ -386,9 +383,9 @@ def apply_bindings(config: dict, specs: list[str]) -> list[str]:
         for workflow in config.get("workflows") or []
     }
 
+    # Keyed by workflow name (or identity, for an unnamed one).
     roots: dict[str, str] = {}
-    remote_locations: dict[str, list[str]] = {}
-    touched: dict[str, dict] = {}
+    remote_binds: dict[str, tuple[dict, list[str]]] = {}  # key -> (workflow, locations)
     for tag, location in parsed:
         if tag not in index:
             raise BindingError(
@@ -401,58 +398,54 @@ def apply_bindings(config: dict, specs: list[str]) -> list[str]:
         dc_config["scan"] = scan
         notes.append(f"{tag} -> {scan['mode']} ({location})")
 
-        workflow_key = str(workflow.get("name") or id(workflow))
-        touched[workflow_key] = workflow
+        workflow_name = workflow.get("name") or id(workflow)
+        workflow_key = str(workflow_name)
         if not local_root:
-            remote_locations.setdefault(workflow_key, []).append(location)
+            remote_binds.setdefault(workflow_key, (workflow, []))[1].append(location)
+            continue
 
-        if local_root:
-            workflow_name = workflow.get("name") or id(workflow)
-            previous = roots.get(str(workflow_name))
-            if previous and previous != local_root:
-                # data_location is per-workflow, so two local binds under one
-                # workflow cannot disagree on the walk root.
-                raise BindingError(
-                    f"Conflicting local roots for workflow {workflow_name!r}: "
-                    f"{previous} vs {local_root}. Local --bind targets in the same "
-                    "workflow must share a directory."
-                )
-            current = original_locations.get(id(workflow), [])
-            unbound = _unbound_recursive_tags(workflow, bound_tags)
-            if unbound and not _same_local_root(current, local_root):
-                # Placeholders shown as the template wrote them, not as sentinels.
-                walked = ", ".join(_SENTINEL_RE.sub(r"{\1}", str(item)) for item in current)
-                keep_root = (
-                    f", or bind {tag} to a glob in {walked}"
-                    if len(current) == 1 and "{" not in walked
-                    else ""
-                )
-                raise BindingError(
-                    f"Cannot bind {tag} to {local_root}: workflow {workflow_name!r} scans "
-                    f"one local folder, and {', '.join(unbound)} (not bound) scan "
-                    f"{walked or 'no folder yet'}. Bind "
-                    f"{'it' if len(unbound) == 1 else 'them'} to the same folder too"
-                    f"{keep_root}."
-                )
-            roots[str(workflow_name)] = local_root
-            data_location = workflow.setdefault("data_location", {})
-            data_location["structure"] = data_location.get("structure") or "flat"
-            data_location["locations"] = [local_root]
+        previous = roots.get(workflow_key)
+        if previous and previous != local_root:
+            # data_location is per-workflow, so two local binds under one
+            # workflow cannot disagree on the walk root.
+            raise BindingError(
+                f"Conflicting local roots for workflow {workflow_name!r}: "
+                f"{previous} vs {local_root}. Local --bind targets in the same "
+                "workflow must share a directory."
+            )
+        current = original_locations.get(id(workflow), [])
+        unbound = _unbound_recursive_tags(workflow, bound_tags)
+        if unbound and not _same_local_root(current, local_root):
+            # Placeholders shown as the template wrote them, not as sentinels.
+            walked = ", ".join(_SENTINEL_RE.sub(r"{\1}", str(item)) for item in current)
+            keep_root = (
+                f", or bind {tag} to a glob in {walked}"
+                if len(current) == 1 and "{" not in walked
+                else ""
+            )
+            raise BindingError(
+                f"Cannot bind {tag} to {local_root}: workflow {workflow_name!r} scans "
+                f"one local folder, and {', '.join(unbound)} (not bound) scan "
+                f"{walked or 'no folder yet'}. Bind "
+                f"{'it' if len(unbound) == 1 else 'them'} to the same folder too"
+                f"{keep_root}."
+            )
+        roots[workflow_key] = local_root
+        data_location = workflow.setdefault("data_location", {})
+        data_location["structure"] = data_location.get("structure") or "flat"
+        data_location["locations"] = [local_root]
 
     # A workflow whose bindings are all remote has no local root left to walk,
     # yet data_location may still hold the template's placeholder (e.g.
     # ['{MANIFEST_URL}']). Remote scan modes ignore it, but leaving an unresolved
     # sentinel there would trip assert_no_unbound_vars. Record where the data
     # actually came from instead.
-    for workflow_key, workflow in touched.items():
+    for workflow_key, (workflow, locations) in remote_binds.items():
         if workflow_key in roots:
-            continue
-        locations = remote_locations.get(workflow_key)
-        if not locations:
             continue
         data_location = workflow.setdefault("data_location", {})
         current = data_location.get("locations") or []
-        if any("__DEPICTIO_UNBOUND_" in str(item) for item in current) or not current:
+        if not current or any("__DEPICTIO_UNBOUND_" in str(item) for item in current):
             data_location["structure"] = data_location.get("structure") or "flat"
             data_location["locations"] = locations
 

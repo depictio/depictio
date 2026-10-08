@@ -275,7 +275,7 @@ def set_ingestion_step(
     Unlike ``upsert_ingestion_step`` (read-modify-write, fine for a single
     writer), this uses a positional update so concurrent workers updating
     *different* steps of the same run can't lose each other's writes. The step
-    must have been seeded at run creation — an unknown name is not appended.
+    must have been seeded at run creation: an unknown name is not appended.
     Returns False if the run or the step name is unknown.
     """
     result = ingestion_runs_collection.update_one(

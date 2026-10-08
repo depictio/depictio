@@ -202,8 +202,8 @@ def validate_remote_url(url: str, policy: RemoteConfig | None = None) -> None:
 
     ``s3://`` URLs skip the DNS/IP checks: they are read through the object
     store client, with the credentials :func:`s3_read_target` resolves for
-    them, not fetched over arbitrary HTTP. ``policy`` lets the redirect loop reuse one policy read
-    across hops; callers normally leave it unset.
+    them, not fetched over arbitrary HTTP. ``policy`` lets the redirect loop
+    reuse one policy read across hops; callers normally leave it unset.
     """
     policy = policy if policy is not None else remote_policy()
     parsed = urlparse(url)
