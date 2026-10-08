@@ -13,19 +13,22 @@ Server context (API process, Celery worker), in order:
 1. a malformed location is refused;
 2. a location in the instance's own bucket is refused, before anything else
    can match it: that bucket holds every project's data;
-3. a location on ``public_s3_buckets`` is read unsigned (kind ``public``);
-4. a project with storage settings reads with those settings and nothing
-   else (kind ``project``): an empty access key reads unsigned against the
-   project's endpoint, a key without its secret is refused, the instance's
-   keys are never mixed in;
-5. a location on ``credentialed_s3_buckets`` is read with the server's own
+3. a project whose storage settings carry keys for this very bucket reads
+   with them (kind ``project``), even when the bucket is also on
+   ``public_s3_buckets``: its private objects stay readable;
+4. a location on ``public_s3_buckets`` is read unsigned (kind ``public``);
+5. any other project with storage settings reads with those settings and
+   nothing else (kind ``project``): an empty access key reads unsigned
+   against the project's endpoint, a key without its secret is refused, the
+   instance's keys are never mixed in;
+6. a location on ``credentialed_s3_buckets`` is read with the server's own
    ambient credentials, the boto3 / object-store default chain (kind
    ``ambient``);
-6. anything else is refused.
+7. anything else is refused.
 
 The instance's credentials are never used for a user-supplied location in
-server context. CLI context keeps its order: public, project, then the
-instance credentials of the CLI configuration (kind ``instance``), then the
+server context. CLI context keeps its order: the project's keys for this
+bucket, public, any other project settings, then the instance credentials of the CLI configuration (kind ``instance``), then the
 ambient chain when that configuration carries no keys.
 
 This module sits under ``depictio.models`` so the CLI-only install can use
@@ -606,6 +609,17 @@ def _has_instance_keys(instance_s3: InstanceS3 | None) -> bool:
     return bool(instance_s3.aws_access_key_id) and bool(instance_s3.aws_secret_access_key)
 
 
+def holds_keys_for(config: ProjectS3Config, bucket: str) -> bool:
+    """Whether ``config`` carries an access key for ``bucket`` itself.
+
+    Such settings win over the public list: a bucket an administrator lists as
+    public may still hold objects only the project's keys can read. Settings
+    for another bucket, or without a key, leave the public list first, so a
+    project with keys for its own bucket still reads a public one unsigned.
+    """
+    return bool(config.access_key_id.strip()) and config.bucket == bucket
+
+
 def resolve_s3_target(
     url: str,
     *,
@@ -629,6 +643,8 @@ def resolve_s3_target(
             f"{url} is in the bucket that holds this Depictio instance's own data, which "
             "cannot be read as a data source."
         )
+    if project_storage is not None and holds_keys_for(project_storage, bucket):
+        return project_target(project_storage, bucket, key, timeout_s=timeout_s)
     if bucket_list_matches(policy.public_s3_buckets, bucket, key):
         return public_target(bucket, key, timeout_s=timeout_s)
     if project_storage is not None:
