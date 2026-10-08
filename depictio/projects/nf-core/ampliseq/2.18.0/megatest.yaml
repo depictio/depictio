@@ -66,6 +66,9 @@ keys:
   # level-2 for the recipe defaults).
   - qiime2/ancombc/differentials/Category-habitat-level-2/*_slice.csv
   - qiime2/ancombc/differentials/Category-habitat-level-3/*_slice.csv
+  # Per-sample read tracking (read_tracking) and PERMANOVA per metric (beta_adonis).
+  - overall_summary.tsv
+  - qiime2/diversity/beta_diversity/adonis/*/adonis.tsv
 prefix_keys: []
 renames: {}
 # Megatest-specific terms that must never appear in the dashboard texts

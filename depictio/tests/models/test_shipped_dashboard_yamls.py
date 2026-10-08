@@ -261,7 +261,9 @@ def test_component_sections_are_declared_in_the_right_list(path: Path):
     section under `filter_sections` fails silently — the section still renders,
     just expanded and with no icon, which looks like a styling slip rather than
     a mis-filed declaration. Interactive components live in the filter panel;
-    everything else lives in the grid.
+    everything else lives in the grid, except the controls of a grid section's
+    filter bar (`filter_bar`, or `display: strip`), which name that grid
+    section (stripLayout.ts `isBarMember`).
     """
     doc = yaml.safe_load(path.read_text())
     errors: list[str] = []
@@ -269,6 +271,11 @@ def test_component_sections_are_declared_in_the_right_list(path: Path):
         declared = {
             "filter_sections": {s.get("name") for s in tab.get("filter_sections") or []},
             "grid_sections": {s.get("name") for s in tab.get("grid_sections") or []},
+        }
+        bar_sections = {
+            s.get("name")
+            for s in tab.get("grid_sections") or []
+            if s.get("filter_bar") or s.get("display") == "strip"
         }
         for comp in tab.get("components") or []:
             if not isinstance(comp, dict):
@@ -282,6 +289,12 @@ def test_component_sections_are_declared_in_the_right_list(path: Path):
                 else ("grid_sections", "filter_sections")
             )
             if section in declared[mine]:
+                continue
+            if (
+                comp.get("component_type") == "interactive"
+                and comp.get("placement") != "top"
+                and section in bar_sections
+            ):
                 continue
             where = f" (it is declared under {other})" if section in declared[other] else ""
             errors.append(

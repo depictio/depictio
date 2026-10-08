@@ -117,13 +117,18 @@ STATIC_IDS = {
             "alpha_diversity_multi_canonical": "646b0f3c1e4a2d7f8e5b8cda",
             "phylogenetic_tree_canonical": "646b0f3c1e4a2d7f8e5b8cdb",
             "phylogenetic_tree_metadata_canonical": "646b0f3c1e4a2d7f8e5b8cdc",
+            # Overview figures: reads kept per sample, PERMANOVA per metric.
+            "read_tracking": "646b0f3c1e4a2d7f8e5b8cdd",
+            "beta_adonis": "646b0f3c1e4a2d7f8e5b8cde",
         },
         "dashboards": {
             # The main tab's `_id` IS the project id — the same convention
             # advanced_viz_showcase follows (…8d00 for both). It was listed as
             # …8cb7, an id no shipped seed carries, so every dashboard-level
-            # cleanup keyed on this table missed the main tab.
-            "ampliseq_multiqc": "646b0f3c1e4a2d7f8e5b8ca2",
+            # cleanup keyed on this table missed the main tab. The main tab is
+            # the Overview; MultiQC, the main tab until v2, is a child tab.
+            "ampliseq_overview": "646b0f3c1e4a2d7f8e5b8ca2",
+            "ampliseq_multiqc": "646b0f3c1e4a2d7f8e5b8cc6",
             # Phase E — Alpha Diversity (tab 1) + Phylogeny (tab 5) tabs.
             "ampliseq_alpha_diversity": "646b0f3c1e4a2d7f8e5b8cbe",
             "ampliseq_community": "646b0f3c1e4a2d7f8e5b8cb3",

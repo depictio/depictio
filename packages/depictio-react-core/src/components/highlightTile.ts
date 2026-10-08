@@ -88,7 +88,7 @@ export function findHighlightSource(
 
 /**
  * How a highlight names its figure: the figure's index when it is readable
- * (a template's `alpha-boxplot-by-habitat`), else its title when no other
+ * (a template's `alpha-boxplot-by-group`), else its title when no other
  * component of its tab has the same one. An index minted by the editor is a
  * UUID that a re-import replaces, and a title is what survives it.
  */
