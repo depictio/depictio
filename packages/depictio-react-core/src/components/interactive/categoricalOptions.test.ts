@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   MAX_STRIP_CHIPS,
+  MAX_STRIP_SEGMENT_CHARS,
   MAX_STRIP_SEGMENTS,
   categoricalDisplay,
   chipFilterValue,
@@ -38,6 +39,13 @@ describe('categoricalDisplay', () => {
     expect(categoricalDisplay(MAX_STRIP_CHIPS)).toBe('chips');
     expect(categoricalDisplay(MAX_STRIP_CHIPS + 1)).toBe('list');
     expect(categoricalDisplay(5, 2, 4)).toBe('list');
+  });
+
+  it('sends values too long for a segment to the dropdown', () => {
+    expect(categoricalDisplay(['EZH2', 'FOXA1'])).toBe('segments');
+    expect(categoricalDisplay(['GM12878_FAST', 'GM12878_OMNI', 'GM12878_STD'])).toBe('chips');
+    expect(categoricalDisplay(['x'.repeat(MAX_STRIP_SEGMENT_CHARS)])).toBe('segments');
+    expect(categoricalDisplay(['x'.repeat(MAX_STRIP_SEGMENT_CHARS + 1)])).toBe('chips');
   });
 });
 
