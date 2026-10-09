@@ -39,12 +39,17 @@ else
     # exec so gunicorn replaces this shell as PID 1 and receives SIGTERM
     # directly — enables graceful worker shutdown on `docker stop` / pod
     # termination instead of waiting for SIGKILL.
+    #
+    # --timeout must stay >= the CLI's longest client timeout (300 s on
+    # /deltatables/upsert). At 120 s the worker was killed while the CLI was
+    # still waiting, so the CLI saw a dropped connection rather than a clean 504
+    # and could not tell a slow table from a broken server.
     exec gunicorn \
         depictio.api.main:app \
         --bind "$FASTAPI_HOST:$FASTAPI_PORT" \
         --workers "$FASTAPI_WORKERS" \
         --worker-class uvicorn.workers.UvicornWorker \
-        --timeout 120 \
+        --timeout 300 \
         --keep-alive 5 \
         --preload \
         --config depictio/api/gunicorn_conf.py

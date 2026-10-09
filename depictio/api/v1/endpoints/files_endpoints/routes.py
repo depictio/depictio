@@ -1,3 +1,4 @@
+import asyncio
 import mimetypes
 import posixpath
 from urllib.parse import unquote
@@ -5,7 +6,7 @@ from urllib.parse import unquote
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from pymongo import UpdateOne
 from pymongo.errors import BulkWriteError
 
@@ -26,8 +27,21 @@ files_endpoint_router = APIRouter()
 files_collection = db[settings.mongodb.collections.files_collection]
 
 
+#: Upper bound on one upsert batch. The CLI used to send every file of a data
+#: collection in a single request, which on a large run produced a body big
+#: enough to outlive its own 120 s timeout. The CLI now chunks; this makes the
+#: limit explicit rather than emergent, and /utils/capabilities advertises it so
+#: a client can size its chunks instead of discovering the ceiling by failing.
+MAX_FILES_PER_BATCH = 5000
+
+#: Upper bound on one delete_batch request, files and runs alike. The request
+#: models enforce this constant and /utils/capabilities reports it, so the two
+#: cannot disagree.
+MAX_IDS_PER_DELETE_BATCH = MAX_FILES_PER_BATCH
+
+
 class UpsertFilesBatchRequest(BaseModel):
-    files: list[File]
+    files: list[File] = Field(..., max_length=MAX_FILES_PER_BATCH)
     update: bool = False
 
 
@@ -60,15 +74,32 @@ async def create_file(payload: UpsertFilesBatchRequest, current_user=Depends(get
         # Use a different update operator based on the `update` flag.
         if payload.update:
             # $set will update the file if it exists; upsert=True means it will insert if not found.
-            op = UpdateOne({"_id": file_obj.id}, {"$set": file_data}, upsert=True)
+            #
+            # `registration_time` is deliberately moved out of the $set payload and
+            # into $setOnInsert: it records when the file first entered depictio, so
+            # it must survive every later re-scan. The CLI never sends a value for it
+            # (File's default_factory stamps "now" on each scan) and `mongo()` uses
+            # exclude_unset=False, so a blanket $set would rewrite the original
+            # timestamp with the current scan's — and the watcher's default
+            # incremental mode sends update=True every cycle, which would converge
+            # every file's registration_time on "recently". Same discipline as
+            # `scan_results` in runs_endpoints/routes.py and `created_at` in
+            # monitoring/store.py.
+            set_data = {k: v for k, v in file_data.items() if k != "registration_time"}
+            update_doc: dict = {"$set": set_data}
+            if "registration_time" in file_data:
+                update_doc["$setOnInsert"] = {"registration_time": file_data["registration_time"]}
+            op = UpdateOne({"_id": file_obj.id}, update_doc, upsert=True)
         else:
             # $setOnInsert will only insert the file if it doesn't already exist.
             op = UpdateOne({"_id": file_obj.id}, {"$setOnInsert": file_data}, upsert=True)
         operations.append(op)
 
     try:
-        # Perform the bulk upsert
-        result = files_collection.bulk_write(operations, ordered=False)
+        # Perform the bulk upsert. pymongo is synchronous, so running it inline
+        # in an async handler blocks the whole worker's event loop for the
+        # duration — and a scan sends every file of a data collection at once.
+        result = await asyncio.to_thread(files_collection.bulk_write, operations, ordered=False)
 
         if payload.update:
             # When update=True, some files might be updated and some inserted.
@@ -164,6 +195,43 @@ def _can_read_data_collection(data_collection_id: ObjectId, user_oid: ObjectId) 
         )
         is not None
     )
+
+
+class DeleteFilesBatchRequest(BaseModel):
+    file_ids: list[str] = Field(..., min_length=1, max_length=MAX_IDS_PER_DELETE_BATCH)
+
+
+@files_endpoint_router.post("/delete_batch")
+async def delete_files_batch(
+    payload: DeleteFilesBatchRequest, current_user=Depends(get_current_user)
+):
+    """
+    Delete many files in one request.
+
+    Scan cleanup used to issue one blocking round-trip per file, so removing a
+    stale run meant thousands of sequential requests.
+
+    Unknown or malformed ids are counted as ``not_found`` rather than rejected:
+    the caller is reconciling its own view of the registry against the server's,
+    and a partially stale list must not fail the whole cleanup.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+
+    requested = len(payload.file_ids)
+    oids = [ObjectId(raw_id) for raw_id in payload.file_ids if ObjectId.is_valid(raw_id)]
+
+    deleted = 0
+    if oids:
+        # Same predicate as delete_file: admin bypass keyed on the caller, never
+        # on a document field.
+        query: dict = {"_id": {"$in": oids}}
+        if not current_user.is_admin:
+            query["permissions.owners._id"] = ObjectId(current_user.id)
+        result = await asyncio.to_thread(files_collection.delete_many, query)
+        deleted = result.deleted_count
+
+    return {"requested": requested, "deleted": deleted, "not_found": requested - deleted}
 
 
 @files_endpoint_router.delete("/delete/{file_id}")

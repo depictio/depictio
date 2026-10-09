@@ -109,17 +109,37 @@ class ConnectionManager:
     async def _handle_pubsub_message(self, channel: str, data: str) -> None:
         """Handle incoming pub/sub message from another instance."""
         try:
-            # Extract dashboard_id from channel
-            # Channel format: depictio:events:dashboard:{dashboard_id}
+            # Channel format: depictio:events:{scope}:{id}
             parts = channel.split(":")
-            if len(parts) >= 4 and parts[2] == "dashboard":
-                dashboard_id = parts[3]
-                message_data = json.loads(data)
+            if len(parts) < 4:
+                return
+            scope, scope_id = parts[2], parts[3]
 
-                # Broadcast to local connections subscribed to this dashboard
-                await self._broadcast_to_dashboard_local(dashboard_id, message_data)
+            if scope == "dashboard":
+                # Hot path for every realtime update — left exactly as it was.
+                await self._broadcast_to_dashboard_local(scope_id, json.loads(data))
+            elif scope == "dc":
+                # Published by whichever process wrote the data (an API worker
+                # or a Celery worker). Only this process knows which of its own
+                # WebSocket clients exist, so the fan-out happens here rather
+                # than at the publisher, which cannot see them.
+                await self._broadcast_dc_update_local(scope_id, json.loads(data))
         except Exception as e:
             logger.error(f"Error handling pub/sub message: {e}")
+
+    async def _broadcast_dc_update_local(self, dc_id: str, message_data: dict[str, Any]) -> None:
+        """Relay a DC-scoped event to every locally-subscribed dashboard.
+
+        Dashboards subscribe by dashboard id, not by data collection, so we
+        cannot narrow this further without a subscription registry keyed on DC.
+        Clients already filter on ``data_collection_id`` — the field is in the
+        payload — so an extra message to an uninterested dashboard is a no-op
+        on the client, not a visible refresh.
+        """
+        for dashboard_id in list(self._dashboard_subscriptions.keys()):
+            await self._broadcast_to_dashboard_local(
+                dashboard_id, {**message_data, "dashboard_id": dashboard_id}
+            )
 
     async def connect(
         self,

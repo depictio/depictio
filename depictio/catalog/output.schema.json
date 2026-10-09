@@ -158,6 +158,12 @@
                 "box",
                 "violin",
                 "histogram",
+                "ecdf",
+                "strip",
+                "area",
+                "funnel",
+                "density_heatmap",
+                "density_contour",
                 "heatmap"
               ],
               "type": "string"

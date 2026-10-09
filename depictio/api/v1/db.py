@@ -56,6 +56,10 @@ groups_collection = db[settings.mongodb.collections.groups_collection]
 deltatables_collection = db[settings.mongodb.collections.deltatables_collection]
 jbrowse_collection = db[settings.mongodb.collections.jbrowse_collection]
 dashboards_collection = db[settings.mongodb.collections.dashboards_collection]
+dashboard_versions_collection = db[settings.mongodb.collections.dashboard_versions_collection]
+dashboard_version_counters_collection = db[
+    settings.mongodb.collections.dashboard_version_counters_collection
+]
 initialization_collection = db[settings.mongodb.collections.initialization_collection]
 projects_collection = db[settings.mongodb.collections.projects_collection]
 multiqc_collection = db[settings.mongodb.collections.multiqc_collection]
@@ -67,4 +71,6 @@ instance_settings_collection = db[settings.mongodb.collections.instance_settings
 branding_assets_collection = db[settings.mongodb.collections.branding_assets_collection]
 telemetry_collection = db[settings.mongodb.collections.telemetry_collection]
 comment_threads_collection = db[settings.mongodb.collections.comment_threads_collection]
+cli_agents_collection = db[settings.mongodb.collections.cli_agents_collection]
+jobs_collection = db[settings.mongodb.collections.jobs_collection]
 test_collection = db[settings.mongodb.collections.test_collection]

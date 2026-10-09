@@ -152,6 +152,7 @@ export type GuideActionKey =
 export type GuideEditActionKey =
   | 'drag'
   | 'edit'
+  | 'history'
   | 'duplicate'
   | 'move-section'
   | 'copy-tab'
@@ -246,6 +247,10 @@ export interface GuideModelInput<T extends DashboardSummary = DashboardSummary> 
   inspector?: boolean;
   /** 'edit' adds the editor's per-tile menu. */
   mode?: 'view' | 'edit';
+  /** Whether the family has a saved version, the condition the menu offers
+   *  History on. Defaults to true: every save writes one, so only a dashboard
+   *  never saved since it was created has none. */
+  hasVersions?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -309,6 +314,10 @@ const ACTION_ORDER: GuideActionKey[] = [
 export const GUIDE_EDIT_ACTIONS: Record<GuideEditActionKey, ActionInfo> = {
   drag: styled(TILE_ACTION_STYLE.drag, 'Grab it to move the tile; its edges resize it.'),
   edit: styled(EDIT_MENU_STYLE.edit, 'Opens the component in the builder.'),
+  history: styled(
+    EDIT_MENU_STYLE.history,
+    'See this component across saved versions, compare two, restore one.',
+  ),
   duplicate: styled(
     EDIT_MENU_STYLE.duplicate,
     'Adds a copy right below it (cards, filters and figures).',
@@ -332,6 +341,7 @@ export const GUIDE_EDIT_ACTIONS: Record<GuideEditActionKey, ActionInfo> = {
 const EDIT_ACTION_ORDER: GuideEditActionKey[] = [
   'drag',
   'edit',
+  'history',
   'duplicate',
   'move-section',
   'copy-tab',
@@ -433,6 +443,7 @@ export function buildGuideModel<T extends DashboardSummary>(
     analysisAvailable,
     inspector = false,
     mode = 'view',
+    hasVersions = true,
   } = input;
 
   // Tabs, as the sidebar groups them.
@@ -519,6 +530,7 @@ export function buildGuideModel<T extends DashboardSummary>(
     mode === 'edit'
       ? countActions(components, EDIT_ACTION_ORDER, GUIDE_EDIT_ACTIONS, (m) => {
           const keys: GuideEditActionKey[] = ['drag', 'edit'];
+          if (hasVersions) keys.push('history');
           if (canDuplicate(m.component_type)) keys.push('duplicate');
           if (hasSections) keys.push('move-section');
           if (hasOtherTabs && canCopyToTab(m)) keys.push('copy-tab');

@@ -70,6 +70,9 @@ def test_multi_tab_import_stores_the_group_and_export_gives_it_back():
         patch(f"{routes_mod}.dashboards_collection", db.dashboards),
         patch(f"{routes_mod}.projects_collection", db.projects),
         patch(f"{routes_mod}.get_project_visibility", lambda _project_id: False),
+        # The import records a version; not what this test is about, and the
+        # capture would otherwise wait on the real Mongo.
+        patch(f"{routes_mod}._capture_version_quietly"),
     ):
         _import_multi_tab_dashboard(yaml_data, project_id, overwrite=False, current_user=user)
 

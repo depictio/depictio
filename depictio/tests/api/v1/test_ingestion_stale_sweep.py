@@ -112,3 +112,25 @@ class TestUpdatedAtStamping:
         # Written now, so a sweep at the real current time leaves it running.
         assert store.mark_stale_ingestion_runs() == 0
         assert _doc(runs, "live")["status"] == "running"
+
+    def test_replacing_a_step_refreshes_updated_at_and_keeps_one_entry(self, runs):
+        # The in-place path, not just the append: a long step that reports
+        # progress under the same name is what keeps a slow run alive.
+        _insert(runs, "live", started_hours_ago=30, updated_hours_ago=25)
+        store.upsert_ingestion_step("live", step={"name": "scan", "status": "running"})
+        runs.update_one({"run_id": "live"}, {"$set": {"updated_at": NOW - timedelta(hours=25)}})
+
+        assert store.upsert_ingestion_step(
+            "live", step={"name": "scan", "status": "success"}, clear_current_step=True
+        )
+        assert store.upsert_ingestion_step("live", step={"name": "process", "status": "running"})
+
+        doc = _doc(runs, "live")
+        assert [(s["name"], s["status"]) for s in doc["steps"]] == [
+            ("scan", "success"),
+            ("process", "running"),
+        ]
+        assert store.mark_stale_ingestion_runs() == 0
+
+    def test_a_step_for_an_unknown_run_is_reported(self, runs):
+        assert store.upsert_ingestion_step("ghost", step={"name": "scan"}) is False

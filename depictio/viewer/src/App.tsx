@@ -22,6 +22,9 @@ import {
   bulkComputeCards,
   hasLiveValues,
   AvailableFilterValuesProvider,
+  DataVersionProvider,
+  dataVersionBody,
+  isCurrentDataOnlyType,
   DashboardGrid,
   FilterPanel,
   FunnelView,
@@ -86,6 +89,7 @@ import type {
   CommentViewState,
 } from 'depictio-react-core';
 import { parseTemplateOrigin } from './projects/template';
+import { extractPreviewVersionId, previewDataRequest } from './versions/preview';
 
 /** localStorage key for the dismissed ingestion banner, scoped per project so
  *  the dismissal sticks across the dashboard's sibling tabs. */
@@ -122,6 +126,8 @@ import { usePageTitle } from './branding';
 import { DashboardGuide, useGuideRoute } from './guide';
 import { DashboardSpotlight } from './spotlight';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
+import VersionPreviewBanner from './versions/VersionPreviewBanner';
+import { dashboardHref } from './dashboards/lib/dashboardLinks';
 
 /**
  * Top-level SPA. Layout:
@@ -247,6 +253,14 @@ const App: React.FC = () => {
     useInspectorChrome(inspectorEnabled);
 
   const dashboardId = extractDashboardId();
+  // Read once per mount: a tab switch is a full navigation, so this cannot
+  // change without remounting.
+  const previewVersionId = extractPreviewVersionId();
+  // Edit affordances are gated on this rather than `isOwner`: editing a past
+  // version makes no sense, and the editor would autosave it over the live
+  // dashboard. House style is visible-but-disabled, which the Header's
+  // existing tooltip already handles.
+  const canEditNow = isOwner && !previewVersionId;
 
   // ---- Cross-tab components: validate the hydrated filters -----------------
   // Runs once the family's floating maps and persistent sections are known.
@@ -295,8 +309,14 @@ const App: React.FC = () => {
   }, []);
 
   // One request per page load for everything this tab renders on behalf of its
-  // siblings: floating maps + persistent sections.
-  const crossTab = useCrossTabComponents(dashboardId ?? '', handleCrossTabResolved);
+  // siblings: floating maps + persistent sections. In a `?version=` preview,
+  // as they were in that version: today's parent sections drawn over the
+  // version's data would be a view that never existed.
+  const crossTab = useCrossTabComponents(
+    dashboardId ?? '',
+    handleCrossTabResolved,
+    previewVersionId,
+  );
 
   // Panel chrome state is scoped to the dashboard *family*: a tab switch is a
   // full page navigation to a sibling dashboard document, so per-dashboard
@@ -337,6 +357,25 @@ const App: React.FC = () => {
     if (!isNarrow) closeFilterDrawer();
   }, [isNarrow, closeFilterDrawer]);
 
+  // Data time travel, read-only in the viewer.
+  //
+  // Choosing which data to draw from is an editing act and lives in the
+  // editor. The one case the viewer owns is a `?version=` preview: the server
+  // overlays the version's content, and every render request then has to carry
+  // that version's data pins and its definition version too, or the preview is
+  // a past layout drawn through today's definitions over today's numbers.
+  // `previewDataRequest` is null for the live dashboard, which keeps every
+  // request byte-identical to what it was without this feature.
+  const previewRequest = useMemo(() => previewDataRequest(dashboard), [dashboard]);
+  // Request fragment + a stable dependency key. The key has to reach every
+  // fetch effect: without it the body would change while the effect never
+  // re-ran, leaving stale numbers under a new label.
+  const versionBody = useMemo(
+    () => (previewRequest ? dataVersionBody(previewRequest) : {}),
+    [previewRequest],
+  );
+  const versionKey = JSON.stringify(versionBody);
+
   const bulkCtrl = useRef<AbortController | null>(null);
 
   // Ingestion-health banner: for template-derived dashboards, surface a
@@ -349,14 +388,19 @@ const App: React.FC = () => {
   // Keep the browser tab title in sync with the dashboard name.
   usePageTitle(dashboard?.title || dashboardId);
 
-  // Fetch dashboard + tab list in parallel
+  // Fetch dashboard + tab list in parallel.
+  //
+  // With `?version=<id>` the server overlays that version's content onto the
+  // live document (identity and access stay live), so every component path
+  // below is unchanged. Read-only by construction: Edit is withheld while a
+  // version is previewed.
   useEffect(() => {
     if (!dashboardId) {
       setError('No dashboard ID in URL. Expected /dashboard/<id>.');
       setLoading(false);
       return;
     }
-    Promise.all([fetchDashboard(dashboardId), fetchAllDashboards()])
+    Promise.all([fetchDashboard(dashboardId, previewVersionId), fetchAllDashboards()])
       .then(([dash, all]) => {
         setDashboard(dash);
         // Declared filter defaults (`default_value` / `default_range`) land in
@@ -369,7 +413,7 @@ const App: React.FC = () => {
         setError(`Failed to load dashboard: ${err.message || err}`);
       })
       .finally(() => setLoading(false));
-  }, [dashboardId]);
+  }, [dashboardId, previewVersionId]);
 
   // Resolve the parent project and its ingestion health (template projects only).
   useEffect(() => {
@@ -477,6 +521,9 @@ const App: React.FC = () => {
           // (e.g. compare-on forces real Delta loads) could land after a fast
           // newer one and resurrect stale card strips.
           signal,
+          // A `?version=` preview computes cards from the version's data and
+          // definitions, like every other renderer under DataVersionProvider.
+          versionBody,
         ),
       ),
     )
@@ -505,6 +552,7 @@ const App: React.FC = () => {
     refreshTick,
     // Undefined while compare is off, so group edits don't refire the fetch.
     JSON.stringify(groupsApi.bulkOptions ?? null),
+    versionKey,
   ]);
 
 
@@ -635,6 +683,12 @@ const App: React.FC = () => {
     }
     return extras.length ? [...own, ...extras] : own;
   }, [dashboard, crossTab.floating, crossTab.persistentSections]);
+  // Tiles a preview badges "Current data" (they never read a pin), so the
+  // banner can say so once rather than leave each badge to be found.
+  const currentDataOnlyCount = useMemo(
+    () => summaryMetadata.filter((m) => isCurrentDataOnlyType(m.component_type)).length,
+    [summaryMetadata],
+  );
 
   const handleFilterChange = useCallback(
     (update: InteractiveFilter) => {
@@ -845,7 +899,9 @@ const App: React.FC = () => {
   // Only subscribe + render the indicator when the dashboard's project has
   // ``realtime.enabled === true`` in its YAML. Projects without that flag
   // never see live-update UI — keeps the chrome quiet for static dashboards.
-  const realtimeEnabled = Boolean(dashboard?.project_realtime?.enabled);
+  // Never while previewing a past version: a live data push would refresh the
+  // grid underneath a historical view, which is incoherent.
+  const realtimeEnabled = Boolean(dashboard?.project_realtime?.enabled) && !previewVersionId;
   const realtime = useDataCollectionUpdates(dashboardId, {
     enabled: realtimeEnabled && Boolean(dashboardId),
     mode: realtimeMode,
@@ -1162,6 +1218,15 @@ const App: React.FC = () => {
   );
 
   return (
+    // Every renderer reads its pin from here rather than taking it as a prop:
+    // the fetch happens deep in the shared component package, and the decision
+    // is made up here. Outermost, so the filter options' availability reads
+    // the previewed version's values too.
+    <DataVersionProvider
+      asOfVersionId={previewRequest?.asOfVersionId}
+      definitionVersionId={previewRequest?.definitionVersionId}
+      dashboardId={dashboardId}
+    >
     <AvailableFilterValuesProvider
       dashboardMetadata={summaryMetadata}
       projectId={dashboard?.project_id}
@@ -1221,7 +1286,7 @@ const App: React.FC = () => {
           filterCount={activeFilterCount}
           onOpenSearch={dashboard ? openSearch : undefined}
           cardsLoading={cardsLoading}
-          isOwner={isOwner}
+          isOwner={canEditNow}
           titleExtras={
             dashboard && !loading && !error ? (
               <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />
@@ -1278,6 +1343,7 @@ const App: React.FC = () => {
         <Sidebar
           tabs={tabSiblings}
           activeId={dashboardId}
+          versionId={previewVersionId}
           brandTheme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}
           guide={
             guideSettings.enabled && dashboard
@@ -1306,6 +1372,16 @@ const App: React.FC = () => {
           transition: 'padding-right 250ms ease',
         }}
       >
+        {dashboard?.preview && (
+          <VersionPreviewBanner
+            preview={dashboard.preview}
+            dashboardId={dashboardId}
+            // Restoring is a write, so it lives in the editor's History; an
+            // owner gets the way there. The editor route is owner-only.
+            editHref={isOwner && dashboardId ? dashboardHref(dashboardId, 'edit') : null}
+            currentDataOnly={currentDataOnlyCount}
+          />
+        )}
         {ingestionHealth &&
           ingestionProjectId &&
           !ingestionBannerDismissed &&
@@ -1544,10 +1620,10 @@ const App: React.FC = () => {
                         </Title>
                         <Text size="sm" c="dimmed" ta="center">
                           No components have been added yet.
-                          {isOwner && ' Start editing to add visualizations, tables, and more.'}
+                          {canEditNow && ' Start editing to add visualizations, tables, and more.'}
                         </Text>
                       </Stack>
-                      {isOwner && (
+                      {canEditNow && (
                         <Button
                           component="a"
                           href={`/dashboard-edit/${dashboardId}`}
@@ -1678,7 +1754,11 @@ const App: React.FC = () => {
         {/* The page's fixed furniture sits above the Guide's layer; hidden
             with the canvas while the Guide is up. */}
         <div style={guide.open ? { visibility: 'hidden' } : undefined}>
-          {dashboard && dashboardId && !inspectorEnabled && (
+          {/* Unmounted while previewing. It would start from the snapshot's
+              notes, and `saveDashboardNotes` writes the editor's text onto the
+              live dashboard it re-reads, so a save here would put a past
+              version's notes over the live ones. */}
+          {dashboard && dashboardId && !inspectorEnabled && !previewVersionId && (
             <NotesFooter
               dashboardId={dashboardId}
               initialContent={(dashboard.notes_content as string) ?? ''}
@@ -1750,6 +1830,7 @@ const App: React.FC = () => {
       </InspectorProviders>
       </DashboardLoadingProvider>
     </AvailableFilterValuesProvider>
+    </DataVersionProvider>
   );
 };
 

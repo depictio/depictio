@@ -19,18 +19,34 @@ CELERY_WORKERS=${DEPICTIO_CELERY_WORKERS:-4}
 # Recycle each prefork child after N tasks so the DataFrame / multiqc.report
 # memory it accumulated is actually returned to the OS. Celery's own default is
 # unlimited, so without this children grow for the lifetime of the container.
+# The dedicated ingestion worker overrides it lower (each of its tasks profiles
+# a whole table).
 #
-# `CeleryConfig.worker_max_tasks_per_child = 50` already declares this intent in
-# settings_models.py, but it is dead config here: the `celery_app.conf.update()`
-# block in depictio/api/celery_app.py is commented out, so nothing in that class
-# reaches the worker. We pass it on the CLI rather than reviving that block —
-# doing so would also apply `default_queue`, which routes work to a queue no
-# worker consumes and silently stops every task (see the comments in
-# celery_app.py before touching it).
+# `CeleryConfig.worker_max_tasks_per_child = 50` declares the same intent in
+# settings_models.py, but `celery_app.conf.update()` deliberately leaves the
+# worker-tuning keys out: applied there, they would re-tune the interactive
+# worker and the ingestion worker identically. They are passed as CLI flags so
+# the two pools stay independently tunable.
 CELERY_MAX_TASKS_PER_CHILD=${DEPICTIO_CELERY_MAX_TASKS_PER_CHILD:-50}
+
+# Queues this worker consumes. Defaults to "celery", the queue everything has
+# always landed on, since task_default_queue is pinned to it. Overriding to
+# "ingestion" is how the dedicated ingestion worker reuses this same script and
+# image without also competing for dashboard callbacks.
+CELERY_QUEUES=${DEPICTIO_CELERY_QUEUES:-celery}
+
+# 1 keeps a worker from reserving several 20-minute ingestion tasks up front and
+# starving its peers. Harmless for short tasks, decisive for long ones.
+CELERY_PREFETCH=${DEPICTIO_CELERY_PREFETCH:-1}
+
+# Distinct node name per queue, so `celery inspect ping` and the compose
+# healthcheck can address one worker rather than whichever answers first.
+CELERY_NODENAME=${DEPICTIO_CELERY_NODENAME:-celery@%h}
 
 echo "✅ CELERY WORKER: Starting Celery worker (required for design mode)"
 echo "🔧 CELERY WORKER: Workers = $CELERY_WORKERS, max tasks/child = $CELERY_MAX_TASKS_PER_CHILD"
+echo "🔧 CELERY WORKER: Queues = $CELERY_QUEUES"
+echo "🔧 CELERY WORKER: Node = $CELERY_NODENAME"
 if [ "${DEPICTIO_CELERY_ENABLED:-false}" = "true" ]; then
     echo "🔧 CELERY WORKER: Dashboard view mode will use background callbacks"
 else
@@ -67,10 +83,16 @@ if [ "$DEV_MODE_LOWER" = "true" ]; then
         -- celery -A depictio.api.celery_worker:celery_app worker \
             --loglevel=info \
             --max-tasks-per-child="$CELERY_MAX_TASKS_PER_CHILD" \
-            --concurrency="$CELERY_WORKERS"
+            --concurrency="$CELERY_WORKERS" \
+            --queues="$CELERY_QUEUES" \
+            --prefetch-multiplier="$CELERY_PREFETCH" \
+            --hostname="$CELERY_NODENAME"
 else
     exec celery -A depictio.api.celery_worker:celery_app worker \
         --loglevel=info \
         --max-tasks-per-child="$CELERY_MAX_TASKS_PER_CHILD" \
-        --concurrency="$CELERY_WORKERS"
+        --concurrency="$CELERY_WORKERS" \
+        --queues="$CELERY_QUEUES" \
+        --prefetch-multiplier="$CELERY_PREFETCH" \
+        --hostname="$CELERY_NODENAME"
 fi

@@ -660,14 +660,30 @@ def _get_aggregation_version(data_collection_id_str: str) -> str | None:
         return None
 
 
+def _version_salt_for(data_collection_id_str: str, delta_version: int | None = None) -> str | None:
+    """The cache-key salt for one read of a collection, live or pinned.
+
+    The latest ``aggregation_version`` describes *current* data. A pinned read
+    appends ``_dv{N}`` so it is never filed under the live key, nor served from
+    it — see ``load_deltatable_lite`` for why that is a correctness requirement
+    rather than an optimisation. An unpinned read gets the bare version back, so
+    no existing key changes.
+    """
+    version_salt = _get_aggregation_version(data_collection_id_str)
+    if delta_version is not None:
+        version_salt = f"{version_salt or ''}_dv{delta_version}"
+    return version_salt
+
+
 def _get_aggregation_hash(data_collection_id_str: str) -> str | None:
     """Fetch the latest ``aggregation_hash`` for a DC from MongoDB.
 
     Preferred over ``_get_aggregation_version`` as a cache-key salt: the version
     is a counter the upsert increments, whereas the hash is derived from the
-    Delta log itself (table version + active files, see ``_delta_identity_hash``)
-    and therefore describes the *state of the data* rather than how many times
-    it has been written.
+    Delta log itself (table version + active files, see ``delta_identity_hash``
+    and ``new_aggregation_hash`` in ``deltatables_endpoints/utils.py``) and
+    therefore describes the *state of the data* rather than how many times it
+    has been written.
 
     Note it is additionally salted with the write timestamp, so it is not a
     content-identity hash: two upserts of byte-identical data produce different
@@ -780,20 +796,35 @@ def _get_delta_location(
     return file_id
 
 
-def _create_delta_scan(file_id: str, dc_type: str | None = None) -> pl.LazyFrame:
+def _create_delta_scan(
+    file_id: str, dc_type: str | None = None, delta_version: int | None = None
+) -> pl.LazyFrame:
     """
     Create a Polars LazyFrame scan from Delta table location or parquet files.
 
     Args:
         file_id: S3 path or local path to Delta table or parquet files.
         dc_type: Data collection type (e.g., "MultiQC", "Table"). If "MultiQC", uses parquet scan.
+        delta_version: Delta commit to read, for time travel. ``None`` reads the
+            latest, which is every existing caller's behaviour.
 
     Returns:
         Polars LazyFrame for the Delta table or parquet files.
+
+    Raises:
+        ValueError: If ``delta_version`` is given for a non-Delta (parquet)
+            collection, which has no commit log to travel through. Failing is
+            the point — silently returning current data under a historical
+            label is the one outcome worth avoiding here.
     """
     # MultiQC data is stored as parquet, not delta tables
     # Case-insensitive check for MultiQC type
     if dc_type and dc_type.lower() == "multiqc":
+        if delta_version is not None:
+            raise ValueError(
+                f"Time travel is not available for '{dc_type}' collections: they are "
+                "stored as plain parquet with no commit log."
+            )
         # Handle both directory and file paths
         # If file_id ends with .parquet, it's a direct file path
         if file_id.endswith(".parquet"):
@@ -809,12 +840,19 @@ def _create_delta_scan(file_id: str, dc_type: str | None = None) -> pl.LazyFrame
             return pl.scan_parquet(f"{cache_path}/**/*.parquet")
         return pl.scan_parquet(parquet_pattern, storage_options=polars_s3_config)
 
-    # Standard delta table scan
-    if USE_LOCAL_FILES:
+    # Standard delta table scan. `version=None` is polars' own default, so the
+    # non-time-travel path is byte-for-byte what it was.
+    #
+    # A pinned read never takes the local mirror. `cache_delta_table_from_s3`
+    # writes the *latest* state as a fresh one-commit table, so the mirror has
+    # no history: its version 0 is today's data, and reading it at a pin would
+    # serve current rows under a historical label. The source's log still holds
+    # the commit asked for.
+    if USE_LOCAL_FILES and delta_version is None:
         cache_path = cache_delta_table_from_s3(file_id, polars_s3_config)
         return pl.scan_delta(cache_path)
 
-    return pl.scan_delta(file_id, storage_options=polars_s3_config)
+    return pl.scan_delta(file_id, storage_options=polars_s3_config, version=delta_version)
 
 
 def _get_cached_dtypes(
@@ -1353,6 +1391,7 @@ def _open_sortable_scan(
     effective_cols: list[str] | None,
     version_salt: str | int | None,
     TOKEN: str | None = None,
+    delta_version: int | None = None,
 ) -> pl.LazyFrame | None:
     """Build a filtered + projected lazy Delta scan (no collect).
 
@@ -1362,6 +1401,12 @@ def _open_sortable_scan(
     columns (see ``_effective_projection``) so nothing a filter references is
     projected away. Returns ``None`` if the scan can't be built, so the caller
     falls back to the memoised full-sort path.
+
+    ``delta_version`` pins the scan to a past Delta commit. It has to be honoured
+    here and not only on the row-returning loader: a reducing figure takes this
+    path instead, and a scan that ignored the pin would answer a historical
+    request with today's numbers — a plausible-looking chart that is silently
+    wrong, which is the one failure mode time travel cannot have.
     """
     try:
         if init_data and data_collection_id_str in init_data:
@@ -1369,7 +1414,7 @@ def _open_sortable_scan(
         else:
             dc_type = _get_dc_type_from_db(ObjectId(data_collection_id_str))
         file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
-        delta_scan = _create_delta_scan(file_id, dc_type)
+        delta_scan = _create_delta_scan(file_id, dc_type, delta_version)
         delta_scan = _apply_scan_filters(delta_scan, metadata, data_collection_id_str, version_salt)
         delta_scan = _project_scan(delta_scan, effective_cols, data_collection_id_str, version_salt)
         return delta_scan
@@ -1385,6 +1430,7 @@ def open_deltatable_scan(
     init_data: dict[str, dict] | None = None,
     select_columns: list[str] | None = None,
     TOKEN: str | None = None,
+    delta_version: int | None = None,
 ) -> pl.LazyFrame | None:
     """Public entry point for a filtered + projected **lazy** Delta scan.
 
@@ -1406,7 +1452,10 @@ def open_deltatable_scan(
     frames the cache is sized for (they belong in the result cache instead).
     """
     data_collection_id_str = str(data_collection_id)
-    version_salt = _get_aggregation_version(data_collection_id_str)
+    # Same salt the row loader applies, and for the same correctness reason: the
+    # filter/projection caches keyed on version_salt must not file a pinned
+    # historical scan under the live key (see load_deltatable_lite).
+    version_salt = _version_salt_for(data_collection_id_str, delta_version)
     effective_cols = _effective_projection(select_columns, metadata, False)
     return _open_sortable_scan(
         str(workflow_id),
@@ -1416,6 +1465,7 @@ def open_deltatable_scan(
         effective_cols,
         version_salt,
         TOKEN,
+        delta_version=delta_version,
     )
 
 
@@ -1528,6 +1578,7 @@ def load_deltatable_lite(
     load_for_preview: bool = False,
     select_columns: list[str] | None = None,
     init_data: dict[str, dict] | None = None,
+    delta_version: int | None = None,
 ) -> pl.DataFrame:
     """
     Load a Delta table with adaptive memory management based on DataFrame size.
@@ -1556,6 +1607,9 @@ def load_deltatable_lite(
         select_columns: Columns to select for projection (None = all columns).
         init_data: Dashboard initialization data to avoid API/DB calls.
             Structure: {"dc_id": {"delta_location": str, "size_bytes": int}}
+        delta_version: Read this Delta commit instead of the latest — the data
+            time-travel path. ``None`` (the default) means "current", so every
+            existing caller is unaffected.
 
     Returns:
         The loaded and optionally filtered DataFrame.
@@ -1596,7 +1650,7 @@ def load_deltatable_lite(
                 else data_collection_id
             )
             dc_type = _get_dc_type_from_db(data_collection_id_obj)
-        delta_scan = _create_delta_scan(file_id, dc_type)
+        delta_scan = _create_delta_scan(file_id, dc_type, delta_version)
         delta_scan = _project_scan(delta_scan, effective_cols, data_collection_id_str, None)
         if limit_rows:
             delta_scan = delta_scan.limit(limit_rows)
@@ -1606,13 +1660,23 @@ def load_deltatable_lite(
     # CACHING ENABLED PATH
     _log_cache_status()
 
-    # Salt the cache keys with the latest aggregation_version so realtime
-    # ingest naturally invalidates this worker's per-process memory cache —
-    # `invalidate_data_collection_cache` from the WS handler only reaches the
-    # one worker that received the event, so without a per-version key the
-    # other 3 default workers keep serving the stale dataframe. The version
-    # bumps on every CLI rewrite, so the new fetch lands on a new key.
-    version_salt = _get_aggregation_version(data_collection_id_str)
+    # Salt the cache keys so a frame is never served under a key that describes
+    # different data. Two things vary:
+    #
+    # 1. Latest `aggregation_version` — realtime ingest bumps it, which
+    #    naturally invalidates this worker's per-process cache.
+    #    `invalidate_data_collection_cache` from the WS handler only reaches
+    #    the one worker that received the event, so without a per-version key
+    #    the other 3 default workers keep serving the stale dataframe.
+    #
+    # 2. The requested `delta_version` — time travel. This one is a
+    #    *correctness* requirement, not an optimisation: salting on the latest
+    #    version alone would file a historical read under the live key and then
+    #    hand that historical frame to every caller asking for current data.
+    #    Silently wrong numbers, no error. Keyed as `_dvN` so a pinned read of
+    #    the newest commit still can't collide with an unpinned one — they are
+    #    equal today but diverge the moment the next commit lands.
+    version_salt = _version_salt_for(data_collection_id_str, delta_version)
 
     # Generate cache keys
     base_cache_key, filtered_cache_key, filter_hash = _generate_cache_keys(
@@ -1668,7 +1732,7 @@ def load_deltatable_lite(
 
     # Get delta location and create scan
     file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
-    delta_scan = _create_delta_scan(file_id, dc_type)
+    delta_scan = _create_delta_scan(file_id, dc_type, delta_version)
 
     # Apply column projection at scan level (schema-guarded; see _project_scan)
     delta_scan = _project_scan(delta_scan, effective_cols, data_collection_id_str, version_salt)
@@ -1732,6 +1796,7 @@ def load_sorted_deltatable_lite(
     nulls_last: bool = True,
     select_columns: list[str] | None = None,
     page: tuple[int, int] | None = None,
+    delta_version: int | None = None,
 ) -> pl.DataFrame:
     """Return a sorted (optionally filtered / projected) frame, or one page of it.
 
@@ -1758,6 +1823,12 @@ def load_sorted_deltatable_lite(
     ``_generate_cache_keys``), so a realtime ingest that bumps the version — or
     an explicit ``invalidate_data_collection_cache`` (dc_id substring match) —
     busts this entry for free, exactly like the base frame.
+
+    ``delta_version`` pins every read here — the lazy sorted page and the
+    memoised full sort alike — to a past Delta commit, and salts the memo key
+    with it. Both halves matter: a pin honoured only by the loader would still
+    find a live sorted frame under an unsalted key and serve today's rows, and
+    a salted key over an unpinned read would file today's rows as the past.
     """
     import time
 
@@ -1766,7 +1837,7 @@ def load_sorted_deltatable_lite(
     data_collection_id_str = str(data_collection_id)
     workflow_id_str = str(workflow_id)
 
-    version_salt = _get_aggregation_version(data_collection_id_str)
+    version_salt = _version_salt_for(data_collection_id_str, delta_version)
     effective_cols = _effective_projection(select_columns, metadata, False)
     base_key, filtered_key, _ = _generate_cache_keys(
         workflow_id_str,
@@ -1820,6 +1891,7 @@ def load_sorted_deltatable_lite(
                 metadata,
                 effective_cols,
                 version_salt,
+                delta_version=delta_version,
             )
             if scan is not None:
                 est = _estimate_frame_size_bytes(scan)
@@ -1851,6 +1923,7 @@ def load_sorted_deltatable_lite(
             metadata=metadata,
             init_data=init_data,
             select_columns=select_columns,
+            delta_version=delta_version,
         )
         sorted_df = df.sort(
             sort_by, descending=descending, nulls_last=nulls_last, maintain_order=True
@@ -1876,6 +1949,7 @@ def count_deltatable_lite(
     metadata: list[dict] | None = None,
     init_data: dict[str, dict] | None = None,
     TOKEN: str | None = None,
+    delta_version: int | None = None,
 ) -> int:
     """Count rows of a (optionally filtered) Delta table without materialising it.
 
@@ -1887,6 +1961,10 @@ def count_deltatable_lite(
     Filters are applied with the same schema-guard as ``load_deltatable_lite``
     (see ``_apply_scan_filters``). Returns 0 on any scan/collect error rather
     than raising — a missing count only degrades the UI's "N of M" hint.
+
+    ``delta_version`` counts a past commit. A total read at the newest commit
+    beside rows from a pinned one sizes the grid for a table that is not the
+    one being shown — and under a filter it is not even the same number.
     """
     data_collection_id_str = str(data_collection_id)
     workflow_id_str = str(workflow_id)
@@ -1906,9 +1984,9 @@ def count_deltatable_lite(
                 if isinstance(data_collection_id, str)
                 else data_collection_id
             )
-        version_salt = _get_aggregation_version(data_collection_id_str)
+        version_salt = _version_salt_for(data_collection_id_str, delta_version)
         file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
-        delta_scan = _create_delta_scan(file_id, dc_type)
+        delta_scan = _create_delta_scan(file_id, dc_type, delta_version)
         delta_scan = _apply_scan_filters(delta_scan, metadata, data_collection_id_str, version_salt)
         result = delta_scan.select(pl.len()).collect()
         return int(result.item()) if result.height else 0
@@ -1922,6 +2000,7 @@ def schema_deltatable_lite(
     data_collection_id: ObjectId | str,
     init_data: dict[str, dict] | None = None,
     TOKEN: str | None = None,
+    delta_version: int | None = None,
 ) -> dict:
     """Return the Delta table's column schema (name → dtype) without loading rows.
 
@@ -1931,6 +2010,13 @@ def schema_deltatable_lite(
     poison it.) Used by the table render endpoint to resolve the default sort
     column and build AG Grid column defs before choosing a load strategy.
     Returns ``{}`` on error; the caller degrades gracefully.
+
+    ``delta_version`` pins the peek to the same commit the rows will be read at.
+    It is not optional in practice: the schema decides the column defs and the
+    default sort column, so reading it at the newest commit while the rows come
+    from a pinned one describes a table that is not the one being shown. A column
+    added after the pinned version would get a header with no values under it,
+    and a sort could be issued on a column the pinned data does not have.
     """
     data_collection_id_str = str(data_collection_id)
     workflow_id_str = str(workflow_id)
@@ -1944,7 +2030,7 @@ def schema_deltatable_lite(
                 else data_collection_id
             )
         file_id = _get_delta_location(data_collection_id_str, workflow_id_str, init_data, TOKEN)
-        schema = _create_delta_scan(file_id, dc_type).collect_schema()
+        schema = _create_delta_scan(file_id, dc_type, delta_version).collect_schema()
         return dict(schema)
     except Exception as e:
         logger.warning(f"schema_deltatable_lite failed for DC {data_collection_id_str}: {e}")

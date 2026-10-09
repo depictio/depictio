@@ -15,7 +15,6 @@ import type {
   GridReadyEvent,
   ValueGetterParams,
   IDatasource,
-  IGetRowsParams,
   GridApi,
   SelectionChangedEvent,
   SortChangedEvent,
@@ -23,6 +22,14 @@ import type {
 import type { RowClickedEvent } from 'ag-grid-community';
 
 import { renderTable, InteractiveFilter, StoredMetadata } from '../api';
+import { useDataVersionRequest } from '../dataVersions';
+import { renderDefinitionKey } from '../renderKey';
+import {
+  createTableDatasource,
+  isTableReady,
+  tableGridIdentity,
+  tableGridKey,
+} from './tableVersionFollow';
 import { LoadAllState } from './chrome/LoadAllButton';
 import { extractRowSelection } from '../selection';
 import { useInView } from '../hooks/useInView';
@@ -127,7 +134,10 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [total, setTotal] = useState(0);
-  const [ready, setReady] = useState(false);
+  // The identity (data version + definition) the grid was last built for.
+  // `ready` is derived from it below, so a new identity unmounts the grid in
+  // the same render rather than one render later.
+  const [readyFor, setReadyFor] = useState<string | null>(null);
   // "Show all" mode: pull every row (up to a cap) into a client-side grid so
   // the user can scroll/search the whole table on demand. Off by default —
   // the grid stays server-paged (never > a page in the browser).
@@ -138,6 +148,23 @@ const TableRenderer: React.FC<TableRendererProps> = ({
 
   const pageSize = clampPageSize(metadata.page_size);
   const { colorScheme } = useMantineColorScheme();
+  // Data time travel: `body` merges into the request, `key` goes in the fetch
+  // effect's deps so a pin change actually refetches instead of relabelling
+  // stale data.
+  const {
+    body: versionBody,
+    key: versionKey,
+    definitionVersionId,
+  } = useDataVersionRequest();
+  // See FigureRenderer: identity does not move when a definition is
+  // replaced in place, so both the column and row fetches follow this.
+  const definitionKey = renderDefinitionKey(metadata, definitionVersionId);
+  // A pin change or a swapped definition is a new grid: new columns, a new
+  // total and a datasource that reads the new data (`tableVersionFollow.ts`).
+  const gridIdentity = tableGridIdentity(versionKey, definitionKey);
+  const gridIdentityRef = useRef(gridIdentity);
+  gridIdentityRef.current = gridIdentity;
+  const ready = isTableReady(readyFor, gridIdentity);
   const isDark = colorScheme === 'dark';
   // Annotation row colours from Mantine's default palette, so a brand theme
   // that remaps palettes onto data colours cannot blend them into the data.
@@ -194,21 +221,25 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   // purge in ``datasource.getRows``).
   const dataVersionRef = useRef<string | number | null>(null);
 
-  // One-shot bootstrap: fetch column defs + total row count via a tiny
-  // (start=0, limit=1) call. The infinite row model then takes over for
+  // Bootstrap, once per grid identity: fetch column defs + total row count via
+  // a tiny (start=0, limit=1) call. The infinite row model then takes over for
   // paging. Once ``ready`` flips on, we keep the grid mounted across
   // subsequent filter changes / realtime ticks — only the row cache is
   // purged (see effect below) and ``total`` is refreshed in the
   // ``datasource.getRows`` callback. We deliberately DON'T re-issue
   // ``setColDefs`` on filter / tick changes: that would replace the
   // ``columnDefs`` prop, which AG Grid treats as a full schema swap and
-  // resets any user-applied sort the user clicked on a header. Schema
-  // changes during a live session are exceedingly rare in this product
-  // and require a full reload anyway.
+  // resets any user-applied sort the user clicked on a header. A new data
+  // version or definition is the exception: it is a different table, so
+  // ``ready`` goes false with it and this runs again.
   useEffect(() => {
     if (!inView || ready) return;
     let cancelled = false;
     const ctrl = new AbortController();
+    const identity = gridIdentity;
+    // Row blocks of another identity are about to be thrown away with their
+    // grid; the next first page sets the data version afresh.
+    dataVersionRef.current = null;
     setLoading(true);
     setError(null);
     enqueueFetch(
@@ -222,6 +253,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           undefined,
           'desc',
           ctrl.signal,
+          versionBody,
         ),
       metadata.layout?.y ?? 0,
     )
@@ -367,7 +399,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           }),
         ]);
         setTotal(res.total);
-        setReady(true);
+        setReadyFor(identity);
       })
       .catch((err) => {
         // Superseded / aborted rounds are expected when the user keeps moving a
@@ -383,9 +415,10 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, inView, ready]);
+  }, [dashboardId, metadata.index, inView, ready, versionKey, definitionKey]);
 
-  const showInitialLoader = !inView || (!ready && loading);
+  // Not ready and not failed is a bootstrap about to start or running.
+  const showInitialLoader = !inView || (!ready && !error);
   const showRefetchOverlay = ready && loading;
 
   // Report load status to the dashboard registry. Off-screen → pending (null).
@@ -399,20 +432,24 @@ const TableRenderer: React.FC<TableRendererProps> = ({
   // (excludes our own row selection) so toggling a row doesn't trigger a
   // self-narrowing refetch.
   useEffect(() => {
-    if (gridApiRef.current && ready) {
-      gridApiRef.current.purgeInfiniteCache();
+    const api = gridApiRef.current;
+    // The ref outlives a grid that a new identity unmounted, until the next
+    // grid reports ready.
+    if (api && !api.isDestroyed() && ready && !showAll) {
+      api.purgeInfiniteCache();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(filtersForFetch), ready, refreshTick]);
 
-  // A new filter slice changes the row set — drop back to the paginated
-  // (server-paged) view so the user re-opts into a full load for the new data.
+  // A new filter slice, data version or definition changes the row set: drop
+  // back to the paginated (server-paged) view so the user re-opts into a full
+  // load for the new data.
   useEffect(() => {
     setShowAll(false);
     setAllRows(null);
     setAllTruncated(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(filtersForFetch)]);
+  }, [JSON.stringify(filtersForFetch), gridIdentity]);
 
   // Pull every row (capped) into memory by paging the server in chunks, then
   // hand them to a client-side grid. Respects the server's 500-row/request
@@ -435,6 +472,8 @@ const TableRenderer: React.FC<TableRendererProps> = ({
           chunk,
           sortRef.current.sortBy,
           sortRef.current.sortDir,
+          undefined,
+          versionBody,
         );
         rows.push(...(res.rows as Record<string, unknown>[]));
         if (typeof res.total === 'number') setTotal(res.total);
@@ -486,6 +525,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       undefined,
       'desc',
       ctrl.signal,
+      versionBody,
     )
       .then((res) => {
         if (cancelled) return;
@@ -504,7 +544,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dashboardId, metadata.index, ready, rowIdColumn, JSON.stringify(filtersForFetch), refreshTick]);
+  }, [dashboardId, metadata.index, ready, rowIdColumn, JSON.stringify(filtersForFetch), refreshTick, versionKey, definitionKey]);
 
   const newRowIds = useNewItemIds(snapshotIds, refreshTick);
   const highlightDurationMs =
@@ -677,14 +717,17 @@ const TableRenderer: React.FC<TableRendererProps> = ({
     syncAnnotationColumn(gridApiRef.current);
   }, [hasRowAnnotations, ready, colDefs, syncAnnotationColumn]);
 
-  const datasource = useMemo<IDatasource>(
-    () => ({
-      getRows: (params: IGetRowsParams) => {
-        const start = params.startRow;
-        const limit = params.endRow - params.startRow;
-        // Queued: AG Grid's infinite row model fires several blocks at once on
-        // first paint, and they'd otherwise contend with every other component's
-        // render. Earlier blocks get priority so the visible rows arrive first.
+  // One datasource per identity. `versionBody` is captured in its fetch, so it
+  // is rebuilt when the pin or the definition changes; the grid that the new
+  // identity remounts installs it in `onGridReady`, and the effect below covers
+  // a datasource rebuilt under a grid that stayed mounted.
+  const datasource = useMemo<IDatasource>(() => {
+    const identity = gridIdentity;
+    return createTableDatasource({
+      // Queued: AG Grid's infinite row model fires several blocks at once on
+      // first paint, and they'd otherwise contend with every other component's
+      // render. Earlier blocks get priority so the visible rows arrive first.
+      fetchRows: (start, limit) =>
         enqueueFetch(
           () =>
             renderTable(
@@ -695,47 +738,32 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               limit,
               sortRef.current.sortBy,
               sortRef.current.sortDir,
+              undefined,
+              versionBody,
             ),
           start,
-        )
-          .then((res) => {
-            // An unsorted table is served in Delta scan order. That order is
-            // stable while files are only appended, but a compaction (OPTIMIZE /
-            // vacuum) rewrites the active file list and reorders the scan — at
-            // which point already-cached blocks no longer line up with freshly
-            // fetched ones, and the grid silently shows some rows twice and
-            // others not at all. The data version changes when that can have
-            // happened, so purge and restart paging from a consistent snapshot.
-            const version = res.data_version ?? null;
-            if (version !== null && dataVersionRef.current === null) {
-              dataVersionRef.current = version;
-            } else if (version !== null && version !== dataVersionRef.current) {
-              dataVersionRef.current = version;
-              params.failCallback();
-              gridApiRef.current?.purgeInfiniteCache();
-              return;
-            }
-            // lastRow tells the grid the total — required so the scrollbar is
-            // accurate and the grid stops asking past the end.
-            const lastRow =
-              typeof res.total === 'number' && res.total >= 0
-                ? res.total
-                : undefined;
-            params.successCallback(res.rows, lastRow);
-            if (typeof res.total === 'number') setTotal(res.total);
-          })
-          .catch((err) => {
-            // A filter change purges the grid's cache and drops every block
-            // still queued for the old filters. Those rejections are the
-            // mechanism working, not an error to show the user — the grid is
-            // already re-requesting the same blocks for the new filters.
-            if (!isStaleFetch(err)) setError(err?.message || String(err));
-            params.failCallback();
-          });
+        ),
+      isCurrent: () => gridIdentityRef.current === identity,
+      dataVersionRef,
+      purge: () => gridApiRef.current?.purgeInfiniteCache(),
+      onTotal: setTotal,
+      // A filter change purges the grid's cache and drops every block still
+      // queued for the old filters. Those rejections are the mechanism
+      // working, not an error to show the user: the grid is already
+      // re-requesting the same blocks for the new filters.
+      onError: (err) => {
+        if (!isStaleFetch(err)) setError((err as Error)?.message || String(err));
       },
-    }),
-    [dashboardId, metadata.index],
-  );
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dashboardId, metadata.index, gridIdentity]);
+
+  useEffect(() => {
+    const api = gridApiRef.current;
+    if (api && !api.isDestroyed() && !showAll) api.setGridOption('datasource', datasource);
+    // Installing on a `showAll` flip is `onGridReady`'s job: that remounts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [datasource]);
 
   // When the user clicks a header to sort (or clears a sort), capture the
   // new state into ``sortRef`` and purge the infinite cache so the next
@@ -1060,8 +1088,9 @@ const TableRenderer: React.FC<TableRendererProps> = ({
               // Remount when switching row models — AG Grid can't swap
               // infinite ↔ client-side on a live instance. uiScale is in the
               // key too: rowHeight/headerHeight are initial-only grid options,
-              // so a font-size change needs a fresh grid to take effect.
-              key={`${showAll ? 'client' : 'infinite'}-${uiScale}`}
+              // so a font-size change needs a fresh grid to take effect. So is
+              // the data version + definition: see `tableVersionFollow.ts`.
+              key={tableGridKey(showAll, uiScale, gridIdentity)}
               columnDefs={colDefs}
               defaultColDef={defaultColDef}
               defaultCsvExportParams={csvExportParams}

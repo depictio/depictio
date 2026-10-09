@@ -1,4 +1,7 @@
+import hashlib
+import time
 from datetime import datetime, timedelta
+from typing import Any
 
 import bcrypt
 import jwt
@@ -172,6 +175,20 @@ async def _create_temporary_user_session(temp_user: UserBeanie) -> dict:
     }
 
 
+def _drop_version_ledger(main_dashboard_id: Any) -> None:
+    """Delete a deleted dashboard family's versions and counter, never raising.
+
+    Best-effort like the comment-thread cascade beside it: a ledger left behind
+    is unreachable litter, a cleanup that fails the user delete is worse.
+    """
+    try:
+        from depictio.api.v1.endpoints.dashboards_endpoints.version_store import delete_family
+
+        delete_family(str(main_dashboard_id))
+    except Exception as exc:
+        logger.warning(f"Could not clear the version ledger of {main_dashboard_id}: {exc}")
+
+
 async def _cleanup_expired_temporary_users() -> dict:
     """Clean up expired temporary users and their associated data.
 
@@ -231,6 +248,13 @@ async def _cleanup_expired_temporary_users() -> dict:
                 try:
                     await project.delete()
                     projects_deleted += 1
+                    # The dashboard version ledgers of the project, which no
+                    # other delete reaches. Never raises.
+                    from depictio.api.v1.endpoints.dashboards_endpoints.version_store import (
+                        delete_project_versions,
+                    )
+
+                    delete_project_versions(project.id)
                 except Exception as e:
                     logger.warning(f"Failed to delete project {project.name}: {e}")
 
@@ -268,6 +292,11 @@ async def _cleanup_expired_temporary_users() -> dict:
                         )
 
                         delete_threads_for_dashboards([dashboard.get("dashboard_id")])
+                        # A main tab takes its family's version ledger with it,
+                        # as the dashboard delete route does; a child tab's
+                        # versions belong to a family that may outlive it.
+                        if dashboard.get("is_main_tab", True) and dashboard.get("dashboard_id"):
+                            _drop_version_ledger(dashboard["dashboard_id"])
                     except Exception as e:
                         logger.warning(f"Failed to delete dashboard {dashboard.get('_id')}: {e}")
 
@@ -318,6 +347,68 @@ async def _cleanup_expired_temporary_users() -> dict:
     return cleanup_results
 
 
+#: How long one bad token stays "already reported" before it earns a fresh
+#: warning plus a tally of what was suppressed in between.
+_INVALID_JWT_WINDOW_SECONDS = 300.0
+
+#: Bound on how many distinct bad tokens are tracked at once. The map exists to
+#: suppress repeats, so losing the oldest entry under pressure costs at most one
+#: duplicate warning — whereas an unbounded map is a memory leak that any
+#: unauthenticated caller could drive by rotating garbage tokens.
+_INVALID_JWT_TRACKED_MAX = 256
+
+#: fingerprint -> (window opened at, rejections suppressed since)
+_invalid_jwt_seen: dict[str, tuple[float, int]] = {}
+
+
+def _token_fingerprint(token: str) -> str:
+    """A short, non-reversible handle for a token, safe to put in a log.
+
+    The token itself must never be logged — the ledger is readable by any admin
+    and, for a *valid* token, would be a credential sitting in plain text. A
+    hash prefix still answers the question the log has to answer: are these
+    ninety rejections one stuck client, or ninety different ones?
+    """
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()[:12]
+
+
+def _report_invalid_jwt(token: str, reason: str) -> None:
+    """Warn about a rejected token, at most once per token per window.
+
+    A client that cannot be told its token is dead — a browser tab polling on a
+    timer, most often — retries indefinitely, and every attempt lands here. That
+    turns a single misconfigured session into hundreds of identical WARNING
+    lines in a *capped* collection, evicting the records someone was actually
+    trying to read. The rejection still matters, so it is not silenced: it is
+    reported once, then counted.
+    """
+    fingerprint = _token_fingerprint(token)
+    now = time.monotonic()
+    opened, suppressed = _invalid_jwt_seen.get(fingerprint, (0.0, 0))
+
+    if opened and now - opened < _INVALID_JWT_WINDOW_SECONDS:
+        _invalid_jwt_seen[fingerprint] = (opened, suppressed + 1)
+        logger.debug("Rejected invalid JWT [%s]: %s", fingerprint, reason)
+        return
+
+    if len(_invalid_jwt_seen) >= _INVALID_JWT_TRACKED_MAX and fingerprint not in _invalid_jwt_seen:
+        oldest = min(_invalid_jwt_seen, key=lambda key: _invalid_jwt_seen[key][0])
+        _invalid_jwt_seen.pop(oldest, None)
+
+    _invalid_jwt_seen[fingerprint] = (now, 0)
+    if suppressed:
+        logger.warning(
+            "Rejected invalid JWT [%s]: %s (and %d more in the last %ds — "
+            "a client is retrying a token this server can never accept)",
+            fingerprint,
+            reason,
+            suppressed,
+            int(_INVALID_JWT_WINDOW_SECONDS),
+        )
+    else:
+        logger.warning("Rejected invalid JWT [%s]: %s", fingerprint, reason)
+
+
 @validate_call(validate_return=True)
 async def _async_fetch_user_from_token(token: str) -> UserBeanie | None:
     """Fetch a user by a JWT access token.
@@ -351,7 +442,10 @@ async def _async_fetch_user_from_token(token: str) -> UserBeanie | None:
         logger.debug("Rejected expired JWT")
         return None
     except InvalidTokenError as exc:
-        logger.warning("Rejected invalid JWT: %s", exc)
+        # "Signature verification failed" here almost always means the token was
+        # minted by a different deployment — a browser or CLI config still
+        # pointed at another instance's keys, not an attack.
+        _report_invalid_jwt(token, str(exc))
         return None
 
     token_doc = await TokenBeanie.find_one({"access_token": token})

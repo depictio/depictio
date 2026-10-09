@@ -5,6 +5,7 @@ Every server and storage call is mocked, through the harness in conftest.py.
 
 from __future__ import annotations
 
+import os
 import re
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -16,6 +17,7 @@ from typer.testing import CliRunner
 
 from depictio.cli.cli.commands.run import register_run_command
 from depictio.cli.cli.utils.image_upload import ImageUploadError
+from depictio.cli.cli.utils.watch import ProjectLock, ProjectLockError
 
 UNKNOWN_MANIFEST = "acme/not-a-real-pipeline/9.9.9"
 
@@ -270,3 +272,58 @@ class TestImagesInStepSix:
 
         assert result.exit_code == 0, result.output
         upload.assert_not_called()
+
+
+class TestTheProjectLock:
+    """`ingest` takes the project's lock before its first write, the one `watch`
+    holds, so a manual ingestion cannot interleave with a watcher's cycle."""
+
+    @pytest.fixture
+    def lock_file(self, tmp_path):
+        return tmp_path / "state" / "project.lock"
+
+    def _run(self, app, runner, harness, data_root, lock_file, *flags):
+        return _invoke(
+            app,
+            runner,
+            harness,
+            _template_args("ingest", data_root, *flags),
+            [patch("depictio.cli.cli.commands.run.lock_path", MagicMock(return_value=lock_file))],
+        )
+
+    def test_a_held_lock_stops_the_ingestion_before_it_writes(
+        self, app, runner, data_root, make_harness, lock_file
+    ):
+        harness = make_harness(data_root, remote_locations=[])
+        with ProjectLock() as watcher_lock:
+            watcher_lock.acquire(lock_file)
+            result = self._run(app, runner, harness, data_root, lock_file)
+
+        assert result.exit_code == 1
+        output = normalize(result.output)
+        assert "already holds" in output and str(os.getpid()) in output
+        harness.sync.assert_not_called()
+        harness.scan.assert_not_called()
+        harness.process.assert_not_called()
+
+    def test_the_lock_is_held_while_it_writes_and_released_after(
+        self, app, runner, data_root, make_harness, lock_file
+    ):
+        harness = make_harness(data_root, remote_locations=[])
+        held: list[bool] = []
+
+        def scan(**_kwargs):
+            try:
+                ProjectLock().acquire(lock_file)
+            except ProjectLockError:
+                held.append(True)
+            return {"result": "success"}
+
+        harness.scan.side_effect = scan
+
+        result = self._run(app, runner, harness, data_root, lock_file)
+
+        assert result.exit_code == 0, result.output
+        assert held == [True]
+        with ProjectLock() as next_one:
+            next_one.acquire(lock_file)

@@ -35,6 +35,9 @@ export function useNotesEditor(
   dashboardId: string,
   initialContent: string,
   permissions?: DashboardPermissions,
+  /** After each successful save. A notes save goes to `/save`, which records
+   *  a dashboard version, so the editor reloads its version list from here. */
+  onSaved?: () => void,
 ): NotesEditorState {
   const [status, setStatus] = useState<NotesSaveStatus>('idle');
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -61,6 +64,9 @@ export function useNotesEditor(
   // pre-auth value and permanently block saves.
   const canEditRef = useRef(canEdit);
   canEditRef.current = canEdit;
+  // Read at save time, so a new callback identity does not rebuild the save.
+  const onSavedRef = useRef(onSaved);
+  onSavedRef.current = onSaved;
 
   const scheduleSave = useCallback(
     (html: string) => {
@@ -72,6 +78,7 @@ export function useNotesEditor(
             lastSavedRef.current = html;
             setStatus('saved');
             setSavedAt(new Date());
+            onSavedRef.current?.();
           })
           .catch((err) => {
             console.error('[notes] save failed:', err);
@@ -88,7 +95,10 @@ export function useNotesEditor(
     editable: canEdit,
     onUpdate: ({ editor: ed }) => {
       if (!canEditRef.current) return;
-      const html = ed.getHTML();
+      // An empty document serialises as "<p></p>", not the "" it was loaded
+      // from. Saving that difference would write a change nobody made, and
+      // every write records a dashboard version.
+      const html = ed.isEmpty ? '' : ed.getHTML();
       if (html === lastSavedRef.current) return;
       scheduleSave(html);
     },
@@ -99,7 +109,9 @@ export function useNotesEditor(
   // they can actually type. Same the other way round, for safety.
   useEffect(() => {
     if (!editor) return;
-    if (editor.isEditable !== canEdit) editor.setEditable(canEdit);
+    // No update event: TipTap emits one by default, and `onUpdate` would save
+    // the notes back on every open, as re-serialised HTML nobody edited.
+    if (editor.isEditable !== canEdit) editor.setEditable(canEdit, false);
   }, [editor, canEdit]);
 
   // When the parent re-fetches the dashboard and feeds in different content

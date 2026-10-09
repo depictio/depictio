@@ -43,6 +43,7 @@ from depictio.models.components.lite import (
     MultiQCLiteComponent,
     TableLiteComponent,
     TextLiteComponent,
+    index_from_tag,
 )
 from depictio.models.components.types import CardVariant, FigureStyle
 from depictio.models.logging import logger
@@ -688,6 +689,68 @@ class DashboardDataLite(BaseModel):
         resolve_linked_components(self._component_dicts())
         return self
 
+    @property
+    def tag_scope(self) -> str | None:
+        """What this tab's tag-derived component ids are namespaced by.
+
+        None on a main tab, so its ids stay the tags' alone. A child tab's title
+        otherwise: the same key a multi-tab import files the tab under
+        (``<source_key>#<title>``), so a re-import of the same YAML lands on the
+        same ids.
+        """
+        return None if self.is_main_tab else (self.title or None)
+
+    @model_validator(mode="after")
+    def validate_unique_tags(self) -> "DashboardDataLite":
+        """Refuse two components sharing a tag on one tab.
+
+        A tag is a component's identity: its id is derived from it. Two
+        components with one tag got one id, so the second tile rendered the
+        first one's definition and a card value computed for one landed on both.
+        """
+        counts: dict[str, int] = {}
+        for comp in self.components:
+            tag = comp.get("tag") if isinstance(comp, dict) else getattr(comp, "tag", None)
+            tag = str(tag or "").strip()
+            if tag:
+                counts[tag] = counts.get(tag, 0) + 1
+        duplicated = sorted(tag for tag, n in counts.items() if n > 1)
+        if duplicated:
+            details = ", ".join(f"'{tag}' ({counts[tag]} components)" for tag in duplicated)
+            raise ValueError(
+                f"Component tags must be unique within a tab, but these repeat: {details}. "
+                "Give each component its own tag."
+            )
+        return self
+
+    @model_validator(mode="before")
+    @classmethod
+    def scope_component_indices(cls, data: Any) -> Any:
+        """Derive each tagged id within the tab's scope (see ``tag_scope``).
+
+        Done on the raw components, before they parse: a component model
+        derives its id from its tag alone, and afterwards a derived id can no
+        longer be told from one the YAML wrote. An ``index`` the YAML states is
+        always kept, which is what lets an export of a tab whose ids predate
+        scoping re-import onto the same ids. A tagged component that stays a
+        plain dict (text tiles do) gets its id here too, so every caller sees
+        the one ``to_full`` writes.
+        """
+        if not isinstance(data, dict) or not isinstance(data.get("components"), list):
+            return data
+        is_main = data.get("is_main_tab", True) is not False
+        scope = None if is_main else (data.get("title") or None)
+        components = []
+        for comp in data["components"]:
+            if (
+                isinstance(comp, dict)
+                and str(comp.get("tag") or "").strip()
+                and not comp.get("index")
+            ):
+                comp = {**comp, "index": index_from_tag(str(comp["tag"]), scope)}
+            components.append(comp)
+        return {**data, "components": components}
+
     def _component_dicts(self) -> list[dict[str, Any]]:
         return [c if isinstance(c, dict) else c.model_dump() for c in self.components]
 
@@ -837,7 +900,7 @@ class DashboardDataLite(BaseModel):
         # Clean and order each component
         if "components" in data:
             data["components"] = [
-                self._clean_component_for_yaml(comp) for comp in data["components"]
+                self._clean_component_for_yaml(comp, self.tag_scope) for comp in data["components"]
             ]
 
         ordered = self._build_ordered_dashboard_dict(data)
@@ -851,6 +914,20 @@ class DashboardDataLite(BaseModel):
     def _is_uuid_like(value: str) -> bool:
         """Check whether a string looks like an auto-generated UUID."""
         return value.count("-") >= 4 or len(value) > 30
+
+    @staticmethod
+    def _index_is_derived(comp: dict[str, Any], index: Any, scope: str | None) -> bool:
+        """Whether a re-import would give ``comp`` this ``index`` without being told.
+
+        True for the id its tag derives within ``scope``, and for a random id on
+        an untagged component, which nothing could derive again anyway.
+        """
+        if not isinstance(index, str):
+            return False
+        tag = str(comp.get("tag") or "").strip()
+        if tag:
+            return index == index_from_tag(tag, scope)
+        return DashboardDataLite._is_uuid_like(index)
 
     @staticmethod
     def _is_empty_value(value: Any) -> bool:
@@ -930,7 +1007,7 @@ class DashboardDataLite(BaseModel):
         return mandatory_common + type_sections.get(comp_type, []) + generated
 
     @staticmethod
-    def _clean_component_for_yaml(comp: dict[str, Any]) -> dict[str, Any]:
+    def _clean_component_for_yaml(comp: dict[str, Any], scope: str | None = None) -> dict[str, Any]:
         """Clean a single component dict for YAML export.
 
         Applies per-type field ordering with sentinel section separators:
@@ -940,7 +1017,11 @@ class DashboardDataLite(BaseModel):
           4. ``# --- generated on export ---`` sentinel (if generated fields are present)
           5. Export-generated fields (tag, layout)
 
-        Also strips empty values, auto-generated UUIDs, and table defaults.
+        Also strips empty values, ids a re-import derives again, and table
+        defaults. ``scope`` is the tab's ``tag_scope``: an ``index`` its tag
+        derives within it is left out, any other is kept, because a re-import
+        that lost it would give the component a new id and cut it off from its
+        version history.
         Sentinels are replaced by comment lines via ``_apply_section_comments()``.
         """
         comp_type = comp.get("component_type", "")
@@ -983,7 +1064,7 @@ class DashboardDataLite(BaseModel):
             value = comp[key]
             if DashboardDataLite._is_empty_value(value):
                 continue
-            if key == "index" and isinstance(value, str) and DashboardDataLite._is_uuid_like(value):
+            if key == "index" and DashboardDataLite._index_is_derived(comp, value, scope):
                 continue
             if is_table and key in table_defaults and value == table_defaults[key]:
                 continue
@@ -1221,6 +1302,13 @@ class DashboardDataLite(BaseModel):
 
         dashboard_id = extract_id(dashboard_data.get("dashboard_id") or dashboard_data.get("_id"))
         lite_components = []
+        # The scope a re-import derives this tab's ids in (see `tag_scope`).
+        scope = (
+            None
+            if dashboard_data.get("is_main_tab", True)
+            else (dashboard_data.get("title") or None)
+        )
+        seen_tags: set[str] = set()
 
         # Import tag generation function
         from depictio.models.yaml_serialization.utils import generate_component_id
@@ -1284,6 +1372,16 @@ class DashboardDataLite(BaseModel):
                 },
                 idx,
             )
+            # The generated tag hashes what a component shows, so two identical
+            # components get one tag, which a re-import refuses (tags are unique
+            # per tab). Numbered rather than refused: duplicating a tile is an
+            # ordinary thing to do.
+            if tag in seen_tags:
+                n = 2
+                while f"{tag}-{n}" in seen_tags:
+                    n += 1
+                tag = f"{tag}-{n}"
+            seen_tags.add(tag)
 
             # Log warning if mandatory tags are missing
             if comp_type not in UNBOUND_COMPONENT_TYPES and not workflow_tag:
@@ -1565,9 +1663,13 @@ class DashboardDataLite(BaseModel):
                 if comp.get("selected_plot"):
                     lite_comp["selected_plot"] = comp["selected_plot"]
 
-            # Export index field only if it's meaningful (not an auto-generated UUID)
-            comp_index = comp.get("index", "").strip()
-            if comp_index and not cls._is_uuid_like(comp_index):
+            # The id goes out unless the tag written above derives it again. A
+            # stored component keeps no tag, so the one written here is usually
+            # generated and derives some other id: dropping the stored one then
+            # gave every component a new id on re-import, which cut each off
+            # from its version history.
+            comp_index = str(comp.get("index") or "").strip()
+            if comp_index and comp_index != index_from_tag(tag, scope):
                 lite_comp["index"] = comp_index
 
             lite_components.append(lite_comp)
@@ -1647,13 +1749,13 @@ class DashboardDataLite(BaseModel):
         Returns:
             Full dashboard dictionary ready for MongoDB insertion
         """
-        import uuid
         from datetime import datetime
 
         def build_base_component(comp_dict: dict[str, Any]) -> dict[str, Any]:
             """Build base component with common fields."""
             base: dict[str, Any] = {
-                "index": comp_dict.get("index") or str(uuid.uuid4()),
+                "index": comp_dict.get("index")
+                or index_from_tag(comp_dict.get("tag"), self.tag_scope),
                 "component_type": comp_dict.get("component_type", "figure"),
                 "title": comp_dict.get("title", ""),
                 "workflow_tag": comp_dict.get("workflow_tag"),

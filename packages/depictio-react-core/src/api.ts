@@ -219,31 +219,151 @@ async function authFetch(url: string, init: RequestInit = {}): Promise<Response>
   return fetch(url, { ...init, headers: retryHeaders });
 }
 
+/** An HTTP failure that keeps its status code, so a caller can tell "the
+ *  server refused this" (asking again will not help) from a failure worth
+ *  retrying. The message is the one a plain `Error` carried before. */
+export class HttpStatusError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'HttpStatusError';
+    this.status = status;
+  }
+}
+
 /** Throw `Error("<prefix>: <status> <body-text>")` after reading the body as
  *  text. Used for the bulk of endpoints whose error envelope is irrelevant. */
 async function throwHttpError(res: Response, prefix: string): Promise<never> {
   const text = await res.text().catch(() => '');
-  throw new Error(`${prefix}: ${res.status} ${text}`.trimEnd());
+  throw new HttpStatusError(`${prefix}: ${res.status} ${text}`.trimEnd(), res.status);
+}
+
+/**
+ * An `HttpStatusError` that also keeps the server's `detail`.
+ *
+ * The message is what it always was, so callers that only show
+ * `err.message` see no difference. Callers that have to tell a missing
+ * resource from a broken one (a restore that removed the tab being edited, a
+ * data version deleted while in use) read `status` instead of parsing text.
+ * A subclass, so code that checks `instanceof HttpStatusError` (following a
+ * job, which stops on a refusal) still recognises these failures.
+ */
+export class HttpError extends HttpStatusError {
+  /** The server's `detail`, as text, when the body carried one. */
+  readonly detail: string | null;
+
+  constructor(message: string, status: number, detail: string | null = null) {
+    super(message, status);
+    this.name = 'HttpError';
+    this.detail = detail;
+  }
+}
+
+/** True for an `HttpError` with this status. */
+export function isHttpStatus(err: unknown, status: number): boolean {
+  return err instanceof HttpError && err.status === status;
+}
+
+/** The `detail` of an error body as text, or null. Object details (a code
+ *  plus a message) are reduced to their message, else serialised. */
+async function readErrorDetail(res: Response): Promise<string | null> {
+  try {
+    const body = await res.json();
+    const detail = body?.detail;
+    if (detail == null) return null;
+    if (typeof detail === 'string') return detail;
+    if (typeof detail === 'object' && typeof detail.message === 'string') return detail.message;
+    return JSON.stringify(detail);
+  } catch {
+    // ignore non-JSON error bodies
+    return null;
+  }
 }
 
 /** Throw using FastAPI's `{detail}` envelope when present, otherwise fall back
- *  to `<fallback-or-prefix>: <status>`. Both single-string and JSON `detail`
- *  bodies are surfaced (the latter stringified). */
+ *  to `<prefix>: <status>`. Both single-string and JSON `detail` bodies are
+ *  surfaced (the latter reduced to its message, else stringified). */
 async function throwHttpDetailError(
   res: Response,
   prefix: string,
 ): Promise<never> {
-  let message = `${prefix}: ${res.status}`;
-  try {
-    const body = await res.json();
-    if (body?.detail) {
-      message =
-        typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
-    }
-  } catch {
-    // ignore non-JSON error bodies
+  const detail = await readErrorDetail(res);
+  throw new HttpError(detail ?? `${prefix}: ${res.status}`, res.status, detail);
+}
+
+// ── Render errors that belong to data time travel ──────────────────────────
+
+/** Window event fired when a render names a data version (`as_of_version`)
+ *  that no longer exists. `detail.asOfVersionId` is the id the request sent,
+ *  so a listener can tell its own stale pin from someone else's. */
+export const DATA_VERSION_GONE_EVENT = 'depictio:data-version-gone';
+
+export interface DataVersionGoneDetail {
+  asOfVersionId: string | null;
+  message: string;
+}
+
+/** Shown on a tile whose stored version read a different data collection
+ *  than the live component does (HTTP 409 on a `definition_version` render). */
+export const DEFINITION_COLLECTION_CHANGED_MESSAGE =
+  'This component read a different data collection in that version, so it cannot be drawn from it.';
+
+/**
+ * Does this failure mean "the data version you asked for is gone"?
+ *
+ * The server answers a stale `as_of_version` with a 400 whose detail starts
+ * with "Version" and says it "no longer exists". Matched loosely, on purpose:
+ * the wording may gain an id or a code, and a miss here only means the
+ * editor keeps the stale pin until the user clears it.
+ */
+export function isStaleDataVersionDetail(status: number, detail: string | null): boolean {
+  if (status !== 400 || !detail) return false;
+  const text = detail.trim();
+  return /^version\b/i.test(text) && /no longer exists/i.test(text);
+}
+
+/** `isStaleDataVersionDetail` for an error thrown by a render call. */
+export function isStaleDataVersionError(err: unknown): boolean {
+  return err instanceof HttpError && isStaleDataVersionDetail(err.status, err.detail);
+}
+
+/**
+ * Throw for a failed render, keeping the two failures time travel can cause
+ * readable on the tile:
+ *
+ *   409  the version's definition read another collection: a sentence the
+ *        tile can show as is, rather than "Failed to render figure: 409";
+ *   400  the `as_of_version` was deleted: the server's own detail, and a
+ *        window event so the editor can drop the stale pin once for every
+ *        tile, rather than each tile failing on its own.
+ *
+ * Every other failure keeps its old message.
+ */
+async function throwRenderError(
+  res: Response,
+  prefix: string,
+  dataVersions?: Record<string, unknown>,
+): Promise<never> {
+  const detail = await readErrorDetail(res);
+  if (res.status === 409) {
+    throw new HttpError(DEFINITION_COLLECTION_CHANGED_MESSAGE, 409, detail);
   }
-  throw new Error(message);
+  if (isStaleDataVersionDetail(res.status, detail)) {
+    const asOf = dataVersions?.as_of_version;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent<DataVersionGoneDetail>(DATA_VERSION_GONE_EVENT, {
+          detail: {
+            asOfVersionId: typeof asOf === 'string' ? asOf : null,
+            message: detail as string,
+          },
+        }),
+      );
+    }
+    throw new HttpError(detail as string, res.status, detail);
+  }
+  throw new HttpError(`${prefix}: ${res.status}`, res.status, detail);
 }
 
 /** 24-char hex id matching MongoDB ObjectId shape. Mirrors the format used by
@@ -519,13 +639,41 @@ export interface DashboardData {
   advanced_viz_controls?: 'popover' | 'rail' | 'header';
   /** Content-aware tile heights (autofit v2). Absent means on. */
   autofit?: boolean;
+  /** Present only when a past version was requested. Carries everything the
+   *  read-only banner needs, so previewing costs one request, not two. */
+  preview?: DashboardPreviewInfo;
   [key: string]: unknown;
 }
 
-/** Fetch dashboard including stored_metadata. Mirrors what the Dash viewer reads. */
-export async function fetchDashboard(dashboardId: string): Promise<DashboardData> {
-  const res = await authFetch(`${API_BASE}/dashboards/get/${dashboardId}`);
-  if (!res.ok) throw new Error(`Failed to fetch dashboard: ${res.status}`);
+export interface DashboardPreviewInfo {
+  version_id: string;
+  seq: number;
+  label?: string | null;
+  kind?: string | null;
+  pinned?: boolean;
+  created_at?: string | null;
+  author_email?: string | null;
+  /** How many of the version's data collections were stamped with each kind
+   *  of data version (same shape as `DashboardVersionSummary`). Lets the
+   *  banner say how much of the preview's data is pinned; absent from servers
+   *  that do not send it. */
+  data_version_kinds?: Record<string, number>;
+}
+
+/** Fetch dashboard including stored_metadata.
+ *
+ *  With `versionId`, the server overlays that version's *content* over the
+ *  live document. Permissions, visibility and the realtime config still come
+ *  from the live document, so a preview can never widen access. */
+export async function fetchDashboard(
+  dashboardId: string,
+  versionId?: string | null,
+): Promise<DashboardData> {
+  const qs = versionId ? `?version_id=${encodeURIComponent(versionId)}` : '';
+  const res = await authFetch(`${API_BASE}/dashboards/get/${dashboardId}${qs}`);
+  if (!res.ok) {
+    throw new HttpError(`Failed to fetch dashboard: ${res.status}`, res.status);
+  }
   return res.json();
 }
 
@@ -606,9 +754,14 @@ export interface CrossTabComponentsResponse {
  * Supersedes `fetchFloatingComponents` for the viewer. Resolves empty rather
  * than throwing, for the same reason as `fetchFloatingComponents`: the caller
  * uses this result to validate filters hydrated from storage.
+ *
+ * With `versionId`, the sections and maps come back as they were in that
+ * stored version, so a `?version=` preview of a child tab does not draw the
+ * parent's sections as they are today.
  */
 export async function fetchCrossTabComponents(
   dashboardId: string,
+  versionId?: string | null,
 ): Promise<CrossTabComponentsResponse> {
   const empty: CrossTabComponentsResponse = {
     parent_dashboard_id: null,
@@ -616,8 +769,9 @@ export async function fetchCrossTabComponents(
     persistent_sections: [],
   };
   try {
+    const qs = versionId ? `?version_id=${encodeURIComponent(versionId)}` : '';
     const res = await authFetch(
-      `${API_BASE}/dashboards/cross_tab_components/${dashboardId}`,
+      `${API_BASE}/dashboards/cross_tab_components/${dashboardId}${qs}`,
     );
     if (!res.ok) return empty;
     const data = await res.json();
@@ -909,6 +1063,121 @@ export interface ColumnRange {
   unique?: number | null;
 }
 
+/** The data pins a filter-option or status request carries: the subset of
+ *  `dataVersionBody` that says which data, without the definition. */
+export interface DataPinFields {
+  as_of_version?: string;
+  data_versions?: Record<string, number | null>;
+}
+
+export interface FilterOptionsRequest extends DataPinFields {
+  dc_id: string;
+  column: string;
+  kind: 'unique' | 'range';
+  filter_expr?: string | null;
+}
+
+/**
+ * A filter control's options read at a data version.
+ *
+ * The per-collection endpoints (`unique_values`, `specs`) only know the
+ * newest commit, so while a data version is active a select would offer
+ * values the pinned data does not hold and a slider would span today's
+ * bounds. This one resolves the pins against the dashboard's family, as the
+ * render endpoints do. Callers use it only while a version is active; live
+ * reads keep the cached per-collection endpoints.
+ */
+async function fetchFilterOptions(
+  dashboardId: string,
+  request: FilterOptionsRequest,
+): Promise<Record<string, unknown>> {
+  const res = await authFetch(`${API_BASE}/dashboards/filter_options/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) await throwRenderError(res, 'Failed to fetch filter options', { ...request });
+  return res.json();
+}
+
+/** `fetchUniqueValues` at a data version (see `fetchFilterOptions`). */
+export async function fetchUniqueValuesAt(
+  dashboardId: string,
+  dcId: string,
+  columnName: string,
+  pins: DataPinFields,
+  filterExpr?: string | null,
+): Promise<string[]> {
+  const body = await fetchFilterOptions(dashboardId, {
+    dc_id: dcId,
+    column: columnName,
+    kind: 'unique',
+    ...(filterExpr ? { filter_expr: filterExpr } : {}),
+    ...pins,
+  });
+  const values = body.values;
+  return Array.isArray(values) ? values.map(String) : [];
+}
+
+/** `fetchColumnRange` at a data version (see `fetchFilterOptions`). */
+export async function fetchColumnRangeAt(
+  dashboardId: string,
+  dcId: string,
+  columnName: string,
+  pins: DataPinFields,
+): Promise<ColumnRange> {
+  const body = await fetchFilterOptions(dashboardId, {
+    dc_id: dcId,
+    column: columnName,
+    kind: 'range',
+    ...pins,
+  });
+  return {
+    min: typeof body.min === 'number' ? body.min : null,
+    max: typeof body.max === 'number' ? body.max : null,
+    dtype: typeof body.dtype === 'string' ? body.dtype : null,
+    unique: typeof body.unique === 'number' ? body.unique : null,
+  };
+}
+
+/** How one collection is drawn under a set of data pins. */
+export type DataVersionCollectionState = 'pinned' | 'live' | 'not_versioned';
+
+export interface DataVersionCollectionStatus {
+  dc_id: string;
+  workflow_tag?: string | null;
+  data_collection_tag?: string | null;
+  dc_type?: string | null;
+  status: DataVersionCollectionState;
+  /** The commit read, for a pinned collection. */
+  delta_version?: number | null;
+  /** Why a collection is live or not versioned, in the server's words. */
+  reason?: string | null;
+}
+
+export interface DataVersionStatusResponse {
+  collections: DataVersionCollectionStatus[];
+}
+
+/**
+ * Which of the dashboard's collections the given pins actually reach.
+ *
+ * The banners state this rather than infer it: a version can pin one
+ * collection, leave another live on purpose, and have recorded nothing for a
+ * third, and only the server knows which is which.
+ */
+export async function fetchDataVersionStatus(
+  dashboardId: string,
+  pins: DataPinFields,
+): Promise<DataVersionStatusResponse> {
+  const res = await authFetch(`${API_BASE}/dashboards/data_version_status/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify(pins),
+  });
+  if (!res.ok) await throwRenderError(res, 'Failed to fetch data version status', { ...pins });
+  const body = (await res.json()) as Partial<DataVersionStatusResponse>;
+  return { collections: Array.isArray(body.collections) ? body.collections : [] };
+}
+
 /** Numeric range bounds for a column — backs RangeSlider min/max.
  *  Reads precomputed min/max from /deltatables/specs/{dcId}.
  */
@@ -1044,6 +1313,10 @@ export async function bulkComputeCards(
   componentIds?: string[],
   options?: BulkComputeOptions,
   signal?: AbortSignal,
+  /** Data time travel: `as_of_version` / `data_versions` /
+   *  `definition_version`, from `dataVersionBody`. Last so existing callers
+   *  keep their positions. */
+  dataVersions?: Record<string, unknown>,
 ): Promise<BulkComputeResponse> {
   // Group state rides in the body only when the comparison is actually on, so
   // requests without the feature stay byte-identical.
@@ -1058,11 +1331,16 @@ export async function bulkComputeCards(
     `${API_BASE}/dashboards/bulk_compute_cards/${dashboardId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, component_ids: componentIds, ...groupBody }),
+      body: JSON.stringify({
+        filters,
+        component_ids: componentIds,
+        ...groupBody,
+        ...(dataVersions ?? {}),
+      }),
       signal,
     },
   );
-  if (!res.ok) throw new Error(`Failed to bulk-compute cards: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to bulk-compute cards', dataVersions);
   return res.json();
 }
 
@@ -1132,6 +1410,8 @@ export async function renderFigure(
   fullLoad = false,
   signal?: AbortSignal,
   options?: RenderFigureOptions,
+  /** Data time travel pins + definition version; see `bulkComputeCards`. */
+  dataVersions?: Record<string, unknown>,
 ): Promise<FigureResponse> {
   // Grouping state rides in the body only when coloring is actually requested,
   // so every request without the feature stays byte-identical to what it was
@@ -1155,11 +1435,17 @@ export async function renderFigure(
     `${API_BASE}/dashboards/render_figure/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme, full_load: fullLoad, ...groupBody }),
+      body: JSON.stringify({
+        filters,
+        theme,
+        full_load: fullLoad,
+        ...groupBody,
+        ...(dataVersions ?? {}),
+      }),
       signal,
     },
   );
-  if (!res.ok) throw new Error(`Failed to render figure: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to render figure', dataVersions);
   return res.json();
 }
 
@@ -1916,6 +2202,8 @@ export async function renderTable(
   sortBy?: string | null,
   sortDir: 'asc' | 'desc' = 'desc',
   signal?: AbortSignal,
+  /** Data time travel pins + definition version; see `bulkComputeCards`. */
+  dataVersions?: Record<string, unknown>,
 ): Promise<TableResponse> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_table/${dashboardId}/${componentId}`,
@@ -1927,11 +2215,12 @@ export async function renderTable(
         limit,
         sort_by: sortBy ?? null,
         sort_dir: sortDir,
+        ...(dataVersions ?? {}),
       }),
       signal,
     },
   );
-  if (!res.ok) throw new Error(`Failed to render table: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to render table', dataVersions);
   return res.json();
 }
 
@@ -1966,15 +2255,22 @@ export async function fetchImagePaths(
   filters: InteractiveFilter[] = [],
   sortBy?: string | null,
   sortDir: 'asc' | 'desc' = 'desc',
+  dataVersions?: Record<string, unknown>,
 ): Promise<ImageGridResponse> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_image_paths/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, max, sort_by: sortBy ?? null, sort_dir: sortDir }),
+      body: JSON.stringify({
+        filters,
+        max,
+        sort_by: sortBy ?? null,
+        sort_dir: sortDir,
+        ...(dataVersions ?? {}),
+      }),
     },
   );
-  if (!res.ok) throw new Error(`Failed to fetch image paths: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to fetch image paths', dataVersions);
   return (await res.json()) as ImageGridResponse;
 }
 
@@ -1984,15 +2280,16 @@ export async function renderMap(
   componentId: string,
   filters: InteractiveFilter[],
   theme: 'light' | 'dark' = 'light',
+  dataVersions?: Record<string, unknown>,
 ): Promise<FigureResponse> {
   const res = await authFetch(
     `${API_BASE}/dashboards/render_map/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters, theme }),
+      body: JSON.stringify({ filters, theme, ...(dataVersions ?? {}) }),
     },
   );
-  if (!res.ok) throw new Error(`Failed to render map: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to render map', dataVersions);
   return res.json();
 }
 
@@ -2013,6 +2310,7 @@ export async function fetchMapData(
   componentId: string,
   filters: InteractiveFilter[],
   signal?: AbortSignal,
+  dataVersions?: Record<string, unknown>,
 ): Promise<MapDataResponse> {
   // Not queued through `enqueueFetch`, unlike `fetchAdvancedVizData` above:
   // this fires when the user opens the popover, and making it wait behind a
@@ -2021,11 +2319,11 @@ export async function fetchMapData(
     `${API_BASE}/dashboards/map_data/${dashboardId}/${componentId}`,
     {
       method: 'POST',
-      body: JSON.stringify({ filters }),
+      body: JSON.stringify({ filters, ...(dataVersions ?? {}) }),
       signal,
     },
   );
-  if (!res.ok) throw new Error(`Failed to fetch map data: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to fetch map data', dataVersions);
   return (await res.json()) as MapDataResponse;
 }
 
@@ -2446,19 +2744,30 @@ export interface PreviewResult {
   total_columns: number;
   /** True when the server narrowed the frame with dashboard filters. */
   filter_applied?: boolean;
+  /** Delta version actually read; null when the current table was read. */
+  version?: number | null;
 }
 
 export async function fetchDataCollectionPreview(
   dcId: string,
   limit = 100,
   filters: InteractiveFilter[] = [],
+  /** Read a historical Delta commit instead of the current table. */
+  version?: number | null,
 ): Promise<PreviewResult> {
+  // The filtered POST variant has no version parameter. Refuse the combination
+  // rather than return current rows labelled as a past version.
+  if (version != null && filters.length > 0) {
+    throw new Error('A filtered preview cannot read a historical Delta version');
+  }
   // Unfiltered callers keep the existing GET; the POST variant applies the
   // dashboard's active filters server-side so builder previews match what the
   // dashboard's components show (rows AND total_rows are filtered).
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (version != null) params.set('version', String(version));
   const res =
     filters.length === 0
-      ? await authFetch(`${API_BASE}/deltatables/preview/${dcId}?limit=${limit}`)
+      ? await authFetch(`${API_BASE}/deltatables/preview/${dcId}?${params.toString()}`)
       : await authFetch(`${API_BASE}/deltatables/preview/${dcId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2466,6 +2775,58 @@ export async function fetchDataCollectionPreview(
         });
   if (!res.ok) {
     throw new Error(`Failed to fetch preview: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** One commit in a data collection's Delta history.
+ *
+ *  Rows are a merge of two sources, hence the sparse fields: `origin: 'delta'`
+ *  is a commit Delta knows about but depictio never recorded (or recorded
+ *  before delta_version existed), `'mongo'` is an aggregation whose commit has
+ *  aged out of the requested window, `'both'` has the full picture. Callers
+ *  should render what is present rather than assuming any field is set.
+ *
+ *  `by_email` is populated only for project owners, editors and admins. */
+export interface DeltaVersionEntry {
+  version?: number | null;
+  timestamp?: string | null;
+  operation?: string | null;
+  rows_added?: number | null;
+  files_added?: number | null;
+  files_removed?: number | null;
+  metadata?: Record<string, string>;
+  aggregation_version?: number | null;
+  aggregation_time?: string | null;
+  /** The Delta commit a depictio record was written at, when it recorded one. */
+  delta_version?: number | null;
+  by_email?: string | null;
+  run_id?: string | null;
+  trigger?: string | null;
+  write_mode?: string | null;
+  rows_total?: number | null;
+  origin: 'delta' | 'mongo' | 'both';
+}
+
+export interface DeltaHistoryResponse {
+  delta_table_location: string;
+  current_version: number | null;
+  /** True when the object store could not be reached and only Mongo's view is
+   *  present — the UI says so rather than implying the table has no history. */
+  degraded: boolean;
+  versions: DeltaVersionEntry[];
+  /** True when the history holds more entries than `limit` returned. */
+  truncated?: boolean;
+}
+
+/** Commit history of a data collection's Delta table, newest first. */
+export async function fetchDeltaHistory(
+  dcId: string,
+  limit = 20,
+): Promise<DeltaHistoryResponse> {
+  const res = await authFetch(`${API_BASE}/deltatables/history/${dcId}?limit=${limit}`);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch Delta history: ${res.status}`);
   }
   return res.json();
 }
@@ -3441,6 +3802,8 @@ export interface IngestionDataCollection {
   removal_reason: string | null;
   files_found: number;
   files_new: number;
+  /** Files whose content changed since the previous scan. */
+  files_updated: number;
   files_skipped: number;
   files_failed: number;
   ingested: boolean;
@@ -3460,6 +3823,10 @@ export interface IngestionRun {
   scan_time: string | null;
   /** 'ok' | 'partial' | 'no_scan' */
   status: string;
+  /** Tallies from this run's most recent scan, summed across its DCs. */
+  files_total: number;
+  files_new: number;
+  files_updated: number;
 }
 
 export interface IngestionSummary {
@@ -4466,7 +4833,7 @@ export interface MonitoringIngestionRun {
   data_collections?: MonitoringIngestionDataCollection[];
   /** `abandoned`: still `running` when no write arrived within the stale threshold. */
   status: 'running' | 'success' | 'partial' | 'failed' | 'interrupted' | 'abandoned';
-  steps?: { name: string; status: string; detail?: string | null }[];
+  steps?: MonitoringIngestionStep[];
   /** Step currently running (live async ingestion); null for finished runs. */
   current_step?: string | null;
   error?: string | null;
@@ -4474,6 +4841,57 @@ export interface MonitoringIngestionRun {
   /** Last write to the record; what the stale sweep measures from. */
   updated_at?: string | null;
   finished_at?: string | null;
+
+  /** How the run was initiated. Absent on runs recorded before this existed,
+   *  which the UI shows as "manual" — correct, since nothing else could start
+   *  one at the time. */
+  trigger?: 'manual' | 'watch' | 'schedule' | 'ui' | null;
+  /** Why a watcher fired: the paths whose change triggered this cycle. */
+  trigger_reason?: string | null;
+  progress?: MonitoringProgress | null;
+  counters?: Record<string, number> | null;
+  timings?: Record<string, number> | null;
+  concurrency?: number | null;
+  warnings?: string[];
+  errors?: MonitoringIngestionError[];
+  errors_truncated?: boolean;
+  logs_truncated?: boolean;
+}
+
+/** One step of an ingestion run. `counters` is an open dict so the CLI can add
+ *  measurements without a server-side schema change. */
+export interface MonitoringIngestionStep {
+  name: string;
+  status: string;
+  detail?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  duration_ms?: number | null;
+  index?: number | null;
+  total?: number | null;
+  progress?: MonitoringProgress | null;
+  counters?: Record<string, number> | null;
+  data_collection_tag?: string | null;
+  job_id?: string | null;
+  error?: string | null;
+}
+
+export interface MonitoringProgress {
+  current?: number | null;
+  total?: number | null;
+  /** Only present when the backend can compute a real fraction. The UI must
+   *  never synthesise one from a step index — a bar that jumps 0→50→100 across
+   *  three very unequal steps is worse than no bar at all. */
+  percent?: number | null;
+  unit?: string | null;
+}
+
+export interface MonitoringIngestionError {
+  step?: string | null;
+  data_collection_tag?: string | null;
+  message: string;
+  file_path?: string | null;
+  ts?: string | null;
 }
 
 /** Per-data-collection summary + local scan paths captured for an ingestion run. */
@@ -4485,6 +4903,54 @@ export interface MonitoringIngestionDataCollection {
   scan_pattern?: string | null;
   locations?: string[];
   file_count?: number | null;
+
+  /** Outcome counters. */
+  files_new?: number | null;
+  files_updated?: number | null;
+  files_unchanged?: number | null;
+  files_skipped?: number | null;
+  files_failed?: number | null;
+  rows_written?: number | null;
+  delta_version?: number | null;
+  duration_ms?: number | null;
+  status?: string | null;
+
+  /** Scan diagnostics. These turn a bare "No files found" from a dead end into
+   *  something actionable: how much of the tree was walked, how many candidates
+   *  the regex rejected, and example paths that were seen but not matched. */
+  dirs_walked?: number | null;
+  files_seen?: number | null;
+  regex_rejected?: number | null;
+  skip_reasons?: Record<string, number> | null;
+  sample_rejected?: string[];
+}
+
+/** A long-running CLI agent (a `depictio watch` process) as the server
+ *  last heard from it. Rows expire via TTL a few heartbeats after one dies, so
+ *  a listed agent is a live one. */
+export interface MonitoringCliAgent {
+  agent_id: string;
+  instance_label?: string | null;
+  hostname?: string | null;
+  pid?: number | null;
+  cli_version?: string | null;
+  project_id?: string | null;
+  project_name?: string | null;
+  mode?: string | null;
+  backend?: string | null;
+  watching?: string[];
+  status: 'idle' | 'settling' | 'scanning' | 'ingesting' | 'error';
+  last_trigger_at?: string | null;
+  last_run_id?: string | null;
+  last_error?: string | null;
+  /** Set while a "Run now" is waiting to be picked up by the agent; cleared the
+   *  moment it claims it, which is how the UI can show "requested" briefly. */
+  run_requested_at?: string | null;
+  run_requested_by?: string | null;
+  runs_total?: number | null;
+  started_at?: string | null;
+  heartbeat_at?: string | null;
+  expires_at?: string | null;
 }
 
 /** A recent application log line from the capped collection. */
@@ -4585,6 +5051,125 @@ export async function fetchAppLogs(opts: {
   if (!res.ok) await throwHttpDetailError(res, 'Failed to load logs');
   const data = await res.json();
   return Array.isArray(data?.logs) ? (data.logs as MonitoringAppLog[]) : [];
+}
+
+/** Ingestion-run history for one project, permission-scoped.
+ *
+ * Distinct from `fetchIngestionRuns`, which is admin-only across all projects.
+ * `redacted` tells the UI that operator-machine fields (local paths, hostname,
+ * command line) were stripped because the caller is not an owner/editor — worth
+ * surfacing, so a viewer understands why those columns are empty rather than
+ * assuming the data is missing.
+ *
+ * A 404 means monitoring is off on this server; treated as an empty history.
+ */
+export async function fetchProjectIngestionRuns(
+  projectId: string,
+  opts: { limit?: number; skip?: number } = {},
+): Promise<{ runs: MonitoringIngestionRun[]; redacted: boolean }> {
+  const qs = monitoringQuery({ limit: opts.limit, skip: opts.skip });
+  const res = await authFetch(`${API_BASE}/projects/ingestion-runs/${projectId}${qs}`);
+  if (res.status === 404) return { runs: [], redacted: false };
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load ingestion history');
+  const data = await res.json();
+  return {
+    runs: Array.isArray(data?.runs) ? (data.runs as MonitoringIngestionRun[]) : [],
+    redacted: Boolean(data?.redacted),
+  };
+}
+
+/** Whether this project can be re-ingested from the browser.
+ *
+ *  `enabled` is whether the server offers the feature at all (hide the control
+ *  when false); `available` is whether this caller can use it now (disable and
+ *  show `reason` when false). A 404 means the server predates the endpoint —
+ *  reported as not enabled, which is the correct rendering. */
+export interface IngestionTriggerStatus {
+  enabled: boolean;
+  available: boolean;
+  reason: string | null;
+  /** Counts for everyone; the paths themselves are sent to admins only. */
+  unreachable_count?: number;
+  unreachable_locations?: string[];
+  outside_roots_count?: number;
+  outside_roots?: string[];
+}
+
+export async function fetchIngestionTriggerStatus(
+  projectId: string,
+): Promise<IngestionTriggerStatus> {
+  const res = await authFetch(`${API_BASE}/projects/ingestion/trigger-status/${projectId}`);
+  if (!res.ok) return { enabled: false, available: false, reason: null };
+  return res.json();
+}
+
+/** Start a server-side ingestion. Returns the job to poll and the run_id it
+ *  will be recorded under. `already_running` means an ingestion for this
+ *  project was already in flight and its job was handed back instead. */
+export interface IngestionTriggerResult {
+  job_id: string;
+  run_id: string | null;
+  already_running: boolean;
+}
+
+export async function triggerProjectIngestion(
+  projectId: string,
+  opts: { overwrite?: boolean } = {},
+): Promise<IngestionTriggerResult> {
+  const qs = opts.overwrite ? '?overwrite=true' : '';
+  const res = await authFetch(`${API_BASE}/projects/ingestion/trigger/${projectId}${qs}`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to start ingestion');
+  return res.json();
+}
+
+/** One offloaded job's status. Mirrors the JobStatus model; `poll_after_seconds`
+ *  is the server telling the client how long to wait before asking again. */
+export interface JobStatusResponse {
+  job_id: string;
+  kind: string;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
+  step?: string | null;
+  detail?: string | null;
+  progress?: { current?: number; total?: number } | null;
+  result?: Record<string, unknown> | null;
+  error?: string | null;
+  poll_after_seconds?: number | null;
+}
+
+export async function fetchJob(jobId: string): Promise<JobStatusResponse> {
+  const res = await authFetch(`${API_BASE}/jobs/${jobId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read job status');
+  return res.json();
+}
+
+/** List live CLI agents (watchers). Admin-scoped, or project-scoped when a
+ *  projectId is given. A 404 means this server predates agents — treated as an
+ *  empty list rather than an error, so the pane degrades to "none" instead of
+ *  showing a failure. */
+export async function fetchCliAgents(
+  opts: { projectId?: string; limit?: number } = {},
+): Promise<MonitoringCliAgent[]> {
+  const qs = monitoringQuery({ project_id: opts.projectId, limit: opts.limit });
+  const res = await authFetch(`${API_BASE}/monitoring/agents${qs}`);
+  if (res.status === 404) return [];
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load watchers');
+  const data = await res.json();
+  return Array.isArray(data?.agents) ? (data.agents as MonitoringCliAgent[]) : [];
+}
+
+/** Ask a running watcher to start a cycle now.
+ *
+ *  Resolves once the request is *recorded*, not once the cycle finishes: the
+ *  agent claims it on its next command poll (a few seconds), so the caller
+ *  should refresh rather than expect a result. `agentId` is the stored id from
+ *  `fetchCliAgents`. */
+export async function triggerCliAgentRun(agentId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/monitoring/agents/${encodeURIComponent(agentId)}/trigger`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to request a run');
 }
 
 export async function fetchMonitoringHealth(): Promise<MonitoringHealth> {
@@ -5544,4 +6129,279 @@ export async function deleteCommentThread(threadId: string): Promise<void> {
 export async function fetchPublishedAnnotations(dashboardId: string): Promise<PublishedAnnotation[]> {
   const res = await authFetch(`${COMMENTS_BASE}/published/${enc(dashboardId)}`);
   return commentsJson(res, 'Failed to load annotations');
+}
+
+// ── Dashboard version history ──────────────────────────────────────────────
+
+/** Which mechanism can reproduce a data collection's state at this version.
+ *  Depictio's data collections don't share a storage format, so coverage is
+ *  genuinely heterogeneous — `none` carries a `reason` the UI shows rather
+ *  than implying a fidelity it doesn't have. */
+export type DataVersionKind = 'delta' | 'manifest' | 'asset' | 'none';
+
+export type DashboardVersionKind = 'auto' | 'explicit' | 'restore' | 'import';
+
+export interface DataCollectionStamp {
+  dc_id: string;
+  dc_type?: string;
+  workflow_tag?: string;
+  data_collection_tag?: string;
+  version_kind: DataVersionKind;
+  schema_hash?: string;
+  columns?: Array<{ name: string; type: string }>;
+  row_count?: number | null;
+  delta_version?: number | null;
+  aggregation_version?: number | null;
+  delta_commit_timestamp?: string | null;
+  as_of?: string | null;
+  manifest_digest?: string | null;
+  s3_locations?: string[];
+  sample_count?: number | null;
+  asset_digest?: string | null;
+  asset_key?: string | null;
+  asset_bytes?: number | null;
+  /** Parts NOT covered by the stamp, e.g. `["image_pixels"]`. */
+  unversioned_parts?: string[];
+  reason?: string | null;
+}
+
+/** Timeline row. Deliberately without `tabs` — the snapshot is ~95% of a
+ *  record's bytes and the drawer lists far more often than it opens one. */
+export interface DashboardVersionSummary {
+  version_id: string;
+  family_id: string;
+  seq: number;
+  kind: DashboardVersionKind;
+  label?: string | null;
+  pinned: boolean;
+  author_id?: string | null;
+  author_email?: string | null;
+  created_at: string;
+  updated_at: string;
+  save_count: number;
+  content_hash: string;
+  tab_count: number;
+  component_count: number;
+  parent_version_id?: string | null;
+  data_version_kinds: Record<string, number>;
+}
+
+export interface DashboardVersionListResponse {
+  family_id: string;
+  total: number;
+  /** The entry matching the live dashboard, or null when the live state has
+   *  drifted from every stored version. */
+  current_version_id: string | null;
+  versions: DashboardVersionSummary[];
+}
+
+export interface DashboardVersionTab {
+  dashboard_id: string;
+  is_main_tab: boolean;
+  tab_order: number;
+  title: string;
+  subtitle?: string;
+  stored_metadata: Array<Record<string, unknown>>;
+  left_panel_layout_data: Array<Record<string, unknown>>;
+  right_panel_layout_data: Array<Record<string, unknown>>;
+  [key: string]: unknown;
+}
+
+export interface DashboardVersionDetail extends DashboardVersionSummary {
+  project_id: string;
+  tabs: DashboardVersionTab[];
+  data_collections: DataCollectionStamp[];
+}
+
+export interface RestoreVersionResult {
+  restored_from: string;
+  restored_from_seq: number | null;
+  new_version_id: string | null;
+  tabs_updated: number;
+  tabs_created: number;
+  tabs_deleted: number;
+  /** Ids of the tabs the restore deleted, from servers that list them. The
+   *  count alone cannot say whether the tab being edited was one of them. */
+  deleted_tab_ids?: string[];
+}
+
+/** Version timeline for a dashboard family, newest first. */
+export async function fetchDashboardVersions(
+  dashboardId: string,
+  opts: { limit?: number; beforeSeq?: number; pinnedOnly?: boolean } = {},
+): Promise<DashboardVersionListResponse> {
+  const params = new URLSearchParams();
+  if (opts.limit != null) params.set('limit', String(opts.limit));
+  if (opts.beforeSeq != null) params.set('before_seq', String(opts.beforeSeq));
+  if (opts.pinnedOnly) params.set('pinned_only', 'true');
+  const qs = params.toString();
+  const res = await authFetch(
+    `${API_BASE}/dashboards/${dashboardId}/versions${qs ? `?${qs}` : ''}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch dashboard versions');
+  return (await res.json()) as DashboardVersionListResponse;
+}
+
+/** One version in full, including the snapshot. */
+export async function fetchDashboardVersion(
+  versionId: string,
+): Promise<DashboardVersionDetail> {
+  const res = await authFetch(`${API_BASE}/dashboards/versions/${versionId}`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to fetch dashboard version');
+  return (await res.json()) as DashboardVersionDetail;
+}
+
+/** Take a named snapshot of the current state. */
+export async function createDashboardVersion(
+  dashboardId: string,
+  label?: string | null,
+): Promise<{ version_id: string; seq: number; label: string | null }> {
+  const res = await authFetch(`${API_BASE}/dashboards/${dashboardId}/versions`, {
+    method: 'POST',
+    body: JSON.stringify({ label: label ?? null }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create version');
+  return await res.json();
+}
+
+/** Pin a version so retention can never remove it. Also seals it, so the next
+ *  autosave opens a fresh version rather than rewriting this one. */
+export async function pinDashboardVersion(
+  versionId: string,
+  label?: string | null,
+): Promise<DashboardVersionSummary> {
+  const res = await authFetch(`${API_BASE}/dashboards/versions/${versionId}/pin`, {
+    method: 'POST',
+    body: JSON.stringify({ label: label ?? null }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to pin version');
+  return (await res.json()) as DashboardVersionSummary;
+}
+
+export async function unpinDashboardVersion(
+  versionId: string,
+): Promise<DashboardVersionSummary> {
+  const res = await authFetch(`${API_BASE}/dashboards/versions/${versionId}/pin`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to unpin version');
+  return (await res.json()) as DashboardVersionSummary;
+}
+
+export async function renameDashboardVersion(
+  versionId: string,
+  label: string | null,
+): Promise<DashboardVersionSummary> {
+  const res = await authFetch(`${API_BASE}/dashboards/versions/${versionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ label }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to rename version');
+  return (await res.json()) as DashboardVersionSummary;
+}
+
+/** Erase a version. Requires owner; a pinned version needs `force`. */
+export async function deleteDashboardVersion(
+  versionId: string,
+  force = false,
+): Promise<void> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/versions/${versionId}${force ? '?force=true' : ''}`,
+    { method: 'DELETE' },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to delete version');
+}
+
+/** Put a past version back. Non-destructive: the current state is captured as
+ *  a version first, so the restore itself can be undone. */
+export async function restoreDashboardVersion(
+  versionId: string,
+): Promise<RestoreVersionResult> {
+  const res = await authFetch(`${API_BASE}/dashboards/versions/${versionId}/restore`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to restore version');
+  return (await res.json()) as RestoreVersionResult;
+}
+
+export interface CompatibilityCheck {
+  dc_id: string;
+  data_collection_tag?: string;
+  workflow_tag?: string;
+  dc_type?: string;
+  version_kind?: DataVersionKind;
+  delta_version?: number | null;
+  found: boolean;
+  schema_match: boolean;
+  columns_removed: string[];
+  columns_added: string[];
+  columns_retyped: Array<{ name: string; from: string; to: string }>;
+  /** Component indices that reference a column which no longer exists — what
+   *  turns a schema diff into something actionable. */
+  affected_components: string[];
+  issues: string[];
+}
+
+export interface CompatibilityReport {
+  version_id: string;
+  seq: number;
+  severity: 'ok' | 'info' | 'warning' | 'error';
+  /** Schema drift never blocks a restore; it is shown beforehand instead. */
+  renderable: boolean;
+  checks: CompatibilityCheck[];
+}
+
+/** Whether a version can still render against today's data. */
+export async function fetchVersionCompatibility(
+  versionId: string,
+): Promise<CompatibilityReport> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/versions/${versionId}/compatibility`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to check version compatibility');
+  return (await res.json()) as CompatibilityReport;
+}
+
+export interface RestoreComponentResult {
+  restored_from: string;
+  restored_from_seq: number | null;
+  component_index: string;
+  /** True when the component had been deleted and was put back. */
+  readded: boolean;
+  layout_restored: boolean;
+  new_version_id: string | null;
+}
+
+/**
+ * Put one component back, leaving the rest of the dashboard alone.
+ *
+ * The narrow counterpart to `restoreDashboardVersion`. Recovering a single
+ * chart by restoring its whole version also reverts every other component and
+ * any work done since, which is rarely what was meant.
+ *
+ * `restoreLayout` is opt-in: the usual request is "give me back what this
+ * showed", and moving neighbours to reinstate an old grid position is a
+ * second, unasked-for change.
+ */
+export async function restoreComponentFromVersion(
+  versionId: string,
+  /** The tab the component lives on. Required: component ids are only unique
+   *  within a tab, and a version holds the whole family. */
+  tabId: string,
+  componentIndex: string,
+  restoreLayout = false,
+): Promise<RestoreComponentResult> {
+  const res = await authFetch(
+    `${API_BASE}/dashboards/versions/${versionId}/restore_component`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        tab_id: tabId,
+        component_index: componentIndex,
+        restore_layout: restoreLayout,
+      }),
+    },
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to restore component');
+  return (await res.json()) as RestoreComponentResult;
 }

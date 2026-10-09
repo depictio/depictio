@@ -23,6 +23,7 @@ import { resolveTabColor, resolveTabIcon, tabImageSrc } from '../chrome/Sidebar'
  *
  *   - Edit:      navigates to the React edit page at
  *                /dashboard-edit/{id}/component/edit/{componentId}
+ *   - History:   fires `onOpenHistory` — opens this component across versions
  *   - Duplicate: fires `onDuplicate` — parent clones metadata + layout, POSTs /save
  *   - Copy to tab…: fires `onCopyToTab` — parent adds a copy to the picked
  *                sibling tab's document and saves that tab
@@ -34,6 +35,11 @@ import { resolveTabColor, resolveTabIcon, tabImageSrc } from '../chrome/Sidebar'
  * fourth action: the list is as long as the dashboard has sections, and it
  * would otherwise be the thing that pushes Delete off the bottom of a viewport.
  * "Copy to tab…" and "Highlight on…" open a page of sibling tabs the same way.
+ *
+ * History lives in this menu rather than as its own hover icon because it is
+ * an editing affordance: it can restore the component, and it is offered only
+ * where the caller can write. A second always-visible icon would also compete
+ * with the chrome cluster this one deliberately joins.
  *
  * Hidden via the `editMode` prop so the same renderer tree can be reused for
  * read-only mode.
@@ -123,6 +129,12 @@ interface GridItemEditOverlayProps {
   /** Puts a tile back under autofit after a manual resize (or opts a figure
    *  in). Omit to hide the item. */
   onResetFit?: (componentId: string) => void;
+  /**
+   * Optional component-history handler. Hidden when absent, or when the
+   * dashboard has no recorded versions — an action that can only ever open an
+   * empty pane is worse than no action.
+   */
+  onOpenHistory?: (componentId: string) => void;
 }
 
 const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
@@ -145,6 +157,7 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
   onEdit,
   fit,
   onResetFit,
+  onOpenHistory,
 }) => {
   // The dropdown shows one page at a time: the actions, the section list or
   // the tab list. A dashboard can declare any number of sections and tabs, and
@@ -240,6 +253,17 @@ const GridItemEditOverlay: React.FC<GridItemEditOverlayProps> = ({
             >
               {EDIT_MENU_STYLE.edit.label}
             </Menu.Item>
+            {onOpenHistory && (
+              // Edit mode only, like the rest of this menu: it can restore the
+              // component, which is a write.
+              <Menu.Item
+                leftSection={<Icon icon={EDIT_MENU_STYLE.history.icon} width={14} />}
+                onClick={() => onOpenHistory(componentId)}
+                data-testid="component-history-action"
+              >
+                {EDIT_MENU_STYLE.history.label}
+              </Menu.Item>
+            )}
             {showDuplicate && (
               <Menu.Item
                 leftSection={<Icon icon={EDIT_MENU_STYLE.duplicate.icon} width={14} />}

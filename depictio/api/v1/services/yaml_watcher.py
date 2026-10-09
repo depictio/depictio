@@ -311,10 +311,24 @@ def sync_yaml_to_mongodb(filepath: str, event_type: str) -> dict[str, Any]:
         )
 
         dashboard = DashboardData.from_mongo(dashboard_dict)
+
+        # A synced file replaces the dashboard as an import does, so it is
+        # versioned as one: the state it overwrites first, then the result.
+        # Either writes nothing when its content is the newest version already.
+        # Anchored on the family's main tab; `capture_quietly` never raises, so
+        # the ledger can never block a sync.
+        from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
+            capture_quietly,
+            resolve_family_id,
+        )
+
+        family_id = resolve_family_id(existing) or ObjectId(dashboard_id)
+        capture_quietly(family_id, kind="explicit")
         dashboards_collection.find_one_and_update(
             {"dashboard_id": ObjectId(dashboard_id)},
             {"$set": dashboard.mongo()},
         )
+        capture_quietly(family_id, kind="import")
 
         result["success"] = True
         result["action"] = "updated"

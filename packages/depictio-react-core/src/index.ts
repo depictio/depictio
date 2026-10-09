@@ -34,6 +34,9 @@ export {
   gridBoxHeight,
   defaultLayoutForType,
 } from './api';
+// Thrown by the fetch helpers on a non-2xx response; `status` lets a poller
+// stop on a refusal instead of retrying it forever.
+export { HttpStatusError } from './api';
 export { default as ComponentRenderer } from './components/ComponentRenderer';
 export { default as ErrorBoundary } from './components/ErrorBoundary';
 export { default as ComponentSkeleton } from './components/ComponentSkeleton';
@@ -444,6 +447,26 @@ export {
   fetchDeltaShape,
   fetchDataCollectionConfig,
   fetchDataCollectionPreview,
+  fetchDashboardVersions,
+  fetchDashboardVersion,
+  createDashboardVersion,
+  pinDashboardVersion,
+  unpinDashboardVersion,
+  renameDashboardVersion,
+  deleteDashboardVersion,
+  restoreDashboardVersion,
+  fetchVersionCompatibility,
+  fetchDeltaHistory,
+  restoreComponentFromVersion,
+  fetchDataVersionStatus,
+  fetchUniqueValuesAt,
+  fetchColumnRangeAt,
+  HttpError,
+  isHttpStatus,
+  isStaleDataVersionError,
+  isStaleDataVersionDetail,
+  DATA_VERSION_GONE_EVENT,
+  DEFINITION_COLLECTION_CHANGED_MESSAGE,
   previewFigure,
   previewMultiQC,
   fetchMultiQCBuilderOptions,
@@ -527,6 +550,12 @@ export {
   fetchMonitoringTask,
   fetchIngestionRuns,
   fetchIngestionRun,
+  fetchCliAgents,
+  triggerCliAgentRun,
+  fetchProjectIngestionRuns,
+  fetchIngestionTriggerStatus,
+  triggerProjectIngestion,
+  fetchJob,
   fetchAppLogs,
   fetchMonitoringHealth,
   fetchLogCaptureLevel,
@@ -710,6 +739,25 @@ export type { FunnelComponentState } from './availableValues';
 export { default as FunnelView } from './components/interactive/FunnelView';
 export type { FunnelViewProps } from './components/interactive/FunnelView';
 
+// Data time travel: which Delta commit each collection is read at. Set by the
+// viewer, consumed by every renderer's fetch.
+export {
+  DataVersionProvider,
+  useDataVersions,
+  useDataVersionRequest,
+  dataVersionBody,
+  dataPinBody,
+  isDataVersionActive,
+} from './dataVersions';
+export {
+  CurrentDataBadge,
+  isCurrentDataOnlyType,
+  showsCurrentDataOnly,
+  CURRENT_DATA_HINT,
+} from './components/chrome/CurrentDataBadge';
+export { renderDefinitionKey } from './renderKey';
+export type { DataVersionPins, DataVersionState } from './dataVersions';
+
 // Real-time event subscription (WebSocket /events/ws)
 export { useDataCollectionUpdates, useMonitoringEvents, ADMIN_MONITORING_CHANNEL } from './realtime';
 export type {
@@ -809,6 +857,25 @@ export type {
   WorkflowEntry,
   DcShapeResponse,
   PreviewResult,
+  DashboardPreviewInfo,
+  DataVersionKind,
+  DashboardVersionKind,
+  DataCollectionStamp,
+  DashboardVersionSummary,
+  DashboardVersionListResponse,
+  DashboardVersionTab,
+  DashboardVersionDetail,
+  RestoreVersionResult,
+  DataPinFields,
+  DataVersionCollectionState,
+  DataVersionCollectionStatus,
+  DataVersionStatusResponse,
+  DataVersionGoneDetail,
+  CompatibilityCheck,
+  CompatibilityReport,
+  DeltaVersionEntry,
+  DeltaHistoryResponse,
+  RestoreComponentResult,
   FigurePreviewRequest,
   MultiQCPreviewRequest,
   MultiQCBuilderOptions,
@@ -860,6 +927,14 @@ export type {
   // Admin monitoring types
   MonitoringTaskEvent,
   MonitoringIngestionRun,
+  MonitoringIngestionStep,
+  MonitoringIngestionDataCollection,
+  MonitoringIngestionError,
+  MonitoringProgress,
+  MonitoringCliAgent,
+  IngestionTriggerStatus,
+  IngestionTriggerResult,
+  JobStatusResponse,
   MonitoringAppLog,
   MonitoringHealth,
   // Profile + CLI token types

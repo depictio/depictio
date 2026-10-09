@@ -16,6 +16,7 @@ import {
 } from '../../selection';
 import { TILE_ACTION_STYLE } from '../chrome/actionStyles';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
+import { useDataVersionRequest } from '../../dataVersions';
 
 // AG Grid is ~250kB of CSS plus its own chunk, and the map branch of
 // ComponentRenderer is imported eagerly — a static import here would put the
@@ -56,6 +57,8 @@ const MapDataButton: React.FC<MapDataButtonProps> = ({
   onFilterChange,
 }) => {
   const componentId = metadata.index;
+  // The map's own pins, so the table lists the rows the map is drawing.
+  const { body: versionBody, key: versionKey } = useDataVersionRequest();
   // The table shows every point the map shows, so it is fetched against the
   // same list the map fetches with: everything *except* this map's own
   // selection. Ticking rows must be able to widen the selection, not just
@@ -91,13 +94,15 @@ const MapDataButton: React.FC<MapDataButtonProps> = ({
   const loadedKeyRef = useRef<string | null>(null);
 
   const load = () => {
-    const filterKey = JSON.stringify(filtersForFetch);
+    // The pin is part of what the rows were fetched for: switching between
+    // live and past data must refetch, not reopen the other one's table.
+    const filterKey = `${JSON.stringify(filtersForFetch)}|${versionKey}`;
     if (loadedKeyRef.current === filterKey) return;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
     setState({ status: 'loading' });
-    fetchMapData(dashboardId, componentId, filtersForFetch, controller.signal)
+    fetchMapData(dashboardId, componentId, filtersForFetch, controller.signal, versionBody)
       .then((data) => {
         if (controller.signal.aborted) return;
         loadedKeyRef.current = filterKey;

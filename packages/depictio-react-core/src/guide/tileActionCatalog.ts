@@ -345,6 +345,7 @@ const EDIT_MEANING: Record<GuideEditAction['key'], string> = {
   drag: 'Grab the grip to move the tile.',
   resize: 'Drag the bottom-right corner to resize it.',
   edit: 'Opens the component in the builder.',
+  history: 'See this component across saved versions, compare two, restore one.',
   duplicate: 'Adds a copy beside it.',
   'move-section': "Files it under another of the tab's sections, or none.",
   'copy-tab': 'Puts a copy on another tab of the dashboard.',
@@ -360,9 +361,9 @@ const EDIT_MEANING: Record<GuideEditAction['key'], string> = {
  */
 export function editActionsFor(
   type?: GuideTileType,
-  ctx: { hasSections?: boolean; hasOtherTabs?: boolean } = {},
+  ctx: { hasSections?: boolean; hasOtherTabs?: boolean; hasVersions?: boolean } = {},
 ): GuideEditAction[] {
-  const { hasSections = true, hasOtherTabs = true } = ctx;
+  const { hasSections = true, hasOtherTabs = true, hasVersions = true } = ctx;
   const all: GuideEditAction[] = [
     { key: 'drag', ...(TILE_ACTION_STYLE.drag as TileActionStyle), meaning: EDIT_MEANING.drag },
     {
@@ -384,6 +385,8 @@ export function editActionsFor(
   };
   const has = (pred: (t: string) => boolean) => (type ? pred(type) : true);
   menu('edit', true);
+  // Every type has a history; the dashboard decides, by having saved one.
+  menu('history', hasVersions, 'Once the dashboard has a saved version');
   menu('duplicate', has(canDuplicate), type ? undefined : 'Cards, filters and figures');
   menu('move-section', hasSections, 'When the tab has sections');
   menu(

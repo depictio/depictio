@@ -38,6 +38,28 @@ from depictio.models.components.constants import (
 )
 from depictio.models.components.types import CardVariant, FigureStyle
 
+#: Namespace for deriving a component's `index` from its YAML `tag`.
+#: Fixed forever: changing it silently renames every tagged component, which
+#: severs each one from its own version history.
+_COMPONENT_TAG_NAMESPACE = uuid.UUID("b3f1a7c4-6d2e-4f88-9a05-1c7e2b9d4e60")
+
+
+def index_from_tag(tag: str | None, scope: str | None = None) -> str:
+    """Stable component id for a tag, or a fresh random one when untagged.
+
+    ``scope`` namespaces the id within a tab family: a main tab passes none, so
+    its ids are its tags' alone, and a child tab passes its title (see
+    ``DashboardDataLite.tag_scope``). Without it, a tag reused on two tabs of one
+    family (iris's overview and petal tabs share eight) named one component
+    twice, and restoring one of them from history overwrote the other.
+    """
+    tag = (tag or "").strip()
+    if not tag:
+        return str(uuid.uuid4())
+    scope = (scope or "").strip()
+    name = f"{scope}\n{tag}" if scope else tag
+    return str(uuid.uuid5(_COMPONENT_TAG_NAMESPACE, name))
+
 
 class BaseLiteComponent(BaseModel):
     """Base class for lite dashboard components.
@@ -100,9 +122,27 @@ class BaseLiteComponent(BaseModel):
 
     @model_validator(mode="after")
     def ensure_index(self) -> "BaseLiteComponent":
-        """Auto-generate index UUID if not provided."""
+        """Give the component an id, derived from its tag when it has one.
+
+        A random id per parse means the *same* component, imported twice, is
+        two unrelated components. Nothing looks wrong at first — the dashboard
+        renders fine — but every feature that follows a component through time
+        matches on `index` across snapshots: version history, "restore just
+        this one", comparing a chart against its former self. With fresh ids
+        none of them can match, and the component-history modal reports "this
+        component did not exist in that version" for a component that plainly
+        did.
+
+        UUID5 puts that identity in the one place the author already controls.
+        The tag is the name they gave it, so two YAMLs describing the same
+        dashboard now agree on ids as well as on names.
+
+        Untagged components stay random: with nothing stable to derive from, a
+        shared constant would be worse than uniqueness, since every untagged
+        component would then collide with every other.
+        """
         if not self.index:
-            self.index = str(uuid.uuid4())
+            self.index = index_from_tag(self.tag)
         return self
 
 

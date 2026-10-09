@@ -10,7 +10,6 @@ DataFrames so subsequent renders see fresh data.
 
 from __future__ import annotations
 
-import hashlib
 import os
 import tempfile
 from datetime import datetime
@@ -24,6 +23,10 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import deltatables_collection, projects_collection, users_collection
 from depictio.api.v1.endpoints.datacollections_endpoints.utils import _user_can_edit_project
+from depictio.api.v1.endpoints.deltatables_endpoints.utils import (
+    delta_identity_hash,
+    new_aggregation_hash,
+)
 from depictio.api.v1.s3 import polars_s3_config, s3_client
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.deltatables import Aggregation, DeltaTableAggregated
@@ -218,12 +221,9 @@ def _bump_table_dc_aggregation(
     user = User.from_mongo(user_doc)
     userbase = user.turn_to_userbase()
 
-    hash_series = combined_df.hash_rows(seed=0)
-    hash_bytes = hash_series.to_numpy().tobytes()
-    hash_df = hashlib.sha256(hash_bytes).hexdigest()
-    final_hash = hashlib.sha256(
-        f"{delta_location}{datetime.now().isoformat()}{hash_df}".encode()
-    ).hexdigest()
+    final_hash = new_aggregation_hash(
+        delta_location, delta_identity_hash(delta_location, polars_s3_config)
+    )
 
     deltatable.aggregation.append(
         Aggregation(

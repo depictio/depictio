@@ -167,6 +167,10 @@ class TestBackupEndpoints:
             # Clean up the override
             client.app.dependency_overrides.clear()
 
+    @patch(
+        "depictio.api.v1.endpoints.backup_endpoints.routes.dashboard_version_counters_collection"
+    )
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.dashboard_versions_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.users_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.projects_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.dashboards_collection")
@@ -193,6 +197,8 @@ class TestBackupEndpoints:
         mock_dashboards,
         mock_projects,
         mock_users,
+        mock_versions,
+        mock_version_counters,
         client,
         admin_user,
         backup_dir,
@@ -220,6 +226,8 @@ class TestBackupEndpoints:
         mock_instance_settings.find.return_value = []
         mock_branding_assets.find.return_value = []
         mock_comment_threads.find.return_value = []
+        mock_versions.find.return_value = []
+        mock_version_counters.find.return_value = []
 
         try:
             response = client.post("/backup/create", json={"include_s3_data": False})
@@ -235,6 +243,10 @@ class TestBackupEndpoints:
             # Clean up the override
             client.app.dependency_overrides.clear()
 
+    @patch(
+        "depictio.api.v1.endpoints.backup_endpoints.routes.dashboard_version_counters_collection"
+    )
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.dashboard_versions_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.users_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.projects_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.dashboards_collection")
@@ -261,6 +273,8 @@ class TestBackupEndpoints:
         mock_dashboards,
         mock_projects,
         mock_users,
+        mock_versions,
+        mock_version_counters,
         client,
         admin_user,
         backup_dir,
@@ -299,6 +313,9 @@ class TestBackupEndpoints:
         mock_branding_assets.count_documents.return_value = 0
         mock_comment_threads.find.return_value = []
         mock_comment_threads.count_documents.return_value = 0
+        for mock_collection in (mock_versions, mock_version_counters):
+            mock_collection.find.return_value = []
+            mock_collection.count_documents.return_value = 0
 
         try:
             response = client.post("/backup/create", json={"include_s3_data": False})
@@ -313,6 +330,10 @@ class TestBackupEndpoints:
             client.app.dependency_overrides.clear()
 
     @pytest.mark.asyncio
+    @patch(
+        "depictio.api.v1.endpoints.backup_endpoints.routes.dashboard_version_counters_collection"
+    )
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.dashboard_versions_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.users_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.projects_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.dashboards_collection")
@@ -339,6 +360,8 @@ class TestBackupEndpoints:
         mock_dashboards,
         mock_projects,
         mock_users,
+        mock_versions,
+        mock_version_counters,
         admin_user,
     ):
         """Backup metadata must record the actual project version, not a stale literal.
@@ -362,6 +385,8 @@ class TestBackupEndpoints:
             mock_instance_settings,
             mock_branding_assets,
             mock_comment_threads,
+            mock_versions,
+            mock_version_counters,
         ):
             mock_collection.find.return_value = []
             mock_collection.count_documents.return_value = 0
@@ -736,6 +761,159 @@ class TestRestoreObjectIdRehydration:
         assert result["restored_collections"]["dashboards"]["status"] == "failed"
         # Second call is the rollback, re-inserting exactly what was there before.
         assert mock_dashboards.insert_many.call_args_list[-1].args[0] == existing
+
+
+@patch("depictio.api.v1.endpoints.backup_endpoints.routes.dashboard_versions_collection")
+class TestRestoreDashboardVersions:
+    """A version keeps its ids as strings; only its own ``_id`` and dates come back typed.
+
+    ``family_id`` is the string the ledger is queried by, and the content hash
+    was computed over stringified tabs, so the generic re-hydration would
+    detach a family's whole history from its dashboard.
+    """
+
+    FAMILY = "6824cb3b89d2b72169309737"
+    OWN_ID = "6824cb3b89d2b72169309799"
+    DC = "646b0f3c1e4a2d7f8e5b8c9c"
+
+    def _version(self):
+        return {
+            "_id": self.OWN_ID,
+            "version_id": "v-1",
+            "family_id": self.FAMILY,
+            "project_id": "646b0f3c1e4a2d7f8e5b8c9a",
+            "seq": 1,
+            "kind": "explicit",
+            "created_at": "2026-03-01 10:00:00",
+            "updated_at": "2026-03-01 10:00:00",
+            "coalesce_until": "2026-03-01 10:10:00",
+            "tabs": [{"dashboard_id": self.FAMILY, "stored_metadata": [{"dc_id": self.DC}]}],
+            "data_collections": [
+                {
+                    "dc_id": self.DC,
+                    "delta_version": 3,
+                    "delta_commit_timestamp": "2026-02-28 09:00:00",
+                }
+            ],
+        }
+
+    def test_ids_stay_strings_and_dates_come_back_as_dates(
+        self, mock_versions, as_admin, backup_dir
+    ):
+        _write_backup(backup_dir, "20260301_100000", {"dashboard_versions": [self._version()]})
+
+        response = as_admin.post(
+            "/backup/restore",
+            json={
+                "backup_id": "20260301_100000",
+                "dry_run": False,
+                "skip_validation": True,
+                "collections": ["dashboard_versions"],
+            },
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["success"] is True
+        (inserted,), _ = mock_versions.insert_many.call_args
+        doc = inserted[0]
+        assert doc["_id"] == ObjectId(self.OWN_ID)
+        assert doc["family_id"] == self.FAMILY
+        assert doc["tabs"][0]["dashboard_id"] == self.FAMILY
+        assert doc["tabs"][0]["stored_metadata"][0]["dc_id"] == self.DC
+        assert doc["created_at"] == datetime(2026, 3, 1, 10, tzinfo=timezone.utc)
+        assert doc["coalesce_until"] == datetime(2026, 3, 1, 10, 10, tzinfo=timezone.utc)
+        stamp = doc["data_collections"][0]
+        assert stamp["dc_id"] == self.DC
+        assert stamp["delta_commit_timestamp"] == datetime(2026, 2, 28, 9, tzinfo=timezone.utc)
+
+
+class TestBackupKeepsOnlyVersionsWorthKeeping:
+    """A backup holds explicit, import and restore versions, and pinned or
+    named autosaves; plain autosaves stay out, as the full ledger runs to
+    about 100x the dashboards collection and the backup is built in memory."""
+
+    _COLLECTIONS = (
+        "users_collection",
+        "projects_collection",
+        "dashboards_collection",
+        "data_collections_collection",
+        "workflows_collection",
+        "files_collection",
+        "deltatables_collection",
+        "runs_collection",
+        "groups_collection",
+        "instance_settings_collection",
+        "branding_assets_collection",
+        "comment_threads_collection",
+        "dashboard_versions_collection",
+        "dashboard_version_counters_collection",
+    )
+
+    @pytest.fixture()
+    def db(self, monkeypatch):
+        import mongomock
+
+        from depictio.api.v1.endpoints.backup_endpoints import routes as backup_routes
+
+        db = mongomock.MongoClient()["backup_test"]
+        for name in self._COLLECTIONS:
+            monkeypatch.setattr(backup_routes, name, db[name])
+        return db
+
+    @staticmethod
+    def _version(version_id, kind, family="f1", **extra):
+        return {"version_id": version_id, "family_id": family, "kind": kind, "tabs": [], **extra}
+
+    @pytest.mark.asyncio
+    async def test_plain_autosaves_are_left_out(self, db, admin_user):
+        from depictio.api.v1.endpoints.backup_endpoints.routes import _create_mongodb_backup
+
+        db["dashboard_versions_collection"].insert_many(
+            [
+                self._version("auto", "auto"),
+                self._version("auto-null-label", "auto", label=None),
+                self._version("auto-empty-label", "auto", label=""),
+                self._version("auto-unpinned", "auto", pinned=False),
+                self._version("auto-pinned", "auto", pinned=True),
+                self._version("auto-named", "auto", label="Known good"),
+                self._version("explicit", "explicit"),
+                self._version("import", "import"),
+                self._version("restore", "restore"),
+            ]
+        )
+        db["dashboard_version_counters_collection"].insert_one({"family_id": "f1", "seq": 9})
+
+        backup = await _create_mongodb_backup(admin_user.email)
+
+        kept = {v["version_id"] for v in backup["data"]["dashboard_versions"]}
+        assert kept == {"auto-pinned", "auto-named", "explicit", "import", "restore"}
+        assert backup["backup_metadata"]["excluded_documents"] == 4
+        assert len(backup["data"]["dashboard_version_counters"]) == 1, (
+            "the counter goes whole, or a restore reallocates a seq the ledger holds"
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_temporary_users_versions_stay_out_too(self, db, admin_user):
+        from depictio.api.v1.endpoints.backup_endpoints.routes import _create_mongodb_backup
+
+        temp_user = ObjectId()
+        temp_dashboard = ObjectId()
+        db["users_collection"].insert_one({"_id": temp_user, "is_temporary": True})
+        db["dashboards_collection"].insert_one(
+            {"dashboard_id": temp_dashboard, "permissions": {"owners": [{"_id": temp_user}]}}
+        )
+        db["dashboard_versions_collection"].insert_many(
+            [
+                self._version("temp-explicit", "explicit", family=str(temp_dashboard)),
+                self._version("kept-explicit", "explicit"),
+                self._version("dropped-auto", "auto"),
+            ]
+        )
+
+        backup = await _create_mongodb_backup(admin_user.email)
+
+        kept = {v["version_id"] for v in backup["data"]["dashboard_versions"]}
+        assert kept == {"kept-explicit"}
 
 
 class TestBackupRetention:

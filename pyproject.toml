@@ -46,6 +46,10 @@ classifiers = [
 # [server] is the API and worker that the Docker images, [local] and [dev] build on;
 # it is not a deployment of its own, so the docs do not offer it.
 multiqc = ["multiqc==1.35"]
+# Native filesystem events for `depictio watch`. Optional: without it the watcher
+# polls. Kept out of the core dependencies because watchdog 6.0.0 has no Python 3.14
+# macOS wheel.
+watch = ["watchdog==6.0.0"]
 server = [
   "depictio[multiqc]",
   "bcrypt==5.0.0",

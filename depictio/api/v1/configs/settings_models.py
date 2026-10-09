@@ -240,6 +240,12 @@ class MongoDBConfig(ServiceConfig):
         deltatables_collection: str = Field(default="deltatables")
         jbrowse_collection: str = Field(default="jbrowse")
         dashboards_collection: str = Field(default="dashboards")
+        dashboard_versions_collection: str = Field(default="dashboard_versions")
+        #: One counter document per dashboard family, holding the next `seq`.
+        #: Kept apart from the versions themselves so the allocation is a single
+        #: atomic $inc rather than a max()+1 read that two concurrent saves
+        #: could both win.
+        dashboard_version_counters_collection: str = Field(default="dashboard_version_counters")
         initialization_collection: str = Field(default="initialization")
         projects_collection: str = Field(default="projects")
         multiqc_collection: str = Field(default="multiqc")
@@ -263,6 +269,8 @@ class MongoDBConfig(ServiceConfig):
         # Comment threads (and the annotations they carry) pinned to dashboard components. Stored
         # apart from `dashboards` so a dashboard save never rewrites or drops them.
         comment_threads_collection: str = Field(default="comment_threads")
+        cli_agents_collection: str = Field(default="cli_agents")
+        jobs_collection: str = Field(default="jobs")
         test_collection: str = Field(default="test")
 
     collections: Collections = Field(default_factory=Collections)
@@ -717,7 +725,20 @@ class CeleryConfig(BaseSettings):
     result_expires: int = Field(default=3600, description="Task result expiration in seconds (1hr)")
 
     # Queue settings
-    default_queue: str = Field(default="dashboard_tasks", description="Default task queue name")
+    default_queue: str = Field(
+        default="dashboard_tasks",
+        description=(
+            "Historical value only — NOT applied. celery_app pins "
+            "task_default_queue to 'celery', which is the queue the shipped "
+            "worker command actually consumes. Applying this value would route "
+            "every task to a queue nothing listens on."
+        ),
+    )
+    ingestion_queue: str = Field(
+        default="ingestion",
+        description="Queue for offloaded ingestion tasks, consumed by the dedicated "
+        "ingestion worker so a 20-minute table read cannot starve dashboard callbacks.",
+    )
 
     # Monitoring settings
     worker_send_task_events: bool = Field(default=True, description="Enable task event monitoring")
@@ -1027,6 +1048,11 @@ class MonitoringConfig(BaseSettings):
     app_log_capped_mb: int = Field(
         default=64, description="Size cap (MB) of the capped app_logs collection"
     )
+    agent_ttl_seconds: int = Field(
+        default=300,
+        description="How long a CLI agent's heartbeat stays valid. Several beats "
+        "long, so one missed heartbeat does not evict a healthy watcher.",
+    )
     live_updates: bool = Field(
         default=True,
         description="Push live task/ingestion status changes over the events WebSocket "
@@ -1035,12 +1061,139 @@ class MonitoringConfig(BaseSettings):
     ingestion_stale_after_hours: int = Field(
         default=24,
         description="Mark a 'running' ingestion run as 'abandoned' once its record has seen no "
-        "write for this many hours (the CLI was killed or lost its connection). The CLI "
-        "sends no heartbeat during a run, so keep this above your longest ingestion. "
-        "0 disables the sweep.",
+        "write for this many hours (the CLI was killed or lost its connection). Every live "
+        "step update counts as a write, so a run that is still reporting progress is never "
+        "swept; keep this above the longest silent stretch of one step (a single large "
+        "Delta write, for instance). 0 disables the sweep.",
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MONITORING_")
+
+
+class DashboardVersionsConfig(BaseSettings):
+    """Version history for dashboards — the timeline, pins, and restore.
+
+    Retention is a prune function rather than a Mongo TTL index, for two
+    reasons: a TTL index cannot exempt pinned versions, and the thinning
+    policy below (keep one per day past a threshold) is application logic no
+    index can express. The prune runs opportunistically after a capture,
+    because this deployment has no Celery beat schedule — anything scheduled
+    would simply never fire.
+    """
+
+    enabled: bool = Field(default=True, description="Capture a version on each dashboard save")
+    coalesce_window_seconds: int = Field(
+        default=300,
+        description="How long consecutive autosaves by the same author fold into one "
+        "version. Anchored at the version's creation, not sliding, so a long "
+        "editing session yields a reviewable series rather than one entry.",
+    )
+    max_versions_per_family: int = Field(
+        default=100, description="Cap on retained unpinned autosave versions per dashboard family"
+    )
+    retention_days: int = Field(
+        default=90, description="Age cap for unpinned versions. Pinned versions never expire."
+    )
+    keep_daily_for_days: int = Field(
+        default=30,
+        description="Past this age, thin unpinned versions to the last one of each day",
+    )
+    max_snapshot_bytes: int = Field(
+        default=8 * 1024 * 1024,
+        description="Skip (and log) a capture larger than this rather than risk the "
+        "16 MB BSON document limit. A version must never break a save.",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASHBOARD_VERSIONS_")
+
+
+class IngestionConfig(BaseSettings):
+    """Server-side limits and opt-ins for the data-ingestion path.
+
+    Everything that changes *behaviour* defaults to off, so an existing
+    deployment upgrades without any change in what it does. Only the step
+    throttle, which merely makes an implicit ceiling explicit, is active by
+    default.
+    """
+
+    step_updates_per_minute: int = Field(
+        default=60,
+        description="Non-terminal ingestion-step updates accepted per run per minute. "
+        "Terminal steps always pass, so a run's final tally is never throttled away.",
+    )
+    async_deltatable_upsert: bool = Field(
+        default=False,
+        description=(
+            "Offload the expensive half of /deltatables/upsert (column specs, row "
+            "hash, Delta history read) to a Celery task and return a job_id. "
+            "Requires DEPICTIO_JOBS_ENABLED=true — without it the API has nowhere "
+            "to record the job and stays on the synchronous path."
+        ),
+    )
+    browser_trigger: bool = Field(
+        default=False,
+        description=(
+            "Allow project owners and editors to start an ingestion from the "
+            "project page. Only meaningful where the API can read the same "
+            "filesystem the data sits on (a shared PVC, a mounted export) — on a "
+            "deployment whose data lives on an HPC node the API cannot see, the "
+            "endpoint rejects the request. Requires DEPICTIO_JOBS_ENABLED=true and "
+            "DEPICTIO_INGESTION_ALLOWED_DATA_ROOTS."
+        ),
+    )
+    allowed_data_roots: list[str] | str = Field(
+        default_factory=list,
+        description=(
+            "Server directories a browser-triggered ingestion may read. Set via "
+            "DEPICTIO_INGESTION_ALLOWED_DATA_ROOTS as a comma-separated list or a JSON "
+            "list (e.g. '/data/runs,/mnt/shared'). Any authenticated user can create a "
+            "project and name any path as its data location, so this is what stops a "
+            "trigger from reading another group's runs or the server's own files. Every "
+            "data location, single-file scan path and image directory of the project must "
+            "resolve (symlinks followed) inside one of these roots, and so must every file "
+            "the scan registers. Empty by default, which refuses every trigger."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_INGESTION_")
+
+    @model_validator(mode="after")
+    def _normalise_allowed_data_roots(self) -> "IngestionConfig":
+        # Accept the comma-separated form as well as pydantic-settings' JSON list,
+        # mirroring cors_allowed_origins.
+        if isinstance(self.allowed_data_roots, str):
+            object.__setattr__(
+                self,
+                "allowed_data_roots",
+                [r.strip() for r in self.allowed_data_roots.split(",") if r.strip()],
+            )
+        return self
+
+
+class JobsConfig(BaseSettings):
+    """User-facing job records for offloaded work (``jobs`` collection).
+
+    Off by default: enabling it creates a collection and its indexes, and
+    changes what ``/deltatables/upsert`` may return. Nothing consults a job
+    unless a client asked for one.
+    """
+
+    enabled: bool = Field(default=False, description="Expose the /jobs endpoints")
+    retention_hours: int = Field(
+        default=24, description="How long a successful job document is kept"
+    )
+    failed_retention_hours: int = Field(
+        default=168,
+        description="How long a failed or cancelled job is kept — longer than a "
+        "success, because a failure is what someone comes back to read.",
+    )
+    max_result_bytes: int = Field(
+        default=262144,
+        description="Results larger than this are dropped and flagged truncated "
+        "rather than risking the 16 MB BSON document ceiling.",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_JOBS_")
 
 
 class DashboardYAMLConfig(BaseSettings):
@@ -1787,6 +1940,9 @@ class Settings(BaseSettings):
     backup: BackupConfig = Field(default_factory=BackupConfig)
     events: EventsConfig = Field(default_factory=EventsConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
+    dashboard_versions: DashboardVersionsConfig = Field(default_factory=DashboardVersionsConfig)
+    ingestion: IngestionConfig = Field(default_factory=IngestionConfig)
+    jobs: JobsConfig = Field(default_factory=JobsConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)
 
     # Observability & development

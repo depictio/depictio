@@ -20,6 +20,7 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.comments_endpoints import cascade
 from depictio.api.v1.endpoints.comments_endpoints import routes as cr
 from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
+from depictio.api.v1.endpoints.dashboards_endpoints import version_store, versioning
 from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymous
 from depictio.models.models.comments import (
     CommentCreate,
@@ -53,6 +54,18 @@ def world():
         patch.object(cascade, "comment_threads_collection", database["comment_threads"]),
         patch.object(dash_routes, "dashboards_collection", database["dashboards"]),
         patch.object(dash_routes, "projects_collection", database["projects"]),
+        # Deleting a dashboard or a tab touches its version ledger; unpatched,
+        # that waits out the real Mongo's server-selection timeout.
+        patch.object(versioning, "dashboards_collection", database["dashboards"]),
+        patch.object(versioning, "deltatables_collection", database["deltatables"]),
+        patch.object(
+            version_store, "dashboard_versions_collection", database["dashboard_versions"]
+        ),
+        patch.object(
+            version_store,
+            "dashboard_version_counters_collection",
+            database["dashboard_version_counters"],
+        ),
         patch.object(cr, "_get_aggregation_hash", side_effect=lambda dc: hashes.get(dc)),
         patch.object(settings.auth, "single_user_mode", False),
     ):
@@ -777,7 +790,7 @@ class TestCascade:
 # ---------------------------------------------------------------------------
 # Backup
 # ---------------------------------------------------------------------------
-def test_backup_leaves_out_threads_of_temporary_users_dashboards():
+def test_backup_leaves_out_threads_and_versions_of_temporary_users_dashboards():
     from contextlib import ExitStack
 
     from depictio.api.v1.endpoints.backup_endpoints import routes as backup_routes
@@ -800,6 +813,12 @@ def test_backup_leaves_out_threads_of_temporary_users_dashboards():
             {"_id": ObjectId(), "anchor": {"dashboard_id": str(real_dash)}},
         ]
     )
+    database["dashboard_versions"].insert_many(
+        [{"family_id": str(temp_dash), "seq": 1}, {"family_id": str(real_dash), "seq": 1}]
+    )
+    database["dashboard_version_counters"].insert_many(
+        [{"family_id": str(temp_dash), "seq": 1}, {"family_id": str(real_dash), "seq": 1}]
+    )
     names = [
         "users",
         "projects",
@@ -813,6 +832,8 @@ def test_backup_leaves_out_threads_of_temporary_users_dashboards():
         "instance_settings",
         "branding_assets",
         "comment_threads",
+        "dashboard_versions",
+        "dashboard_version_counters",
     ]
     with ExitStack() as stack:
         for name in names:
@@ -822,3 +843,6 @@ def test_backup_leaves_out_threads_of_temporary_users_dashboards():
     threads = backup["data"]["comment_threads"]
     assert [t["anchor"]["dashboard_id"] for t in threads] == [str(real_dash)]
     assert [str(d["dashboard_id"]) for d in backup["data"]["dashboards"]] == [str(real_dash)]
+    # Their version history goes with them.
+    for name in ("dashboard_versions", "dashboard_version_counters"):
+        assert [v["family_id"] for v in backup["data"][name]] == [str(real_dash)], name

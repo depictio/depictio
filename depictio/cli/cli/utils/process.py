@@ -90,6 +90,10 @@ def process_project_data_collections(
     total_processed = 0
     failed_tags: list[str] = []
     skipped_optional: list[str] = []
+    skipped_unchanged: list[str] = []
+    # Collections whose table is now what their registered files say, written or
+    # left as it was. The scan's unsettled mark is cleared for these only.
+    settled_dc_ids: list[str] = []
 
     for workflow in workflows_to_process:
         rich_print_checked_statement(
@@ -135,13 +139,20 @@ def process_project_data_collections(
                 if error is not None:
                     raise error
 
-                if result["success"]:
+                if result["success"] and (result.get("data") or {}).get("skipped"):
+                    # Counted apart from processed collections: "12 processed"
+                    # when 11 were left untouched would be a lie, and the whole
+                    # point of the skip is that it is visible.
+                    skipped_unchanged.append(dc.data_collection_tag)
+                    settled_dc_ids.append(str(dc.id))
+                elif result["success"]:
                     rich_print_checked_statement(
                         f"Data collection [italic]'{escape(dc.data_collection_tag)}'[/italic] "
                         f"processed successfully. {escape(str(result['data']['message']))}",
                         "success",
                     )
                     total_processed += 1
+                    settled_dc_ids.append(str(dc.id))
                 elif getattr(dc, "optional", False):
                     # Optional DCs whose inputs are absent (missing dc_ref / source
                     # file) are skipped, not failed: e.g. seed-only advanced-viz
@@ -183,11 +194,12 @@ def process_project_data_collections(
             f"Workflow {escape(workflow.workflow_tag)} processing completed", "success"
         )
 
-    skipped_note = (
-        f" ({len(skipped_optional)} optional skipped: {', '.join(skipped_optional)})"
-        if skipped_optional
-        else ""
-    )
+    notes = []
+    if skipped_optional:
+        notes.append(f"{len(skipped_optional)} optional skipped: {', '.join(skipped_optional)}")
+    if skipped_unchanged:
+        notes.append(f"{len(skipped_unchanged)} unchanged: {', '.join(skipped_unchanged)}")
+    skipped_note = f" ({'; '.join(notes)})" if notes else ""
     if failed_tags:
         rich_print_checked_statement(
             f"Processing completed with failures: {total_processed} processed, "
@@ -207,6 +219,8 @@ def process_project_data_collections(
         "total_failed": len(failed_tags),
         "failed_tags": failed_tags,
         "skipped_optional": skipped_optional,
+        "skipped_unchanged": skipped_unchanged,
+        "settled_dc_ids": settled_dc_ids,
     }
 
 

@@ -81,6 +81,7 @@ describe('editActionsFor', () => {
       'drag',
       'resize',
       'edit',
+      'history',
       'duplicate',
       'move-section',
       'copy-tab',
@@ -101,6 +102,17 @@ describe('editActionsFor', () => {
     expect(editActionsFor('figure').map((a) => a.key)).toContain('font-size');
     expect(
       editActionsFor('figure', { hasSections: false, hasOtherTabs: false }).map((a) => a.key),
-    ).toEqual(['drag', 'resize', 'edit', 'duplicate', 'font-size', 'delete']);
+    ).toEqual(['drag', 'resize', 'edit', 'history', 'duplicate', 'font-size', 'delete']);
+  });
+
+  it('offers History on every type, once the dashboard has a saved version', () => {
+    for (const type of GUIDE_TILE_TYPES) {
+      const history = editActionsFor(type).find((a) => a.key === 'history');
+      expect(history?.icon, type).toBe(EDIT_MENU_STYLE.history.icon);
+      expect(history?.when, type).toMatch(/saved version/);
+    }
+    expect(editActionsFor('card', { hasVersions: false }).map((a) => a.key)).not.toContain(
+      'history',
+    );
   });
 });
