@@ -827,6 +827,95 @@ class TestRestoreDashboardVersions:
         assert stamp["delta_commit_timestamp"] == datetime(2026, 2, 28, 9, tzinfo=timezone.utc)
 
 
+class TestBackupKeepsOnlyVersionsWorthKeeping:
+    """A backup holds explicit, import and restore versions, and pinned or
+    named autosaves; plain autosaves stay out, as the full ledger runs to
+    about 100x the dashboards collection and the backup is built in memory."""
+
+    _COLLECTIONS = (
+        "users_collection",
+        "projects_collection",
+        "dashboards_collection",
+        "data_collections_collection",
+        "workflows_collection",
+        "files_collection",
+        "deltatables_collection",
+        "runs_collection",
+        "groups_collection",
+        "instance_settings_collection",
+        "branding_assets_collection",
+        "comment_threads_collection",
+        "dashboard_versions_collection",
+        "dashboard_version_counters_collection",
+    )
+
+    @pytest.fixture()
+    def db(self, monkeypatch):
+        import mongomock
+
+        from depictio.api.v1.endpoints.backup_endpoints import routes as backup_routes
+
+        db = mongomock.MongoClient()["backup_test"]
+        for name in self._COLLECTIONS:
+            monkeypatch.setattr(backup_routes, name, db[name])
+        return db
+
+    @staticmethod
+    def _version(version_id, kind, family="f1", **extra):
+        return {"version_id": version_id, "family_id": family, "kind": kind, "tabs": [], **extra}
+
+    @pytest.mark.asyncio
+    async def test_plain_autosaves_are_left_out(self, db, admin_user):
+        from depictio.api.v1.endpoints.backup_endpoints.routes import _create_mongodb_backup
+
+        db["dashboard_versions_collection"].insert_many(
+            [
+                self._version("auto", "auto"),
+                self._version("auto-null-label", "auto", label=None),
+                self._version("auto-empty-label", "auto", label=""),
+                self._version("auto-unpinned", "auto", pinned=False),
+                self._version("auto-pinned", "auto", pinned=True),
+                self._version("auto-named", "auto", label="Known good"),
+                self._version("explicit", "explicit"),
+                self._version("import", "import"),
+                self._version("restore", "restore"),
+            ]
+        )
+        db["dashboard_version_counters_collection"].insert_one({"family_id": "f1", "seq": 9})
+
+        backup = await _create_mongodb_backup(admin_user.email)
+
+        kept = {v["version_id"] for v in backup["data"]["dashboard_versions"]}
+        assert kept == {"auto-pinned", "auto-named", "explicit", "import", "restore"}
+        assert backup["backup_metadata"]["excluded_documents"] == 4
+        assert len(backup["data"]["dashboard_version_counters"]) == 1, (
+            "the counter goes whole, or a restore reallocates a seq the ledger holds"
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_temporary_users_versions_stay_out_too(self, db, admin_user):
+        from depictio.api.v1.endpoints.backup_endpoints.routes import _create_mongodb_backup
+
+        temp_user = ObjectId()
+        temp_dashboard = ObjectId()
+        db["users_collection"].insert_one({"_id": temp_user, "is_temporary": True})
+        db["dashboards_collection"].insert_one(
+            {"dashboard_id": temp_dashboard, "permissions": {"owners": [{"_id": temp_user}]}}
+        )
+        db["dashboard_versions_collection"].insert_many(
+            [
+                self._version("temp-explicit", "explicit", family=str(temp_dashboard)),
+                self._version("kept-explicit", "explicit"),
+                self._version("dropped-auto", "auto"),
+            ]
+        )
+
+        backup = await _create_mongodb_backup(admin_user.email)
+
+        kept = {v["version_id"] for v in backup["data"]["dashboard_versions"]}
+        assert kept == {"kept-explicit"}
+
+
 class TestBackupRetention:
     """`backup_file_retention_days` was declared but never applied — nothing
     pruned the backup directory, so it grew by one full database snapshot per

@@ -6,10 +6,10 @@ import type { DashboardVersionSummary } from 'depictio-react-core';
 
 /** Parse a backend ISO timestamp to epoch ms.
  *
- *  The API stamps with `datetime.now()` inside UTC containers and serialises
- *  without an offset, so an offset-less value has to be read as UTC —
- *  otherwise JS treats it as local time and a fresh version reads hours off
- *  for anyone not on UTC. */
+ *  The API stamps naive UTC (`utc_now_naive`) and serialises it without an
+ *  offset, so an offset-less value has to be read as UTC. Otherwise JS treats
+ *  it as local time and a fresh version reads hours off for anyone not on
+ *  UTC. */
 export function parseTs(iso?: string | null): number {
   if (!iso) return NaN;
   const hasTz = /([zZ]|[+-]\d{2}:?\d{2})$/.test(iso);

@@ -40,7 +40,10 @@ def _no_version_capture():
     """
     from depictio.api.v1.endpoints.dashboards_endpoints import versioning
 
-    with patch.object(versioning, "capture_quietly", return_value=None):
+    with (
+        patch.object(versioning, "capture_quietly", return_value=None),
+        patch.object(versioning, "ensure_baseline_quietly", return_value=None),
+    ):
         yield
 
 

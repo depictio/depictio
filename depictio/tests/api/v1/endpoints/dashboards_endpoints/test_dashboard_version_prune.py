@@ -203,8 +203,9 @@ def test_maybe_prune_skips_below_threshold(versions, monkeypatch) -> None:
     """The common path after a capture must be one count, not a full scan."""
     from depictio.api.v1.endpoints.dashboards_endpoints import version_store
 
+    # Recent: an expired version is the other trigger, tested on its own below.
     for seq in range(1, 6):
-        _add(versions, seq=seq, created=BASE - timedelta(days=9999))
+        _add(versions, seq=seq, created=BASE - timedelta(minutes=seq))
 
     called = False
 
@@ -217,6 +218,84 @@ def test_maybe_prune_skips_below_threshold(versions, monkeypatch) -> None:
     version_store.maybe_prune_family("fam", now=BASE)
 
     assert not called, "a small family must not trigger a scan-and-sort on every save"
+
+
+def test_maybe_prune_counts_only_what_a_prune_can_remove(versions, monkeypatch) -> None:
+    """Saves and pins are never pruned, so they must not hold a family over the
+    threshold: it would then stay over after every prune, and every capture
+    would pay for a full scan."""
+    from depictio.api.v1.configs.config import settings
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+
+    cap = settings.dashboard_versions.max_versions_per_family
+    for seq in range(1, cap + 1):
+        _add(versions, seq=seq, created=BASE - timedelta(minutes=seq))
+    for seq in range(cap + 1, cap + 41):
+        _add(versions, seq=seq, created=BASE - timedelta(minutes=seq), kind="explicit")
+    _add(versions, seq=cap + 41, created=BASE, pinned=True, label="Known good")
+
+    calls: list[str] = []
+    monkeypatch.setattr(version_store, "prune_family", lambda family, **_k: calls.append(family))
+
+    version_store.maybe_prune_family("fam", now=BASE)
+    assert calls == [], "kept versions alone must not trigger a prune"
+
+    threshold = int(cap * 1.2)
+    for seq in range(cap + 42, cap + 42 + threshold - cap + 1):
+        _add(versions, seq=seq, created=BASE)
+    version_store.maybe_prune_family("fam", now=BASE)
+    assert calls == ["fam"], "autosaves past the threshold must still trigger one"
+
+
+def test_maybe_prune_expires_old_saves_in_a_family_with_few_autosaves(
+    versions, monkeypatch
+) -> None:
+    """Each Save click seals an autosave, so a family that is saved often keeps
+    few autosaves and never reaches the count threshold. Its explicit versions
+    must still expire after `retention_days`, and pins never do."""
+    from depictio.api.v1.configs.config import settings
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+
+    retention = settings.dashboard_versions.retention_days
+    _add(versions, seq=1, created=BASE - timedelta(days=retention + 5), pinned=True, label="Kept")
+    _add(versions, seq=2, created=BASE - timedelta(days=1), kind="explicit")
+
+    calls: list[str] = []
+    monkeypatch.setattr(version_store, "prune_family", lambda family, **_k: calls.append(family))
+
+    version_store.maybe_prune_family("fam", now=BASE)
+    assert calls == [], "a pin past the cutoff is never removed, so it must not trigger"
+
+    _add(versions, seq=3, created=BASE - timedelta(days=retention + 1), kind="explicit")
+    version_store.maybe_prune_family("fam", now=BASE)
+    assert calls == ["fam"], "an expired Save must trigger a prune without the count"
+
+
+def test_prune_never_loads_the_snapshots(versions, monkeypatch) -> None:
+    """A family past the threshold holds well over a hundred full snapshots."""
+    _add(versions, seq=1, created=BASE - timedelta(days=9999))
+    projections: list = []
+    real_find = versions.find
+
+    def spy(query, projection=None, *args, **kwargs):
+        # The delete that follows goes through `find` too, inside mongomock.
+        if query == {"family_id": "fam"}:
+            projections.append(projection)
+        return real_find(query, projection, *args, **kwargs)
+
+    monkeypatch.setattr(versions, "find", spy)
+
+    assert _prune() == 1
+    assert projections, "precondition: prune reads the family through find"
+    for projection in projections:
+        assert projection, "an unprojected read loads every snapshot"
+        assert {k for k, v in projection.items() if v} == {
+            "version_id",
+            "created_at",
+            "kind",
+            "pinned",
+            "label",
+        }
 
 
 def test_prune_never_raises_on_bad_records(versions) -> None:
@@ -264,6 +343,16 @@ def test_project_delete_drops_its_ledgers_and_counters(versions) -> None:
     assert {d["family_id"] for d in counters.find({})} == {"kept"}, (
         "a counter left behind would hand a recreated family's first version a stale seq"
     )
+
+
+def test_project_delete_has_an_index_to_use(versions) -> None:
+    """The distinct and the delete both filter the largest collection on it."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+
+    version_store.ensure_dashboard_version_storage()
+
+    keys = [spec["key"] for spec in versions.index_information().values()]
+    assert [("project_id", 1)] in keys
 
 
 def test_project_delete_never_raises(versions, monkeypatch) -> None:

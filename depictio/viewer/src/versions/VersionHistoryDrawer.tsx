@@ -88,13 +88,16 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
     setLabelDraft('');
   }, []);
 
+  /** `restored` marks a restore, the one action that changes the dashboard
+   *  itself: only then does the host refetch it, since that replaces the
+   *  editor's document and resets its user-action gate. */
   const run = useCallback(
-    async (work: () => Promise<string>) => {
+    async (work: () => Promise<string>, { restored = false } = {}) => {
       setBusy(true);
       try {
         const message = await work();
         await reload();
-        onRestored?.();
+        if (restored) onRestored?.();
         notifications.show({ color: 'teal', title: 'Version history', message });
         closeModal();
       } catch (err) {
@@ -324,13 +327,16 @@ const VersionHistoryDrawer: React.FC<VersionHistoryDrawerProps> = ({
               onClick={() => {
                 if (!pending) return;
                 const version = pending.version;
-                void run(async () => {
-                  const result = await restoreDashboardVersion(version.version_id);
-                  const bits = [`Restored ${versionTitle(version)}`];
-                  if (result.tabs_created) bits.push(`${result.tabs_created} tab(s) recreated`);
-                  if (result.tabs_deleted) bits.push(`${result.tabs_deleted} tab(s) removed`);
-                  return `${bits.join(' · ')}.`;
-                });
+                void run(
+                  async () => {
+                    const result = await restoreDashboardVersion(version.version_id);
+                    const bits = [`Restored ${versionTitle(version)}`];
+                    if (result.tabs_created) bits.push(`${result.tabs_created} tab(s) recreated`);
+                    if (result.tabs_deleted) bits.push(`${result.tabs_deleted} tab(s) removed`);
+                    return `${bits.join(' · ')}.`;
+                  },
+                  { restored: true },
+                );
               }}
             >
               Restore

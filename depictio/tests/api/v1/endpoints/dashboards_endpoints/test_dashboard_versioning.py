@@ -384,6 +384,96 @@ def test_oversized_snapshot_is_skipped_not_raised(store, monkeypatch) -> None:
     assert store["versions"].count_documents({}) == 0
 
 
+def test_a_strict_capture_says_why_it_recorded_nothing(store, monkeypatch) -> None:
+    """Strict, None means unchanged content and nothing else.
+
+    Naming the current state labels the newest version when nothing changed;
+    for any other reason there is no version holding the live state to label.
+    """
+    from depictio.api.v1.configs.config import settings
+    from depictio.api.v1.endpoints.dashboards_endpoints.versioning import CaptureSkipped
+
+    did = _make_dashboard(store, components=[{"index": "a"}])
+    _capture(did, kind="explicit", author=ALICE, now=BASE)
+    assert _capture(did, kind="explicit", author=ALICE, now=BASE, strict=True) is None
+
+    with pytest.raises(CaptureSkipped) as missing:
+        _capture(PyObjectId(), author=ALICE, now=BASE, strict=True)
+    assert missing.value.reason == "missing"
+
+    _set_components(store, did, [{"index": "b", "blob": "x" * 5000}])
+    monkeypatch.setattr(settings.dashboard_versions, "max_snapshot_bytes", 100)
+    with pytest.raises(CaptureSkipped) as oversized:
+        _capture(did, kind="explicit", author=ALICE, now=BASE, strict=True)
+    assert oversized.value.reason == "oversized"
+    assert oversized.value.limit == 100
+    assert oversized.value.size is not None and oversized.value.size > 100
+
+    monkeypatch.setattr(settings.dashboard_versions, "enabled", False)
+    with pytest.raises(CaptureSkipped) as disabled:
+        _capture(did, kind="explicit", author=ALICE, now=BASE, strict=True)
+    assert disabled.value.reason == "disabled"
+    assert store["versions"].count_documents({}) == 1
+
+
+# ── Concurrent writers ──────────────────────────────────────────────────────
+#
+# Capture reads the newest version, then builds the snapshot, then writes.
+# Across API workers, anything can land in between.
+
+
+@pytest.mark.parametrize(
+    "sealed_by",
+    [{"pinned": True}, {"label": "Known good"}, {"kind": "explicit"}],
+    ids=["pin", "name", "save-click"],
+)
+def test_a_fold_never_rewrites_a_version_sealed_after_it_was_read(
+    store, monkeypatch, sealed_by
+) -> None:
+    """The fold re-checks the version, and records a new one if it was sealed."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+
+    did = _make_dashboard(store, components=[{"index": "a"}])
+    first = _capture(did, author=ALICE, now=BASE)
+    assert first is not None
+    stale = store["versions"].find_one({"version_id": first.version_id})
+    store["versions"].update_one({"version_id": first.version_id}, {"$set": sealed_by})
+    # Capture reads the newest version before the seal lands.
+    monkeypatch.setattr(version_store, "latest_version", lambda _family: stale)
+
+    _set_components(store, did, [{"index": "b"}])
+    second = _capture(did, author=ALICE, now=BASE + timedelta(seconds=30))
+
+    assert second is not None and second.version_id != first.version_id
+    assert store["versions"].count_documents({}) == 2
+    kept = store["versions"].find_one({"version_id": first.version_id})
+    assert kept["tabs"][0]["stored_metadata"] == [{"index": "a"}], "the sealed state was rewritten"
+    assert kept["save_count"] == 1
+
+
+def test_a_counter_behind_its_ledger_catches_up_instead_of_losing_versions(store) -> None:
+    """A counter restored from an older backup than its ledger.
+
+    Every allocation hit the unique (family, seq) index until the counter
+    caught up, and each hit was a version silently not recorded.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+
+    version_store.ensure_dashboard_version_storage()
+    did = _make_dashboard(store)
+    for hour, index in enumerate("abc"):
+        _set_components(store, did, [{"index": index}])
+        _capture(did, kind="explicit", author=ALICE, now=BASE + timedelta(hours=hour))
+    store["counters"].update_one({"family_id": str(did)}, {"$set": {"seq": 1}})
+
+    _set_components(store, did, [{"index": "d"}])
+    record = _capture(did, kind="explicit", author=ALICE, now=BASE + timedelta(hours=5))
+
+    assert record is not None and record.seq == 4
+    assert sorted(v["seq"] for v in store["versions"].find({})) == [1, 2, 3, 4]
+    assert store["counters"].find_one({"family_id": str(did)})["seq"] == 4
+
+
 # ── Denormalised counts ─────────────────────────────────────────────────────
 #
 # The timeline query projects `tabs` away, so anything derived from `tabs` is
@@ -574,49 +664,50 @@ def test_source_key_is_kept_but_never_hashed(store) -> None:
     _capture(did, author=ALICE, now=BASE)
 
     store["dashboards"].update_one({"_id": did}, {"$set": {"source_key": "nf-core/x:base.yaml"}})
-    assert _capture(did, author=ALICE, now=BASE + timedelta(hours=5)) is None
+    assert _capture(did, kind="explicit", author=ALICE, now=BASE + timedelta(hours=5)) is None
 
+    # The next version written for a real edit carries it.
+    _set_components(store, did, [{"index": "a"}])
     _capture(did, kind="explicit", author=ALICE, now=BASE + timedelta(hours=6))
     latest = store["versions"].find_one({}, sort=[("seq", -1)])
     assert latest["tabs"][0]["source_key"] == "nf-core/x:base.yaml"
 
 
-# ── only_if_changed ─────────────────────────────────────────────────────────
+# ── Unchanged content, whatever the kind ────────────────────────────────────
+#
+# A "state before" capture (ahead of a restore or an import) is explicit, and
+# the state it records is usually the newest version already. Writing nothing
+# for unchanged content, whatever the kind, is what keeps it from duplicating
+# that version every time.
 
 
-def test_only_if_changed_writes_nothing_for_an_unchanged_family(store) -> None:
+def test_an_unchanged_explicit_capture_writes_nothing(store) -> None:
     """Even an explicit capture: a copy of the newest version is noise."""
     did = _make_dashboard(store, components=[{"index": "a"}])
     _capture(did, kind="explicit", author=ALICE, now=BASE)
 
-    result = _capture(
-        did, kind="explicit", author=ALICE, now=BASE + timedelta(hours=5), only_if_changed=True
-    )
+    result = _capture(did, kind="explicit", author=ALICE, now=BASE + timedelta(hours=5))
 
     assert result is None
-    doc = store["versions"].find_one({})
     assert store["versions"].count_documents({}) == 1
-    assert doc["save_count"] == 1, "not even a touch: nothing was saved"
 
 
-def test_only_if_changed_records_a_state_the_ledger_lacks(store) -> None:
+def test_an_explicit_capture_records_a_state_the_ledger_lacks(store) -> None:
     did = _make_dashboard(store, components=[{"index": "a"}])
     _capture(did, kind="explicit", author=ALICE, now=BASE)
     _set_components(store, did, [{"index": "b"}])
 
-    result = _capture(
-        did, kind="explicit", author=ALICE, now=BASE + timedelta(hours=5), only_if_changed=True
-    )
+    result = _capture(did, kind="explicit", author=ALICE, now=BASE + timedelta(hours=5))
 
     assert result is not None
     assert store["versions"].count_documents({}) == 2
 
 
-def test_only_if_changed_records_the_first_state_of_a_family(store) -> None:
+def test_an_explicit_capture_records_the_first_state_of_a_family(store) -> None:
     """An empty ledger lacks every state, including the present one."""
     did = _make_dashboard(store, components=[{"index": "a"}])
 
-    assert _capture(did, kind="explicit", author=ALICE, now=BASE, only_if_changed=True)
+    assert _capture(did, kind="explicit", author=ALICE, now=BASE)
     assert store["versions"].count_documents({}) == 1
 
 
@@ -707,3 +798,88 @@ def test_versions_are_stamped_in_utc(store, far_from_utc) -> None:
     created = store["versions"].find_one({})["created_at"]
     assert abs((created - before).total_seconds()) < 60
 
+
+# ── Baseline ────────────────────────────────────────────────────────────────
+#
+# Capture runs *after* a save, so without a baseline every version describes a
+# state the user has already left. For a dashboard that predates the ledger —
+# which is every existing dashboard — that makes its original state the one
+# state no version can restore, and "restore doesn't go back to the original"
+# is exactly what a user reports.
+
+
+def _ensure_baseline(did, **kwargs):
+    from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
+        ensure_baseline_quietly,
+    )
+
+    return ensure_baseline_quietly(did, **kwargs)
+
+
+def test_baseline_makes_the_pre_edit_state_restorable(store) -> None:
+    """The state before the first tracked edit must be reachable."""
+    original = [{"index": "a"}, {"index": "b"}, {"index": "c"}]
+    did = _make_dashboard(store, components=original)
+
+    # First tracked write: seed the baseline, then the edit is captured.
+    _ensure_baseline(did, author=ALICE)
+    _set_components(store, did, original[:1])
+    _capture(did, author=ALICE, now=BASE)
+
+    reachable = [
+        len(v["tabs"][0]["stored_metadata"]) for v in store["versions"].find({}).sort("seq", 1)
+    ]
+    assert len(original) in reachable, (
+        f"the pristine {len(original)}-component state must be restorable; got {reachable}"
+    )
+
+
+def test_baseline_is_labelled_so_it_explains_itself(store) -> None:
+    did = _make_dashboard(store, components=[{"index": "a"}])
+
+    record = _ensure_baseline(did, author=ALICE)
+
+    assert record is not None
+    assert record.label == "Before first tracked change"
+    assert record.kind == "explicit", "a baseline must never be thinned as an autosave"
+
+
+def test_baseline_is_seeded_only_once(store) -> None:
+    """A per-save baseline would double the ledger for no added recoverability."""
+    did = _make_dashboard(store, components=[{"index": "a"}])
+
+    _ensure_baseline(did, author=ALICE)
+    _set_components(store, did, [{"index": "b"}])
+    _capture(did, author=ALICE, now=BASE)
+    _ensure_baseline(did, author=ALICE)
+
+    assert store["versions"].count_documents({"label": "Before first tracked change"}) == 1
+
+
+def test_baseline_belongs_to_the_family_not_the_tab(store) -> None:
+    """Saving a child tab must seed the family's baseline, not a second one."""
+    main = _make_dashboard(store, components=[{"index": "main-a"}])
+    child = _make_dashboard(
+        store, title="Tab 2", components=[{"index": "child-a"}], is_main_tab=False, parent=main
+    )
+
+    _ensure_baseline(child, author=ALICE)
+
+    assert store["versions"].count_documents({}) == 1
+    doc = store["versions"].find_one({})
+    assert doc["family_id"] == str(main)
+    assert doc["tab_count"] == 2, "a baseline covers the whole family, as every version does"
+
+
+def test_baseline_never_raises(store, monkeypatch) -> None:
+    """A version is a nice-to-have; a saved dashboard is not."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import versioning
+
+    did = _make_dashboard(store, components=[{"index": "a"}])
+    monkeypatch.setattr(
+        versioning,
+        "capture_dashboard_version",
+        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("mongo is down")),
+    )
+
+    assert _ensure_baseline(did, author=ALICE) is None

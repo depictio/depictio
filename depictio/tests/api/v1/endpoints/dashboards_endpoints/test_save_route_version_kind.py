@@ -26,6 +26,7 @@ def captures():
         patch.object(dash_routes, "_should_enqueue_screenshot", return_value=False),
         patch.object(dash_routes, "check_project_permission", return_value=True),
         patch.object(dash_routes, "get_project_visibility", return_value=False),
+        patch.object(versioning, "ensure_baseline_quietly", return_value=None),
         patch.object(
             versioning,
             "capture_quietly",
@@ -85,3 +86,28 @@ def test_a_save_click_is_explicit_and_seals(captures, user) -> None:
 
     assert captures[-1]["kind"] == "explicit"
     assert captures[-1]["seal"] is True
+
+
+def test_a_save_seeds_the_baseline_from_the_state_it_replaces(user) -> None:
+    """Seeded before the write, or the baseline would hold the saved state."""
+    dashboards = mongomock.MongoClient()["depictio_test"]["dashboards"]
+    seen: list[str | None] = []
+
+    def baseline(dashboard_id, **_kwargs):
+        doc = dashboards.find_one({"dashboard_id": dashboard_id})
+        seen.append(doc["title"] if doc else None)
+
+    with (
+        patch.object(dash_routes, "dashboards_collection", dashboards),
+        patch.object(dash_routes, "_should_enqueue_screenshot", return_value=False),
+        patch.object(dash_routes, "check_project_permission", return_value=True),
+        patch.object(dash_routes, "get_project_visibility", return_value=False),
+        patch.object(versioning, "ensure_baseline_quietly", side_effect=baseline),
+        patch.object(versioning, "capture_quietly", return_value=None),
+    ):
+        dashboard_id, project_id = ObjectId(), ObjectId()
+        _save(dashboard_id, project_id, user, title="Before")
+        _save(dashboard_id, project_id, user, title="After")
+
+    # A creation has no earlier state to keep, so only the second save seeds.
+    assert seen == ["Before"]

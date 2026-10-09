@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 from pymongo import ASCENDING, DESCENDING, ReturnDocument
+from pymongo.errors import DuplicateKeyError
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -44,6 +45,8 @@ def ensure_dashboard_version_storage() -> None:
         dashboard_versions_collection.create_index(
             [("family_id", ASCENDING), ("pinned", ASCENDING)], name="family_pinned"
         )
+        # A project delete drops every ledger of the project by this field.
+        dashboard_versions_collection.create_index("project_id", name="project_id")
         dashboard_version_counters_collection.create_index("family_id", unique=True, name="family")
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning(f"dashboard_versions: failed to ensure indexes: {exc}")
@@ -65,6 +68,46 @@ def next_seq(family_id: str) -> int:
     return int((doc or {}).get("seq", 1))
 
 
+def resync_seq(family_id: str) -> int:
+    """Raise a family's counter to the highest seq its ledger holds.
+
+    The counter can fall behind its ledger when the two are restored from
+    different backups. Every allocation then collides with the unique
+    ``family_seq`` index until the counter catches up, and each collision is a
+    lost version. ``$max`` never lowers the counter, so a concurrent allocation
+    is never undone.
+    """
+    top = dashboard_versions_collection.find_one(
+        {"family_id": family_id}, {"seq": 1}, sort=[("seq", DESCENDING)]
+    )
+    highest = int((top or {}).get("seq", 0) or 0)
+    dashboard_version_counters_collection.update_one(
+        {"family_id": family_id}, {"$max": {"seq": highest}}, upsert=True
+    )
+    return highest
+
+
+def insert_with_next_seq(family_id: str, record: dict[str, Any]) -> int:
+    """Insert a new version under the family's next seq, and return that seq.
+
+    A seq the ledger already holds means the counter is behind (see
+    ``resync_seq``): it is raised past the ledger and the insert is retried
+    once, so the version is recorded rather than lost.
+    """
+    record["seq"] = next_seq(family_id)
+    try:
+        insert_version(record)
+    except DuplicateKeyError:
+        highest = resync_seq(family_id)
+        logger.warning(
+            f"dashboard_versions: seq counter of {family_id} was behind its ledger; "
+            f"raised to {highest}"
+        )
+        record["seq"] = next_seq(family_id)
+        insert_version(record)
+    return record["seq"]
+
+
 def latest_version(family_id: str) -> Optional[dict[str, Any]]:
     """Most recent version for a family, or None."""
     return dashboard_versions_collection.find_one(
@@ -77,12 +120,25 @@ def insert_version(record: dict[str, Any]) -> dict[str, Any]:
     return record
 
 
-def fold_into_version(version_id: str, updates: dict[str, Any]) -> None:
-    """Merge a coalesced save into an existing version."""
-    dashboard_versions_collection.update_one(
-        {"version_id": version_id},
+def fold_into_version(version_id: str, updates: dict[str, Any]) -> bool:
+    """Merge a coalesced save into an existing version. False if it may not.
+
+    The caller decided to fold on a read taken before it built the snapshot.
+    Between that read and this write, another worker may have pinned, named or
+    sealed the version, so the filter checks again: only an unpinned, unnamed
+    autosave takes a fold. An empty label counts as unnamed, as it does for the
+    caller's own check.
+    """
+    result = dashboard_versions_collection.update_one(
+        {
+            "version_id": version_id,
+            "kind": "auto",
+            "pinned": {"$ne": True},
+            "label": {"$in": [None, ""]},
+        },
         {"$set": updates, "$inc": {"save_count": 1}},
     )
+    return result.matched_count > 0
 
 
 def touch_version(version_id: str, now: datetime) -> None:
@@ -210,8 +266,13 @@ def prune_family(family_id: str, *, now: datetime | None = None) -> int:
     cfg = settings.dashboard_versions
     now = now or utc_now_naive()
 
+    # The fields the policy reads, never `tabs`: a ledger past the threshold
+    # holds well over a hundred full family snapshots.
     records = list(
-        dashboard_versions_collection.find({"family_id": family_id}).sort("seq", DESCENDING)
+        dashboard_versions_collection.find(
+            {"family_id": family_id},
+            {"_id": 0, "version_id": 1, "created_at": 1, "kind": 1, "pinned": 1, "label": 1},
+        ).sort("seq", DESCENDING)
     )
     if not records:
         return 0
@@ -262,15 +323,36 @@ def prune_family(family_id: str, *, now: datetime | None = None) -> int:
 
 
 def maybe_prune_family(family_id: str, *, now: datetime | None = None) -> int:
-    """Prune only once a family has visibly outgrown its cap.
+    """Prune once a family's autosaves outgrow their cap, or a version expires.
 
-    Called after every capture, so the common case must be a single cheap
-    count rather than a full scan-and-sort of the family's ledger.
+    Called after every capture, so the common case must be a cheap indexed
+    count rather than a full scan-and-sort of the family's ledger. It counts
+    only what a prune can remove: counting kept versions too, a family with a
+    few dozen Saves or pins would stay over the threshold after every prune,
+    and every capture would then pay for a full one.
+
+    The age check covers the other way a prune removes something. A family
+    whose user clicks Save often has few autosaves left (each click seals one),
+    so the count alone would never trigger and its explicit versions would
+    outlive `retention_days`. After a prune nothing unpinned is older than the
+    cutoff, so this does not fire again until another version ages past it.
     """
     cfg = settings.dashboard_versions
     threshold = int(cfg.max_versions_per_family * 1.2)
+    now = now or utc_now_naive()
     try:
-        if count_versions(family_id) <= threshold:
+        prunable = dashboard_versions_collection.count_documents(
+            {"family_id": family_id, "kind": "auto", "pinned": {"$ne": True}}
+        )
+        expired = dashboard_versions_collection.find_one(
+            {
+                "family_id": family_id,
+                "pinned": {"$ne": True},
+                "created_at": {"$lt": now - timedelta(days=cfg.retention_days)},
+            },
+            {"_id": 1},
+        )
+        if prunable <= threshold and expired is None:
             return 0
         return prune_family(family_id, now=now)
     except Exception as exc:  # pragma: no cover - defensive

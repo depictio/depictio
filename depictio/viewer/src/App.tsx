@@ -123,6 +123,7 @@ import { DashboardGuide, useGuideRoute } from './guide';
 import { DashboardSpotlight } from './spotlight';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
+import { dashboardHref } from './dashboards/lib/dashboardLinks';
 
 /**
  * Top-level SPA. Layout:
@@ -347,26 +348,6 @@ const App: React.FC = () => {
   }, [isNarrow, closeFilterDrawer]);
 
   const bulkCtrl = useRef<AbortController | null>(null);
-
-  /** Restore straight from the preview banner, then drop back to the live view.
-   *  A full navigation rather than a state update: a restore can add or remove
-   *  whole tabs, so every derived list on this page is stale afterwards. */
-  const handleRestorePreview = useCallback(async () => {
-    if (!previewVersionId) return;
-    try {
-      const { restoreDashboardVersion } = await import('depictio-react-core');
-      await restoreDashboardVersion(previewVersionId);
-      const url = new URL(window.location.href);
-      url.searchParams.delete('version');
-      window.location.assign(url.toString());
-    } catch (err) {
-      notifications.show({
-        color: 'red',
-        title: 'Restore failed',
-        message: err instanceof Error ? err.message : 'Could not restore this version',
-      });
-    }
-  }, [previewVersionId]);
 
   // Ingestion-health banner: for template-derived dashboards, surface a
   // prominent prompt when a required data collection was not found during
@@ -1341,8 +1322,7 @@ const App: React.FC = () => {
         {dashboard?.preview && (
           <VersionPreviewBanner
             preview={dashboard.preview}
-            canRestore={isOwner}
-            onRestore={handleRestorePreview}
+            editHref={isOwner && dashboardId ? dashboardHref(dashboardId, 'edit') : null}
           />
         )}
         {ingestionHealth &&
@@ -1586,7 +1566,7 @@ const App: React.FC = () => {
                           {canEditNow && ' Start editing to add visualizations, tables, and more.'}
                         </Text>
                       </Stack>
-                      {isOwner && (
+                      {canEditNow && (
                         <Button
                           component="a"
                           href={`/dashboard-edit/${dashboardId}`}
@@ -1717,10 +1697,10 @@ const App: React.FC = () => {
         {/* The page's fixed furniture sits above the Guide's layer; hidden
             with the canvas while the Guide is up. */}
         <div style={guide.open ? { visibility: 'hidden' } : undefined}>
-          {/* Unmounted while previewing. NotesFooter saves through
-              `saveDashboardNotes`, which re-reads the dashboard and POSTs it to
-              /save: during a preview that read returns the *snapshot*, so an
-              edit here would write a past version's content over the live one. */}
+          {/* Unmounted while previewing. It would start from the snapshot's
+              notes, and `saveDashboardNotes` writes the editor's text onto the
+              live dashboard it re-reads, so a save here would put a past
+              version's notes over the live ones. */}
           {dashboard && dashboardId && !inspectorEnabled && !previewVersionId && (
             <NotesFooter
               dashboardId={dashboardId}

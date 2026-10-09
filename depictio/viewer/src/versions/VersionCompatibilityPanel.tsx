@@ -117,30 +117,32 @@ const VersionCompatibilityPanel: React.FC<VersionCompatibilityPanelProps> = ({ v
                   <Text size="xs">
                     <strong>{name}</strong> no longer exists
                     {check.affected_components.length > 0 &&
-                      ` — ${check.affected_components.length} component(s) affected`}
+                      `: ${check.affected_components.length} component(s) affected`}
                   </Text>
                 </List.Item>
               );
             }
+            const problems = [
+              check.columns_removed.length > 0 && `missing ${check.columns_removed.join(', ')}`,
+              check.columns_retyped.length > 0 &&
+                `retyped ${check.columns_retyped
+                  .map((c) => `${c.name} (${c.from} → ${c.to})`)
+                  .join(', ')}`,
+              check.affected_components.length > 0 &&
+                `${check.affected_components.length} component(s) affected`,
+            ].filter(Boolean);
             return (
               <List.Item key={check.dc_id}>
                 <Text size="xs">
                   <strong>{name}</strong>
-                  {check.columns_removed.length > 0 &&
-                    ` — missing ${check.columns_removed.join(', ')}`}
-                  {check.columns_retyped.length > 0 &&
-                    ` — retyped ${check.columns_retyped
-                      .map((c) => `${c.name} (${c.from} → ${c.to})`)
-                      .join(', ')}`}
-                  {check.affected_components.length > 0 &&
-                    ` · ${check.affected_components.length} component(s) affected`}
+                  {problems.length > 0 && `: ${problems.join(' · ')}`}
                 </Text>
               </List.Item>
             );
           })}
         </List>
         <Text size="xs" c="dimmed">
-          Restoring is still allowed — affected components will render empty.
+          Restoring is still allowed; affected components will render empty.
         </Text>
       </Stack>
     </Alert>

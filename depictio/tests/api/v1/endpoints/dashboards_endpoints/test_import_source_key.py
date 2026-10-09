@@ -1047,12 +1047,14 @@ class TestImportIsVersioned:
         assert edited["stored_metadata"][0]["index"] == "edited"
         assert _versions(db)[2]["tabs"][0]["stored_metadata"] == []
 
-    def test_an_identical_reimport_is_marked_but_not_duplicated_before(self, db, user, project_id):
+    def test_an_identical_reimport_records_nothing(self, db, user, project_id):
+        """Unchanged content writes nothing, whatever the kind: the newest
+        version already holds what the reimport produced."""
         _import(_single("RNA-seq"), user, project_id, source_key=KEY)
 
         _import(_single("RNA-seq"), user, project_id, overwrite=True, source_key=KEY)
 
-        assert _kinds(db) == ["import", "import"]
+        assert _kinds(db) == ["import"]
 
     def test_a_multi_tab_overwrite_is_one_pair_on_the_main_tab(self, db, user, project_id):
         first = _import(_multi("RNA-seq", ["QC", "Expression"]), user, project_id, source_key=KEY)

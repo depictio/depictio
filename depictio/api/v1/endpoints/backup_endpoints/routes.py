@@ -573,7 +573,20 @@ async def _create_mongodb_backup(created_by: str, *, automatic: bool = False) ->
         # Dashboard version history and its per-family sequence counters. The
         # counters go with the versions: restored without them, the next
         # capture would allocate a `seq` the restored ledger already holds.
-        "dashboard_versions": {"collection": dashboard_versions_collection, "exclude_filter": {}},
+        #
+        # Only the versions worth keeping: explicit saves, imports, restore
+        # points, and any autosave a user pinned or named. The full ledger runs
+        # to ~120 family snapshots per dashboard, about 100x the `dashboards`
+        # collection, and this backup is built in memory. The autosaves left
+        # out are the ones retention thins anyway.
+        "dashboard_versions": {
+            "collection": dashboard_versions_collection,
+            "exclude_filter": {
+                "kind": "auto",
+                "pinned": {"$ne": True},
+                "label": {"$in": [None, ""]},
+            },
+        },
         "dashboard_version_counters": {
             "collection": dashboard_version_counters_collection,
             "exclude_filter": {},
@@ -612,10 +625,14 @@ async def _create_mongodb_backup(created_by: str, *, automatic: bool = False) ->
 
         # Get all documents (applying exclusions)
         ref_field = _TEMP_DASHBOARD_REF_FIELDS.get(collection_name)
-        if ref_field and temp_dashboard_ids:
-            ref_filter = {ref_field: {"$in": temp_dashboard_ids}}
-            excluded_documents += collection.count_documents(ref_filter)
-            documents = list(collection.find({"$nor": [ref_filter]}))
+        if ref_field and (temp_dashboard_ids or exclude_filter):
+            # The collection's own exclusion still applies alongside the
+            # temporary users' dashboards.
+            excluded = [exclude_filter] if exclude_filter else []
+            if temp_dashboard_ids:
+                excluded.append({ref_field: {"$in": temp_dashboard_ids}})
+            excluded_documents += collection.count_documents({"$or": excluded})
+            documents = list(collection.find({"$nor": excluded}))
         elif base_filter:
             # Count excluded documents
             excluded_count = collection.count_documents(

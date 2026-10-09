@@ -16,7 +16,7 @@ route is exercised against a caller who lacks the required level.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import mongomock
 import pytest
@@ -25,6 +25,17 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 BASE = datetime(2026, 3, 1, 12, 0, 0)
+
+
+@pytest.fixture(autouse=True)
+def _versions_do_not_expire(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fixtures are captured at a fixed BASE, while the routes capture at the
+    real clock. Past `retention_days`, the prune that follows a capture would
+    remove every fixture version, which is retention working, not the
+    behaviour under test here."""
+    from depictio.api.v1.configs.config import settings
+
+    monkeypatch.setattr(settings.dashboard_versions, "retention_days", 100 * 365)
 
 
 class _User:
@@ -320,6 +331,89 @@ def test_delete_refuses_the_only_version(ctx) -> None:
     response = ctx["client"].delete(f"{API}/versions/{record.version_id}")
 
     assert response.status_code == 409
+
+
+# ── naming the current state ────────────────────────────────────────────────
+
+
+def test_naming_an_oversized_state_labels_no_stale_version(ctx, monkeypatch) -> None:
+    """No version holds a state too large to snapshot, so there is none to name.
+
+    The route once labelled the newest version whenever the capture recorded
+    nothing, here a version older than the live state. It must say why instead.
+    """
+    from depictio.api.v1.configs.config import settings
+
+    did = _make_dashboard(ctx, title="small")
+    _capture(ctx, did, kind="explicit")
+    big = [{"index": f"c{i}", "component_type": "card", "blob": "x" * 500} for i in range(50)]
+    ctx["dashboards"].update_one({"_id": did}, {"$set": {"stored_metadata": big}})
+    monkeypatch.setattr(settings.dashboard_versions, "max_snapshot_bytes", 500)
+
+    response = ctx["client"].post(f"{API}/{did}/versions", json={"label": "current big state"})
+
+    assert response.status_code == 413, response.text
+    detail = response.json()["detail"]
+    assert "over the 500-byte limit" in detail, detail
+    size = int(detail.split(" bytes,")[0].rsplit(" ", 1)[-1])
+    assert size > 500, "the detail gives the snapshot's size as well as the limit"
+    assert ctx["versions"].count_documents({"label": "current big state"}) == 0
+
+
+def test_naming_with_versioning_disabled_says_so(ctx, monkeypatch) -> None:
+    from depictio.api.v1.configs.config import settings
+
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    _capture(ctx, did, kind="explicit")
+    monkeypatch.setattr(settings.dashboard_versions, "enabled", False)
+
+    response = ctx["client"].post(f"{API}/{did}/versions", json={"label": "Known good"})
+
+    assert response.status_code == 409
+    assert "disabled" in response.json()["detail"]
+    assert ctx["versions"].find_one({})["label"] is None
+
+
+def test_naming_never_labels_a_version_the_live_state_has_left(ctx, monkeypatch) -> None:
+    """A save landing between the capture and the label moves the live state on."""
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    _capture(ctx, did, kind="auto")
+    ctx["dashboards"].update_one({"_id": did}, {"$set": {"stored_metadata": [{"index": "b"}]}})
+    # The capture saw the old state: unchanged, so it recorded nothing.
+    monkeypatch.setattr(ctx["versioning"], "capture_dashboard_version", lambda *_a, **_k: None)
+
+    response = ctx["client"].post(f"{API}/{did}/versions", json={"label": "Known good"})
+
+    assert response.status_code == 409
+    stored = ctx["versions"].find_one({})
+    assert stored["label"] is None
+    assert stored["kind"] == "auto"
+
+
+def test_naming_without_a_label_keeps_the_existing_one(ctx) -> None:
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    record = _capture(ctx, did, kind="explicit", label="Known good")
+
+    response = ctx["client"].post(f"{API}/{did}/versions", json={"label": None})
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {"version_id": record.version_id, "seq": 1, "label": "Known good"}
+    assert ctx["versions"].find_one({})["label"] == "Known good"
+
+
+@pytest.mark.parametrize("kind", ["import", "restore", "explicit"])
+def test_naming_keeps_the_kind_of_a_deliberate_version(ctx, kind) -> None:
+    """Only an autosave becomes `explicit`; an import or a restore point stays one."""
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    record = _capture(ctx, did, kind=kind)
+
+    response = ctx["client"].post(f"{API}/{did}/versions", json={"label": "Release"})
+
+    assert response.status_code == 200, response.text
+    assert ctx["versions"].count_documents({}) == 1
+    stored = ctx["versions"].find_one({"version_id": record.version_id})
+    assert stored["kind"] == kind
+    assert stored["label"] == "Release"
 
 
 # ── restore ─────────────────────────────────────────────────────────────────
@@ -809,6 +903,29 @@ def test_restore_keeps_the_live_logo_url(ctx) -> None:
     }
 
 
+def test_restoring_a_version_without_a_brand_keeps_the_live_logo(ctx) -> None:
+    """The logo is in no version, so a restore that dropped it lost it for good.
+
+    Restoring the later version could not bring it back either: its logo URL
+    comes from the live document, which no longer had one.
+    """
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    themeless = _capture(ctx, did, kind="explicit")
+    logo = "/depictio/api/v1/dashboards/logo/abc?v=1"
+    branded = {"logo_mode": "custom", "logo_url": logo, "primary": "#111111"}
+    ctx["dashboards"].update_one({"_id": did}, {"$set": {"brand_theme": branded}})
+    later = _capture(ctx, did, kind="explicit", now=BASE + timedelta(hours=1))
+
+    ctx["client"].post(f"{API}/versions/{themeless.version_id}/restore")
+    assert ctx["dashboards"].find_one({"_id": did})["brand_theme"] == {
+        "logo_mode": "custom",
+        "logo_url": logo,
+    }, "only the look goes; the logo stays"
+
+    ctx["client"].post(f"{API}/versions/{later.version_id}/restore")
+    assert ctx["dashboards"].find_one({"_id": did})["brand_theme"] == branded
+
+
 def test_restore_stamps_the_save_time(ctx) -> None:
     """The listing's thumbnail cache-buster and "modified" column move with it."""
     did = _make_dashboard(ctx, components=[{"index": "a"}])
@@ -845,17 +962,6 @@ def test_source_key_is_never_written_onto_a_live_tab(ctx) -> None:
     ctx["client"].post(f"{API}/versions/{record.version_id}/restore")
 
     assert ctx["dashboards"].find_one({"_id": did})["source_key"] == "new:key.yaml"
-
-
-def test_restoring_the_current_state_records_no_duplicate_before_it(ctx) -> None:
-    """The present already is the newest version; a copy of it is noise."""
-    did = _make_dashboard(ctx, components=[{"index": "a"}])
-    record = _capture(ctx, did, kind="explicit")
-
-    ctx["client"].post(f"{API}/versions/{record.version_id}/restore")
-
-    kinds = [v["kind"] for v in ctx["versions"].find({}).sort("seq", 1)]
-    assert kinds == ["explicit", "restore"]
 
 
 def test_restore_queues_a_forced_thumbnail_of_the_main_tab(ctx) -> None:
@@ -990,6 +1096,43 @@ def test_a_project_editor_who_does_not_own_the_dashboard_still_cannot_delete(ctx
 # ── Writes outside /save ────────────────────────────────────────────────────
 
 
+def test_a_tab_edit_on_a_fresh_family_keeps_the_title_it_replaced(bypass) -> None:
+    """The first tracked change seeds a baseline, as every bypass route does."""
+    main = _make_dashboard(bypass, components=[{"index": "a"}])
+    child = _make_dashboard(bypass, title="QC", parent=main, tab_order=1)
+
+    response = bypass["client"].patch(f"{API}/tab/{child}", json={"title": "Renamed tab"})
+
+    assert response.status_code == 200, response.text
+    titles = [{t["title"] for t in v["tabs"]} for v in _family_versions(bypass, main)]
+    assert titles == [{"Main", "QC"}, {"Main", "Renamed tab"}]
+
+
+def test_a_reorder_on_a_fresh_family_keeps_the_order_it_replaced(bypass) -> None:
+    main = _make_dashboard(bypass, components=[{"index": "a"}])
+    first = _make_dashboard(bypass, title="B", parent=main, tab_order=1)
+    second = _make_dashboard(bypass, title="C", parent=main, tab_order=2)
+
+    response = bypass["client"].post(
+        f"{API}/tabs/reorder",
+        json={
+            "parent_dashboard_id": str(main),
+            "tab_orders": [
+                {"dashboard_id": str(second), "tab_order": 1},
+                {"dashboard_id": str(first), "tab_order": 2},
+            ],
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    orders = [
+        {t["title"]: t["tab_order"] for t in v["tabs"]} for v in _family_versions(bypass, main)
+    ]
+    assert len(orders) == 2
+    assert orders[0]["B"] < orders[0]["C"], f"the baseline must hold the old order, got {orders}"
+    assert orders[1]["C"] < orders[1]["B"]
+
+
 def test_an_appearance_edit_is_versioned(ctx) -> None:
     did = _make_dashboard(ctx, components=[{"index": "a"}])
     _capture(ctx, did, kind="explicit")
@@ -1040,3 +1183,214 @@ def test_deleting_a_child_tab_through_the_delete_route_is_versioned(ctx, monkeyp
     assert newest["seq"] == 2
     assert newest["kind"] == "explicit", "a lost tab must never coalesce away"
     assert newest["tab_count"] == 1
+
+
+def test_an_appearance_edit_on_a_fresh_family_keeps_the_look_it_replaced(ctx) -> None:
+    """The first tracked change seeds a baseline, as every bypass route does."""
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+
+    response = ctx["client"].patch(f"{API}/appearance/{did}", json={"primary": "#1a4f8f"})
+
+    assert response.status_code == 200, response.text
+    themes = [v["tabs"][0].get("brand_theme") for v in ctx["versions"].find({}).sort("seq", 1)]
+    assert themes == [None, {"primary": "#1a4f8f"}]
+
+
+def test_deleting_a_child_tab_through_the_delete_route_keeps_it_restorable(
+    ctx, monkeypatch
+) -> None:
+    """On a family with no history, the baseline is seeded before the delete."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
+    from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+
+    monkeypatch.setattr(dash_routes, "delete_logo_asset", lambda *_a: None)
+    monkeypatch.setattr(dash_routes, "delete_threads_for_dashboards", lambda *_a: 0)
+    ctx["client"].app.dependency_overrides[get_current_user] = lambda: CALLER
+    main = _make_dashboard(ctx, title="Main")
+    child = _make_dashboard(ctx, title="QC", parent=main, tab_order=1)
+
+    response = ctx["client"].delete(f"{API}/delete/{child}")
+
+    assert response.status_code == 200, response.text
+    versions = list(ctx["versions"].find({"family_id": str(main)}).sort("seq", 1))
+    assert [len(v["tabs"]) for v in versions] == [2, 1]
+    assert "QC" in {t["title"] for t in versions[0]["tabs"]}
+
+
+# ── regressions ─────────────────────────────────────────────────────────────
+#
+# Each of these reproduces something the timeline actually showed a user, and
+# each failure mode was silent: the endpoint returned 200 every time.
+
+
+def test_restore_adds_exactly_one_version(ctx) -> None:
+    """A restore appeared as two entries, not one.
+
+    The pre-restore capture used ``kind="explicit"``, and an explicit capture
+    bypassed the unchanged-content check — so restoring wrote a redundant
+    snapshot of a state already at the top of the timeline, plus the restore
+    point itself.
+    """
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    target = _capture(ctx, did, kind="explicit")
+    ctx["dashboards"].update_one({"_id": did}, {"$set": {"stored_metadata": [{"index": "b"}]}})
+    _capture(ctx, did, kind="auto", now=BASE + timedelta(hours=1))
+
+    before = ctx["versions"].count_documents({})
+    ctx["client"].post(f"{API}/versions/{target.version_id}/restore")
+    after = ctx["versions"].count_documents({})
+
+    assert after - before == 1
+
+
+def test_restoring_the_live_state_is_a_no_op(ctx) -> None:
+    """Restoring what is already on screen must not grow the timeline."""
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    record = _capture(ctx, did, kind="explicit")
+
+    before = ctx["versions"].count_documents({})
+    response = ctx["client"].post(f"{API}/versions/{record.version_id}/restore")
+
+    assert response.status_code == 200, response.text
+    assert ctx["versions"].count_documents({}) == before
+
+
+def test_restore_gives_components_back_their_object_ids(ctx) -> None:
+    """A restored dashboard rendered no data, because its ids came back as text.
+
+    Snapshots stringify ObjectIds so the payload is plain JSON and hashes
+    deterministically. Writing that straight back left components carrying a
+    string ``dc_id``, which no ``{"data_collection_id": ObjectId(...)}`` lookup
+    on the read path matches — the dashboard returned intact but empty, which
+    a user reads as "restore did nothing".
+    """
+    dc_id = ObjectId()
+    did = _make_dashboard(ctx, components=[{"index": "a", "dc_id": dc_id}])
+    record = _capture(ctx, did, kind="explicit")
+
+    ctx["dashboards"].update_one({"_id": did}, {"$set": {"stored_metadata": []}})
+    ctx["client"].post(f"{API}/versions/{record.version_id}/restore")
+
+    live = ctx["dashboards"].find_one({"_id": did})
+    assert live["stored_metadata"][0]["dc_id"] == dc_id
+    assert isinstance(live["stored_metadata"][0]["dc_id"], ObjectId)
+
+
+def test_naming_an_unchanged_state_labels_it_instead_of_failing(ctx) -> None:
+    """Naming the current state used to 409 whenever nothing had changed.
+
+    Which is almost always: every save already records a version, so by the
+    time the user opens the drawer the live state *is* the newest version.
+    The button was therefore broken in its most common case.
+    """
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    existing = _capture(ctx, did, kind="auto")
+
+    response = ctx["client"].post(f"{API}/{did}/versions", json={"label": "Known good"})
+
+    assert response.status_code == 200, response.text
+    assert response.json()["version_id"] == existing.version_id
+    assert ctx["versions"].count_documents({}) == 1, "naming must not duplicate the version"
+
+    stored = ctx["versions"].find_one({"version_id": existing.version_id})
+    assert stored["label"] == "Known good"
+    assert stored["kind"] == "explicit"
+    assert stored["coalesce_until"] == stored["created_at"], (
+        "a named version must be sealed, or the next autosave rewrites what was named"
+    )
+
+
+def test_naming_a_changed_state_creates_a_version(ctx) -> None:
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    _capture(ctx, did, kind="auto")
+    ctx["dashboards"].update_one({"_id": did}, {"$set": {"stored_metadata": [{"index": "b"}]}})
+
+    response = ctx["client"].post(f"{API}/{did}/versions", json={"label": "After the change"})
+
+    assert response.status_code == 200, response.text
+    assert ctx["versions"].count_documents({}) == 2
+    assert response.json()["label"] == "After the change"
+
+
+def test_naming_requires_editor(ctx) -> None:
+    did = _make_dashboard(ctx, components=[{"index": "a"}])
+    _capture(ctx, did, kind="auto")
+    ctx["granted"]["level"] = "viewer"
+
+    response = ctx["client"].post(f"{API}/{did}/versions", json={"label": "nope"})
+
+    assert response.status_code == 403
+
+
+# ── the routes that bypass /save ─────────────────────────────────────────────
+#
+# `/save` is not the only way a dashboard's content changes. A rename, a tab
+# edit, a reorder and a tab delete all mutate it, and each recorded nothing
+# until `_capture_version_quietly` was wired in. Every test below failed before
+# that, so they describe a fixed bug rather than restating the implementation.
+
+
+@pytest.fixture()
+def bypass(ctx, monkeypatch: pytest.MonkeyPatch):
+    """`ctx`, with the dashboard routes pointed at the same in-memory Mongo.
+
+    The version fixtures patch `versioning`/`version_store`; these routes read
+    and write through `routes.dashboards_collection`, which needs patching too
+    or a capture reads an empty collection and silently records nothing.
+
+    `core_functions` holds its own module-level handle, and `/tabs/reorder`
+    delegates the actual write to it — leave that one alone and the reorder goes
+    to the real database, which in CI is simply absent.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import core_functions
+    from depictio.api.v1.endpoints.dashboards_endpoints import routes as dash_routes
+    from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+
+    monkeypatch.setattr(dash_routes, "dashboards_collection", ctx["dashboards"])
+    monkeypatch.setattr(core_functions, "dashboards_collection", ctx["dashboards"])
+    # A tab delete also drops the tab's comment threads, in the real Mongo.
+    monkeypatch.setattr(dash_routes, "delete_threads_for_dashboards", lambda *_a: 0)
+    ctx["client"].app.dependency_overrides[get_current_user] = lambda: CALLER
+    return ctx
+
+
+def _family_versions(ctx, did):
+    return list(ctx["versions"].find({"family_id": str(did)}).sort("seq", 1))
+
+
+def test_renaming_a_dashboard_records_a_version(bypass) -> None:
+    """Otherwise the previous title is unrecoverable from the timeline."""
+    did = _make_dashboard(bypass, title="Q3 report", components=[{"index": "a"}])
+
+    response = bypass["client"].post(f"{API}/edit/{did}", json={"title": "Q4 report"})
+
+    assert response.status_code == 200, response.text
+    versions = _family_versions(bypass, did)
+    # Two: the baseline holding the pre-rename state, and the rename itself.
+    # The baseline is what makes the old title reachable at all.
+    assert len(versions) == 2
+    titles = [v["tabs"][0]["title"] for v in versions]
+    assert titles == ["Q3 report", "Q4 report"]
+
+
+def test_deleting_a_tab_records_an_explicit_version(bypass) -> None:
+    """The change most worth undoing, and the one that must not coalesce.
+
+    Anchored on the parent because the deleted tab can no longer resolve its own
+    family, and `explicit` so a following autosave opens a new entry instead of
+    folding the deletion into itself.
+    """
+    main = _make_dashboard(bypass, components=[{"index": "a"}])
+    child = _make_dashboard(bypass, title="Doomed", parent=main, tab_order=1)
+
+    response = bypass["client"].delete(f"{API}/tab/{child}")
+
+    assert response.status_code == 200, response.text
+    versions = _family_versions(bypass, main)
+    assert versions, "deleting a tab must be recoverable"
+    assert versions[-1]["kind"] == "explicit"
+    # The newest version is the post-delete state: one tab.
+    assert len(versions[-1]["tabs"]) == 1
+    # ...and the entry before it still holds the deleted tab, which is the whole
+    # point. Asserting only the count would pass on an empty snapshot.
+    assert "Doomed" in {t["title"] for t in versions[0]["tabs"]}

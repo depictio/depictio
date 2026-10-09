@@ -100,6 +100,58 @@ _SCREENSHOTS_DIR = str(settings.performance.screenshots_path)
 _SCREENSHOT_STALE_AFTER_S = 3600
 
 
+def _ensure_baseline_quietly(
+    dashboard_id: PyObjectId | ObjectId | str,
+    current_user: Any,
+) -> None:
+    """Seed the pre-write state on the first tracked change to a family.
+
+    Every capture runs *after* a write, so it describes a state the user has
+    already left. On a family with no history that makes the state being changed
+    right now the one state no version can restore — a rename would record the
+    new title and nothing would hold the old one.
+
+    ``/save`` already does this. The bypass routes need it for the same reason,
+    and more sharply: a rename or a tab delete is often the *first* thing that
+    ever happens to a dashboard, so without it the very change most likely to
+    need undoing is the one with nothing behind it.
+
+    No-ops from the second write onwards, and never raises.
+    """
+    try:
+        from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
+            ensure_baseline_quietly,
+        )
+
+        ensure_baseline_quietly(dashboard_id, author=current_user)  # type: ignore[arg-type]
+    except Exception as exc:  # noqa: BLE001 — versioning must never break a write
+        logger.warning(f"Baseline capture failed for {dashboard_id}: {exc}")
+
+
+def _capture_version_quietly(
+    dashboard_id: PyObjectId | ObjectId | str,
+    current_user: Any,
+    kind: str = "auto",
+) -> None:
+    """Record a version after a write that does not go through ``/save``.
+
+    ``/save`` is not the only route that changes what a dashboard *is*. A
+    rename, a tab edit, a reorder and a tab delete all mutate content, and
+    without this none of them left a timeline entry — so the state before them
+    was unrecoverable. A deleted tab is the change most worth undoing and was
+    the least recoverable.
+
+    Lazily imported and never allowed to raise: a missing version costs an undo
+    step, a failed write costs work. Same posture as the screenshot dispatch.
+    """
+    try:
+        from depictio.api.v1.endpoints.dashboards_endpoints.versioning import capture_quietly
+
+        capture_quietly(dashboard_id, kind=kind, author=current_user)  # type: ignore[arg-type]
+    except Exception as exc:  # noqa: BLE001 — versioning must never break a write
+        logger.warning(f"Version capture failed for {dashboard_id}: {exc}")
+
+
 def _should_enqueue_screenshot(dashboard_id: str, now_s: float | None = None) -> bool:
     """Return True iff any dual-theme PNG is missing or older than 1h.
 
@@ -326,39 +378,15 @@ _PREVIEW_OVERLAY_FIELDS: tuple[str, ...] = tuple(
 )
 
 
-def _capture_version_quietly(
-    dashboard_id: PyObjectId | ObjectId | str,
-    current_user: Any,
-    kind: str = "auto",
-    only_if_changed: bool = False,
-) -> None:
-    """Record a version after a write that does not go through ``/save``.
-
-    Lazily imported and never allowed to raise: a missing version costs an undo
-    step, a failed write costs work. Same posture as the screenshot dispatch.
-    """
-    try:
-        from depictio.api.v1.endpoints.dashboards_endpoints.versioning import capture_quietly
-
-        capture_quietly(
-            dashboard_id,
-            kind=kind,  # type: ignore[arg-type]
-            author=current_user,
-            only_if_changed=only_if_changed,
-        )
-    except Exception as exc:  # noqa: BLE001 — versioning must never break a write
-        logger.warning(f"Version capture failed for {dashboard_id}: {exc}")
-
-
 def _capture_before_import(family_id: Any, current_user: Any) -> Callable[[], None]:
     """A callable that records a family's present state, once, before an import.
 
     An import overwrites a family wholesale, so the state it replaces must be
     restorable afterwards. That state is usually the newest version already,
-    and then nothing is written (`only_if_changed`). When it is not (a
-    dashboard imported before versioning existed, or changed by a write that
-    does not capture), the import would otherwise destroy the one state nobody
-    recorded.
+    and then nothing is written: an unchanged capture writes nothing, whatever
+    its kind. When it is not (a dashboard imported before versioning existed,
+    or changed by a write that does not capture), the import would otherwise
+    destroy the one state nobody recorded.
 
     Returned rather than run, so a path that learns only mid-way whether it
     writes at all (a kept family gaining the tabs it lacks) runs it at its
@@ -370,7 +398,7 @@ def _capture_before_import(family_id: Any, current_user: Any) -> Callable[[], No
         nonlocal done
         if not done:
             done = True
-            _capture_version_quietly(family_id, current_user, kind="explicit", only_if_changed=True)
+            _capture_version_quietly(family_id, current_user, kind="explicit")
 
     return capture
 
@@ -774,6 +802,9 @@ async def edit_dashboard(
             status_code=403, detail="You don't have permission to edit this dashboard."
         )
 
+    # Before the write, and only now that the caller is known to be an editor.
+    _ensure_baseline_quietly(dashboard_id, current_user)
+
     result = dashboards_collection.find_one_and_update(
         {"dashboard_id": dashboard_id},
         {"$set": update_data},
@@ -854,6 +885,11 @@ async def save_dashboard(
     # make the next refresh of that source pick either copy.
     save_payload.pop("source_key", None)
 
+    from depictio.api.v1.endpoints.dashboards_endpoints.versioning import (
+        capture_quietly,
+        ensure_baseline_quietly,
+    )
+
     if existing_dashboard:
         project_id = existing_dashboard.get("project_id")
         if not project_id:
@@ -874,6 +910,13 @@ async def save_dashboard(
         save_payload.pop("is_public", None)
         save_payload.pop("permissions", None)
         save_payload.pop("project_id", None)
+
+        # Seed the ledger with the pre-write state, once per family. Every
+        # other capture runs *after* a write and so describes a state the user
+        # has already moved to; without this, the state being edited right now
+        # is the one state no version can ever restore. No-ops from the second
+        # save onwards, and runs only once the caller is known to be an editor.
+        ensure_baseline_quietly(dashboard_id, author=current_user)
 
         result = dashboards_collection.find_one_and_update(
             {"dashboard_id": dashboard_id},
@@ -936,8 +979,6 @@ async def save_dashboard(
         #
         # capture_quietly swallows everything: a missing version is a lost
         # undo step, a failed save is lost work.
-        from depictio.api.v1.endpoints.dashboards_endpoints.versioning import capture_quietly
-
         capture_quietly(
             dashboard_id,
             kind="explicit" if force_screenshot or not existing_dashboard else "auto",
@@ -1024,6 +1065,10 @@ async def update_dashboard_appearance(
 
     payload = brand_theme.model_dump(exclude_none=True)
     update = {"$set": {"brand_theme": payload}} if payload else {"$unset": {"brand_theme": ""}}
+    # Before the write, as for every route that bypasses `/save`: on a family
+    # with no history, the look being replaced would otherwise be the one state
+    # no version holds.
+    _ensure_baseline_quietly(dashboard_id, current_user)
     dashboards_collection.update_one({"dashboard_id": dashboard_id}, update)
     logger.info(f"Dashboard {dashboard_id} appearance updated ({len(payload)} field(s))")
     # The brand theme is part of a snapshot, so this is an edit the timeline
@@ -1123,6 +1168,12 @@ async def delete_dashboard(
             status_code=404,
             detail=f"Dashboard with ID '{dashboard_id}' not found or access denied.",
         )
+
+    # A child tab deleted through this route is the same change as DELETE /tab,
+    # so it seeds the family's baseline the same way: on the parent, and before
+    # the delete, since a baseline seeded afterwards would not hold the tab.
+    if not dashboard.get("is_main_tab", True) and dashboard.get("parent_dashboard_id"):
+        _ensure_baseline_quietly(dashboard["parent_dashboard_id"], current_user)
 
     # Check if this is a main tab - if so, delete all child tabs first
     child_tabs_deleted = 0
@@ -1275,6 +1326,10 @@ async def update_tab(
     if not update_fields:
         raise HTTPException(status_code=400, detail="No valid fields provided for update.")
 
+    # Anchored on this tab: `resolve_family_id` walks to the parent, so a child
+    # tab seeds the family's baseline correctly.
+    _ensure_baseline_quietly(dashboard_id, current_user)
+
     result = dashboards_collection.find_one_and_update(
         {"dashboard_id": dashboard_id},
         {"$set": update_fields},
@@ -1340,6 +1395,12 @@ async def delete_tab(
     # Store parent dashboard ID for navigation after delete
     parent_dashboard_id = dashboard.get("parent_dashboard_id")
     tab_title = dashboard.get("title", "Untitled")
+
+    # Must precede the delete: afterwards the tab is gone from the family, so a
+    # baseline seeded then would not contain the tab being deleted — which is
+    # the only thing anyone would restore this for.
+    if parent_dashboard_id:
+        _ensure_baseline_quietly(parent_dashboard_id, current_user)
 
     result = dashboards_collection.delete_one({"dashboard_id": dashboard_id})
 
@@ -1417,6 +1478,8 @@ async def reorder_tabs(
 
     if not check_dashboard_mutation_permission(parent_dashboard, current_user, "editor"):
         raise HTTPException(status_code=403, detail="You don't have permission to reorder tabs.")
+
+    _ensure_baseline_quietly(parent_dashboard_id, current_user)
 
     # Perform the reorder
     updated_count = reorder_child_tabs(PyObjectId(parent_dashboard_id), tab_orders)

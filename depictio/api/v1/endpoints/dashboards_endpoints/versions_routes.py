@@ -282,6 +282,9 @@ async def get_dashboard_version(
 
 # ── write ───────────────────────────────────────────────────────────────────
 
+#: Status for each reason a capture can skip other than unchanged content.
+_SKIPPED_STATUS: dict[str, int] = {"disabled": 409, "missing": 404, "oversized": 413}
+
 
 @dashboard_versions_endpoint_router.post("/{dashboard_id}/versions")
 async def create_dashboard_version(
@@ -289,23 +292,57 @@ async def create_dashboard_version(
     payload: CreateVersionRequest,
     current_user: User = Depends(get_user_or_anonymous),
 ):
-    """Take a named snapshot of the current state.
+    """Name the dashboard's current state.
 
     ``kind="explicit"``, so it never folds into a neighbouring autosave and is
     kept for the full retention window.
+
+    When the current state is already the newest version (the common case,
+    since every save records one), this names *that* version rather than
+    writing a duplicate. It never names a version whose content differs from
+    the live state: a snapshot that could not be taken at all is an error that
+    says why, 409 when versioning is off and 413 when the dashboard is over
+    the size cap.
     """
-    _, main = _resolve_family(dashboard_id)
+    family_id, main = _resolve_family(dashboard_id)
     _require(main, current_user, "editor")
 
-    record = versioning.capture_dashboard_version(
-        dashboard_id, kind="explicit", author=current_user, label=payload.label
-    )
-    if record is None:
+    try:
+        record = versioning.capture_dashboard_version(
+            dashboard_id, kind="explicit", author=current_user, label=payload.label, strict=True
+        )
+    except versioning.CaptureSkipped as skipped:
+        raise HTTPException(
+            status_code=_SKIPPED_STATUS[skipped.reason], detail=str(skipped)
+        ) from skipped
+    if record is not None:
+        return {"version_id": record.version_id, "seq": record.seq, "label": record.label}
+
+    # Unchanged content: name the version that holds it. Checked again here,
+    # because a save landing since the capture may have moved the live state on.
+    latest = version_store.latest_version(str(family_id))
+    if latest is None or latest.get("content_hash") != _live_content_hash(family_id):
         raise HTTPException(
             status_code=409,
-            detail="No version created — the current state is already the latest version.",
+            detail="The dashboard changed while it was being named. Try again.",
         )
-    return {"version_id": record.version_id, "seq": record.seq, "label": record.label}
+
+    # A null label names nothing, so it leaves an existing name alone.
+    updates: dict[str, Any] = {} if payload.label is None else {"label": payload.label}
+    if latest.get("kind") == "auto":
+        # Sealed, so a later autosave cannot fold into what the user just named.
+        updated = version_store.seal_version(latest, updates)
+    elif updates:
+        # An import, restore or explicit version keeps its kind.
+        updated = version_store.set_version_fields(latest["version_id"], updates)
+    else:
+        updated = latest
+    updated = updated or latest
+    return {
+        "version_id": updated["version_id"],
+        "seq": updated.get("seq"),
+        "label": updated.get("label"),
+    }
 
 
 @dashboard_versions_endpoint_router.post("/versions/{version_id}/pin")
@@ -399,6 +436,31 @@ _RESTORABLE_FIELDS: tuple[str, ...] = tuple(
 )
 
 
+def _rehydrate_ids(value: Any) -> Any:
+    """Undo the snapshot's ObjectId→str flattening before writing back.
+
+    ``versioning._jsonify`` stringifies ObjectIds so a snapshot is plain JSON
+    and hashes deterministically. Writing that back verbatim would leave a
+    restored dashboard's components carrying string ``dc_id`` / ``wf_id``,
+    which no ``find_one({"data_collection_id": ObjectId(...)})`` on the read
+    path can match: the dashboard returns structurally intact but renders no
+    data, which reads as "restore did nothing".
+
+    Deliberately the same rule ``MongoModel.mongo`` applies on the normal save
+    path — any string that is a valid ObjectId becomes one — so a restored
+    document is byte-identical to one the save endpoint would have written.
+    Sharing that quirk is the point: a divergence here would mean restore and
+    save produce different documents from the same content.
+    """
+    if isinstance(value, dict):
+        return {k: _rehydrate_ids(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_rehydrate_ids(v) for v in value]
+    if isinstance(value, str) and ObjectId.is_valid(value):
+        return ObjectId(value)
+    return value
+
+
 @dashboard_versions_endpoint_router.post("/versions/{version_id}/restore")
 async def restore_dashboard_version(
     version_id: str,
@@ -408,7 +470,9 @@ async def restore_dashboard_version(
 
     The current state is captured as a version *before* anything is written,
     so a restore is always undoable by restoring the entry that precedes the
-    new restore point.
+    new restore point. That pre-capture is a no-op when the live state already
+    matches the newest version — the usual case — so a restore normally adds
+    exactly one entry to the timeline.
 
     Only content is written. ``permissions``, ``is_public`` and ``project_id``
     are never taken from the snapshot — a months-old version must not be able
@@ -432,13 +496,10 @@ async def restore_dashboard_version(
             detail="This version holds no tab snapshot and cannot be restored.",
         )
 
-    # Capture the pre-restore state first. Without this the state being
-    # replaced could be unrecoverable — precisely the situation restore exists
-    # to prevent. `only_if_changed`: when the present already is the newest
-    # version, that version is the undo point and a copy of it is noise.
-    versioning.capture_quietly(
-        family_id, kind="explicit", author=current_user, only_if_changed=True
-    )
+    # Capture the pre-restore state first, so the state being replaced is never
+    # unrecoverable — precisely the situation restore exists to prevent. Writes
+    # nothing when the live content already matches the newest version.
+    versioning.capture_quietly(family_id, kind="explicit", author=current_user)
 
     live_docs = versioning.load_family_docs(family_id)
     live_by_id = {str(d.get("dashboard_id") or d.get("_id")): d for d in live_docs}
@@ -451,14 +512,17 @@ async def restore_dashboard_version(
 
     for tab_id, tab in snapshot_by_id.items():
         live = live_by_id.get(tab_id)
-        content = {f: tab[f] for f in _RESTORABLE_FIELDS if f in tab}
+        # Rehydrated, or the restored components carry string `dc_id`s and
+        # render no data (see `_rehydrate_ids`).
+        content = {f: _rehydrate_ids(tab[f]) for f in _RESTORABLE_FIELDS if f in tab}
         unset: dict[str, str] = {}
         if "brand_theme" in content:
             theme = versioning.restorable_brand_theme(
                 content.pop("brand_theme"), (live or {}).get("brand_theme")
             )
-            # No override at that version: drop the field, as PATCH /appearance
-            # does for an empty theme, so the tab inherits again.
+            # No override at that version and no logo now: drop the field, as
+            # PATCH /appearance does for an empty theme, so the tab inherits
+            # again. A live logo is never dropped (see `restorable_brand_theme`).
             if theme is None:
                 unset["brand_theme"] = ""
             else:

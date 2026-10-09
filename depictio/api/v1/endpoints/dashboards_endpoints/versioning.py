@@ -33,7 +33,7 @@ import json
 import re
 import uuid
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from bson import ObjectId
 from pymongo import ASCENDING
@@ -237,16 +237,25 @@ def restorable_brand_theme(
 
     The logo URLs are the live ones. The bytes behind them are not versioned,
     so an old URL could only serve today's image, under a cache-buster a browser
-    may still hold an older image for. None means the tab had no brand override
-    at that version, which restore turns into an ``$unset``.
+    may still hold an older image for.
+
+    A tab with no brand override at that version keeps its live logo, with its
+    ``logo_mode``, and nothing else. The upload is in no version, so dropping it
+    here would lose it for good: restoring a later version brings back that
+    version's look, but its logo URL comes from the live document, which would
+    no longer have one. None means there is neither an override nor a logo,
+    which restore turns into an ``$unset``.
     """
-    if not snapshot_theme:
-        return None
     live = live_theme or {}
+    live_logo = {key: live[key] for key in _LOGO_URL_KEYS if live.get(key)}
+    if not snapshot_theme:
+        if not live_logo:
+            return None
+        if live.get("logo_mode"):
+            live_logo["logo_mode"] = live["logo_mode"]
+        return live_logo
     theme = {k: v for k, v in snapshot_theme.items() if k not in _LOGO_URL_KEYS}
-    for key in _LOGO_URL_KEYS:
-        if live.get(key):
-            theme[key] = live[key]
+    theme.update(live_logo)
     return theme or None
 
 
@@ -449,6 +458,46 @@ def _should_coalesce(latest: dict[str, Any], author_id: str | None, now: datetim
     return now <= until
 
 
+#: Why a capture recorded nothing, other than unchanged content.
+CaptureSkipReason = Literal["disabled", "missing", "oversized"]
+
+
+class CaptureSkipped(Exception):
+    """A strict capture that could not record the current state.
+
+    ``reason`` says which: versioning is off, the dashboard or its family is
+    gone, or the snapshot is over the size cap (``size`` and ``limit`` then
+    give both in bytes). The message is fit to show a user.
+    """
+
+    def __init__(
+        self,
+        reason: CaptureSkipReason,
+        message: str,
+        *,
+        size: int | None = None,
+        limit: int | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.reason = reason
+        self.size = size
+        self.limit = limit
+
+
+def _skipped(
+    strict: bool,
+    reason: CaptureSkipReason,
+    message: str,
+    *,
+    size: int | None = None,
+    limit: int | None = None,
+) -> None:
+    """None for a lenient capture; ``CaptureSkipped`` for a strict one."""
+    if strict:
+        raise CaptureSkipped(reason, message, size=size, limit=limit)
+    return None
+
+
 def capture_dashboard_version(
     dashboard_id: ObjectId | str,
     *,
@@ -456,50 +505,54 @@ def capture_dashboard_version(
     author: Any = None,
     label: str | None = None,
     parent_version_id: str | None = None,
+    strict: bool = False,
     seal: bool = False,
     now: datetime | None = None,
-    only_if_changed: bool = False,
 ) -> Optional[DashboardVersion]:
     """Snapshot a dashboard family. Returns None when nothing was recorded.
 
     None means: versioning disabled, the dashboard is gone, the family is
     empty, the snapshot is oversized, or — the common case — the content is
-    byte-identical to the newest version.
-
-    ``only_if_changed`` writes nothing when the content matches the newest
-    version, whatever ``kind`` is. For recording "the state before" ahead of a
-    restore or an import: that state is usually the newest version already,
-    and an explicit capture would otherwise write a duplicate of it every time.
+    byte-identical to the newest version, whatever ``kind`` is. That is what
+    lets a "state before" capture ahead of a restore or an import run
+    unconditionally: when that state is already the newest version, it writes
+    nothing.
 
     ``seal`` is for a user's explicit Save: when the content is unchanged and
     the newest version is an autosave, that autosave becomes ``explicit``
     instead, so the Save is visible and nothing folds into it afterwards.
+
+    ``strict`` raises ``CaptureSkipped`` for every other reason, so None then
+    means unchanged content and nothing else. Naming the current state needs
+    that: it labels the newest version when nothing changed, and must not label
+    a stale one when the snapshot could not be taken at all.
     """
     cfg = settings.dashboard_versions
     if not cfg.enabled:
-        return None
+        return _skipped(strict, "disabled", "Dashboard versioning is disabled on this server.")
 
     now = now or utc_now_naive()
 
+    gone = "The dashboard or its tab family no longer exists."
     try:
         dashboard_oid = ObjectId(str(dashboard_id))
     except Exception:
         logger.warning(f"versioning: not a valid dashboard id: {dashboard_id!r}")
-        return None
+        return _skipped(strict, "missing", gone)
 
     anchor = _find_dashboard(dashboard_oid)
     if not anchor:
         logger.debug(f"versioning: dashboard {dashboard_id} not found; nothing to capture")
-        return None
+        return _skipped(strict, "missing", gone)
 
     family_id = resolve_family_id(anchor)
     if family_id is None:
         logger.warning(f"versioning: could not resolve family for {dashboard_id}")
-        return None
+        return _skipped(strict, "missing", gone)
 
     family_docs = load_family_docs(family_id)
     if not family_docs:
-        return None
+        return _skipped(strict, "missing", gone)
 
     tabs = build_tab_snapshots(family_docs)
     content_hash = compute_content_hash(tabs)
@@ -511,22 +564,24 @@ def capture_dashboard_version(
 
     latest = version_store.latest_version(family_key)
 
-    # Nothing changed. An explicit save still deserves a marker, so it falls
-    # through to the normal path; an autosave leaves no trace at all, and
-    # neither does a "state before" capture.
+    # Nothing changed, so there is no new state to preserve.
     #
-    # A Save click (`seal`) marks the autosave that already holds this content
-    # instead: the debounced autosave has nearly always written it, and a
-    # second entry with the same content would say nothing.
+    # This applies to every kind, not just autosaves. Without it, a restore
+    # whose target is already live, or any deliberate snapshot of an unchanged
+    # dashboard, writes a second entry that says nothing, which is what made a
+    # single restore appear as two versions. Only an autosave counts as a save
+    # of the latest version: a "state before" capture ahead of a restore or an
+    # import is not one, and touching for it would inflate its save count.
+    #
+    # A Save click (`seal`) is the exception that still leaves a mark: the
+    # debounced autosave has nearly always written this content already, so
+    # without sealing that autosave the click would vanish from the timeline.
     if latest and latest.get("content_hash") == content_hash:
-        if only_if_changed:
-            return None
         if kind == "auto":
             version_store.touch_version(latest["version_id"], now)
-            return None
-        if seal and latest.get("kind") == "auto":
+        elif seal and latest.get("kind") == "auto":
             version_store.seal_version(latest, {"updated_at": now})
-            return None
+        return None
 
     stamps = build_dc_stamps(tabs)
 
@@ -560,10 +615,21 @@ def capture_dashboard_version(
             f"versioning: skipping capture for {family_key} — snapshot is {size} bytes, "
             f"over the {cfg.max_snapshot_bytes} limit"
         )
-        return None
+        return _skipped(
+            strict,
+            "oversized",
+            f"The dashboard is too large to snapshot: {size} bytes, "
+            f"over the {cfg.max_snapshot_bytes}-byte limit.",
+            size=size,
+            limit=cfg.max_snapshot_bytes,
+        )
 
     if latest and kind == "auto" and _should_coalesce(latest, author_id, now):
-        version_store.fold_into_version(
+        # `latest` was read before the snapshot was built, so a pin, a name or a
+        # Save click may have sealed it since. The fold checks that again in its
+        # own filter, and a fold that finds the version sealed falls through to
+        # a new version rather than rewriting what the user kept.
+        folded = version_store.fold_into_version(
             latest["version_id"],
             {
                 "tabs": payload["tabs"],
@@ -579,15 +645,14 @@ def capture_dashboard_version(
                 "record_schema_version": RECORD_SCHEMA_VERSION,
             },
         )
-        record.version_id = latest["version_id"]
-        record.seq = int(latest.get("seq", 1))
-        record.created_at = latest.get("created_at", now)
-        record.save_count = int(latest.get("save_count", 1)) + 1
-        return record
+        if folded:
+            record.version_id = latest["version_id"]
+            record.seq = int(latest.get("seq", 1))
+            record.created_at = latest.get("created_at", now)
+            record.save_count = int(latest.get("save_count", 1)) + 1
+            return record
 
-    record.seq = version_store.next_seq(family_key)
-    payload["seq"] = record.seq
-    version_store.insert_version(payload)
+    record.seq = version_store.insert_with_next_seq(family_key, payload)
     version_store.maybe_prune_family(family_key, now=now)
     return record
 
@@ -602,4 +667,49 @@ def capture_quietly(dashboard_id: ObjectId | str, **kwargs: Any) -> Optional[Das
         return capture_dashboard_version(dashboard_id, **kwargs)
     except Exception as exc:  # noqa: BLE001 — versioning must never break a save
         logger.warning(f"versioning: capture failed for {dashboard_id}: {exc}")
+        return None
+
+
+def ensure_baseline_quietly(
+    dashboard_id: ObjectId | str, *, author: Any = None
+) -> Optional[DashboardVersion]:
+    """Record the state a dashboard is in *before* its first tracked write.
+
+    Capture runs after a save, so every version describes a state the user has
+    already moved to. For a dashboard that predates the ledger — which is every
+    existing dashboard — that leaves its original state permanently
+    unreachable: the first edit is recorded, but the thing being edited is not.
+    Users read that as "restore does not go back to the original", and they are
+    right.
+
+    So the very first write to a family seeds a baseline from the live document
+    first. Called *before* the write, unlike every other capture. It is a
+    one-time cost per family: the ledger is non-empty from then on, and the
+    check is a single indexed count.
+
+    Labelled rather than left bare, because "v1" for a state the user never
+    explicitly saved needs to explain itself in the timeline.
+    """
+    try:
+        if not settings.dashboard_versions.enabled:
+            return None
+
+        anchor = _find_dashboard(ObjectId(str(dashboard_id)))
+        if not anchor:
+            return None
+
+        family_id = resolve_family_id(anchor)
+        if family_id is None:
+            return None
+        if version_store.count_versions(str(family_id)) > 0:
+            return None
+
+        return capture_dashboard_version(
+            family_id,
+            kind="explicit",
+            author=author,
+            label="Before first tracked change",
+        )
+    except Exception as exc:  # noqa: BLE001 — must never break a save
+        logger.warning(f"versioning: baseline capture failed for {dashboard_id}: {exc}")
         return None
