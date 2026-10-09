@@ -284,8 +284,8 @@ export function useGuideSources(input: GuideSourcesInput): GuideSources {
           layoutData: pinned.layouts,
         }
       : null;
-    if (own && ownSections.some(hasCards)) return own;
-    if (pin && pinned?.sections.some(hasCards)) return pin;
+    if (ownSections.some(hasCards)) return own;
+    if (pinned?.sections.some(hasCards)) return pin;
     if (!sibling || sibling.status === 'pending') return undefined;
     const sib: SectionsDemoSource | null =
       sibling.status === 'found'

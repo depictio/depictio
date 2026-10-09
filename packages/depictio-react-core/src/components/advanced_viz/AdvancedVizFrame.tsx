@@ -187,6 +187,31 @@ const EstimatedBadge: React.FC = () => (
   </Tooltip>
 );
 
+/** The height of the element behind `ref`, 0 while there is none. Measured
+ *  again when it resizes and when `remeasureOn` changes (the element may have
+ *  come or gone). Rounded, and held within 2 px, so reflow churn does not
+ *  re-render the frame. */
+function useMeasuredHeight(ref: React.RefObject<HTMLElement | null>, remeasureOn: unknown): number {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || typeof ResizeObserver === 'undefined') {
+      setHeight(0);
+      return;
+    }
+    const measureHeight = () =>
+      setHeight((prev) => {
+        const next = Math.round(node.getBoundingClientRect().height);
+        return Math.abs(prev - next) < 2 ? prev : next;
+      });
+    measureHeight();
+    const observer = new ResizeObserver(measureHeight);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [ref, remeasureOn]);
+  return height;
+}
+
 /**
  * Shared wrapper for advanced-viz renderers.
  *
@@ -400,45 +425,13 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   // without this, turning the strip on squeezes the figure instead of growing
   // the tile. A side rail takes width, not height, so it adds nothing.
   const inlineRef = useRef<HTMLDivElement | null>(null);
-  const [inlineHeight, setInlineHeight] = useState(0);
-  useEffect(() => {
-    const node = inlineRef.current;
-    if (!node || typeof ResizeObserver === 'undefined') {
-      setInlineHeight(0);
-      return;
-    }
-    const measureHeight = () =>
-      setInlineHeight((prev) => {
-        const next = Math.round(node.getBoundingClientRect().height);
-        return Math.abs(prev - next) < 2 ? prev : next;
-      });
-    measureHeight();
-    const observer = new ResizeObserver(measureHeight);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [inlineLayout]);
+  const inlineHeight = useMeasuredHeight(inlineRef, inlineLayout);
 
   // The caption under the plot takes height the content demand does not
   // count, so it is measured and added like the strip.
   const caption = useAdvancedVizCaption();
   const captionRef = useRef<HTMLDivElement | null>(null);
-  const [captionHeight, setCaptionHeight] = useState(0);
-  useEffect(() => {
-    const node = captionRef.current;
-    if (!node || typeof ResizeObserver === 'undefined') {
-      setCaptionHeight(0);
-      return;
-    }
-    const measureHeight = () =>
-      setCaptionHeight((prev) => {
-        const next = Math.round(node.getBoundingClientRect().height);
-        return Math.abs(prev - next) < 2 ? prev : next;
-      });
-    measureHeight();
-    const observer = new ResizeObserver(measureHeight);
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [caption]);
+  const captionHeight = useMeasuredHeight(captionRef, caption);
 
   // The strip, the rail, the dock and the badge rows all take room from the
   // plot slot without the window moving, which is the only resize Plotly
@@ -470,7 +463,7 @@ const AdvancedVizFrame: React.FC<AdvancedVizFrameProps> = ({
   // no row count: it keeps a sample or a region, never the full count.
   const isShowcase = Boolean(showcase);
   const echoText = useMemo(() => {
-    const sampled = redPresent && !redFull && redDisplayed < redTotal;
+    const sampled = !redFull && redDisplayed < redTotal;
     return selectionEcho({
       echo,
       reduction:

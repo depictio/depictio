@@ -53,8 +53,9 @@ def url_origin(url: str | None) -> str | None:
     if not url:
         return None
     parts = urlsplit(url.strip())
-    scheme = parts.scheme.lower()
-    # ``hostname`` is lowercased and has userinfo and IPv6 brackets stripped.
+    # ``scheme`` and ``hostname`` come back lowercased; ``hostname`` also has
+    # userinfo and IPv6 brackets stripped.
+    scheme = parts.scheme
     host = parts.hostname
     if not scheme or not host:
         return None

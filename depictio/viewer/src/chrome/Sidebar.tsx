@@ -125,13 +125,8 @@ export function tabImageSrc(
   // `tab_icon` wins outright: an Iconify `tab_icon` beside an image `icon` (a
   // template's `mdi:compass-outline` over its pipeline favicon) is drawn by
   // `resolveTabIcon`, not replaced by the favicon.
-  const raw = tab.tab_icon
-    ? isImagePath(tab.tab_icon)
-      ? tab.tab_icon
-      : null
-    : isParent && tab.icon && isImagePath(tab.icon)
-      ? tab.icon
-      : null;
+  const iconPath = tab.tab_icon || (isParent ? tab.icon : null);
+  const raw = iconPath && isImagePath(iconPath) ? iconPath : null;
   if (!raw) return null;
   const themed = themedIconSrc(raw, isDark, onFilled);
   return themed.startsWith('/dashboard/') ? themed : resolveAssetUrl(themed);

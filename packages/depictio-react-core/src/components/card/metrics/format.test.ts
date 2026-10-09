@@ -177,6 +177,7 @@ describe('breakdownHasShares', () => {
 describe('hexWithAlpha', () => {
   it('takes a hex colour, an rgb() colour and a Mantine palette name', () => {
     expect(hexWithAlpha('#ff7f00', 0.5)).toBe('rgba(255,127,0,0.5)');
+    expect(hexWithAlpha('FF7F00', 0.5)).toBe('rgba(255,127,0,0.5)');
     expect(hexWithAlpha('rgb(1, 2, 3)', 0.3)).toBe('rgba(1,2,3,0.3)');
     expect(hexWithAlpha('grape', 0.85)).toBe(
       'color-mix(in srgb, var(--mantine-color-grape-filled) 85%, transparent)',

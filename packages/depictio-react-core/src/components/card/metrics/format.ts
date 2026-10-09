@@ -112,13 +112,19 @@ export function formatNumber(v: number, format?: string | null): string {
   return formatCardNumber(v);
 }
 
+/** A card's own `format`, trimmed; undefined when it sets none. */
+export function explicitCardFormat(format: unknown): string | undefined {
+  return typeof format === 'string' && format.trim() ? format.trim() : undefined;
+}
+
 /**
  * The format a card's value takes: its `format`, else its `decimals` as
  * `decimals:N`. `format` wins when both are set (validation refuses the pair
  * in YAML, but a stored card is not re-validated on read).
  */
 export function cardNumberFormat(m: { format?: unknown; decimals?: unknown }): string | undefined {
-  if (typeof m.format === 'string' && m.format.trim()) return m.format.trim();
+  const explicit = explicitCardFormat(m.format);
+  if (explicit) return explicit;
   if (typeof m.decimals === 'number' && Number.isFinite(m.decimals)) {
     return `decimals:${Math.min(6, Math.max(0, Math.round(m.decimals)))}`;
   }
@@ -214,18 +220,23 @@ export function hexWithAlpha(hex: string | null | undefined, alpha: number): str
   // drew the intended gray.
   const rgba = hex.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
   if (rgba) return `rgba(${rgba[1]},${rgba[2]},${rgba[3]},${alpha})`;
+  // Hex first: a bare hex starting with a letter (`FF7F00`) also reads as a
+  // palette name below.
+  const cleaned = hex.replace('#', '').trim();
+  if (/^[0-9a-fA-F]{6}$/.test(cleaned)) {
+    const r = parseInt(cleaned.slice(0, 2), 16);
+    const g = parseInt(cleaned.slice(2, 4), 16);
+    const b = parseInt(cleaned.slice(4, 6), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
   // A Mantine palette name (`orange`, `grape`, a theme's own `brandPrimary`):
   // the colour a card's icon takes, so its strip takes it too, in either scheme.
-  if (/^[a-zA-Z][a-zA-Z0-9]*$/.test(hex.trim())) {
+  const paletteName = hex.trim();
+  if (/^[a-zA-Z][a-zA-Z0-9]*$/.test(paletteName)) {
     const pct = Math.round(alpha * 100);
-    return `color-mix(in srgb, var(--mantine-color-${hex.trim()}-filled) ${pct}%, transparent)`;
+    return `color-mix(in srgb, var(--mantine-color-${paletteName}-filled) ${pct}%, transparent)`;
   }
-  const cleaned = hex.replace('#', '').trim();
-  if (cleaned.length !== 6 || !/^[0-9a-fA-F]{6}$/.test(cleaned)) return fallback;
-  const r = parseInt(cleaned.slice(0, 2), 16);
-  const g = parseInt(cleaned.slice(2, 4), 16);
-  const b = parseInt(cleaned.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
+  return fallback;
 }
 
 /** Opacity ramp for ranked segments of one accent colour. Rank 0 is the most

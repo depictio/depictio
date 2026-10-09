@@ -27,7 +27,7 @@ import SecondaryMetrics, {
   breakdownHasShares,
   type SecondaryLayout,
 } from './card/SecondaryMetrics';
-import { cardNumberFormat, formatNumber } from './card/metrics/format';
+import { cardNumberFormat, explicitCardFormat, formatNumber } from './card/metrics/format';
 import { wrapWithChrome } from './chrome';
 import { resolveFigureStyle } from './figureStyle';
 import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
@@ -757,10 +757,7 @@ const CardRenderer: React.FC<{
   const valueFormat = cardNumberFormat(metadata);
   // Only an explicit `format` reaches the strips that never followed
   // `decimals`, so a `decimals` card keeps the strip it has always had.
-  const explicitFormat =
-    typeof metadata.format === 'string' && metadata.format.trim()
-      ? metadata.format.trim()
-      : undefined;
+  const explicitFormat = explicitCardFormat(metadata.format);
   const displayValue =
     loading && value == null ? '…' : value != null ? formatValue(value, valueFormat) : '—';
 

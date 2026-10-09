@@ -965,17 +965,15 @@ def _vertical_legend_entries(fig_dict: dict[str, Any]) -> int:
     layout = fig_dict.get("layout")
     layout = layout if isinstance(layout, dict) else {}
     legend = layout.get("legend")
-    if layout.get("showlegend") is False:
+    hidden = layout.get("showlegend") is False
+    horizontal = isinstance(legend, dict) and legend.get("orientation") == "h"
+    if hidden or horizontal:
         return 0
-    if isinstance(legend, dict) and legend.get("orientation") == "h":
-        return 0
-    names: set[str] = set()
-    for trace in fig_dict.get("data") or []:
-        if not isinstance(trace, dict) or trace.get("showlegend") is False:
-            continue
-        name = trace.get("name")
-        if name:
-            names.add(str(name))
+    names = {
+        str(trace["name"])
+        for trace in fig_dict.get("data") or []
+        if isinstance(trace, dict) and trace.get("showlegend") is not False and trace.get("name")
+    }
     # Plotly hides the legend of a single trace unless asked to show it.
     return len(names) if len(names) > 1 else 0
 

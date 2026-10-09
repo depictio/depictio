@@ -270,8 +270,9 @@ const CONTEXT_SPLIT = /\s+[—–]\s+/;
  */
 export function parseStatRow(item: string): StatRow | null {
   const m = STAT_HEAD.exec(item.trim());
-  const figure = m ? withStandIns(m[1].trim()) : '';
-  if (!m || figure.length > STAT_MAX || !/\d/.test(figure)) return null;
+  if (!m) return null;
+  const figure = withStandIns(m[1].trim());
+  if (figure.length > STAT_MAX || !/\d/.test(figure)) return null;
   let rest = m[2];
   const linkMatch = TRAILING_LINK.exec(rest);
   const link = linkMatch ? linkMatch[1] : null;

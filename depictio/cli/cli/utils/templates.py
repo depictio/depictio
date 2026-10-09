@@ -347,19 +347,16 @@ def substitute_template_variables(config: Any, variables: dict[str, str]) -> Any
     """
     if isinstance(config, dict):
         out: dict[Any, Any] = {}
-        static_keys: set[Any] = set()
         for key, value in config.items():
             new_key = substitute_template_variables(key, variables)
             new_value = substitute_template_variables(value, variables)
-            is_static = new_key == key
             if new_key not in out:
                 out[new_key] = new_value
-            elif is_static and new_key not in static_keys:
+            elif new_key == key:
+                # Written as is, so it wins over the entry a variable made.
                 out[new_key] = merge_colliding_entries(new_value, out[new_key])
             else:
                 out[new_key] = merge_colliding_entries(out[new_key], new_value)
-            if is_static:
-                static_keys.add(new_key)
         return out
     elif isinstance(config, list):
         return [substitute_template_variables(item, variables) for item in config]

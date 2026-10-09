@@ -123,8 +123,8 @@ export function defaultRegionFilters(input: DefaultRegionInput): InteractiveFilt
   // `first` opens on the first contig the data carries, whole: a template
   // that serves any reference cannot name a contig that holds across them.
   const resolved = opensOnFirstContig(text)
-      ? { chrom: contigs[0], start: null, end: null }
-      : resolveLocus(text, contigs, input.genes ?? null);
+    ? { chrom: contigs[0], start: null, end: null }
+    : resolveLocus(text, contigs, input.genes ?? null);
   // A default region naming a contig this collection does not carry is an
   // authoring mistake, and emitting it would filter every tile down to zero
   // rows. Drawing the overview is the better failure.

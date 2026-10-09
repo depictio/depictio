@@ -91,7 +91,8 @@ def assign_category_colors(
     fits = ranked or len(unassigned) <= len(free)
     generated = dict(zip(unassigned, free)) if fits else {}
 
-    result = {v: fixed.get(v) or generated[v] for v in ordered if v in fixed or v in generated}
+    colours = {**fixed, **generated}
+    result = {v: colours[v] for v in ordered if v in colours}
     for value, colour in pinned.items():
         result.setdefault(value, colour)
     return result

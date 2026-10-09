@@ -28,8 +28,9 @@ export type TextSegment =
 
 /** Whether `text` holds a placeholder at all. */
 export function hasPlaceholder(text: string): boolean {
-  PLACEHOLDER.lastIndex = 0;
-  return PLACEHOLDER.test(text);
+  // `search` leaves the shared global regex's `lastIndex` alone, which `test`
+  // would advance and `splitPlaceholders` would then start from.
+  return text.search(PLACEHOLDER) !== -1;
 }
 
 /** `text` cut into its prose and its placeholders, in order. */

@@ -140,8 +140,10 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
   // labels. Rounded so a sub-pixel reflow does not rebuild the figure.
   const { ref: plotBoxRef, height: plotBoxPx } = useElementSize();
   const plotAreaPx = Math.max(120, plotBoxPx - PLOT_CHROME_PX);
-  const stripBand = Math.round(Math.min(0.15, STRIP_BAND_PX / plotAreaPx) * 1000) / 1000;
-  const stripGap = Math.round(Math.min(0.05, STRIP_GAP_PX / plotAreaPx) * 1000) / 1000;
+  const plotFraction = (px: number, cap: number) =>
+    Math.round(Math.min(cap, px / plotAreaPx) * 1000) / 1000;
+  const stripBand = plotFraction(STRIP_BAND_PX, 0.15);
+  const stripGap = plotFraction(STRIP_GAP_PX, 0.05);
 
   // Stable taxon→colour universe so a habitat filter doesn't shuffle the
   // top-N taxon colours. Pulled from the DC's unique values for taxon_col;
@@ -358,7 +360,6 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
     const stripLabels: Record<string, unknown>[] = [];
     let stripKey = false;
     const stripAxes: Record<string, unknown> = {};
-    const STRIP_BAND = stripBand;
     const step = stripBand + stripGap;
     const nTop = strips.filter((s) => s.position === 'top').length;
     const nBottom = strips.length - nTop;
@@ -395,8 +396,8 @@ const StackedTaxonomyRenderer: React.FC<Props> = ({ metadata, filters, refreshTi
 
         const isTop = strip.position === 'top';
         const domain: [number, number] = isTop
-          ? [topCursor - STRIP_BAND, topCursor]
-          : [bottomCursor, bottomCursor + STRIP_BAND];
+          ? [topCursor - stripBand, topCursor]
+          : [bottomCursor, bottomCursor + stripBand];
         if (isTop) topCursor -= step;
         else bottomCursor += step;
 

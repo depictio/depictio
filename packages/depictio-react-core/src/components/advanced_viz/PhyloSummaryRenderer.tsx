@@ -729,7 +729,8 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     const fullNames = splitValues.every((s) => headerWidth(s) + keyWidth <= headerRoom);
     const labelOf = (s: string) => (fullNames || s.length <= 4 ? s : s.slice(0, 3));
     const keysFit =
-      Boolean(splitPalette) && splitValues.every((s) => headerWidth(labelOf(s)) + 12 <= headerRoom);
+      Boolean(splitPalette) &&
+      splitValues.every((s) => headerWidth(labelOf(s)) + keyWidth <= headerRoom);
     const headers = splitValues.map((s, k) => {
       const cx = L.stripX0 + (k + 0.5) * L.cellW;
       const label = labelOf(s);

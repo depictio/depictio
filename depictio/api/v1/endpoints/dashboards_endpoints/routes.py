@@ -2072,6 +2072,7 @@ class _ComponentContext:
     """A resolved, authorised component plus what the Delta loader needs for it."""
 
     component: dict
+    dashboard_data: dict
     wf_oid: ObjectId
     dc_id: str
     init_data: dict[str, dict]
@@ -2154,6 +2155,7 @@ def _component_context(
 
     return _ComponentContext(
         component=component,
+        dashboard_data=dashboard_data,
         wf_oid=wf_id if isinstance(wf_id, ObjectId) else ObjectId(str(wf_id)),
         dc_id=str(dc_id),
         init_data=init_data,
@@ -2173,7 +2175,7 @@ def _text_params(text: dict) -> list[str]:
 
 def _text_has_live_values(text: dict) -> bool:
     """Whether a text tile asks the server for anything: values, or run parameters."""
-    return bool(text.get("values")) or bool(_text_params(text))
+    return bool(text.get("values") or _text_params(text))
 
 
 def _text_value_cards(text: dict) -> list[dict]:
@@ -3808,11 +3810,7 @@ def render_map_endpoint(
     component = ctx.component
     # The family's category colours, so the map draws a category in the colour
     # every other tile gives it (as render_figure_endpoint does).
-    dashboard_doc = dashboards_collection.find_one(
-        {"dashboard_id": dashboard_id},
-        {"category_colors": 1, "parent_dashboard_id": 1},
-    )
-    category_colors = effective_category_colors(dashboard_doc or {})
+    category_colors = effective_category_colors(ctx.dashboard_data)
 
     try:
         df = load_deltatable_lite(
@@ -5746,17 +5744,15 @@ def _recompact_main_grid(
             bottom = 0
             for item in packed:
                 out.append({**item, "y": item["y"] + y_offset})
-                bottom = max(bottom, item["y"] + item["h"])
+                bottom = max(bottom, item["y"] + int(item.get("h", 1)))
             y_offset += bottom
         return out
-
-    def slot_of(item: dict) -> tuple:
-        return (item.get("x", 0), item.get("y", 0), item.get("w", 1), item.get("h", 1))
 
     # One entry per slot, in reading order; alternates ride with the first.
     slots: dict[tuple, list[dict]] = {}
     for item in sorted(items, key=lambda it: (it.get("y", 0), it.get("x", 0))):
-        slots.setdefault(slot_of(item), []).append(item)
+        slot = (item.get("x", 0), item.get("y", 0), item.get("w", 1), item.get("h", 1))
+        slots.setdefault(slot, []).append(item)
 
     rows: list[list[list[dict]]] = []
     current: list[list[dict]] = []
@@ -5899,13 +5895,14 @@ def _remove_components(dashboard_dict: dict, kept: list[dict], dropped: list[Any
     `dropped` holds the removed components' indices. Every key written is one
     `dashboard_dict` already had, so the dict can be used as a `$set` document.
     """
+    dropped_indices = set(dropped)
     removed_sections = {
         c.get("section") or None
         for c in dashboard_dict.get("stored_metadata") or []
-        if c.get("index") in set(dropped)
+        if c.get("index") in dropped_indices
     }
     dashboard_dict["stored_metadata"] = kept
-    drop_keys = {f"box-{idx}" for idx in dropped}
+    drop_keys = {f"box-{idx}" for idx in dropped_indices}
     for layout_key in ("left_panel_layout_data", "right_panel_layout_data", "stored_layout_data"):
         if layout_key in dashboard_dict:
             dashboard_dict[layout_key] = [
@@ -6060,7 +6057,8 @@ def _category_column_dc(
     if not project_id:
         return None
     project = projects_collection.find_one({"_id": ObjectId(project_id)}, {"workflows": 1})
-    tables: list[tuple[bool, str]] = []
+    preferred_tables: list[str] = []
+    other_tables: list[str] = []
     for wf in (project or {}).get("workflows") or []:
         for dc in wf.get("data_collections") or []:
             config = dc.get("config") or {}
@@ -6069,34 +6067,34 @@ def _category_column_dc(
             tag = (dc.get("data_collection_tag") or "").lower()
             preferred = "metadata" in tag or "samplesheet" in tag
             preferred = preferred or (config.get("metatype") or "").lower() == "metadata"
-            tables.append((not preferred, str(dc["_id"])))
-    for _, dc_id in sorted(tables, key=lambda t: t[0]):
+            (preferred_tables if preferred else other_tables).append(str(dc["_id"]))
+    for dc_id in preferred_tables + other_tables:
         if column in (_dc_column_names(dc_id) or set()) and holds_rank(dc_id):
             return dc_id
     return None
+
+
+def _dc_scan(dc_id: str) -> Any | None:
+    """A lazy scan of a data collection's Delta table, or None when none is stored."""
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import _create_delta_scan
+
+    dt = deltatables_collection.find_one(
+        {"data_collection_id": ObjectId(dc_id)}, {"delta_table_location": 1}
+    )
+    location = (dt or {}).get("delta_table_location")
+    return _create_delta_scan(location) if location else None
 
 
 def _distinct_column_values(dc_id: str, column: str) -> list[str] | None:
     """The distinct non-null values of a table column, as strings; None when unreadable."""
     import polars as pl
 
-    from depictio.api.v1.db import deltatables_collection
-    from depictio.api.v1.deltatables_utils import _create_delta_scan
-
     try:
-        dt = deltatables_collection.find_one(
-            {"data_collection_id": ObjectId(dc_id)}, {"delta_table_location": 1}
-        )
-        location = (dt or {}).get("delta_table_location")
-        if not location:
+        scan = _dc_scan(dc_id)
+        if scan is None:
             return None
-        frame = (
-            _create_delta_scan(location)
-            .select(pl.col(column).cast(pl.Utf8))
-            .drop_nulls()
-            .unique()
-            .collect()
-        )
+        frame = scan.select(pl.col(column).cast(pl.Utf8)).drop_nulls().unique().collect()
     except Exception as exc:
         logger.warning(f"category_colors: reading {column!r} of {dc_id} failed: {exc}")
         return None
@@ -6110,19 +6108,12 @@ def _ranked_column_values(dc_id: str, column: str, rank_by: str) -> list[str] | 
     """
     import polars as pl
 
-    from depictio.api.v1.db import deltatables_collection
-    from depictio.api.v1.deltatables_utils import _create_delta_scan
-
     try:
-        dt = deltatables_collection.find_one(
-            {"data_collection_id": ObjectId(dc_id)}, {"delta_table_location": 1}
-        )
-        location = (dt or {}).get("delta_table_location")
-        if not location:
+        scan = _dc_scan(dc_id)
+        if scan is None:
             return None
         frame = (
-            _create_delta_scan(location)
-            .select(pl.col(column).cast(pl.Utf8), pl.col(rank_by).cast(pl.Float64))
+            scan.select(pl.col(column).cast(pl.Utf8), pl.col(rank_by).cast(pl.Float64))
             .filter(pl.col(column).is_not_null() & (pl.col(column) != ""))
             .group_by(column)
             .agg(pl.col(rank_by).sum().alias("__weight__"))

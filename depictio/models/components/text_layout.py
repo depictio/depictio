@@ -67,7 +67,8 @@ def estimate_text_lines(body: str, width: int = GRID_COLUMNS) -> int:
                 steps = None
             continue
         if steps is not None:
-            steps += 1 if _LIST_ITEM.match(line) else 0
+            if _LIST_ITEM.match(line):
+                steps += 1
             continue
         # The renderer keeps the body's line breaks (white-space: pre-wrap), so
         # every authored line starts a new rendered one; a folded `>` body
