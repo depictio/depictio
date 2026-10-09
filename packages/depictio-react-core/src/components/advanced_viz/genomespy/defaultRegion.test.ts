@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import type { InteractiveFilter, StoredMetadata } from '../../../api';
 import { genomeRegionFilters, regionFromFilters } from '../../../selection';
 import {
+  dataContigsInAssemblyOrder,
   defaultRegionFilters,
+  opensOnFirstContig,
   ownRegionKey,
   ownRegionZoom,
   regionFilterInForce,
@@ -97,6 +99,14 @@ describe('defaultRegionFilters', () => {
       start: 0,
       end: Infinity,
     });
+  });
+
+  it('opens `first` on a run aligned to one chromosome of an assembly', () => {
+    // The axis is hg38's; the data covers chr20 alone, spelled its own way.
+    const assembly = ['chr1', 'chr2', 'chr10', 'chr20', 'chrX'];
+    const contigs = dataContigsInAssemblyOrder(['20'], assembly);
+    const emitted = defaultRegionFilters(input({ defaultRegion: 'first', contigs }));
+    expect(regionFromFilters(emitted ?? [], 'chr', 'pos')?.chrom).toBe('20');
   });
 
   it('never moves a reader who is already somewhere', () => {
@@ -236,5 +246,20 @@ describe('ownRegionZoom', () => {
   it('does not zoom to a region spanning several contigs', () => {
     const filters = genomeRegionFilters(meta, 'chr', 'pos', { chroms: ['chr1', 'chr2'], range: null });
     expect(ownRegionZoom({ ...base, filters }).decision).toEqual({ action: 'none' });
+  });
+});
+
+describe('dataContigsInAssemblyOrder', () => {
+  it('orders by the assembly, then the contigs it does not name', () => {
+    const assembly = ['chr1', 'chr2', 'chr10', 'chrX'];
+    expect(
+      dataContigsInAssemblyOrder(['chrUn_KI1', 'chrX', 'chr10', 'chr2', 'chrEBV'], assembly),
+    ).toEqual(['chr2', 'chr10', 'chrX', 'chrEBV', 'chrUn_KI1']);
+  });
+
+  it('knows the keyword in any case', () => {
+    expect(opensOnFirstContig(' First ')).toBe(true);
+    expect(opensOnFirstContig('chr1')).toBe(false);
+    expect(opensOnFirstContig(null)).toBe(false);
   });
 });

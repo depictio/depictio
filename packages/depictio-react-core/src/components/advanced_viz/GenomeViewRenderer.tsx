@@ -9,7 +9,7 @@ import {
 } from '@mantine/core';
 import type { RootSpec } from '@genome-spy/core/spec/root.js';
 
-import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
+import { fetchAdvancedVizData, fetchUniqueValues, InteractiveFilter, StoredMetadata } from '../../api';
 import { columnCategoryColors } from '../../categoryColors';
 import { resolveCategoricalPalette } from '../../colors';
 import { useCategoryColorSource } from '../../hooks/useCategoryColors';
@@ -37,7 +37,13 @@ import {
 import type { Contig, GenomeRegion, GenomeViewConfig } from './genomespy/genomeSpySpec';
 import { loadGeneAnnotation } from './genomespy/geneAnnotations';
 import type { GeneAnnotation } from './genomespy/geneAnnotations';
-import { defaultRegionFilters, ownRegionKey, ownRegionZoom } from './genomespy/defaultRegion';
+import {
+  dataContigsInAssemblyOrder,
+  defaultRegionFilters,
+  opensOnFirstContig,
+  ownRegionKey,
+  ownRegionZoom,
+} from './genomespy/defaultRegion';
 import {
   filtersForGenomeViewFetch,
   loadGenomeViewRows,
@@ -696,10 +702,31 @@ const GenomeViewRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, o
   // being sent straight back to it.
   // With a built-in assembly the contig names are known before any row is:
   // that is what lets the navigator decide, and window its own fetch, first.
-  const contigNames = useMemo(
-    () => (contigs ?? (builtinAssembly ? assemblyContigs : null) ?? []).map((c) => c.name),
-    [contigs, builtinAssembly, assemblyContigs],
-  );
+  // `first` names a contig of the data, which the assembly's axis does not
+  // tell: read the column's distinct contigs, a small query, and order them
+  // by the assembly. A failed read falls back to the axis.
+  const firstFromData = builtinAssembly && hasDefaultRegion && opensOnFirstContig(config.default_region);
+  const [dataContigNames, setDataContigNames] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!firstFromData) return undefined;
+    let cancelled = false;
+    fetchUniqueValues(String(metadata.dc_id ?? ''), config.chr_col)
+      .then((values) => {
+        if (!cancelled) setDataContigNames(values.map(String));
+      })
+      .catch(() => {
+        if (!cancelled) setDataContigNames([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [firstFromData, metadata.dc_id, config.chr_col]);
+  const contigNames = useMemo(() => {
+    const axis = (contigs ?? (builtinAssembly ? assemblyContigs : null) ?? []).map((c) => c.name);
+    if (!firstFromData) return axis;
+    if (dataContigNames === null) return [];
+    return dataContigNames.length ? dataContigsInAssemblyOrder(dataContigNames, axis) : axis;
+  }, [contigs, builtinAssembly, assemblyContigs, firstFromData, dataContigNames]);
   useEffect(() => {
     if (defaultRegionDecided.current || !onFilterChange) return;
     // A locus is resolved against the contigs the data carries, so there is

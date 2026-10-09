@@ -22,7 +22,7 @@
 import type { InteractiveFilter, StoredMetadata } from '../../../api';
 import { genomePosFilterIndex, genomeRegionFilters, regionFromFilters } from '../../../selection';
 import type { GeneRow } from './genomeSpySpec';
-import { resolveLocus } from './locusParse';
+import { contigKey, resolveLocus } from './locusParse';
 
 export interface DefaultRegionInput {
   /** The emitting tile: its index and dc_id ride on both filters. */
@@ -46,6 +46,33 @@ export interface DefaultRegionInput {
 
 /** `default_region` keyword for the first contig the data carries. */
 export const FIRST_CONTIG = 'first';
+
+/** True when `default_region` is the `first` keyword. */
+export function opensOnFirstContig(defaultRegion: string | null | undefined): boolean {
+  return (defaultRegion ?? '').trim().toLowerCase() === FIRST_CONTIG;
+}
+
+/**
+ * The data's contigs in the assembly's order, spelled as the data spells them.
+ *
+ * With a built-in assembly the axis is the assembly's, known before any row,
+ * so `first` resolved against it opened on chr1 even for a run aligned to
+ * chr20 alone, and every tile of the section drew nothing. Contigs the
+ * assembly does not name (alt, unplaced, a renamed spike-in) go last, in
+ * natural order.
+ */
+export function dataContigsInAssemblyOrder(
+  dataContigs: readonly string[],
+  assemblyContigs: readonly string[],
+): string[] {
+  const rank = new Map(assemblyContigs.map((name, i) => [contigKey(name), i]));
+  const at = (name: string) => rank.get(contigKey(name)) ?? Number.POSITIVE_INFINITY;
+  return [...dataContigs].sort((a, b) => {
+    const byAssembly = at(a) - at(b);
+    // Two contigs off the assembly subtract to NaN, which falls through.
+    return byAssembly || a.localeCompare(b, undefined, { numeric: true });
+  });
+}
 
 function hasValue(value: unknown): boolean {
   if (Array.isArray(value)) return value.length > 0;
@@ -95,8 +122,7 @@ export function defaultRegionFilters(input: DefaultRegionInput): InteractiveFilt
   if (!contigs.length) return null;
   // `first` opens on the first contig the data carries, whole: a template
   // that serves any reference cannot name a contig that holds across them.
-  const resolved =
-    text.toLowerCase() === FIRST_CONTIG
+  const resolved = opensOnFirstContig(text)
       ? { chrom: contigs[0], start: null, end: null }
       : resolveLocus(text, contigs, input.genes ?? null);
   // A default region naming a contig this collection does not carry is an
