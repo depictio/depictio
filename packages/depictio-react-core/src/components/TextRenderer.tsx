@@ -926,13 +926,22 @@ const TextRenderer: React.FC<TextRendererProps> = ({
         >
           {logoSrc ? (
             // The heading stays a heading: the logo is its content, the title
-            // its accessible name. Sized in `em`, so it takes the title's
-            // height at every level and holds it before the image loads.
+            // its accessible name. A fixed box in `em` holds its place before
+            // the image loads, and `contain` fits any logo into it: the
+            // two-line nf-core logos (2.3:1) take its height, the one-line ones
+            // (up to 8:1) its width, so the pipeline name reads at about the
+            // same size whichever layout a pipeline ships.
             <img
               src={logoSrc}
               alt={rawTitle}
               onError={() => setFailedLogo(logoSrc)}
-              style={{ height: '1.15em', width: 'auto', maxWidth: '100%', verticalAlign: 'top' }}
+              style={{
+                width: 'min(100%, 7em)',
+                height: '1.9em',
+                objectFit: 'contain',
+                objectPosition: alignment,
+                verticalAlign: 'top',
+              }}
             />
           ) : (
             fill(rawTitle)
