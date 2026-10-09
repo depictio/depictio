@@ -834,6 +834,7 @@ def test_backup_leaves_out_threads_and_versions_of_temporary_users_dashboards():
         "comment_threads",
         "dashboard_versions",
         "dashboard_version_counters",
+        "project_storage",
     ]
     with ExitStack() as stack:
         for name in names:
