@@ -97,7 +97,9 @@ const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     const lower = (rows[config.lower_col] || []) as number[];
     const upper = (rows[config.upper_col] || []) as number[];
 
-    let order = labels.map((_, i) => i);
+    // A row with no estimate (a callset that made no call has no precision)
+    // is left out, rather than drawn as a point at 0.
+    let order = labels.map((_, i) => i).filter((i) => Number.isFinite(value[i]));
     order = order.sort((a, b) => (sortDesc ? value[b] - value[a] : value[a] - value[b]));
     // Horizontal bars read top→bottom; reverse so the best sits at the top.
     order.reverse();
