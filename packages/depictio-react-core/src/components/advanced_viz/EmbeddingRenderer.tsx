@@ -15,6 +15,7 @@ import {
   type ComputeEmbeddingResult,
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
   advancedVizSelectionFilter,
@@ -36,11 +37,12 @@ import { applyDataTheme, applyLayoutTheme, plotlyThemeColors } from './plotlyThe
 import { usePersistedVizControl } from './usePersistedVizControl';
 import { splitFigureByGroups } from './groupSplit';
 import { useSelectionRevision } from './selectionGesture';
+import { embeddingAxisTitles, type EmbeddingMethod } from './embeddingAxes';
 import type { GroupRenderState } from '../../selectionGroups';
 import { useReportGroupColouring } from '../../groupReach';
 import { usePlotSelectionReset } from '../usePlotSelectionReset';
 
-type ComputeMethod = 'pca' | 'umap' | 'tsne' | 'pcoa';
+type ComputeMethod = EmbeddingMethod;
 
 interface EmbeddingConfig {
   sample_id_col: string;
@@ -54,6 +56,10 @@ interface EmbeddingConfig {
   category_palette?: Record<string, string> | null;
   point_size?: number;
   show_density?: boolean;
+  /** Names the dimensions on the axes and in the hover: `PCo` gives PCo1 /
+   *  PCo2. Unset, live mode takes the method's and precomputed mode keeps
+   *  the column names. */
+  axis_prefix?: string | null;
   // Live-compute mode (see PhylogeneticConfig / EmbeddingConfig in
   // depictio/models/components/advanced_viz/configs.py). When set, the
   // renderer dispatches a Celery task instead of reading dim_*_col.
@@ -206,6 +212,10 @@ const EmbeddingRenderer: React.FC<Props> = ({
       cancelled = true;
     };
   }, [metadata.dc_id, colorBy]);
+  // The colour-by column's values wear the dashboard's colours for it (a site
+  // keeps its colour from every other tile), the component's own
+  // `category_palette` winning value by value, the palette for the rest.
+  const pinnedColours = usePinnedCategoryColors(colorBy, config.category_palette);
 
   // ---- Live-compute mode state -------------------------------------------
   const liveMode = Boolean(config.compute_method);
@@ -506,7 +516,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
         ? stableColorMap(
             colorUniverse ?? categories,
             resolveCategoricalPalette(theme, TAB10_PALETTE),
-            config.category_palette ?? null,
+            pinnedColours,
           )
         : null;
     // One trace per group only while the group count stays sane, see
@@ -570,6 +580,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
     };
 
     const scatterType = actuallyRender3D ? ('scatter3d' as const) : ('scattergl' as const);
+    const axisTitles = embeddingAxisTitles(config, liveMode ? method : null);
 
     if (perCategoryTraces && colourSource) {
       const centroids: { x: number; y: number; z?: number; label: string; colour: string }[] = [];
@@ -583,9 +594,9 @@ const EmbeddingRenderer: React.FC<Props> = ({
           y: idx.map((i) => y[i]),
           customdata: buildCustomdata(idx),
           hovertemplate:
-            `<b>%{customdata[0]}</b><br>${cat}<br>${config.dim_1_col}: %{x:.3f}` +
-            `<br>${config.dim_2_col}: %{y:.3f}` +
-            (actuallyRender3D ? `<br>${config.dim_3_col ?? 'dim_3'}: %{z:.3f}` : '') +
+            `<b>%{customdata[0]}</b><br>${cat}<br>${axisTitles[0]}: %{x:.3f}` +
+            `<br>${axisTitles[1]}: %{y:.3f}` +
+            (actuallyRender3D ? `<br>${axisTitles[2]}: %{z:.3f}` : '') +
             hoverExtraTpl +
             '<extra></extra>',
           marker: actuallyRender3D
@@ -657,9 +668,9 @@ const EmbeddingRenderer: React.FC<Props> = ({
         y,
         customdata: buildCustomdata(x.map((_, i) => i)),
         hovertemplate:
-          `<b>%{customdata[0]}</b><br>${config.dim_1_col}: %{x:.3f}` +
-          `<br>${config.dim_2_col}: %{y:.3f}` +
-          (actuallyRender3D ? `<br>${config.dim_3_col ?? 'dim_3'}: %{z:.3f}` : '') +
+          `<b>%{customdata[0]}</b><br>${axisTitles[0]}: %{x:.3f}` +
+          `<br>${axisTitles[1]}: %{y:.3f}` +
+          (actuallyRender3D ? `<br>${axisTitles[2]}: %{z:.3f}` : '') +
           hoverExtraTpl +
           '<extra></extra>',
         marker: {
@@ -728,7 +739,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
       xaxis: {
         ...axisCommon,
         title: {
-          text: config.dim_1_col,
+          text: axisTitles[0],
           standoff: 6,
           font: { size: 12, color: textColor },
         },
@@ -736,7 +747,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
       yaxis: {
         ...axisCommon,
         title: {
-          text: config.dim_2_col,
+          text: axisTitles[1],
           standoff: 6,
           font: { size: 12, color: textColor },
         },
@@ -749,14 +760,14 @@ const EmbeddingRenderer: React.FC<Props> = ({
     // control changes (a value swap re-triggers the useMemo here).
     const scene3D = {
       xaxis: {
-        title: { text: config.dim_1_col, font: { size: 11, color: textColor } },
+        title: { text: axisTitles[0], font: { size: 11, color: textColor } },
         color: textColor,
         gridcolor: gridColor,
         tickfont: { color: textColor },
         ...scene3DAxisStyle,
       },
       yaxis: {
-        title: { text: config.dim_2_col, font: { size: 11, color: textColor } },
+        title: { text: axisTitles[1], font: { size: 11, color: textColor } },
         color: textColor,
         gridcolor: gridColor,
         tickfont: { color: textColor },
@@ -764,7 +775,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
       },
       zaxis: {
         title: {
-          text: config.dim_3_col ?? 'dim_3',
+          text: axisTitles[2],
           font: { size: 11, color: textColor },
         },
         color: textColor,
@@ -833,6 +844,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
     pointSize,
     colorBy,
     colorUniverse,
+    pinnedColours,
     showDensity,
     showCentroids,
     markerOutline,
@@ -847,6 +859,7 @@ const EmbeddingRenderer: React.FC<Props> = ({
     reverseScale,
     hoverCols,
     liveMode,
+    method,
   ]);
 
   // The dashboard's analysis groups, applied to the finished figure. An

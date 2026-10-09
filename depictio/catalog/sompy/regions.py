@@ -3,6 +3,11 @@
 Consumes ``indel/summary/tables/sompy/sompy.regions.csv``. som.py encodes the
 allele-fraction stratum inside the ``Type`` column as ``indels.<lo>-<hi>``; we split that
 into a clean ``af_bin`` so the result drives a caller × AF-bin heatmap of recall/precision/F1.
+
+som.py bins a false positive by the caller's allele fraction (``--af-query``) but a true
+positive or a miss by the truth set's (``--af-truth``, ``I.T_ALT_RATE``). A truth set without
+that field leaves ``tp`` and ``fn`` at 0 in every bin, and som.py still prints recall and F1
+as 0.0: those ratios are nulled here, like a precision in a bin without calls.
 """
 
 import polars as pl
@@ -58,6 +63,23 @@ OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
 }
 
 
+def null_undefined_metrics(df: pl.DataFrame) -> pl.DataFrame:
+    """Null each ratio whose denominator is 0 instead of keeping som.py's 0.0.
+
+    A precision without calls (``tp + fp == 0``) and a recall without truth variants
+    (``tp + fn == 0``) are undefined; F1 is undefined as soon as either one is. Rows
+    whose counts are missing keep the tool's values.
+    """
+    no_calls = (pl.col("tp") + pl.col("fp")) == 0
+    no_truth = (pl.col("tp") + pl.col("fn")) == 0
+    null = pl.lit(None, dtype=pl.Float64)
+    return df.with_columns(
+        pl.when(no_calls).then(null).otherwise(pl.col("precision")).alias("precision"),
+        pl.when(no_truth).then(null).otherwise(pl.col("recall")).alias("recall"),
+        pl.when(no_calls | no_truth).then(null).otherwise(pl.col("f1")).alias("f1"),
+    )
+
+
 def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     """Split the AF stratum out of ``Type`` and standardize metric columns."""
     df = sources["sompy_regions"]
@@ -83,6 +105,8 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     for out, src in (("tp", "TP_comp"), ("fp", "FP"), ("fn", "FN")):
         if src in df.columns:
             df = df.with_columns(pl.col(src).cast(pl.Int64, strict=False).alias(out))
+    if {"tp", "fp", "fn"} <= set(df.columns):
+        df = null_undefined_metrics(df)
 
     keep = ["caller", "label", "truth_set", "af_bin", "recall", "precision", "f1", "tp", "fp", "fn"]
     return df.select([c for c in keep if c in df.columns])

@@ -188,3 +188,11 @@ def test_gene_asset_is_present_compact_and_well_formed(assembly: str):
     # Sorted by contig then start, which is what lets the lane be scanned.
     first_chrom_rows = [r for r in genes if r[1] == genes[0][1]]
     assert first_chrom_rows == sorted(first_chrom_rows, key=lambda r: r[2])
+
+
+@pytest.mark.parametrize("region", ["first", "First"])
+def test_default_region_takes_the_first_contig_keyword(region: str):
+    # A template that serves any reference cannot name a contig; `first` opens
+    # the first one the data carries (resolved in the viewer, defaultRegion.ts).
+    config = GenomeViewConfig(chr_col="chr", pos_col="pos", default_region=region)
+    assert config.default_region == region

@@ -19,6 +19,7 @@ import {
   resolveCategoricalPalette,
   stableColorMap,
 } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import { useFullscreenPortalTarget } from '../chrome/useFullscreenPortalTarget';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import {
@@ -311,6 +312,10 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     'arc_colors',
     {},
   );
+  /** The dashboard's colours for the annotation column's classes, between the
+   *  palette and `arcColors`: a class it pins is drawn in that colour unless
+   *  the author overrode it here. */
+  const annotationPinned = usePinnedCategoryColors(config.annotation_col);
   const [showCoverage, setShowCoverage] = usePersistedVizControl<boolean>(
     metadata,
     'show_coverage',
@@ -837,7 +842,7 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     if (!visible.length || !lanes.length) return null;
     const colors = plotlyThemeColors(isDark, theme);
     const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark));
-    const paletteColour = stableColorMap(annotationValues, palette);
+    const paletteColour = stableColorMap(annotationValues, palette, annotationPinned);
     // An override wins over the palette, per class, so two classes that the
     // stable map happened to give near neighbours can be pulled apart.
     const annotationColour = new Map(
@@ -1440,6 +1445,7 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     showCounts,
     exons,
     arcColors,
+    annotationPinned,
     coverage,
     coverageActive,
     coverageHeight,
@@ -1470,9 +1476,9 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
    *  what is actually drawn rather than on an empty field. */
   const paletteDefaults = useMemo(() => {
     const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark));
-    const map = stableColorMap(annotationValues, palette);
+    const map = stableColorMap(annotationValues, palette, annotationPinned);
     return { map, palette };
-  }, [annotationValues, theme, isDark]);
+  }, [annotationValues, annotationPinned, theme, isDark]);
 
   const setArcColor = useCallback(
     (key: string, value: string | null) => {
@@ -1498,22 +1504,14 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     [junctions],
   );
 
-  const gsJunctions = useMemo(() => {
-    if (!genomeSpyOn) return [];
-    // The same per-lane top-N as the arc panel, taken over the whole data
-    // rather than one locus, since GenomeSpy lets the reader pan to the rest.
-    const byLane = new Map<string, Junction[]>();
-    for (const j of supported) {
-      const bucket = byLane.get(j.lane);
-      if (bucket) bucket.push(j);
-      else byLane.set(j.lane, [j]);
-    }
-    const kept: Junction[] = [];
-    for (const arcs of byLane.values()) {
-      kept.push(...arcs.slice().sort((a, b) => b.count - a.count).slice(0, Math.max(1, topN)));
-    }
-    return junctionData(kept);
-  }, [genomeSpyOn, supported, topN]);
+  // The arc panel's junctions: one region, strongest `top_n` per lane. Taken
+  // over the whole data, the strongest junctions sit off the opened locus, so
+  // its lanes drew empty and each lane's y scale, which spans every row it
+  // holds, was set by domes on other chromosomes.
+  const gsJunctions = useMemo(
+    () => (genomeSpyOn ? junctionData(visible) : []),
+    [genomeSpyOn, visible],
+  );
 
   const gsCoverage = useMemo(() => {
     if (!genomeSpyOn || !config.coverage_dc_id || !showCoverage || !coverageRows) return null;
@@ -1570,7 +1568,7 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
   const gsColours = useMemo(() => {
     const themeColours = plotlyThemeColors(isDark, theme);
     const palette = resolveCategoricalPalette(theme, mantineCategoricalPalette(theme, isDark));
-    const stable = stableColorMap(annotationValues, palette);
+    const stable = stableColorMap(annotationValues, palette, annotationPinned);
     const base = arcColors[ARC_COLOR_ALL] || palette[0];
     const annotations = junctions.some((j) => !j.annotation)
       ? [...annotationValues, UNANNOTATED]
@@ -1588,7 +1586,7 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       ),
       laneColours: allLanes.map((_, i) => palette[i % palette.length] ?? base),
     };
-  }, [isDark, theme, annotationValues, arcColors, junctions, allLanes]);
+  }, [isDark, theme, annotationValues, annotationPinned, arcColors, junctions, allLanes]);
 
   // The min-reads slider drags a local value and commits on release, so a
   // drag is one data swap rather than one per tick.
@@ -2019,6 +2017,7 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       {genomeSpyOn && figure ? (
         <SashimiGenomeSpyView
           junctions={gsJunctions}
+          axisJunctions={junctions}
           coverage={gsCoverage}
           coverageShared={!config.coverage_sample_col}
           coverageTitle={coverageLog ? 'log10(1 + depth)' : 'depth'}

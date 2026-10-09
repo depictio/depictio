@@ -1,7 +1,7 @@
 import React from 'react';
 import { Stack } from '@mantine/core';
 
-import { hexWithAlpha, percent } from './format';
+import { formatNumber, hexWithAlpha, percent } from './format';
 import { Meter, MetricCaption, MetricStrip, TooltipDivider, TooltipStat } from './tokens';
 
 /** Below this share the fill switches to amber: the bar's job is to say "not
@@ -30,7 +30,10 @@ const CoverageMetric: React.FC<{
   value: number;
   max: number;
   color?: string | null;
-}> = ({ value, max, color }) => {
+  /** The card's `format`: the value and the maximum are both in its unit. */
+  format?: string;
+}> = ({ value, max, color, format }) => {
+  const num = (v: number) => (format ? formatNumber(v, format) : v.toLocaleString());
   const share = Math.max(0, Math.min(1, value / max));
   const status = coverageStatus(share);
   const fill = status === 'complete' ? hexWithAlpha(color, 0.8) : INCOMPLETE_FILL;
@@ -38,9 +41,9 @@ const CoverageMetric: React.FC<{
 
   const tooltip = (
     <Stack gap={2}>
-      <TooltipStat label="covered" value={value.toLocaleString()} />
-      <TooltipStat label="maximum" value={max.toLocaleString()} />
-      <TooltipStat label="remaining" value={remaining.toLocaleString()} />
+      <TooltipStat label="covered" value={num(value)} />
+      <TooltipStat label="maximum" value={num(max)} />
+      <TooltipStat label="remaining" value={num(remaining)} />
       <TooltipDivider />
       <TooltipStat label="coverage" value={percent(share, share === 1 ? 0 : 1)} strong />
       <TooltipStat label="status" value={status} />
@@ -54,7 +57,7 @@ const CoverageMetric: React.FC<{
           is a bar over one line, so the cards' contents stand the same
           height and their titles line up. */}
       <MetricCaption strong>
-        {percent(share)} of {max.toLocaleString()}
+        {percent(share)} of {num(max)}
       </MetricCaption>
     </MetricStrip>
   );

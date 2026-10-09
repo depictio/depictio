@@ -6,8 +6,9 @@
  * folds. These are the pure choices behind them; the viewer does the fetching.
  */
 
-import type { FilterSectionSpec, StoredMetadata } from '../api';
+import type { FilterSectionSpec, PersistentSection, StoredMetadata } from '../api';
 import { isStripSection } from '../components/interactive/strip/stripLayout';
+import { tabLinkKey } from '../components/tabLinks';
 import { advancedVizSelectionColumn, supportsSelectionGrouping } from '../selection';
 import { groupDisplaysForKind, type GroupDisplays } from '../splitPanels';
 import { sectionComponents } from '../utils/groupInteractive';
@@ -90,6 +91,91 @@ export function demoSectionsOf(found: readonly GuideDemoSection[], max = 2): Gui
 /** Whether a section holds a key figure, which its folded header then reads. */
 export function hasCards(section: GuideDemoSection): boolean {
   return section.members.some((m) => m.component_type === 'card');
+}
+
+/** Whether `spec` is a pinned section kept off the tab called `tabName`
+ *  (its `exclude_tabs`), so that tab never shows it. */
+export function excludedOnTab(spec: FilterSectionSpec | null | undefined, tabName: string): boolean {
+  if (!spec?.persistent || !tabName) return false;
+  const key = tabLinkKey(tabName);
+  return (spec.exclude_tabs ?? []).some((t) => tabLinkKey(t) === key);
+}
+
+/** The pinned sections a demo borrows: one owner tab's, with their layout. */
+export interface PinnedDemoSections {
+  ownerId: string;
+  sections: GuideDemoSection[];
+  /** The owner's stored layout entries for the members. */
+  layouts: unknown[];
+}
+
+/**
+ * The family's pinned sections the Sections demo can show on the tab called
+ * `tabName`: grid sections that fold, hold something and are shown there (not
+ * in their `exclude_tabs`), all of one owner tab, an owner whose sections hold
+ * cards before one whose do not. Null when there are none.
+ */
+export function pinnedDemoSections(
+  persistent: readonly PersistentSection[],
+  tabName: string,
+): PinnedDemoSections | null {
+  const shown = persistent.filter(
+    (s) =>
+      s.kind === 'grid' &&
+      s.components.length > 0 &&
+      s.spec.appearance !== 'plain' &&
+      !isStripSection(s.spec) &&
+      !excludedOnTab(s.spec, tabName),
+  );
+  const sectionOf = (s: PersistentSection): GuideDemoSection => ({
+    spec: s.spec,
+    members: s.components.map((c) => c.metadata),
+  });
+  const ownerId = (shown.find((s) => hasCards(sectionOf(s))) ?? shown[0])?.owner_dashboard_id;
+  if (!ownerId) return null;
+  const own = shown.filter((s) => s.owner_dashboard_id === ownerId);
+  return {
+    ownerId,
+    sections: own.map(sectionOf),
+    layouts: own.flatMap((s) => s.layouts ?? []),
+  };
+}
+
+/** What a sibling-tab lookup reads of a tab's document. */
+export interface GuideSectionsDoc extends GuideFamilyDoc {
+  grid_sections?: readonly FilterSectionSpec[] | null;
+}
+
+/** Sections borrowed from a sibling tab, or why there are none yet. */
+export type GuideSiblingSectionsPick =
+  | { status: 'found'; dashboardId: string; sections: GuideDemoSection[] }
+  /** `need`: the tab whose document has to be fetched before deciding. */
+  | { status: 'pending'; need: string }
+  | { status: 'none' };
+
+/**
+ * The sibling tab whose foldable sections the Sections demo borrows: the first
+ * in `order` whose sections hold cards, else the first with any. A tab's own
+ * pinned sections it is excluded from are not counted, since it never shows
+ * them. Looks (and so fetches) on until a tab with cards turns up.
+ */
+export function siblingDemoSections(
+  order: readonly string[],
+  docFor: (id: string) => GuideSectionsDoc | null | undefined,
+  nameOf: (id: string) => string,
+): GuideSiblingSectionsPick {
+  let first: { dashboardId: string; sections: GuideDemoSection[] } | null = null;
+  for (const id of order) {
+    const doc = docFor(id);
+    if (doc === undefined) return { status: 'pending', need: id };
+    if (!doc) continue;
+    const sections = foldableSectionsOf(doc.stored_metadata ?? [], doc.grid_sections).filter(
+      (s) => !excludedOnTab(s.spec, nameOf(id)),
+    );
+    if (sections.some(hasCards)) return { status: 'found', dashboardId: id, sections };
+    if (!first && sections.length > 0) first = { dashboardId: id, sections };
+  }
+  return first ? { status: 'found', ...first } : { status: 'none' };
 }
 
 // ---------------------------------------------------------------------------

@@ -538,8 +538,12 @@ export function buildFileGenomeSpec(input: BuildFileSpecInput): BuiltFileSpec {
         'use a built-in assembly (hg38, hg19, hg18, mm10, mm9, dm6) or supply contigs.',
     );
   }
-  const laneHeight =
-    format === 'bam' && options.bamView === 'pileup' ? PILEUP_LANE_HEIGHT : LANE_HEIGHT;
+  // Each lane takes its share of the tile and never less than its floor, so a
+  // taller tile, or the tile in fullscreen, draws taller lanes.
+  const laneHeight = {
+    grow: 1,
+    minPx: format === 'bam' && options.bamView === 'pileup' ? PILEUP_LANE_HEIGHT : LANE_HEIGHT,
+  };
 
   const spec: Record<string, unknown> = {
     config: {

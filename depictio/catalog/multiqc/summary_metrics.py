@@ -79,34 +79,33 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         if col_name in df.columns:
             df = df.with_columns(pl.col(col_name).cast(pl.Float64, strict=False))
 
-    # Compute total variants if not present
+    # Compute total variants if not present. A sample with neither count was not
+    # called (a nanopore sample below the read floor writes NA for both): its
+    # total is unknown, not 0.
     if "num_variants_total" not in df.columns:
         if "num_variants_snp" in df.columns and "num_variants_indel" in df.columns:
+            snp, indel = pl.col("num_variants_snp"), pl.col("num_variants_indel")
             df = df.with_columns(
-                (
-                    pl.col("num_variants_snp").fill_null(0)
-                    + pl.col("num_variants_indel").fill_null(0)
-                )
+                pl.when(snp.is_null() & indel.is_null())
+                .then(None)
+                .otherwise(snp.fill_null(0) + indel.fill_null(0))
                 .cast(pl.Float64)
                 .alias("num_variants_total")
             )
 
-    # Fill null lineage
+    # Unassigned lineage: null, or the "NA" the nanopore CSV writes.
     if "lineage" in df.columns:
-        df = df.with_columns(pl.col("lineage").fill_null("Unassigned"))
+        df = df.with_columns(
+            pl.when(pl.col("lineage").is_in(["NA", ""]))
+            .then(None)
+            .otherwise(pl.col("lineage"))
+            .fill_null("Unassigned")
+            .alias("lineage")
+        )
 
-    # Select available columns
-    keep_cols = [
-        "sample",
-        "num_reads_mapped",
-        "pct_reads_mapped",
-        "coverage_median",
-        "pct_genome_covered_1x",
-        "pct_genome_covered_10x",
-        "num_variants_snp",
-        "num_variants_indel",
-        "num_variants_total",
-        "lineage",
-    ]
-    available = [c for c in keep_cols if c in df.columns]
-    return df.select(available)
+    # The nanopore (ARTIC) CSV has no "% Mapped reads": a column the run does not
+    # write comes back empty rather than failing the whole table.
+    missing = [c for c in OUTPUT_SCHEMA if c not in df.columns]
+    if missing:
+        df = df.with_columns(pl.lit(None, dtype=OUTPUT_SCHEMA[c]).alias(c) for c in missing)
+    return df.select(list(OUTPUT_SCHEMA))

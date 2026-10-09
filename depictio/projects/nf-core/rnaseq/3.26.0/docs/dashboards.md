@@ -1,139 +1,141 @@
 # nf-core/rnaseq 3.26.0: Depictio dashboards
 
-This template turns the output of [nf-core/rnaseq](https://nf-co.re/rnaseq) 3.26.0 into a
-single three-tab Depictio dashboard. rnaseq takes bulk RNA sequencing libraries, trims them,
-aligns them with STAR, quantifies transcripts with Salmon and merges the per-sample estimates
-into gene-level TPM and count matrices. The template surfaces the pipeline's own MultiQC
-funnel next to two views built on the pipeline's outputs: how the libraries relate to each
-other, and which genes separate them and what any one gene does across conditions.
+One dashboard: an **Overview**, then child tabs in two groups, read as a funnel from the
+run to the genes that vary between conditions. It follows the family rules in
+`depictio/projects/nf-core/RULES.md`; nf-core/ampliseq 2.18.0 is the reference.
+nf-core/rnasplice 1.0.4 shares its `Data & QC` group and its Sample Space tab.
 
-Data comes from the AWS megatest run
-`results-e7ca46272c8f9d5ceee3f71759f4ba551d3217a4` (the 3.26.0 release tag): eight libraries
-from four ENCODE cell lines, two replicates each, Trim Galore then STAR + Salmon.
+| Group | Tab | The question it answers |
+|---|---|---|
+| Data & QC | MultiQC | Did trimming, alignment and quantification work for every library? |
+| Data & QC | Library QC | Which library stands apart on mapping, duplication or read placement? |
+| Data & QC | Sample Space | Do the replicates of each condition sit together? |
+| Expression | Variable Genes | Which genes vary most between the libraries and conditions? |
+| Expression | Gene Explorer | Where does a gene sit, and which condition does it peak in? |
 
----
+nf-core/rnaseq takes bulk RNA-seq libraries, trims them, aligns them with STAR, quantifies
+transcripts with Salmon and merges the per-sample estimates into gene-level TPM and count
+matrices. Its sample sheet (`sample,fastq_1,fastq_2,strandedness`) has no design column, so
+the project-local samplesheet recipe reads `condition` and `replicate` out of the
+`<condition>_REP<n>` sample names the pipeline's own test data and docs use. There is no
+`GROUP_COL` variable: everything the dashboard groups or colours by is that `condition`,
+copied as `group` into the expression tables and as `top_condition` into the gene table.
 
-## How the dashboard is built
+## Overview
 
-- **One funnel, three tabs.** MultiQC, then Expression overview, then Gene explorer. Each tab
-  answers the question the previous one raises: are the libraries usable, how do they relate
-  to each other, and which genes drive that.
-- **Persistent sample filter.** `Sample scope` (sample, condition, replicate) is pinned to the
-  top of every tab's filter panel and reads the samplesheet, which links to every other
-  collection. One pick there narrows the MultiQC panels, the DESeq2 PCA, the distance matrix
-  and the gene explorer at once. `Reference scope` (persistent) narrows the pinned count
-  matrix. Each tab adds its own scope on top: `Library scope` on Expression overview and
-  `Gene scope` on Gene explorer.
-- **Pinned sample sheet and reference tables.** The samplesheet sits in a collapsed,
-  persistent `Sample sheet` section pinned to every tab; the raw merged count matrix sits in a
-  collapsed `Reference tables` section pinned to the bottom. The design cards over the sheet
-  open the MultiQC tab in `Run at a glance`.
-- **Catalog provenance.** Every expression panel is a catalog render (`use: salmon/...`,
-  `use: deseq2/...`) and every tool-level MultiQC tile names its module
-  (`use: multiqc/star`, `use: multiqc/qualimap`, …). The tiles that read nf-core/rnaseq's own
-  custom-content MultiQC sections carry no `use:`, because those module ids belong to the
-  pipeline rather than to a tool.
-- **The condition comes from the sample name.** The nf-core/rnaseq samplesheet schema is
-  `sample,fastq_1,fastq_2,strandedness` and has no condition column, so the samplesheet recipe
-  reads `condition` and `replicate` out of the `<condition>_REP<n>` names the pipeline's own
-  test data and docs use. Everything the dashboard groups or colours by comes from that.
-- **One sample view.** The only sample embedding is the pipeline's own DESeq2 QC PCA. The
-  earlier TPM PCA recomputed the same picture from a different matrix and was dropped, as
-  were the MultiQC copies of the DESeq2 PCA, the RSeQC distribution and the Qualimap genomic
-  origin, which the Expression overview tab already draws from the raw files.
+The landing page, at compact width with the filter panel collapsed:
 
----
+- **Hero**: what the run is, and a link to the run parameters.
+- **About this dashboard** and **The run**: two cards side by side. The first says what the
+  dashboard shows and how to move through it; the second lists the run's facts (samples,
+  genome, aligner, trimmer), read from the run parameters and the sample sheet.
+- **Pipeline**: six steps (trim, align, check, relate, quantify, annotate). Each step opens
+  the parameters that drive it and the tab that shows its output.
+- **Key figures**: four headline cards, each opening the tab that explains it. Samples
+  (split by condition), the median number of genes a library expresses (with its spread),
+  the genes two-fold higher in one condition (split by the condition they peak in) and the
+  median uniquely mapped share (a coverage bar). A condition and a sample filter above them
+  narrow these four only.
+- **Findings**: result rows whose values are computed under the filters, each with a link
+  to its tab: the genes two-fold higher in one condition and the condition most of them
+  peak in, the variance on the first principal component (DESeq2 QC on all libraries, so no
+  filter changes it), the genes expressed, and the largest RSeQC region class with its share
+  of the tags. Below them, four figures in two rows, each linking its tab: the most variable
+  genes per condition beside the clustered sample distances, then the mean-variance plane
+  beside the RSeQC read distribution. The bar of this section filters by condition and
+  sample.
+- **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
-## MultiQC
+The persistent `Sample filters` (condition, sample, replicate) sit in the collapsed left
+panel and narrow every tab through the samplesheet links. The `Sample sheet` section is
+pinned to the bottom of every child tab, collapsed, and absent from the Overview.
 
-The main tab, and the pipeline in the order it ran. `General statistics` opens with the
-MultiQC general statistics table, one row per library pooling every module's headline
-numbers. `Read quality` pairs FastQC on the raw reads with Trim Galore's filtered-read counts
-and FastQC again after trimming, so the same two measurements sit side by side before and
-after. `Alignment` carries STAR's summary statistics, samtools' percent mapped and Picard's
-duplicate marking.
+nf-core/rnaseq runs no differential test. The gene numbers are rankings (spread across the
+libraries, or the mean of the top condition against the others), and every tile that shows
+one says so. `gene_summary` is computed over all libraries, so the sample filters do not
+change it: they narrow the per-library collections only.
 
-`Quantification and strandedness` is where the run's two most common failure modes show up:
-Salmon's fragment length distribution, then the pipeline's own strandedness inference against
-what the samplesheet declared, then its read strand composition. A library whose inferred
-strandedness disagrees with the sheet was quantified against the wrong library type and every
-number downstream of it is suspect.
+## Child tabs
 
-`Transcript QC` (collapsed) holds Qualimap's gene body coverage, dupRadar's duplication
-against expression and RSeQC's inner distance. Coverage that falls away at the 5' end is
-degraded RNA; duplication that rises with expression is normal, duplication that is flat and
-high is a library problem.
+Each child tab opens with a short intro (the method, with a link to its tool, and how to
+read the tab), then a strip of four key numbers, each card with its own colour and a
+secondary that reads it (a box plot, a distribution, a gauge, a ranking or a share), then at
+most three open sections; tables and details follow, collapsed.
 
-`Run at a glance` is the design: samples, conditions, replicates per condition (a top-N
-breakdown by condition) and the declared strandedness, over the samplesheet.
+**MultiQC.** MultiQC panels only, no key-number strip. Open: general statistics, FastQC raw
+sequence counts beside the reads Trim Galore kept, STAR's summary beside samtools' percent
+mapped, then the pipeline's own strandedness inference beside the featureCounts biotype
+composition. A library whose inferred strandedness disagrees with the sheet was quantified
+against the wrong library type. Collapsed: read quality (FastQC before and after trimming),
+alignment details (Picard duplicates, Salmon fragment lengths, read strand composition) and
+transcript QC (Qualimap gene body coverage, dupRadar, RSeQC inner distance). Its own sample
+filter reads the MultiQC report, whose library names carry read suffixes.
 
-![MultiQC](screenshots/qc.png)
+**Library QC.** Strip: reads received by STAR (split by condition), the uniquely mapped
+share on a 0 to 100 gauge, the duplication share with its spread and the exonic share with
+its distribution. Then the per-library QC profile, eleven MultiQC general statistics as
+parallel coordinates coloured by condition, and the RSeQC read distribution per library,
+switchable between the five region classes and the individual features. Filters: uniquely
+mapped and duplication ranges.
 
-## Expression overview
+**Sample Space.** Strip: libraries in the TPM matrix (a ring by condition), genes expressed
+with their spread, genes detected with their distribution and the median TPM (ranked by
+condition). The same four cards open the Sample Space tab of nf-core/rnasplice. Then the
+pipeline's own DESeq2 QC PCA beside the sample distance matrix it clusters on (`ward`,
+`Blues`). Collapsed: the library summary table with the library record card beside it.
+Filters: genes expressed and median TPM ranges.
 
-`Libraries at a glance` puts four strips on one row: the uniquely mapped share per library,
-median TPM, genes expressed and genes detected, each as a median with a Tukey box plot. No
-fixed threshold is drawn, because the right floor depends on the organism and the library
-type.
+**Variable Genes.** Strip: genes at 1 TPM or more (counted per condition), the median log2(TPM + 1)
+with its spread, the genes two-fold higher in one condition (split by that condition) and
+the highest TPM with the genes that reach it. Then the 500 most variable genes as a
+clustered, row z-scored heatmap with the design strips on top (condition, replicate, read
+type, strandedness), and the twelve most variable genes in view as one box per condition.
+Collapsed: the top variable gene matrix as rows. Filters: a top variable gene picker and a
+log2(TPM + 1) range.
 
-`Sample relationships` is the signature panel. On the left, the pipeline's **own** DESeq2 QC
-PCA: nf-core/rnaseq runs `deseq2_qc.r` over the count matrix and publishes the component
-coordinates as `deseq2_qc/*pca.vals.txt`, which the `deseq2/qc_pca` recipe reads instead of
-recomputing, so the tile carries exactly the points MultiQC draws as a picture. The variance
-each component explains is parsed out of the file's own header and kept as a column, and a
-`pca_set` column names the file each block came from. On the right, the sample distance
-matrix `deseq2_qc.r` clusters its dendrogram on, read through `deseq2/qc_sample_dists` and
-clustered in the browser with Ward linkage. Because `sample` is a real column of that matrix,
-the sample filter narrows it on **both** axes and it stays square under a selection.
+**Gene Explorer.** Strip: expressed genes (a ring by the condition they peak in), the
+median of their mean expression (a distribution) and of their spread (a box plot), and the
+median lead of the top condition over the others (the genes two-fold or more ahead pass).
+Then the mean-variance plane, one point per expressed gene coloured by the condition it
+peaks in and unlabelled (the most variable genes sit too close to name), beside the gene
+record card (its id links to Ensembl). Collapsed: the gene rows (one per gene and library) and the merged count matrix,
+which moved here from the old pinned reference tables. Filters: a gene picker and a mean
+log2(TPM + 1) range.
 
-Replicates of one condition should sit together and away from the others. The library
-summary table at the foot selects rows on the same `sample_id`, so picking points and picking
-rows are the same act. A library record card sits beside that table and stays a thin rail
-until a library is picked there or on the PCA, then shows its group, expression summary and
-position on the first three components. On the MultiQC tab the pinned samplesheet also
-selects rows on `sample`, which narrows the MultiQC panels through the sample mapping.
+## Routes and pruning
 
-`Library composition` puts the featureCounts biotype composition and a bar of genes expressed
-per library on the first row and, below them, the RSeQC read distribution read straight out of
-the per-sample `*.read_distribution.txt` reports. RSeQC publishes its upstream and downstream
-bands **nested** inside each other, so the recipe differences them into disjoint rings and
-adds the tags that fall in no feature as an explicit `Other_intergenic` row, which is what
-makes the composition sum to one.
+| Route | What changes |
+|---|---|
+| `--skip_multiqc` or `--skip_qc` (`SKIP_MULTIQC`) | No MultiQC tab. Library QC keeps only the RSeQC read distribution; the uniquely mapped key figure is dropped. |
+| `--skip_quantification_merge` (`SKIP_QUANTIFICATION_MERGE`) | No Variable Genes or Gene Explorer tab. Sample Space keeps the DESeq2 QC PCA and distances, without its strip or library table. The expression key figures, the gene rows of Findings and their two highlights are dropped. |
+| `--skip_alignment` (`PSEUDOALIGNER_ONLY`) | The expression collections read `salmon/` instead of `star_salmon/`. STAR, samtools, Picard, Qualimap and RSeQC panels have nothing to show; the RSeQC figure and row are dropped. |
+| `--skip_deseq2_qc`, or fewer than three samples | No DESeq2 PCA, distances, variance row or distances highlight. |
 
-`Library QC profile` draws every library as one line across the MultiQC general statistics,
-coloured by condition, each axis rescaled to its own range. The pipeline-local recipe
-`nf-core/rnaseq/general_stats.py` reads `multiqc_general_stats.txt` and folds the per-read-file
-FastQC and Cutadapt rows onto their library. Brushing an axis filters the libraries.
+The import re-packs the Overview grid after a drop, so a lone highlight takes the full row.
+These flags are passed by hand with `--var` (see Reproducing).
 
-![Expression overview](screenshots/expression-overview.png)
+## Colours
 
-## Gene explorer
+`category_colors` is declared once, on the Overview, and read by every tab. `condition`,
+`group` and `top_condition` are coloured `auto`: they hold the same values, so a condition
+takes the same colour in the parallel coordinates, the heatmap strip, the box plot and the
+plane.
+The five RSeQC region classes are written out, `Other intergenic` in grey. The box plot is
+a code figure: it reads the same map and follows Analysis mode's groups when it has some.
 
-The former Expression heatmap tab is folded in here, so the gene questions live on one tab.
-`Picked genes` reports what the current selection covers: genes in view, genes by the
-condition they peak in, libraries in view and log2(TPM + 1) as a median with a box plot.
+## Cross-selection
 
-`Top variable genes` draws the most variable genes across the run as a clustered heatmap, row
-z-normalised on the log2(TPM + 1) scale, with the condition annotation strip above the
-columns. The gene filter in `Gene scope` narrows its rows; the sample columns follow the
-pinned `Sample scope`.
+Tables select rows and the PCA, the box plot and the plane select points; a pick becomes a
+dashboard filter that narrows the other tiles of the same collection and, through the
+project links, the collections downstream of it. Row selection is on `sample` in the sample
+sheet, `sample_id` in the library summary (shared with the PCA), `gene_name` in the gene
+rows and the box plot, and `gene_id` on the plane. The two record cards wait for a pick:
+the library record reads the library summary table, the gene record reads the plane.
 
-`Expression by condition` is the one code-mode figure in the template. It takes the genes
-with the highest spread of log2(TPM + 1) left after filtering and draws one box per gene and
-condition. Selecting boxes filters on `gene_name`, and the `Gene rows` table below selects
-rows on the same column.
+## Controls
 
-`Gene detail` is the master/detail pair. The pipeline runs no differential test, so the
-picking surface is the mean-variance plane: one point per expressed gene, mean log2(TPM + 1)
-against its standard deviation across the libraries, coloured by the condition it peaks in
-(recipe `nf-core/rnaseq/gene_summary.py`). The record card sits on the same row and is linked
-to the plane: it stays a thin rail until a point is clicked, which fills it and, through the `gene_summary` to `gene_expression` link on `gene_id`, narrows the
-box plot and the gene rows below. `Gene rows` and `Matrix rows` (both collapsed) hold the
-long and wide forms of the same matrix.
-
-![Gene explorer](screenshots/gene-explorer.png)
-
----
+Advanced visualisation controls dock by width: to the right of a full-width tile, on top
+of a narrower one. Nothing is set per tab or per tile.
 
 ## Catalog module
 
@@ -145,13 +147,13 @@ nothing was reading.
 
 | Output | What it is | Renders as |
 |---|---|---|
-| `salmon_sample_pca` | One row per sample: PCA coordinates of the log2(TPM + 1) matrix, genes detected and expressed, median TPM | 4 cards, table |
-| `salmon_expression_heatmap` | The 500 most variable genes, wide, with a condition annotation strip | Clustered heatmap (`use: salmon/top_variable_heatmap`), table |
-| `salmon_gene_expression` | The merged TPMs as one row per gene and sample, expressed genes only | Box figure, 2 cards, gene filter, table |
+| `salmon_sample_pca` | One row per sample: PCA coordinates of the log2(TPM + 1) matrix, genes detected and expressed, median TPM | 4 cards, a key figure, table with a record card |
+| `salmon_expression_heatmap` | The 500 most variable genes, wide, with a condition annotation strip | Clustered heatmap (`use: salmon/top_variable_heatmap`), gene picker, table |
+| `salmon_gene_expression` | The merged TPMs as one row per gene and sample, expressed genes only | Box figure, 3 cards, log2(TPM + 1) range, table |
 | `salmon_merged_gene_counts` | The raw merged count matrix tximport writes next to the TPM matrix | Table |
-| `deseq2_qc_pca` | The pipeline's own DESeq2 QC principal components, with the variance each explains and a `pca_set` label per source file | Embedding (`use: deseq2/qc_pca_embedding`), gauge card, table |
-| `deseq2_qc_sample_dists` | The square sample-to-sample Euclidean distance matrix the QC dendrogram is clustered on | Clustered heatmap (`use: deseq2/qc_distance_heatmap`), table |
-| `rseqc_read_distribution` | Share of each library's tags per annotation feature, at two resolutions | Stacked composition (`use: rseqc/distribution_composition`), card, table |
+| `deseq2_qc_pca` | The pipeline's own DESeq2 QC principal components, with the variance each explains and a `pca_set` label per source file | Embedding (`use: deseq2/qc_pca_embedding`), a findings row |
+| `deseq2_qc_sample_dists` | The square sample-to-sample Euclidean distance matrix the QC dendrogram is clustered on | Clustered heatmap (`use: deseq2/qc_distance_heatmap`), a highlight |
+| `rseqc_read_distribution` | Share of each library's tags per annotation feature, at two resolutions | Stacked composition (`use: rseqc/distribution_composition`), a findings row, a highlight |
 
 The two `deseq2` outputs are deliberately **not** pipeline-specific: their globs key on the file
 suffix (`**/*pca.vals.txt`, `**/*sample.dists.txt`) rather than on a `star_salmon/` directory,

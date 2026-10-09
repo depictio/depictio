@@ -27,7 +27,7 @@ import SecondaryMetrics, {
   breakdownHasShares,
   type SecondaryLayout,
 } from './card/SecondaryMetrics';
-import { formatCardNumber, formatDecimals } from './card/metrics/format';
+import { cardNumberFormat, explicitCardFormat, formatNumber } from './card/metrics/format';
 import { wrapWithChrome } from './chrome';
 import { resolveFigureStyle } from './figureStyle';
 import LoadAllButton, { LoadAllState } from './chrome/LoadAllButton';
@@ -264,7 +264,7 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
     // Another tab's figure, looked up there and drawn here with this tab's
     // filters. A figure goes through FigureBlock, rendered by the server from
     // its own tab in the highlight's style; an advanced visualisation is drawn
-    // as on its tab, its header's link to that tab in the chrome.
+    // client-side in that style, its link to the source tab in the chrome.
     return (
       <HighlightBlock metadata={metadata} extraActions={extraActions} showDragHandle={showDragHandle}>
         {({ metadata: shown, renderSource, styleRequest, sourceLink }) =>
@@ -274,12 +274,17 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
                 metadata={shown}
                 filters={filters}
                 refreshTick={refreshTick}
+                // The `minimal` header links the source tab itself; any other
+                // style keeps the link in the chrome.
                 extraActions={
                   <>
-                    {sourceLink && <SourceTabAction link={sourceLink} />}
+                    {sourceLink && resolveFigureStyle(shown.figure_style) !== 'minimal' && (
+                      <SourceTabAction link={sourceLink} />
+                    )}
                     {extraActions}
                   </>
                 }
+                sourceLink={sourceLink}
                 showDragHandle={showDragHandle}
                 groupRender={groupRender}
               />
@@ -390,11 +395,17 @@ const ComponentRenderer: React.FC<ComponentRendererProps> = ({
   }
 
   if (metadata.component_type === 'text') {
+    // A text tile with live values is computed with the cards: its entry in
+    // the bulk-compute response is the map of its values, by name.
+    const liveValues =
+      cardValue && typeof cardValue === 'object' && !Array.isArray(cardValue)
+        ? (cardValue as Record<string, unknown>)
+        : null;
     return wrapWithChrome(
       'text',
       metadata,
       undefined,
-      <TextRenderer metadata={metadata} />,
+      <TextRenderer metadata={metadata} liveValues={liveValues} liveLoading={cardLoading} />,
       { extraActions, showDragHandle },
     );
   }
@@ -741,12 +752,14 @@ const CardRenderer: React.FC<{
   loading?: boolean;
   filterApplied: boolean;
 }> = ({ metadata, value, secondaryValues, loading, filterApplied }) => {
+  // The card's `format`, else its `decimals`: how the value (and each group's
+  // value under a group comparison) prints.
+  const valueFormat = cardNumberFormat(metadata);
+  // Only an explicit `format` reaches the strips that never followed
+  // `decimals`, so a `decimals` card keeps the strip it has always had.
+  const explicitFormat = explicitCardFormat(metadata.format);
   const displayValue =
-    loading && value == null
-      ? '…'
-      : value != null
-      ? formatValue(value, typeof metadata.decimals === 'number' ? metadata.decimals : undefined)
-      : '—';
+    loading && value == null ? '…' : value != null ? formatValue(value, valueFormat) : '—';
 
   // Preserve the YAML-declared order; fall back to the keys returned by the
   // server. Drop the hero aggregation if it appears in the list (the API
@@ -859,7 +872,8 @@ const CardRenderer: React.FC<{
       typeof value === 'number'
     ) {
       const pct = Math.round((value / coverageMax) * 100);
-      return `${base} · ${pct}% of ${coverageMax}`;
+      const max = explicitFormat ? formatNumber(coverageMax, explicitFormat) : coverageMax;
+      return `${base} · ${pct}% of ${max}`;
     }
     return base;
   })();
@@ -918,13 +932,16 @@ const CardRenderer: React.FC<{
   const external = Boolean(href && /^https?:\/\//.test(href));
   // A card with no colour of its own takes its section's, so the cards of a
   // section read as one group. Outside a section it stays neutral.
-  // Resolved to the theme's hex, not a CSS variable: the secondary strip
-  // derives its tints from the colour's channels and falls back to teal on
-  // anything it cannot parse.
+  // A palette name, the card's or its section's, is resolved to the theme's
+  // hex, not a CSS variable: the secondary strip derives its tints from the
+  // colour's channels and falls back to teal on anything it cannot parse. Left
+  // as a name, `grape` is no CSS colour (the icon drew black) and `cyan` or
+  // `lime` drew the CSS keyword, not the theme's shade.
   const sectionColor = useContext(SectionColorContext);
   const theme = useMantineTheme();
+  const ownColor = metadata.icon_color as string | undefined;
   const iconColor =
-    (metadata.icon_color as string | undefined) ||
+    (ownColor ? (theme.colors[ownColor]?.[6] ?? ownColor) : undefined) ||
     (sectionColor ? theme.colors[sectionColor]?.[6] : undefined);
   const wrapperStyle: React.CSSProperties = {
     opacity: dimming ? 0.6 : 1,
@@ -973,13 +990,15 @@ const CardRenderer: React.FC<{
                   coverageMax={coverageMax}
                   minimal={stripIsMinimal(variant)}
                   decimals={typeof metadata.decimals === 'number' ? metadata.decimals : undefined}
+                  format={explicitFormat}
                   heroColumn={metadata.column_name}
                 />
               )}
               {groupCompare && (
                 <GroupCompareStrip
                   payload={groupCompare}
-                  formatValue={formatValue}
+                  // Each group's value is the card's own aggregation.
+                  formatValue={(v) => formatValue(v, valueFormat)}
                   coverageMax={coverageMax}
                 />
               )}
@@ -1018,12 +1037,11 @@ function capitalize(s: string): string {
 }
 
 /** Exported alongside `inferCardTitle`, and for the same reason. Numbers get
- *  thousands separators and magnitude-aware rounding (`formatCardNumber`); an
- *  author's `decimals` is a display choice, kept as written (7.10, not 7.1) so
- *  a row of figures lines up (`formatDecimals`). */
-export function formatValue(v: unknown, decimals?: number): string | number {
-  if (typeof v === 'number') {
-    return decimals !== undefined ? formatDecimals(v, decimals) : formatCardNumber(v);
-  }
+ *  thousands separators and magnitude-aware rounding (`formatCardNumber`), or
+ *  the card's own format (`cardNumberFormat`: its `format`, else `decimals:N`
+ *  from its `decimals`, kept as written, 7.10 not 7.1, so a row of figures
+ *  lines up). */
+export function formatValue(v: unknown, format?: string): string | number {
+  if (typeof v === 'number') return formatNumber(v, format);
   return String(v);
 }

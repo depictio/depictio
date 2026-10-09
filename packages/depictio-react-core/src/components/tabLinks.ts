@@ -63,13 +63,33 @@ export function parseTabTile(item: string): TabTileItem | null {
 }
 
 /**
+ * Whether a list is tab tiles of which not one is on this dashboard: every
+ * item reads as a tile and no tile's tab resolves. Such a list draws nothing
+ * (see TabTiles), and neither should the heading that announces it.
+ */
+export function tabTilesAllMissing(items: string[], resolveTab: TabLinkResolver): boolean {
+  const tiles = items.map(parseTabTile);
+  return (
+    tiles.length > 0 &&
+    tiles.every((tile) => tile !== null && resolveTab(tile.tab) === null)
+  );
+}
+
+/** Fewest columns a tile grid keeps when they fit, so one or two tiles stay
+ *  tile-sized instead of stretching across the row. */
+export const MIN_TILE_COLUMNS = 3;
+
+/**
  * How many columns a row of `count` tiles takes in `width` pixels: as many as
  * fit at `minPx`, then evened out so the last row is never one tile on its
- * own (five tiles where four fit go three and two, not four and one).
+ * own (five tiles where four fit go three and two, not four and one). Never
+ * fewer than `MIN_TILE_COLUMNS` where those fit: a group of one tab reads as a
+ * tile beside an empty slot, like the groups of three under it, not as a
+ * banner across the page.
  */
 export function balancedColumns(count: number, width: number, minPx: number, gapPx: number): number {
   if (count <= 0) return 1;
   const fit = Math.max(1, Math.floor((width + gapPx) / (minPx + gapPx)));
   const rows = Math.ceil(count / fit);
-  return Math.ceil(count / rows);
+  return Math.max(Math.ceil(count / rows), Math.min(fit, MIN_TILE_COLUMNS));
 }

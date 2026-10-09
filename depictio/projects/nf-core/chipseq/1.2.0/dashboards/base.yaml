@@ -1,597 +1,745 @@
 version: 1
-# nf-core/chipseq 1.2.0 reference dashboard.
+# nf-core/chipseq 1.2.0, on the family rules of depictio/projects/nf-core/RULES.md
+# (ampliseq/2.18.0 is the reference implementation). atacseq/1.2.2 is its
+# sibling: the two share their tab groups, tab names and KPI logic wherever
+# their data allow, so a reader moving between them finds the same places.
 #
-# Funnel: sequencing QC (the reprocessed MultiQC report) -> the per-sample
-# signal numbers -> the peaks each sample yielded -> the consensus peak set per
-# antibody -> differential binding between conditions. The `design` hub is what
-# every tab is narrowed by: it carries one row per LIBRARY (the ChIPs and their
-# input controls) with the antibody, the replicate, and the condition taken
-# from the design table (METADATA_FILE, GROUP_COL; else the design sheet
-# group), so the comparison the run was built to make is a filter.
-#
-# Pinned persistent sections ride every tab: `Cohort at a glance` (the four
-# numbers the whole run is judged on) and `Sample sheet` at the top, and
-# `Reference tables` for the per-sample QC rows at the bottom. The `Sample filters` panel
-# (sample, antibody, condition, replicate, role) is persistent too and reaches
-# every collection through the project links,
-# including the consensus sets and the DESeq2 contrasts, which are keyed on the
-# antibody rather than on a sample.
+# Funnel: library QC (the reprocessed MultiQC report, the deepTools and preseq
+# tables) -> the peaks each library yielded, where they land and what one
+# region holds -> the consensus set per antibody -> differential binding
+# between conditions. The `design` hub carries one row per library (the ChIPs
+# and their input controls) with the antibody, the replicate and the condition:
+# GROUP_COL of the design table (METADATA_FILE) when there is one, else the
+# design sheet's group. The hub column is always named `condition`, so the
+# dashboard reads it literally and never depends on the optional table.
 #
 # The MultiQC report bound here was re-generated with MultiQC 1.35 from the
 # run's raw tool outputs; the run itself published MultiQC 1.9, which writes no
-# parquet. Anchors and section names are therefore the 1.35 ones.
+# parquet. DSL1 wrote no params.json either: the Run parameters dialog lists
+# the software versions, which is what the `params:` links search.
 main_dashboard:
   title: nf-core/chipseq
-  subtitle: "MACS2 peaks, consensus peak sets per antibody and DESeq2 differential binding, on top of the MultiQC report"
+  subtitle: Protein-DNA binding, from library quality to the regions that change between conditions
   project_tag: ChIP-seq Peak Analysis
-  main_tab_name: MultiQC
-  tab_icon: /assets/images/logos/multiqc_icon_color.svg
-  tab_icon_color: orange
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family.
+  category_colors:
+    condition: auto
+    antibody: auto
+    role:
+      ChIP: '#1c7ed6'
+      input control: '#868e96'
+    # HOMER's coarse feature classes, written out so a class keeps its colour
+    # on the annotation bars, the donut cards and the gene track.
+    annotation_class:
+      '*': auto
+      promoter-TSS: '#d6336c'
+      "5' UTR": '#ae3ec9'
+      exon: '#7048e8'
+      intron: '#1c7ed6'
+      "3' UTR": '#1098ad'
+      TTS: '#0ca678'
+      non-coding: '#74b816'
+      Intergenic: '#f59f00'
+    direction:
+      up: '#e03131'
+      down: '#1971c2'
+      not significant: '#adb5bd'
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. All
+  # five are bound to the design hub; the antibody reaches the consensus sets
+  # and the DESeq2 contrasts through prefix links.
   filter_sections:
-  # Persistent, pinned, and one filter per real experimental factor. Before the
-  # hub was rebuilt only `antibody` was exposed, so the two comparisons the run
-  # exists to make could not be selected at all.
   - name: Sample filters
     icon: mdi:filter-variant
     color: teal
-    description: Applies to every tab through the project links
+    description: Applies to every tab
     persistent: true
     pin: top
   - name: QC thresholds
     icon: mdi:tune
     color: cyan
-    description: Signal-to-noise and yield floors on the per-sample QC summary
+    description: Signal-to-noise and yield floors on the per-library peak QC
     collapsed: true
     persistent: true
     pin: bottom
-  # Tab-local: the read-level panels on this tab are keyed on the sequencing
-  # library, which is a finer grain than the sample every other tab works in.
-  - name: Library scope
-    icon: mdi:test-tube
-    color: blue
-    description: The sequencing libraries behind the FastQC and Trim Galore panels
-    collapsed: true
-  # `Cohort at a glance`, `Sample sheet` and `Reference tables` are pinned so the
-  # headline numbers, the design sheet every filter starts from and the
-  # per-sample QC rows trail each tab. All three are declared here, on the tab
-  # no route conditional can remove.
   grid_sections:
-  - name: Cohort at a glance
-    icon: mdi:account-group-outline
-    color: teal
-    description: What the run contains and what it yielded, on every tab
-    persistent: true
-    pin: top
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab, which no route removes.
   - name: Sample sheet
     icon: mdi:table-account
-    color: teal
-    description: The design sheet every tab is filtered by
+    color: gray
+    description: The design behind every tab, narrowed by the sample filters
     collapsed: true
     persistent: true
-    pin: top
-  - name: Run summary
-    icon: mdi:view-dashboard-outline
-    color: teal
-    description: MultiQC's general statistics table, one row per library
-  - name: Read quality
-    icon: mdi:chart-bell-curve
-    color: blue
-    description: FastQC and Trim Galore as MultiQC reports them
-  - name: Alignment and library complexity
-    icon: mdi:chart-bar
-    color: indigo
-    description: How much of each library survived alignment, filtering and deduplication
-  - name: ChIP enrichment
-    icon: mdi:chart-line
-    color: cyan
-    description: Whether the ChIP is enriched over its input, and how sharply
+    pin: bottom
+    exclude_tabs:
+    - Overview
   - name: Reference tables
     icon: mdi:table
     color: gray
-    description: The per-sample peak QC rows, on every tab
+    description: The per-library peak QC rows behind the tiles
     collapsed: true
     persistent: true
     pin: bottom
+    exclude_tabs:
+    - Overview
   components:
-  # ------------------------------------------------------- cohort at a glance
-  # The strip that opens every tab. Four different breakdowns on purpose: what
-  # the cohort is made of, what was varied in it, what it yielded and how clean
-  # that yield is. It sits in a pinned persistent section, which is also what
-  # makes it legal on a MultiQC tab.
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Libraries, below).
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: design
+    interactive_component_type: MultiSelect
+    column_name: condition
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: Condition
+    section: Key figures
+    tag: cs-ov-kf-condition
+    index: ov-kf-condition
+    title: Condition
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: design
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+      strip_label: Library
+    section: Key figures
+    tag: cs-ov-kf-library
+    index: ov-kf-library
+    title: Library
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
+  - component_type: text
+    title: nf-core/chipseq
+    logo: https://raw.githubusercontent.com/nf-core/chipseq/master/docs/images/nf-core-chipseq_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/chipseq/master/docs/images/nf-core-chipseq_logo_dark.png
+    order: 1
+    body: >
+      Protein-DNA binding from ChIP-seq reads: how well each library worked, the peaks
+      each ChIP yielded against its input, and the regions bound differently between
+      conditions. [Run parameters](params:)
+    tag: cs-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/chipseq aligns ChIP-seq reads, calls the peaks of each ChIP against its input control with MACS2 and compares them between the conditions of the design, one antibody at a time. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab: narrow the libraries once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: cs-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # DSL1 wrote no params.json, so the run's facts come from its own tables
+  # (`values:`) and the genome from the GENOME template variable.
+  - component_type: text
+    surface: card
+    values:
+      libraries: {dc: design, column: sample_id, aggregation: nunique, format: integer}
+      chips: {dc: design, column: sample_id, aggregation: nunique, filter_expr: col('role') == 'ChIP', format: integer}
+      antibodies: {dc: design, column: antibody, aggregation: nunique, filter_expr: col('role') == 'ChIP',
+        format: integer}
+      conditions: {dc: design, column: condition, aggregation: nunique, format: integer}
+      peaks: {dc: macs2_peak_summary, column: num_peaks, aggregation: sum, format: si}
+    body: |
+      ### The run
+      - ![](icon:mdi:test-tube) **Libraries** {{libraries}}, {{chips}} of them ChIPs
+      - ![](icon:mdi:molecule) **Antibodies** {{antibodies}} in {{conditions}} conditions
+      - ![](icon:mdi:dna) **Genome** {GENOME}
+      - ![](icon:mdi:chart-scatter-plot) **Peaks** {{peaks}} narrow calls
+    tag: cs-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the family's colour (the header's), not the theme's blue.
+  # A `params:` link searches the software versions the run recorded.
+  - component_type: text
+    surface: card
+    accent: green
+    body: |
+      ### Six steps from reads to differential binding
+      Each step names the tool version it ran and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:content-cut) **Trim** Adapters cut by Trim Galore · [Version](params:trim) · [MultiQC](tab:MultiQC)
+      2. ![](icon:mdi:dna) **Align** BWA, then duplicates and poor alignments filtered · [Version](params:bwa) · [Signal](tab:Signal)
+      3. ![](icon:mdi:chart-scatter-plot) **Call** MACS2 narrow peaks, each ChIP against its input · [Version](params:macs2) · [Peaks](tab:Peaks)
+      4. ![](icon:mdi:tag-outline) **Annotate** HOMER, the nearest gene of each peak · [Annotation](tab:Annotation)
+      5. ![](icon:mdi:set-merge) **Merge** One consensus set per antibody · [Version](params:bedtools) · [Consensus](tab:Consensus)
+      6. ![](icon:mdi:scale-balance) **Test** DESeq2 between conditions · [Version](params:featurecounts) · [Differential](tab:Differential binding)
+      :::
+    tag: cs-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it.
   - component_type: card
-    tag: cs-glance-card-libraries
-    index: cs-glance-card-libraries
-    section: Cohort at a glance
     workflow_tag: chipseq
     data_collection_tag: design
     aggregation: count
     column_name: sample_id
     column_type: object
-    secondary_layout: donut
-    breakdown_col: role
-    display: {icon_name: 'mdi:test-tube', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    secondary_layout: composition
+    breakdown_col: condition
+    display:
+      icon_name: mdi:test-tube
+      icon_color: orange
+      caption: ChIPs and inputs, by condition
+      link: tab:MultiQC
+    section: Key figures
+    tag: cs-ov-kf-libraries
+    index: ov-kf-libraries
     title: Libraries
+    description: Libraries in the design, the ChIPs and their input controls. The bar splits them by condition.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: cs-glance-card-conditions
-    index: cs-glance-card-conditions
-    section: Cohort at a glance
-    workflow_tag: chipseq
-    data_collection_tag: design
-    aggregation: nunique
-    column_name: condition
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: condition
-    top_n_count: 4
-    display: {icon_name: 'mdi:scale-balance', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Conditions
-    layout: {x: 2, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: cs-glance-card-peaks
-    index: cs-glance-card-peaks
-    section: Cohort at a glance
     workflow_tag: chipseq
     data_collection_tag: macs2_peak_summary
     use: macs2/peak_summary
     aggregation: sum
     column_name: num_peaks
     column_type: int64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:counter', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Peaks called
-    layout: {x: 4, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: cs-glance-card-frip
-    index: cs-glance-card-frip
-    section: Cohort at a glance
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peak_summary
-    use: macs2/peak_summary
-    aggregation: average
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
-    column_name: frip_score
-    column_type: float64
-    display: {icon_name: 'mdi:target', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: FRiP score
-    layout: {x: 6, y: 0, w: 2, h: 2}
-
-  # -------------------------------------------------------------- run summary
-  # This tab holds MultiQC panels only. The four peak-yield cards that used to
-  # open it read `macs2/peak_summary`, not the report; see VALIDATION_REPORT.md,
-  # CS-D13, for where each of them already existed.
-  - component_type: text
-    tag: cs-qc-intro
-    section: Run summary
-    title: A ChIP-seq run, from reads to peaks
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [MultiQC](https://multiqc.info) pools what every tool reported into one
-      row per library. The panels below take that apart: read quality,
-      alignment and library complexity, and whether each ChIP is enriched over
-      its own input. The peaks themselves are on the Peaks tab.
+    display:
+      icon_name: mdi:chart-scatter-plot
+      icon_color: indigo
+      caption: peaks per ChIP, with their spread
+      link: tab:Peaks
+      format: si
+    section: Key figures
+    tag: cs-ov-kf-peaks
+    index: ov-kf-peaks
+    title: Peaks called
+    description: MACS2 narrow peaks over the ChIPs in view. The box shows how many each ChIP yielded.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  # chipseq runs `samtools stats` and `samtools flagstat` over the same BAMs and
-  # both contribute a general-stats column titled "Reads mapped", which the API's
-  # payload builder used to collapse onto one label (a 500 on render). See
-  # VALIDATION_REPORT.md, CS-D3. The table paginates at 50 rows, so the 80
-  # libraries of this run come out over two pages.
-  - component_type: multiqc
-    tag: cs-qc-general-stats
-    section: Run summary
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    use: multiqc/general_stats
-    selected_module: general_stats
-    selected_plot: general_stats
-    title: General statistics
-    description: One row per library, pooling the FastQC, Trim Galore, samtools, Picard, MACS2 and phantompeakqualtools headline numbers.
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 5}
-
-  # ------------------------------------------------------------ read quality
-  - component_type: text
-    tag: cs-qc-reads-intro
-    section: Read quality
-    title: Raw and trimmed reads
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/) on
-      the raw and the trimmed libraries, plus what
-      [Trim Galore](https://www.bioinformatics.babraham.ac.uk/projects/trim_galore/)
-      removed. Every library carries a technical-replicate suffix, so a sample
-      appears here once per library; the Library scope filter picks them.
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: multiqc
-    tag: cs-qc-fastqc-counts
-    section: Read quality
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    selected_module: fastqc
-    selected_plot: Sequence Counts
-    use: multiqc/fastqc
-    title: Sequence counts
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 2, w: 4, h: 5}
-  - component_type: multiqc
-    tag: cs-qc-fastqc-quality
-    section: Read quality
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    selected_module: fastqc
-    selected_plot: Sequence Quality Histograms
-    use: multiqc/fastqc
-    title: Per-base sequence quality
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 2, w: 4, h: 5}
-  - component_type: multiqc
-    tag: cs-qc-cutadapt
-    section: Read quality
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    selected_module: cutadapt
-    selected_plot: Filtered Reads
-    use: multiqc/cutadapt
-    title: Reads kept after trimming
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 7, w: 8, h: 4}
-
-  # ------------------------------------------- alignment and library complexity
-  - component_type: text
-    tag: cs-qc-align-intro
-    section: Alignment and library complexity
-    title: From libraries to filtered alignments
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Libraries are merged per sample, duplicates marked and low-quality or
-      blacklisted alignments removed. The complexity curve with its confidence
-      ribbon is on the Signal tab.
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: multiqc
-    tag: cs-qc-samtools
-    section: Alignment and library complexity
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    selected_module: samtools
-    selected_plot: Percent mapped
-    use: multiqc/samtools
-    title: Percent mapped
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 2, w: 4, h: 5}
-  - component_type: multiqc
-    tag: cs-qc-picard-dup
-    section: Alignment and library complexity
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    selected_module: picard
-    selected_plot: Mark Duplicates
-    use: multiqc/picard
-    title: Duplication
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 2, w: 4, h: 5}
-  - component_type: multiqc
-    tag: cs-qc-featurecounts
-    section: Alignment and library complexity
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    selected_module: featurecounts
-    selected_plot: Assignments
-    use: multiqc/featurecounts
-    title: Reads assigned to consensus peaks
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 7, w: 8, h: 4}
-
-  # --------------------------------------------------------- ChIP enrichment
-  - component_type: text
-    tag: cs-qc-enrich-intro
-    section: ChIP enrichment
-    title: Is the ChIP enriched over its input?
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The fingerprint curve separates an enriched ChIP from a flat input. FRiP
-      is the share of reads inside called peaks, and the strand cross-correlation
-      coefficients say how sharp the signal is.
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: multiqc
-    tag: cs-qc-fingerprint
-    section: ChIP enrichment
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    selected_module: deepTools
-    selected_plot: Fingerprint plot
-    use: multiqc/deeptools
-    title: deepTools fingerprint
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 2, w: 4, h: 5}
-  # The four panels below are the pipeline's own custom content: FRiP from the
-  # peak-QC step, and the three phantompeakqualtools coefficients. None of them
-  # had a catalog panel, so none of them carried a `use:`; the stubs now live in
-  # depictio/catalog/multiqc/.
-  - component_type: multiqc
-    tag: cs-qc-frip
-    section: ChIP enrichment
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    selected_module: frip_score
-    selected_plot: frip_score-section
-    use: multiqc/frip_score
-    title: FRiP score
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 2, w: 4, h: 5}
-  - component_type: multiqc
-    tag: cs-qc-strandshift
-    section: ChIP enrichment
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    selected_module: strand_shift_correlation
-    selected_plot: strand_shift_correlation-section
-    use: multiqc/strand_shift_correlation
-    title: Strand cross-correlation
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 7, w: 4, h: 5}
-  - component_type: multiqc
-    tag: cs-qc-nsc
-    section: ChIP enrichment
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    selected_module: nsc_coefficient
-    selected_plot: nsc_coefficient-section
-    use: multiqc/nsc_coefficient
-    title: NSC coefficient
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 7, w: 4, h: 5}
-  # The deepTools "Read Distribution Profile after Annotation" panel used to sit
-  # beside this one. It is MultiQC's rendering of the same plotProfile matrix the
-  # Signal tab draws as an advanced_viz, so only the richer of the two is kept.
-  - component_type: multiqc
-    tag: cs-qc-rsc
-    section: ChIP enrichment
-    workflow_tag: chipseq
-    data_collection_tag: multiqc_data
-    selected_module: rsc_coefficient
-    selected_plot: rsc_coefficient-section
-    use: multiqc/rsc_coefficient
-    title: RSC coefficient
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 12, w: 8, h: 5}
-
-  # ------------------------------------------------------------ sample sheet
-  - component_type: text
-    tag: cs-meta-intro
-    section: Sample sheet
-    title: The cohort behind the run
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      One row per sequencing library, the ChIPs and the input controls they
-      were called against, with the antibody, replicate and design condition.
-      Every sample filter starts from this table; tick a row to carry that
-      library into every tab.
-    workflow_tag: chipseq
-    data_collection_tag: design
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: table
-    tag: cs-ref-table-design
-    section: Sample sheet
-    workflow_tag: chipseq
-    data_collection_tag: design
-    row_selection_enabled: true
-    title: Sample sheet
-    description: One row per library, with its role, antibody, condition, replicate and input control.
-    title_size: h3
-    title_align: left
-    row_selection_column: sample_id
-    layout: {x: 0, y: 2, w: 8, h: 4}
-
-  # -------------------------------------------------------- reference tables
-  - component_type: text
-    tag: cs-ref-intro
-    section: Reference tables
-    title: The per-sample QC rows
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      One row per ChIP sample: the peak count, the FRiP score and the width,
-      enrichment and significance spreads of what MACS2 called. Pinned to every
-      tab, and narrowed by the filters picked in the left panel.
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peak_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: table
-    tag: cs-ref-table-summary
-    section: Reference tables
+    data_collection_tag: deseq2_results
+    use: deseq2/results
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('significant') == True
+    secondary_layout: composition
+    breakdown_col: direction
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: red
+      caption: significant calls, by direction
+      link: tab:Differential binding
+    section: Key figures
+    tag: cs-ov-kf-diff
+    index: ov-kf-diff
+    title: Differential calls
+    description: Intervals passing padj 0.05 and a two-fold change, one call per interval and contrast. The bar splits them into gained and lost binding.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  # frip_score is per ChIP, so the median is of libraries, not of reads.
+  - component_type: card
     workflow_tag: chipseq
     data_collection_tag: macs2_peak_summary
     use: macs2/peak_summary
-    row_selection_enabled: true
-    row_selection_column: sample
-    title: Peak QC summary
-    description: Peak count, FRiP score and the width, enrichment and significance spreads per sample.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 4}
-
-  # -------------------------------------------------------------- left panel
+    aggregation: median
+    column_name: frip_score
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.01
+    threshold_direction: min
+    display:
+      icon_name: mdi:target
+      icon_color: lime
+      caption: median; ENCODE wants at least 1%
+      link: tab:MultiQC
+      format: percent
+    section: Key figures
+    tag: cs-ov-kf-frip
+    index: ov-kf-frip
+    title: FRiP
+    description: Median fraction of each ChIP's reads falling inside its called peaks, the ChIP signal-to-noise. The strip counts the ChIPs at or above the ENCODE floor of 1%.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the condition, then the antibody, both on the hub.
   - component_type: interactive
-    tag: cs-filter-sample
-    index: cs-sample-filter
-    section: Sample filters
-    group: Sample scope
-    workflow_tag: chipseq
-    data_collection_tag: design
-    interactive_component_type: MultiSelect
-    column_name: sample_id
-    column_type: object
-    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:test-tube'}
-    placement: left
-    title: Library
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: cs-filter-antibody
-    index: cs-antibody-filter
-    section: Sample filters
-    group: Sample scope
-    workflow_tag: chipseq
-    data_collection_tag: design
-    interactive_component_type: MultiSelect
-    column_name: antibody
-    column_type: object
-    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:dna'}
-    placement: left
-    title: Antibody
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
-    tag: cs-filter-condition
-    index: cs-condition-filter
-    section: Sample filters
-    group: Experimental factors
     workflow_tag: chipseq
     data_collection_tag: design
     interactive_component_type: MultiSelect
     column_name: condition
     column_type: object
-    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:scale-balance'}
-    placement: left
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: Condition
+    section: Findings
+    tag: cs-ov-findings-condition
+    index: ov-findings-condition
     title: Condition
-    layout: {x: 0, y: 6, w: 1, h: 3}
+    layout: {x: 0, y: 0, w: 2, h: 1}
   - component_type: interactive
-    tag: cs-filter-replicate
-    index: cs-replicate-filter
+    workflow_tag: chipseq
+    data_collection_tag: design
+    interactive_component_type: MultiSelect
+    column_name: antibody
+    column_type: object
+    display:
+      icon_name: mdi:molecule
+      custom_color: grape
+      strip_label: Antibody
+    section: Findings
+    tag: cs-ov-findings-antibody
+    index: ov-findings-antibody
+    title: Antibody
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one data collection, so the import
+  # removes a row with its data.
+  - component_type: text
+    surface: card
+    values:
+      fold: {dc: macs2_peaks, column: fold_enrichment, aggregation: median, format: 'decimals:1'}
+      top: {dc: homer_annotated_peaks, column: annotation_class, aggregation: top}
+      top_share: {dc: homer_annotated_peaks, column: annotation_class, aggregation: top_share, format: percent}
+      n_cons: {dc: macs2_consensus_boolean, column: peak_id, aggregation: count, format: integer}
+      n_repro: {dc: macs2_consensus_boolean, column: peak_id, aggregation: count, filter_expr: col('num_samples') > 1,
+        format: integer}
+      n_sig: {dc: deseq2_results, column: gene_id, aggregation: count, filter_expr: col('significant') == True,
+        format: integer}
+      n_tested: {dc: deseq2_results, column: gene_id, aggregation: count, format: integer}
+    body: |
+      - **{{fold}}** median fold enrichment at the summits over the input – MACS2 narrow calls [Peaks](tab:Peaks)
+      - **{{top_share}}** of the peaks sit in the {{top}} class – the most common HOMER feature class [Annotation](tab:Annotation)
+      - **{{n_repro}}** of {{n_cons}} consensus intervals are called by more than one library – the reproducible set [Consensus](tab:Consensus)
+      - **{{n_sig}}** of {{n_tested}} interval tests call a change – DESeq2, padj below 0.05 and two-fold, per contrast [Differential](tab:Differential binding)
+    section: Findings
+    tag: cs-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per analysis tab, in the order of the rows above. The tiles
+  # of a row share a stored height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Peaks
+    source_component: pk-manhattan
+    caption: One point per peak at its summit, as high as its significance; colour is the library.
+    hide_legend: true
+    tag: cs-ov-hl-manhattan
+    index: ov-hl-manhattan
+    layout: {x: 0, y: 2, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Annotation
+    source_component: anno-tss-distance
+    caption: Each library's peaks by distance to the nearest start site, one curve per library; the band is the promoter window.
+    hide_legend: true
+    tag: cs-ov-hl-tss
+    index: ov-hl-tss
+    layout: {x: 4, y: 2, w: 4, h: 4}
+  # The consensus UpSet stacks every antibody's libraries into one plot, too
+  # many sets for a third of the row: this summary counts each antibody's
+  # intervals by how many of its libraries call them.
+  - component_type: figure
+    workflow_tag: chipseq
+    data_collection_tag: macs2_consensus_boolean
+    use: macs2/consensus_boolean
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Consensus intervals per antibody by the number of libraries calling them.
+      d = df.group_by(['consensus_set', 'num_samples']).agg(pl.len().cast(pl.Int64).alias('intervals')).sort(['consensus_set', 'num_samples'])
+      fig = px.bar(d.to_pandas(), x='num_samples', y='intervals', color='consensus_set', barmode='group', labels={'num_samples': 'Libraries calling the interval', 'intervals': 'Consensus intervals', 'consensus_set': ''})
+      fig.update_xaxes(dtick=1)
+      fig.update_layout(margin=dict(t=10))
+    title: Replicate agreement
+    link: tab:Consensus
+    caption: Each antibody's consensus intervals by how many of its libraries call a peak on them; the right-hand bars are the reproducible set.
+    section: Findings
+    tag: cs-ov-consensus-support
+    index: ov-consensus-support
+    layout: {x: 0, y: 6, w: 4, h: 4}
+  - component_type: highlight
+    section: Findings
+    source_tab: Differential binding
+    source_component: diff-volcano
+    caption: One point per interval and contrast; right of the line, more binding in the first condition.
+    tag: cs-ov-hl-volcano
+    index: ov-hl-volcano
+    layout: {x: 4, y: 6, w: 4, h: 4}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers. A tab the run does not have is left out.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+      - [Signal](tab:Signal)
+
+      ### Peak calls
+      - [Peaks](tab:Peaks)
+      - [Annotation](tab:Annotation)
+      - [Locus](tab:Locus)
+
+      ### Comparison
+      - [Consensus](tab:Consensus)
+      - [Differential binding](tab:Differential binding)
+    section: How to read this dashboard
+    tag: cs-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the condition first. One per real factor of
+  # the hub: the condition, the antibody, the library, the replicate and the
+  # role (ChIP or input control).
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: design
+    interactive_component_type: MultiSelect
+    column_name: condition
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
     section: Sample filters
-    group: Experimental factors
+    group: Sample scope
+    tag: cs-filter-condition
+    index: sample-filters-condition
+    title: Condition
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: design
+    interactive_component_type: MultiSelect
+    column_name: antibody
+    column_type: object
+    display:
+      icon_name: mdi:molecule
+      custom_color: grape
+    section: Sample filters
+    group: Sample scope
+    tag: cs-filter-antibody
+    index: sample-filters-antibody
+    title: Antibody
+    layout: {x: 0, y: 2, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: design
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: cs-filter-sample
+    index: sample-filters-library
+    title: Library
+    layout: {x: 0, y: 4, w: 1, h: 3}
+  - component_type: interactive
     workflow_tag: chipseq
     data_collection_tag: design
     interactive_component_type: MultiSelect
     column_name: replicate
     column_type: object
-    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:relation-many-to-many'}
-    placement: left
-    title: Replicate
-    layout: {x: 0, y: 9, w: 1, h: 3}
-  # `role` (ChIP or input control) is the design's fourth factor: two values on
-  # the reference run, and the one that says whether a row is signal or its
-  # background. Sourced on the hub like the other three, so it reaches every
-  # collection through the same links.
-  - component_type: interactive
-    tag: cs-filter-role
-    index: cs-role-filter
+    display:
+      icon_name: mdi:content-duplicate
+      custom_color: cyan
     section: Sample filters
-    group: Experimental factors
+    group: Sample scope
+    tag: cs-filter-replicate
+    index: sample-filters-replicate
+    title: Replicate
+    layout: {x: 0, y: 7, w: 1, h: 2}
+  - component_type: interactive
     workflow_tag: chipseq
     data_collection_tag: design
     interactive_component_type: MultiSelect
     column_name: role
     column_type: object
-    display: {title_size: md, custom_color: '#7C4DFF', icon_name: 'mdi:shape-outline'}
-    placement: left
+    display:
+      icon_name: mdi:tag-outline
+      custom_color: pink
+    section: Sample filters
+    group: Sample scope
+    tag: cs-filter-role
+    index: sample-filters-role
     title: Role
-    layout: {x: 0, y: 12, w: 1, h: 3}
+    layout: {x: 0, y: 9, w: 1, h: 2}
   - component_type: interactive
-    tag: cs-filter-frip
-    index: cs-frip-range
-    section: QC thresholds
-    group: Signal quality
     workflow_tag: chipseq
     data_collection_tag: macs2_peak_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: frip_score
     column_type: float64
-    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:target'}
-    placement: left
+    display:
+      icon_name: mdi:magnet
+      custom_color: yellow
+    section: QC thresholds
+    group: Library quality
+    tag: cs-filter-frip
+    index: qc-frip-range
     title: FRiP score
-    show_histogram: true
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
-    tag: cs-filter-peakcount
-    index: cs-peakcount-range
-    section: QC thresholds
-    group: Signal quality
     workflow_tag: chipseq
     data_collection_tag: macs2_peak_summary
     interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: num_peaks
     column_type: int64
-    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:counter'}
-    placement: left
+    display:
+      icon_name: mdi:counter
+      custom_color: indigo
+    section: QC thresholds
+    group: Library quality
+    tag: cs-filter-peakcount
+    index: qc-peakcount-range
     title: Peaks called
-    show_histogram: true
     layout: {x: 0, y: 3, w: 1, h: 3}
+  # Row selection feeds the Analysis panel.
+  - component_type: table
+    workflow_tag: chipseq
+    data_collection_tag: design
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    section: Sample sheet
+    tag: cs-sample-sheet
+    index: sample-sheet
+    title: Sample sheet
+    description: One row per library, ChIP or input control, with its antibody, condition, replicate and control.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peak_summary
+    use: macs2/peak_summary
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Reference tables
+    tag: cs-ref-table-summary
+    index: ref-peak-summary
+    title: Peak QC summary
+    description: Peak count, FRiP score and the width, enrichment and significance spreads per ChIP.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+tabs:
+# ============================================================================
+# Data & QC
+# ============================================================================
+- title: MultiQC
+  subtitle: Did sequencing, alignment and filtering work for every library?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  # Tab-local: the read-level panels are keyed on the sequencing library, a
+  # finer grain than the sample every other tab works in.
+  filter_sections:
+  - name: Library scope
+    icon: mdi:test-tube
+    color: orange
+    description: The sequencing libraries behind the FastQC and Trim Galore panels
+  grid_sections:
+  - name: Run summary
+    icon: mdi:view-dashboard-outline
+    color: orange
+    description: Every module's headline numbers, one row per library
+  - name: Reads and alignment
+    icon: mdi:chart-bar
+    color: orange
+    description: Reads sequenced per library, and the share that mapped
+  - name: Enrichment
+    icon: mdi:chart-line
+    color: orange
+    description: How concentrated the reads are, how much falls in peaks, and the strand shift scores
+  - name: QC details
+    icon: mdi:file-document-outline
+    color: gray
+    description: Read quality, trimming, duplication, read assignment and strand shift curves
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      [MultiQC](https://multiqc.info) gathers what every tool of the run reported: FastQC
+      and Trim Galore on the reads, samtools and Picard on the alignments, deepTools,
+      phantompeakqualtools and MACS2 on the signal. Read whether each library yielded
+      enough reads, how many mapped, and how well each ChIP separates from its input.
+    tag: cs-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: interactive
-    tag: cs-qc-filter-library
-    index: cs-library-filter
-    section: Library scope
-    group: Library scope
     workflow_tag: chipseq
     data_collection_tag: design_reads
     interactive_component_type: MultiSelect
     column_name: sample_id
     column_type: object
-    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:folder-outline'}
-    placement: left
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+    section: Library scope
+    tag: cs-mqc-filter-library
+    index: mqc-library-filter
     title: Sequencing library
     layout: {x: 0, y: 0, w: 1, h: 3}
-
-tabs:
-# ============================================================================
-# Signal
-# ============================================================================
-# The MultiQC tab holds MultiQC panels. preseq, plotFingerprint and plotProfile
-# each write a per-sample table beside the curve MultiQC draws, and those tables
-# are what this tab reads. The persistent `Sample filters`, `QC thresholds`,
-# `Cohort at a glance`, `ChIP design` and `Reference tables` sections declared
-# on the main tab reach this one too; `Signal scope` below is this tab's own.
+  - component_type: multiqc
+    workflow_tag: chipseq
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    section: Run summary
+    tag: cs-mqc-general-stats
+    title: General statistics
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: chipseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    section: Reads and alignment
+    tag: cs-mqc-fastqc-counts
+    title: Sequence counts
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: chipseq
+    data_collection_tag: multiqc_data
+    use: multiqc/samtools
+    selected_module: samtools
+    selected_plot: Percent mapped
+    section: Reads and alignment
+    tag: cs-mqc-samtools-mapped
+    title: Reads mapped
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: chipseq
+    data_collection_tag: multiqc_data
+    use: multiqc/deeptools
+    selected_module: deepTools
+    selected_plot: Fingerprint plot
+    section: Enrichment
+    tag: cs-mqc-fingerprint
+    title: deepTools fingerprint
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: chipseq
+    data_collection_tag: multiqc_data
+    use: multiqc/frip_score
+    selected_module: frip_score
+    selected_plot: frip_score-section
+    section: Enrichment
+    tag: cs-mqc-frip
+    title: FRiP score
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  # The two phantompeakqualtools scores: NSC and RSC read the strand shift
+  # curve (in QC details) as one number per ChIP.
+  - component_type: multiqc
+    workflow_tag: chipseq
+    data_collection_tag: multiqc_data
+    use: multiqc/nsc_coefficient
+    selected_module: nsc_coefficient
+    selected_plot: nsc_coefficient-section
+    section: Enrichment
+    tag: cs-mqc-nsc
+    title: Normalised strand coefficient
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: chipseq
+    data_collection_tag: multiqc_data
+    use: multiqc/rsc_coefficient
+    selected_module: rsc_coefficient
+    selected_plot: rsc_coefficient-section
+    section: Enrichment
+    tag: cs-mqc-rsc
+    title: Relative strand coefficient
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: chipseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Quality Histograms
+    section: QC details
+    tag: cs-mqc-fastqc-quality
+    title: Per-base sequence quality
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: chipseq
+    data_collection_tag: multiqc_data
+    use: multiqc/cutadapt
+    selected_module: cutadapt
+    selected_plot: Filtered Reads
+    section: QC details
+    tag: cs-mqc-cutadapt
+    title: Reads kept after trimming
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: chipseq
+    data_collection_tag: multiqc_data
+    use: multiqc/picard
+    selected_module: picard
+    selected_plot: Mark Duplicates
+    section: QC details
+    tag: cs-mqc-picard-dups
+    title: Duplicate reads
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: chipseq
+    data_collection_tag: multiqc_data
+    use: multiqc/featurecounts
+    selected_module: featurecounts
+    selected_plot: Assignments
+    section: QC details
+    tag: cs-mqc-featurecounts
+    title: Reads assigned to consensus peaks
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: chipseq
+    data_collection_tag: multiqc_data
+    use: multiqc/strand_shift_correlation
+    selected_module: strand_shift_correlation
+    selected_plot: strand_shift_correlation-section
+    section: QC details
+    tag: cs-mqc-strandshift
+    title: Strand shift correlation
+    layout: {x: 0, y: 8, w: 8, h: 4}
 - title: Signal
-  subtitle: The per-sample signal numbers behind the MultiQC curves - library complexity, coverage concentration and the metagene profile
+  subtitle: How enriched and how complex is each library?
+  tab_group: Data & QC
   tab_order: 2
   tab_icon: mdi:waves
   tab_icon_color: cyan
@@ -599,287 +747,223 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: Signal scope
-    icon: mdi:tune
+  - name: Signal filters
+    icon: mdi:filter-variant
     color: cyan
-    description: Narrow the curves to a band of enrichment and of sequencing depth
+    description: Narrows the libraries by enriched share, and the curves by depth
   grid_sections:
   - name: Signal at a glance
     icon: mdi:counter
     color: cyan
-    description: The four numbers a ChIP library's signal is judged on
-  - name: Library complexity
-    icon: mdi:chart-line
-    color: blue
-    description: Whether sequencing deeper would still find new molecules
+    description: The deepTools numbers a library's signal is judged on
   - name: Coverage concentration
     icon: mdi:chart-scatter-plot
-    color: indigo
-    description: How far each IP's coverage departs from its own input control
-  - name: Metagene signal
-    icon: mdi:chart-bell-curve
-    color: teal
-    description: Where the signal sits along a gene, from upstream flank to downstream flank
+    color: cyan
+    description: How far each ChIP's coverage departs from its input control
+  - name: Complexity and metagene
+    icon: mdi:chart-line
+    color: cyan
+    description: Distinct fragments left at deeper sequencing, and the mean signal along a gene
   components:
-  # ---------------------------------------------------------- at a glance
   - component_type: text
-    tag: cs-sig-intro
-    section: Signal at a glance
-    title: The numbers beside the curves
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
+    order: 1
     body: >
-      [preseq](https://github.com/smithlabcode/preseq), plotFingerprint and
-      plotProfile each write a per-sample table next to the curve
-      [MultiQC](https://multiqc.info) renders. Those tables are read here: how
-      much new material a library still holds, how concentrated its coverage
-      is, and where its signal sits along a gene.
+      The tables [deepTools](https://deeptools.readthedocs.io) and
+      [preseq](https://github.com/smithlabcode/preseq) write beside the curves MultiQC
+      draws. The fingerprint metrics say how concentrated each ChIP's coverage is against
+      its input, the complexity curve whether sequencing deeper would still find new
+      fragments. The metagene profile shows where the signal sits along a gene.
+    tag: cs-sig-intro
+    index: sig-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
     workflow_tag: chipseq
     data_collection_tag: deeptools_fingerprint_metrics
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: percent_genome_enriched
+    column_type: float64
+    display:
+      icon_name: mdi:percent-outline
+      custom_color: orange
+    section: Signal filters
+    group: Signal strength
+    tag: cs-sig-filter-enriched
+    index: sig-enriched-range
+    title: Genome called enriched
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: preseq_complexity_curve
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: total_reads
+    column_type: float64
+    display:
+      icon_name: mdi:ruler
+      custom_color: blue
+    section: Signal filters
+    group: Signal strength
+    tag: cs-sig-filter-depth
+    index: sig-depth-range
+    title: Extrapolated depth
+    layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: card
-    tag: cs-sig-card-ratio
-    index: cs-sig-card-ratio
-    section: Signal at a glance
     workflow_tag: chipseq
     data_collection_tag: deeptools_fingerprint_metrics
     use: deeptools/fingerprint_metrics
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    aggregation: median
     column_name: auc_ratio
     column_type: float64
-    display: {icon_name: 'mdi:target', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Coverage concentration
-    layout: {x: 0, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: cs-sig-card-jsd
-    index: cs-sig-card-jsd
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:chart-areaspline
+      icon_color: cyan
+      caption: median, with its spread
+      decimals: 2
     section: Signal at a glance
+    tag: cs-sig-card-auc
+    index: sig-card-auc
+    title: Coverage concentration
+    description: Area under the fingerprint curve over that of a uniform library; 1 is no concentration at all.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: chipseq
     data_collection_tag: deeptools_fingerprint_metrics
     use: deeptools/fingerprint_metrics
-    aggregation: average
+    aggregation: median
     column_name: js_distance
     column_type: float64
-    secondary_layout: gauge
-    coverage_max: 1
-    display: {icon_name: 'mdi:magnet', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Divergence from input
-    layout: {x: 2, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: cs-sig-card-enriched
-    index: cs-sig-card-enriched
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:magnet
+      icon_color: indigo
+      caption: median, with its distribution
+      decimals: 2
     section: Signal at a glance
+    tag: cs-sig-card-jsd
+    index: sig-card-jsd
+    title: Divergence from input
+    description: Median Jensen-Shannon distance between a ChIP's coverage and that of its input control.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: chipseq
     data_collection_tag: deeptools_fingerprint_metrics
     use: deeptools/fingerprint_metrics
-    aggregation: average
+    aggregation: median
     column_name: percent_genome_enriched
     column_type: float64
     secondary_layout: histogram
-    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Genome called enriched
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: cs-sig-card-signal
-    index: cs-sig-card-signal
+    display:
+      icon_name: mdi:percent-outline
+      icon_color: orange
+      caption: median, with its distribution
+      decimals: 1
     section: Signal at a glance
+    tag: cs-sig-card-enriched
+    index: sig-card-enriched
+    title: Genome called enriched
+    description: Median share of the genome deepTools calls enriched over the input.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  # preseq's curve ends at a billion reads for every library (the recipe clips
+  # there), so that depth compares the libraries like for like.
+  - component_type: card
     workflow_tag: chipseq
-    data_collection_tag: deeptools_plot_profile
-    use: deeptools/plot_profile
-    aggregation: max
-    column_name: signal
+    data_collection_tag: preseq_complexity_curve
+    use: preseq/complexity_curve
+    aggregation: median
+    column_name: expected_distinct
     column_type: float64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:chart-line', icon_color: '#F2A93B', title_color: '#F2A93B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Strongest metagene signal
-    layout: {x: 6, y: 2, w: 2, h: 2}
-
-  # ----------------------------------------------------- library complexity
-  - component_type: text
-    tag: cs-sig-complexity-intro
-    section: Library complexity
-    title: "How much new material is left in each library"
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      preseq extrapolates how many distinct molecules each library would still
-      yield if it were sequenced deeper. Where the 95% ribbon stays narrow the
-      extrapolation is safe; where it fans out, deeper sequencing is a guess.
-    workflow_tag: chipseq
-    data_collection_tag: preseq_complexity_curve
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    filter_expr: col('total_reads') == 1000000000
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:fingerprint
+      icon_color: teal
+      caption: median at 1 billion reads, with its spread
+      decimals: 0
+    section: Signal at a glance
+    tag: cs-sig-card-distinct
+    index: sig-card-distinct
+    title: Distinct fragments
+    description: Distinct fragments preseq expects a library to yield at a billion reads; a low value is a library that sequencing deeper will not save.
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
-    tag: cs-qc-av-complexity
-    index: cs-qc-av-complexity
-    section: Library complexity
-    workflow_tag: chipseq
-    data_collection_tag: preseq_complexity_curve
-    use: preseq/complexity_ribbon
-    config:
-      controls_placement: header
-      log_x: true
-      band_opacity: 0.18
-      line_width: 2
-      x_title: Sequencing depth (reads)
-      y_title: Expected distinct molecules
-      legend_pos: right
-      selection_enabled: true
-      selection_column: sample
-    title: "Library complexity with its confidence ribbon"
-    description: "One curve per library, extrapolated by preseq; the band is the 95% interval on that extrapolation. Click a curve to filter the dashboard to that library."
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-
-  # -------------------------------------------------- coverage concentration
-  - component_type: text
-    tag: cs-sig-fingerprint-intro
-    section: Coverage concentration
-    title: "How far each IP departs from its own input"
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      plotFingerprint compares every IP against the input it was called
-      against: how much of the genome is called enriched, and how far the
-      coverage diverges from the control. Input libraries carry no point
-      because they are the reference.
-    workflow_tag: chipseq
-    data_collection_tag: deeptools_fingerprint_metrics
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  # Rebound off the catalog's `auc` / `synthetic_js_distance` default. Those two
-  # are the same measurement twice (r = -0.87 across the 16 libraries here), so
-  # the cloud came out as a diagonal band that says nothing a single bar chart
-  # would not. `percent_genome_enriched` against `js_distance` is deepTools' own
-  # QC scatter and the two axes are independent; the price is that it plots the
-  # IP libraries only, because the JSD columns need `--JSDsample` and the
-  # inputs are the sample they are compared against.
-  - component_type: advanced_viz
-    tag: cs-qc-av-fingerprint
-    index: cs-qc-av-fingerprint
-    section: Coverage concentration
     workflow_tag: chipseq
     data_collection_tag: deeptools_fingerprint_metrics
     use: deeptools/fingerprint_scatter
     config:
-      controls_placement: header
       x_col: percent_genome_enriched
       y_col: js_distance
       label_col: sample
       size_col: diff_enrichment
-      color_col: auc_ratio
-      color_scale: Viridis
+      # A colour and a legend per ChIP: point labels piled up on the replicates.
+      color_col: sample
       x_title: Share of the genome called enriched
       y_title: Jensen-Shannon distance to the input
       min_size: 8
       max_size: 26
       opacity: 0.85
       marker_outline: true
-      top_n_labels: 5
+      top_n_labels: 0
       legend_pos: right
       selection_enabled: true
       selection_column: sample
-    title: "Coverage concentration per IP"
-    description: "plotFingerprint's own QC scatter: enriched genome share against divergence from the input. Point size is the differential enrichment, colour is how concentrated the coverage is against a uniform library of the same depth."
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-
-  # ----------------------------------------------------------- metagene signal
-  - component_type: text
-    tag: cs-sig-metagene-intro
-    section: Metagene signal
-    title: "Where the signal sits along a gene"
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [deepTools](https://deeptools.readthedocs.io) writes this matrix as a
-      plain table beside its PDF. MultiQC renders the same profile as a bare
-      curve; this one marks the start site, shades the scaled gene body and
-      says on the axis what a bin is.
-    workflow_tag: chipseq
-    data_collection_tag: deeptools_plot_profile
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    section: Coverage concentration
+    tag: cs-sig-fingerprint
+    index: sig-fingerprint
+    title: Coverage concentration per ChIP
+    description: Enriched genome share against divergence from the input; size is the differential enrichment, colour the ChIP. Click a point to select the library.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
-    tag: cs-qc-av-metagene
-    index: cs-qc-av-metagene
-    section: Metagene signal
+    workflow_tag: chipseq
+    data_collection_tag: preseq_complexity_curve
+    use: preseq/complexity_ribbon
+    config:
+      log_x: true
+      band_opacity: 0.18
+      line_width: 2
+      x_title: Sequencing depth (reads)
+      y_title: Expected distinct molecules
+      # Every ChIP and input has a curve: under the plot the legend wraps
+      # across the row instead of scrolling.
+      legend_pos: bottom
+      selection_enabled: true
+      selection_column: sample
+    section: Complexity and metagene
+    tag: cs-sig-complexity
+    index: sig-complexity
+    title: Library complexity
+    description: One curve per library, extrapolated by preseq; the band is the 95% interval on that extrapolation.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
     workflow_tag: chipseq
     data_collection_tag: deeptools_plot_profile
     use: deeptools/metagene_profile
     config:
-      controls_placement: header
       reference_x: 300
       reference_label: TSS
       shaded_bands:
-        - [300, 400, Gene body]
-      # No `band_opacity`: the recipe writes no confidence columns, so the
-      # profile renderer offers that control only when lower/upper are bound.
-      line_width: 2.5
-      x_title: "Bin along the window: 1 = -3.0Kb, 300 = TSS, 400 = TES, 700 = 3.0Kb"
+      - [300, 400, Gene body]
+      x_title: Bin (TSS at 300, TES at 400)
       y_title: Mean signal
-      legend_pos: right
+      line_width: 2
+      legend_pos: bottom
       selection_enabled: true
       selection_column: sample
-    title: "Metagene signal profile"
-    description: "Mean signal of every library across the plotted window, with the transcription start site marked and the scaled gene body shaded. Click a curve to filter the dashboard to that library."
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-
-  # -------------------------------------------------------------- left panel
-  - component_type: interactive
-    tag: cs-sig-filter-enriched
-    index: cs-sig-enriched-range
-    section: Signal scope
-    group: Signal strength
-    workflow_tag: chipseq
-    data_collection_tag: deeptools_fingerprint_metrics
-    interactive_component_type: RangeSlider
-    column_name: percent_genome_enriched
-    column_type: float64
-    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:magnet'}
-    placement: left
-    title: Genome called enriched
-    show_histogram: true
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: cs-sig-filter-depth
-    index: cs-sig-depth-range
-    section: Signal scope
-    group: Signal strength
-    workflow_tag: chipseq
-    data_collection_tag: preseq_complexity_curve
-    interactive_component_type: RangeSlider
-    column_name: total_reads
-    column_type: float64
-    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:ruler'}
-    placement: left
-    title: Extrapolated depth
-    show_histogram: true
-    layout: {x: 0, y: 3, w: 1, h: 3}
-
+    section: Complexity and metagene
+    tag: cs-sig-metagene
+    index: sig-metagene
+    title: Metagene signal profile
+    description: Mean signal of every library along a scaled gene with 3 kb flanks, the start site marked and the gene body shaded.
+    layout: {x: 0, y: 6, w: 8, h: 6}
 # ============================================================================
-# Peaks
+# Peak calls
 # ============================================================================
 - title: Peaks
-  subtitle: MACS2 narrow peaks per sample, their significance along the genome and where they land relative to genes
+  subtitle: How many peaks did each library yield, and how strong?
+  tab_group: Peak calls
   tab_order: 3
   tab_icon: mdi:chart-scatter-plot
   tab_icon_color: indigo
@@ -887,57 +971,107 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: Peak scope
-    icon: mdi:tune
+  - name: Peak filters
+    icon: mdi:filter-variant
     color: indigo
-    description: Keep only the peaks inside a significance, enrichment and width band, on the chromosomes picked
-  - name: Annotation scope
-    icon: mdi:dna
-    color: grape
-    description: Genomic feature class and distance to the nearest TSS
+    description: How significant, enriched and wide a call has to be, and on which chromosomes
   grid_sections:
-  - name: Peak yield
+  - name: Peaks at a glance
     icon: mdi:counter
     color: indigo
-    description: How many peaks each sample contributed, and how strong they are
+    description: How many calls the libraries made, how wide, how enriched and how significant
   - name: Significance along the genome
     icon: mdi:chart-scatter-plot
     color: indigo
-    description: Every peak placed on its chromosome, height is the q-value
+    description: Every call at its summit, as high as its q-value
+  - name: Peak width
+    icon: mdi:ruler
+    color: indigo
+    description: How wide the narrow calls are, library by library
   - name: Around the summits
     icon: mdi:chart-bell-curve
-    color: blue
-    description: Every sample's peak calls stacked on their summits, as a shape and as agreement between libraries
-  - name: Where the peaks land
-    icon: mdi:dna
-    color: grape
-    description: Genomic feature classes and the distance from each peak to the nearest TSS
-  - name: Peak tables
+    color: indigo
+    description: How sharply replicates agree on a summit, and how far a call spreads from it
+  - name: Peak table
     icon: mdi:table
-    color: violet
-    description: The peak rows behind the panels, with the HOMER annotation
+    color: gray
+    description: Coordinates, summit, enrichment and significance of every call
     collapsed: true
   components:
-  # ---------------------------------------------------------------- yield
   - component_type: text
-    tag: cs-pk-intro
-    section: Peak yield
-    title: What MACS2 called
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
+    order: 1
     body: >
-      One row per peak per sample. The cards count the peaks and summarise their
-      width, enrichment and significance; the sliders in the left panel narrow
-      every panel on this tab to a band of each.
+      [MACS2](https://github.com/macs3-project/MACS) narrow peaks, one row per peak and
+      ChIP, each called against its input control around a summit. The cards count the
+      calls and sum up their width, enrichment and significance. A lasso on the
+      genome-wide panel narrows the tab and, through the peak links, the HOMER annotation.
+    tag: cs-pk-intro
+    index: pk-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
     workflow_tag: chipseq
     data_collection_tag: macs2_peaks
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: neg_log10_qvalue
+    column_type: float64
+    display:
+      icon_name: mdi:check-decagram
+      custom_color: red
+    section: Peak filters
+    group: Peak strength
+    tag: cs-pk-filter-qvalue
+    index: pk-qvalue-range
+    title: Peak significance
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: fold_enrichment
+    column_type: float64
+    display:
+      icon_name: mdi:magnet
+      custom_color: yellow
+    section: Peak filters
+    group: Peak strength
+    tag: cs-pk-filter-fold
+    index: pk-fold-range
+    title: Fold enrichment
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: width
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      custom_color: orange
+    section: Peak filters
+    group: Peak strength
+    tag: cs-pk-filter-width
+    index: pk-width-range
+    title: Peak width
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    interactive_component_type: MultiSelect
+    column_name: chr
+    column_type: object
+    display:
+      icon_name: mdi:chart-timeline-variant
+      custom_color: indigo
+    section: Peak filters
+    group: Peak location
+    tag: cs-pk-filter-chr
+    index: pk-chr-filter
+    title: Chromosome
+    layout: {x: 0, y: 9, w: 1, h: 3}
   - component_type: card
-    tag: cs-pk-card-count
-    index: cs-pk-card-count
-    section: Peak yield
     workflow_tag: chipseq
     data_collection_tag: macs2_peaks
     use: macs2/peaks
@@ -945,206 +1079,238 @@ tabs:
     column_name: peak_id
     column_type: object
     secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:counter', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    breakdown_col: chr
+    display:
+      icon_name: mdi:counter
+      icon_color: indigo
+      caption: the chromosomes with the most
+    section: Peaks at a glance
+    tag: cs-pk-card-count
+    index: pk-card-count
     title: Peaks in view
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    description: Narrow calls over the ChIPs in view, one per peak and library.
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: cs-pk-card-width
-    index: cs-pk-card-width
-    section: Peak yield
     workflow_tag: chipseq
     data_collection_tag: macs2_peaks
     use: macs2/peaks
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
     column_name: width
     column_type: int64
-    display: {icon_name: 'mdi:ruler', icon_color: '#5E35B1', title_color: '#5E35B1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:ruler
+      icon_color: orange
+      caption: median bp, with its spread
+      decimals: 0
+    section: Peaks at a glance
+    tag: cs-pk-card-width
+    index: pk-card-width
     title: Peak width
-    layout: {x: 2, y: 2, w: 2, h: 2}
+    description: Median width of the calls in bp.
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: cs-pk-card-fold
-    index: cs-pk-card-fold
-    section: Peak yield
     workflow_tag: chipseq
     data_collection_tag: macs2_peaks
     use: macs2/peaks
-    aggregation: average
+    aggregation: median
     column_name: fold_enrichment
     column_type: float64
     secondary_layout: histogram
-    display: {icon_name: 'mdi:magnet', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    display:
+      icon_name: mdi:magnet
+      icon_color: yellow
+      caption: median, with its distribution
+      decimals: 1
+    section: Peaks at a glance
+    tag: cs-pk-card-fold
+    index: pk-card-fold
     title: Fold enrichment
-    layout: {x: 4, y: 2, w: 2, h: 2}
+    description: Median enrichment at the summit over the input control.
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: cs-pk-card-qvalue
-    index: cs-pk-card-qvalue
-    section: Peak yield
     workflow_tag: chipseq
     data_collection_tag: macs2_peaks
     use: macs2/peaks
     aggregation: median
     column_name: neg_log10_qvalue
     column_type: float64
-    secondary_layout: threshold
-    threshold_value: 1.3
-    threshold_direction: min
-    threshold_warn: 1
-    display: {icon_name: 'mdi:check-decagram', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: red
+      caption: median, with its spread
+      decimals: 1
+    section: Peaks at a glance
+    tag: cs-pk-card-qvalue
+    index: pk-card-qvalue
     title: Median -log10 q
-    layout: {x: 6, y: 2, w: 2, h: 2}
-
-  # ----------------------------------------------------- manhattan + volcano
-  - component_type: text
-    tag: cs-pk-manhattan-intro
-    section: Significance along the genome
-    title: Pick peaks here, read them in the tables below
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Each point is a peak at its summit, height is the
-      [MACS2](https://github.com/macs3-project/MACS) q-value. Lasso a region
-      on the Manhattan panel: the selection carries the peak id into the
-      [HOMER](http://homer.ucsd.edu/homer/) annotation table through the
-      project links.
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    description: Median significance of the calls, as -log10 of the MACS2 q-value; every call already passes q 0.05 (1.3).
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
-    tag: cs-pk-av-manhattan
-    index: cs-pk-av-manhattan
-    section: Significance along the genome
     workflow_tag: chipseq
     data_collection_tag: macs2_peaks
     use: macs2/peak_significance
     config:
-      controls_placement: header
       feature_col: peak_id
-      score_kind: "-log10(q)"
+      score_kind: -log10(q)
       color_by_columns: [sample]
       default_color_by: sample
       selection_enabled: true
       selection_column: peak_id
-      top_n_labels: 10
-    title: Peak significance along the genome
-    description: Every peak at its summit position; height is -log10 of the MACS2 q-value, colour is the sample.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-  - component_type: figure
-    tag: cs-pk-fig-width
+      # Peak ids say nothing as point labels; they piled up over the tallest calls.
+      top_n_labels: 0
     section: Significance along the genome
+    tag: cs-pk-manhattan
+    index: pk-manhattan
+    title: Peak significance along the genome
+    description: Every call at its summit; height is -log10 of the MACS2 q-value, colour is the library.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  # Log x: peak width is a long tail. On a linear axis the widest call sets the
+  # range and the panel reads as a single spike.
+  - component_type: figure
     workflow_tag: chipseq
     data_collection_tag: macs2_peaks
     use: macs2/peaks
     visu_type: histogram
-    # Log x: peak width is a long tail. On a linear axis the widest call
-    # sets the range, every bin but the first two is empty, and the panel
-    # reads as a single spike against 19 kb of white space.
-    dict_kwargs: {x: width, color: sample, nbins: 60, log_x: true}
+    dict_kwargs:
+      x: width
+      color: sample
+      nbins: 60
+      log_x: true
+      labels: {width: Peak width (bp), sample: Library}
+    section: Peak width
+    tag: cs-pk-width
+    index: pk-width
     title: Peak width distribution
-    description: How wide the calls are, per sample, on a log axis. A histone mark gives broader peaks than a transcription factor.
-    title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 6}
-
-  # ------------------------------------------------------- around the summits
-  # The genome_view + coverage_track pair that sat here bound macs2_peaks twice
-  # (lint test_no_double_track_binding). The intervals moved to the Locus tab,
-  # where one navigator drives the consensus and annotation tracks under it.
-  # computeMatrix is not published as a table and the bigWigs are not in the
-  # megatest mirror, so there is no read-coverage metagene around the summits:
-  # these two curves aggregate the peak calls themselves (macs2/summit_profile).
-  - component_type: text
-    tag: cs-pk-summit-intro
-    section: Around the summits
-    title: The peak calls stacked on their summits
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Every summit of a sample is set at 0 and the calls are counted around it
-      in 50 bp bins, from the narrowPeak intervals rather than read coverage.
-      A sharp spike in the first curve means the other libraries call the same
-      site; the second curve is the average width of the sample's own calls.
-    workflow_tag: chipseq
-    data_collection_tag: macs2_summit_profile
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    description: How wide the calls are, per library, on a log axis. A sharp factor gives a tight band; a broad mark spreads.
+    layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
-    tag: cs-pk-av-summit-concordance
-    index: cs-pk-av-summit-concordance
-    section: Around the summits
     workflow_tag: chipseq
     data_collection_tag: macs2_summit_profile
     use: macs2/summit_concordance_profile
     config:
-      controls_placement: header
       reference_x: 0
       reference_label: Summit
       log_y: true
       x_title: Offset from the summit (bp)
-      y_title: Other samples' summits per kb
+      y_title: Other libraries' summits per kb
       legend_pos: right
       selection_enabled: true
       selection_column: sample
-    title: Other libraries' summits around each summit
-    description: Summits called in the other samples, per anchor summit and per kb, on a log axis. Replicates of a sharp factor pile their summits onto each other; a broad mark or an unrelated antibody agrees far less sharply.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 6}
-  - component_type: advanced_viz
-    tag: cs-pk-av-summit-footprint
-    index: cs-pk-av-summit-footprint
     section: Around the summits
+    tag: cs-pk-summit-concordance
+    index: pk-summit-concordance
+    title: Other libraries' summits around each summit
+    description: Summits called in the other libraries, per anchor summit and per kb, on a log axis. Replicates of a sharp factor pile their summits onto each other.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
     workflow_tag: chipseq
     data_collection_tag: macs2_summit_profile
     use: macs2/summit_footprint_profile
     config:
-      controls_placement: header
       reference_x: 0
       reference_label: Summit
       x_title: Offset from the summit (bp)
-      y_title: Share of the sample's peaks covering the offset
+      y_title: Share of the library's peaks covering the offset
       legend_pos: right
       selection_enabled: true
       selection_column: sample
+    section: Around the summits
+    tag: cs-pk-summit-footprint
+    index: pk-summit-footprint
     title: Average peak footprint
-    description: The share of each sample's calls still open at every offset from their own summit. Where a curve crosses one half is the median half-width of the calls on that side.
-    title_size: h3
-    layout: {x: 0, y: 8, w: 8, h: 6}
-
-  # -------------------------------------------------------------- annotation
+    description: The share of each library's calls still open at every offset from their own summit; where a curve crosses one half is the median half-width.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: table
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    use: macs2/peaks
+    row_selection_enabled: true
+    row_selection_column: peak_id
+    section: Peak table
+    tag: cs-pk-table
+    index: pk-table-peaks
+    title: MACS2 narrow peaks
+    description: Coordinates, summit, width, fold enrichment and significance of every call.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Annotation
+  subtitle: Where do the peaks fall relative to genes?
+  tab_group: Peak calls
+  tab_order: 4
+  tab_icon: mdi:tag-outline
+  tab_icon_color: blue
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Annotation filters
+    icon: mdi:filter-variant
+    color: blue
+    description: The feature class of a peak and its distance to the nearest start site
+  grid_sections:
+  - name: Annotation at a glance
+    icon: mdi:counter
+    color: blue
+    description: Feature classes, genes reached and distance to the start sites of the peaks in view
+  - name: Feature classes
+    icon: mdi:chart-bar
+    color: blue
+    description: The share of each library's peaks in each HOMER feature class
+  - name: Distance to the nearest TSS
+    icon: mdi:chart-line
+    color: blue
+    description: Each library's peaks binned by their distance to the nearest start site
+  - name: Peak annotation
+    icon: mdi:table
+    color: gray
+    description: Every annotated peak, and the full record of the one picked
+    collapsed: true
+  components:
   - component_type: text
-    tag: cs-pk-anno-intro
-    section: Where the peaks land
-    title: Peaks against gene structure
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
+    order: 1
     body: >
-      HOMER assigns every peak to a genomic feature and to the nearest
-      transcription start site. The composition bar reads the feature classes
-      per sample, the curve the distance to the TSS as a share of each
-      sample's peaks.
+      [HOMER](http://homer.ucsd.edu/homer/) assigns every peak to a genomic feature class
+      and to the nearest transcription start site. A promoter-bound factor puts most of
+      its peaks in the promoter window, a distal one spreads them over introns and
+      intergenic space. Pick a row of the collapsed table to read the record of one peak.
+    tag: cs-anno-intro
+    index: anno-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    interactive_component_type: MultiSelect
+    column_name: annotation_class
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: blue
+    section: Annotation filters
+    group: Annotation
+    tag: cs-anno-filter-class
+    index: anno-class-filter
+    title: Feature class
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: homer_annotated_peaks
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: distance_to_tss
+    column_type: int64
+    display:
+      icon_name: mdi:ruler
+      custom_color: lime
+    section: Annotation filters
+    group: Annotation
+    tag: cs-anno-filter-tss
+    index: anno-tss-range
+    title: Distance to TSS
+    layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: card
-    tag: cs-pk-card-anno
-    index: cs-pk-card-anno
-    section: Where the peaks land
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
     use: homer/annotated_peaks
@@ -1153,128 +1319,124 @@ tabs:
     column_type: object
     secondary_layout: donut
     breakdown_col: annotation_class
-    display: {icon_name: 'mdi:chart-donut', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    display:
+      icon_name: mdi:chart-donut
+      icon_color: blue
+      caption: peaks, by feature class
+    section: Annotation at a glance
+    tag: cs-anno-card-classes
+    index: anno-card-classes
     title: Annotated peaks
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    description: Peaks HOMER annotated, split by the feature class they fall in.
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: cs-pk-card-genes
-    index: cs-pk-card-genes
-    section: Where the peaks land
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
     use: homer/annotated_peaks
     aggregation: nunique
     column_name: gene_name
     column_type: object
-    secondary_layout: composition
+    filter_expr: col('gene_name').is_not_null() & (col('gene_name') != '')
+    secondary_layout: top_n
     breakdown_col: annotation_class
-    display: {icon_name: 'mdi:dna', icon_color: '#5E35B1', title_color: '#5E35B1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Genes touched
-    layout: {x: 2, y: 2, w: 2, h: 2}
+    display:
+      icon_name: mdi:dna
+      icon_color: teal
+      caption: distinct genes, by feature class
+    section: Annotation at a glance
+    tag: cs-anno-card-genes
+    index: anno-card-genes
+    title: Genes reached
+    description: Distinct genes named as the nearest gene of a peak.
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: cs-pk-card-tss
-    index: cs-pk-card-tss
-    section: Where the peaks land
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
     use: homer/annotated_peaks
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
     column_name: distance_to_tss
     column_type: int64
-    display: {icon_name: 'mdi:ruler', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:ruler
+      icon_color: lime
+      caption: median signed bp, with its spread
+      decimals: 0
+    section: Annotation at a glance
+    tag: cs-anno-card-tss
+    index: anno-card-tss
     title: Distance to TSS
-    layout: {x: 4, y: 2, w: 2, h: 2}
+    description: Median signed distance from a peak to the nearest start site.
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: cs-pk-card-score
-    index: cs-pk-card-score
-    section: Where the peaks land
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
     use: homer/annotated_peaks
-    aggregation: average
+    aggregation: median
     column_name: peak_score
     column_type: float64
     secondary_layout: histogram
-    display: {icon_name: 'mdi:trending-up', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    display:
+      icon_name: mdi:trending-up
+      icon_color: orange
+      caption: median, with its distribution
+      decimals: 0
+    section: Annotation at a glance
+    tag: cs-anno-card-score
+    index: anno-card-score
     title: Peak score
-    layout: {x: 6, y: 2, w: 2, h: 2}
+    description: Median score the peak caller gave the annotated peaks.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # A share per library, not a count, so libraries of different depth compare.
   - component_type: figure
-    tag: cs-pk-fig-anno
-    section: Where the peaks land
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
     use: homer/annotated_peaks
     visu_type: histogram
-    # A share per sample, not a count: the libraries called between 6 858 and
-    # 66 004 peaks, and raw bars hide the composition of the small ones.
-    dict_kwargs: {x: sample, color: annotation_class, barnorm: percent}
-    title: Peak annotation composition per sample
-    description: The share of each sample's peaks in promoter-TSS, exon, intron, TTS and intergenic, as a percentage so libraries of different depth compare directly.
-    title_size: h3
-    layout: {x: 0, y: 4, w: 8, h: 6}
+    dict_kwargs:
+      x: sample
+      color: annotation_class
+      barnorm: percent
+      labels: {sample: '', annotation_class: Feature class}
+    section: Feature classes
+    tag: cs-anno-classes
+    index: anno-classes
+    title: Feature classes per library
+    description: The share of each library's peaks in each feature class, as a percentage.
+    layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: advanced_viz
-    tag: cs-pk-av-tss
-    index: cs-pk-av-tss
-    section: Where the peaks land
     workflow_tag: chipseq
     data_collection_tag: homer_tss_distance_profile
     use: homer/tss_distance
     config:
-      controls_placement: header
       reference_x: 0
       reference_label: TSS
       shaded_bands:
-        - [-1000, 1000, Promoter window]
+      - [-1000, 1000, Promoter window]
       x_title: Distance to the nearest TSS (bp)
-      y_title: Share of the sample's peaks
+      y_title: Share of the library's peaks
       legend_pos: right
-    title: "Peak distribution around the nearest TSS"
-    description: "Peaks counted in 250 bp bins across a 20 kb window; the shaded band is the 1 kb promoter window either side of the start site."
-    title_size: h3
-    layout: {x: 0, y: 10, w: 8, h: 7}
-
-  # ------------------------------------------------------------ peak tables
-  - component_type: text
-    tag: cs-pk-tables-intro
-    section: Peak tables
-    title: The rows behind the panels
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Tick a row in either table and the peak carries over to the other one and
-      to the panels above, through the project links on the peak id.
-    workflow_tag: chipseq
-    data_collection_tag: homer_annotated_peaks
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    section: Distance to the nearest TSS
+    tag: cs-anno-tss-distance
+    index: anno-tss-distance
+    title: Peaks around the nearest TSS
+    description: Peaks counted in 250 bp bins across a 20 kb window; the band is the 1 kb promoter window either side.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  # Master and detail: a picked row is the selection the record card follows.
   - component_type: table
-    tag: cs-pk-table-homer
-    section: Peak tables
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
     use: homer/annotated_peaks
     row_selection_enabled: true
     row_selection_column: peak_id
-    title: Annotated peaks
-    description: Feature class, distance to TSS and nearest gene for every peak.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 2, w: 5, h: 6}
+    section: Peak annotation
+    tag: cs-anno-table
+    index: anno-table
+    title: HOMER peak annotation
+    description: Feature class, distance to the nearest start site and the gene of every call.
+    layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
-    tag: cs-pk-av-record
-    index: cs-pk-av-record
-    section: Peak tables
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
     viz_kind: record_card
@@ -1283,150 +1445,37 @@ tabs:
       id_col: peak_id
       title_col: peak_id
       selection_source: any
-      linked_component: cs-pk-table-homer
+      linked_component: cs-anno-table
       sections:
         Call: [sample, chr, start, end, strand, peak_score]
         Annotation: [annotation_class, annotation, distance_to_tss, nearest_promoter_id, gene_name, gene_type]
       labels:
         distance_to_tss: Distance to TSS (bp)
         nearest_promoter_id: Nearest promoter
+    section: Peak annotation
+    tag: cs-anno-record
+    index: anno-record
     title: Peak record
-    description: The peak picked in the annotated table beside it, with the feature and gene HOMER assigned to it.
-    title_size: h3
-    layout: {x: 5, y: 2, w: 3, h: 6}
-  - component_type: table
-    tag: cs-pk-table-peaks
-    section: Peak tables
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    use: macs2/peaks
-    row_selection_enabled: true
-    row_selection_column: peak_id
-    title: MACS2 peak calls
-    description: Coordinates, summit, width, fold enrichment and significance per peak.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 8, w: 8, h: 5}
-
-  # -------------------------------------------------------------- left panel
-  - component_type: interactive
-    tag: cs-pk-filter-qvalue
-    index: cs-pk-qvalue-range
-    section: Peak scope
-    group: Peak strength
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    interactive_component_type: RangeSlider
-    column_name: neg_log10_qvalue
-    column_type: float64
-    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:check-decagram'}
-    placement: left
-    title: -log10 q-value
-    show_histogram: true
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: cs-pk-filter-fold
-    index: cs-pk-fold-range
-    section: Peak scope
-    group: Peak strength
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    interactive_component_type: RangeSlider
-    column_name: fold_enrichment
-    column_type: float64
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:magnet'}
-    placement: left
-    title: Fold enrichment
-    show_histogram: true
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
-    tag: cs-pk-filter-width
-    index: cs-pk-width-range
-    section: Peak scope
-    group: Peak strength
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    interactive_component_type: RangeSlider
-    column_name: width
-    column_type: int64
-    display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:ruler'}
-    placement: left
-    title: Peak width
-    show_histogram: true
-    layout: {x: 0, y: 6, w: 1, h: 3}
-  - component_type: interactive
-    tag: cs-pk-filter-chr
-    index: cs-pk-chr-filter
-    section: Peak scope
-    group: Peak location
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    interactive_component_type: MultiSelect
-    column_name: chr
-    column_type: object
-    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:dna'}
-    placement: left
-    title: Chromosome
-    layout: {x: 0, y: 9, w: 1, h: 3}
-  - component_type: interactive
-    tag: cs-pk-filter-class
-    index: cs-pk-class-filter
-    section: Annotation scope
-    group: Annotation
-    workflow_tag: chipseq
-    data_collection_tag: homer_annotated_peaks
-    interactive_component_type: MultiSelect
-    column_name: annotation_class
-    column_type: object
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:shape-outline'}
-    placement: left
-    title: Feature class
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: cs-pk-filter-tss
-    index: cs-pk-tss-range
-    section: Annotation scope
-    group: Annotation
-    workflow_tag: chipseq
-    data_collection_tag: homer_annotated_peaks
-    interactive_component_type: RangeSlider
-    column_name: distance_to_tss
-    column_type: int64
-    display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:ruler'}
-    placement: left
-    title: Distance to TSS
-    show_histogram: true
-    layout: {x: 0, y: 3, w: 1, h: 3}
-
-# ============================================================================
-# Locus
-# ============================================================================
-# The locus section (plan C.5): one navigator, the tracks under it follow its
-# region. The navigator is a genome_view on macs2_peaks; its default_region
-# emits the chromosome and position filters on open, and the two `region`
-# links in template.yaml carry them to macs2_consensus_boolean and
-# homer_annotated_peaks. A tab of its own rather than a section of Peaks,
-# because those filters narrow every tile on the tab: on the Peaks tab they
-# would have turned the genome-wide cards and Manhattan into one locus.
-# The genome axis comes from the `GENOME` template variable (default hg38; the
-# hg19 megatest sets it through reference.vars / --var GENOME=hg19). With a
-# built-in assembly the navigator fetches only the chromosome of its region,
-# and the coverage track holds its first fetch until that region lands, so no
-# `chromosomes_filter` is needed. The bundled gene lane exists for hg38 and
-# mm10 only, so no `annotation` lane is drawn: the HOMER track names the
-# nearest gene of every peak instead. The default region (chr21:43.6-44.0 Mb,
-# the TFF1 locus of the megatest) is documented in the tab intro. No read-coverage track either: the
-# bigWigs are not in the megatest mirror (see VALIDATION_REPORT.md).
+    description: The call picked in the table beside it, with the feature and gene HOMER assigned to it.
+    layout: {x: 5, y: 0, w: 3, h: 5}
+# The locus section: three collections on one genomic region. The navigator
+# (macs2/peak_genome_view on macs2_peaks) opens on its default_region and emits
+# the chromosome and position filters; the two region links in template.yaml
+# rename them onto the consensus intervals and the HOMER annotation, so every
+# track clamps to the same window. A tab of its own: a region filter narrows
+# every tile of its collection on the tab. The axis comes from GENOME (the
+# bundled gene lanes are hg38 and mm10 only, so the HOMER track stands in).
 - title: Locus
-  subtitle: One region, three collections - the peak calls of every library, the consensus intervals per antibody and the HOMER annotation, on one genome axis
-  tab_order: 4
-  tab_icon: mdi:dna
+  subtitle: What do the libraries call at one genomic region?
+  tab_group: Peak calls
+  tab_order: 5
+  tab_icon: mdi:map-search-outline
   tab_icon_color: teal
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: Locus scope
+  - name: Locus filters
     icon: mdi:filter-variant
     color: teal
     description: Peak strength, consensus support and feature class of the tracks on the region
@@ -1435,127 +1484,180 @@ tabs:
     icon: mdi:counter
     color: teal
     description: What the region in view holds, recounted on every brush or locus entry
-  - name: One region, three collections
+  - name: Peaks on one axis
     icon: mdi:dna
     color: teal
-    description: The peak navigator and the tracks that follow its region
+    description: The narrow calls per library, then the tracks that follow their region
   components:
+  - component_type: text
+    order: 1
+    body: >
+      The narrow calls of every ChIP, the consensus intervals per antibody and the HOMER
+      annotation on one genome axis. The tab opens on a fixed default region set in the
+      navigator; type a locus in its header or brush its axis, and the tracks and cards
+      follow.
+    tag: cs-loc-intro
+    index: loc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: macs2_peaks
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: neg_log10_qvalue
+    column_type: float64
+    display:
+      icon_name: mdi:check-decagram
+      custom_color: red
+    section: Locus filters
+    group: Region
+    tag: cs-loc-filter-qvalue
+    index: loc-qvalue-range
+    title: Peak significance
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: macs2_consensus_boolean
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: num_samples
+    column_type: int64
+    display:
+      icon_name: mdi:account-group-outline
+      custom_color: green
+    section: Locus filters
+    group: Region
+    tag: cs-loc-filter-support
+    index: loc-support-range
+    title: Libraries per interval
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: homer_annotated_peaks
+    interactive_component_type: MultiSelect
+    column_name: annotation_class
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: blue
+    section: Locus filters
+    group: Region
+    tag: cs-loc-filter-class
+    index: loc-class-filter
+    title: Feature class
+    layout: {x: 0, y: 6, w: 1, h: 3}
   - component_type: card
-    tag: cs-loc-card-peaks
-    index: cs-loc-card-peaks
-    section: Region at a glance
     workflow_tag: chipseq
     data_collection_tag: macs2_peaks
     use: macs2/peaks
     aggregation: count
     column_name: peak_id
     column_type: object
-    secondary_layout: top_n
+    secondary_layout: composition
     breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Peaks in the region
+    follow_region_filter: true
+    display:
+      icon_name: mdi:counter
+      icon_color: indigo
+      caption: calls, by library
+    section: Region at a glance
+    tag: cs-loc-card-peaks
+    index: loc-card-peaks
+    title: Calls in the region
+    description: Narrow calls on the region in view, one per peak and library.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: cs-loc-card-fold
-    index: cs-loc-card-fold
-    section: Region at a glance
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    use: macs2/peaks
-    aggregation: average
-    column_name: fold_enrichment
-    column_type: float64
-    secondary_layout: histogram
-    display: {icon_name: 'mdi:magnet', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Fold enrichment
-    layout: {x: 2, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: cs-loc-card-consensus
-    index: cs-loc-card-consensus
-    section: Region at a glance
     workflow_tag: chipseq
     data_collection_tag: macs2_consensus_boolean
     use: macs2/consensus_boolean
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    aggregation: median
     column_name: num_samples
     column_type: int64
-    display: {icon_name: 'mdi:set-merge', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Consensus support
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    follow_region_filter: true
+    display:
+      icon_name: mdi:set-merge
+      icon_color: violet
+      caption: median, with its spread
+      decimals: 0
+    section: Region at a glance
+    tag: cs-loc-card-support
+    index: loc-card-support
+    title: Libraries per interval
+    description: How many libraries call each consensus interval on the region.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: chipseq
+    data_collection_tag: homer_annotated_peaks
+    use: homer/annotated_peaks
+    aggregation: count
+    column_name: annotation_class
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: annotation_class
+    follow_region_filter: true
+    display:
+      icon_name: mdi:chart-donut
+      icon_color: blue
+      caption: peaks, by feature class
+    section: Region at a glance
+    tag: cs-loc-card-classes
+    index: loc-card-classes
+    title: Feature classes
+    description: The annotated calls on the region, split by feature class.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: cs-loc-card-genes
-    index: cs-loc-card-genes
-    section: Region at a glance
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
     use: homer/annotated_peaks
     aggregation: nunique
     column_name: gene_name
     column_type: object
-    secondary_layout: composition
+    filter_expr: col('gene_name').is_not_null() & (col('gene_name') != '')
+    secondary_layout: top_n
     breakdown_col: annotation_class
-    display: {icon_name: 'mdi:dna', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    follow_region_filter: true
+    display:
+      icon_name: mdi:dna
+      icon_color: teal
+      caption: distinct genes, by feature class
+    section: Region at a glance
+    tag: cs-loc-card-genes
+    index: loc-card-genes
     title: Nearest genes
+    description: Distinct genes named as the nearest gene of a call on the region.
     layout: {x: 6, y: 0, w: 2, h: 2}
-
-  - component_type: text
-    tag: cs-loc-intro
-    section: One region, three collections
-    title: One region, every track
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The tab opens on the navigator's default region, a fixed locus set in
-      its config. Type a locus in the navigator header or brush its axis; the
-      tracks and the cards above follow.
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Default region: a 400 kb window on chr21 that every ChIP of the reference
+  # run calls peaks on, so no track opens empty.
   - component_type: advanced_viz
-    tag: cs-loc-av-navigator
-    index: cs-loc-av-navigator
-    section: One region, three collections
     workflow_tag: chipseq
     data_collection_tag: macs2_peaks
     use: macs2/peak_genome_view
     config:
-      controls_placement: header
       mark: rect
       facet_by_sample: true
       max_facets: 8
-      assembly: "{GENOME}"
-      default_region: "chr21:43,600,000-44,000,000"
-      score_title: "-log10(q)"
+      score_title: -log10(q)
       opacity: 0.85
+      assembly: '{GENOME}'
+      default_region: chr21:43,600,000-44,000,000
       region_filter_enabled: true
       selection_enabled: true
       selection_column: peak_id
-    title: Peak navigator
-    description: Every MACS2 call on the region, one lane per library, height is -log10 of the q-value. The locus field in the header and a brush on the axis move this tile and every track below.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 5}
+    section: Peaks on one axis
+    tag: cs-loc-navigator
+    index: loc-navigator
+    title: Narrow calls per library
+    description: Every MACS2 call on the region, one lane per library, as high as its significance. The locus field and a brush on this axis move every track below.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  # A coverage track, faceted by consensus set: chipseq builds one consensus
+  # set per antibody, and a lane per set keeps them apart.
   - component_type: advanced_viz
-    tag: cs-loc-av-consensus
-    index: cs-loc-av-consensus
-    section: One region, three collections
     workflow_tag: chipseq
     data_collection_tag: macs2_consensus_boolean
     viz_kind: coverage_track
     config:
-      controls_placement: header
       viz_kind: coverage_track
       chromosome_col: chr
       position_col: start
@@ -1565,25 +1667,21 @@ tabs:
       color_by: sample
       view_mode: facet
       mark: rect
-      # Intervals, not evenly spaced bins: a rolling mean would average across
-      # the gaps between them.
       smoothing_window: 0
       show_annotation_lane: false
       view: track
       views: [track]
+    section: Peaks on one axis
+    tag: cs-loc-consensus
+    index: loc-consensus
     title: Consensus intervals per antibody
-    description: The merged intervals of each antibody's consensus set on the same region, height is how many libraries called a peak there (1 to the number of libraries in the set).
-    title_size: h3
-    layout: {x: 0, y: 7, w: 8, h: 3}
+    description: The merged intervals of each consensus set on the same region, each as high as the number of libraries calling a peak there.
+    layout: {x: 0, y: 6, w: 8, h: 3}
   - component_type: advanced_viz
-    tag: cs-loc-av-annotation
-    index: cs-loc-av-annotation
-    section: One region, three collections
     workflow_tag: chipseq
     data_collection_tag: homer_annotated_peaks
     viz_kind: genome_view
     config:
-      controls_placement: header
       viz_kind: genome_view
       chr_col: chr
       pos_col: start
@@ -1592,116 +1690,113 @@ tabs:
       feature_col: gene_name
       category_col: annotation_class
       mark: rect
-      assembly: "{GENOME}"
       score_title: HOMER peak score
+      assembly: '{GENOME}'
       region_filter_enabled: false
       follow_region_filter: true
       selection_enabled: true
       selection_column: peak_id
-    title: Peaks by nearest gene and feature class
-    description: The same calls as HOMER annotated them, coloured by feature class (promoter-TSS, intron, exon, TTS, intergenic); hover a call for the gene it was assigned to.
-    title_size: h3
-    layout: {x: 0, y: 10, w: 8, h: 3}
-
-  - component_type: interactive
-    tag: cs-loc-filter-qvalue
-    index: cs-loc-qvalue-range
-    section: Locus scope
-    group: Region
-    workflow_tag: chipseq
-    data_collection_tag: macs2_peaks
-    interactive_component_type: RangeSlider
-    column_name: neg_log10_qvalue
-    column_type: float64
-    show_histogram: true
-    display: {title_size: md, icon_name: 'mdi:check-decagram'}
-    placement: left
-    title: -log10 q-value
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: cs-loc-filter-support
-    index: cs-loc-support-range
-    section: Locus scope
-    group: Region
-    workflow_tag: chipseq
-    data_collection_tag: macs2_consensus_boolean
-    interactive_component_type: RangeSlider
-    column_name: num_samples
-    column_type: int64
-    show_histogram: true
-    display: {title_size: md, icon_name: 'mdi:set-merge'}
-    placement: left
-    title: Consensus support
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
-    tag: cs-loc-filter-class
-    index: cs-loc-class-filter
-    section: Locus scope
-    group: Region
-    workflow_tag: chipseq
-    data_collection_tag: homer_annotated_peaks
-    interactive_component_type: MultiSelect
-    column_name: annotation_class
-    column_type: object
-    display: {title_size: md, icon_name: 'mdi:shape-outline'}
-    placement: left
-    title: Feature class
-    layout: {x: 0, y: 6, w: 1, h: 3}
-
+    section: Peaks on one axis
+    tag: cs-loc-genes
+    index: loc-genes
+    title: Nearest gene of every call
+    description: The same calls as HOMER annotated them, coloured by feature class; hover a call for its nearest gene.
+    layout: {x: 0, y: 9, w: 8, h: 3}
 # ============================================================================
-# Consensus
+# Comparison
 # ============================================================================
 - title: Consensus
-  subtitle: Merged peak sets per antibody, which samples agree on an interval and how strong the signal is there
-  tab_order: 5
+  subtitle: Which peaks do the libraries agree on?
+  tab_group: Comparison
+  tab_order: 6
   tab_icon: mdi:set-merge
-  tab_icon_color: cyan
+  tab_icon_color: violet
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: Consensus scope
+  - name: Consensus filters
     icon: mdi:filter-variant
-    color: cyan
-    description: Which antibody's consensus set to read, how well supported an interval must be and where it sits
+    color: violet
+    description: Which antibody's consensus set to read, how well supported and where
   grid_sections:
   - name: Consensus at a glance
     icon: mdi:counter
-    color: cyan
-    description: How many intervals each antibody's consensus set holds, and how many samples back them
+    color: violet
+    description: How many intervals the merged sets hold, and how many libraries back them
   - name: Replicate agreement
     icon: mdi:set-merge
-    color: cyan
-    description: Which combinations of samples call the same interval
+    color: violet
+    description: Which combinations of libraries call the same interval
   - name: Signal at the strongest intervals
     icon: mdi:chart-box-outline
-    color: blue
+    color: violet
     description: Fold enrichment of the most strongly bound intervals, clustered
+    collapsed: true
   - name: Consensus tables
     icon: mdi:table
-    color: violet
-    description: The consensus rows behind the panels
+    color: gray
+    description: The merged intervals, and the fold enrichment behind the heatmap
     collapsed: true
   components:
   - component_type: text
-    tag: cs-cons-intro
-    section: Consensus at a glance
-    title: One peak set per antibody
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
+    order: 1
     body: >
-      The per-sample peaks of one antibody are merged into consensus intervals.
-      An interval called by every replicate is reproducible binding; one called
-      by a single sample is usually noise or a condition-specific site.
+      The per-ChIP calls merged into one set of intervals per antibody: an interval every
+      replicate calls is reproducible binding. Pick one consensus set on the left first,
+      since the libraries of two sets never meet. The UpSet shows which libraries agree;
+      the heatmap below it, folded, the signal at the strongest intervals.
+    tag: cs-cons-intro
+    index: cons-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
     workflow_tag: chipseq
     data_collection_tag: macs2_consensus_boolean
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    interactive_component_type: MultiSelect
+    column_name: consensus_set
+    column_type: object
+    display:
+      icon_name: mdi:set-merge
+      custom_color: grape
+    section: Consensus filters
+    group: Consensus
+    tag: cs-cons-filter-set
+    index: cons-set-filter
+    title: Consensus set
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: macs2_consensus_boolean
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: num_samples
+    column_type: int64
+    display:
+      icon_name: mdi:account-group-outline
+      custom_color: green
+    section: Consensus filters
+    group: Consensus
+    tag: cs-cons-filter-support
+    index: cons-support-range
+    title: Libraries per interval
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: macs2_consensus_boolean
+    interactive_component_type: MultiSelect
+    column_name: chr
+    column_type: object
+    display:
+      icon_name: mdi:chart-timeline-variant
+      custom_color: indigo
+    section: Consensus filters
+    group: Location
+    tag: cs-cons-filter-chr
+    index: cons-chr-filter
+    title: Chromosome
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  # The breakdown is the consensus set: chipseq builds one set per antibody.
   - component_type: card
-    tag: cs-cons-card-intervals
-    index: cs-cons-card-intervals
-    section: Consensus at a glance
     workflow_tag: chipseq
     data_collection_tag: macs2_consensus_boolean
     use: macs2/consensus_boolean
@@ -1710,33 +1805,37 @@ tabs:
     column_type: object
     secondary_layout: top_n
     breakdown_col: consensus_set
-    top_n_count: 3
-    display: {icon_name: 'mdi:counter', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Consensus intervals
-    layout: {x: 0, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: cs-cons-card-support
-    index: cs-cons-card-support
+    display:
+      icon_name: mdi:counter
+      icon_color: violet
+      caption: intervals, by consensus set
     section: Consensus at a glance
+    tag: cs-cons-card-intervals
+    index: cons-card-intervals
+    title: Consensus intervals
+    description: Intervals of the merged peak sets in view.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: chipseq
     data_collection_tag: macs2_consensus_boolean
     use: macs2/consensus_boolean
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    aggregation: median
     column_name: num_samples
     column_type: int64
-    display: {icon_name: 'mdi:account-group-outline', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Samples per interval
-    layout: {x: 2, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: cs-cons-card-peaks
-    index: cs-cons-card-peaks
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:account-group-outline
+      icon_color: indigo
+      caption: median, with its spread
+      decimals: 0
     section: Consensus at a glance
+    tag: cs-cons-card-support
+    index: cons-card-support
+    title: Libraries per interval
+    description: How many libraries call a peak on each consensus interval.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: chipseq
     data_collection_tag: macs2_consensus_boolean
     use: macs2/consensus_boolean
@@ -1744,18 +1843,17 @@ tabs:
     column_name: num_peaks
     column_type: int64
     secondary_layout: histogram
-    display: {icon_name: 'mdi:layers-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Peaks merged
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  # Was a fourth `consensus_set` breakdown, which made three of the four cards
-  # say the same thing. `support` is the reproducibility tier of the strongest
-  # intervals, which is the question this strip does not otherwise answer.
-  - component_type: card
-    tag: cs-cons-card-sets
-    index: cs-cons-card-sets
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: teal
+      caption: total; the bars, peaks per interval
     section: Consensus at a glance
+    tag: cs-cons-card-peaks
+    index: cons-card-peaks
+    title: Peaks merged
+    description: Per-library peaks merged into the consensus intervals in view.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: chipseq
     data_collection_tag: macs2_consensus_fc
     use: macs2/consensus_fc
@@ -1764,38 +1862,22 @@ tabs:
     column_type: object
     secondary_layout: donut
     breakdown_col: support
-    display: {icon_name: 'mdi:shape-outline', icon_color: '#5E35B1', title_color: '#5E35B1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Reproducibility tiers
-    layout: {x: 6, y: 2, w: 2, h: 2}
-
-  - component_type: text
-    tag: cs-cons-upset-intro
-    section: Replicate agreement
-    title: Which samples call the same intervals
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Each bar is a combination of samples calling exactly the same set of
-      intervals. Pick one antibody in the left panel first: with several
-      consensus sets in view the combinations of one never meet those of the
-      other.
-    workflow_tag: chipseq
-    data_collection_tag: macs2_consensus_boolean
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    display:
+      icon_name: mdi:chart-donut
+      icon_color: orange
+      caption: by libraries calling them
+    section: Consensus at a glance
+    tag: cs-cons-card-strongest
+    index: cons-card-strongest
+    title: Strongest intervals
+    description: The most strongly bound intervals, split by how many libraries call them.
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
-    tag: cs-cons-av-upset
-    index: cs-cons-av-upset
-    section: Replicate agreement
     workflow_tag: chipseq
     data_collection_tag: macs2_consensus_boolean
     use: macs2/consensus_upset
     config:
-      controls_placement: header
-      # Every sample column of the run: the pipeline names samples <group>_R<replicate>.
+      # Library columns of the run (`<group>_R<replicate>`), whatever the samples.
       set_columns_pattern: '_R\d+$'
       color_intersections_by: degree
       show_set_sizes: true
@@ -1803,246 +1885,218 @@ tabs:
       sort_by: cardinality
       sort_order: descending
       min_size: 1
+    section: Replicate agreement
+    tag: cs-cons-upset
+    index: cons-upset
     title: Consensus peak overlap
-    description: Intersections of the samples calling each consensus interval, largest first.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-
-  - component_type: text
-    tag: cs-cons-heatmap-intro
-    section: Signal at the strongest intervals
-    title: How strong the binding is, interval by interval
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Fold enrichment of the 250 most strongly bound intervals of each consensus
-      set. A cell is zero where that sample called no peak, so condition-specific
-      binding reads as a block rather than as scattered gaps.
-    workflow_tag: chipseq
-    data_collection_tag: macs2_consensus_fc
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    description: Intersections of the libraries calling each consensus interval, largest first.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
-    tag: cs-cons-av-heatmap
-    index: cs-cons-av-heatmap
-    section: Signal at the strongest intervals
     workflow_tag: chipseq
     data_collection_tag: macs2_consensus_fc
     use: macs2/consensus_signal_heatmap
     config:
-      controls_placement: header
       value_columns_pattern: '_R\d+$'
       row_annotation_cols: [consensus_set, support]
       cluster_rows: true
       cluster_cols: true
       normalize: log1p
       colorscale: Viridis
+    section: Signal at the strongest intervals
+    tag: cs-cons-heatmap
+    index: cons-heatmap
     title: Consensus signal heatmap
-    description: Log-scaled MACS2 fold enrichment per sample at the strongest consensus intervals, rows and columns clustered.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-
-  - component_type: text
-    tag: cs-cons-tables-intro
-    section: Consensus tables
-    title: The consensus rows
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The merged intervals and their per-sample presence, and the fold
-      enrichment behind the heatmap. Selecting a row in one carries the interval
-      to the other, and to its DESeq2 row on the next tab.
-    workflow_tag: chipseq
-    data_collection_tag: macs2_consensus_boolean
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    description: Log-scaled fold enrichment per library at the strongest intervals; a zero cell is a library that called no peak there.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
-    tag: cs-cons-table-boolean
-    section: Consensus tables
     workflow_tag: chipseq
     data_collection_tag: macs2_consensus_boolean
     use: macs2/consensus_boolean
     row_selection_enabled: true
     row_selection_column: peak_id
-    title: Consensus intervals
-    description: Coordinates, how many peaks merged into the interval and which samples called it.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 5}
-  - component_type: table
-    tag: cs-cons-table-fc
     section: Consensus tables
+    tag: cs-cons-table-boolean
+    index: cons-table-boolean
+    title: Consensus intervals
+    description: Coordinates, consensus set, how many peaks merged into the interval and which libraries called it.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
     workflow_tag: chipseq
     data_collection_tag: macs2_consensus_fc
     use: macs2/consensus_fc
     row_selection_enabled: true
     row_selection_column: peak_id
+    section: Consensus tables
+    tag: cs-cons-table-fc
+    index: cons-table-fc
     title: Consensus fold enrichment
-    description: Per-sample fold enrichment at the strongest intervals of each set.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 7, w: 8, h: 5}
-
-  - component_type: interactive
-    tag: cs-cons-filter-set
-    index: cs-cons-set-filter
-    section: Consensus scope
-    group: Consensus
-    workflow_tag: chipseq
-    data_collection_tag: macs2_consensus_boolean
-    interactive_component_type: MultiSelect
-    column_name: consensus_set
-    column_type: object
-    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:shape-outline'}
-    placement: left
-    title: Consensus set
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: cs-cons-filter-support
-    index: cs-cons-support-range
-    section: Consensus scope
-    group: Consensus
-    workflow_tag: chipseq
-    data_collection_tag: macs2_consensus_boolean
-    interactive_component_type: RangeSlider
-    column_name: num_samples
-    column_type: int64
-    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:account-group-outline'}
-    placement: left
-    title: Samples per interval
-    show_histogram: true
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
-    tag: cs-cons-filter-chr
-    index: cs-cons-chr-filter
-    section: Consensus scope
-    group: Interval location
-    workflow_tag: chipseq
-    data_collection_tag: macs2_consensus_boolean
-    interactive_component_type: MultiSelect
-    column_name: chr
-    column_type: object
-    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:dna'}
-    placement: left
-    title: Chromosome
-    layout: {x: 0, y: 6, w: 1, h: 3}
-
-# ============================================================================
-# Differential binding
-# ============================================================================
+    description: Per-library fold enrichment at the strongest intervals of each consensus set.
+    layout: {x: 0, y: 6, w: 8, h: 6}
 - title: Differential binding
-  subtitle: DESeq2 on the consensus interval counts, one contrast at a time
-  tab_order: 6
+  subtitle: Which regions change binding between conditions?
+  tab_group: Comparison
+  tab_order: 7
   tab_icon: mdi:scale-balance
-  tab_icon_color: grape
+  tab_icon_color: red
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: Contrast
-    icon: mdi:scale-balance
-    color: grape
-    description: Which comparison to read, and how strong a change has to be
+  - name: Differential filters
+    icon: mdi:filter-variant
+    color: red
+    description: Pick a contrast first, then how strong a change has to be
   grid_sections:
-  - name: Differential binding at a glance
+  - name: Calls at a glance
     icon: mdi:counter
-    color: grape
-    description: How many intervals changed, and by how much
+    color: red
+    description: Intervals tested, and the calls passing padj 0.05 and a two-fold change
+  - name: Volcano and ranked effects
+    icon: mdi:chart-scatter-plot
+    color: red
+    description: Effect size against significance, then the largest effects and the calls per contrast
   - name: Sample space
-    icon: mdi:chart-scatter-plot
-    color: violet
-    description: Where the libraries sit in the count matrix DESeq2 tested, before any interval is read
-  - name: Volcano, MA and QQ
-    icon: mdi:chart-scatter-plot
-    color: grape
-    description: Significance against effect size, effect size against read depth, and whether the p-values behave
-  - name: Direction
-    icon: mdi:chart-bar
-    color: violet
-    description: Which way the strongest changes go
+    icon: mdi:chart-box-outline
+    color: red
+    description: Where the libraries sit in the count matrix DESeq2 tested, before any interval
   - name: Differential tables
     icon: mdi:table
-    color: violet
-    description: The DESeq2 rows behind the panels
+    color: gray
+    description: The DESeq2 rows, the principal components and the distance matrix
     collapsed: true
   components:
   - component_type: text
-    tag: cs-db-intro
-    section: Differential binding at a glance
-    title: Binding that changes between conditions
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
+    order: 1
     body: >
-      [DESeq2](https://bioconductor.org/packages/DESeq2) counts reads over the
-      consensus intervals of one antibody and tests each interval between the
-      two conditions. Pick a single contrast in the left panel before reading
-      the volcano or the MA plot.
+      [DESeq2](https://bioconductor.org/packages/DESeq2) counts reads over the consensus
+      intervals of each antibody and tests each one between two conditions. Pick a single
+      contrast on the left first: every number on this tab depends on it.
+    tag: cs-diff-intro
+    index: diff-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
     workflow_tag: chipseq
     data_collection_tag: deseq2_results
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  # Breaks down by contrast, not by direction: the card beside it already draws
-  # the direction split, and with two contrasts in the collection the reader's
-  # first question is which of them is in view.
-  - component_type: card
-    tag: cs-db-card-intervals
-    index: cs-db-card-intervals
-    section: Differential binding at a glance
-    workflow_tag: chipseq
-    data_collection_tag: deseq2_results
-    use: deseq2/results
-    aggregation: nunique
-    column_name: gene_id
+    interactive_component_type: Select
+    column_name: contrast
     column_type: object
-    secondary_layout: top_n
-    breakdown_col: contrast
-    top_n_count: 2
-    display: {icon_name: 'mdi:counter', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Intervals tested
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    display:
+      icon_name: mdi:compare-horizontal
+      custom_color: grape
+    section: Differential filters
+    group: Comparison
+    tag: cs-diff-filter-contrast
+    index: diff-contrast-filter
+    title: Contrast
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: deseq2_results
+    interactive_component_type: MultiSelect
+    column_name: direction
+    column_type: object
+    display:
+      icon_name: mdi:swap-vertical
+      custom_color: pink
+    section: Differential filters
+    group: Comparison
+    tag: cs-diff-filter-direction
+    index: diff-direction-filter
+    title: Direction
+    layout: {x: 0, y: 2, w: 1, h: 2}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: deseq2_results
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: log2fc
+    column_type: float64
+    display:
+      icon_name: mdi:arrow-expand-horizontal
+      custom_color: orange
+    section: Differential filters
+    group: Effect
+    tag: cs-diff-filter-lfc
+    index: diff-lfc-range
+    title: log2 fold change
+    layout: {x: 0, y: 4, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: chipseq
+    data_collection_tag: deseq2_results
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: neg_log10_padj
+    column_type: float64
+    display:
+      icon_name: mdi:check-decagram
+      custom_color: red
+    section: Differential filters
+    group: Effect
+    tag: cs-diff-filter-padj
+    index: diff-padj-range
+    title: Significance
+    layout: {x: 0, y: 7, w: 1, h: 3}
   - component_type: card
-    tag: cs-db-card-direction
-    index: cs-db-card-direction
-    section: Differential binding at a glance
     workflow_tag: chipseq
     data_collection_tag: deseq2_results
     use: deseq2/results
     aggregation: count
-    column_name: direction
+    column_name: gene_id
     column_type: object
+    secondary_layout: composition
+    breakdown_col: direction
+    display:
+      icon_name: mdi:counter
+      icon_color: grape
+      caption: tests, by outcome
+    section: Calls at a glance
+    tag: cs-diff-card-tested
+    index: diff-card-tested
+    title: Intervals tested
+    description: Consensus intervals DESeq2 tested, one test per interval and contrast.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: chipseq
+    data_collection_tag: deseq2_results
+    use: deseq2/results
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('significant') == True
     secondary_layout: donut
     breakdown_col: direction
-    display: {icon_name: 'mdi:chart-donut', icon_color: '#5E35B1', title_color: '#5E35B1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Direction of change
-    layout: {x: 2, y: 2, w: 2, h: 2}
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: red
+      caption: calls, by direction
+    section: Calls at a glance
+    tag: cs-diff-card-significant
+    index: diff-card-significant
+    title: Significant calls
+    description: Calls passing padj 0.05 and a two-fold change, one per interval and contrast.
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: cs-db-card-lfc
-    index: cs-db-card-lfc
-    section: Differential binding at a glance
     workflow_tag: chipseq
     data_collection_tag: deseq2_results
     use: deseq2/results
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
     column_name: log2fc
     column_type: float64
-    display: {icon_name: 'mdi:scale-balance', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: log2 fold change
-    layout: {x: 4, y: 2, w: 2, h: 2}
+    filter_expr: col('significant') == True
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:arrow-expand-horizontal
+      icon_color: orange
+      caption: median log2 fold change of the calls
+      decimals: 2
+    section: Calls at a glance
+    tag: cs-diff-card-effect
+    index: diff-card-effect
+    title: Effect size
+    description: The signed log2 fold change of the significant calls; the box shows both directions.
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: cs-db-card-padj
-    index: cs-db-card-padj
-    section: Differential binding at a glance
     workflow_tag: chipseq
     data_collection_tag: deseq2_results
     use: deseq2/results
@@ -2053,36 +2107,80 @@ tabs:
     threshold_value: 1.3
     threshold_direction: min
     threshold_warn: 1
-    display: {icon_name: 'mdi:check-decagram', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Strongest -log10 padj
-    layout: {x: 6, y: 2, w: 2, h: 2}
-
-  # ------------------------------------------------------------ sample space
-  # The two QC panels nf-core's own deseq2_qc.r writes beside the results and
-  # the MultiQC report renders as pictures. They answer the question that comes
-  # before any single interval: do the replicates of a condition sit together?
-  - component_type: text
-    tag: cs-db-space-intro
-    section: Sample space
-    title: Do the replicates agree before the test is read?
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      DESeq2 places every library in the space of its antibody's consensus
-      counts. Replicates of a condition should sit together and the conditions
-      apart; where they interleave, the contrast below measures a batch rather
-      than the condition.
-    workflow_tag: chipseq
-    data_collection_tag: deseq2_qc_pca
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    display:
+      icon_name: mdi:sigma
+      icon_color: blue
+      caption: strongest call; at or above 1.3, padj below 0.05
+      decimals: 1
+    section: Calls at a glance
+    tag: cs-diff-card-padj
+    index: diff-card-padj
+    title: Strongest significance
+    description: The highest -log10 adjusted p-value among the intervals in view.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # One tile, three views of the same rows: the MA view reads log2_base_mean,
+  # the QQ view the raw p-values.
   - component_type: advanced_viz
-    tag: cs-db-av-pca
-    index: cs-db-av-pca
-    section: Sample space
+    workflow_tag: chipseq
+    data_collection_tag: deseq2_results
+    use: deseq2/volcano
+    config:
+      label_col: gene_id
+      category_col: direction
+      significance_threshold: 0.05
+      effect_threshold: 1.0
+      # gene_id holds interval ids here, which say nothing as point labels.
+      show_labels: false
+      avg_log_intensity_col: log2_base_mean
+      log2_fold_change_col: log2fc
+      fold_change_threshold: 1.0
+      p_value_col: pvalue
+      view: volcano
+      views: [volcano, ma, qq]
+    section: Volcano and ranked effects
+    tag: cs-diff-volcano
+    index: diff-volcano
+    title: Effect size against significance
+    description: -log10(padj) against log2 fold change; the View switch reads the same rows as an MA or a QQ plot.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: chipseq
+    data_collection_tag: deseq2_results
+    use: deseq2/da_barplot
+    config:
+      significance_col: padj
+      significance_threshold: 0.05
+      top_n: 10
+    section: Volcano and ranked effects
+    tag: cs-diff-dabar
+    index: diff-dabar
+    title: Largest effects
+    description: The 10 intervals with the largest significant effect per contrast, signed by direction.
+    layout: {x: 0, y: 6, w: 5, h: 5}
+  - component_type: figure
+    workflow_tag: chipseq
+    data_collection_tag: deseq2_results
+    use: deseq2/results
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Significant intervals per contrast and direction. A merge-level suffix,
+      # when the contrast id carries one, is dropped from the axis label, and the
+      # rest breaks before 'vs' so the label fits a third of the row.
+      d = df.filter(pl.col('significant')).with_columns(pl.col('contrast').str.replace(r'\.m(Lb|Rp)\.clN$', '').str.replace('vs', '<br>vs ', literal=True).alias('comparison'))
+      d = d.group_by(['comparison', 'direction']).agg(pl.len().cast(pl.Int64).alias('intervals')).sort(['comparison', 'direction'])
+      fig = px.bar(d.to_pandas(), x='intervals', y='comparison', color='direction', orientation='h', barmode='group', text='intervals', color_discrete_map=depictio_category_colors.get('direction') or {}, labels={'comparison': '', 'intervals': 'Significant intervals', 'direction': 'Direction'})
+      fig.update_layout(margin=dict(t=10))
+      fig.update_yaxes(automargin=True)
+    section: Volcano and ranked effects
+    tag: cs-diff-counts
+    index: diff-counts
+    title: Calls per contrast
+    description: Intervals passing padj 0.05 and a two-fold change in each contrast, by direction.
+    layout: {x: 5, y: 6, w: 3, h: 5}
+  # One PCA per antibody: a component only compares libraries inside its own
+  # count matrix, so the points are coloured by consensus set.
+  - component_type: advanced_viz
     workflow_tag: chipseq
     data_collection_tag: deseq2_qc_pca
     use: deseq2/qc_pca_embedding
@@ -2092,221 +2190,65 @@ tabs:
       hover_cols: [dim_1_percent, dim_2_percent]
       point_size: 12
       marker_outline: true
+      axis_prefix: PC
       legend_pos: right
       plot_style: grid
       selection_enabled: true
       selection_column: sample_id
-      controls_placement: header
-    title: Libraries in the space of the consensus counts
-    description: The principal components the pipeline itself computed, read from the file it publishes rather than recomputed. Colour is the consensus set, because a component only compares libraries inside its own matrix.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-  - component_type: advanced_viz
-    tag: cs-db-av-dists
-    index: cs-db-av-dists
     section: Sample space
+    tag: cs-diff-pca
+    index: diff-pca
+    title: Consensus count PCA
+    description: The principal components the pipeline computed on each antibody's consensus counts, one point per library.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
     workflow_tag: chipseq
     data_collection_tag: deseq2_qc_sample_dists
     use: deseq2/qc_distance_heatmap
     config:
-      controls_placement: header
-      cluster_method: ward
       cluster_rows: true
       cluster_cols: true
+      cluster_method: ward
       colorscale: Blues
-    title: Distance between libraries
-    description: Euclidean distance on DESeq2 rlog values, Ward-clustered. The matrix is block diagonal because libraries of two different antibodies were never compared; a row that stands out inside one block is a library apart from its replicates.
-    title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 7}
-
-  - component_type: text
-    tag: cs-db-volcano-intro
-    section: Volcano, MA and QQ
-    title: Effect size against significance and against depth
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      One tile, three readings of the same DESeq2 rows, switched in its
-      header: significance against effect size (volcano), effect size against
-      read depth (MA) and the p-values against the uniform null (QQ). A QQ
-      curve that leaves the diagonal at once is usually confounding rather
-      than signal.
-    workflow_tag: chipseq
-    data_collection_tag: deseq2_results
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  # The MA and QQ tiles were separate `ma` / `qq` kinds; they are views of this
-  # volcano now (wave 2a), so the three share one tile and one set of bindings.
-  - component_type: advanced_viz
-    tag: cs-db-av-volcano
-    index: cs-db-av-volcano
-    section: Volcano, MA and QQ
-    workflow_tag: chipseq
-    data_collection_tag: deseq2_results
-    use: deseq2/volcano
-    config:
-      label_col: gene_id
-      category_col: direction
-      significance_threshold: 0.05
-      effect_threshold: 1.0
-      top_n_labels: 15
-      show_labels: true
-      avg_log_intensity_col: log2_base_mean
-      log2_fold_change_col: log2fc
-      p_value_col: pvalue
-      fold_change_threshold: 1.0
-      view: volcano
-      views: [volcano, ma, qq]
-      controls_placement: header
-    title: Differential binding
-    description: -log10(padj) against log2 fold change, with the MA and QQ views of the same rows in the header switch. The dashed lines are padj 0.05 and a two-fold change.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 8}
-
-  - component_type: text
-    tag: cs-db-qq-intro
-    section: Direction
-    title: Which way the changes go
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The strongest significant intervals of the contrast in view, ranked by
-      effect size and signed by direction: gained binding to the right, lost to
-      the left.
-    workflow_tag: chipseq
-    data_collection_tag: deseq2_results
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: cs-db-av-dabar
-    index: cs-db-av-dabar
-    section: Direction
-    workflow_tag: chipseq
-    data_collection_tag: deseq2_results
-    use: deseq2/da_barplot
-    config:
-      controls_placement: header
-      significance_col: padj
-      significance_threshold: 0.05
-      top_n: 25
-    title: Strongest differential intervals
-    description: The 25 intervals with the largest significant effect, signed by direction.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-
-  - component_type: text
-    tag: cs-db-tables-intro
-    section: Differential tables
-    title: The DESeq2 rows
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Every tested interval with its effect size, standard error and adjusted
-      p-value, then the principal components and the distance matrix behind
-      the sample-space tiles. Tick a result row to carry that interval into
-      the panels above and back to the consensus tables.
-    workflow_tag: chipseq
-    data_collection_tag: deseq2_results
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    section: Sample space
+    tag: cs-diff-dists
+    index: diff-dists
+    title: Library distances
+    description: Euclidean distance on DESeq2 rlog values, Ward-clustered; libraries of two antibodies were never compared, so the matrix is block diagonal.
+    layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
-    tag: cs-db-table-results
-    section: Differential tables
     workflow_tag: chipseq
     data_collection_tag: deseq2_results
     use: deseq2/results
     row_selection_enabled: true
     row_selection_column: gene_id
-    title: DESeq2 differential binding
-    description: One row per contrast and consensus interval, sorted by adjusted p-value.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 6}
-  - component_type: table
-    tag: cs-db-table-pca
     section: Differential tables
+    tag: cs-diff-table-results
+    index: diff-table-results
+    title: DESeq2 differential binding
+    description: One row per contrast and consensus interval, with the significance call and the MA abscissa.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
     workflow_tag: chipseq
     data_collection_tag: deseq2_qc_pca
     use: deseq2/qc_pca
     row_selection_enabled: true
     row_selection_column: sample_id
-    title: Principal components
-    description: One row per library, with its coordinates and the variance each component explains in its own matrix.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 8, w: 8, h: 3}
-  - component_type: table
-    tag: cs-db-table-dists
     section: Differential tables
+    tag: cs-diff-table-pca
+    index: diff-table-pca
+    title: Principal components
+    description: The two principal components of every library inside its antibody's matrix, and the variance each explains.
+    layout: {x: 0, y: 6, w: 8, h: 6}
+  - component_type: table
     workflow_tag: chipseq
     data_collection_tag: deseq2_qc_sample_dists
     use: deseq2/qc_sample_dists
     row_selection_enabled: true
     row_selection_column: sample
-    title: Sample distance matrix
-    description: The square distance matrix behind the heatmap, one column per library of the same consensus set.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 11, w: 8, h: 3}
-
-  - component_type: interactive
-    tag: cs-db-filter-contrast
-    index: cs-db-contrast-filter
-    section: Contrast
-    group: Contrast scope
-    workflow_tag: chipseq
-    data_collection_tag: deseq2_results
-    interactive_component_type: Select
-    column_name: contrast
-    column_type: object
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:scale-balance'}
-    placement: left
-    title: Contrast
-    layout: {x: 0, y: 0, w: 1, h: 2}
-  - component_type: interactive
-    tag: cs-db-filter-direction
-    index: cs-db-direction-filter
-    section: Contrast
-    group: Contrast scope
-    workflow_tag: chipseq
-    data_collection_tag: deseq2_results
-    interactive_component_type: MultiSelect
-    column_name: direction
-    column_type: object
-    display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:chart-donut'}
-    placement: left
-    title: Direction
-    layout: {x: 0, y: 2, w: 1, h: 3}
-  - component_type: interactive
-    tag: cs-db-filter-lfc
-    index: cs-db-lfc-range
-    section: Contrast
-    group: Effect size
-    workflow_tag: chipseq
-    data_collection_tag: deseq2_results
-    interactive_component_type: RangeSlider
-    column_name: log2fc
-    column_type: float64
-    display: {title_size: md, custom_color: '#3F51B5', icon_name: 'mdi:scale-balance'}
-    placement: left
-    title: log2 fold change
-    show_histogram: true
-    layout: {x: 0, y: 5, w: 1, h: 3}
-  - component_type: interactive
-    tag: cs-db-filter-padj
-    index: cs-db-padj-range
-    section: Contrast
-    group: Effect size
-    workflow_tag: chipseq
-    data_collection_tag: deseq2_results
-    interactive_component_type: RangeSlider
-    column_name: neg_log10_padj
-    column_type: float64
-    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:check-decagram'}
-    placement: left
-    title: -log10 padj
-    show_histogram: true
-    layout: {x: 0, y: 8, w: 1, h: 3}
+    section: Differential tables
+    tag: cs-diff-table-dists
+    index: diff-table-dists
+    title: Library distance matrix
+    description: The square distance table behind the heatmap; a pair from two different antibodies is empty.
+    layout: {x: 0, y: 12, w: 8, h: 6}

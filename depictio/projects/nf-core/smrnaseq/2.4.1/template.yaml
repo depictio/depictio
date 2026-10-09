@@ -248,37 +248,6 @@ workflows:
               "isomirs": "Distinct isomiR sequences with at least one read"
               "reference_pct": "Share of the miRNA's reads matching the reference mature sequence, %"
 
-      # ----------------------------------------------------------------
-      # Sample hub: one row per sample, every tab filters through it. Built
-      # from the always-present counts, enriched with miRTrace and miRDeep2
-      # when those ran, and carrying the design columns when given.
-      # ----------------------------------------------------------------
-      - data_collection_tag: "samples"
-        description: "One row per sample: miRNA library size and detection, miRTrace RNA composition, miRDeep2 calls, design factors"
-        config:
-          type: "Table"
-          metatype: "Metadata"
-          source: "transformed"
-          transform:
-            recipe: "nf-core/smrnaseq/samples.py"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "sample": "Sample identifier, the key every link joins on"
-              "mirna_reads": "Reads mirtop assigned to miRNAs"
-              "mirnas_detected": "miRNAs with at least one read"
-              "mirnas_10cpm": "miRNAs at 10 CPM or more"
-              "reference_isoform_pct": "miRNA reads matching the reference mature sequence exactly, %"
-              "mirna_pct": "miRTrace: reads classified as miRNA, %"
-              "rrna_pct": "miRTrace: reads classified as rRNA, %"
-              "trna_pct": "miRTrace: reads classified as tRNA, %"
-              "artifact_pct": "miRTrace: artifact reads, %"
-              "unknown_pct": "miRTrace: unclassified reads, %"
-              "top_clade": "miRTrace: organism clade holding most detected miRNAs"
-              "top_clade_pct": "Share of the detected miRNAs in that clade, %"
-              "novel_candidates": "miRDeep2 novel precursor calls"
-              "known_recovered": "miRBase precursors miRDeep2 re-discovered"
-
       - data_collection_tag: "mirtop_sample_matrix"
         description: "Samples x miRNAs CPM matrix (most expressed miRNAs) with the design columns, the input of the two-group comparison"
         config:
@@ -566,6 +535,39 @@ workflows:
               "known_detected": "Of those, recovered at this cutoff"
               "known_detected_pct": "Known recovered over known in data, %"
               "signal_to_noise": "Real over permuted candidate counts"
+
+      # ----------------------------------------------------------------
+      # Sample hub: one row per sample, every tab filters through it. Last,
+      # because ingest builds collections in this order and its dc_refs read
+      # miRTrace and miRDeep2 tables that must exist by then. Built
+      # from the always-present counts, enriched with miRTrace and miRDeep2
+      # when those ran, and carrying the design columns when given.
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "One row per sample: miRNA library size and detection, miRTrace RNA composition, miRDeep2 calls, design factors"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/smrnaseq/samples.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier, the key every link joins on"
+              "mirna_reads": "Reads mirtop assigned to miRNAs"
+              "mirnas_detected": "miRNAs with at least one read"
+              "mirnas_10cpm": "miRNAs at 10 CPM or more"
+              "reference_isoform_pct": "miRNA reads matching the reference mature sequence exactly, %"
+              "mirna_pct": "miRTrace: reads classified as miRNA, %"
+              "rrna_pct": "miRTrace: reads classified as rRNA, %"
+              "trna_pct": "miRTrace: reads classified as tRNA, %"
+              "artifact_pct": "miRTrace: artifact reads, %"
+              "unknown_pct": "miRTrace: unclassified reads, %"
+              "top_clade": "miRTrace: organism clade holding most detected miRNAs"
+              "top_clade_pct": "Share of the detected miRNAs in that clade, %"
+              "novel_candidates": "miRDeep2 novel precursor calls"
+              "known_recovered": "miRBase precursors miRDeep2 re-discovered"
 
 links:
   # Hub to everything keyed on a sample. The design table sends the same

@@ -16,7 +16,9 @@ Covers:
   a kept multi-tab family gains the tabs it lacks; `existing=replace` is
   `overwrite`, and every response says which it was;
 - what a match can be: a main dashboard only a main one, a tab only a tab of its
-  parent, and by title only a dashboard without a key.
+  parent, and by title only a dashboard without a key;
+- `overwrite` deletes the family tabs the YAML no longer holds, not the tabs added
+  in the viewer; `existing=keep` deletes none.
 """
 
 import asyncio
@@ -51,6 +53,7 @@ def db(user):
         patch.object(dash_routes, "dashboards_collection", database["dashboards"]),
         patch.object(dash_routes, "projects_collection", database["projects"]),
         patch.object(dash_routes, "_should_enqueue_screenshot", return_value=False),
+        patch.object(dash_routes, "delete_threads_for_dashboards", return_value=0),
     ):
         yield database
 
@@ -224,6 +227,47 @@ class TestSourceKeyMatching:
         tabs = list(db["dashboards"].find({"is_main_tab": False}))
         assert {t["parent_dashboard_id"] for t in tabs} == {main["dashboard_id"]}
         assert sorted(t["title"] for t in tabs) == ["Expression", "QC"]
+
+    def test_overwrite_removes_the_tabs_the_yaml_no_longer_holds(self, db, user, project_id):
+        _import(
+            _multi("RNA-seq", ["QC", "Expression", "Splicing"]), user, project_id, source_key=KEY
+        )
+        main = db["dashboards"].find_one({"is_main_tab": True})
+        # A tab added in the viewer has no key from this YAML.
+        db["dashboards"].insert_one(
+            {
+                "_id": ObjectId(),
+                "dashboard_id": ObjectId(),
+                "title": "My notes",
+                "is_main_tab": False,
+                "parent_dashboard_id": main["dashboard_id"],
+                "source_key": None,
+            }
+        )
+
+        # The template renames "QC" and drops "Splicing".
+        _import(
+            _multi("RNA-seq", ["Quality", "Expression"]),
+            user,
+            project_id,
+            overwrite=True,
+            source_key=KEY,
+        )
+
+        tabs = {t["title"]: t["source_key"] for t in db["dashboards"].find({"is_main_tab": False})}
+        assert tabs == {
+            "Quality": f"{KEY}#Quality",
+            "Expression": f"{KEY}#Expression",
+            "My notes": None,
+        }
+
+    def test_keep_leaves_the_tabs_the_yaml_no_longer_holds(self, db, user, project_id):
+        _import(_multi("RNA-seq", ["QC", "Splicing"]), user, project_id, source_key=KEY)
+
+        _import(_multi("RNA-seq", ["QC"]), user, project_id, source_key=KEY, existing="keep")
+
+        titles = sorted(t["title"] for t in db["dashboards"].find({"is_main_tab": False}))
+        assert titles == ["QC", "Splicing"]
 
 
 def _rename(db, title, new_title):

@@ -550,6 +550,26 @@ def test_faceted_rows_stack_their_demands():
     )
 
 
+def test_a_vertical_legend_taller_than_the_bars_sets_the_height():
+    """Four groups split by eleven phyla: the legend, not the bars, is the height."""
+    stacked = {
+        "data": [
+            {"type": "bar", "orientation": "h", "name": f"p{i}", "y": ["a", "b", "c", "d"]}
+            for i in range(11)
+        ],
+        "layout": {},
+    }
+    four = {"data": [{"type": "bar", "orientation": "h", "y": ["a", "b", "c", "d"]}], "layout": {}}
+    assert (
+        figure_content_demand("bar", stacked)["rows"] > figure_content_demand("bar", four)["rows"]
+    )
+    # A legend laid out across the width, or hidden, leaves the bars to decide.
+    across = {**stacked, "layout": {"legend": {"orientation": "h"}}}
+    hidden = {**stacked, "layout": {"showlegend": False}}
+    assert figure_content_demand("bar", across) == figure_content_demand("bar", four)
+    assert figure_content_demand("bar", hidden) == figure_content_demand("bar", four)
+
+
 def test_point_plots_have_no_opinion_about_height():
     """Ten thousand points want the same box as ten."""
     scatter = {"data": [{"type": "scatter", "x": [1, 2, 3], "y": [1, 2, 3]}], "layout": {}}

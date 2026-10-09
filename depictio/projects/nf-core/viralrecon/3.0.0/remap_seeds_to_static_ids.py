@@ -15,8 +15,8 @@ It also pins each seed's own identity — `_id`, `dashboard_id`, `project_id` an
 `dashboard_id` written in the YAML and mints a fresh ObjectId for any tab it
 cannot match by title, so without this a re-export quietly renumbers the family.
 
-Run via (neither `nf-core` nor `3.0.0` is a valid module path component — the
-hyphen and the dots make the `-m` form below unimportable — so invoke by file):
+Run via (neither `nf-core` nor `3.0.0` is a valid module path component, so
+invoke by file):
     python depictio/projects/nf-core/viralrecon/3.0.0/remap_seeds_to_static_ids.py
 
 Idempotent — running on already-static seeds is a no-op.
@@ -52,14 +52,14 @@ def _remap_dc_id(component: dict[str, Any], dc_tag_to_id: dict[str, str]) -> boo
     changed = False
 
     if comp_type == "text" or not tag:
-        # Text tiles aren't bound to a DC; null the field to match ampliseq.
+        # Text tiles aren't bound to a DC; null the field.
         if component.get("dc_id") is not None:
             component["dc_id"] = None
             changed = True
         if isinstance(component.get("dc_config"), dict) and component["dc_config"].get("_id"):
             component["dc_config"]["_id"] = None
             changed = True
-        return changed
+        return _remap_text_values(component, dc_tag_to_id) or changed
 
     static_id = dc_tag_to_id.get(tag)
     if not static_id:
@@ -86,6 +86,60 @@ def _remap_dc_id(component: dict[str, Any], dc_tag_to_id: dict[str, str]) -> boo
     return changed
 
 
+def _remap_text_values(component: dict[str, Any], dc_tag_to_id: dict[str, str]) -> bool:
+    """Pin a text tile's live `values` to the static ids. True iff changed.
+
+    Each value names its DC by tag (`dc`); the import resolved that tag to the
+    ingesting instance's ids, which a fresh deploy does not reproduce. A tag
+    with no static id is left as is and reported, like a component's.
+    """
+    changed = False
+    wf_static = STATIC_IDS[PROJECT_KEY]["workflows"][PROJECT_KEY]
+    for name, spec in (component.get("values") or {}).items():
+        if not isinstance(spec, dict):
+            continue
+        static_id = dc_tag_to_id.get(spec.get("dc") or "")
+        if not static_id:
+            print(f"  ⚠️  value '{name}' tag '{spec.get('dc')}' has no STATIC_IDS entry")
+            continue
+        for field, wanted in (("dc_id", static_id), ("wf_id", wf_static)):
+            if spec.get(field) != {"$oid": wanted}:
+                spec[field] = {"$oid": wanted}
+                changed = True
+    return changed
+
+
+def _remap_workflow_ids(component: dict[str, Any], dc_tag_to_id: dict[str, str]) -> bool:
+    """Pin a component's workflow and its config's `<x>_dc_id` / `<x>_wf_id`. True iff changed.
+
+    An export from a project the ingest created (not the reference project
+    `db_init` seeds) carries that project's workflow id on every component, and
+    an advanced viz resolves each of its extra tables (`tree_dc_tag`,
+    `ma_dc_tag`...) to that instance's ids in its config. Each `<x>_dc_id`
+    follows its sibling `<x>_dc_tag`.
+    """
+    wanted = {"$oid": STATIC_IDS[PROJECT_KEY]["workflows"][PROJECT_KEY]}
+    changed = False
+    if component.get("wf_id") not in (None, wanted):
+        component["wf_id"] = wanted
+        changed = True
+    config = component.get("config")
+    if not isinstance(config, dict):
+        return changed
+    for key in list(config):
+        if key.endswith("_wf_id") and config[key] is not None and config[key] != wanted:
+            config[key] = wanted
+            changed = True
+        elif key.endswith("_dc_id") and config[key] is not None:
+            static_id = dc_tag_to_id.get(config.get(key[: -len("_id")] + "_tag") or "")
+            if not static_id:
+                print(f"  ⚠️  config.{key} has no tag with a STATIC_IDS entry — left untouched")
+            elif config[key] != {"$oid": static_id}:
+                config[key] = {"$oid": static_id}
+                changed = True
+    return changed
+
+
 # --- dashboard identity ------------------------------------------------------
 # `_import_multi_tab_dashboard` does NOT honour the `dashboard_id` written in the
 # YAML: it reuses the id of an existing dashboard found by (title, project) and
@@ -95,13 +149,14 @@ def _remap_dc_id(component: dict[str, Any], dc_tag_to_id: dict[str, str]) -> boo
 # in the e2e specs all point at documents that no longer exist. Pinning them
 # here is what makes the export reproducible.
 SEED_TO_DASHBOARD_KEY: dict[str, str] = {
+    "dashboard_overview.json": "viralrecon_overview",
     "dashboard_multiqc.json": "viralrecon_multiqc",
-    "dashboard_coverage_depth.json": "viralrecon_coverage_depth",
-    "dashboard_lineage_clustering.json": "viralrecon_lineage_clustering",
-    "dashboard_variants.json": "viralrecon_variants",
     "dashboard_sample_qc.json": "viralrecon_sample_qc",
+    "dashboard_coverage_depth.json": "viralrecon_coverage_depth",
+    "dashboard_variants.json": "viralrecon_variants",
+    "dashboard_lineage_clustering.json": "viralrecon_lineage_clustering",
 }
-MAIN_SEED = "dashboard_multiqc.json"
+MAIN_SEED = "dashboard_overview.json"
 
 
 def _pin_dashboard_ids(path: Path, doc: dict[str, Any]) -> bool:
@@ -168,7 +223,8 @@ def remap_file(path: Path, dc_tag_to_id: dict[str, str]) -> int:
     doc = json.loads(path.read_text())
     n = 0
     for sm in doc.get("stored_metadata", []) or []:
-        if _remap_dc_id(sm, dc_tag_to_id):
+        # Both, not `or`: the second must run even when the first changed.
+        if _remap_dc_id(sm, dc_tag_to_id) | _remap_workflow_ids(sm, dc_tag_to_id):
             n += 1
     ids_pinned = _pin_dashboard_ids(path, doc)
     frozen = _freeze_timestamps(doc)

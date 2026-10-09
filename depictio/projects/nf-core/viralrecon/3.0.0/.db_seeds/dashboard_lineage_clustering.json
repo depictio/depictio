@@ -14,6 +14,29 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
+      "index": "lin-intro",
+      "component_type": "text",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "[Pangolin](https://github.com/cov-lineages/pangolin) names each consensus genome's lineage and [Nextclade](https://clades.nextstrain.org) its clade, each with a QC verdict. The Sankey follows every sample from its verdict to both calls; the PCA and the UpSet group samples by the mutations they share.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null
+    },
+    {
       "index": "lin-lineage-filter",
       "component_type": "interactive",
       "title": "Lineage",
@@ -38,9 +61,8 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "md",
       "title_align": "left",
-      "section": "Typing",
+      "section": "Typing filters",
       "interactive_component_type": "MultiSelect",
       "column_name": "lineage",
       "column_type": "object",
@@ -48,12 +70,12 @@
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Typing calls",
+      "group": "Calls",
       "timescale": null,
       "show_marks": null,
       "show_histogram": null,
       "slider_mode": null,
-      "custom_color": "#E74C3C",
+      "custom_color": "red",
       "icon_name": "mdi:virus",
       "wf_tag": "nextflow/viralrecon"
     },
@@ -82,9 +104,8 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "md",
       "title_align": "left",
-      "section": "Typing",
+      "section": "Typing filters",
       "interactive_component_type": "MultiSelect",
       "column_name": "clade",
       "column_type": "object",
@@ -92,12 +113,12 @@
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Typing calls",
+      "group": "Calls",
       "timescale": null,
       "show_marks": null,
       "show_histogram": null,
       "slider_mode": null,
-      "custom_color": "#9C27B0",
+      "custom_color": "grape",
       "icon_name": "mdi:family-tree",
       "wf_tag": "nextflow/viralrecon"
     },
@@ -126,9 +147,8 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "md",
       "title_align": "left",
-      "section": "Typing",
+      "section": "Typing filters",
       "interactive_component_type": "MultiSelect",
       "column_name": "qc_status",
       "column_type": "object",
@@ -136,12 +156,12 @@
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Typing calls",
+      "group": "QC verdicts",
       "timescale": null,
       "show_marks": null,
       "show_histogram": null,
       "slider_mode": null,
-      "custom_color": "#E74C3C",
+      "custom_color": "pink",
       "icon_name": "mdi:check-decagram",
       "wf_tag": "nextflow/viralrecon"
     },
@@ -170,9 +190,8 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "md",
       "title_align": "left",
-      "section": "Typing",
+      "section": "Typing filters",
       "interactive_component_type": "MultiSelect",
       "column_name": "qc_overallStatus",
       "column_type": "object",
@@ -180,48 +199,19 @@
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Typing calls",
+      "group": "QC verdicts",
       "timescale": null,
       "show_marks": null,
       "show_histogram": null,
       "slider_mode": null,
-      "custom_color": "#7B1FA2",
+      "custom_color": "green",
       "icon_name": "mdi:shield-check-outline",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "b8d6e44e-9564-4940-9095-dec993ee520b",
-      "component_type": "text",
-      "title": "Typing at a glance",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "summary_metrics",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": null,
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
-        "data_collection_tag": "summary_metrics",
-        "dc_specific_properties": null,
-        "_id": null
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_align": "left",
-      "section": "Typing at a glance",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "[Pangolin](https://github.com/cov-lineages/pangolin) assigns a lineage, [Nextclade](https://github.com/nextstrain/nextclade) assigns a clade and scores the consensus it was called from. They disagree usefully: a confident lineage on a consensus Nextclade marks as bad is a call to distrust, and the two QC selectors on the left are there to isolate exactly that case.",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "f73adf25-ffe3-42e4-bd93-261fab3a0ecd",
+      "index": "lin-card-lineages",
       "component_type": "card",
-      "title": "Unique Lineages",
+      "title": "Lineages",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "pangolin_lineages",
       "wf_id": {
@@ -243,6 +233,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Distinct Pangolin lineages, unassigned genomes left out. The bar splits the samples by lineage.",
       "title_size": "sm",
       "title_align": "left",
       "use": "pangolin/report",
@@ -259,8 +250,8 @@
       "column_type": "object",
       "value": null,
       "aggregations": null,
-      "filter_expr": null,
-      "secondary_layout": "top_n",
+      "filter_expr": "col('lineage') != 'Unassigned'",
+      "secondary_layout": "composition",
       "breakdown_col": "lineage",
       "top_n_count": 3,
       "coverage_max": null,
@@ -271,16 +262,15 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:virus",
-      "icon_color": "#E74C3C",
-      "title_color": "#E74C3C",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
+      "icon_color": "red",
+      "caption": "samples per assigned lineage",
+      "decimals": 0,
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "422b1dca-8016-40cf-b3a3-9b1a9b3595c7",
+      "index": "lin-card-clades",
       "component_type": "card",
-      "title": "Unique Clades",
+      "title": "Clades",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "nextclade_results",
       "wf_id": {
@@ -302,6 +292,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Distinct Nextclade clades. The ring splits the samples by clade.",
       "title_size": "sm",
       "title_align": "left",
       "use": "nextclade/report",
@@ -319,7 +310,7 @@
       "value": null,
       "aggregations": null,
       "filter_expr": null,
-      "secondary_layout": "top_n",
+      "secondary_layout": "donut",
       "breakdown_col": "clade",
       "top_n_count": 3,
       "coverage_max": null,
@@ -330,16 +321,15 @@
       "trend_col": null,
       "follow_region_filter": false,
       "icon_name": "mdi:family-tree",
-      "icon_color": "#9C27B0",
-      "title_color": "#9C27B0",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
+      "icon_color": "grape",
+      "caption": "samples per clade",
+      "decimals": 0,
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "lin-nextclade-coverage",
+      "index": "lin-card-qc-score",
       "component_type": "card",
-      "title": "Consensus coverage (median)",
+      "title": "Nextclade QC score",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "nextclade_results",
       "wf_id": {
@@ -361,6 +351,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median overall QC score of the consensus genomes; lower is better.",
       "title_size": "sm",
       "title_align": "left",
       "use": "nextclade/report",
@@ -373,8 +364,67 @@
       },
       "section": "Typing at a glance",
       "aggregation": "median",
-      "column_name": "coverage",
+      "column_name": "qc_overallScore",
       "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "threshold",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": 30,
+      "threshold_direction": "max",
+      "threshold_warn": 100,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:shield-check-outline",
+      "icon_color": "green",
+      "caption": "genomes against Nextclade's good and bad marks",
+      "decimals": 1,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "lin-card-missing",
+      "component_type": "card",
+      "title": "Missing bases",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "nextclade_results",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c15"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nextclade clade assignments and sequence quality metrics",
+        "data_collection_tag": "nextclade_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c15"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median count of N bases in the consensus genomes, the bases a call cannot read.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "nextclade/report",
+      "catalog_source": {
+        "toolId": "nextclade",
+        "toolName": "Nextclade",
+        "outputId": "nextclade_report",
+        "use": "nextclade/report",
+        "description": "Per-sample clade assignment + sequence QC."
+      },
+      "section": "Typing at a glance",
+      "aggregation": "median",
+      "column_name": "totalMissing",
+      "column_type": "int64",
       "value": null,
       "aggregations": [
         "box_plot_stats"
@@ -390,224 +440,16 @@
       "attrition_cols": [],
       "trend_col": null,
       "follow_region_filter": false,
-      "icon_name": "mdi:chart-areaspline",
-      "icon_color": "#1976D2",
-      "title_color": "#1976D2",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
+      "icon_name": "mdi:alert-outline",
+      "icon_color": "orange",
+      "caption": "median per genome, with its spread",
+      "decimals": 0,
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "lin-qc-status",
-      "component_type": "card",
-      "title": "Pangolin QC verdicts",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "pangolin_lineages",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c14"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Pangolin lineage assignments for each sample",
-        "data_collection_tag": "pangolin_lineages",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c14"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "use": "pangolin/report",
-      "catalog_source": {
-        "toolId": "pangolin",
-        "toolName": "Pangolin",
-        "outputId": "pangolin_report",
-        "use": "pangolin/report",
-        "description": "Per-sample PANGO lineage report."
-      },
-      "section": "Typing at a glance",
-      "aggregation": "nunique",
-      "column_name": "qc_status",
-      "column_type": "object",
-      "value": null,
-      "aggregations": null,
-      "filter_expr": null,
-      "secondary_layout": "donut",
-      "breakdown_col": "qc_status",
-      "top_n_count": 3,
-      "coverage_max": null,
-      "threshold_value": null,
-      "threshold_direction": "min",
-      "threshold_warn": null,
-      "attrition_cols": [],
-      "trend_col": null,
-      "follow_region_filter": false,
-      "icon_name": "mdi:check-decagram",
-      "icon_color": "#2E7D32",
-      "title_color": "#2E7D32",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "lin-distribution-header",
-      "component_type": "text",
-      "title": "What was called",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": null,
-      "dc_config": {},
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Lineage distribution",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "Sample counts per Pangolin lineage and per Nextclade clade. When one lineage dominates, read the tail rather than the mode.",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "1817ae9e-34c8-4547-a516-ca4aa23d8e4a",
-      "component_type": "figure",
-      "title": "Pangolin lineage distribution",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "pangolin_lineages",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c14"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Pangolin lineage assignments for each sample",
-        "data_collection_tag": "pangolin_lineages",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c14"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Number of samples per Pangolin lineage, sorted by frequency.",
-      "title_size": "h3",
-      "title_align": "left",
-      "use": "pangolin/report",
-      "catalog_source": {
-        "toolId": "pangolin",
-        "toolName": "Pangolin",
-        "outputId": "pangolin_report",
-        "use": "pangolin/report",
-        "description": "Per-sample PANGO lineage report."
-      },
-      "section": "Lineage distribution",
-      "visu_type": "bar",
-      "dict_kwargs": {},
-      "mode": "code",
-      "code_content": "df_modified = df.group_by('lineage').agg(pl.count().alias('count')).sort('count', descending=True)\nfig = px.bar(df_modified.to_pandas(), x='lineage', y='count', color='lineage',\n    labels={'lineage': 'Lineage', 'count': 'Number of Samples'})\nfig.update_layout(xaxis={'categoryorder': 'total descending'}, showlegend=False)\nfig.update_xaxes(tickangle=-45)\n",
-      "displayed_data_count": 0,
-      "total_data_count": 0,
-      "was_sampled": false,
-      "filter_applied": false,
-      "max_points": null,
-      "selection_enabled": false,
-      "selection_column": null,
-      "font_scale": null,
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "eb173867-1926-455f-bc7f-ade823f0867d",
-      "component_type": "figure",
-      "title": "Nextclade clade distribution",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "nextclade_results",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c15"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Nextclade clade assignments and sequence quality metrics",
-        "data_collection_tag": "nextclade_results",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c15"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Number of samples per Nextclade clade, complementary to the Pangolin lineage.",
-      "title_size": "h3",
-      "title_align": "left",
-      "use": "nextclade/report",
-      "catalog_source": {
-        "toolId": "nextclade",
-        "toolName": "Nextclade",
-        "outputId": "nextclade_report",
-        "use": "nextclade/report",
-        "description": "Per-sample clade assignment + sequence QC."
-      },
-      "section": "Lineage distribution",
-      "visu_type": "bar",
-      "dict_kwargs": {},
-      "mode": "code",
-      "code_content": "df_modified = df.group_by('clade').agg(pl.count().alias('count')).sort('count', descending=True)\nfig = px.bar(df_modified.to_pandas(), x='clade', y='count', color='clade',\n    labels={'clade': 'Clade', 'count': 'Number of Samples'})\nfig.update_layout(xaxis={'categoryorder': 'total descending'}, showlegend=False)\nfig.update_xaxes(tickangle=-45)\n",
-      "displayed_data_count": 0,
-      "total_data_count": 0,
-      "was_sampled": false,
-      "filter_applied": false,
-      "max_points": null,
-      "selection_enabled": false,
-      "selection_column": null,
-      "font_scale": null,
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "lin-flow-header",
-      "component_type": "text",
-      "title": "From QC verdict to call",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": null,
-      "dc_config": {},
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Classification flow",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "The Sankey follows each sample from its QC verdict through its lineage to its clade, so a band that narrows is a set of samples losing their call somewhere. The embedding below places samples by their shared mutations, which is the sequence-level view of the same grouping.",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "adv-lin-sankey",
+      "index": "lin-sankey",
       "component_type": "advanced_viz",
-      "title": "Classification flow: QC verdict, lineage, clade",
+      "title": "From QC verdict to lineage and clade",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "sankey_canonical",
       "wf_id": {
@@ -629,8 +471,8 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Ribbon width is the number of samples on that path, which surfaces mismatched calls and the dominant lineage and clade pairs.",
-      "title_size": "h3",
+      "description": "Ribbon width is the number of samples on that path; a thin one is a rare or mismatched call.",
+      "title_size": "sm",
       "title_align": "left",
       "section": "Classification flow",
       "viz_kind": "sankey",
@@ -647,7 +489,7 @@
         "value_label": null,
         "value_format": "raw",
         "sort_mode": "total_flow",
-        "color_mode": "source",
+        "color_mode": "target",
         "link_opacity": 0.5,
         "min_link_value": 0,
         "show_node_labels": true,
@@ -656,9 +498,9 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "adv-lin-embedding",
+      "index": "lin-embedding",
       "component_type": "advanced_viz",
-      "title": "Variant-profile PCA embedding (coloured by lineage)",
+      "title": "Samples by shared mutations (PCA)",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "variant_feature_matrix_canonical",
       "wf_id": {
@@ -680,10 +522,10 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "2D PCA of the sample x mutation binary matrix. Points coloured by Pangolin lineage, marker shape encodes Nextclade clade. Samples sharing variants cluster together.",
-      "title_size": "h3",
+      "description": "PCA of which mutations each sample carries; colour is the lineage, shape the clade.",
+      "title_size": "sm",
       "title_align": "left",
-      "section": "Classification flow",
+      "section": "Variant profiles",
       "viz_kind": "embedding",
       "config": {
         "controls_placement": "popover",
@@ -701,6 +543,7 @@
         "tsne_perplexity": 30,
         "tsne_n_iter": 1000,
         "pcoa_distance": "bray_curtis",
+        "axis_prefix": "PC",
         "show_density": false,
         "point_size": 8,
         "marker_outline_width": 1.5,
@@ -720,32 +563,66 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "lin-tables-header",
-      "component_type": "text",
-      "title": "The raw reports",
+      "index": "lin-upset",
+      "component_type": "advanced_viz",
+      "title": "Mutations shared across lineages (UpSet)",
       "workflow_tag": "viralrecon",
-      "data_collection_tag": "",
+      "data_collection_tag": "upset_canonical",
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
-      "dc_id": null,
-      "dc_config": {},
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c1e"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "UpSet-ready mutation \u00d7 lineage binary membership matrix",
+        "data_collection_tag": "upset_canonical",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c1e"
+        }
+      },
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Each set is a lineage, each bar the mutations a combination of lineages shares.",
       "title_size": "sm",
       "title_align": "left",
-      "section": "Typing tables",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "Pangolin and Nextclade output as delivered, including the scorpio support and conflict columns the summary cards do not surface.",
+      "section": "Variant profiles",
+      "viz_kind": "upset_plot",
+      "config": {
+        "controls_placement": "popover",
+        "viz_kind": "upset_plot",
+        "matrix_wf_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+        },
+        "matrix_dc_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c1e"
+        },
+        "set_columns": null,
+        "set_columns_pattern": null,
+        "sort_by": "cardinality",
+        "sort_order": "descending",
+        "min_size": 1,
+        "max_degree": null,
+        "show_set_sizes": true,
+        "color_intersections_by": "degree",
+        "set_colors": null,
+        "default_annotation_cols": null,
+        "show_values": false,
+        "show_annotations": true,
+        "set_category_column": null,
+        "selection_enabled": false,
+        "selection_column": null
+      },
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "00c585bb-06fa-4cf3-848e-7ab37b784dab",
-      "component_type": "table",
-      "title": "Pangolin lineage assignments",
+      "index": "lin-lineage-bar",
+      "component_type": "figure",
+      "title": "Samples per lineage",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "pangolin_lineages",
       "wf_id": {
@@ -767,8 +644,110 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Per-sample lineage, conflict, scorpio, QC status. Tick a row to read the full Pangolin call beside the table.",
-      "title_size": "h3",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "pangolin/report",
+      "catalog_source": {
+        "toolId": "pangolin",
+        "toolName": "Pangolin",
+        "outputId": "pangolin_report",
+        "use": "pangolin/report",
+        "description": "Per-sample PANGO lineage report."
+      },
+      "section": "Calls per lineage and clade",
+      "fit": "auto",
+      "visu_type": "bar",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "# Samples per Pangolin lineage: the eight largest, the rest folded into\n# Other, in the family's lineage colours.\nd = df.filter(pl.col('lineage').is_not_null()).group_by('lineage').agg(pl.len().alias('samples')).sort(['samples', 'lineage'], descending=[True, False])\ntop = d['lineage'].head(8).to_list()\nd = d.with_columns(pl.when(pl.col('lineage').is_in(top)).then(pl.col('lineage')).otherwise(pl.lit('Other')).alias('lineage')).group_by('lineage').agg(pl.col('samples').sum()).sort('samples', descending=True)\nfig = px.bar(d.to_pandas(), x='lineage', y='samples', color='lineage', color_discrete_map=depictio_category_colors.get('lineage') or {}, labels={'lineage': 'Pangolin lineage', 'samples': 'Samples'})\nfig.update_layout(showlegend=False, margin=dict(t=10))\n# A count axis in whole steps: a short one otherwise ticks 0.5.\nfig.update_yaxes(dtick=max(1, round((d['samples'].max() or 0) / 5)))",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "lin-clade-bar",
+      "component_type": "figure",
+      "title": "Samples per clade",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "nextclade_results",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c15"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nextclade clade assignments and sequence quality metrics",
+        "data_collection_tag": "nextclade_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c15"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "nextclade/report",
+      "catalog_source": {
+        "toolId": "nextclade",
+        "toolName": "Nextclade",
+        "outputId": "nextclade_report",
+        "use": "nextclade/report",
+        "description": "Per-sample clade assignment + sequence QC."
+      },
+      "section": "Calls per lineage and clade",
+      "fit": "auto",
+      "visu_type": "bar",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "# Samples per Nextclade clade: the eight largest, the rest folded into\n# Other, in the family's clade colours.\nd = df.filter(pl.col('clade').is_not_null()).group_by('clade').agg(pl.len().alias('samples')).sort(['samples', 'clade'], descending=[True, False])\ntop = d['clade'].head(8).to_list()\nd = d.with_columns(pl.when(pl.col('clade').is_in(top)).then(pl.col('clade')).otherwise(pl.lit('Other')).alias('clade')).group_by('clade').agg(pl.col('samples').sum()).sort('samples', descending=True)\nfig = px.bar(d.to_pandas(), x='clade', y='samples', color='clade', color_discrete_map=depictio_category_colors.get('clade') or {}, labels={'clade': 'Nextclade clade', 'samples': 'Samples'})\nfig.update_layout(showlegend=False, margin=dict(t=10))\n# A count axis in whole steps: a short one otherwise ticks 0.5.\nfig.update_yaxes(dtick=max(1, round((d['samples'].max() or 0) / 5)))",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "lin-pangolin-table",
+      "component_type": "table",
+      "title": "Pangolin lineage calls",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "pangolin_lineages",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c14"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Pangolin lineage assignments for each sample",
+        "data_collection_tag": "pangolin_lineages",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c14"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Tick a row to read the full call beside the table.",
+      "title_size": "sm",
       "title_align": "left",
       "use": "pangolin/report",
       "catalog_source": {
@@ -813,8 +792,8 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "The ticked sample's Pangolin call, with the scorpio notes a table cell cuts short.",
-      "title_size": "h3",
+      "description": "The ticked sample's Pangolin call, with the Scorpio notes a cell cuts short.",
+      "title_size": "sm",
       "title_align": "left",
       "section": "Typing tables",
       "viz_kind": "record_card",
@@ -853,16 +832,16 @@
         },
         "link_templates": null,
         "selection_source": "table_selection",
-        "linked_component": "00c585bb-06fa-4cf3-848e-7ab37b784dab",
+        "linked_component": "lin-pangolin-table",
         "max_fields": 40,
         "default_record": null
       },
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "71f09f2f-f624-43bf-9f53-f6d5c2f55fbe",
+      "index": "lin-nextclade-table",
       "component_type": "table",
-      "title": "Nextclade clade assignments",
+      "title": "Nextclade clade calls",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "nextclade_results",
       "wf_id": {
@@ -884,8 +863,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Per-sample clade, substitutions, deletions, QC.",
-      "title_size": "h3",
+      "title_size": "sm",
       "title_align": "left",
       "use": "nextclade/report",
       "catalog_source": {
@@ -943,7 +921,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-b8d6e44e-9564-4940-9095-dec993ee520b",
+      "i": "box-lin-intro",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -958,57 +936,42 @@
       ]
     },
     {
-      "i": "box-f73adf25-ffe3-42e4-bd93-261fab3a0ecd",
+      "i": "box-lin-card-lineages",
       "x": 0,
-      "y": 1,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
     },
     {
-      "i": "box-422b1dca-8016-40cf-b3a3-9b1a9b3595c7",
+      "i": "box-lin-card-clades",
       "x": 2,
-      "y": 1,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
     },
     {
-      "i": "box-lin-nextclade-coverage",
+      "i": "box-lin-card-qc-score",
       "x": 4,
-      "y": 1,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
     },
     {
-      "i": "box-lin-qc-status",
+      "i": "box-lin-card-missing",
       "x": 6,
-      "y": 1,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
     },
     {
-      "i": "box-lin-distribution-header",
+      "i": "box-lin-sankey",
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-1817ae9e-34c8-4547-a516-ca4aa23d8e4a",
-      "x": 0,
-      "y": 1,
-      "w": 4,
       "h": 6,
       "static": false,
       "resizeHandles": [
@@ -1020,40 +983,10 @@
       ]
     },
     {
-      "i": "box-eb173867-1926-455f-bc7f-ade823f0867d",
-      "x": 4,
-      "y": 1,
-      "w": 4,
-      "h": 6,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-lin-flow-header",
+      "i": "box-lin-embedding",
       "x": 0,
       "y": 0,
       "w": 8,
-      "h": 1,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-adv-lin-sankey",
-      "x": 0,
-      "y": 1,
-      "w": 8,
       "h": 6,
       "static": false,
       "resizeHandles": [
@@ -1065,67 +998,7 @@
       ]
     },
     {
-      "i": "box-adv-lin-embedding",
-      "x": 0,
-      "y": 7,
-      "w": 8,
-      "h": 6,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-lin-tables-header",
-      "x": 0,
-      "y": 0,
-      "w": 8,
-      "h": 1,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-00c585bb-06fa-4cf3-848e-7ab37b784dab",
-      "x": 0,
-      "y": 1,
-      "w": 5,
-      "h": 5,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-lin-pangolin-record",
-      "x": 5,
-      "y": 1,
-      "w": 3,
-      "h": 5,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-71f09f2f-f624-43bf-9f53-f6d5c2f55fbe",
+      "i": "box-lin-upset",
       "x": 0,
       "y": 6,
       "w": 8,
@@ -1138,17 +1011,99 @@
         "sw",
         "w"
       ]
+    },
+    {
+      "i": "box-lin-lineage-bar",
+      "x": 0,
+      "y": 0,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-lin-clade-bar",
+      "x": 4,
+      "y": 0,
+      "w": 4,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-lin-pangolin-table",
+      "x": 0,
+      "y": 0,
+      "w": 5,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-lin-pangolin-record",
+      "x": 5,
+      "y": 0,
+      "w": 3,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-lin-nextclade-table",
+      "x": 0,
+      "y": 6,
+      "w": 8,
+      "h": 6,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
     }
   ],
   "filter_sections": [
     {
-      "name": "Typing",
-      "icon": "mdi:virus",
+      "name": "Typing filters",
+      "icon": "mdi:filter-variant",
       "color": "red",
-      "description": "Lineage and clade calls, with their QC verdicts",
+      "description": "Narrows the samples by their calls and the QC verdict on each",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     }
   ],
   "grid_sections": [
@@ -1156,41 +1111,91 @@
       "name": "Typing at a glance",
       "icon": "mdi:counter",
       "color": "red",
-      "description": "How many distinct calls, and how well supported",
+      "description": "Lineages, clades and the quality of the consensus they were called from",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
-    },
-    {
-      "name": "Lineage distribution",
-      "icon": "mdi:chart-bar",
-      "color": "grape",
-      "description": "What was called, and how often",
-      "collapsed": false,
-      "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     },
     {
       "name": "Classification flow",
       "icon": "mdi:relation-many-to-many",
-      "color": "violet",
-      "description": "How samples move from QC verdict to lineage to clade",
+      "color": "red",
+      "description": "Each sample from its QC verdict to its lineage and its clade",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Variant profiles",
+      "icon": "mdi:set-merge",
+      "color": "red",
+      "description": "Samples placed by the mutations they share, and the mutations each lineage holds",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
+    },
+    {
+      "name": "Calls per lineage and clade",
+      "icon": "mdi:chart-bar",
+      "color": "gray",
+      "description": "Samples per Pangolin lineage and per Nextclade clade",
+      "collapsed": true,
+      "persistent": false,
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     },
     {
       "name": "Typing tables",
       "icon": "mdi:table",
       "color": "gray",
-      "description": "The raw Pangolin and Nextclade reports",
+      "description": "The Pangolin and Nextclade reports, with a record of the picked call",
       "collapsed": true,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     }
   ],
+  "category_colors": null,
   "funnel_filtering": true,
-  "advanced_viz_controls": "header",
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
   "autofit": true,
   "brand_theme": null,
   "buttons_data": {
@@ -1203,7 +1208,7 @@
     "count": 0
   },
   "title": "Lineage & Clustering",
-  "subtitle": "Pangolin / Nextclade typing + classification funnel + variant-profile PCA",
+  "subtitle": "Which lineage and clade is each sample, and do they agree?",
   "icon": "/assets/images/workflows/nf-core.png",
   "icon_color": "green",
   "icon_variant": "filled",
@@ -1219,7 +1224,7 @@
         "flexible_metadata": null,
         "hash": null,
         "email": "admin@example.com",
-        "is_admin": true,
+        "is_admin": false,
         "is_anonymous": false,
         "is_temporary": false,
         "expiration_time": null
@@ -1230,7 +1235,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-09-17 09:20:46",
+  "creation_time": "2026-10-08 21:52:39",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
@@ -1239,10 +1244,14 @@
   "parent_dashboard_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
   },
-  "tab_order": 2,
+  "tab_order": 5,
   "main_tab_name": null,
   "tab_icon": "mdi:virus",
   "tab_icon_color": "red",
+  "tab_group": "Genomes",
   "parent_dashboard_title": null,
-  "project_realtime": null
+  "project_realtime": null,
+  "inherited_brand_theme": null,
+  "inherited_category_colors": null,
+  "source_key": "nf-core/viralrecon:dashboards/base.yaml#Lineage & Clustering"
 }

@@ -93,6 +93,15 @@ viewer's origin, pass the flag explicitly. Equivalent settings elsewhere:
   that range requests are not rewritten. The EMBL gateway's quirks are covered
   in the deployment notes.
 
+## Content-Security-Policy
+
+The reads are fetch range requests, so the page's `connect-src` must name the
+storage origin. The API adds the origin of its S3 public URL to the policy it
+serves; the nginx viewer takes it from `DEPICTIO_CSP_S3_ORIGIN`, which the
+compose files and the Helm chart derive from the same public URL. Without it the
+browser refuses every read and the lanes draw empty, while the Vite dev server,
+which sends no CSP, shows them.
+
 A deployment that does not set any of this simply does not show file tracks:
 `genome_view` falls back to `source: table`.
 

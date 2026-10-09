@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
 
 import { AdvancedVizKind, fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import { plotlyColorscale } from '../../utils/colorScale';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import AdvancedVizPlot from './AdvancedVizPlot';
@@ -125,6 +126,8 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
   const theme = useMantineTheme();
   const { colorScheme } = useMantineColorScheme();
   const isDark = colorScheme === 'dark';
+  // A transcript class wears the dashboard's colour for it.
+  const classPinned = usePinnedCategoryColors(config.transcript_class_col);
 
   const [gene, setGene] = usePersistedVizControl<string | null>(metadata, 'gene', null);
   const [maxTranscripts, setMaxTranscripts] = usePersistedVizControl<number>(metadata, 'max_transcripts', DEFAULT_MAX_TRANSCRIPTS);
@@ -415,6 +418,11 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
       if (NEUTRAL_CLASSES.has(name.toLowerCase())) groupColour.set(name, neutralColour);
       else groupColour.set(name, palette[hue++ % palette.length]);
     });
+    // Over the palette, after it: a pinned class must not shift the others' hues.
+    for (const name of groupNames) {
+      const pinned = classPinned?.[name];
+      if (pinned) groupColour.set(name, pinned);
+    }
 
     const expressions = lanes
       .map((l) => l.expression)
@@ -550,6 +558,7 @@ const TranscriptStructureRenderer: React.FC<Props> = ({ metadata, filters, refre
     hasExpression,
     expressionPanel,
     palette,
+    classPinned,
     neutralColour,
     baseColour,
     lineColour,

@@ -454,6 +454,8 @@ describe('withAlpha', () => {
     expect(withAlpha('#ff0000', 0.5)).toBe('rgba(255, 0, 0, 0.5)');
     expect(withAlpha('#0f0', 1)).toBe('rgba(0, 255, 0, 1)');
     expect(withAlpha('rgb(1, 2, 3)', 0.1)).toBe('rgba(1, 2, 3, 0.1)');
+    // A theme colour that already has an alpha takes the new one.
+    expect(withAlpha('rgba(0,0,0,0.35)', 0.1)).toBe('rgba(0, 0, 0, 0.1)');
     expect(withAlpha('var(--x)', 0.1)).toBe('var(--x)');
   });
 });

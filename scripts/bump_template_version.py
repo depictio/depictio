@@ -62,11 +62,15 @@ def blank_manifest_sha(manifest: Path) -> bool:
 
 
 def rewrite_versions(new_dir: Path, old_version: str, new_version: str) -> list[Path]:
-    """Replace the exact old version string in every text file under ``new_dir``.
+    """Replace the old version in every text file under ``new_dir``.
 
-    Returns the files that changed. Files that are binary (by suffix or decode
-    failure) are skipped.
+    Only where it stands as a version of its own: a short one like ``3.1`` is
+    also inside ``python: 3.11.0`` or ``3.14``, which stay. Prose that names the
+    old release on purpose ("built on the 3.1 megatest") is rewritten too, so
+    the copy still needs a read. Returns the files that changed. Files that are
+    binary (by suffix or decode failure) are skipped.
     """
+    pattern = re.compile(rf"(?<![\d.]){re.escape(old_version)}(?!\d|\.\d)")
     changed: list[Path] = []
     for path in sorted(new_dir.rglob("*")):
         if not path.is_file() or path.suffix.lower() in _BINARY_SUFFIXES:
@@ -75,9 +79,10 @@ def rewrite_versions(new_dir: Path, old_version: str, new_version: str) -> list[
             text = path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
-        if old_version not in text:
+        new_text = pattern.sub(new_version, text)
+        if new_text == text:
             continue
-        path.write_text(text.replace(old_version, new_version), encoding="utf-8")
+        path.write_text(new_text, encoding="utf-8")
         changed.append(path)
     return changed
 

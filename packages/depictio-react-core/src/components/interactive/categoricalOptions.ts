@@ -13,6 +13,10 @@ export const MAX_STRIP_SEGMENTS = 3;
 /** Up to this many, a dropdown listing the values as coloured chips; past it,
  *  a dropdown with a plain list and a search field. One column either way. */
 export const MAX_STRIP_CHIPS = 10;
+/** Up to this many characters across its values, a segmented control fits a
+ *  bar's cell; a segment is never cut, so longer names (library ids, species)
+ *  would run into the next filter and go to the dropdown instead. */
+export const MAX_STRIP_SEGMENT_CHARS = 24;
 
 const COLLATOR = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
@@ -37,15 +41,18 @@ export function orderCategoricalOptions(
 
 export type CategoricalDisplay = 'segments' | 'chips' | 'list';
 
-/** Segments up to `segments` values, a dropdown of chips up to `chips`, a
- *  dropdown list beyond. */
+/** Segments up to `segments` short values, a dropdown of chips up to `chips`,
+ *  a dropdown list beyond. Given only a count, the values count as short. */
 export function categoricalDisplay(
-  optionCount: number,
+  options: number | readonly string[],
   segments = MAX_STRIP_SEGMENTS,
   chips = MAX_STRIP_CHIPS,
 ): CategoricalDisplay {
-  if (optionCount <= segments) return 'segments';
-  return optionCount <= chips ? 'chips' : 'list';
+  const count = typeof options === 'number' ? options : options.length;
+  const chars =
+    typeof options === 'number' ? 0 : options.reduce((n, v) => n + String(v).length, 0);
+  if (count <= segments && chars <= MAX_STRIP_SEGMENT_CHARS) return 'segments';
+  return count <= chips ? 'chips' : 'list';
 }
 
 /** `multi` toggles membership; `single` picks one value (or none). */

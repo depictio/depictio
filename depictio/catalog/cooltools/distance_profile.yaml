@@ -20,6 +20,8 @@ renders_as:
     component: advanced_viz
     kind: profile
     roles: {series: chrom, x: distance, y: log10_slope}
-  - { component: card, column: log10_slope, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  # The pooled curve only: a median over it and the per-chromosome curves
+  # counts the genome twice.
+  - { component: card, column: log10_slope, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, filter_expr: "col('chrom') == 'all'" }
   - { component: card, column: contact_probability, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: table }

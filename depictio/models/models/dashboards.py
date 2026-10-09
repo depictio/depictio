@@ -28,6 +28,7 @@ from pydantic import (
     Field,
     ValidationError,
     field_serializer,
+    field_validator,
     model_validator,
 )
 
@@ -41,6 +42,7 @@ from depictio.models.components.lite import (
     MapLiteComponent,
     MultiQCLiteComponent,
     TableLiteComponent,
+    TextLiteComponent,
 )
 from depictio.models.components.types import CardVariant, FigureStyle
 from depictio.models.logging import logger
@@ -147,6 +149,65 @@ HIGHLIGHT_SOURCE_FIELDS: tuple[str, ...] = (
 # Component types bound to no data collection of their own: neither export nor
 # import gives them a workflow or a collection.
 UNBOUND_COMPONENT_TYPES: frozenset[str] = frozenset({"text", "highlight"})
+
+# The `category_colors` key standing for "every value not pinned", always with
+# the value `auto`. Only YAML and the import see it: the import replaces it by
+# real colours, and `strip_auto_category_colors` drops any it did not resolve.
+AUTO_CATEGORY_KEY = "*"
+
+# `auto`, or `auto:<column>`: the values ranked by the sum of that numeric
+# column first. A column with more values than the palette has slots (phyla,
+# genera) then colours its largest and leaves the tail to the figures' Other,
+# where a plain `auto` colours none of them.
+_AUTO_CATEGORY_SPEC = re.compile(r"auto(?::(?P<rank_by>[^\s:]+))?")
+
+
+def parse_auto_category_spec(spec: Any) -> tuple[bool, str | None]:
+    """Whether `spec` asks the import for colours, and the column ranking the values."""
+    match = _AUTO_CATEGORY_SPEC.fullmatch(spec) if isinstance(spec, str) else None
+    return (match is not None, match.group("rank_by") if match else None)
+
+
+def strip_auto_category_colors(category_colors: Any) -> Any:
+    """`category_colors` without the `"*": "auto"` entries an import left unresolved.
+
+    A column left with no colour at all is dropped. Anything that is not a
+    column map is returned as it is, for the model to accept or refuse.
+    """
+    if not isinstance(category_colors, dict):
+        return category_colors
+    out: dict[str, Any] = {}
+    for column, mapping in category_colors.items():
+        if parse_auto_category_spec(mapping)[0]:
+            continue
+        if isinstance(mapping, dict):
+            mapping = {k: v for k, v in mapping.items() if k != AUTO_CATEGORY_KEY}
+            if not mapping:
+                continue
+        out[column] = mapping
+    return out or None
+
+
+# What a text tile's live value carries only once imported (see `TextValueRuntimeSpec`).
+_TEXT_VALUE_RUNTIME_FIELDS: frozenset[str] = frozenset({"dc_id", "wf_id"})
+
+
+def exportable_text_values(values: Any) -> dict[str, dict[str, Any]] | None:
+    """A text tile's `values` as YAML writes them: unset fields and resolved ids left out.
+
+    Takes the stored dicts or the parsed specs alike.
+    """
+    if not isinstance(values, dict):
+        return None
+    out: dict[str, dict[str, Any]] = {}
+    for name, spec in values.items():
+        raw = spec.model_dump() if isinstance(spec, BaseModel) else spec
+        if not isinstance(raw, dict):
+            continue
+        out[str(name)] = {
+            k: v for k, v in raw.items() if v is not None and k not in _TEXT_VALUE_RUNTIME_FIELDS
+        }
+    return out or None
 
 
 class FilterSectionSpec(BaseModel):
@@ -456,13 +517,59 @@ class DashboardDataLite(BaseModel):
     # Category colours (column -> value -> colour), so one category is drawn in
     # one colour everywhere: a filter bar's chip dots, a figure's points, a
     # bar's underline. Shared contract between the filter bar and the figures.
-    category_colors: dict[str, dict[str, str]] | None = Field(
+    # `auto` (bare, or as `"*": auto` beside some pins) asks the import to colour
+    # every value the data holds; see `_normalise_auto_category_colors`.
+    # `auto:<column>` ranks the values by that column first (see
+    # `parse_auto_category_spec`).
+    category_colors: dict[str, dict[str, str] | str] | None = Field(
         default=None,
         description="Optional fixed colours per categorical value, keyed by column name "
-        "then value (e.g. `locality: {Athens: '#1c7ed6'}`). Values not listed fall back "
-        "to the dashboard brand's colorway in the order of the column's values, then to "
-        "a neutral grey.",
+        "then value (e.g. `locality: {Athens: '#1c7ed6'}`). `auto` instead of the value "
+        "map (`condition: auto`), or `'*': auto` inside it beside some pinned values, "
+        "colours every value the data holds at import, from a colour-blind safe palette; "
+        "a re-import keeps the colours values already had. `auto:<column>` ranks the "
+        "values by the sum of that numeric column first and colours the largest, for a "
+        "column with more values than the palette (`Phylum: 'auto:rel_abundance'`). "
+        "Values not listed fall back to the dashboard brand's colorway in the order of "
+        "the column's values, then to a neutral grey.",
     )
+
+    @field_validator("category_colors", mode="before")
+    @classmethod
+    def _normalise_auto_category_colors(cls, value: Any) -> Any:
+        """A bare `auto` is the column map `{"*": "auto"}`, so later code sees one shape."""
+        if isinstance(value, dict):
+            return {
+                column: {AUTO_CATEGORY_KEY: spec} if parse_auto_category_spec(spec)[0] else spec
+                for column, spec in value.items()
+            }
+        return value
+
+    @field_validator("category_colors")
+    @classmethod
+    def _check_auto_category_colors(
+        cls, value: dict[str, dict[str, str] | str] | None
+    ) -> dict[str, dict[str, str] | str] | None:
+        """`"*"` only ever means "every other value", and `auto` only under it."""
+        for column, mapping in (value or {}).items():
+            if not isinstance(mapping, dict):
+                raise ValueError(
+                    f"category_colors.{column}: a map of values to colours, or `auto` "
+                    f"(got {mapping!r})"
+                )
+            for key, colour in mapping.items():
+                is_auto = parse_auto_category_spec(colour)[0]
+                if key == AUTO_CATEGORY_KEY and not is_auto:
+                    raise ValueError(
+                        f"category_colors.{column}: '*' only takes `auto` or `auto:<column>` "
+                        f"(got {colour!r}); pin a value by its name instead"
+                    )
+                if key != AUTO_CATEGORY_KEY and is_auto:
+                    raise ValueError(
+                        f"category_colors.{column}.{key}: `auto` colours a whole column; "
+                        f"write `{column}: auto`, or `'*': auto` beside the pinned values"
+                    )
+        return value
 
     # Dashboard-level brand override (#397). Same shape as the instance
     # branding; unset fields inherit from it, so a dashboard only states what
@@ -488,6 +595,7 @@ class DashboardDataLite(BaseModel):
         "image": ImageLiteComponent,
         "multiqc": MultiQCLiteComponent,
         "map": MapLiteComponent,
+        "text": TextLiteComponent,
     }
 
     @model_validator(mode="after")
@@ -1291,8 +1399,12 @@ class DashboardDataLite(BaseModel):
                         "variant",
                         "link",
                         "decimals",
+                        "format",
                     ],
                 )
+                # `decimals: 0` is a real setting, not an empty one.
+                if comp.get("decimals") == 0:
+                    display["decimals"] = 0
                 if display:
                     lite_comp["display"] = display
 
@@ -1406,12 +1518,20 @@ class DashboardDataLite(BaseModel):
                     lite_comp["alignment"] = comp["alignment"]
                 if comp.get("vertical_alignment", "center") != "center":
                     lite_comp["vertical_alignment"] = comp["vertical_alignment"]
+                # Before the body that prints them. The ids the import resolved
+                # stay behind: another instance resolves the tags afresh.
+                text_values = exportable_text_values(comp.get("values"))
+                if text_values:
+                    lite_comp["values"] = text_values
                 if comp.get("body"):
                     lite_comp["body"] = comp["body"]
                 if comp.get("surface", "none") != "none":
                     lite_comp["surface"] = comp["surface"]
                 if comp.get("accent"):
                     lite_comp["accent"] = comp["accent"]
+                for key in ("logo", "logo_dark"):
+                    if comp.get(key):
+                        lite_comp[key] = comp[key]
 
             elif comp_type == "highlight":
                 # The tab's name is what survives a move to another instance;
@@ -1711,6 +1831,7 @@ class DashboardDataLite(BaseModel):
                     "variant",
                     "link",
                     "decimals",
+                    "format",
                 ]:
                     # `decimals: 0` is a real setting, not an empty one.
                     if comp_dict.get(f) or (f == "decimals" and comp_dict.get(f) == 0):
@@ -1880,6 +2001,12 @@ class DashboardDataLite(BaseModel):
                 full_comp["body"] = comp_dict.get("body", "")
                 full_comp["surface"] = comp_dict.get("surface", "none")
                 full_comp["accent"] = comp_dict.get("accent")
+                full_comp["logo"] = comp_dict.get("logo")
+                full_comp["logo_dark"] = comp_dict.get("logo_dark")
+                # The import resolves each value's `dc` to `dc_id` / `wf_id`.
+                text_values = exportable_text_values(comp_dict.get("values"))
+                if text_values:
+                    full_comp["values"] = text_values
 
             full_components.append(full_comp)
 
@@ -2003,6 +2130,14 @@ class DashboardData(MongoModel):
     # Column -> value -> colour. None for dashboards that pin no colours, which
     # then draw categories from the brand colorway exactly as before.
     category_colors: dict[str, dict[str, str]] | None = None
+
+    @field_validator("category_colors", mode="before")
+    @classmethod
+    def _drop_unresolved_auto_colors(cls, value: Any) -> Any:
+        """A stored dashboard never carries `"*": "auto"`: the import resolves it
+        from the data, and whatever it could not resolve goes here."""
+        return strip_auto_category_colors(value)
+
     # Funnel filtering (issue #939). On by default; authors opt out per
     # dashboard from the settings drawer.
     funnel_filtering: bool = True

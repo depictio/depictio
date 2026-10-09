@@ -1,0 +1,165 @@
+# Megatest manifest for nf-core/cutandrun 3.2.2 (read by scripts/nfcore_megatest.py).
+#
+# Which AWS megatest run this template was validated against and the tables-only
+# subset of it that the template recipes and MultiQC need. Fetch it with:
+#
+#   python scripts/nfcore_megatest.py fetch --pipeline cutandrun --version 3.2.2 [--dest DIR]
+#   bash download_test_data.sh [DIR]      # same thing
+#
+# Keys are fnmatch globs relative to run_root (here the prefix root) and are
+# mirrored 1:1 below the destination, which becomes the template DATA_ROOT.
+#
+# NO USABLE MEGATEST FOR 3.2.2. Every cutandrun 3.2.x prefix in the bucket (3.2,
+# 3.2.1, 3.2.2) holds pipeline_info plus zero-byte directory markers only (see
+# depictio/projects/nf-core/MEGATEST_STATUS.md), so results_sha stays null and
+# there is nothing to fetch. The bump from 3.1 was validated on EMBL HPC runs of
+# the release instead, repatriated by scripts/nfcore_validation_hpc.py with the
+# keys cutandrun322-full (profile test_full, the megatest design) and
+# cutandrun322-small (profile test_full_small). The keys below are the subset a
+# 3.2.2 megatest would need, checked against both HPC trees.
+#
+# 3.2.2 keeps the 3.1 layout: numbered stage directories (01_prealign,
+# 02_alignment, 03_peak_calling, 04_reporting), and still no
+# pipeline_info/params*.json (checked on both HPC trees), so the provenance the
+# CLI introspects is pipeline_info/software_versions.yml. The validated
+# samplesheet is pipeline_info/samplesheet.valid.csv.
+#
+# MultiQC: the release pins MultiQC 1.19 (multiqc_data.json, no parquet), so the
+# manifest fetches the raw MultiQC inputs and the parquet Depictio reads is
+# produced afterwards by
+#
+#   python -m depictio.dev_scripts.multiqc_reprocess --src <dest> --dest <dest>
+#
+# which writes <dest>/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json.
+# The reprocess tool skips every multiqc*/ directory when it re-parses inputs, so
+# the pipeline's own 04_reporting/multiqc/ report is fetched for provenance only.
+# A run that uses MultiQC >= 1.31 publishes
+# 04_reporting/multiqc/multiqc_data/multiqc.parquet itself. The template binds
+# that one unless MULTIQC_REPROCESSED is set, and never both (see template.yaml).
+#
+# Not fetched on purpose: the deeptools heatmap matrices under
+# 04_reporting/deeptools_heatmaps/, the BAM/bigWig/bedGraph signal tracks, and
+# the reference genome under 04_reporting/igv/ (its copies of the SEACR beds
+# do match the glob below, see there).
+pipeline: cutandrun
+version: "3.2.2"
+# s3://nf-core-awsmegatests/cutandrun/results-<results_sha>/ == the 3.2.2 release tag_sha.
+results_sha: null  # every 3.2.x prefix is empty; validated on EMBL HPC runs cutandrun322-full and cutandrun322-small (scripts/nfcore_validation_hpc.py)
+run_root: ""
+multiqc:
+  version: "1.19"
+  parquet: multiqc/multiqc_data/multiqc.parquet
+  reprocess: true
+# PORTABILITY (lint F7). Every key below is anchored on the tool directory or
+# the file name that identifies the output, never on the numbered stage
+# directory in front of it: `01_prealign/ 02_alignment/ 03_peak_calling/
+# 04_reporting/` is this run's publishing layout, not part of any file's
+# identity, and a run published with a different `--outdir` structure was
+# missed by every key that spelled one out. Keys are fnmatch globs and fnmatch
+# `*` crosses `/`, so a leading `*` matches the same file at any depth,
+# including directly at the run root.
+keys:
+  # Validated samplesheet (target/control pairing) + software versions + trace.
+  # `pipeline_info/` is nf-core's own contract, so it stays spelled out.
+  - pipeline_info/samplesheet.valid.csv
+  - pipeline_info/software_versions.yml
+  - pipeline_info/local_versions.yml
+  - pipeline_info/execution_trace_*.txt
+  # Provenance of the pipeline's own MultiQC 1.19 report (version banner, module list).
+  - "*multiqc/multiqc_data/multiqc.log"
+  # --- raw MultiQC inputs (re-parsed by MultiQC 1.35) ----------------------
+  # FastQC before and after trimming, plus the Trim Galore / cutadapt reports.
+  - "*pretrim_fastqc/*_fastqc.zip"
+  - "*trimgalore/fastqc/*_fastqc.zip"
+  - "*trimgalore/*_trimming_report.txt"
+  # Bowtie2 logs for the target genome and for the spike-in genome. ONE key
+  # collects both sets: a spike-in log is `<sample>.spikein.bowtie2.log`, so it
+  # matches the same glob, and `bowtie2/spikein_factors.py` tells the two apart
+  # by that infix rather than by the directory they happen to sit in.
+  - "*.bowtie2.log"
+  # samtools stats/flagstat/idxstats of the marked-duplicate target BAMs. Two
+  # twins are left out, because MultiQC derives the sample name from the file
+  # stem and would report the same sample more than once: dedup/ (the IgG
+  # controls) and linear_dedup/ (every sample, written when linear duplicate
+  # removal is on, as on the test_full_small HPC run). That exclusion is why
+  # these three keep the `markdup/` directory, which names the BAM the
+  # statistics describe rather than the stage that produced it.
+  - "*markdup/*.stats"
+  - "*markdup/*.flagstat"
+  - "*markdup/*.idxstats"
+  # deepTools QC: per-sample fingerprint (quality metrics + raw counts) and the
+  # cross-sample PCA / correlation matrices over the target BAMs.
+  - "*.plotFingerprint.qcmetrics.txt"
+  - "*.plotFingerprint.raw.txt"
+  - "*.plotPCA.tab"
+  - "*.plotCorrelation.mat.tab"
+  # --- peak calls ----------------------------------------------------------
+  # MACS2 narrow peaks (+ the xls MultiQC's macs2 module reads).
+  - "*.macs2_peaks.narrowPeak"
+  - "*.macs2_peaks.xls"
+  # SEACR stringent peaks, the CUT&RUN-specific caller (BED6 with total signal,
+  # max signal and the max-signal region). A sample SEACR calls nothing for
+  # still gets its bed, at 0 bytes (see post_fetch_help). The glob also
+  # mirrors the byte-identical igv/ copies of these beds; the template's SEACR
+  # scan skips them.
+  - "*.seacr.peaks.stringent.bed"
+  # Consensus peaks per target: merged intervals with the member peaks and the
+  # replicate files that supported them. 3.2.2 names them
+  # <target>.<caller>.consensus.peak_counts.bed, which the glob covers.
+  # consensus.peaks.awk.bed is a byte-equal intermediate of the same table, so
+  # only peak_counts.bed is fetched.
+  - "*.consensus.peak_counts.bed"
+  # Fragment-length histograms, the signature CUT&RUN QC figure (about 6 KB each).
+  - "*.frags.len.txt"
+  # The fragments themselves (BED3, one row per fragment, 30 to 60 MB each on
+  # the test_full run): seacr/frags_profile piles them up around the SEACR
+  # summits for the metagene matrix and the locus fragment track. The template
+  # marks both collections optional, so a mirror without them still ingests.
+  - "*.frags.cut.bed"
+prefix_keys: []
+# Megatest-specific names the dashboard texts must never carry (lint:
+# depictio/tests/models/test_template_conventions.py, rule e). 3.2.2 adds the
+# per-replicate control names its samplesheet writes.
+forbidden_terms:
+  - H3K4me3
+  - H3K27me3
+  - h3k4me3_R1
+  - h3k4me3_R2
+  - h3k27me3_R1
+  - h3k27me3_R2
+  - igg_ctrl_R1
+  - igg_ctrl_R2
+  - igg_ctrl_1
+  - igg_ctrl_2
+  - ABL1
+  - PLPP7
+  - NUP214
+  - FAM78A
+  - LAMC3
+  - FIBCD1
+  - E. coli
+renames: {}
+post_fetch_help: |
+  === Zero-byte peak files ===
+
+  A caller that finds nothing for a sample still publishes its peak file, at
+  0 bytes (on the test_full_small HPC run: the SEACR bed of h3k27me3_R2). The
+  ingest skips it with a warning; the caller_agreement collection keeps an
+  n_peaks = 0 row for that sample and caller.
+
+  === Reprocess MultiQC (the run wrote MultiQC 1.19, Depictio reads >= 1.31 parquet) ===
+
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest} --dry-run
+  python -m depictio.dev_scripts.multiqc_reprocess --src {dest} --dest {dest}
+  # -> {dest}/multiqc/multiqc_data/multiqc.parquet + REPROCESSED.json
+
+  === Quick test commands ===
+
+  # MULTIQC_REPROCESSED points the MultiQC collection at the reprocessed report
+  # instead of the pipeline's own 04_reporting/multiqc/ location.
+
+  # 1. Dry run (validates the template against the data, no ingestion)
+  depictio-cli ingest --template nf-core/cutandrun/3.2.2 --data-root {dest} --var MULTIQC_REPROCESSED=true --dry-run
+
+  # 2. Full run (needs a reachable server and ~/.depictio/CLI.yaml)
+  depictio-cli ingest --template nf-core/cutandrun/3.2.2 --data-root {dest} --var MULTIQC_REPROCESSED=true

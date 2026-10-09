@@ -35,11 +35,15 @@ const NO_PANELS: RecordPanelState = {
 
 export const RecordPanelContext = createContext<RecordPanelState>(NO_PANELS);
 
+/** Spelled out in full: the icon-subset generator bundles only the ids it can
+ *  read in the source, and the CSP blocks fetching a missing one. */
+const CHEVRONS = { left: 'mdi:chevron-double-left', right: 'mdi:chevron-double-right' } as const;
+
 /** Chevron pointing the way the card grows (unfold) or shrinks (fold). */
 function chevron(side: RecordSidePanel['side'], unfold: boolean): string {
   const towardsSource = side === 'right' ? 'left' : 'right';
   const away = side === 'right' ? 'right' : 'left';
-  return `mdi:chevron-double-${unfold ? towardsSource : away}`;
+  return CHEVRONS[unfold ? towardsSource : away];
 }
 
 /** Gap between the rail and the source's own content. */

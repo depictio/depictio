@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import type { FilterSectionSpec, StoredMetadata } from '../api';
+import type { FilterSectionSpec, PersistentSection, StoredMetadata } from '../api';
 import {
   actionsTileRank,
   analysisCardRank,
@@ -8,14 +8,18 @@ import {
   analysisSelectableFigureRank,
   analysisTableRank,
   demoSectionsOf,
+  excludedOnTab,
   familyOrder,
   figureDrawsGroups,
   foldableSectionsOf,
   groupDisplaysOf,
   pickFilterDemo,
   pickFromFamily,
+  pinnedDemoSections,
+  siblingDemoSections,
   type GuideDemoSection,
   type GuideFamilyDoc,
+  type GuideSectionsDoc,
 } from './demoSources';
 
 const meta = (m: Partial<StoredMetadata> & { index: string; component_type: string }) =>
@@ -104,6 +108,102 @@ describe('demoSectionsOf', () => {
       'Intro',
       'Plots',
     ]);
+  });
+});
+
+describe('excludedOnTab', () => {
+  const pinned: FilterSectionSpec = { name: 'Samples', persistent: true, exclude_tabs: ['Overview'] };
+
+  it('matches a pinned section to the tabs it is kept off, by displayed name', () => {
+    expect(excludedOnTab(pinned, 'overview ')).toBe(true);
+    expect(excludedOnTab(pinned, 'Quality')).toBe(false);
+  });
+
+  it('ignores the list on a section that is not pinned, or without a tab name', () => {
+    expect(excludedOnTab({ ...pinned, persistent: false }, 'Overview')).toBe(false);
+    expect(excludedOnTab(pinned, '')).toBe(false);
+  });
+});
+
+describe('pinnedDemoSections', () => {
+  const pinned = (
+    owner: string,
+    name: string,
+    types: string[],
+    spec: Partial<FilterSectionSpec> = {},
+  ): PersistentSection => ({
+    kind: 'grid',
+    owner_dashboard_id: owner,
+    spec: { name, persistent: true, ...spec },
+    components: types.map((t, i) => ({
+      dashboard_id: owner,
+      metadata: meta({ index: `${name}-${i}`, component_type: t, section: name }),
+    })),
+    layouts: [{ i: `box-${name}` }],
+  });
+  const table = pinned('main', 'Samples', ['table'], { exclude_tabs: ['Overview'] });
+  const keys = pinned('qc', 'Key figures', ['card', 'card']);
+
+  it('leaves out a pinned section the open tab is excluded from', () => {
+    expect(pinnedDemoSections([table], 'Overview')).toBeNull();
+    expect(pinnedDemoSections([table], 'Quality')?.sections.map((s) => s.spec.name)).toEqual([
+      'Samples',
+    ]);
+  });
+
+  it('prefers the owner whose sections hold cards', () => {
+    const shownOnQuality = pinned('main', 'Runs', ['table']);
+    const out = pinnedDemoSections([shownOnQuality, keys], 'Quality');
+    expect(out?.ownerId).toBe('qc');
+    expect(out?.sections.map((s) => s.spec.name)).toEqual(['Key figures']);
+    expect(out?.layouts).toEqual([{ i: 'box-Key figures' }]);
+  });
+
+  it('skips plain headings, filter bars and filter sections', () => {
+    const plain = pinned('main', 'Intro', ['card'], { appearance: 'plain' });
+    const bar = pinned('main', 'Bar', ['interactive'], { display: 'strip' });
+    const filter: PersistentSection = { ...pinned('main', 'Filters', ['interactive']), kind: 'filter' };
+    expect(pinnedDemoSections([plain, bar, filter], 'Quality')).toBeNull();
+  });
+});
+
+describe('siblingDemoSections', () => {
+  const doc = (sections: [string, string[]][], spec: Partial<FilterSectionSpec> = {}) =>
+    ({
+      stored_metadata: sections.flatMap(([name, types]) =>
+        types.map((t, i) => meta({ index: `${name}-${i}`, component_type: t, section: name })),
+      ),
+      grid_sections: sections.map(([name]) => ({ name, ...spec })),
+    }) as GuideSectionsDoc;
+  const tables = doc([['Tables', ['table']]]);
+  const cards = doc([['Key figures', ['card']]]);
+  const nameOf = (id: string) => id;
+
+  it('takes the first sibling whose sections hold cards over an earlier one without', () => {
+    const docs: Record<string, GuideSectionsDoc> = { a: tables, b: cards };
+    const out = siblingDemoSections(['a', 'b'], (id) => docs[id], nameOf);
+    expect(out.status === 'found' && out.dashboardId).toBe('b');
+  });
+
+  it('asks for the next tab while none with cards has turned up', () => {
+    const docs: Record<string, GuideSectionsDoc | undefined> = { a: tables };
+    expect(siblingDemoSections(['a', 'b'], (id) => docs[id], nameOf)).toEqual({
+      status: 'pending',
+      need: 'b',
+    });
+  });
+
+  it('falls back to the first sibling with sections, then to none', () => {
+    const docs: Record<string, GuideSectionsDoc | null> = { a: null, b: tables, c: doc([]) };
+    const out = siblingDemoSections(['a', 'b', 'c'], (id) => docs[id], nameOf);
+    expect(out.status === 'found' && out.dashboardId).toBe('b');
+    expect(siblingDemoSections(['a', 'c'], (id) => docs[id], nameOf)).toEqual({ status: 'none' });
+  });
+
+  it("does not count a tab's pinned section it is excluded from", () => {
+    const hidden = doc([['Key figures', ['card']]], { persistent: true, exclude_tabs: ['b'] });
+    const docs: Record<string, GuideSectionsDoc> = { b: hidden };
+    expect(siblingDemoSections(['b'], (id) => docs[id], nameOf)).toEqual({ status: 'none' });
   });
 });
 

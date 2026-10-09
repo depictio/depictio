@@ -108,7 +108,7 @@ template:
           scan_filename: "{SAMPLESHEET_FILE}"
     # --tools without arriba: no arriba/ directory at all.
     - if_var_present: "SKIP_ARRIBA"
-      remove_dc_tags: ["arriba_fusions"]
+      remove_dc_tags: ["arriba_fusions", "arriba_fusion_links"]
       dashboards: ["dashboards/base.yaml"]
     - if_var_present: "SKIP_STARFUSION"
       remove_dc_tags: ["starfusion_fusions"]

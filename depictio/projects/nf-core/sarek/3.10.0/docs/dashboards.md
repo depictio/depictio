@@ -1,139 +1,164 @@
 # nf-core/sarek 3.10.0: Depictio dashboards
 
-This template turns the output of [nf-core/sarek](https://nf-co.re/sarek) 3.10.0 into a
-six-tab Depictio dashboard. sarek trims and aligns reads, marks duplicates, recalibrates base
-quality with GATK4 BQSR, calls variants with any mix of germline and somatic callers, and
-annotates the calls with SnpEff and VEP. The dashboard follows that chain and keeps going past
-the summary counts: it reads the VCFs themselves, so callers are compared call by call and gene
-by gene, not only by how many calls each one made.
+One dashboard: an **Overview**, then child tabs in three groups, read as a funnel from the
+reads to the genes the calls hit. [nf-core/sarek](https://nf-co.re/sarek) trims and aligns
+reads, marks duplicates, recalibrates base quality, calls variants with any mix of callers and
+annotates the calls with SnpEff and VEP. The dashboard follows that chain past the summary
+counts: it reads the VCFs themselves, so callers are compared call by call and gene by gene.
+The family rules are in `depictio/projects/nf-core/RULES.md`.
 
-The template was validated on the AWS megatest run `results-8ccac7ad37b05dd792447763bf9671b719824587`
-(the 3.10.0 release tag), `test_full_germline_ncbench_agilent/` profile. The dashboard texts
-quote nothing from that run: its sample names, depths and loci are listed as `forbidden_terms`
-in `megatest.yaml`, and `test_template_conventions.py` keeps them out.
+| Group | Tab | The question it answers |
+|---|---|---|
+| Data & QC | MultiQC | Did reads, mapping and recalibration work for every sample? |
+| Data & QC | Coverage | How deeply were the intervals covered, sample by sample? |
+| Variant calls | Variant yield | How much did each caller call, and of what kind? |
+| Variant calls | Call quality | Do the callsets look like clean germline calls? |
+| Variant calls | Caller concordance | Which calls do the callers share, and where do they differ? |
+| Annotation | Consequences | What do the calls do to the transcripts? |
+| Annotation | Genes | Which genes carry the calls, and where on the protein? |
+| Annotation | Locus | What do depth and calls show at one region? |
 
-## Inputs the template relies on
+The design comes from sarek's own CSV manifests (`csv/recalibrated.csv`,
+`csv/markduplicates*.csv`, `csv/variantcalled.csv`): the `samples` hub reads patient, sex and
+status (shown as `status_label`: Normal, Tumour or Unknown) and counts the callers per sample.
+Nothing is parsed from sample names, so the template has no `GROUP_COL`. A callset is one
+caller on one sample. "Concordance" is agreement between callers and samples, never a truth
+comparison: nf-core/variantbenchmarking has its own template for that.
 
-- **The sample hub comes from sarek's own CSV manifests.** sarek writes its resume points under
-  `csv/` (`recalibrated.csv`, `markduplicates*.csv`, `variantcalled.csv`). The `samples`
-  collection reads the first design manifest present for patient, sex and status (0 normal,
-  1 tumour, shown as `status_label`) and counts the callers per sample from `variantcalled.csv`.
-  Nothing is parsed out of sample names, and the samplesheet the run was launched with is not
-  needed.
-- **`GENOME`** (default `hg38`) names the assembly of the genome tracks and of the annotated VCF
-  collection. The bundled gene lane of the calls track stays `hg38`, because the viz model only
-  accepts a fixed list there.
-- **Optional collections.** The VCFtools and SnpEff collections, the X/Y sex check and the
-  somatic outputs (ASCAT, CNVkit, MSIsensor-pro, NGSCheckMate) are `optional: true`: a run that
-  skipped a step loads without them. Somatic outputs carry no tiles yet.
-- **The MultiQC tab links through `sample_mapping`** with no hand-written name table: each
-  MultiQC sample name is resolved to the hub sample it starts with.
-- **One mosdepth pass per sample.** sarek runs mosdepth on the duplicate-marked and on the
-  recalibrated CRAM; the coverage recipes keep the recalibrated pass when present (then the
-  duplicate-marked, then the sorted one), so no tile double-counts a sample.
+## Overview
 
-## Conventions
+The landing page, at compact width with the filter panel collapsed:
 
-- **Tab 1 is MultiQC.** The five tabs after it are a funnel: coverage, caller yield, caller
-  agreement, consequences, genes.
-- **Pinned on every tab:** the `Run at a glance` strip (SNPs called, indels per callset as a box
-  plot, samples by status, median Ts/Tv), the collapsed `Sample sheet`, the `Sample filters`
-  (sample, status) and the collapsed `QC thresholds` (a Ts/Tv floor).
-- **Structural-variant callers call few SNPs**, so every Ts/Tv card and filter carries
-  `filter_expr: col('ts_tv') > 0`.
-- **Every tab has its own open filters**, and within a tab the order is cards, distributions,
-  detail, then collapsed tables. Advanced visualisation controls sit in the tile header.
+- **Hero**: the sarek wordmark, what the run is, and a link to the run parameters.
+- **About this dashboard** and **The run**: two cards side by side. The second lists the
+  samples, the callsets and callers, the genome and the aligner, from the sample hub, the
+  bcftools summary and the run parameters. The `tools` parameter is not printed: a
+  comma-joined list has no space to wrap at.
+- **Pipeline**: six steps (map, cover, call, check, compare, annotate), each opening the
+  parameters that drive it and the tab that shows its output.
+- **Key figures**: the variant calls summed over the callsets (split by caller), the median
+  depth over the intervals (with its spread), the median PASS share of a callset (with its
+  spread) and the median Ts/Tv of the callsets with SNPs against a 1.8 floor. All four read
+  collections every run writes. A caller and a sample filter above them narrow these four
+  only.
+- **Findings**: result rows computed under the filters, each linking its tab: the median depth
+  over the intervals, the median Ts/Tv, the caller that keeps most PASS calls and its share,
+  and the HIGH-impact calls with the genes they hit. Below them, four figures in two rows: the
+  substitution spectrum beside the FILTER partitions per caller, then the allele fraction
+  against depth density beside the impact classes per caller. The bar of this section filters
+  by caller and sample.
+- **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
----
+The persistent `Sample filters` (status, patient, sample) sit in the collapsed left panel and
+narrow every tab through the sample links. The `Sample sheet` section is pinned to the bottom
+of every child tab, collapsed, and absent from the Overview.
 
-## MultiQC
+## Child tabs
 
-The run's native MultiQC report: general statistics, read quality (FastQC, fastp), alignment and
-recalibration (samtools, MarkDuplicates, BQSR, mosdepth coverage and insert size), the
-variant-call QC MultiQC pools across callers, and the SnpEff and VEP summaries. A tab-local
-`Glance scope` picker narrows the pinned strip to one caller.
+Each child tab opens with a short intro (the method, with a link to its tool, and how to read
+the tab), then a strip of four key numbers, each card with its own colour and a secondary that
+reads it, then at most three open sections; tables follow, collapsed. Structural-variant
+callers call few SNPs, so every Ts/Tv card and filter keeps `ts_tv > 0`.
 
-## Cohort QC
+**MultiQC.** MultiQC panels only. Open: general statistics, fastp filtered reads, Samtools
+percent mapped, MarkDuplicates and the mosdepth cumulative coverage. Collapsed: the FastQC
+panels, the BQSR fit and insert sizes, the bcftools and VCFtools panels, and the SnpEff and
+VEP panels. Its own sample filter reads the MultiQC report, where a library carries a lane and
+a read suffix.
 
-Coverage bounds every call, so it comes first. Cards: target depth per contig (box plot over the
-capture-target scope), targets under 20x (top samples), and the X/Y depth ratio.
+**Coverage.** Strip: the depth over the intervals per sample (box plot), the median depth of
+an interval against a 20x floor, the depth across contigs (distribution) and the intervals
+under 20x (the contigs with most). Then the mean depth per contig, with a bar that picks the
+intervals or the whole contig (it opens on the intervals), and the X against Y sex check.
+Collapsed: the per-contig and sex-check tables. Filter: a mean-depth range, not a contig or
+scope picker, which would empty the first card (it reads mosdepth's `total` row of the
+intervals).
 
-`One locus, three tracks` is a locus section. The navigator is a `genome_view` on
-`mosdepth_windows` (the per-target bed binned to 1 Mb windows) that keeps the whole genome and
-only zooms to its region; it opens on `chr1:1,000,000-2,000,000`, a generic window that is
-already small enough for the file track to fetch. Its locus field (a region or a gene symbol)
-and its brush drive three followers through the region links in `template.yaml`: per-target
-depth (`coverage_track` on `mosdepth_targets`), the calls over the gene lane (`genome_view` on
-`vcf_variants`), and the snpEff-annotated VCFs range-read by the browser from the
-`snpeff_vcf_files` indexed_file collection. Cards are not region-scoped.
+**Variant yield.** Strip: the median records per callset (the callers that call most: a
+structural-variant caller writes orders of magnitude fewer, which a box plot would flatten),
+SNPs (split by caller), indels (a ring by caller) and multiallelic sites (distribution). Then
+SNPs and indels per caller, one bar per sample, and the substitution and indel spectra, one bar
+per caller with its callsets' shares averaged, so the legend lists callers, not callsets.
+Collapsed: the bcftools distribution blocks (picked in the left panel, opening on depth) and
+the per-caller count table. The bcftools QUAL histogram is not ingested: it outweighed every
+other block and repeats the quality sweep. Filters: caller and bcftools block.
 
-`Whole contig against capture targets` compares mosdepth's two scopes per contig, one facet row
-per scope; the scope picker opens on the targets. `X against Y coverage` is a heuristic sex
-check from the same summaries.
+**Call quality.** Strip: the Ts/Tv against a 1.8 floor, the PASS share (out of 100), the het to
+hom ratio (box plot) and the allele fraction of heterozygous calls (distribution). Then the
+callset QC profile (six numbers per callset on parallel axes; the record count stays on
+Variant yield), the calls per FILTER value per caller, and the Ts/Tv above a rising quality
+floor on a log axis (callers write QUAL on scales a thousand-fold apart), its legend under the
+plot. Collapsed: the FILTER breakdown and the
+Ts/Tv per callset. Filters: caller, FILTER value and a Ts/Tv range.
 
-## Variant yield
+**Caller concordance.** Strip: the calls (the callers that call most), the calls by variant
+type (a ring), the allele fraction (box plot) and the depth at the call (distribution). Then
+the UpSet of PASS calls shared between callsets (fixed: the pickers do not narrow it), the
+allele fraction against depth as a density beside its histogram per caller (log count axis:
+homozygous calls pile at 1), and the rainfall
+of the calls along the genome. Collapsed: the call table. Filters: caller, variant type,
+contig and a depth range.
 
-Each caller's own bcftools stats and VCFtools reports, caller against caller. Cards: MNPs,
-multiallelic sites, calls by FILTER value, and the het to hom ratio per callset. Then SNP and
-indel counts per sample, the mutation spectra (strand-folded substitutions and indel lengths,
-each normalised to its callset), the `parallel_coordinates` callset profile, calls per FILTER
-partition, Ts/Tv above a rising quality floor, and the remaining bcftools blocks (indel length,
-substitution, depth, allele frequency, singletons) behind a block picker that opens on depth.
-The bcftools QUAL histogram is not ingested: it outweighed every other block and repeated the
-quality-floor panel.
+**Consequences.** Strip: the annotated calls (a ring by impact class), the HIGH-impact calls
+(split by variant type), the genes with a HIGH or MODERATE call (the callers that hit most)
+and the depth at HIGH-impact calls (distribution). Then SnpEff's own counts for the summary
+section picked in the left panel (opening on impact), and the impact recomputed on the calls:
+the impact classes per caller as shares (MODIFIER left out), and the allele fraction against
+depth scatter with the variant record beside it. The impact class and consequence pickers sit
+in the bar of that section, because three cards pin an impact class. Collapsed: the SnpEff
+summary and annotated call tables. Filters: caller and SnpEff section.
 
-## Caller concordance
+**Genes.** Strip: the genes with a call (the commonest biotypes), the HIGH-impact variants
+(split by caller), the top gene burden (the most coding variants on one gene, the callers'
+maxima) and the protein changes (a ring by impact class). Then the gene by callset burden
+heatmap (log1p colour, so one long gene does not wash out the rest), the UpSet of genes the
+callers share (fixed), and the coding variants along the protein. Collapsed: the per-gene
+burden and protein position tables. Filters: biotype, caller and impact class.
 
-Agreement between callers and samples, never a truth comparison (that is
-nf-core/variantbenchmarking). Two UpSets (exact PASS calls, then genes carrying a coding
-variant; both fixed, the pickers do not narrow them), allele fraction against depth as a
-density and as a histogram, a rainfall plot of inter-call distances, and the call table.
+**Locus.** A depth navigator in 1 Mb windows drives three tracks on one axis through the
+region links: the depth per interval, the calls over the gene lane and the annotated VCFs read
+from their files. It opens on a default region in the second megabase of chromosome 1, inside
+the 2 Mb under which the file track reads its VCFs. The four cards (calls by caller, depth per interval,
+allele fraction, depth at the call) take `follow_region_filter: true`, so they follow the
+region and recount it on every brush or locus entry. Filters: caller and variant type.
 
-## Consequences
+## Routes and pruning
 
-SnpEff's published composition next to the same composition recomputed from the annotated calls.
-Cards count impact classes, consequence terms, HIGH-impact calls (top callers) and genes with a
-HIGH or MODERATE call. A click on the allele fraction against depth scatter fills the variant
-record card beside it, which stays a thin rail until a call is picked, with the gene linked to
-Ensembl.
+| Route | What changes |
+|---|---|
+| No SnpEff (`--tools` without `snpeff`) | No Consequences or Genes tab, no shared-calls UpSet or annotated VCF track, no HIGH-impact row or impact highlight on the Overview. |
+| VCFtools skipped | No FILTER partitions, quality sweep or FILTER filter on Call quality; the FILTER highlight is dropped. |
+| No X/Y sex check | No sex-check scatter or table on Coverage. |
+| Somatic outputs | Loaded when present (ASCAT, CNVkit, MSIsensor-pro, NGSCheckMate), with no tiles yet. |
 
-## Genes
+The import re-packs the Overview grid after a drop, so a lone highlight takes the full row.
 
-The per-gene burden SnpEff writes: a clustered gene by callset heatmap of coding-variant counts,
-a protein lollipop, and the per-gene table, whose row selection drives the lollipop. A high
-burden on long, repetitive genes is a mappability signal before it is a biological one.
+## Colours
 
-## Selection
+`category_colors` is declared once, on the Overview, and read by every tab: callers take
+`auto` (a colour-blind-safe colour each at import), the impact classes, variant types,
+mutation and indel classes, inferred sex, mosdepth scope and status are written out, and the
+FILTER values take `auto:n_variants` (the commonest eight of the run take the palette) with
+PASS pinned green. The impact figure reads the same map.
 
-Tables and point views select on their entity column, and the selection narrows every tile on the
-tab that reads the same collection or one linked from it:
+## Cross-selection
 
-- The sample sheet selects on `sample_id`, which the links carry to every collection and the
-  MultiQC panels. The contig-depth, sex-check, FILTER and distribution tables, and the sex-check
-  scatter, select on `sample`.
-- The bcftools summary and Ts/Tv tables and the SnpEff composition table select on `caller`,
-  which the links carry to the other callset-level collections on the Variant yield tab and to
-  the annotated calls.
-- The rainfall plot and the call tables select single calls on `variant_key`; the per-gene table
-  selects on `gene_name`, which reaches the protein lollipop.
+Tables and point views select on their entity column, and a pick narrows the tiles of the same
+collection and, through the project links, the collections downstream of it. The sample sheet
+selects on `sample_id`, which the links carry to every collection and the MultiQC panels; the
+contig, sex-check, FILTER and distribution tables and the sex-check scatter on `sample`; the
+bcftools and SnpEff summary tables on `caller`; the rainfall plot, the impact scatter and the
+call tables on `variant_key`; the per-gene table on `gene_name`, which reaches the protein
+lollipop. The variant record on Consequences shows the call picked in the scatter beside it.
 
-The genome view tracks move the locus through their region links rather than a selection, the
-Ts/Tv quality sweep and the callset QC profile have no sibling tile on their collection, and the
-allele fraction against depth view on the Caller concordance tab draws density bins rather than
-points, so none of them selects.
+## Controls
 
----
+Advanced visualisation controls dock by width: to the right of a full-width tile, on top of a
+narrower one. Nothing is set per tab or per tile.
 
 ## Reproducing
 
 ```bash
-# 1. Fetch the megatest subset
-bash depictio/projects/nf-core/sarek/3.10.0/download_test_data.sh \
-  ~/Data/depictio-nfcore/sarek/3.10.0/megatest
-
-# 2. Dry run, then ingest
-depictio-cli ingest --template nf-core/sarek/3.10.0 \
-  --data-root ~/Data/depictio-nfcore/sarek/3.10.0/megatest --dry-run
-depictio-cli ingest --template nf-core/sarek/3.10.0 \
-  --data-root ~/Data/depictio-nfcore/sarek/3.10.0/megatest
+bash depictio/projects/nf-core/sarek/3.10.0/download_test_data.sh <DATA_ROOT>
+depictio-cli ingest --template nf-core/sarek/3.10.0 --data-root <DATA_ROOT>
 ```

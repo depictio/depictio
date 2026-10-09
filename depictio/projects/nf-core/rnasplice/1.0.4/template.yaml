@@ -22,6 +22,8 @@
 #     edger/diffsplice_genes, dexseq/dtu, rmats/events, suppa/local_events.
 #     DEXSeq exon, edgeR and rMATS need the STAR alignments; DEXSeq DTU and
 #     SUPPA2 run on Salmon TPMs and are written once per quantification route.
+#   - star_salmon/log/<sample>.SJ.out.tab: STAR's splice junctions per sample,
+#     which the sashimi of the called rMATS events reads (event_junctions).
 #
 # Route. `--aligner star_salmon` writes everything under star_salmon/;
 # `--pseudo_aligner salmon` writes a second, alignment-free copy of the
@@ -42,7 +44,7 @@
 # ============================================================================
 template:
   template_id: "nf-core/rnasplice/1.0.4"
-  description: "nf-core/rnasplice template: MultiQC funnel, sample space, cross-tool differential splicing (DEXSeq exon and DTU, edgeR, rMATS, SUPPA2) with per-tool volcanoes and event types"
+  description: "nf-core/rnasplice template: MultiQC funnel, sample space, cross-tool differential splicing (DEXSeq exon and DTU, edgeR, rMATS, SUPPA2) with per-tool volcanoes, event types and a sashimi of the junctions around the rMATS calls"
   version: "1.0.0"
   variables:
     - name: "DATA_ROOT"
@@ -445,6 +447,30 @@ workflows:
               "significant": "FDR under SPLICING_FDR and absolute dPSI at or above MIN_DPSI"
               "direction": "up (more inclusion in treatment), down, or not significant"
 
+      # Declared after rmats_events, samples and contrasts, which its recipe
+      # reads through dc_ref. Optional twice over: a run without STAR (pseudo-
+      # alignment only) has no junction table, a run without rMATS no events.
+      - data_collection_tag: "event_junctions"
+        optional: true
+        description: "STAR junction reads around the called rMATS events: one row per gene, condition and junction, averaged over the condition's replicates, for the sashimi"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/rnasplice/event_junctions.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "gene_id": "Ensembl gene id of the called rMATS event(s) the junction belongs to"
+              "gene_name": "Gene symbol (rMATS), else the gene id"
+              "condition": "Condition of the lane: the treatment or the control of a contrast that calls the gene"
+              "chrom": "Chromosome, as rMATS names it"
+              "start": "Donor: the last exonic base before the intron"
+              "end": "Acceptor: the first exonic base after the intron"
+              "strand": "Strand of the gene"
+              "reads": "Uniquely mapped reads crossing the junction, mean per replicate of the condition"
+
       - data_collection_tag: "suppa_events"
         optional: true
         description: "SUPPA2 local events per contrast: parsed event, delta PSI (treatment minus control), empirical p-value and the call"
@@ -638,4 +664,11 @@ links:
     target_type: "table"
     link_config: {resolver: "direct", target_field: "gene_id"}
     description: "Carry the cross-tool gene selection onto the SUPPA2 events"
+    enabled: true
+  - source_dc_tag: "splicing_genes"
+    source_column: "gene_id"
+    target_dc_tag: "event_junctions"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "gene_id"}
+    description: "Carry the cross-tool gene selection onto the sashimi of the rMATS events"
     enabled: true

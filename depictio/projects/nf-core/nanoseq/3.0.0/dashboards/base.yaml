@@ -1,425 +1,670 @@
-version: 1
-# nf-core/nanoseq 3.0.0 reference dashboard.
+# nf-core/nanoseq 3.0.0. Every rule it follows is written out in
+# depictio/projects/nf-core/RULES.md.
 #
-# Six tabs, one question each: what MultiQC reports -> how long and how good
-# the reads are -> how they aligned -> what Bambu counted and whether the
-# libraries group by condition -> which genes moved (DESeq2) -> which
-# transcripts changed their share of their gene (DEXSeq) and how the isoforms
-# are expressed.
+# The hub is `samples`, one row per library, the source of every sample link
+# in template.yaml: a filter on it reaches NanoStat, samtools stats, the melted
+# Bambu counts and the sample-structure collections. DESeq2 and DEXSeq run
+# once over the whole run and carry no sample column, so the sample filters do
+# not narrow those two tabs, and their intros say so.
 #
-# EVERY TAB HAS A SCOPE. The pinned `Sample filters` section carries the
-# sample, condition and library-preparation pickers, and the template's links
-# fan them out to NanoStat, the samtools distributions, the melted Bambu counts
-# and the sample-structure collections, so the pick means the same thing on
-# every tab. Each tab adds an open, non-persistent filter section on its own
-# columns. The run-level collections (DESeq2, DEXSeq) have no sample column,
-# because the statistic is computed across the whole run, and their tab says so.
+# Routes: without a design table (METADATA_FILE) the hub falls back to the
+# samplesheet group as the condition and writes "unknown" for the preparation,
+# source replicate and flow-cell run; only the `metadata` collection is pruned.
+# The isoform structures need bambu/extended_annotations.gtf, which a
+# quantification-only run does not write.
 #
-# The pinned `Run at a glance` strip (4 cards: libraries by condition, reads,
-# yield, N50) opens every tab and is not repeated as a tab card. MultiQC panels
-# live on the MultiQC tab only, minus the ones a data-collection tile already
-# draws (NanoStat summary and quality ladder, FastQC length distribution,
-# samtools SN block).
-#
-# The MultiQC report bound here was reprocessed with MultiQC 1.35 from the
-# run's raw tool outputs (REPROCESSED.json next to the parquet); nanoseq 3.0.0
-# publishes MultiQC 1.11, which writes no parquet. Module and plot names below
+# The MultiQC report was reprocessed with MultiQC 1.35 from the run's raw tool
+# outputs (nanoseq 3.0.0 writes no parquet); the module and plot names below
 # are the 1.35 ones.
 main_dashboard:
   title: nf-core/nanoseq
-  subtitle: "Nanopore long-read QC, alignment and Bambu gene and transcript quantification"
+  subtitle: Nanopore long reads, from QC to the genes and isoforms that differ
   project_tag: Nanopore RNA-Seq
-  main_tab_name: MultiQC
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family: figures, advanced viz
+  # and filter chips all colour a value the same way.
+  category_colors:
+    condition: auto
+    protocol:
+      '*': auto
+      unknown: '#adb5bd'
+    run_id:
+      '*': auto
+      unknown: '#adb5bd'
+    direction:
+      up: '#e03131'
+      down: '#1971c2'
+      not significant: '#adb5bd'
+    # Biotypes outnumber the palette: the import ranks them by their summed
+    # counts and gives the eight largest the palette.
+    gene_biotype:
+      '*': 'auto:count'
+      Other: '#868e96'
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs.
+  # Bound to the samples hub, the source of every sample link.
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab that has a sample column
+    persistent: true
+    pin: top
+  grid_sections:
+  - name: Key figures
+    icon: mdi:counter
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
+  # Declared on the main tab rather than on an analysis tab: a run that prunes
+  # that tab would take a persistent section declared there with it.
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: gray
+    description: The library design behind every tab, narrowed by the sample filters
+    collapsed: true
+    persistent: true
+    pin: bottom
+    exclude_tabs:
+    - Overview
+  components:
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Libraries, below).
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: condition
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: Condition
+    section: Key figures
+    tag: ns-ov-kf-condition
+    index: ov-kf-condition
+    title: Condition
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+      strip_label: Library
+    section: Key figures
+    tag: ns-ov-kf-sample
+    index: ov-kf-sample
+    title: Library
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  - component_type: text
+    title: nf-core/nanoseq
+    logo: https://raw.githubusercontent.com/nf-core/nanoseq/master/docs/images/nf-core-nanoseq_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/nanoseq/master/docs/images/nf-core-nanoseq_logo_dark.png
+    order: 1
+    body: >
+      Nanopore long reads from basecalled FASTQ to gene and transcript counts, and the genes and
+      isoforms that differ between conditions. [Run parameters](params:)
+    tag: ns-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/nanoseq takes Nanopore reads through quality control and alignment, counts them per gene and transcript with Bambu, and tests what differs between conditions, gene by gene and isoform by isoform. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
+
+      The sample filters in the left panel apply to every tab with a sample column: narrow the libraries once and those tabs follow. A bar above a section narrows that section only.
+    tag: ns-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's facts, read from its data: it ships no params.json, so no
+  # {{param:...}} line would print anything but a dash.
+  - component_type: text
+    surface: card
+    values:
+      libs: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
+      conds: {dc: samples, column: condition, aggregation: nunique, format: integer}
+      preps: {dc: samples, column: protocol, aggregation: nunique, format: integer}
+      reads: {dc: nanostats, column: n_reads, aggregation: sum, format: si}
+    body: |
+      ### The run
+      - ![](icon:mdi:test-tube) **Libraries** {{libs}}
+      - ![](icon:mdi:shape-outline) **Conditions** {{conds}}
+      - ![](icon:mdi:flask-outline) **Preparations** {{preps}}
+      - ![](icon:mdi:counter) **Reads** {{reads}}
+    tag: ns-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the family's colour (the header's), not the theme's blue.
+  # The run has no params.json, so each step's link searches the software
+  # versions for its tool.
+  - component_type: text
+    surface: card
+    accent: green
+    body: |
+      ### Five steps from raw reads to isoforms
+      Each step names its tool versions and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:check-decagram) **QC** NanoPlot and FastQC on the raw reads · [Versions](params:nanoplot) · [Reads](tab:Reads)
+      2. ![](icon:mdi:dna) **Align** minimap2 to the reference · [Versions](params:minimap2) · [Alignment](tab:Alignment)
+      3. ![](icon:mdi:counter) **Count** Bambu, per gene and transcript · [Versions](params:bambu) · [Quantification](tab:Quantification)
+      4. ![](icon:mdi:scale-balance) **Genes** DESeq2 between the conditions · [Versions](params:deseq2) · [Genes](tab:Gene expression)
+      5. ![](icon:mdi:chart-timeline-variant) **Isoforms** DEXSeq on transcript usage · [Versions](params:dexseq) · [Isoforms](tab:Isoform usage)
+      :::
+    tag: ns-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. The icon colour is that tab's colour. Every route writes all
+  # four collections.
+  - component_type: card
+    workflow_tag: nanoseq
+    data_collection_tag: samples
+    aggregation: count
+    column_name: sample_id
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: condition
+    display:
+      icon_name: mdi:test-tube
+      icon_color: orange
+      caption: in the sample sheet, by condition
+      link: tab:MultiQC
+    section: Key figures
+    tag: ns-ov-kf-libraries
+    index: ov-kf-libraries
+    title: Libraries
+    description: Libraries in the sample sheet. The bar splits them by condition.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nanoseq
+    data_collection_tag: nanostats
+    use: nanoplot/nanostats
+    aggregation: median
+    column_name: read_length_n50
+    column_type: float64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:ruler
+      icon_color: cyan
+      caption: median per library, with its spread
+      link: tab:Reads
+      decimals: 0
+    section: Key figures
+    tag: ns-ov-kf-n50
+    index: ov-kf-n50
+    title: Read length N50
+    description: Median read length N50 of the libraries in view, in bases. The box shows how it spreads.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nanoseq
+    data_collection_tag: samtools_stats_sections
+    use: samtools/stats_sections
+    aggregation: median
+    column_name: reads_mapped_pct
+    column_type: float64
+    filter_expr: col('section') == 'SN'
+    secondary_layout: coverage
+    coverage_max: 100
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: indigo
+      caption: median share of each library's reads
+      link: tab:Alignment
+      decimals: 1
+    section: Key figures
+    tag: ns-ov-kf-placed
+    index: ov-kf-placed
+    title: Reads placed (%)
+    description: Median share of each library's reads minimap2 placed on the reference.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  # DESeq2 tests one row per annotation entry, so this counts calls, not
+  # distinct genes; the Gene expression tab counts the genes.
+  - component_type: card
+    workflow_tag: nanoseq
+    data_collection_tag: deseq2_results
+    use: deseq2/results
+    aggregation: count
+    column_name: gene_id
+    column_type: object
+    filter_expr: col('significant') == True
+    secondary_layout: composition
+    breakdown_col: direction
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: grape
+      caption: significant calls, up and down
+      link: tab:Gene expression
+    section: Key figures
+    tag: ns-ov-kf-de-calls
+    index: ov-kf-de-calls
+    title: DESeq2 calls
+    description: Calls at a 5% FDR and a two-fold change, over the whole run. The bar splits them by direction.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the condition, then the library, on the hub.
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: condition
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+      strip_label: Condition
+    section: Findings
+    tag: ns-ov-findings-condition
+    index: ov-findings-condition
+    title: Condition
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+      strip_label: Library
+    section: Findings
+    tag: ns-ov-findings-sample
+    index: ov-findings-sample
+    title: Library
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing one data collection, so the import
+  # removes a row with its data. The two test rows are computed once over the
+  # whole run, so no sample filter changes them. The DESeq2 row counts calls
+  # (one per tested annotation entry), as the Key figure and the volcano's
+  # badges do; the Gene expression tab counts the distinct genes.
+  # The DEXSeq row counts the transcripts of the genes under a 5% gene-level
+  # q-value, which the volcano colours (effect_threshold 0 on its source).
+  - component_type: text
+    surface: card
+    values:
+      q10: {dc: nanostats_quality, column: pct_reads, aggregation: median, filter_expr: "col('q_cutoff') == 10",
+        format: 'decimals:1'}
+      pc1: {dc: bambu_sample_pca, column: pc1_var_pct, aggregation: max, format: 'decimals:1'}
+      n_up: {dc: deseq2_results, column: gene_id, aggregation: count, filter_expr: "col('direction') == 'up'",
+        format: integer}
+      n_down: {dc: deseq2_results, column: gene_id, aggregation: count, filter_expr: "col('direction') == 'down'",
+        format: integer}
+      n_dtu: {dc: dexseq_results, column: feature_id, aggregation: nunique, filter_expr: "col('significant') == True",
+        format: integer}
+      n_tx: {dc: dexseq_results, column: feature_id, aggregation: nunique, format: integer}
+    body: |
+      - **{{q10}}%** of a library's reads reach Q10 or above – the median over the libraries [Reads](tab:Reads)
+      - **{{pc1}}%** of the expression variance lies on the first principal component – log CPM of the most variable genes [Quantification](tab:Quantification)
+      - **{{n_up}}** calls up and **{{n_down}}** down between the conditions – DESeq2, 5% FDR and a two-fold change [Genes](tab:Gene expression)
+      - **{{n_dtu}}** of {{n_tx}} transcripts shift their share of their gene – DEXSeq, gene-level 5% FDR [Isoforms](tab:Isoform usage)
+    section: Findings
+    tag: ns-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # One highlight per tab behind the rows above, in their order. The tiles of
+  # a row share a stored height.
+  - component_type: highlight
+    section: Findings
+    source_tab: Reads
+    source_component: rd-length-quality
+    caption: One point per library, mean read length against mean quality, sized by its yield; one off the trend of the others is the one to check.
+    hide_legend: true
+    tag: ns-ov-hl-length-quality
+    index: ov-hl-length-quality
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  # The highlights take a short title: the source's is cut at half width.
+  - component_type: highlight
+    section: Findings
+    title: Libraries (PCA)
+    source_tab: Quantification
+    source_component: qt-pca
+    caption: One point per library on the first two components of log CPM, coloured by condition; replicates should sit together.
+    tag: ns-ov-hl-pca
+    index: ov-hl-pca
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  # show_labels is off on both volcano sources: Ensembl and transcript ids pile
+  # up over the points.
+  - component_type: highlight
+    section: Findings
+    title: DESeq2 volcano
+    source_tab: Gene expression
+    source_component: de-volcano
+    caption: One point per tested gene, effect against significance; the coloured calls clear a 5% FDR and a two-fold change.
+    tag: ns-ov-hl-de-volcano
+    index: ov-hl-de-volcano
+    layout: {x: 0, y: 7, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Isoform usage
+    source_component: iso-volcano
+    caption: One point per transcript, its change in usage against the gene-level q-value; the coloured ones shift their share of the gene.
+    tag: ns-ov-hl-iso-volcano
+    index: ov-hl-iso-volcano
+    layout: {x: 4, y: 7, w: 4, h: 5}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+      - [Reads](tab:Reads)
+      - [Alignment](tab:Alignment)
+
+      ### Expression
+      - [Quantification](tab:Quantification)
+      - [Gene expression](tab:Gene expression)
+      - [Isoform usage](tab:Isoform usage)
+    section: How to read this dashboard
+    tag: ns-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filters, the condition first, then the design columns
+  # of the design table ("unknown" without one).
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: condition
+    column_type: object
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: violet
+    section: Sample filters
+    group: Sample scope
+    tag: ns-filter-condition
+    index: sample-filters-condition
+    title: Condition
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: ns-filter-sample
+    index: sample-filters-sample
+    title: Library
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: protocol
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: grape
+    section: Sample filters
+    group: Design
+    tag: ns-filter-protocol
+    index: sample-filters-protocol
+    title: Library preparation
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: run_id
+    column_type: object
+    display:
+      icon_name: mdi:calendar-outline
+      custom_color: indigo
+    section: Sample filters
+    group: Design
+    tag: ns-filter-run
+    index: sample-filters-run
+    title: Flow-cell run
+    layout: {x: 0, y: 9, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: source_replicate
+    column_type: object
+    display:
+      icon_name: mdi:relation-many-to-many
+      custom_color: blue
+    section: Sample filters
+    group: Design
+    tag: ns-filter-source-replicate
+    index: sample-filters-source-rep
+    title: Source replicate
+    layout: {x: 0, y: 12, w: 1, h: 3}
+  # Row selection feeds the Analysis panel: the one component of the family
+  # that is both persistent and row-addressable.
+  - component_type: table
+    workflow_tag: nanoseq
+    data_collection_tag: samples
+    row_selection_enabled: true
+    row_selection_column: sample_id
+    section: Sample sheet
+    tag: ns-sample-sheet
+    index: sample-sheet
+    title: Library design
+    layout: {x: 0, y: 0, w: 8, h: 6}
+tabs:
+- title: MultiQC
+  subtitle: Did every library sequence and align as expected?
+  tab_group: Data & QC
+  tab_order: 1
   tab_icon: /assets/images/logos/multiqc_icon_color.svg
   tab_icon_color: orange
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: Sample filters
-    icon: mdi:filter-variant
-    color: teal
-    description: Applies to every tab through the project links
-    persistent: true
-    pin: top
-  - name: Run scope
-    icon: mdi:tune
-    color: indigo
-    description: Flow-cell run and source replicate, on this tab only
-  grid_sections:
-  - name: Run at a glance
-    icon: mdi:counter
-    color: teal
-    description: What the run contains and what the basecaller delivered, on every tab
-    persistent: true
-    pin: top
-  - name: Sample sheet
-    icon: mdi:table-account
-    color: teal
-    description: The sample hub the sample filter is sourced on
-    collapsed: true
-    persistent: true
-    pin: top
-  - name: General statistics
-    icon: mdi:view-dashboard-outline
+  - name: MultiQC report
+    icon: mdi:file-document-outline
     color: orange
-    description: MultiQC's general statistics table, one row per sample
-  - name: Read QC (FastQC)
-    icon: mdi:chart-bell-curve
-    color: blue
-    description: FastQC as MultiQC reports it
-  - name: Alignment (samtools)
-    icon: mdi:chart-bar
-    color: indigo
-    description: samtools flagstat and idxstats as MultiQC reports them
+    description: Libraries as the MultiQC report names them
+  grid_sections:
+  - name: QC overview
+    icon: mdi:chart-box-outline
+    color: orange
+    description: General statistics, read counts and quality, and where the reads aligned
+  - name: FastQC details
+    icon: mdi:file-document-outline
+    color: gray
+    description: The remaining FastQC panels
+    collapsed: true
+  - name: samtools details
+    icon: mdi:file-document-outline
+    color: gray
+    description: The remaining samtools panels
+    collapsed: true
   components:
-  # ------------------------------------------------------- run at a glance
-  # Pinned persistent strip: what the run is made of and what it yielded.
-  - component_type: card
-    tag: ns-glance-card-libraries
-    index: ns-glance-card-libraries
-    section: Run at a glance
-    workflow_tag: nanoseq
-    data_collection_tag: samples
-    aggregation: count
-    column_name: sample_id
-    column_type: object
-    secondary_layout: donut
-    breakdown_col: condition
-    display: {icon_name: 'mdi:test-tube', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Libraries by condition
-    layout: {x: 0, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: ns-glance-card-reads
-    index: ns-glance-card-reads
-    section: Run at a glance
-    workflow_tag: nanoseq
-    data_collection_tag: nanostats
-    use: nanoplot/nanostats
-    aggregation: sum
-    column_name: n_reads
-    column_type: float64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:counter', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Reads basecalled
-    layout: {x: 2, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: ns-glance-card-yield
-    index: ns-glance-card-yield
-    section: Run at a glance
-    workflow_tag: nanoseq
-    data_collection_tag: nanostats
-    use: nanoplot/nanostats
-    aggregation: sum
-    column_name: total_gigabases
-    column_type: float64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:database-outline', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Gigabases sequenced
-    layout: {x: 4, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: ns-glance-card-n50
-    index: ns-glance-card-n50
-    section: Run at a glance
-    workflow_tag: nanoseq
-    data_collection_tag: nanostats
-    use: nanoplot/nanostats
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: read_length_n50
-    column_type: float64
-    display: {icon_name: 'mdi:ruler', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Read length N50
-    layout: {x: 6, y: 0, w: 2, h: 2}
-
-  # ------------------------------------------------------------- sample sheet
+  # The tab's intro: the method, with its link, and how to read the tab.
   - component_type: text
-    tag: ns-sheet-intro
-    section: Sample sheet
-    title: The design behind every panel
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
+    order: 1
     body: >
-      One row per library, with its condition, replicate, library preparation
-      and flow-cell run. The filters in the left panel are sourced on this
-      table, and a row picked here scopes every other tab.
+      [MultiQC](https://multiqc.info) gathers the per-library FastQC, NanoStat and samtools
+      reports. Read the general statistics first, then whether quality holds along the read and
+      where the reads aligned; the NanoStat and samtools summaries are drawn in full on the
+      Reads and Alignment tabs.
+    tag: ns-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
     workflow_tag: nanoseq
-    data_collection_tag: samples
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: table
-    tag: ns-sheet-table-samples
-    section: Sample sheet
-    workflow_tag: nanoseq
-    data_collection_tag: samples
-    row_selection_enabled: true
-    row_selection_column: sample_id
-    title: Sample hub
-    description: One row per library, with condition, replicate, library preparation, source replicate, flow-cell run and reference build.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 3}
-
-  # ------------------------------------------------------ general statistics
+    data_collection_tag: multiqc_data
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+    section: MultiQC report
+    tag: ns-mqc-filter-sample
+    index: mqc-sample-filter
+    title: Library
+    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: multiqc
-    tag: ns-mqc-general-stats
-    section: General statistics
     workflow_tag: nanoseq
     data_collection_tag: multiqc_data
     use: multiqc/general_stats
     selected_module: general_stats
     selected_plot: general_stats
-    title: General statistics
-    description: One row per sample, pooling the FastQC, NanoStat and samtools headline numbers.
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 5}
-
-  # ---------------------------------------------------------------- FastQC
-  # No NanoStat panels and no FastQC length distribution: the Reads tab draws
-  # the NanoStat summary, its quality ladder and the length profile from data
-  # collections.
+    section: QC overview
+    tag: ns-mqc-general-stats
+    index: mqc-general-stats
+    layout: {x: 0, y: 0, w: 8, h: 4}
   - component_type: multiqc
-    tag: ns-mqc-fastqc-counts
-    section: Read QC (FastQC)
     workflow_tag: nanoseq
     data_collection_tag: multiqc_data
     use: multiqc/fastqc
     selected_module: fastqc
     selected_plot: Sequence Counts
-    title: Sequence counts
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 0, w: 4, h: 5}
+    section: QC overview
+    tag: ns-mqc-fastqc-counts
+    index: mqc-fastqc-counts
+    layout: {x: 0, y: 4, w: 4, h: 4}
   - component_type: multiqc
-    tag: ns-mqc-fastqc-quality
-    section: Read QC (FastQC)
     workflow_tag: nanoseq
     data_collection_tag: multiqc_data
     use: multiqc/fastqc
     selected_module: fastqc
     selected_plot: Sequence Quality Histograms
-    title: Per-base sequence quality
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 0, w: 4, h: 5}
+    section: QC overview
+    tag: ns-mqc-fastqc-quality
+    index: mqc-fastqc-quality
+    layout: {x: 4, y: 4, w: 4, h: 4}
   - component_type: multiqc
-    tag: ns-mqc-fastqc-perseq
-    section: Read QC (FastQC)
-    workflow_tag: nanoseq
-    data_collection_tag: multiqc_data
-    use: multiqc/fastqc
-    selected_module: fastqc
-    selected_plot: Per Sequence Quality Scores
-    title: Per-sequence quality scores
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 5, w: 4, h: 5}
-  - component_type: multiqc
-    tag: ns-mqc-fastqc-gc
-    section: Read QC (FastQC)
-    workflow_tag: nanoseq
-    data_collection_tag: multiqc_data
-    use: multiqc/fastqc
-    selected_module: fastqc
-    selected_plot: Per Sequence GC Content
-    title: GC content
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 5, w: 4, h: 5}
-  - component_type: multiqc
-    tag: ns-mqc-fastqc-ncontent
-    section: Read QC (FastQC)
-    workflow_tag: nanoseq
-    data_collection_tag: multiqc_data
-    use: multiqc/fastqc
-    selected_module: fastqc
-    selected_plot: Per Base N Content
-    title: Per-base N content
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 10, w: 4, h: 5}
-  - component_type: multiqc
-    tag: ns-mqc-fastqc-dup
-    section: Read QC (FastQC)
-    workflow_tag: nanoseq
-    data_collection_tag: multiqc_data
-    use: multiqc/fastqc
-    selected_module: fastqc
-    selected_plot: Sequence Duplication Levels
-    title: Sequence duplication levels
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 10, w: 4, h: 5}
-  - component_type: multiqc
-    tag: ns-mqc-fastqc-over
-    section: Read QC (FastQC)
-    workflow_tag: nanoseq
-    data_collection_tag: multiqc_data
-    use: multiqc/fastqc
-    selected_module: fastqc
-    selected_plot: Top overrepresented sequences
-    title: Top overrepresented sequences
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 15, w: 4, h: 5}
-  - component_type: multiqc
-    tag: ns-mqc-fastqc-status
-    section: Read QC (FastQC)
-    workflow_tag: nanoseq
-    data_collection_tag: multiqc_data
-    use: multiqc/fastqc
-    selected_module: fastqc
-    selected_plot: Status Checks
-    title: FastQC status checks
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 15, w: 4, h: 5}
-
-  # -------------------------------------------------------------- samtools
-  # No "Percent mapped" or "Alignment stats": both read the samtools stats SN
-  # block, which the Alignment tab cards and table read directly.
-  - component_type: multiqc
-    tag: ns-mqc-samtools-flagstat
-    section: Alignment (samtools)
     workflow_tag: nanoseq
     data_collection_tag: multiqc_data
     use: multiqc/samtools
     selected_module: samtools
     selected_plot: Flagstat
-    title: Flagstat
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 0, w: 4, h: 5}
+    section: QC overview
+    tag: ns-mqc-samtools-flagstat
+    index: mqc-samtools-flagstat
+    layout: {x: 0, y: 8, w: 4, h: 4}
   - component_type: multiqc
-    tag: ns-mqc-samtools-flagstat-pct
-    section: Alignment (samtools)
-    workflow_tag: nanoseq
-    data_collection_tag: multiqc_data
-    use: multiqc/samtools
-    selected_module: samtools
-    selected_plot: "Flagstat: Percentage of total"
-    title: Flagstat as a percentage
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 0, w: 4, h: 5}
-  - component_type: multiqc
-    tag: ns-mqc-samtools-xy
-    section: Alignment (samtools)
-    workflow_tag: nanoseq
-    data_collection_tag: multiqc_data
-    use: multiqc/samtools
-    selected_module: samtools
-    selected_plot: XY counts
-    title: XY counts
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 5, w: 4, h: 5}
-  - component_type: multiqc
-    tag: ns-mqc-samtools-contig
-    section: Alignment (samtools)
     workflow_tag: nanoseq
     data_collection_tag: multiqc_data
     use: multiqc/samtools
     selected_module: samtools
     selected_plot: Mapped reads per contig
-    title: Mapped reads per contig
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 5, w: 4, h: 5}
-
-  # ---------------------------------------------------------------- filters
-  - component_type: interactive
-    tag: ns-filter-sample
-    index: ns-sample-filter
-    section: Sample filters
-    group: Sample scope
+    section: QC overview
+    tag: ns-mqc-samtools-contig
+    index: mqc-samtools-contig
+    layout: {x: 4, y: 8, w: 4, h: 4}
+  - component_type: multiqc
     workflow_tag: nanoseq
-    data_collection_tag: samples
-    interactive_component_type: MultiSelect
-    column_name: sample_id
-    column_type: object
-    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:test-tube'}
-    placement: left
-    title: Sample
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: ns-filter-condition
-    index: ns-condition-filter
-    section: Sample filters
-    group: Sample scope
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Per Sequence Quality Scores
+    section: FastQC details
+    tag: ns-mqc-fastqc-perseq
+    index: mqc-fastqc-perseq
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
     workflow_tag: nanoseq
-    data_collection_tag: samples
-    interactive_component_type: MultiSelect
-    column_name: condition
-    column_type: object
-    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:dna'}
-    placement: left
-    title: Condition
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
-    tag: ns-filter-protocol
-    index: ns-protocol-filter
-    section: Sample filters
-    group: Sample scope
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Per Sequence GC Content
+    section: FastQC details
+    tag: ns-mqc-fastqc-gc
+    index: mqc-fastqc-gc
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
     workflow_tag: nanoseq
-    data_collection_tag: samples
-    interactive_component_type: MultiSelect
-    column_name: protocol
-    column_type: object
-    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:shape-outline'}
-    placement: left
-    title: Library preparation
-    layout: {x: 0, y: 6, w: 1, h: 3}
-  - component_type: interactive
-    tag: ns-mqc-filter-run
-    index: ns-mqc-run-filter
-    section: Run scope
-    group: Run scope
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Per Base N Content
+    section: FastQC details
+    tag: ns-mqc-fastqc-ncontent
+    index: mqc-fastqc-ncontent
+    layout: {x: 0, y: 4, w: 4, h: 4}
+  - component_type: multiqc
     workflow_tag: nanoseq
-    data_collection_tag: samples
-    interactive_component_type: MultiSelect
-    column_name: run_id
-    column_type: object
-    display: {title_size: md, custom_color: '#5C6BC0', icon_name: 'mdi:calendar-outline'}
-    placement: left
-    title: Flow-cell run
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: ns-mqc-filter-sourcerep
-    index: ns-mqc-sourcerep-filter
-    section: Run scope
-    group: Run scope
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Duplication Levels
+    section: FastQC details
+    tag: ns-mqc-fastqc-dup
+    index: mqc-fastqc-dup
+    layout: {x: 4, y: 4, w: 4, h: 4}
+  - component_type: multiqc
     workflow_tag: nanoseq
-    data_collection_tag: samples
-    interactive_component_type: MultiSelect
-    column_name: source_replicate
-    column_type: object
-    display: {title_size: md, custom_color: '#5C6BC0', icon_name: 'mdi:relation-many-to-many'}
-    placement: left
-    title: Source replicate
-    layout: {x: 0, y: 3, w: 1, h: 3}
-
-tabs:
-# ============================================================================
-# Reads and read length (basecall QC, with the former Run dynamics tab folded in)
-# ============================================================================
-- title: Reads and read length
-  subtitle: How long and how good the reads are, and what survives a quality floor
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Top overrepresented sequences
+    section: FastQC details
+    tag: ns-mqc-fastqc-over
+    index: mqc-fastqc-over
+    layout: {x: 0, y: 8, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: nanoseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Status Checks
+    section: FastQC details
+    tag: ns-mqc-fastqc-status
+    index: mqc-fastqc-status
+    layout: {x: 4, y: 8, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: nanoseq
+    data_collection_tag: multiqc_data
+    use: multiqc/samtools
+    selected_module: samtools
+    selected_plot: 'Flagstat: Percentage of total'
+    section: samtools details
+    tag: ns-mqc-samtools-flagstat-pct
+    index: mqc-samtools-flagstat-pct
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: nanoseq
+    data_collection_tag: multiqc_data
+    use: multiqc/samtools
+    selected_module: samtools
+    selected_plot: XY counts
+    section: samtools details
+    tag: ns-mqc-samtools-xy
+    index: mqc-samtools-xy
+    layout: {x: 4, y: 0, w: 4, h: 4}
+- title: Reads
+  subtitle: How long and how good are the reads of each library?
+  tab_group: Data & QC
   tab_order: 2
   tab_icon: mdi:waves
   tab_icon_color: cyan
@@ -427,161 +672,209 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: Read QC scope
+  - name: Read filters
     icon: mdi:filter-variant
     color: cyan
-    description: Quality and N50 floors on the NanoStat summary, on this tab only
+    description: Quality and N50 floors on the NanoStat summary
   grid_sections:
-  - name: Read length
-    icon: mdi:ruler
+  - name: Reads at a glance
+    icon: mdi:counter
     color: cyan
-    description: How long the reads are, per library, before and after alignment
-  - name: Quality ladder
-    icon: mdi:chart-bell-curve
-    color: blue
-    description: How much of each library survives a quality floor
-  - name: Run dynamics (pycoQC)
-    icon: mdi:alert-outline
-    color: orange
-    description: The flow-cell views that need a sequencing summary
-  - name: Read QC tables
+    description: Yield, length and quality over the libraries in view
+  - name: Length and quality
+    icon: mdi:chart-scatter-plot
+    color: cyan
+    description: Each library's mean read length against its mean quality
+  - name: Ladders
+    icon: mdi:chart-line
+    color: cyan
+    description: Read length and quality, rung by rung
+  - name: Read tables
     icon: mdi:table
     color: gray
-    description: The NanoStat summary and the yield per quality cutoff
+    description: The NanoStat summary and the yield per quality floor
     collapsed: true
   components:
+  # The tab's intro: the method, with its link, and how to read the tab.
   - component_type: text
-    tag: ns-rq-intro
-    section: Read length
-    title: The read itself
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
+    order: 1
     body: >
-      The cards and the scatter read NanoStat's summary of the raw FASTQ, the
-      two ladders below read the samtools stats read-length histogram. Look for
-      libraries whose length and quality both sit apart from the rest.
+      [NanoPlot](https://github.com/wdecoster/nanoplot) summarises each library's raw reads:
+      yield, length and quality. Click a point in the scatter to read that library's summary
+      beside it; the ladders show its read lengths and qualities rung by rung.
+    tag: ns-rd-intro
+    index: rd-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
     workflow_tag: nanoseq
     data_collection_tag: nanostats
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    interactive_component_type: Slider
+    slider_mode: gte
+    column_name: mean_read_quality
+    column_type: float64
+    display:
+      icon_name: mdi:check-decagram
+      custom_color: cyan
+    section: Read filters
+    group: Floors
+    tag: ns-rd-filter-quality
+    index: rd-quality-filter
+    title: Mean read quality at least
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: nanostats
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: read_length_n50
+    column_type: float64
+    display:
+      icon_name: mdi:ruler
+      custom_color: blue
+    section: Read filters
+    group: Floors
+    tag: ns-rd-filter-n50
+    index: rd-n50-filter
+    title: Read length N50
+    layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: card
-    tag: ns-rq-card-mean-len
-    index: ns-rq-card-mean-len
-    section: Read length
     workflow_tag: nanoseq
     data_collection_tag: nanostats
     use: nanoplot/nanostats
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: mean_read_length
+    aggregation: sum
+    column_name: n_reads
     column_type: float64
-    display: {icon_name: 'mdi:ruler', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Mean read length
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:counter
+      icon_color: cyan
+      caption: per library, their distribution
+    section: Reads at a glance
+    tag: ns-rd-card-reads
+    index: rd-card-reads
+    title: Reads
+    description: Reads basecalled over the libraries in view; the bars show how they spread over the libraries.
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: ns-rq-card-median-len
-    index: ns-rq-card-median-len
-    section: Read length
     workflow_tag: nanoseq
     data_collection_tag: nanostats
     use: nanoplot/nanostats
     aggregation: median
+    column_name: read_length_n50
+    column_type: float64
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
-    column_name: median_read_length
-    column_type: float64
-    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Median read length
-    layout: {x: 2, y: 2, w: 2, h: 2}
+    display:
+      icon_name: mdi:ruler
+      icon_color: violet
+      caption: median per library, with its spread
+      decimals: 0
+    section: Reads at a glance
+    tag: ns-rd-card-n50
+    index: rd-card-n50
+    title: Read length N50
+    description: Half of a library's bases sit in reads at least this long.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  # Q10 passes, under Q7 fails: the floors of the high- and fast-accuracy
+  # basecaller models.
   - component_type: card
-    tag: ns-rq-card-stdev
-    index: ns-rq-card-stdev
-    section: Read length
     workflow_tag: nanoseq
     data_collection_tag: nanostats
     use: nanoplot/nanostats
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: stdev_read_length
+    aggregation: median
+    column_name: mean_read_quality
     column_type: float64
-    display: {icon_name: 'mdi:waves', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Read length spread
-    layout: {x: 4, y: 2, w: 2, h: 2}
+    secondary_layout: threshold
+    threshold_value: 10
+    threshold_direction: min
+    threshold_warn: 7
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: teal
+      caption: libraries against Q10, failing under Q7
+      decimals: 1
+    section: Reads at a glance
+    tag: ns-rd-card-quality
+    index: rd-card-quality
+    title: Mean read quality
+    description: Median of the libraries' mean Phred quality.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  # One row per library and quality floor: the card reads the Q10 rung only.
   - component_type: card
-    tag: ns-rq-card-longest
-    index: ns-rq-card-longest
-    section: Read length
     workflow_tag: nanoseq
-    data_collection_tag: nanostats
-    use: nanoplot/nanostats
-    aggregation: max
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: longest_read_length
+    data_collection_tag: nanostats_quality
+    use: nanoplot/nanostats_quality
+    aggregation: median
+    column_name: pct_reads
     column_type: float64
-    display: {icon_name: 'mdi:star-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Longest read
-    layout: {x: 6, y: 2, w: 2, h: 2}
+    filter_expr: col('q_cutoff') == 10
+    secondary_layout: gauge
+    coverage_max: 100
+    display:
+      icon_name: mdi:percent-outline
+      icon_color: blue
+      caption: median share of each library
+      decimals: 1
+    section: Reads at a glance
+    tag: ns-rd-card-q10
+    index: rd-card-q10
+    title: Reads at Q10 (%)
+    description: Median share of a library's reads at a mean quality of Q10 or above.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # nanoseq publishes no per-read table (NanoPlot runs without --raw), so the
+  # scatter holds one point per library, sized by its yield.
   - component_type: advanced_viz
-    tag: ns-rq-av-length-quality
-    index: ns-rq-av-length-quality
-    section: Read length
     workflow_tag: nanoseq
     data_collection_tag: nanostats
     use: nanoplot/length_vs_quality
-    # No `density: true`: nanoseq publishes no per-read table (NanoPlot runs
-    # without --raw, pycoQC needs sequencing_summary.txt), so this collection
-    # holds one row per library and a binned density would be empty bins
-    # (NS-D14).
     config:
-      controls_placement: header
       x_title: Mean read length (bases)
       y_title: Mean read quality (Phred)
       top_n_labels: 6
       marker_size: 14
       selection_enabled: true
       selection_column: sample
-    title: "Length against quality, one point per library"
-    description: "The trade-off a Nanopore run is read on; marker size is the yield each library delivered. A library off the trend of the others is the one to check first. Click a point to read its NanoStat summary beside the plot."
-    title_size: h3
-    layout: {x: 0, y: 4, w: 5, h: 7}
+    section: Length and quality
+    tag: ns-rd-length-quality
+    index: rd-length-quality
+    title: Length against quality, one point per library
+    description: Marker size is the yield; click a library to read its summary beside the plot.
+    layout: {x: 0, y: 0, w: 5, h: 6}
   - component_type: advanced_viz
-    tag: ns-rq-av-library-record
-    index: ns-rq-av-library-record
-    section: Read length
     workflow_tag: nanoseq
     data_collection_tag: nanostats
     viz_kind: record_card
     config:
       viz_kind: record_card
-      linked_component: ns-rq-av-length-quality
+      linked_component: ns-rd-length-quality
       id_col: sample
+      title_col: sample
       selection_source: any
       sections:
         Yield: [n_reads, total_bases, total_gigabases]
         Read length: [mean_read_length, median_read_length, read_length_n50, stdev_read_length, longest_read_length]
         Read quality: [mean_read_quality, median_read_quality, top_read_quality]
+      labels:
+        n_reads: Reads
+        total_bases: Bases
+        total_gigabases: Gigabases
+        mean_read_length: Mean length
+        median_read_length: Median length
+        read_length_n50: N50
+        stdev_read_length: Length spread (SD)
+        longest_read_length: Longest read
+        mean_read_quality: Mean quality
+        median_read_quality: Median quality
+        top_read_quality: Best read quality
+    section: Length and quality
+    tag: ns-rd-library-record
+    index: rd-library-record
     title: Library record
-    description: The picked library's NanoStat summary; it stays a thin rail until a library is picked.
-    title_size: h3
-    layout: {x: 5, y: 4, w: 3, h: 7}
-  # The Nx ladder replaces the N50 bar: N50 is its rung 50 (marked), and the
-  # rest of the ladder is what a single bar hides.
+    description: The picked library's NanoStat summary.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  # The Nx ladder replaces an N50 bar: N50 is its marked rung, and the rest of
+  # the ladder is what a single bar hides.
   - component_type: advanced_viz
-    tag: ns-rq-av-nx-ladder
-    index: ns-rq-av-nx-ladder
-    section: Read length
     workflow_tag: nanoseq
     data_collection_tag: samtools_read_length_nx
     viz_kind: profile
@@ -593,224 +886,59 @@ tabs:
       log_y: true
       reference_x: 50
       reference_label: N50
-      x_title: Share of the library's bases (Nx, percent)
+      x_title: Share of the bases (Nx, %)
       y_title: Read length (bases)
       selection_enabled: true
       selection_column: sample
-    title: "Nx ladder per library"
-    description: "Nx is the shortest read inside the longest x percent of the bases; the marker is N50. A flat top is a library whose yield sits in a few long reads, a steep drop one whose reads share one length."
-    title_size: h3
-    layout: {x: 0, y: 11, w: 8, h: 7}
+    section: Ladders
+    tag: ns-rd-nx-ladder
+    index: rd-nx-ladder
+    title: Nx ladder per library
+    description: The shortest read inside the longest x% of the bases; the marker is N50.
+    layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
-    tag: ns-rq-av-readlen
-    index: ns-rq-av-readlen
-    section: Read length
-    workflow_tag: nanoseq
-    data_collection_tag: samtools_stats_sections
-    use: samtools/read_length_profile
-    config:
-      x_title: Read length (bases)
-      y_title: Reads
-      log_x: true
-      log_y: true
-      selection_enabled: true
-      selection_column: sample
-    title: "Aligned read length distribution per library"
-    description: "The samtools stats read-length histogram, one curve per library, both axes logarithmic. Library preparations differ here far more than their mean lengths suggest."
-    title_size: h3
-    layout: {x: 0, y: 18, w: 8, h: 7}
-
-  - component_type: text
-    tag: ns-rq-ladder-intro
-    section: Quality ladder
-    title: What survives a quality floor
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      A mean quality hides whether the distribution is tight or bimodal; the
-      ladder says how much of each library is left above each Phred floor.
-      The cards read the Q10 rung, the floor most long-read analyses assume.
-    workflow_tag: nanoseq
-    data_collection_tag: nanostats_quality
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  # The three ladder cards are scoped to one rung with filter_expr: the
-  # collection has one row per library and cutoff, so a sum or an average over
-  # every rung counts each read up to five times.
-  - component_type: card
-    tag: ns-rq-card-pct
-    index: ns-rq-card-pct
-    section: Quality ladder
-    workflow_tag: nanoseq
-    data_collection_tag: nanostats_quality
-    use: nanoplot/nanostats_quality
-    filter_expr: "col('q_cutoff') == 10"
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: pct_reads
-    column_type: float64
-    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Reads at Q10 or above (%)
-    layout: {x: 0, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: ns-rq-card-ladder-reads
-    index: ns-rq-card-ladder-reads
-    section: Quality ladder
-    workflow_tag: nanoseq
-    data_collection_tag: nanostats_quality
-    use: nanoplot/nanostats_quality
-    filter_expr: "col('q_cutoff') == 10"
-    aggregation: sum
-    column_name: n_reads
-    column_type: float64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:counter', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Reads at Q10 or above
-    layout: {x: 2, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: ns-rq-card-mb
-    index: ns-rq-card-mb
-    section: Quality ladder
-    workflow_tag: nanoseq
-    data_collection_tag: nanostats_quality
-    use: nanoplot/nanostats_quality
-    filter_expr: "col('q_cutoff') == 10"
-    aggregation: sum
-    column_name: megabases
-    column_type: float64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:database-outline', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Megabases at Q10 or above
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: ns-rq-card-quality
-    index: ns-rq-card-quality
-    section: Quality ladder
-    workflow_tag: nanoseq
-    data_collection_tag: nanostats
-    use: nanoplot/nanostats
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: mean_read_quality
-    column_type: float64
-    display: {icon_name: 'mdi:check-decagram', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Mean read quality
-    layout: {x: 6, y: 2, w: 2, h: 2}
-  - component_type: advanced_viz
-    tag: ns-rq-av-ladder
-    index: ns-rq-av-ladder
-    section: Quality ladder
     workflow_tag: nanoseq
     data_collection_tag: nanostats_quality
     use: nanoplot/quality_ladder
     config:
       x_title: Phred quality floor
-      y_title: Share of the library above the floor (%)
+      y_title: Reads above the floor (%)
       reference_x: 10
       reference_label: Q10
       line_width: 2.5
       selection_enabled: true
       selection_column: sample
-    title: "Yield above each quality cutoff"
-    description: "One curve per library. Where a curve falls off tells you the quality floor that library can afford; the marker sits at Q10."
-    title_size: h3
-    layout: {x: 0, y: 4, w: 8, h: 7}
-
-  - component_type: text
-    tag: ns-rq-pycoqc-note
-    section: Run dynamics (pycoQC)
-    title: Yield over time and the channel map need pycoQC
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Cumulative yield over the sequencing hours, quality drift and the
-      flow-cell channel map read [pycoQC](https://a-slide.github.io/pycoQC/)'s
-      summary of the basecaller's `sequencing_summary.txt`. nanoseq only runs
-      pycoQC when that file is supplied, so a run started from FASTQ has no
-      flow-cell view.
-    workflow_tag: nanoseq
-    data_collection_tag: nanostats
-    layout: {x: 0, y: 0, w: 8, h: 2}
-
+    section: Ladders
+    tag: ns-rd-quality-ladder
+    index: rd-quality-ladder
+    title: Reads above each quality floor
+    description: Where a curve falls off is the quality floor that library can afford.
+    layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
-    tag: ns-rq-table-nanostats
-    section: Read QC tables
     workflow_tag: nanoseq
     data_collection_tag: nanostats
     use: nanoplot/nanostats
     row_selection_enabled: true
     row_selection_column: sample
+    section: Read tables
+    tag: ns-rd-table-nanostats
+    index: rd-table-nanostats
     title: NanoStat summary
-    description: One row per library, with reads, yield, the length and quality summaries, N50 and the run's extremes.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 4}
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
-    tag: ns-rq-table-ladder
-    section: Read QC tables
     workflow_tag: nanoseq
     data_collection_tag: nanostats_quality
     use: nanoplot/nanostats_quality
     row_selection_enabled: true
     row_selection_column: sample
-    title: Yield per cutoff
-    description: One row per library and Phred floor, with reads, share and megabases.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 4, w: 8, h: 5}
-  - component_type: interactive
-    tag: ns-rq-filter-quality
-    index: ns-rq-quality-filter
-    section: Read QC scope
-    group: Read QC scope
-    workflow_tag: nanoseq
-    data_collection_tag: nanostats
-    interactive_component_type: Slider
-    slider_mode: gte
-    column_name: mean_read_quality
-    column_type: float64
-    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:check-decagram'}
-    placement: left
-    title: Mean read quality at least
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: ns-rq-filter-n50
-    index: ns-rq-n50-filter
-    section: Read QC scope
-    group: Read QC scope
-    workflow_tag: nanoseq
-    data_collection_tag: nanostats
-    interactive_component_type: RangeSlider
-    show_histogram: true
-    column_name: read_length_n50
-    column_type: float64
-    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:ruler'}
-    placement: left
-    title: Read length N50
-    layout: {x: 0, y: 3, w: 1, h: 3}
-
-# ============================================================================
-# Alignment and coverage
-# ============================================================================
-- title: Alignment and coverage
-  subtitle: How much of each library minimap2 placed, how accurately, and how evenly
+    section: Read tables
+    tag: ns-rd-table-ladder
+    index: rd-table-ladder
+    title: Yield per quality floor
+    layout: {x: 0, y: 6, w: 8, h: 6}
+- title: Alignment
+  subtitle: How much of each library aligned, and how accurately?
+  tab_group: Data & QC
   tab_order: 3
   tab_icon: mdi:chart-bar
   tab_icon_color: indigo
@@ -818,133 +946,138 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: Alignment scope
+  - name: Alignment filters
     icon: mdi:filter-variant
     color: indigo
-    description: Libraries shown on this tab only
+    description: Libraries shown on this tab
   grid_sections:
-  - name: Mapping at a glance
-    icon: mdi:check-decagram
+  - name: Alignment at a glance
+    icon: mdi:counter
     color: indigo
-    description: Placement rate and per-base agreement with the reference
-  - name: Coverage and indels
+    description: Placement, identity and split reads over the libraries in view
+  - name: Coverage
+    icon: mdi:chart-line
+    color: indigo
+    description: How much of the reference sits at each depth
+  - name: Indels and read lengths
     icon: mdi:chart-bell-curve
-    color: blue
-    description: How evenly the reference was hit, and the error mode behind it
-  - name: Alignment tables
+    color: indigo
+    description: The long-read error mode, and the length of the aligned reads
+  - name: Alignment table
     icon: mdi:table
     color: gray
     description: Every point of the samtools stats distributions
     collapsed: true
   components:
+  # The tab's intro: the method, with its link, and how to read the tab.
   - component_type: text
-    tag: ns-al-intro
-    section: Mapping at a glance
-    title: What minimap2 placed
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
+    order: 1
     body: >
-      [minimap2](https://github.com/lh3/minimap2) placement read out of the
-      `samtools stats` summary block, one reading per library. Identity is 100
-      minus the mismatch rate per mapped base, the reading a long-read run is
-      judged on.
+      [minimap2](https://github.com/lh3/minimap2) alignments as
+      [samtools stats](https://www.htslib.org/doc/samtools-stats.html) reads them, one summary
+      per library. Identity is 100 minus the mismatch rate per aligned base; the curves show how
+      depth, indel lengths and aligned read lengths spread.
+    tag: ns-al-intro
+    index: al-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
     workflow_tag: nanoseq
     data_collection_tag: samtools_stats_sections
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display:
+      icon_name: mdi:test-tube
+      custom_color: teal
+    section: Alignment filters
+    tag: ns-al-filter-library
+    index: al-library-filter
+    title: Library
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  # Every card reads the SN rows, one per library: the other rows are the
+  # histograms and carry no summary.
   - component_type: card
-    tag: ns-al-card-mapped
-    index: ns-al-card-mapped
-    section: Mapping at a glance
     workflow_tag: nanoseq
     data_collection_tag: samtools_stats_sections
     use: samtools/stats_sections
-    filter_expr: "col('section') == 'SN'"
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    aggregation: median
     column_name: reads_mapped_pct
     column_type: float64
-    display: {icon_name: 'mdi:check-decagram', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    filter_expr: col('section') == 'SN'
+    secondary_layout: gauge
+    coverage_max: 100
+    display:
+      icon_name: mdi:check-decagram
+      icon_color: indigo
+      caption: median share of each library's reads
+      decimals: 1
+    section: Alignment at a glance
+    tag: ns-al-card-placed
+    index: al-card-placed
     title: Reads placed (%)
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    description: Median share of each library's reads minimap2 placed.
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: ns-al-card-identity
-    index: ns-al-card-identity
-    section: Mapping at a glance
     workflow_tag: nanoseq
     data_collection_tag: samtools_stats_sections
     use: samtools/stats_sections
-    filter_expr: "col('section') == 'SN'"
-    aggregation: average
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    aggregation: median
     column_name: identity_pct
     column_type: float64
-    display: {icon_name: 'mdi:shield-check-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    filter_expr: col('section') == 'SN'
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:shield-check-outline
+      icon_color: teal
+      caption: median per library, with its spread
+      decimals: 1
+    section: Alignment at a glance
+    tag: ns-al-card-identity
+    index: al-card-identity
     title: Per-base identity (%)
-    layout: {x: 2, y: 2, w: 2, h: 2}
+    description: Median agreement of the aligned bases with the reference.
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: ns-al-card-reads
-    index: ns-al-card-reads
-    section: Mapping at a glance
     workflow_tag: nanoseq
     data_collection_tag: samtools_stats_sections
     use: samtools/stats_sections
     aggregation: sum
     column_name: reads_mapped
     column_type: float64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:counter', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    filter_expr: col('section') == 'SN'
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:counter
+      icon_color: cyan
+      caption: per library, their distribution
+    section: Alignment at a glance
+    tag: ns-al-card-mapped
+    index: al-card-mapped
     title: Reads mapped
-    layout: {x: 4, y: 2, w: 2, h: 2}
+    description: Reads placed on the reference over the libraries in view.
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: ns-al-card-suppl
-    index: ns-al-card-suppl
-    section: Mapping at a glance
     workflow_tag: nanoseq
     data_collection_tag: samtools_stats_sections
     use: samtools/stats_sections
     aggregation: sum
     column_name: supplementary_alignments
     column_type: float64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:set-merge', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    filter_expr: col('section') == 'SN'
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:set-merge
+      icon_color: violet
+      caption: per library, with its spread
+    section: Alignment at a glance
+    tag: ns-al-card-suppl
+    index: al-card-suppl
     title: Supplementary alignments
-    layout: {x: 6, y: 2, w: 2, h: 2}
-  - component_type: text
-    tag: ns-al-cov-intro
-    section: Coverage and indels
-    title: Evenness, and the error mode under it
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The coverage histogram says how much of the reference sits at each depth;
-      on a transcriptome run a long right tail is expression, not bias. The
-      indel spectrum is the characteristic Nanopore error mode, insertions and
-      deletions drawn as separate curves.
-    workflow_tag: nanoseq
-    data_collection_tag: samtools_stats_sections
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    description: Split alignments, the long-read signal of chimeras and structural differences.
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
-    tag: ns-al-av-coverage
-    index: ns-al-av-coverage
-    section: Coverage and indels
     workflow_tag: nanoseq
     data_collection_tag: samtools_stats_sections
     use: samtools/coverage_distribution
@@ -955,14 +1088,13 @@ tabs:
       log_y: true
       selection_enabled: true
       selection_column: sample
-    title: "Coverage depth distribution"
-    description: "Bases of the reference at each depth, one curve per library, both axes logarithmic. The last bin pools everything at 1000x and above, as samtools reports it."
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
+    section: Coverage
+    tag: ns-al-coverage
+    index: al-coverage
+    title: Coverage depth distribution
+    description: One curve per library; the last bin pools everything at 1000x and above.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
-    tag: ns-al-av-indels
-    index: ns-al-av-indels
-    section: Coverage and indels
     workflow_tag: nanoseq
     data_collection_tag: samtools_stats_sections
     use: samtools/indel_spectrum
@@ -971,181 +1103,292 @@ tabs:
       y_title: Events
       log_x: true
       log_y: true
+      # Two curves per library (insertions, deletions): past 8 entries the
+      # legend scrolls and eats the plot. A hover names the curve.
+      legend_pos: none
       selection_enabled: true
       selection_column: sample
-    title: "Indel length spectrum"
-    description: "Two curves per library, insertions and deletions. The balance between the two and how fast each falls with length depend on the pore chemistry and the basecaller model."
-    title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 7}
+    section: Indels and read lengths
+    tag: ns-al-indels
+    index: al-indels
+    title: Indel length spectrum
+    description: Insertions and deletions per library, by length; hover a curve for its name.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: nanoseq
+    data_collection_tag: samtools_stats_sections
+    use: samtools/read_length_profile
+    config:
+      x_title: Read length (bases)
+      y_title: Reads
+      log_x: true
+      log_y: true
+      selection_enabled: true
+      selection_column: sample
+    section: Indels and read lengths
+    tag: ns-al-read-length
+    index: al-read-length
+    title: Aligned read lengths
+    description: The samtools read-length histogram, one curve per library.
+    layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
-    tag: ns-al-table-sections
-    section: Alignment tables
     workflow_tag: nanoseq
     data_collection_tag: samtools_stats_sections
     use: samtools/stats_sections
     row_selection_enabled: true
     row_selection_column: sample
+    section: Alignment table
+    tag: ns-al-table
+    index: al-table
     title: Alignment distributions
-    description: Every point of the three histograms plus the per-sample summary row, with the stats section it came from.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 7}
-  - component_type: interactive
-    tag: ns-al-filter-library
-    index: ns-al-library-filter
-    section: Alignment scope
-    group: Alignment scope
-    workflow_tag: nanoseq
-    data_collection_tag: samtools_stats_sections
-    interactive_component_type: MultiSelect
-    column_name: sample
-    column_type: object
-    display: {title_size: md, custom_color: '#5C6BC0', icon_name: 'mdi:test-tube'}
-    placement: left
-    title: Library
-    layout: {x: 0, y: 0, w: 1, h: 3}
-
-# ============================================================================
-# Quantification and sample structure
-# ============================================================================
-- title: Quantification and sample structure
-  subtitle: What Bambu counted per gene, and whether the libraries group by condition or by preparation
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Quantification
+  subtitle: Do the libraries group by condition, or by preparation?
+  tab_group: Expression
   tab_order: 4
   tab_icon: mdi:dna
   tab_icon_color: violet
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
+  # The biotype filter also narrows the variable-gene heatmap, which carries
+  # the same column.
   filter_sections:
-  - name: Feature scope
+  - name: Gene filters
     icon: mdi:filter-variant
     color: violet
     description: Biotype and expression floor on the gene counts
   grid_sections:
-  - name: Library composition
-    icon: mdi:chart-donut
+  - name: Libraries at a glance
+    icon: mdi:counter
     color: violet
     description: Depth, genes detected and how concentrated each library is
   - name: Sample structure
     icon: mdi:chart-scatter-plot
-    color: indigo
-    description: Where the libraries sit relative to each other
-  - name: Gene counts
+    color: violet
+    description: The libraries on the first components of log CPM
+  - name: Sample correlation
+    icon: mdi:relation-many-to-many
+    color: violet
+    description: Spearman correlation between the libraries, clustered
+  # Collapsed: its 100 rows autofit to about ten grid rows, past the tab's
+  # budget, and the PCA and the correlation above already answer the tab.
+  - name: Most variable genes
     icon: mdi:chart-box-outline
-    color: teal
-    description: The genes that separate the libraries, and the per-library distribution
+    color: gray
+    description: The genes that separate the libraries, row-standardised
+    collapsed: true
+  - name: Libraries and counts
+    icon: mdi:chart-bar
+    color: gray
+    description: Depth against complexity, the design behind the libraries and the count distributions
+    collapsed: true
   - name: Quantification tables
     icon: mdi:table
     color: gray
-    description: Per-library readings, the correlation matrix and the melted gene counts
+    description: Per-library readings, the correlation matrix and the gene counts
     collapsed: true
   components:
+  # The tab's intro: the method, with its link, and how to read the tab.
   - component_type: text
-    tag: ns-qt-intro
-    section: Library composition
-    title: What Bambu assigned, per library
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
+    order: 1
     body: >
-      [Bambu](https://github.com/GoekeLab/bambu) assigns each spliced alignment
-      to a gene model and counts per sample. Library size, genes detected and
-      the share its 50 highest genes take say how much of each library is worth
-      comparing.
+      [Bambu](https://github.com/GoekeLab/bambu) assigns each long read to a gene and transcript
+      model and counts them per library. The PCA and the correlation matrix read log CPM over the
+      most variable genes: the libraries should group by condition, and a split by preparation or
+      flow-cell run is a confounder.
+    tag: ns-qt-intro
+    index: qt-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
     workflow_tag: nanoseq
-    data_collection_tag: bambu_sample_pca
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    data_collection_tag: bambu_counts_gene_long
+    interactive_component_type: MultiSelect
+    column_name: gene_biotype
+    column_type: object
+    display:
+      icon_name: mdi:shape-plus-outline
+      custom_color: grape
+    section: Gene filters
+    group: Genes
+    tag: ns-qt-filter-biotype
+    index: qt-biotype-filter
+    title: Gene biotype
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: bambu_counts_gene_long
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: log_cpm
+    column_type: float64
+    display:
+      icon_name: mdi:chart-bell-curve
+      custom_color: violet
+    section: Gene filters
+    group: Genes
+    tag: ns-qt-filter-logcpm
+    index: qt-logcpm-filter
+    title: log2(CPM + 1)
+    layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: card
-    tag: ns-qt-card-depth
-    index: ns-qt-card-depth
-    section: Library composition
     workflow_tag: nanoseq
     data_collection_tag: bambu_sample_pca
     use: bambu/sample_pca
     aggregation: sum
     column_name: total_counts
     column_type: float64
-    secondary_layout: top_n
-    breakdown_col: sample_id
-    top_n_count: 3
-    display: {icon_name: 'mdi:counter', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    secondary_layout: composition
+    breakdown_col: condition
+    display:
+      icon_name: mdi:counter
+      icon_color: violet
+      caption: assigned reads, by condition
+    section: Libraries at a glance
+    tag: ns-qt-card-assigned
+    index: qt-card-assigned
     title: Reads assigned
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    description: Reads Bambu assigned to a gene over the libraries in view.
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: ns-qt-card-genes
-    index: ns-qt-card-genes
-    section: Library composition
     workflow_tag: nanoseq
     data_collection_tag: bambu_sample_pca
     use: bambu/sample_pca
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
     column_name: n_genes_detected
     column_type: int64
-    display: {icon_name: 'mdi:dna', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:dna
+      icon_color: indigo
+      caption: median per library, with its spread
+      decimals: 0
+    section: Libraries at a glance
+    tag: ns-qt-card-genes
+    index: qt-card-genes
     title: Genes detected
-    layout: {x: 2, y: 2, w: 2, h: 2}
+    description: Median number of genes with at least one read in a library.
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: ns-qt-card-coding
-    index: ns-qt-card-coding
-    section: Library composition
     workflow_tag: nanoseq
     data_collection_tag: bambu_sample_pca
     use: bambu/sample_pca
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
     column_name: pct_protein_coding
     column_type: float64
-    display: {icon_name: 'mdi:chart-donut', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    filter_expr: col('total_counts') > 0
+    secondary_layout: gauge
+    coverage_max: 100
+    display:
+      icon_name: mdi:chart-donut
+      icon_color: teal
+      caption: median share of each library
+      decimals: 1
+    section: Libraries at a glance
+    tag: ns-qt-card-coding
+    index: qt-card-coding
     title: Protein-coding share (%)
-    layout: {x: 4, y: 2, w: 2, h: 2}
+    description: Median share of a library's counts on protein-coding genes.
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: ns-qt-card-top50
-    index: ns-qt-card-top50
-    section: Library composition
     workflow_tag: nanoseq
     data_collection_tag: bambu_sample_pca
     use: bambu/sample_pca
     aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
     column_name: top50_share_pct
     column_type: float64
-    display: {icon_name: 'mdi:star-outline', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    filter_expr: col('total_counts') > 0
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:star-outline
+      icon_color: orange
+      caption: median, with its distribution
+      decimals: 1
+    section: Libraries at a glance
+    tag: ns-qt-card-top50
+    index: qt-card-top50
     title: Top-50 gene share (%)
-    layout: {x: 6, y: 2, w: 2, h: 2}
-
-  - component_type: text
-    tag: ns-qt-structure-intro
-    section: Sample structure
-    title: Do the libraries group by condition, or by preparation
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The PCA is computed on log CPM over the 500 most variable genes, the way
-      DESeq2 plotPCA does, and the correlation matrix is Spearman on the same
-      values. Replicates should cluster by condition; a split by preparation or
-      flow-cell run is a confounder.
+    description: Median share of a library's counts on its 50 most expressed genes; high is concentrated.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # No centroids: with two or three libraries per condition the labels would
+  # cover the points.
+  - component_type: advanced_viz
     workflow_tag: nanoseq
     data_collection_tag: bambu_sample_pca
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: card
-    tag: ns-qt-card-protocol
-    index: ns-qt-card-protocol
+    use: bambu/pca
+    config:
+      color_col: condition
+      default_color_by: condition
+      point_size: 16
+      axis_prefix: PC
+      plot_style: grid
+      hover_cols: [total_counts, n_genes_detected, top50_share_pct]
+      selection_enabled: true
+      selection_column: sample_id
     section: Sample structure
+    tag: ns-qt-pca
+    index: qt-pca
+    title: Libraries on log-CPM gene expression (PCA)
+    description: A first component that follows the preparation or the run, not the condition, is a confounder.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  # Library ids on both axes: full width, or the labels leave the plot no room.
+  - component_type: advanced_viz
+    workflow_tag: nanoseq
+    data_collection_tag: bambu_sample_correlation
+    use: bambu/correlation_heatmap
+    config:
+      index_column: sample_id
+      # Every library column, not the per-row mean the table also carries.
+      value_columns_pattern: '^(?!mean_correlation$)'
+      row_annotation_cols: [condition]
+      cluster_rows: true
+      cluster_cols: true
+      cluster_method: ward
+      colorscale: Blues
+    section: Sample correlation
+    tag: ns-qt-correlation
+    index: qt-correlation
+    title: Library correlation (Spearman, log CPM)
+    description: Replicates should correlate more with each other than across conditions.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: nanoseq
+    data_collection_tag: bambu_top_variable_genes
+    use: bambu/variable_gene_heatmap
+    config:
+      index_column: gene_id
+      # Every library column, not the variance the genes were ranked by.
+      value_columns_pattern: '^(?!log_cpm_variance$)'
+      row_annotation_cols: [gene_biotype]
+      normalize: row_z
+      cluster_rows: true
+      cluster_cols: true
+      colorscale: RdBu
+    section: Most variable genes
+    tag: ns-qt-variable-genes
+    index: qt-variable-genes
+    title: The 100 most variable genes
+    description: Row-standardised log CPM; the column dendrogram should repeat the split of the PCA.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: nanoseq
+    data_collection_tag: bambu_sample_pca
+    use: bambu/depth_vs_complexity
+    config:
+      x_title: Reads assigned to a gene
+      y_title: Genes detected
+      log_x: true
+      top_n_labels: 6
+      selection_enabled: true
+      selection_column: sample_id
+    section: Libraries and counts
+    tag: ns-qt-depth-complexity
+    index: qt-depth-complexity
+    title: Depth against complexity
+    description: Genes detected saturates with depth; a library under the trend is concentrated, not shallow.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: card
     workflow_tag: nanoseq
     data_collection_tag: samples
     aggregation: count
@@ -1153,15 +1396,17 @@ tabs:
     column_type: object
     secondary_layout: donut
     breakdown_col: protocol
-    display: {icon_name: 'mdi:shape-outline', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    display:
+      icon_name: mdi:flask-outline
+      icon_color: grape
+      caption: libraries, by preparation
+    section: Libraries and counts
+    tag: ns-qt-card-protocol
+    index: qt-card-protocol
     title: Libraries by preparation
-    layout: {x: 0, y: 2, w: 4, h: 2}
+    description: A preparation that splits with the condition confounds it.
+    layout: {x: 0, y: 6, w: 4, h: 2}
   - component_type: card
-    tag: ns-qt-card-runs
-    index: ns-qt-card-runs
-    section: Sample structure
     workflow_tag: nanoseq
     data_collection_tag: samples
     aggregation: count
@@ -1169,381 +1414,268 @@ tabs:
     column_type: object
     secondary_layout: donut
     breakdown_col: run_id
-    display: {icon_name: 'mdi:calendar-outline', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    display:
+      icon_name: mdi:calendar-outline
+      icon_color: indigo
+      caption: libraries, by flow-cell run
+    section: Libraries and counts
+    tag: ns-qt-card-runs
+    index: qt-card-runs
     title: Libraries by flow-cell run
-    layout: {x: 4, y: 2, w: 4, h: 2}
-  - component_type: advanced_viz
-    tag: ns-qt-av-pca
-    index: ns-qt-av-pca
-    section: Sample structure
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_sample_pca
-    use: bambu/pca
-    config:
-      controls_placement: header
-      color_col: condition
-      default_color_by: condition
-      point_size: 16
-      show_centroids: true
-      plot_style: grid
-      hover_cols: [total_counts, n_genes_detected, top50_share_pct]
-      selection_enabled: true
-      selection_column: sample_id
-    title: "Sample PCA on log-CPM gene expression"
-    description: "One point per library, coloured by condition. If the first component separates the conditions the design holds; a component that follows the preparation or the flow-cell run is a confounder."
-    title_size: h3
-    layout: {x: 0, y: 4, w: 8, h: 7}
-  - component_type: advanced_viz
-    tag: ns-qt-av-depth
-    index: ns-qt-av-depth
-    section: Sample structure
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_sample_pca
-    use: bambu/depth_vs_complexity
-    config:
-      controls_placement: header
-      x_title: Reads assigned to a gene
-      y_title: Genes detected
-      log_x: true
-      top_n_labels: 6
-      selection_enabled: true
-      selection_column: sample_id
-    title: "Depth against complexity"
-    description: "Genes detected saturates with depth, so a library sitting below the trend is concentrated rather than shallow. Marker size is the share its 50 top genes take."
-    title_size: h3
-    layout: {x: 0, y: 11, w: 8, h: 7}
-  - component_type: advanced_viz
-    tag: ns-qt-av-correlation
-    index: ns-qt-av-correlation
-    section: Sample structure
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_sample_correlation
-    use: bambu/correlation_heatmap
-    config:
-      index_column: sample_id
-      row_annotation_cols: [condition]
-      cluster_rows: true
-      cluster_cols: true
-      cluster_method: ward
-      colorscale: Blues
-    title: "Sample correlation, Spearman on log CPM"
-    description: "Replicates of a condition should correlate more with each other than across conditions; the dendrogram says whether the libraries split on condition or on preparation."
-    title_size: h3
-    layout: {x: 0, y: 18, w: 8, h: 7}
-
-  - component_type: text
-    tag: ns-qt-counts-intro
-    section: Gene counts
-    title: The genes that carry the difference
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Ranking genes by the variance of log CPM returns the genes that separate
-      the libraries, not the mitochondrial and ribosomal shortlist a total-count
-      ranking gives. The biotype and expression filters in the left panel narrow
-      the cards and the distribution.
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_top_variable_genes
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: card
-    tag: ns-qt-card-logcpm
-    index: ns-qt-card-logcpm
-    section: Gene counts
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_counts_gene_long
-    use: bambu/counts_gene_long
-    filter_expr: "col('count') > 0"
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: log_cpm
-    column_type: float64
-    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Median log2(CPM + 1), detected genes
-    layout: {x: 0, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: ns-qt-card-genecount
-    index: ns-qt-card-genecount
-    section: Gene counts
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_counts_gene_long
-    use: bambu/counts_gene_long
-    filter_expr: "col('count') > 0"
-    aggregation: nunique
-    column_name: gene_id
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: gene_biotype
-    top_n_count: 3
-    display: {icon_name: 'mdi:dna', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Genes with reads
-    layout: {x: 2, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: ns-qt-card-biotype
-    index: ns-qt-card-biotype
-    section: Gene counts
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_counts_gene_long
-    use: bambu/counts_gene_long
-    filter_expr: "col('count') > 0"
-    aggregation: nunique
-    column_name: gene_biotype
-    column_type: object
-    secondary_layout: donut
-    breakdown_col: gene_biotype
-    display: {icon_name: 'mdi:chart-donut', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Biotypes represented
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: ns-qt-card-variance
-    index: ns-qt-card-variance
-    section: Gene counts
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_top_variable_genes
-    use: bambu/top_variable_genes
-    aggregation: max
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: log_cpm_variance
-    column_type: float64
-    display: {icon_name: 'mdi:ruler', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Top log-CPM variance
-    layout: {x: 6, y: 2, w: 2, h: 2}
+    description: A run that splits with the condition confounds it.
+    layout: {x: 4, y: 6, w: 4, h: 2}
   - component_type: figure
-    tag: ns-qt-fig-distribution
-    index: ns-qt-fig-distribution
-    section: Gene counts
     workflow_tag: nanoseq
     data_collection_tag: bambu_counts_gene_long
     use: bambu/counts_gene_long
     visu_type: box
-    dict_kwargs: {x: sample, y: log_cpm, color: condition}
-    title: Expression distribution per library
-    description: After CPM normalisation the distributions should sit on top of each other; a shifted box is a composition difference, not a depth one.
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 4, w: 8, h: 5}
-  - component_type: advanced_viz
-    tag: ns-qt-av-variable
-    index: ns-qt-av-variable
-    section: Gene counts
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_top_variable_genes
-    use: bambu/variable_gene_heatmap
-    config:
-      index_column: gene_id
-      row_annotation_cols: [gene_biotype]
-      normalize: row_z
-      cluster_rows: true
-      cluster_cols: true
-      colorscale: RdBu
-    title: "The 100 most variable genes, row-standardised log CPM"
-    description: "Rows standardised so a gene expressed at any level contributes equally. The column dendrogram should repeat the split the PCA and the correlation matrix show."
-    title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 9}
-
+    mode: code
+    code_content: |-
+      # log CPM of the detected genes per library: by condition, or by Analysis
+      # mode's groups when it has some.
+      d = df.filter(pl.col('count') > 0).sort('sample')
+      kw = depictio_group_kwargs or {'color': 'condition', 'color_discrete_map': depictio_category_colors.get('condition') or {}}
+      fig = px.box(d.to_pandas(), x='sample', y='log_cpm', labels={'sample': 'Library', 'log_cpm': 'log2(CPM + 1)', 'condition': 'Condition'}, **kw)
+      fig.update_layout(margin=dict(t=10))
+    section: Libraries and counts
+    tag: ns-qt-distribution
+    index: qt-distribution
+    title: Gene expression per library
+    description: After CPM normalisation the boxes should line up; a shifted one differs in composition.
+    layout: {x: 0, y: 8, w: 8, h: 4}
   - component_type: table
-    tag: ns-qt-table-pca
-    section: Quantification tables
     workflow_tag: nanoseq
     data_collection_tag: bambu_sample_pca
     use: bambu/sample_pca
     row_selection_enabled: true
     row_selection_column: sample_id
-    title: Per-library readings
-    description: One row per library, with the embedding coordinates, library size, genes detected and the two concentration readings.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 4}
-  - component_type: table
-    tag: ns-qt-table-correlation
     section: Quantification tables
+    tag: ns-qt-table-pca
+    index: qt-table-pca
+    title: Per-library readings
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
     workflow_tag: nanoseq
     data_collection_tag: bambu_sample_correlation
     use: bambu/sample_correlation
     row_selection_enabled: true
     row_selection_column: sample_id
-    title: Correlation matrix
-    description: One row and one column per library, plus each library's mean correlation with the others.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 4, w: 8, h: 4}
-  - component_type: table
-    tag: ns-qt-table-long
     section: Quantification tables
+    tag: ns-qt-table-correlation
+    index: qt-table-correlation
+    title: Correlation matrix
+    layout: {x: 0, y: 6, w: 8, h: 6}
+  - component_type: table
     workflow_tag: nanoseq
     data_collection_tag: bambu_counts_gene_long
     use: bambu/counts_gene_long
-    row_selection_enabled: false
-    title: Gene counts per sample
-    description: One row per library and gene, with the raw count, CPM and log CPM; narrowed by the sample and feature filters.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 8, w: 8, h: 7}
-  - component_type: interactive
-    tag: ns-qt-filter-biotype
-    index: ns-qt-biotype-filter
-    section: Feature scope
-    group: Feature scope
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_counts_gene_long
-    interactive_component_type: MultiSelect
-    column_name: gene_biotype
-    column_type: object
-    display: {title_size: md, custom_color: '#7C4DFF', icon_name: 'mdi:shape-outline'}
-    placement: left
-    title: Gene biotype
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: ns-qt-filter-logcpm
-    index: ns-qt-logcpm-filter
-    section: Feature scope
-    group: Feature scope
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_counts_gene_long
-    interactive_component_type: RangeSlider
-    show_histogram: true
-    column_name: log_cpm
-    column_type: float64
-    display: {title_size: md, custom_color: '#7C4DFF', icon_name: 'mdi:chart-bell-curve'}
-    placement: left
-    title: log2(CPM + 1)
-    layout: {x: 0, y: 3, w: 1, h: 3}
-
-# ============================================================================
-# Gene expression (DESeq2)
-# ============================================================================
-- title: Gene expression (DESeq2)
-  subtitle: Which genes differ between the conditions of the run's contrast
+    section: Quantification tables
+    tag: ns-qt-table-counts
+    index: qt-table-counts
+    title: Gene counts per library
+    layout: {x: 0, y: 12, w: 8, h: 6}
+- title: Gene expression
+  subtitle: Which genes differ between the two conditions?
+  tab_group: Expression
   tab_order: 5
-  tab_icon: mdi:chart-scatter-plot
+  tab_icon: mdi:scale-balance
   tab_icon_color: grape
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
-  # One section: every control here filters deseq2_results, which has no
-  # sample column, so the pinned sample filters do not narrow this tab.
+  # Every control here filters deseq2_results, which has no sample column. No
+  # direction filter: the up and down cards each read one direction.
   filter_sections:
-  - name: DE scope
+  - name: DE filters
     icon: mdi:filter-variant
     color: grape
-    description: Significance, effect size, direction, biotype and expression floor on the DESeq2 results
+    description: Significance, effect size, biotype and expression on the DESeq2 results
   grid_sections:
-  - name: Differential expression
+  - name: Calls at a glance
+    icon: mdi:counter
+    color: grape
+    description: Significant genes, their effect sizes and the strongest call
+  - name: Volcano
     icon: mdi:chart-scatter-plot
     color: grape
-    description: Genes whose Bambu counts differ between the two conditions
-  - name: DESeq2 tables
+    description: Effect size against significance, one point per tested gene
+  - name: Largest effects
+    icon: mdi:chart-bar
+    color: grape
+    description: The genes with the largest fold changes, signed
+  - name: Best-measured genes
     icon: mdi:table
     color: gray
-    description: The best-measured DESeq2 rows
+    description: The 200 rows with the highest mean normalised count
     collapsed: true
   components:
+  # The tab's intro: the method, with its link, and how to read the tab.
   - component_type: text
-    tag: ns-de-intro
-    section: Differential expression
-    title: What moved between the conditions
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
+    order: 1
     body: >
-      DESeq2 on Bambu's gene counts, one comparison across the whole run, so
-      the sample filters do not narrow this tab. Narrow it with the DE scope
-      filters, and read the per-library counts on the Quantification tab.
+      [DESeq2](https://bioconductor.org/packages/DESeq2/) tests Bambu's gene counts between the
+      run's two conditions, once over the whole run, so the sample filters do not narrow this
+      tab. A call clears a 5% FDR and a two-fold change; the View switch reads the same rows as an
+      MA or a QQ plot.
+    tag: ns-de-intro
+    index: de-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
     workflow_tag: nanoseq
     data_collection_tag: deseq2_results
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: card
-    tag: ns-de-card-sig
-    index: ns-de-card-sig
-    section: Differential expression
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: padj
+    column_type: float64
+    display:
+      icon_name: mdi:chart-bell-curve
+      custom_color: grape
+    section: DE filters
+    group: Calls
+    tag: ns-de-filter-padj
+    index: de-padj-filter
+    title: Adjusted p-value
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
     workflow_tag: nanoseq
     data_collection_tag: deseq2_results
-    use: deseq2/results
-    aggregation: count
-    column_name: direction
-    column_type: object
-    secondary_layout: donut
-    breakdown_col: direction
-    display: {icon_name: 'mdi:chart-donut', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Features by direction
-    layout: {x: 0, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: ns-de-card-lfc
-    index: ns-de-card-lfc
-    section: Differential expression
-    workflow_tag: nanoseq
-    data_collection_tag: deseq2_results
-    use: deseq2/results
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
+    interactive_component_type: RangeSlider
+    show_histogram: true
     column_name: log2fc
     column_type: float64
-    display: {icon_name: 'mdi:ruler', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    display:
+      icon_name: mdi:swap-vertical
+      custom_color: pink
+    section: DE filters
+    group: Calls
+    tag: ns-de-filter-log2fc
+    index: de-log2fc-filter
     title: log2 fold change
-    layout: {x: 2, y: 2, w: 2, h: 2}
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: deseq2_results
+    interactive_component_type: MultiSelect
+    column_name: gene_biotype
+    column_type: object
+    display:
+      icon_name: mdi:shape-plus-outline
+      custom_color: grape
+    section: DE filters
+    group: Genes
+    tag: ns-de-filter-biotype
+    index: de-biotype-filter
+    title: Gene biotype
+    layout: {x: 0, y: 6, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: nanoseq
+    data_collection_tag: deseq2_results
+    interactive_component_type: RangeSlider
+    show_histogram: true
+    column_name: log2_base_mean
+    column_type: float64
+    display:
+      icon_name: mdi:chart-line
+      custom_color: violet
+    section: DE filters
+    group: Genes
+    tag: ns-de-filter-basemean
+    index: de-basemean-filter
+    title: log2 mean expression
+    layout: {x: 0, y: 9, w: 1, h: 3}
+  # nunique per direction draws ranked bars: up and down, short labels.
   - component_type: card
-    tag: ns-de-card-topn
-    index: ns-de-card-topn
-    section: Differential expression
     workflow_tag: nanoseq
     data_collection_tag: deseq2_results
     use: deseq2/results
     aggregation: nunique
     column_name: gene_id
     column_type: object
+    filter_expr: col('significant') == True
     secondary_layout: top_n
     breakdown_col: direction
-    top_n_count: 3
-    display: {icon_name: 'mdi:dna', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Genes tested
-    layout: {x: 4, y: 2, w: 2, h: 2}
+    top_n_count: 2
+    display:
+      icon_name: mdi:scale-balance
+      icon_color: grape
+      caption: genes, up and down
+      decimals: 0
+    section: Calls at a glance
+    tag: ns-de-card-genes
+    index: de-card-genes
+    title: Significant genes
+    description: Distinct genes with a call at a 5% FDR and a two-fold change.
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: ns-de-card-strongest
-    index: ns-de-card-strongest
-    section: Differential expression
+    workflow_tag: nanoseq
+    data_collection_tag: deseq2_results
+    use: deseq2/results
+    aggregation: median
+    column_name: log2fc
+    column_type: float64
+    filter_expr: col('direction') == 'up'
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:trending-up
+      icon_color: red
+      caption: median of the up calls, with its spread
+      decimals: 2
+    section: Calls at a glance
+    tag: ns-de-card-up
+    index: de-card-up
+    title: Fold change up (log2)
+    description: Median log2 fold change of the calls higher in the contrast's first condition.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nanoseq
+    data_collection_tag: deseq2_results
+    use: deseq2/results
+    aggregation: median
+    column_name: log2fc
+    column_type: float64
+    filter_expr: col('direction') == 'down'
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:trending-down
+      icon_color: blue
+      caption: the down calls, their distribution
+      decimals: 2
+    section: Calls at a glance
+    tag: ns-de-card-down
+    index: de-card-down
+    title: Fold change down (log2)
+    description: Median log2 fold change of the calls lower in the contrast's first condition.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  # 1.3 is -log10(0.05): the rows at or above it pass the 5% FDR.
+  - component_type: card
     workflow_tag: nanoseq
     data_collection_tag: deseq2_results
     use: deseq2/results
     aggregation: max
     column_name: neg_log10_padj
     column_type: float64
-    display: {icon_name: 'mdi:target', icon_color: '#EC407A', title_color: '#EC407A', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Strongest -log10(padj)
-    layout: {x: 6, y: 2, w: 2, h: 2}
+    secondary_layout: threshold
+    threshold_value: 1.3
+    threshold_direction: min
+    display:
+      icon_name: mdi:target
+      icon_color: violet
+      caption: tested rows against the 5% FDR (1.3)
+      decimals: 1
+    section: Calls at a glance
+    tag: ns-de-card-strongest
+    index: de-card-strongest
+    title: Strongest significance
+    description: The highest -log10 adjusted p-value, capped at 300 where it underflowed.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # One tile, three views of the same rows: the MA view reads log2_base_mean,
+  # the QQ view the raw p-values. No point labels: Ensembl ids pile up.
   - component_type: advanced_viz
-    tag: ns-de-av-volcano
-    index: ns-de-av-volcano
-    section: Differential expression
     workflow_tag: nanoseq
     data_collection_tag: deseq2_results
     use: deseq2/volcano
-    # One tile, three readings of the same table: MA and QQ are views of the
-    # volcano (header switch).
     config:
-      controls_placement: header
       view: volcano
       views: [volcano, ma, qq]
       avg_log_intensity_col: log2_base_mean
@@ -1554,16 +1686,16 @@ tabs:
       significance_threshold: 0.05
       effect_threshold: 1.0
       fold_change_threshold: 1.0
-      top_n_labels: 15
-      show_labels: true
-    title: "Volcano, MA and QQ: the run's contrast"
-    description: "Effect size against significance, one point per tested feature; switch to MA to see whether the effect depends on expression, or to QQ to see how far the raw p-values leave the null. Labels are Ensembl gene ids."
-    title_size: h3
-    layout: {x: 0, y: 4, w: 8, h: 7}
+      show_labels: false
+      effect_label: log2 fold change
+      significance_label: -log10 adjusted p-value
+    section: Volcano
+    tag: ns-de-volcano
+    index: de-volcano
+    title: Effect size against significance
+    description: The View switch reads the same rows as an MA plot or a QQ plot of the raw p-values.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
-    tag: ns-de-av-barplot
-    index: ns-de-av-barplot
-    section: Differential expression
     workflow_tag: nanoseq
     data_collection_tag: deseq2_results
     use: deseq2/da_barplot
@@ -1574,101 +1706,24 @@ tabs:
       significance_col: padj
       significance_threshold: 0.05
       top_n: 20
-    title: "Largest effect sizes in the contrast"
-    description: "The twenty features with the largest absolute fold change, signed, with the ones clearing the adjusted p-value cut-off highlighted."
-    title_size: h3
-    layout: {x: 0, y: 11, w: 8, h: 7}
+    section: Largest effects
+    tag: ns-de-barplot
+    index: de-barplot
+    title: The twenty largest fold changes
+    description: Signed, the ones clearing the adjusted p-value cut-off highlighted.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
-    tag: ns-de-table-top
-    section: DESeq2 tables
     workflow_tag: nanoseq
     data_collection_tag: deseq2_top_expressed
     use: deseq2/results
-    row_selection_enabled: false
+    section: Best-measured genes
+    tag: ns-de-table-top
+    index: de-table-top
     title: Best-measured DESeq2 rows
-    description: The 200 rows with the highest mean normalised count, with log2 fold change, p-value, adjusted p-value, Ensembl gene id and biotype.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 7}
-  - component_type: interactive
-    tag: ns-de-filter-padj
-    index: ns-de-padj-range
-    section: DE scope
-    group: DE scope
-    workflow_tag: nanoseq
-    data_collection_tag: deseq2_results
-    interactive_component_type: RangeSlider
-    show_histogram: true
-    column_name: padj
-    column_type: float64
-    display: {title_size: md, custom_color: '#AB47BC', icon_name: 'mdi:chart-bell-curve'}
-    placement: left
-    title: Adjusted p-value
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: ns-de-filter-log2fc
-    index: ns-de-log2fc-range
-    section: DE scope
-    group: DE scope
-    workflow_tag: nanoseq
-    data_collection_tag: deseq2_results
-    interactive_component_type: RangeSlider
-    show_histogram: true
-    column_name: log2fc
-    column_type: float64
-    display: {title_size: md, custom_color: '#AB47BC', icon_name: 'mdi:swap-vertical'}
-    placement: left
-    title: log2 fold change
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
-    tag: ns-de-filter-direction
-    index: ns-de-direction-filter
-    section: DE scope
-    group: DE scope
-    workflow_tag: nanoseq
-    data_collection_tag: deseq2_results
-    interactive_component_type: MultiSelect
-    column_name: direction
-    column_type: object
-    display: {title_size: md, custom_color: '#AB47BC', icon_name: 'mdi:swap-vertical'}
-    placement: left
-    title: Direction
-    layout: {x: 0, y: 6, w: 1, h: 3}
-  - component_type: interactive
-    tag: ns-de-filter-biotype
-    index: ns-de-biotype-filter
-    section: DE scope
-    group: DE scope
-    workflow_tag: nanoseq
-    data_collection_tag: deseq2_results
-    interactive_component_type: MultiSelect
-    column_name: gene_biotype
-    column_type: object
-    display: {title_size: md, custom_color: '#AB47BC', icon_name: 'mdi:shape-outline'}
-    placement: left
-    title: Gene biotype
-    layout: {x: 0, y: 9, w: 1, h: 3}
-  - component_type: interactive
-    tag: ns-de-filter-basemean
-    index: ns-de-basemean-filter
-    section: DE scope
-    group: DE scope
-    workflow_tag: nanoseq
-    data_collection_tag: deseq2_results
-    interactive_component_type: RangeSlider
-    show_histogram: true
-    column_name: log2_base_mean
-    column_type: float64
-    display: {title_size: md, custom_color: '#AB47BC', icon_name: 'mdi:chart-bell-curve'}
-    placement: left
-    title: log2 mean expression
-    layout: {x: 0, y: 12, w: 1, h: 3}
-
-# ============================================================================
-# Isoform usage and expression
-# ============================================================================
-- title: Isoform usage and expression
-  subtitle: Which transcripts change their share of their gene, and how the isoforms are expressed
+    layout: {x: 0, y: 0, w: 8, h: 6}
+- title: Isoform usage
+  subtitle: Which transcripts change their share of their gene?
+  tab_group: Expression
   tab_order: 6
   tab_icon: mdi:chart-timeline-variant
   tab_icon_color: pink
@@ -1676,347 +1731,260 @@ tabs:
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: Isoform scope
+  - name: Isoform filters
     icon: mdi:filter-variant
     color: pink
     description: Biotype and expression floor on the transcript counts
   grid_sections:
-  - name: Transcript usage (DEXSeq)
-    icon: mdi:scale-balance
+  - name: Usage at a glance
+    icon: mdi:counter
     color: pink
-    description: Transcripts whose share of their gene shifts between the conditions
+    description: Transcripts tested, their usage shifts and the reads on isoforms
+  - name: Usage volcano
+    icon: mdi:chart-scatter-plot
+    color: pink
+    description: Change in usage against the gene-level q-value, one point per transcript
+  - name: Usage per library
+    icon: mdi:chart-bar
+    color: pink
+    description: Each top gene's split across its transcripts, library by library
   - name: Isoform expression
-    icon: mdi:chart-timeline-variant
-    color: grape
+    icon: mdi:chart-box-outline
+    color: gray
     description: Transcript-level counts per library
+    collapsed: true
   - name: Isoform structures
     icon: mdi:dna
-    color: violet
+    color: gray
     description: Exon lanes, when the run publishes the models it used
+    collapsed: true
   - name: Isoform tables
     icon: mdi:table
     color: gray
-    description: The DEXSeq results and the melted transcript counts
+    description: The DEXSeq results and the transcript counts
     collapsed: true
   components:
+  # The tab's intro: the method, with its link, and how to read the tab.
   - component_type: text
-    tag: ns-is-dexseq-intro
-    section: Transcript usage (DEXSeq)
-    title: Transcripts whose share of their gene shifted
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
+    order: 1
     body: >
-      DEXSeq on Bambu's transcript counts asks whether one transcript is used
-      more or less relative to its siblings, not whether the gene changed.
-      Significance is the gene-level adjusted q-value, and the usage bars show
-      each top gene's split library by library.
-    workflow_tag: nanoseq
-    data_collection_tag: dexseq_results
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: card
-    tag: ns-is-dex-card-sig
-    index: ns-is-dex-card-sig
-    section: Transcript usage (DEXSeq)
-    workflow_tag: nanoseq
-    data_collection_tag: dexseq_results
-    use: dexseq/results
-    aggregation: count
-    column_name: direction
-    column_type: object
-    secondary_layout: donut
-    breakdown_col: direction
-    display: {icon_name: 'mdi:chart-donut', icon_color: '#D81B60', title_color: '#D81B60', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Transcripts by direction
-    layout: {x: 0, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: ns-is-dex-card-lfc
-    index: ns-is-dex-card-lfc
-    section: Transcript usage (DEXSeq)
-    workflow_tag: nanoseq
-    data_collection_tag: dexseq_results
-    use: dexseq/results
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: log2fc
-    column_type: float64
-    display: {icon_name: 'mdi:ruler', icon_color: '#AB47BC', title_color: '#AB47BC', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Usage log2 fold change
-    layout: {x: 2, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: ns-is-dex-card-genes
-    index: ns-is-dex-card-genes
-    section: Transcript usage (DEXSeq)
-    workflow_tag: nanoseq
-    data_collection_tag: dexseq_results
-    use: dexseq/results
-    aggregation: nunique
-    column_name: gene_id
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: direction
-    top_n_count: 3
-    display: {icon_name: 'mdi:dna', icon_color: '#8D6E63', title_color: '#8D6E63', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Genes with a tested transcript
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: ns-is-dex-card-transcripts
-    index: ns-is-dex-card-transcripts
-    section: Transcript usage (DEXSeq)
-    workflow_tag: nanoseq
-    data_collection_tag: dexseq_results
-    use: dexseq/results
-    aggregation: nunique
-    column_name: feature_id
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: direction
-    top_n_count: 3
-    display: {icon_name: 'mdi:star-outline', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Transcripts tested
-    layout: {x: 6, y: 2, w: 2, h: 2}
-  - component_type: advanced_viz
-    tag: ns-is-dex-av-volcano
-    index: ns-is-dex-av-volcano
-    section: Transcript usage (DEXSeq)
-    workflow_tag: nanoseq
-    data_collection_tag: dexseq_results
-    use: dexseq/volcano
-    # DEXSeq has no mean-intensity column, so no MA view; QQ reads the raw
-    # p-values.
-    config:
-      controls_placement: header
-      view: volcano
-      views: [volcano, qq]
-      p_value_col: pvalue
-      label_col: feature_id
-      category_col: direction
-      significance_threshold: 0.05
-      effect_threshold: 1.0
-      top_n_labels: 10
-      show_labels: true
-    title: "Volcano: differential transcript usage"
-    description: "Usage effect size against the gene-level adjusted q-value, one point per transcript. The QQ view shows how far the raw p-values depart from the null."
-    title_size: h3
-    layout: {x: 0, y: 4, w: 8, h: 7}
-  - component_type: figure
-    tag: ns-is-dex-fig-usage
-    index: ns-is-dex-fig-usage
-    section: Transcript usage (DEXSeq)
-    workflow_tag: nanoseq
-    data_collection_tag: dexseq_usage
-    visu_type: bar
-    dict_kwargs:
-      x: sample
-      y: usage_pct
-      color: transcript_id
-      facet_col: gene_label
-      facet_col_wrap: 3
-      barmode: stack
-    title: Transcript usage per library, top DEXSeq genes
-    description: Each bar is one library and sums to 100 percent of its gene's reads. A gene DEXSeq calls shows its colours shifting between the bars of the two conditions; the q-value is in each panel title.
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 11, w: 8, h: 7}
-
-  - component_type: text
+      [DEXSeq](https://bioconductor.org/packages/DEXSeq/) asks whether a transcript is used more
+      or less relative to its gene's other transcripts, on Bambu's transcript counts, once over the
+      whole run. Significance is the gene-level adjusted q-value; the bars show each top gene's
+      split library by library.
     tag: ns-is-intro
-    section: Isoform expression
-    title: Where the gene-level signal sits
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      A gene's count is the sum over its isoforms, and long reads can tell them
-      apart. These tiles read the melted transcript matrix, so the sample and
-      isoform filters reach them.
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_counts_transcript_long
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: card
-    tag: ns-is-card-logcpm
-    index: ns-is-card-logcpm
-    section: Isoform expression
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_counts_transcript_long
-    use: bambu/counts_transcript_long
-    filter_expr: "col('count') > 0"
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: log_cpm
-    column_type: float64
-    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#D81B60', title_color: '#D81B60', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Median log2(CPM + 1), detected transcripts
-    layout: {x: 0, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: ns-is-card-transcripts
-    index: ns-is-card-transcripts
-    section: Isoform expression
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_counts_transcript_long
-    use: bambu/counts_transcript_long
-    filter_expr: "col('count') > 0"
-    aggregation: nunique
-    column_name: transcript_id
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: gene_biotype
-    top_n_count: 3
-    display: {icon_name: 'mdi:chart-timeline-variant', icon_color: '#AB47BC', title_color: '#AB47BC', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Transcripts with reads
-    layout: {x: 2, y: 2, w: 2, h: 2}
-  # nunique under top_n shows the per-library value (wave 3a); scoped to
-  # count > 0 so each library reports the genes it actually detected.
-  - component_type: card
-    tag: ns-is-card-genes
-    index: ns-is-card-genes
-    section: Isoform expression
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_counts_transcript_long
-    use: bambu/counts_transcript_long
-    filter_expr: "col('count') > 0"
-    aggregation: nunique
-    column_name: gene_id
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:dna', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Genes with a detected isoform
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: ns-is-card-counts
-    index: ns-is-card-counts
-    section: Isoform expression
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_counts_transcript_long
-    use: bambu/counts_transcript_long
-    aggregation: sum
-    column_name: count
-    column_type: float64
-    secondary_layout: donut
-    breakdown_col: condition
-    display: {icon_name: 'mdi:counter', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Reads on isoforms
-    layout: {x: 6, y: 2, w: 2, h: 2}
-  - component_type: figure
-    tag: ns-is-fig-distribution
-    index: ns-is-fig-distribution
-    section: Isoform expression
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_counts_transcript_long
-    use: bambu/counts_transcript_long
-    visu_type: box
-    dict_kwargs: {x: sample, y: log_cpm, color: condition}
-    title: Isoform expression distribution per library
-    description: The transcript-level twin of the gene distribution, on the same CPM scale.
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 4, w: 8, h: 5}
-
-  - component_type: text
-    tag: ns-is-structures-intro
-    section: Isoform structures
-    title: Exon lanes need the models, not just the counts
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Isoform lanes read `bambu/extended_annotations.gtf`, which Bambu writes
-      only when it is allowed to extend the annotation. On a
-      quantification-only run the collection is absent and the tile stays
-      empty.
-    workflow_tag: nanoseq
-    data_collection_tag: gtf_transcripts
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: ns-is-av-structures
-    index: ns-is-av-structures
-    section: Isoform structures
-    workflow_tag: nanoseq
-    data_collection_tag: gtf_transcripts
-    use: gtf/transcript_structures
-    config:
-      controls_placement: header
-      max_transcripts: 25
-      colour_by: transcript_class
-    title: "Isoform structures of one gene"
-    description: "One lane per transcript of the chosen gene, exons drawn on a base-pair axis."
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-
-  - component_type: table
-    tag: ns-is-dex-table
-    section: Isoform tables
-    workflow_tag: nanoseq
-    data_collection_tag: dexseq_results
-    use: dexseq/results
-    row_selection_enabled: true
-    row_selection_column: feature_id
-    title: DEXSeq usage results
-    description: Every tested transcript, with the gene it belongs to, the usage fold change and both adjusted q-values.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 7}
-  - component_type: table
-    tag: ns-is-table-long
-    section: Isoform tables
-    workflow_tag: nanoseq
-    data_collection_tag: bambu_counts_transcript_long
-    use: bambu/counts_transcript_long
-    row_selection_enabled: false
-    title: Transcript counts per sample
-    description: One row per library and transcript, with the gene it belongs to, the raw count, CPM and log CPM.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 7, w: 8, h: 7}
+    index: is-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: interactive
-    tag: ns-is-filter-biotype
-    index: ns-is-biotype-filter
-    section: Isoform scope
-    group: Isoform scope
     workflow_tag: nanoseq
     data_collection_tag: bambu_counts_transcript_long
     interactive_component_type: MultiSelect
     column_name: gene_biotype
     column_type: object
-    display: {title_size: md, custom_color: '#D81B60', icon_name: 'mdi:shape-outline'}
-    placement: left
+    display:
+      icon_name: mdi:shape-plus-outline
+      custom_color: grape
+    section: Isoform filters
+    group: Transcripts
+    tag: ns-is-filter-biotype
+    index: is-biotype-filter
     title: Gene biotype
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
-    tag: ns-is-filter-logcpm
-    index: ns-is-logcpm-filter
-    section: Isoform scope
-    group: Isoform scope
     workflow_tag: nanoseq
     data_collection_tag: bambu_counts_transcript_long
     interactive_component_type: RangeSlider
     show_histogram: true
     column_name: log_cpm
     column_type: float64
-    display: {title_size: md, custom_color: '#D81B60', icon_name: 'mdi:chart-bell-curve'}
-    placement: left
+    display:
+      icon_name: mdi:chart-bell-curve
+      custom_color: pink
+    section: Isoform filters
+    group: Transcripts
+    tag: ns-is-filter-logcpm
+    index: is-logcpm-filter
     title: log2(CPM + 1)
     layout: {x: 0, y: 3, w: 1, h: 3}
+  # Not a ring by direction: "not significant" fills it, and one call in 400
+  # rounds to 0%. The threshold counts the calls exactly. One row per
+  # transcript, every one with a q-value, so the count is the transcripts.
+  - component_type: card
+    workflow_tag: nanoseq
+    data_collection_tag: dexseq_results
+    use: dexseq/results
+    aggregation: count
+    column_name: padj
+    column_type: float64
+    secondary_layout: threshold
+    threshold_value: 0.05
+    threshold_direction: max
+    display:
+      icon_name: mdi:chart-donut
+      icon_color: pink
+      caption: transcripts against a 5% gene-level q-value
+      decimals: 0
+    section: Usage at a glance
+    tag: ns-is-card-tested
+    index: is-card-tested
+    title: Transcripts tested
+    description: Transcripts DEXSeq tested; the bar counts those whose gene clears a 5% q-value.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nanoseq
+    data_collection_tag: dexseq_results
+    use: dexseq/results
+    aggregation: median
+    column_name: log2fc
+    column_type: float64
+    filter_expr: col('log2fc') > 0
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:trending-up
+      icon_color: red
+      caption: median of the gains, with its spread
+      decimals: 2
+    section: Usage at a glance
+    tag: ns-is-card-gain
+    index: is-card-gain
+    title: Usage gain (log2)
+    description: Median log2 fold change of the tested transcripts used more in the contrast's first condition.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nanoseq
+    data_collection_tag: dexseq_results
+    use: dexseq/results
+    aggregation: median
+    column_name: log2fc
+    column_type: float64
+    filter_expr: col('log2fc') < 0
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:trending-down
+      icon_color: blue
+      caption: the losses, their distribution
+      decimals: 2
+    section: Usage at a glance
+    tag: ns-is-card-loss
+    index: is-card-loss
+    title: Usage loss (log2)
+    description: Median log2 fold change of the tested transcripts used less in the contrast's first condition.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: nanoseq
+    data_collection_tag: bambu_counts_transcript_long
+    use: bambu/counts_transcript_long
+    aggregation: sum
+    column_name: count
+    column_type: float64
+    secondary_layout: composition
+    breakdown_col: condition
+    display:
+      icon_name: mdi:counter
+      icon_color: violet
+      caption: reads, by condition
+    section: Usage at a glance
+    tag: ns-is-card-reads
+    index: is-card-reads
+    title: Reads on isoforms
+    description: Reads Bambu assigned to a transcript over the libraries in view.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # DEXSeq has no mean-intensity column, so no MA view. No point labels:
+  # transcript ids pile up.
+  - component_type: advanced_viz
+    workflow_tag: nanoseq
+    data_collection_tag: dexseq_results
+    use: dexseq/volcano
+    config:
+      view: volcano
+      views: [volcano, qq]
+      p_value_col: pvalue
+      label_col: feature_id
+      category_col: direction
+      significance_threshold: 0.05
+      # 0: DEXSeq's call is the gene-level q-value alone, so the badges count
+      # the transcripts the cards and the Findings row count.
+      effect_threshold: 0.0
+      show_labels: false
+      effect_label: log2 fold change in usage
+      significance_label: -log10 gene-level q-value
+    section: Usage volcano
+    tag: ns-is-volcano
+    index: iso-volcano
+    title: Change in usage against significance
+    description: The View switch reads the raw p-values as a QQ plot.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: nanoseq
+    data_collection_tag: dexseq_usage
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Each library's split of its gene's reads across the gene's transcripts,
+      # one panel per top DEXSeq gene, its q-value in the panel title.
+      d = df.sort(['gene_label', 'sample'])
+      fig = px.bar(d.to_pandas(), x='sample', y='usage_pct', color='transcript_id', facet_col='gene_label', facet_col_wrap=3, labels={'sample': 'Library', 'usage_pct': 'Share of the gene (%)', 'transcript_id': 'Transcript', 'gene_label': 'Gene'})
+      fig.for_each_annotation(lambda a: a.update(text=a.text.split('=')[-1]))
+      # No legend: one entry per transcript id of every panel; a hover names it.
+      fig.update_layout(barmode='stack', showlegend=False, margin=dict(t=30))
+    section: Usage per library
+    tag: ns-is-usage
+    index: is-usage
+    title: Transcript usage per library, top DEXSeq genes
+    description: Each bar sums to 100% of its gene's reads; hover a segment for its transcript.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: figure
+    workflow_tag: nanoseq
+    data_collection_tag: bambu_counts_transcript_long
+    use: bambu/counts_transcript_long
+    visu_type: box
+    mode: code
+    code_content: |-
+      # log CPM of the detected transcripts per library: by condition, or by
+      # Analysis mode's groups when it has some.
+      d = df.filter(pl.col('count') > 0).sort('sample')
+      kw = depictio_group_kwargs or {'color': 'condition', 'color_discrete_map': depictio_category_colors.get('condition') or {}}
+      fig = px.box(d.to_pandas(), x='sample', y='log_cpm', labels={'sample': 'Library', 'log_cpm': 'log2(CPM + 1)', 'condition': 'Condition'}, **kw)
+      fig.update_layout(margin=dict(t=10))
+    section: Isoform expression
+    tag: ns-is-distribution
+    index: is-distribution
+    title: Transcript expression per library
+    description: The transcript-level twin of the gene distribution, on the same CPM scale.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  # Needs bambu/extended_annotations.gtf, which only a run that lets Bambu
+  # extend the annotation writes; without it the import drops the tile.
+  - component_type: advanced_viz
+    workflow_tag: nanoseq
+    data_collection_tag: gtf_transcripts
+    use: gtf/transcript_structures
+    config:
+      max_transcripts: 25
+      colour_by: transcript_class
+    section: Isoform structures
+    tag: ns-is-structures
+    index: is-structures
+    title: Isoform structures of one gene
+    description: One lane per transcript of the chosen gene, exons on a base-pair axis.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: nanoseq
+    data_collection_tag: dexseq_results
+    use: dexseq/results
+    row_selection_enabled: true
+    row_selection_column: feature_id
+    section: Isoform tables
+    tag: ns-is-table-dexseq
+    index: is-table-dexseq
+    title: DEXSeq usage results
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: nanoseq
+    data_collection_tag: bambu_counts_transcript_long
+    use: bambu/counts_transcript_long
+    section: Isoform tables
+    tag: ns-is-table-counts
+    index: is-table-counts
+    title: Transcript counts per library
+    layout: {x: 0, y: 6, w: 8, h: 6}

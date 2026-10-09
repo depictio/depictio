@@ -337,6 +337,10 @@ workflows:
       # `infer_schema_length: 0` reads every column as text because SEACR
       # writes the signal columns in scientific notation and per-file
       # inference disagrees between a sharp and a broad mark.
+      # The pattern skips any `igv/` directory: cutandrun copies every SEACR
+      # bed into 04_reporting/igv/ for the IGV session, and a name-only match
+      # loads each region twice. Every pattern is tried against the bare file
+      # name first, so it has to require a `/` to keep those copies out.
       # ----------------------------------------------------------------
       - data_collection_tag: "seacr_peaks_raw"
         description: "Raw per-sample SEACR peak beds (input of seacr_peaks)"
@@ -347,7 +351,7 @@ workflows:
             mode: "recursive"
             scan_parameters:
               regex_config:
-                pattern: ".*\\.seacr\\.peaks\\.\\w+\\.bed$"
+                pattern: "(?!(?:.*/)?igv/).*/[^/]*\\.seacr\\.peaks\\.\\w+\\.bed$"
           dc_specific_properties:
             format: "TSV"
             polars_kwargs:

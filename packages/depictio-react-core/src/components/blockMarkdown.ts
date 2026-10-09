@@ -13,6 +13,8 @@
  * breaks, which is exactly how bodies rendered before blocks existed.
  */
 
+import { withStandIns } from './textValues';
+
 export type Block =
   | { type: 'heading'; level: 1 | 2 | 3; text: string }
   | { type: 'paragraph'; text: string }
@@ -253,7 +255,9 @@ export interface StatRow {
   link: string | null;
 }
 
-const STAT_HEAD = /^\*\*([^*\n]{1,16})\*\*\s+(\S.*)$/;
+const STAT_HEAD = /^\*\*([^*\n]+)\*\*\s+(\S.*)$/;
+/** The longest a figure runs: a number and its unit, not a phrase. */
+const STAT_MAX = 16;
 const TRAILING_LINK = /\s*(\[[^\]\n]+\]\((?:[^()\n]|\([^()\n]*\))+\))\s*$/;
 const CONTEXT_SPLIT = /\s+[—–]\s+/;
 
@@ -261,11 +265,14 @@ const CONTEXT_SPLIT = /\s+[—–]\s+/;
  * Reads a list item as a result row, or null: a bold figure (it must hold a
  * digit), the claim, then a context after an em or en dash and/or a closing
  * link. The figure alone is not enough: `**16S** amplicons` is a fact, not a
- * result, so a row also needs its context or its link.
+ * result, so a row also needs its context or its link. A live value
+ * (`**{{share}}**`) counts as a figure: it is read as the number it will show.
  */
 export function parseStatRow(item: string): StatRow | null {
   const m = STAT_HEAD.exec(item.trim());
-  if (!m || !/\d/.test(m[1])) return null;
+  if (!m) return null;
+  const figure = withStandIns(m[1].trim());
+  if (figure.length > STAT_MAX || !/\d/.test(figure)) return null;
   let rest = m[2];
   const linkMatch = TRAILING_LINK.exec(rest);
   const link = linkMatch ? linkMatch[1] : null;

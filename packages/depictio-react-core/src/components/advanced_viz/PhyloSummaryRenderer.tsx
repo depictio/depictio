@@ -599,13 +599,31 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
               : ', all in one clade'}
           </Text>
           {g.splitShares && splitValues.length > 0 ? (
-            <Text size="xs">
-              {splitValues
-                .map((s) =>
-                  splitInView.has(s) ? `${s} ${formatShare(g.splitShares![s] ?? 0)}` : `${s} –`,
-                )
-                .join(' · ')}
-            </Text>
+            // One line per group, in the strip's colours and order, the shares
+            // in a column: the strip beside the tip, read as numbers.
+            <Stack gap={1} mt={2}>
+              {splitValues.map((s) => (
+                <Group key={s} gap={8} wrap="nowrap" justify="space-between">
+                  <Group gap={6} wrap="nowrap">
+                    <span
+                      aria-hidden
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        flexShrink: 0,
+                        background: splitColour(s, colour),
+                        opacity: splitInView.has(s) ? 1 : 0.4,
+                      }}
+                    />
+                    <Text size="xs">{s}</Text>
+                  </Group>
+                  <Text size="xs" fw={600} style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {splitInView.has(s) ? formatShare(g.splitShares![s] ?? 0) : '–'}
+                  </Text>
+                </Group>
+              ))}
+            </Stack>
           ) : null}
         </Stack>
       );
@@ -702,11 +720,22 @@ const PhyloSummaryRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
       );
     });
 
+    // One style for every column, so no header reads differently from its
+    // neighbour: the full names when all of them fit with their colour dot,
+    // else every longer name cut to three letters (a four-letter one stays
+    // whole: `Soi` reads worse than `Soil`); the dots when they all fit.
+    const headerRoom = L.cellW - 4;
+    const keyWidth = splitPalette ? 12 : 0;
+    const fullNames = splitValues.every((s) => headerWidth(s) + keyWidth <= headerRoom);
+    const labelOf = (s: string) => (fullNames || s.length <= 4 ? s : s.slice(0, 3));
+    const keysFit =
+      Boolean(splitPalette) &&
+      splitValues.every((s) => headerWidth(labelOf(s)) + keyWidth <= headerRoom);
     const headers = splitValues.map((s, k) => {
       const cx = L.stripX0 + (k + 0.5) * L.cellW;
-      const label = headerWidth(s) <= L.cellW - 4 ? s : s.slice(0, 3);
-      // The column's key: a dot of its colour before the name, where it fits.
-      const key = splitPalette?.[s] && headerWidth(label) + 12 <= L.cellW - 4;
+      const label = labelOf(s);
+      // The column's key: a dot of its colour before the name.
+      const key = keysFit && Boolean(splitPalette?.[s]);
       const textX = key ? cx + 5 : cx;
       return (
         <g key={s}>

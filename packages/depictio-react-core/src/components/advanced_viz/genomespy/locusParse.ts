@@ -89,7 +89,7 @@ export function parseLocusText(text: string): ParsedLocus | null {
 }
 
 /** Normalise a contig name for comparison: case-insensitive, `chr` optional. */
-function contigKey(name: string): string {
+export function contigKey(name: string): string {
   return name.trim().toLowerCase().replace(/^chr/, '');
 }
 

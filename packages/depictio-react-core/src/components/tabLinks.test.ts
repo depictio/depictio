@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { balancedColumns, parseTabTile, tabLinkKey } from './tabLinks';
+import {
+  balancedColumns,
+  parseTabTile,
+  tabLinkKey,
+  tabTilesAllMissing,
+  type TabLinkResolver,
+} from './tabLinks';
 
 describe('parseTabTile', () => {
   it('reads a bare tab link', () => {
@@ -30,6 +36,25 @@ describe('parseTabTile', () => {
   });
 });
 
+describe('tabTilesAllMissing', () => {
+  const resolve: TabLinkResolver = (name) =>
+    name === 'Alpha Diversity' ? { href: '/dashboard/a', label: name } : null;
+
+  it('holds when no tile of the list is on this dashboard', () => {
+    expect(tabTilesAllMissing(['[Beta](tab:Beta)', '[QC](tab:QC): did it work'], resolve)).toBe(
+      true,
+    );
+  });
+
+  it('does not hold while one tab is there, or for a list that is not tiles', () => {
+    expect(tabTilesAllMissing(['[Beta](tab:Beta)', '[Alpha](tab:Alpha Diversity)'], resolve)).toBe(
+      false,
+    );
+    expect(tabTilesAllMissing(['see [Beta](tab:Beta) for more'], resolve)).toBe(false);
+    expect(tabTilesAllMissing([], resolve)).toBe(false);
+  });
+});
+
 describe('tabLinkKey', () => {
   it('ignores case and repeated spaces', () => {
     expect(tabLinkKey('  Community  &  Diversity ')).toBe(tabLinkKey('community & diversity'));
@@ -42,6 +67,13 @@ describe('balancedColumns', () => {
     expect(balancedColumns(5, 940, 220, 12)).toBe(3);
     expect(balancedColumns(4, 940, 220, 12)).toBe(4);
     expect(balancedColumns(3, 940, 220, 12)).toBe(3);
+  });
+
+  it('keeps a short group tile-sized rather than stretching it', () => {
+    expect(balancedColumns(1, 940, 220, 12)).toBe(3);
+    expect(balancedColumns(2, 940, 220, 12)).toBe(3);
+    // Only two fit: two columns, not three.
+    expect(balancedColumns(1, 470, 220, 12)).toBe(2);
   });
 
   it('falls back to one column when nothing fits', () => {

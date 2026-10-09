@@ -199,6 +199,9 @@ def _resolve_glob_source(
 
     frames: list[pl.DataFrame] = []
     for file_path in matched_files:
+        # A zero-byte output has no header for polars to parse; it holds no rows.
+        if file_path.stat().st_size == 0:
+            continue
         df = _read_source_file(file_path, source, data_dir)
         if not df.is_empty():
             frames.append(df)

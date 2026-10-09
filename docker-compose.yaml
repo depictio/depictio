@@ -143,6 +143,11 @@ services:
     container_name: depictio-viewer
     ports:
       - 5080:8080
+    environment:
+      # S3 origin (scheme://host[:port]) the browser reads genome_view file
+      # tracks from, added to the CSP connect-src. Defaults to the public S3
+      # URL the backend signs presigned URLs for; empty adds nothing.
+      DEPICTIO_CSP_S3_ORIGIN: "${DEPICTIO_CSP_S3_ORIGIN:-${DEPICTIO_S3_PUBLIC_URL:-${DEPICTIO_MINIO_PUBLIC_URL:-}}}"
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:8080/ || exit 1"]
       interval: 30s

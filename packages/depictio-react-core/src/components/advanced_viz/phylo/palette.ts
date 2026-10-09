@@ -1,4 +1,4 @@
-import type { CategoryColorSource } from '../../../categoryColors';
+import { columnCategoryColors, type CategoryColorSource } from '../../../categoryColors';
 
 /**
  * Muted publication-friendly palette for categorical tip colouring, used when
@@ -32,10 +32,5 @@ export function pinnedPalette(
   column: string | null | undefined,
 ): Record<string, string> | null {
   if (!column) return null;
-  const merged = {
-    ...(source?.inherited_category_colors?.[column] ?? {}),
-    ...(source?.category_colors?.[column] ?? {}),
-    ...(componentPalettes?.[column] ?? {}),
-  };
-  return Object.keys(merged).length ? merged : null;
+  return columnCategoryColors(source, column, componentPalettes?.[column]);
 }

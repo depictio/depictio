@@ -65,17 +65,22 @@ def test_seed_dc_ids_are_static(project_key: str, seed_path: Path) -> None:
     offenders: list[str] = []
 
     for component in doc.get("stored_metadata", []) or []:
-        dc_id = component.get("dc_id")
-        if dc_id is None:
-            # Text tiles + similar UI-only components don't bind to a DC.
-            continue
-
-        # dc_id can serialise as either a bare string or `{"$oid": "..."}`.
-        oid = dc_id.get("$oid") if isinstance(dc_id, dict) else str(dc_id)
-        if oid not in valid_ids:
-            tag = component.get("data_collection_tag") or "<no tag>"
-            label = component.get("title") or component.get("index") or "<no label>"
-            offenders.append(f"dc_id={oid} tag={tag} component={label!r}")
+        label = component.get("title") or component.get("index") or "<no label>"
+        # A text tile's live values each bind a DC of their own.
+        bindings = [(component.get("dc_id"), component.get("data_collection_tag"), label)]
+        bindings += [
+            (spec.get("dc_id"), spec.get("dc"), f"{label} values.{name}")
+            for name, spec in (component.get("values") or {}).items()
+            if isinstance(spec, dict)
+        ]
+        for dc_id, tag, where in bindings:
+            if dc_id is None:
+                # Text tiles + similar UI-only components don't bind to a DC.
+                continue
+            # dc_id can serialise as either a bare string or `{"$oid": "..."}`.
+            oid = dc_id.get("$oid") if isinstance(dc_id, dict) else str(dc_id)
+            if oid not in valid_ids:
+                offenders.append(f"dc_id={oid} tag={tag or '<no tag>'} component={where!r}")
 
     assert not offenders, (
         f"{seed_path.relative_to(REPO_ROOT)} references DC IDs that aren't in "

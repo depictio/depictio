@@ -1,416 +1,606 @@
-version: 1
-# nf-core/scrnaseq 4.2.0 reference dashboard.
+# nf-core/scrnaseq 4.2.0, following depictio/projects/nf-core/RULES.md (the
+# ampliseq 2.18.0 template is the reference).
 #
-# Funnel: the MultiQC report (raw-read QC + Cell Ranger's own summary) ->
-# Library QC (headline metrics, thresholded) -> Cell calling (the barcode-rank
-# curve, the filtering waterfall and CellBender's ambient-RNA removal) ->
-# Cell QC (the MAD-based flag every downstream tab can filter on) ->
-# Embeddings (UMAP / t-SNE / PCA, the gene-coloured UMAP and the feature
-# selection behind them) -> Clusters (sizes, QC medians, cell cycle, stability
-# across k) -> Markers (per-cluster marker genes and their per-cell spread) ->
-# Compare selections (two lassoed groups of cells, tested gene by gene) ->
-# Aligner concordance (optional: simpleaf / kallisto against Cell Ranger).
-#
-# The cell-level QC filters (cluster, QC status, UMI counts, genes detected)
-# are pinned on every tab and compose forward through the cluster_label links:
-# pick a cluster on any tab and the cluster summary, marker expression,
-# marker-gene, per-cell expression and cell-cycle tables all narrow to it.
-# Every tab also carries its own non-persistent filter section for the
-# question that tab asks (resolution, phase, gene, aligner route, ...); the
-# MultiQC tab is the exception, its only collection is the MultiQC report,
-# which is filtered by sample mapping rather than by column.
-#
-# The MultiQC tab holds MultiQC panels only. The pinned sections are the
-# deliberate exception: the glance strip and the sample sheet ride along on
-# every tab, as do the cell-level QC filters. The Cell Ranger metrics table
-# lives on Library QC only.
-#
-# The Sample filter is a one-value control on a single-sample run. It stays
-# because the template is written for runs with many, and every per-sample
-# tile is keyed on it.
+# Routes: the Cell Ranger route is the template's core and every Key figure
+# reads it. CellBender (--skip_cellbender drops it) and the simpleaf and
+# kallisto routes are optional collections: a run without them loses the
+# CellBender card and the Aligner Concordance tab, nothing else.
 main_dashboard:
   title: nf-core/scrnaseq
-  subtitle: "nf-core/scrnaseq 4.2.0: from reads to called cells, per-cell QC, clusters and marker genes on the Cell Ranger route; the Aligner concordance tab fills when the run used several --aligner routes"
-  advanced_viz_controls: header
+  subtitle: Droplet single-cell RNA-seq, from reads to called cells, clusters and their marker genes
   project_tag: Single-Cell RNA-seq
-  main_tab_name: MultiQC
-  tab_icon: /assets/images/logos/multiqc_icon_color.svg
-  tab_icon_color: orange
+  main_tab_name: Overview
+  tab_icon: mdi:compass-outline
+  tab_icon_color: brandPrimary
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
+  filter_panel_default: collapsed
+  content_width_default: compact
+  show_tab_header: false
+  # Declared once here, read by every tab of the family: figures, advanced viz
+  # and filter chips all colour a value the same way. Clusters are left to the
+  # default palette: their labels carry the run's own marker genes.
+  category_colors:
+    sample: auto
+    qc_status:
+      pass: '#2f9e44'
+      flagged: '#e03131'
+    qc_reason:
+      pass: '#2f9e44'
+      low_umi: '#f08c00'
+      low_genes: '#e8590c'
+      high_top20: '#ae3ec9'
+      high_mito: '#e03131'
+    # '10x cut-off' is no status value: it colours the cut-off ticks of the
+    # library checks figure, which reads it from here.
+    status:
+      pass: '#2f9e44'
+      warn: '#f08c00'
+      fail: '#e03131'
+      '10x cut-off': '#868e96'
+    phase:
+      G1: '#74c0fc'
+      S: '#fab005'
+      G2M: '#e8590c'
+    selection:
+      selected: '#1c7ed6'
+      not selected: '#adb5bd'
+    aligner:
+      cellranger: '#1c7ed6'
+      simpleaf: '#2f9e44'
+      kallisto: '#e8590c'
+    region:
+      exonic: '#1c7ed6'
+      intronic: '#74c0fc'
+      intergenic: '#adb5bd'
+      antisense: '#f08c00'
+      unmapped: '#e03131'
+  # Persistent: drawn in every tab's filter panel, picks kept across tabs. The
+  # sample filter reads the sample hub, the source of every sample link in
+  # template.yaml; the cell filters read the per-cell QC table, whose
+  # cluster_label links reach the cluster, marker and expression tables.
   filter_sections:
   - name: Sample filters
     icon: mdi:filter-variant
     color: teal
-    description: Applies to every tab through the project links
+    description: Applies to every tab
     persistent: true
     pin: top
-  - name: Cell QC filters
+  - name: Cell filters
     icon: mdi:tune
-    color: cyan
-    description: Cluster, QC status, UMI counts and genes detected; applies wherever cells are shown, through the cluster_label links
+    color: grape
+    description: Cluster, QC status and depth, on every tab that shows cells
     collapsed: true
     persistent: true
     pin: bottom
+    exclude_tabs:
+    - Overview
+    - MultiQC
+    - Library QC
+    - Cell Calling
+    - Aligner Concordance
+    - Compare Selections
   grid_sections:
-  # Pinned to the top and carried by every tab: the four numbers that size the
-  # run. Cards are legal on the MultiQC tab only inside a pinned persistent
-  # section, which is exactly what this is.
-  - name: Run at a glance
+  - name: Key figures
     icon: mdi:counter
-    color: teal
-    description: The run in four numbers, on every tab
-    persistent: true
-    pin: top
-  - name: MultiQC general statistics
-    icon: mdi:view-dashboard-outline
-    color: blue
-    description: One row per sample, pooling FastQC and Cell Ranger's headline numbers
-  - name: Read quality
-    icon: mdi:chart-bell-curve
-    color: blue
-    description: FastQC on the raw reads
-  - name: Cell Ranger summary
-    icon: mdi:dna
-    color: indigo
-    description: Cell Ranger count's own summary stats and QC curves
-  # Pinned to every tab: the design the whole dashboard is filtered by should
-  # be one collapse away wherever the viewer lands.
+    color: gray
+    appearance: plain
+    card_variant: headline
+    filter_bar: true
+    visible_filters: 2
+    description: The run in four numbers. The filters here narrow these four only.
+  - name: Findings
+    icon: mdi:star-outline
+    color: gray
+    appearance: plain
+    figure_style: minimal
+    filter_bar: true
+    visible_filters: 2
+    description: What the data says, each with the tab that shows it, then the figures behind it.
+  - name: How to read this dashboard
+    icon: mdi:information-outline
+    color: gray
+    appearance: plain
+    description: The tabs by group, each with the question it answers.
   - name: Sample sheet
     icon: mdi:table-account
-    color: teal
-    description: The sample hub every other tab is filtered by
+    color: gray
+    description: The sample hub behind every tab, narrowed by the sample filter
     collapsed: true
     persistent: true
-    pin: top
+    pin: bottom
+    exclude_tabs:
+    - Overview
   components:
-  # ------------------------------------------------------------- at a glance
-  - component_type: card
-    tag: sc-glance-card-cells
-    index: sc-glance-card-cells
-    section: Run at a glance
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_metrics
-    use: cellranger/metrics_summary
-    aggregation: sum
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    column_name: estimated_cells
-    column_type: int64
-    display: {icon_name: 'mdi:test-tube', icon_color: '#3F51B5', title_color: '#3F51B5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Cells called
-    layout: {x: 0, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: sc-glance-card-genes
-    index: sc-glance-card-genes
-    section: Run at a glance
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_metrics
-    use: cellranger/metrics_summary
-    aggregation: median
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    column_name: median_genes_per_cell
-    column_type: int64
-    display: {icon_name: 'mdi:dna', icon_color: '#5C6BC0', title_color: '#5C6BC0', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Median genes per cell
-    description: Median of the per-library medians; the strip shows their spread.
-    layout: {x: 2, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: sc-glance-card-saturation
-    index: sc-glance-card-saturation
-    section: Run at a glance
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_metrics
-    use: cellranger/metrics_summary
-    aggregation: min
-    secondary_layout: box_plot
-    column_name: sequencing_saturation_frac
-    column_type: float64
-    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Sequencing saturation
-    aggregations: [box_plot_stats]
-    description: Lowest library, as a 0 to 1 fraction; the strip shows the spread across libraries.
-    layout: {x: 4, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: sc-glance-card-incells
-    index: sc-glance-card-incells
-    section: Run at a glance
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_metrics
-    use: cellranger/metrics_summary
-    aggregation: min
-    secondary_layout: box_plot
-    column_name: fraction_reads_in_cells_frac
-    column_type: float64
-    display: {icon_name: 'mdi:shield-check-outline', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Reads in cells
-    aggregations: [box_plot_stats]
-    description: Lowest library, as a 0 to 1 fraction; the strip shows the spread across libraries.
-    layout: {x: 6, y: 0, w: 2, h: 2}
-  # ------------------------------------------------------ general statistics
-  - component_type: text
-    tag: sc-qc-intro
-    section: MultiQC general statistics
-    title: A Cell Ranger run, from reads to cells
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      FastQC on the raw reads and Cell Ranger count's own summary, as
-      MultiQC reports them. The other tabs follow the run from libraries
-      to called cells, per-cell QC, clusters and marker genes.
-    workflow_tag: scrnaseq
-    data_collection_tag: multiqc_data
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: multiqc
-    tag: sc-qc-general-stats
-    section: MultiQC general statistics
-    workflow_tag: scrnaseq
-    data_collection_tag: multiqc_data
-    use: multiqc/general_stats
-    selected_module: general_stats
-    selected_plot: general_stats
-    title: General statistics
-    description: One row per sample, pooling the FastQC and Cell Ranger headline numbers.
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 5}
-
-  # ------------------------------------------------------------ read quality
-  - component_type: text
-    tag: sc-qc-reads-intro
-    section: Read quality
-    title: Raw reads
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc
-      /) on every FASTQ Cell Ranger read: R1 carries the cell barcode
-      and UMI, R2 the transcript. Read counts, quality, GC profile and
-      duplication, one panel each.
-    workflow_tag: scrnaseq
-    data_collection_tag: multiqc_data
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: multiqc
-    tag: sc-qc-fastqc-counts
-    section: Read quality
-    workflow_tag: scrnaseq
-    data_collection_tag: multiqc_data
-    selected_module: fastqc
-    selected_plot: Sequence Counts
-    use: multiqc/fastqc
-    title: Sequence counts
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 2, w: 4, h: 5}
-  - component_type: multiqc
-    tag: sc-qc-fastqc-quality
-    section: Read quality
-    workflow_tag: scrnaseq
-    data_collection_tag: multiqc_data
-    selected_module: fastqc
-    selected_plot: Per Sequence Quality Scores
-    use: multiqc/fastqc
-    title: Per-sequence quality scores
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 2, w: 4, h: 5}
-  - component_type: multiqc
-    tag: sc-qc-fastqc-gc
-    section: Read quality
-    workflow_tag: scrnaseq
-    data_collection_tag: multiqc_data
-    selected_module: fastqc
-    selected_plot: Per Sequence GC Content
-    use: multiqc/fastqc
-    title: GC content
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 7, w: 4, h: 5}
-  - component_type: multiqc
-    tag: sc-qc-fastqc-dup
-    section: Read quality
-    workflow_tag: scrnaseq
-    data_collection_tag: multiqc_data
-    selected_module: fastqc
-    selected_plot: Sequence Duplication Levels
-    use: multiqc/fastqc
-    title: Sequence duplication levels
-    description: High duplication is expected on a 3' scRNA-seq library; read it next to the saturation curve rather than on its own.
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 7, w: 4, h: 5}
-
-  # ------------------------------------------------------- cellranger summary
-  - component_type: text
-    tag: sc-qc-cellranger-intro
-    section: Cell Ranger summary
-    title: Cell Ranger's own QC
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Cell Ranger count's summary stats, then median genes per cell and
-      sequencing saturation against downsampled depth. The Cell calling
-      tab draws the barcode-rank curve with the cell cutoff marked.
-    workflow_tag: scrnaseq
-    data_collection_tag: multiqc_data
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: multiqc
-    tag: sc-qc-cellranger-stats
-    section: Cell Ranger summary
-    workflow_tag: scrnaseq
-    data_collection_tag: multiqc_data
-    selected_module: cellranger
-    selected_plot: "Count - Summary stats"
-    use: multiqc/cellranger
-    title: Cell Ranger count summary stats
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 5}
-  - component_type: multiqc
-    tag: sc-qc-cellranger-genes
-    section: Cell Ranger summary
-    workflow_tag: scrnaseq
-    data_collection_tag: multiqc_data
-    selected_module: cellranger
-    selected_plot: "Count - Median genes"
-    use: multiqc/cellranger
-    title: Median genes per cell
-    title_size: sm
-    title_align: left
-    layout: {x: 0, y: 7, w: 4, h: 5}
-  - component_type: multiqc
-    tag: sc-qc-cellranger-saturation
-    section: Cell Ranger summary
-    workflow_tag: scrnaseq
-    data_collection_tag: multiqc_data
-    selected_module: cellranger
-    selected_plot: "Count - Saturation plot"
-    use: multiqc/cellranger
-    title: Sequencing saturation
-    description: Saturation against downsampled depth. Flattening means more reads would add few new UMIs; still climbing means the library is under-sequenced.
-    title_size: sm
-    title_align: left
-    layout: {x: 4, y: 7, w: 4, h: 5}
-
-  # ---------------------------------------------------------- filters (main)
+  # First in component order on purpose: the Guide demos the first categorical
+  # filter that shares a data collection with the first card (Cells called).
   - component_type: interactive
-    tag: sc-filter-sample
-    index: sc-sample-filter
-    section: Sample filters
-    group: Sample scope
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_cell_qc
+    interactive_component_type: MultiSelect
+    column_name: qc_status
+    column_type: object
+    display:
+      icon_name: mdi:check-decagram
+      custom_color: grape
+      strip_label: QC status
+    section: Key figures
+    tag: sc-ov-kf-qc
+    index: ov-kf-qc
+    title: QC status
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
     workflow_tag: scrnaseq
     data_collection_tag: samples
     interactive_component_type: MultiSelect
     column_name: sample_id
     column_type: object
-    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:test-tube'}
-    placement: left
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+      strip_label: Sample
+    section: Key figures
+    tag: sc-ov-kf-sample
+    index: ov-kf-sample
     title: Sample
-    layout: {x: 0, y: 0, w: 1, h: 3}
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  - component_type: text
+    title: nf-core/scrnaseq
+    logo: https://raw.githubusercontent.com/nf-core/scrnaseq/master/docs/images/nf-core-scrnaseq_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/scrnaseq/master/docs/images/nf-core-scrnaseq_logo_dark.png
+    order: 1
+    body: >
+      Droplet single-cell RNA-seq turned into cells: which barcodes hold a cell, which cells
+      pass QC, how they cluster and which genes mark each cluster. [Run parameters](params:)
+    tag: sc-ov-hero
+    index: ov-hero
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: text
+    surface: card
+    body: |
+      ### About this dashboard
+      nf-core/scrnaseq quantifies droplet single-cell RNA-seq with Cell Ranger (and, on request, simpleaf or kallisto), then CellBender removes the ambient RNA. This page sums up one run; each tab behind it answers one question, in the order of the steps below.
 
-  # -------------------------------------------------- cell QC filters (main)
-  - component_type: interactive
-    tag: sc-filter-cluster
-    index: sc-cluster-filter
-    section: Cell QC filters
-    group: Cell scope
+      The sample filter in the left panel applies to every tab: narrow the samples once and the whole dashboard follows. A bar above a section narrows that section only.
+    tag: sc-ov-about
+    index: ov-about
+    layout: {x: 0, y: 1, w: 5, h: 3}
+  # The run's own settings, read from its params.json: a key the run did not
+  # set prints a dash.
+  - component_type: text
+    surface: card
+    values:
+      samples: {dc: samples, column: sample_id, aggregation: nunique, format: integer}
+    body: |
+      ### The run
+      - ![](icon:mdi:flask-outline) **Samples** {{samples}}
+      - ![](icon:mdi:source-branch) **Aligner** {{param:aligner}}
+      - ![](icon:mdi:barcode) **Protocol** {{param:protocol}}
+      - ![](icon:mdi:book-open-variant) **Genome** {{param:genome}}
+    tag: sc-ov-run
+    index: ov-run
+    layout: {x: 5, y: 1, w: 3, h: 3}
+  # The marks take the family's colour (the header's), not the theme's blue.
+  - component_type: text
+    surface: card
+    accent: green
+    body: |
+      ### Five steps from reads to marker genes
+      Each step names its settings and the tab that shows its result.
+
+      ::: steps
+      1. ![](icon:mdi:file-document-outline) **Reads** FastQC on the raw reads · [Settings](params:fastqc) · [MultiQC](tab:MultiQC)
+      2. ![](icon:mdi:dna) **Count** Reads mapped and counted per barcode · [Settings](params:aligner) · [Library QC](tab:Library QC)
+      3. ![](icon:mdi:filter-variant) **Call** Barcodes called as cells, ambient RNA removed · [Settings](params:cellbender) · [Cell Calling](tab:Cell Calling)
+      4. ![](icon:mdi:shield-check-outline) **Flag** Outlier cells flagged by MAD rules · [Settings](params:doublets) · [Cell QC](tab:Cell QC)
+      5. ![](icon:mdi:chart-scatter-plot) **Cluster** Graph-based clusters and their markers · [Settings](params:cellranger) · [Clusters](tab:Clusters) · [Markers](tab:Markers)
+      :::
+    tag: sc-ov-steps
+    index: ov-steps
+    layout: {x: 0, y: 4, w: 8, h: 3}
+  # Key figures: one card per stage of the funnel, each opening the tab that
+  # explains it. The icon colour is that tab's colour. All four read Cell
+  # Ranger collections, which every run writes.
+  - component_type: card
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
-    use: cellranger/cluster_picker
+    use: cellranger/cell_qc
+    aggregation: count
+    column_name: barcode
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: qc_status
+    top_n_count: 2
+    display:
+      icon_name: mdi:test-tube
+      icon_color: cyan
+      caption: called by Cell Ranger, by QC status
+      link: tab:Cell Calling
+    section: Key figures
+    tag: sc-ov-kf-cells
+    index: ov-kf-cells
+    title: Cells called
+    description: Barcodes Cell Ranger called as cells. The bar splits them into cells that pass the MAD rules and cells flagged.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_cell_qc
+    use: cellranger/cell_qc
+    aggregation: median
+    column_name: n_genes
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:dna
+      icon_color: grape
+      caption: median per cell, with the spread
+      link: tab:Cell QC
+    section: Key figures
+    tag: sc-ov-kf-genes
+    index: ov-kf-genes
+    title: Genes per cell
+    description: Genes detected in each called cell. The box shows how they spread over the cells.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_cell_qc
+    use: cellranger/cell_qc
+    aggregation: nunique
+    column_name: graphclust
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: graphclust
+    top_n_count: 5
+    display:
+      icon_name: mdi:chart-donut
+      icon_color: violet
+      caption: graph-based, the largest by cells
+      link: tab:Clusters
+    section: Key figures
+    tag: sc-ov-kf-clusters
+    index: ov-kf-clusters
+    title: Clusters
+    description: Cell Ranger's graph-based clusters. The bar shows the share of cells the five largest hold.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_diffexp
+    use: cellranger/diffexp
+    aggregation: nunique
+    column_name: gene
+    column_type: object
+    filter_expr: "(col('resolution') == 'graphclust') & (col('adjusted_pvalue') < 0.05) & (col('log2fc') > 0)"
+    secondary_layout: uniqueness
+    display:
+      icon_name: mdi:dna
+      icon_color: pink
+      caption: up-regulated in a cluster, and how many recur
+      link: tab:Markers
+    section: Key figures
+    tag: sc-ov-kf-markers
+    index: ov-kf-markers
+    title: Marker genes
+    description: Genes up-regulated in a graph-based cluster at adjusted p below 0.05. The strip shows how many mark more than one cluster.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # Findings filter bar: the sample, then the cluster.
+  - component_type: interactive
+    workflow_tag: scrnaseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+      strip_label: Sample
+    section: Findings
+    tag: sc-ov-findings-sample
+    index: ov-findings-sample
+    title: Sample
+    layout: {x: 0, y: 0, w: 2, h: 1}
+  - component_type: interactive
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_cell_qc
     interactive_component_type: MultiSelect
     column_name: cluster_label
     column_type: object
-    display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:chart-scatter-plot'}
-    placement: left
+    display:
+      icon_name: mdi:chart-donut
+      custom_color: violet
+      strip_label: Cluster
+    section: Findings
+    tag: sc-ov-findings-cluster
+    index: ov-findings-cluster
+    title: Cluster
+    layout: {x: 2, y: 0, w: 2, h: 1}
+  # One result row per finding, each citing the collections it reads, so the
+  # import removes a row with its data.
+  - component_type: text
+    surface: card
+    values:
+      cells: {dc: cellranger_cell_funnel, column: cells_called, aggregation: sum, format: integer}
+      barcodes: {dc: cellranger_cell_funnel, column: barcodes_observed, aggregation: sum, format: si}
+      flagged: {dc: cellranger_cell_qc, column: qc_flagged, aggregation: average, format: percent}
+      reason: {dc: cellranger_cell_qc, column: qc_reason, aggregation: top, filter_expr: "col('qc_status') == 'flagged'"}
+      top_share: {dc: cellranger_cell_qc, column: cluster_label, aggregation: top_share, format: percent}
+      top_cl: {dc: cellranger_cell_qc, column: cluster_label, aggregation: top}
+      n_clust: {dc: cellranger_cell_qc, column: graphclust, aggregation: nunique, format: integer}
+      n_markers: {dc: cellranger_diffexp, column: gene, aggregation: nunique, format: integer,
+        filter_expr: "(col('resolution') == 'graphclust') & (col('adjusted_pvalue') < 0.05) & (col('log2fc') > 0)"}
+    body: |
+      - **{{cells}}** cells called from {{barcodes}} barcodes – the rest are empty droplets [Cell Calling](tab:Cell Calling)
+      - **{{flagged}}** of the called cells are flagged – most common rule: {{reason}} [Cell QC](tab:Cell QC)
+      - **{{top_share}}** of the cells sit in {{top_cl}} – the largest of {{n_clust}} clusters [Clusters](tab:Clusters)
+      - **{{n_markers}}** genes mark a graph-based cluster – up-regulated, adjusted p below 0.05 [Markers](tab:Markers)
+    section: Findings
+    tag: sc-ov-findings
+    index: ov-findings
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Four figures in two rows, wide then narrow, then narrow then wide.
+  - component_type: highlight
+    section: Findings
+    source_tab: Embeddings
+    source_component: em-umap
+    hide_legend: true
+    caption: One point per cell, coloured by graph-based cluster; nearby cells have similar expression.
+    tag: sc-ov-hl-umap
+    index: ov-hl-umap
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Cell Calling
+    source_component: cc-knee
+    hide_legend: true
+    caption: UMIs per barcode against its rank, one curve per sample; the cliff is where cells end.
+    tag: sc-ov-hl-knee
+    index: ov-hl-knee
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Clusters
+    source_component: cl-sizes
+    caption: Cells per graph-based cluster, the flagged ones stacked on top in red.
+    tag: sc-ov-hl-sizes
+    index: ov-hl-sizes
+    layout: {x: 0, y: 7, w: 4, h: 5}
+  - component_type: highlight
+    section: Findings
+    source_tab: Markers
+    source_component: mk-top-markers
+    caption: The strongest up-regulated marker of each graph-based cluster, named on its bar.
+    tag: sc-ov-hl-markers
+    index: ov-hl-markers
+    layout: {x: 4, y: 7, w: 4, h: 5}
+  # Link-only tab tiles: each tile prints its tab's subtitle, the question the
+  # tab answers. A tab the run does not have is left out.
+  - component_type: text
+    body: |
+      ### Data & QC
+      - [MultiQC](tab:MultiQC)
+      - [Library QC](tab:Library QC)
+
+      ### Cells
+      - [Cell Calling](tab:Cell Calling)
+      - [Aligner Concordance](tab:Aligner Concordance)
+      - [Cell QC](tab:Cell QC)
+      - [Embeddings](tab:Embeddings)
+      - [Clusters](tab:Clusters)
+
+      ### Genes
+      - [Markers](tab:Markers)
+      - [Compare Selections](tab:Compare Selections)
+    section: How to read this dashboard
+    tag: sc-ov-how-to-read
+    index: ov-how-to-read
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  # Persistent sample filter.
+  - component_type: interactive
+    workflow_tag: scrnaseq
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample_id
+    column_type: object
+    display:
+      icon_name: mdi:flask-outline
+      custom_color: teal
+    section: Sample filters
+    group: Sample scope
+    tag: sc-filter-sample
+    index: sample-filters-sample
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  # Persistent cell filters, on the tabs that draw cells.
+  - component_type: interactive
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_cell_qc
+    interactive_component_type: MultiSelect
+    column_name: cluster_label
+    column_type: object
+    display:
+      icon_name: mdi:chart-donut
+      custom_color: violet
+    section: Cell filters
+    group: Cell scope
+    tag: sc-filter-cluster
+    index: cell-filters-cluster
     title: Cluster
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
-    tag: sc-filter-qc-status
-    index: sc-qc-status-filter
-    section: Cell QC filters
-    group: Cell scope
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
-    use: cellranger/qc_status_picker
     interactive_component_type: SegmentedControl
     column_name: qc_status
     column_type: object
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:check-decagram'}
-    placement: left
-    title: QC status
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
-    tag: sc-filter-n-umi
-    index: sc-n-umi-filter
-    section: Cell QC filters
+    display:
+      icon_name: mdi:check-decagram
+      custom_color: grape
+    section: Cell filters
     group: Cell scope
+    tag: sc-filter-qc-status
+    index: cell-filters-qc-status
+    title: QC status
+    layout: {x: 0, y: 3, w: 1, h: 2}
+  - component_type: interactive
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
-    use: cellranger/n_umi_filter
     interactive_component_type: RangeSlider
     column_name: n_umi
     column_type: int64
     show_histogram: true
-    display: {title_size: md, custom_color: '#D81B60', icon_name: 'mdi:counter'}
-    placement: left
-    title: UMI counts per cell
-    layout: {x: 0, y: 6, w: 1, h: 3}
-  - component_type: interactive
-    tag: sc-filter-n-genes
-    index: sc-n-genes-filter
-    section: Cell QC filters
+    display:
+      icon_name: mdi:counter
+      custom_color: pink
+    section: Cell filters
     group: Cell scope
+    tag: sc-filter-umi
+    index: cell-filters-umi
+    title: UMIs per cell
+    layout: {x: 0, y: 5, w: 1, h: 3}
+  - component_type: interactive
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
-    use: cellranger/n_genes_filter
     interactive_component_type: RangeSlider
     column_name: n_genes
     column_type: int64
     show_histogram: true
-    display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:dna'}
-    placement: left
-    title: Genes detected
-    layout: {x: 0, y: 9, w: 1, h: 3}
-
-
-  # --------------------------------------------------------- pinned sections
+    display:
+      icon_name: mdi:dna
+      custom_color: indigo
+    section: Cell filters
+    group: Cell scope
+    tag: sc-filter-genes
+    index: cell-filters-genes
+    title: Genes per cell
+    layout: {x: 0, y: 8, w: 1, h: 3}
+  # Row selection feeds the Analysis panel: the one component of the family
+  # that is both persistent and row-addressable.
   - component_type: table
-    tag: sc-ref-table-samples
-    section: Sample sheet
     workflow_tag: scrnaseq
     data_collection_tag: samples
     row_selection_enabled: true
     row_selection_column: sample_id
+    section: Sample sheet
+    tag: sc-sample-sheet
+    index: sample-sheet
     title: Sample hub
-    description: One row per sample, its expected cell count and how many lanes were merged; select rows to narrow every linked tile to those samples.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 3}
-
+    layout: {x: 0, y: 0, w: 8, h: 4}
 tabs:
-# ============================================================================
-# Library QC
-# ============================================================================
+- title: MultiQC
+  subtitle: Did the reads and Cell Ranger's own QC hold for every sample?
+  tab_group: Data & QC
+  tab_order: 1
+  tab_icon: /assets/images/logos/multiqc_icon_color.svg
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  grid_sections:
+  - name: QC overview
+    icon: mdi:view-dashboard-outline
+    color: orange
+    description: One row per sample, FastQC and Cell Ranger side by side
+  - name: Cell Ranger curves
+    icon: mdi:chart-line
+    color: orange
+    description: Genes per cell and saturation as the reads are subsampled
+  - name: Read quality
+    icon: mdi:chart-bell-curve
+    color: orange
+    description: FastQC on the raw reads
+  - name: QC details
+    icon: mdi:file-document-outline
+    color: gray
+    description: The remaining FastQC panels
+    collapsed: true
+  components:
+  # The tab's intro: the method, with its link, and how to read the tab.
+  - component_type: text
+    order: 1
+    body: >
+      [MultiQC](https://multiqc.info) gathers [FastQC](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/)
+      on the raw reads and the summary of [Cell Ranger](https://www.10xgenomics.com/support/software/cell-ranger)
+      count. Read whether every sample has enough good reads and how close each library comes
+      to saturation. High duplication is expected: each transcript is read many times.
+    tag: sc-mqc-intro
+    index: mqc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: multiqc
+    workflow_tag: scrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/general_stats
+    selected_module: general_stats
+    selected_plot: general_stats
+    section: QC overview
+    tag: sc-mqc-general-stats
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: scrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/cellranger
+    selected_module: cellranger
+    selected_plot: Count - Summary stats
+    section: QC overview
+    tag: sc-mqc-cellranger-summary
+    layout: {x: 0, y: 4, w: 8, h: 4}
+  - component_type: multiqc
+    workflow_tag: scrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/cellranger
+    selected_module: cellranger
+    selected_plot: Count - Median genes
+    section: Cell Ranger curves
+    tag: sc-mqc-cellranger-genes
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: scrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/cellranger
+    selected_module: cellranger
+    selected_plot: Count - Saturation plot
+    section: Cell Ranger curves
+    tag: sc-mqc-cellranger-saturation
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: scrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Counts
+    section: Read quality
+    tag: sc-mqc-fastqc-counts
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: scrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Per Sequence Quality Scores
+    section: Read quality
+    tag: sc-mqc-fastqc-quality
+    layout: {x: 4, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: scrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Per Sequence GC Content
+    section: QC details
+    tag: sc-mqc-fastqc-gc
+    layout: {x: 0, y: 0, w: 4, h: 4}
+  - component_type: multiqc
+    workflow_tag: scrnaseq
+    data_collection_tag: multiqc_data
+    use: multiqc/fastqc
+    selected_module: fastqc
+    selected_plot: Sequence Duplication Levels
+    section: QC details
+    tag: sc-mqc-fastqc-dup
+    layout: {x: 4, y: 0, w: 4, h: 4}
 - title: Library QC
-  subtitle: Cell Ranger's headline library metrics, thresholded against 10x's own QC guidance
-  advanced_viz_controls: header
+  subtitle: Do the libraries meet 10x Genomics' own QC guidance?
+  tab_group: Data & QC
   tab_order: 2
   tab_icon: mdi:check-decagram
   tab_icon_color: blue
@@ -421,268 +611,219 @@ tabs:
   - name: Library filters
     icon: mdi:filter-variant
     color: blue
-    description: Narrow the thresholded metrics to one metric or one QC band
+    description: Narrows the checks to a verdict and the mapping to some regions
   grid_sections:
-  - name: Library metrics
+  - name: Libraries at a glance
+    icon: mdi:counter
+    color: blue
+    description: Reads in cells, depth, saturation and transcriptome mapping
+  - name: Against 10x's guidance
     icon: mdi:check-decagram
     color: blue
-    description: Five metrics against 10x's own cut-offs, depth per cell, and the thresholded table
-  - name: Mapping breakdown
+    description: Each library metric against the cut-off 10x Genomics recommends
+  - name: Where the reads map
     icon: mdi:chart-bar
-    color: indigo
-    description: Where confidently-mapped reads land in the genome
-  - name: Cell Ranger metrics table
+    color: blue
+    description: Share of each sample's reads by genomic region
+  - name: Metrics tables
     icon: mdi:table
     color: gray
-    description: Cell Ranger's per-sample metrics_summary.csv, every column
+    description: The thresholded checks and every column of Cell Ranger's metrics summary
     collapsed: true
   components:
+  - component_type: text
+    order: 1
+    body: >
+      Cell Ranger's per-sample metrics, read against the cut-offs
+      [10x Genomics](https://www.10xgenomics.com/support/single-cell-gene-expression) gives for
+      a usable library. A dot left of its cut-off is a library to check; the bars show where
+      the reads land, exonic first.
+    tag: sc-lq-intro
+    index: lq-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: interactive
-    tag: sc-lq-filter-metric
-    index: sc-lq-metric-filter
-    section: Library filters
-    group: Library scope
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_library_metrics_long
-    use: cellranger/library_metric_picker
-    interactive_component_type: Select
-    column_name: metric
-    column_type: object
-    display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:tune'}
-    placement: left
-    title: Metric
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: sc-lq-filter-status
-    index: sc-lq-status-filter
-    section: Library filters
-    group: Library scope
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_library_metrics_long
-    use: cellranger/library_status_picker
-    interactive_component_type: SegmentedControl
+    interactive_component_type: MultiSelect
     column_name: status
     column_type: object
-    display: {title_size: md, custom_color: '#43A047', icon_name: 'mdi:check-decagram'}
-    placement: left
-    title: QC band
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: text
-    tag: sc-lq-intro
-    section: Library metrics
-    title: Reading the library metrics
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Five Cell Ranger metrics against 10x's own cut-offs, one card
-      each, next to sequencing depth per cell. `Cells called` should
-      track `expected_cells` on the pinned sample sheet.
+    display:
+      icon_name: mdi:check-decagram
+      custom_color: green
+    section: Library filters
+    tag: sc-lq-filter-status
+    index: lq-status-filter
+    title: Check verdict
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
     workflow_tag: scrnaseq
-    data_collection_tag: cellranger_library_metrics_long
-    layout: {x: 0, y: 0, w: 8, h: 2}
+    data_collection_tag: cellranger_mapping_breakdown
+    interactive_component_type: MultiSelect
+    column_name: region
+    column_type: object
+    display:
+      icon_name: mdi:dna
+      custom_color: blue
+    section: Library filters
+    tag: sc-lq-filter-region
+    index: lq-region-filter
+    title: Mapping region
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  # Levels rather than spreads: a run of one sample still reads them. The
+  # percent columns are 0 to 100, so the gauges run to 100.
   - component_type: card
-    tag: sc-lq-card-reads
-    index: sc-lq-card-reads
-    section: Library metrics
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_metrics
+    use: cellranger/metrics_summary
+    aggregation: median
+    column_name: fraction_reads_in_cells_pct
+    column_type: float64
+    filter_expr: "col('estimated_cells') > 0"
+    secondary_layout: gauge
+    coverage_max: 100
+    display:
+      icon_name: mdi:test-tube
+      icon_color: blue
+      caption: median, 10x expects 70% or more
+      decimals: 1
+    section: Libraries at a glance
+    tag: sc-lq-card-incells
+    index: lq-card-incells
+    title: Reads in cells (%)
+    description: Share of valid-barcode reads that fall in called cells, the median over samples.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_metrics
     use: cellranger/metrics_summary
     aggregation: median
     column_name: mean_reads_per_cell
     column_type: int64
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#1E88E5', title_color: '#1E88E5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Mean reads / cell
-    layout: {x: 2, y: 4, w: 2, h: 2}
+    secondary_layout: threshold
+    threshold_value: 20000
+    threshold_direction: min
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: indigo
+      caption: median, 10x expects 20,000 or more
+    section: Libraries at a glance
+    tag: sc-lq-card-depth
+    index: lq-card-depth
+    title: Reads per cell
+    description: Mean reads per called cell. The strip counts the samples at or above the 20 000 10x recommends.
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: sc-lq-card-umi
-    index: sc-lq-card-umi
-    section: Library metrics
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_metrics
     use: cellranger/metrics_summary
     aggregation: median
-    column_name: median_umi_counts_per_cell
-    column_type: int64
-    aggregations: [box_plot_stats]
-    secondary_layout: box_plot
-    display: {icon_name: 'mdi:counter', icon_color: '#1E88E5', title_color: '#1E88E5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Median UMI / cell
-    layout: {x: 4, y: 4, w: 2, h: 2}
-  - component_type: table
-    tag: sc-lq-table-thresholds
-    section: Library metrics
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_library_metrics_long
-    use: cellranger/library_metrics_long
-    row_selection_enabled: false
-    title: Thresholded library metrics
-    description: The 5 metrics 10x's QC guidance bands, with the threshold and the status each one crosses.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 6, w: 8, h: 4}
-  - component_type: card
-    tag: sc-lq-th-saturation
-    index: sc-lq-th-saturation
-    section: Library metrics
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_library_metrics_long
-    use: cellranger/library_metrics_long
-    aggregation: min
-    column_name: value
+    column_name: sequencing_saturation_pct
     column_type: float64
-    filter_expr: "col('metric') == 'sequencing_saturation'"
-    secondary_layout: threshold
-    threshold_value: 0.6
-    threshold_direction: min
-    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#1E88E5', title_color: '#1E88E5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Saturation vs 0.6
-    description: Lowest library against 10x's cut-off.
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    filter_expr: "col('estimated_cells') > 0"
+    secondary_layout: coverage
+    coverage_max: 100
+    display:
+      icon_name: mdi:chart-line
+      icon_color: cyan
+      caption: median, how much more depth would add
+      decimals: 1
+    section: Libraries at a glance
+    tag: sc-lq-card-saturation
+    index: lq-card-saturation
+    title: Saturation (%)
+    description: Share of reads that repeat a UMI already seen. Near 100, more sequencing finds few new transcripts.
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: sc-lq-th-incells
-    index: sc-lq-th-incells
-    section: Library metrics
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_library_metrics_long
-    use: cellranger/library_metrics_long
-    aggregation: min
-    column_name: value
-    column_type: float64
-    filter_expr: "col('metric') == 'fraction_reads_in_cells'"
-    secondary_layout: threshold
-    threshold_value: 0.7
-    threshold_direction: min
-    display: {icon_name: 'mdi:test-tube', icon_color: '#1E88E5', title_color: '#1E88E5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Reads in cells vs 0.7
-    description: Lowest library against 10x's cut-off.
-    layout: {x: 2, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-lq-th-validbc
-    index: sc-lq-th-validbc
-    section: Library metrics
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_library_metrics_long
-    use: cellranger/library_metrics_long
-    aggregation: min
-    column_name: value
-    column_type: float64
-    filter_expr: "col('metric') == 'valid_barcodes'"
-    secondary_layout: threshold
-    threshold_value: 0.75
-    threshold_direction: min
-    display: {icon_name: 'mdi:barcode', icon_color: '#1E88E5', title_color: '#1E88E5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Valid barcodes vs 0.75
-    description: Lowest library against 10x's cut-off.
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-lq-th-q30
-    index: sc-lq-th-q30
-    section: Library metrics
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_library_metrics_long
-    use: cellranger/library_metrics_long
-    aggregation: min
-    column_name: value
-    column_type: float64
-    filter_expr: "col('metric') == 'q30_rna'"
-    secondary_layout: threshold
-    threshold_value: 0.65
-    threshold_direction: min
-    display: {icon_name: 'mdi:quality-high', icon_color: '#1E88E5', title_color: '#1E88E5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Q30 RNA vs 0.65
-    description: Lowest library against 10x's cut-off.
-    layout: {x: 6, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-lq-th-mapped
-    index: sc-lq-th-mapped
-    section: Library metrics
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_library_metrics_long
-    use: cellranger/library_metrics_long
-    aggregation: min
-    column_name: value
-    column_type: float64
-    filter_expr: "col('metric') == 'confidently_mapped_transcriptome'"
-    secondary_layout: threshold
-    threshold_value: 0.3
-    threshold_direction: min
-    display: {icon_name: 'mdi:dna', icon_color: '#1E88E5', title_color: '#1E88E5', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Mapped to transcriptome vs 0.3
-    description: Lowest library against 10x's cut-off.
-    layout: {x: 0, y: 4, w: 2, h: 2}
-  - component_type: card
-    tag: sc-lq-card-band
-    index: sc-lq-card-band
-    section: Library metrics
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_library_metrics_long
-    use: cellranger/library_metrics_long
-    aggregation: count
-    column_name: metric
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: status
-    top_n_count: 3
-    display: {icon_name: 'mdi:check-decagram', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Metric checks by QC band
-    description: One check per (library, metric); the strip splits them into pass, warn and fail.
-    layout: {x: 6, y: 4, w: 2, h: 2}
-  - component_type: figure
-    tag: sc-lq-fig-mapping
-    section: Mapping breakdown
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_mapping_breakdown
-    use: cellranger/mapping_stacked_bar
-    visu_type: bar
-    dict_kwargs: {x: sample, y: fraction, color: region, barmode: group}
-    title: Read mapping breakdown
-    description: >
-      Grouped, not stacked: `antisense` overlaps `exonic`/`intronic` by
-      Cell Ranger's own definition, so the regions do not sum to 1 and a
-      100%-stacked bar would misread as a partition.
-    title_size: h3
-    layout: {x: 0, y: 0, w: 8, h: 6}
-  - component_type: table
-    tag: sc-ref-table-metrics
-    section: Cell Ranger metrics table
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_metrics
     use: cellranger/metrics_summary
-    row_selection_enabled: false
+    aggregation: median
+    column_name: reads_mapped_confidently_transcriptome_pct
+    column_type: float64
+    filter_expr: "col('estimated_cells') > 0"
+    secondary_layout: gauge
+    coverage_max: 100
+    display:
+      icon_name: mdi:dna
+      icon_color: grape
+      caption: median, 10x expects 30% or more
+      decimals: 1
+    section: Libraries at a glance
+    tag: sc-lq-card-transcriptome
+    index: lq-card-transcriptome
+    title: On the transcriptome (%)
+    description: Share of reads mapped confidently to the transcriptome, the median over samples.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_library_metrics_long
+    use: cellranger/library_metrics_long
+    visu_type: scatter
+    mode: code
+    code_content: |-
+      # One dot per sample and metric, coloured by its verdict, with the 10x
+      # cut-off as a grey tick: a dot left of its tick fails the check.
+      names = {'sequencing_saturation': 'Sequencing saturation', 'fraction_reads_in_cells': 'Reads in cells', 'valid_barcodes': 'Valid barcodes', 'q30_rna': 'Q30 bases, RNA read', 'confidently_mapped_transcriptome': 'Mapped to transcriptome'}
+      d = df.with_columns(pl.col('metric').replace(names).alias('check')).sort('check')
+      cuts = d.group_by('check').agg(pl.col('threshold').first()).sort('check')
+      colors = depictio_category_colors.get('status') or {}
+      fig = px.scatter(d.to_pandas(), x='value', y='check', color='status', hover_name='sample', color_discrete_map=colors, category_orders={'status': ['pass', 'warn', 'fail']}, labels={'value': 'Value', 'check': '', 'status': 'Verdict'})
+      fig.update_traces(marker=dict(size=12))
+      fig.add_scatter(x=cuts.get_column('threshold').to_list(), y=cuts.get_column('check').to_list(), mode='markers', marker=dict(symbol='line-ns-open', size=24, color=colors.get('10x cut-off'), line=dict(width=3)), name='10x cut-off')
+      fig.update_xaxes(tickformat='.0%', range=[0, 1.02])
+      # A single-panel code figure gets no automargin of its own: without it
+      # the check names are cut at the left edge.
+      fig.update_yaxes(automargin=True)
+      fig.update_layout(margin=dict(t=10))
+    section: Against 10x's guidance
+    tag: sc-lq-fig-checks
+    index: lq-checks
+    title: Library metrics against their cut-offs
+    description: The grey tick is the 10x cut-off; the dot is the sample's value.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: figure
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_mapping_breakdown
+    use: cellranger/mapping_breakdown
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Each sample's reads by genomic region, side by side, exonic first.
+      order = ['exonic', 'intronic', 'intergenic', 'antisense', 'unmapped']
+      fig = px.bar(df.to_pandas(), x='sample', y='fraction', color='region', barmode='group', color_discrete_map=depictio_category_colors.get('region') or {}, category_orders={'region': order}, labels={'sample': '', 'fraction': 'Share of reads', 'region': 'Region'})
+      fig.update_yaxes(tickformat='.0%')
+      fig.update_layout(margin=dict(t=10))
+    section: Where the reads map
+    tag: sc-lq-fig-mapping
+    index: lq-mapping
+    title: Read mapping by region
+    description: Intronic reads are expected from nuclei and from unspliced RNA.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_library_metrics_long
+    use: cellranger/library_metrics_long
+    section: Metrics tables
+    tag: sc-lq-table-checks
+    index: lq-table-checks
+    title: Library checks
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: table
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_metrics
+    use: cellranger/metrics_summary
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Metrics tables
+    tag: sc-lq-table-metrics
+    index: lq-table-metrics
     title: Cell Ranger metrics
-    description: Cells called, sequencing depth and saturation, mapping and Q30 rates, per sample.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 8, h: 3}
-
-# ============================================================================
-# Cell calling
-# ============================================================================
-- title: Cell calling
-  subtitle: The barcode-rank curve behind Cell Ranger's cell calling, the filtering waterfall, and CellBender's ambient-RNA removal
-  advanced_viz_controls: header
+    layout: {x: 0, y: 5, w: 8, h: 5}
+- title: Cell Calling
+  subtitle: How many barcodes are cells, and how much ambient RNA was removed?
+  tab_group: Cells
   tab_order: 3
-  tab_icon: mdi:chart-scatter-plot
+  tab_icon: mdi:filter-variant
   tab_icon_color: cyan
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
@@ -691,83 +832,48 @@ tabs:
   - name: Barcode filters
     icon: mdi:filter-variant
     color: cyan
-    description: Narrow the rank curve and the tables below it to a UMI range
+    description: Narrows the rank curve to a band of UMI counts
   grid_sections:
-  - name: Calling funnel
-    icon: mdi:filter-variant
-    color: teal
-    description: Every barcode observed, narrowed stage by stage down to the cells the QC keeps
-  - name: Cell calling
+  - name: Calling at a glance
+    icon: mdi:counter
+    color: cyan
+    description: From every barcode to the cells kept, and the counts CellBender removes
+  - name: The knee
     icon: mdi:chart-scatter-plot
     color: cyan
-    description: UMI count per barcode against its rank; the knee separates cells from background droplets
-  - name: Ambient RNA removal
-    icon: mdi:tune
-    color: blue
-    description: CellBender's per-sample accounting of background removed from the raw counts, and its agreement with Cell Ranger
+    description: UMIs per barcode against rank; the cliff separates cells from empty droplets
+  - name: Calling tables
+    icon: mdi:table
+    color: gray
+    description: The calling funnel and CellBender's accounting, per sample
+    collapsed: true
   components:
+  - component_type: text
+    order: 1
+    body: >
+      Most barcodes are empty droplets holding a little ambient RNA. Cell Ranger calls the
+      barcodes above the knee of the rank curve as cells, and
+      [CellBender](https://cellbender.readthedocs.io) removes the ambient counts from them. The
+      funnel card follows the barcodes down to the cells that pass QC.
+    tag: sc-cc-intro
+    index: cc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: interactive
-    tag: sc-cc-filter-umi
-    index: sc-cc-umi-filter
-    section: Barcode filters
-    group: Barcode scope
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_barcode_rank
-    use: cellranger/barcode_umi_filter
     interactive_component_type: RangeSlider
     column_name: umi_count
     column_type: int64
     show_histogram: true
-    display: {title_size: md, custom_color: '#00ACC1', icon_name: 'mdi:counter'}
-    placement: left
+    display:
+      icon_name: mdi:counter
+      custom_color: cyan
+    section: Barcode filters
+    tag: sc-cc-filter-umi
+    index: cc-umi-range
     title: UMIs per barcode
     layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: text
-    tag: sc-cc-intro
-    section: Cell calling
-    title: The barcode-rank ("knee") curve
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      UMI counts per barcode from the raw matrix, background droplets
-      included, ranked from highest to lowest. Colour marks the barcodes
-      Cell Ranger kept as cells; the knee is where it drew the line.
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_barcode_rank
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: sc-cc-av-knee
-    index: sc-cc-av-knee
-    section: Cell calling
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_barcode_rank
-    use: cellranger/barcode_rank_knee
-    title: Barcode-rank curve
-    description: UMI count vs rank, log-log axes, one line per sample, cell-calling cutoff marked.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-  - component_type: text
-    tag: sc-cc-funnel-intro
-    section: Calling funnel
-    title: From every droplet to the cells you keep
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Every barcode observed, then the ones Cell Ranger called a cell,
-      the subset CellBender also kept, and the subset no MAD rule
-      flagged. Each stage is a subset of the one before, so the drop
-      between two stages is the cost of that step.
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_funnel
-    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
-    tag: sc-cc-card-waterfall
-    index: sc-cc-card-waterfall
-    section: Calling funnel
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_funnel
     use: cellranger/cell_waterfall
@@ -776,434 +882,479 @@ tabs:
     column_type: int64
     secondary_layout: attrition
     attrition_cols: [cells_called, cellbender_cells, cells_qc_pass]
-    display: {icon_name: 'mdi:filter-variant', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    display:
+      icon_name: mdi:barcode
+      icon_color: cyan
+      caption: called, kept by CellBender, passing QC
+    section: Calling at a glance
+    tag: sc-cc-card-funnel
+    index: cc-card-funnel
     title: Barcodes observed
-    description: Then called, then kept by CellBender, then passing the per-cell QC.
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    description: Every barcode with a read, then the cells Cell Ranger calls, those CellBender keeps and those that pass the MAD rules.
+    layout: {x: 0, y: 0, w: 4, h: 2}
+  # Optional: gone with --skip_cellbender, and the funnel card widens.
   - component_type: card
-    tag: sc-cc-card-called
-    index: sc-cc-card-called
-    section: Calling funnel
+    workflow_tag: scrnaseq
+    data_collection_tag: cellbender_metrics
+    use: cellbender/metrics
+    aggregation: sum
+    column_name: total_raw_counts
+    column_type: float64
+    secondary_layout: attrition
+    attrition_cols: [total_output_counts]
+    display:
+      icon_name: mdi:waves
+      icon_color: teal
+      caption: UMI counts, kept after ambient RNA removal
+    section: Calling at a glance
+    tag: sc-cc-card-cellbender
+    index: cc-card-cellbender
+    title: UMI counts
+    description: UMI counts before CellBender, then the share left once the ambient RNA is removed.
+    layout: {x: 4, y: 0, w: 4, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_barcode_rank
+    use: cellranger/barcode_rank_knee
+    section: The knee
+    tag: sc-cc-knee
+    index: cc-knee
+    title: Barcode-rank curve
+    description: Log scales. Called cells are drawn darker; the dashed line is the last one.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_funnel
     use: cellranger/cell_funnel
-    aggregation: sum
+    row_selection_enabled: true
+    row_selection_column: sample
+    section: Calling tables
+    tag: sc-cc-table-funnel
+    index: cc-table-funnel
+    title: Cell-calling funnel
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: table
+    workflow_tag: scrnaseq
+    data_collection_tag: cellbender_metrics
+    use: cellbender/metrics
+    section: Calling tables
+    tag: sc-cc-table-cellbender
+    index: cc-table-cellbender
+    title: CellBender metrics
+    layout: {x: 0, y: 4, w: 8, h: 4}
+- title: Aligner Concordance
+  subtitle: Do Cell Ranger, simpleaf and kallisto call the same cells?
+  tab_group: Cells
+  tab_order: 4
+  tab_icon: mdi:set-merge
+  tab_icon_color: lime
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Route filters
+    icon: mdi:filter-variant
+    color: lime
+    description: Some aligner routes, or barcodes a given number of methods agree on
+  grid_sections:
+  - name: Routes at a glance
+    icon: mdi:counter
+    color: lime
+    description: Cells each route calls, and how many methods agree on a barcode
+  - name: Routes side by side
+    icon: mdi:scale-balance
+    color: lime
+    description: Each route's own call against CellBender's, and its mapping rate
+  - name: Cell-call overlap
+    icon: mdi:set-merge
+    color: lime
+    description: Barcodes by the exact set of methods that call them a cell
+  - name: Route details
+    icon: mdi:table
+    color: gray
+    description: The simpleaf knee and the tables behind the tab
+    collapsed: true
+  components:
+  - component_type: text
+    order: 1
+    body: >
+      A run with several `--aligner` routes calls cells three ways: Cell Ranger,
+      [simpleaf](https://simpleaf.readthedocs.io) and
+      [kallisto | bustools](https://www.kallistobus.tools), each with CellBender on top. Barcodes
+      are matched on their 16 bases, so the overlap compares the same droplets. Most cells
+      should sit in the intersection of every method.
+    tag: sc-al-intro
+    index: al-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
+  - component_type: interactive
+    workflow_tag: scrnaseq
+    data_collection_tag: aligner_summary
+    interactive_component_type: MultiSelect
+    column_name: aligner
+    column_type: object
+    display:
+      icon_name: mdi:source-branch
+      custom_color: lime
+    section: Route filters
+    tag: sc-al-filter-aligner
+    index: al-aligner-filter
+    title: Aligner route
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    workflow_tag: scrnaseq
+    data_collection_tag: cell_calls_by_method
+    interactive_component_type: RangeSlider
+    column_name: n_callers
+    column_type: int64
+    show_histogram: true
+    display:
+      icon_name: mdi:counter
+      custom_color: red
+    section: Route filters
+    tag: sc-al-filter-callers
+    index: al-callers-range
+    title: Methods agreeing
+    layout: {x: 0, y: 3, w: 1, h: 3}
+  - component_type: card
+    workflow_tag: scrnaseq
+    data_collection_tag: aligner_summary
+    use: cellranger/aligner_summary
+    aggregation: median
     column_name: cells_called
     column_type: int64
     secondary_layout: top_n
-    breakdown_col: sample
+    breakdown_col: aligner
     top_n_count: 3
-    display: {icon_name: 'mdi:test-tube', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    display:
+      icon_name: mdi:test-tube
+      icon_color: lime
+      caption: median over the routes, each route below
+    section: Routes at a glance
+    tag: sc-al-card-cells
+    index: al-card-cells
     title: Cells called
-    layout: {x: 2, y: 2, w: 2, h: 2}
+    description: Cells each aligner route calls on its own, before CellBender.
+    layout: {x: 0, y: 0, w: 4, h: 2}
   - component_type: card
-    tag: sc-cc-card-qcpass
-    index: sc-cc-card-qcpass
-    section: Calling funnel
     workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_funnel
-    use: cellranger/cell_funnel
-    aggregation: median
-    column_name: pct_qc_pass
-    column_type: float64
-    secondary_layout: box_plot
-    display: {icon_name: 'mdi:shield-check-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Called cells passing QC
-    aggregations: [box_plot_stats]
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-cc-card-pctcalled
-    index: sc-cc-card-pctcalled
-    section: Calling funnel
+    data_collection_tag: cell_calls_by_method
+    use: cellranger/cell_calls_by_method
+    aggregation: count
+    column_name: barcode_core
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: n_callers
+    top_n_count: 5
+    display:
+      icon_name: mdi:barcode
+      icon_color: red
+      caption: called by any method, by how many agree
+    section: Routes at a glance
+    tag: sc-al-card-barcodes
+    index: al-card-barcodes
+    title: Barcodes called
+    description: Barcodes at least one method calls a cell. The bar splits them by the number of methods that agree.
+    layout: {x: 4, y: 0, w: 4, h: 2}
+  - component_type: advanced_viz
     workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_funnel
-    use: cellranger/cell_funnel
-    aggregation: median
-    aggregations: [box_plot_stats]
-    column_name: pct_called
-    column_type: float64
-    secondary_layout: box_plot
-    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Barcodes called as cells
-    layout: {x: 6, y: 2, w: 2, h: 2}
+    data_collection_tag: aligner_summary
+    use: cellranger/aligner_agreement
+    config:
+      x_title: Cells the route calls
+      y_title: Cells CellBender keeps
+      reference_line: diagonal
+      top_n_labels: 3
+      selection_enabled: true
+      selection_column: aligner
+    section: Routes side by side
+    tag: sc-al-agreement
+    index: al-agreement
+    title: Own call against CellBender's
+    description: A route on the diagonal agrees with CellBender on the number of cells.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: figure
+    workflow_tag: scrnaseq
+    data_collection_tag: aligner_summary
+    use: cellranger/aligner_summary
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Share of reads each route maps, one bar per route.
+      d = df.sort('aligner')
+      fig = px.bar(d.to_pandas(), x='aligner', y='mapping_rate', color='aligner', color_discrete_map=depictio_category_colors.get('aligner') or {}, labels={'aligner': '', 'mapping_rate': 'Reads mapped'})
+      fig.update_traces(texttemplate='%{y:.1%}', textposition='outside', cliponaxis=False)
+      fig.update_yaxes(tickformat='.0%', range=[0, 1.05])
+      fig.update_layout(showlegend=False, margin=dict(t=10))
+    section: Routes side by side
+    tag: sc-al-fig-mapping
+    index: al-mapping
+    title: Mapping rate per route
+    description: Each route counts a read as mapped by its own rule, so compare them loosely.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: scrnaseq
+    data_collection_tag: cell_calls_by_method
+    use: cellranger/cell_call_upset
+    config:
+      set_columns: [cellranger, cellranger_cellbender, simpleaf_cellbender, kallisto, kallisto_cellbender]
+      sort_by: cardinality
+      sort_order: descending
+      color_intersections_by: degree
+      show_set_sizes: true
+    section: Cell-call overlap
+    tag: sc-al-upset
+    index: al-upset
+    title: Cell calls shared between methods
+    description: Each column is the barcodes called by exactly that set of methods.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: advanced_viz
+    workflow_tag: scrnaseq
+    data_collection_tag: simpleaf_barcode_rank
+    use: simpleaf/simpleaf_barcode_rank_knee
+    section: Route details
+    tag: sc-al-knee-simpleaf
+    index: al-knee-simpleaf
+    title: Barcode-rank curve, simpleaf
+    description: The same knee as Cell Ranger's, on simpleaf's counts.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: table
-    tag: sc-cc-table-funnel
-    section: Calling funnel
     workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_funnel
-    use: cellranger/cell_funnel
-    row_selection_enabled: false
-    title: Cell-calling funnel
-    description: One row per sample, the four stage counts and the two percentages derived from them.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 4, w: 8, h: 3}
-  - component_type: card
-    tag: sc-cc-card-found
-    index: sc-cc-card-found
-    section: Ambient RNA removal
-    workflow_tag: scrnaseq
-    data_collection_tag: cellbender_metrics
-    use: cellbender/metrics
-    aggregation: sum
-    column_name: found_cells
-    column_type: float64
-    secondary_layout: top_n
-    breakdown_col: sample
-    top_n_count: 3
-    display: {icon_name: 'mdi:test-tube', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: CellBender cells found
-    layout: {x: 0, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: sc-cc-card-removed
-    index: sc-cc-card-removed
-    section: Ambient RNA removal
-    workflow_tag: scrnaseq
-    data_collection_tag: cellbender_metrics
-    use: cellbender/metrics
-    aggregation: median
-    column_name: fraction_counts_removed
-    column_type: float64
-    secondary_layout: box_plot
-    display: {icon_name: 'mdi:filter-variant', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Fraction counts removed
-    aggregations: [box_plot_stats]
-    layout: {x: 2, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: sc-cc-card-totalremoved
-    index: sc-cc-card-totalremoved
-    section: Ambient RNA removal
-    workflow_tag: scrnaseq
-    data_collection_tag: cellbender_metrics
-    use: cellbender/metrics
-    aggregation: sum
-    column_name: total_counts_removed
-    column_type: float64
-    secondary_layout: top_n
-    display: {icon_name: 'mdi:counter', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Counts removed
-    breakdown_col: sample
-    top_n_count: 3
-    layout: {x: 4, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: sc-cc-card-ratio
-    index: sc-cc-card-ratio
-    section: Ambient RNA removal
-    workflow_tag: scrnaseq
-    data_collection_tag: cellbender_metrics
-    use: cellbender/metrics
-    aggregation: median
-    column_name: ratio_of_found_cells_to_expected_cells
-    column_type: float64
-    secondary_layout: box_plot
-    display: {icon_name: 'mdi:scale-balance', icon_color: '#00ACC1', title_color: '#00ACC1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Found / expected ratio
-    description: CellBender cells over expected_cells, per library. Near 1 is the healthy reading; far above or below 1 means CellBender and the sample sheet disagree on how many cells were loaded.
-    aggregations: [box_plot_stats]
-    layout: {x: 6, y: 0, w: 2, h: 2}
+    data_collection_tag: aligner_summary
+    use: cellranger/aligner_summary
+    row_selection_enabled: true
+    row_selection_column: aligner
+    section: Route details
+    tag: sc-al-table-summary
+    index: al-table-summary
+    title: Aligner summary
+    layout: {x: 0, y: 5, w: 8, h: 4}
   - component_type: table
-    tag: sc-am-table
-    section: Ambient RNA removal
     workflow_tag: scrnaseq
-    data_collection_tag: cellbender_metrics
-    use: cellbender/metrics
-    row_selection_enabled: false
-    title: CellBender metrics
-    description: Per-sample ambient-RNA removal accounting.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 2, w: 8, h: 3}
-
-# ============================================================================
-# Cell QC
-# ============================================================================
+    data_collection_tag: cell_calls_by_method
+    use: cellranger/cell_calls_by_method
+    row_selection_enabled: true
+    row_selection_column: barcode_core
+    section: Route details
+    tag: sc-al-table-calls
+    index: al-table-calls
+    title: Cell calls by method
+    layout: {x: 0, y: 9, w: 8, h: 5}
 - title: Cell QC
-  subtitle: The MAD-based flag every other tab can filter on
-  advanced_viz_controls: header
-  tab_order: 4
+  subtitle: Which called cells do the MAD rules flag, and why?
+  tab_group: Cells
+  tab_order: 5
   tab_icon: mdi:shield-check-outline
   tab_icon_color: grape
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: QC detail filters
-    icon: mdi:tune
+  - name: QC filters
+    icon: mdi:filter-variant
     color: grape
-    description: The failing rule and the top-20 share, on top of the pinned cell filters
+    description: The failing rule and the top-20 gene share, the cards included
   grid_sections:
-  - name: QC rules
-    icon: mdi:shield-check-outline
+  - name: Cell QC at a glance
+    icon: mdi:counter
     color: grape
-    description: The MAD criteria a cell is flagged against, per sample
-  - name: QC distributions
-    icon: mdi:chart-bell-curve
-    color: violet
-    description: UMI against genes per cell, and the depth and mitochondrial spread per cluster
+    description: Cells by verdict, their depth, genes and top-20 gene share
+  - name: Depth against genes
+    icon: mdi:chart-scatter-plot
+    color: grape
+    description: One point per cell; flagged cells sit off the main diagonal
+  - name: Per cluster
+    icon: mdi:chart-box-outline
+    color: grape
+    description: Depth and top-20 gene share of each graph-based cluster
   - name: Flagged cells
     icon: mdi:table
     color: gray
-    description: Every cell the MAD rules flagged; select one to read its record beside the table
+    description: Every called cell with its verdict; tick one to read its record
+    collapsed: true
   components:
+  - component_type: text
+    order: 1
+    body: >
+      Each called cell is flagged when its UMIs or genes fall too low, or its top-20 gene share
+      or mitochondrial share rises too high, against the median and MAD of its sample. Flagged
+      cells stay in the data; the cell filters take them out. A reference without MT- genes
+      reads a mitochondrial share of 0.
+    tag: sc-cq-intro
+    index: cq-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: interactive
-    tag: sc-cq-filter-reason
-    index: sc-cq-reason-filter
-    section: QC detail filters
-    group: QC scope
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
-    use: cellranger/qc_reason_picker
     interactive_component_type: MultiSelect
     column_name: qc_reason
     column_type: object
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:alert-outline'}
-    placement: left
+    display:
+      icon_name: mdi:alert-outline
+      custom_color: grape
+    section: QC filters
+    tag: sc-cq-filter-reason
+    index: cq-reason-filter
     title: Failing rule
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
-    tag: sc-cq-filter-top20
-    index: sc-cq-top20-filter
-    section: QC detail filters
-    group: QC scope
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
-    use: cellranger/top20_share_filter
     interactive_component_type: RangeSlider
     column_name: pct_top20
     column_type: float64
     show_histogram: true
-    display: {title_size: md, custom_color: '#7C4DFF', icon_name: 'mdi:chart-donut'}
-    placement: left
-    title: Top-20 gene share
+    display:
+      icon_name: mdi:chart-donut
+      custom_color: violet
+    section: QC filters
+    tag: sc-cq-filter-top20
+    index: cq-top20-range
+    title: Top-20 gene share (%)
     layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: text
-    tag: sc-cq-intro
-    section: QC rules
-    title: The MAD rules
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Per sample, a cell is flagged when log1p UMI or genes falls 5 MAD
-      below the median, its top-20 gene share sits 5 MAD above it, or
-      its mitochondrial fraction exceeds the median plus 3 MAD or 8%
-      (the mito rule reads `MT-` gene symbols, so it stays silent on a
-      reference without them). The pinned QC status filter carries the
-      flag to every other tab.
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_qc
-    layout: {x: 0, y: 0, w: 8, h: 2}
   - component_type: card
-    tag: sc-cq-card-flagged
-    index: sc-cq-card-flagged
-    section: QC rules
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
     use: cellranger/cell_qc
-    aggregation: average
-    column_name: qc_flagged
+    aggregation: count
+    column_name: barcode
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: qc_reason
+    top_n_count: 5
+    display:
+      icon_name: mdi:test-tube
+      icon_color: grape
+      caption: called cells, by the rule that flags them
+    section: Cell QC at a glance
+    tag: sc-cq-card-cells
+    index: cq-card-cells
+    title: Cells
+    description: Called cells in view. The ring splits them by the first rule that flags them; pass is unflagged.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_cell_qc
+    use: cellranger/cell_qc
+    aggregation: median
+    column_name: n_umi
     column_type: int64
-    secondary_layout: gauge
-    coverage_max: 1.0
-    display: {icon_name: 'mdi:alert-outline', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Cells flagged (any rule)
-    layout: {x: 0, y: 4, w: 2, h: 2}
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:counter
+      icon_color: pink
+      caption: median per cell, with the distribution
+    section: Cell QC at a glance
+    tag: sc-cq-card-umi
+    index: cq-card-umi
+    title: UMIs per cell
+    description: UMI counts per called cell. A second hump at low counts is often damaged cells.
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: sc-cq-card-lowumi
-    index: sc-cq-card-lowumi
-    section: QC rules
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
     use: cellranger/cell_qc
-    aggregation: sum
-    column_name: mad_low_umi
-    column_type: bool
-    secondary_layout: top_n
-    breakdown_col: cluster_label
-    top_n_count: 3
-    display: {icon_name: 'mdi:trending-down', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Low-UMI outliers
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    aggregation: median
+    column_name: n_genes
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:dna
+      icon_color: indigo
+      caption: median per cell, with the spread
+    section: Cell QC at a glance
+    tag: sc-cq-card-genes
+    index: cq-card-genes
+    title: Genes per cell
+    description: Genes detected per called cell.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  # The top-20 share rather than the mitochondrial one: a reference without
+  # MT- genes reads 0 there for every cell.
   - component_type: card
-    tag: sc-cq-card-lowgenes
-    index: sc-cq-card-lowgenes
-    section: QC rules
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
     use: cellranger/cell_qc
-    aggregation: sum
-    column_name: mad_low_genes
-    column_type: bool
-    secondary_layout: top_n
-    breakdown_col: cluster_label
-    top_n_count: 3
-    display: {icon_name: 'mdi:trending-down', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Low-gene outliers
-    layout: {x: 2, y: 2, w: 2, h: 2}
-  - component_type: card
+    aggregation: median
+    column_name: pct_top20
+    column_type: float64
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:chart-donut
+      icon_color: violet
+      caption: median per cell, with the distribution
+      decimals: 1
+    section: Cell QC at a glance
     tag: sc-cq-card-top20
-    index: sc-cq-card-top20
-    section: QC rules
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_qc
-    use: cellranger/cell_qc
-    aggregation: sum
-    column_name: mad_high_top20
-    column_type: bool
-    secondary_layout: top_n
-    breakdown_col: cluster_label
-    top_n_count: 3
-    display: {icon_name: 'mdi:trending-up', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: High top-20 share outliers
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-cq-card-mito
-    index: sc-cq-card-mito
-    section: QC rules
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_qc
-    use: cellranger/cell_qc
-    aggregation: sum
-    column_name: mad_high_mito
-    column_type: bool
-    secondary_layout: top_n
-    breakdown_col: cluster_label
-    top_n_count: 3
-    display: {icon_name: 'mdi:trending-up', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: High-mito outliers
-    layout: {x: 6, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-cq-card-box-umi
-    index: sc-cq-card-box-umi
-    section: QC rules
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_qc
-    use: cellranger/cell_qc
-    aggregation: median
-    column_name: log10_n_umi
-    column_type: float64
-    secondary_layout: box_plot
-    aggregations: [box_plot_stats]
-    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#5E35B1', title_color: '#5E35B1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: log10 UMI per cell
-    layout: {x: 2, y: 4, w: 2, h: 2}
-  - component_type: card
-    tag: sc-cq-card-box-genes
-    index: sc-cq-card-box-genes
-    section: QC rules
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_qc
-    use: cellranger/cell_qc
-    aggregation: median
-    column_name: log10_n_genes
-    column_type: float64
-    secondary_layout: box_plot
-    aggregations: [box_plot_stats]
-    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#5E35B1', title_color: '#5E35B1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: log10 genes per cell
-    layout: {x: 4, y: 4, w: 2, h: 2}
-  - component_type: card
-    tag: sc-cq-card-box-mito
-    index: sc-cq-card-box-mito
-    section: QC rules
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_qc
-    use: cellranger/cell_qc
-    aggregation: median
-    column_name: pct_mito
-    column_type: float64
-    secondary_layout: box_plot
-    aggregations: [box_plot_stats]
-    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#5E35B1', title_color: '#5E35B1', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Mitochondrial fraction
-    description: Share of each cell's UMIs on `MT-` genes; reads 0 on a reference without them.
-    layout: {x: 6, y: 4, w: 2, h: 2}
+    index: cq-card-top20
+    title: Top-20 gene share (%)
+    description: Share of a cell's UMIs from its 20 most expressed genes. A high share is a cell of low complexity.
+    layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
-    tag: sc-cq-av-scatter
-    index: sc-cq-av-scatter
-    section: QC distributions
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
     use: cellranger/umi_vs_genes
-    config: {selection_enabled: true, selection_column: barcode, controls_placement: header}
-    title: UMI counts vs genes detected
-    description: Coloured by QC status; flagged cells should sit apart from the main cloud. Lasso cells to narrow the cluster boxes and the per-cell table to them.
-    title_size: h3
-    layout: {x: 0, y: 0, w: 8, h: 7}
+    config:
+      x_title: UMIs per cell
+      y_title: Genes detected
+      log_x: true
+      log_y: true
+      selection_enabled: true
+      selection_column: barcode
+    section: Depth against genes
+    tag: sc-cq-scatter
+    index: cq-umi-genes
+    title: UMIs against genes detected
+    description: Log axes. Points select cells, and the pick filters the other tabs.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: figure
-    tag: sc-cq-fig-mito-box
-    section: QC distributions
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
-    use: cellranger/mito_box
+    use: cellranger/cell_qc
     visu_type: box
-    dict_kwargs: {x: cluster_label, y: pct_mito, title: Mitochondrial fraction by cluster}
-    title: Mitochondrial fraction by cluster
-    description: pct_mito spread per cluster; a cluster shifted high is a candidate for stressed or dying cells rather than a cell type.
-    title_size: h3
-    layout: {x: 0, y: 7, w: 4, h: 5}
+    mode: code
+    code_content: |-
+      # UMIs per cell in each graph-based cluster, log scale, clusters in
+      # numeric order. A low box is a cluster of small or damaged cells.
+      d = df.with_columns(pl.col('graphclust').str.extract(r'(\d+)', 1).cast(pl.Int64).alias('_n')).sort('_n')
+      orders = d.select(['graphclust', '_n']).unique().sort('_n').get_column('graphclust').to_list()
+      fig = px.box(d.to_pandas(), x='graphclust', y='n_umi', log_y=True, points=False, category_orders={'graphclust': orders}, labels={'graphclust': 'Cluster', 'n_umi': 'UMIs per cell'})
+      fig.update_layout(margin=dict(t=10))
+    section: Per cluster
+    tag: sc-cq-fig-umi
+    index: cq-umi-box
+    title: UMIs per cell, by cluster
+    layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
-    tag: sc-cq-fig-umi-box
-    section: QC distributions
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
-    use: cellranger/umi_box
+    use: cellranger/cell_qc
     visu_type: box
-    dict_kwargs: {x: cluster_label, y: log10_n_umi, title: log10 UMI count by cluster}
-    title: log10 UMI count by cluster
-    description: Depth spread per cluster; a low-depth cluster is a candidate for a doublet or ambient artefact, not necessarily a real cell type.
-    title_size: h3
-    layout: {x: 4, y: 7, w: 4, h: 5}
+    mode: code
+    code_content: |-
+      # Top-20 gene share per cell in each cluster: a high box is a cluster
+      # of low-complexity cells, often damaged or dying.
+      d = df.with_columns(pl.col('graphclust').str.extract(r'(\d+)', 1).cast(pl.Int64).alias('_n')).sort('_n')
+      orders = d.select(['graphclust', '_n']).unique().sort('_n').get_column('graphclust').to_list()
+      fig = px.box(d.to_pandas(), x='graphclust', y='pct_top20', points=False, category_orders={'graphclust': orders}, labels={'graphclust': 'Cluster', 'pct_top20': 'Top-20 gene share (%)'})
+      fig.update_layout(margin=dict(t=10))
+    section: Per cluster
+    tag: sc-cq-fig-top20
+    index: cq-top20-box
+    title: Top-20 gene share, by cluster
+    description: Share of each cell's UMIs from its 20 most expressed genes.
+    layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: table
-    tag: sc-cq-table-flagged
-    section: Flagged cells
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
     use: cellranger/cell_qc
     row_selection_enabled: true
     row_selection_column: barcode
-    title: Per-cell QC table
-    description: Use the QC status filter above (Cell QC filters, pinned) to narrow this to flagged cells only; select a row to read the cell in the record beside the table.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 5, h: 7}
-  - component_type: advanced_viz
-    tag: sc-cq-av-record
-    index: sc-cq-av-record
     section: Flagged cells
+    tag: sc-cq-table-flagged
+    index: cq-table-cells
+    title: Per-cell QC
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
     viz_kind: record_card
@@ -1217,211 +1368,244 @@ tabs:
         Cell: [barcode, sample, cluster_label, cellbender_cell]
         Counts: [n_umi, n_genes, pct_mito, pct_ribo, pct_hb, pct_top20]
         QC verdict: [qc_status, qc_reason, mad_low_umi, mad_low_genes, mad_high_top20, mad_high_mito]
+    section: Flagged cells
+    tag: sc-cq-record
+    index: cq-record
     title: Cell record
-    description: The cell picked in the table or lassoed on the scatter, with its counts and the MAD rules it passes or fails. The sample field says which library the barcode came from.
-    title_size: h3
-    layout: {x: 5, y: 0, w: 3, h: 7}
-
-# ============================================================================
-# Embeddings
-# ============================================================================
+    layout: {x: 5, y: 0, w: 3, h: 6}
 - title: Embeddings
-  subtitle: UMAP and t-SNE by cluster, the gene-coloured UMAP, and the gene dispersion and PCA behind them
-  advanced_viz_controls: header
-  tab_order: 5
-  tab_icon: mdi:relation-many-to-many
+  subtitle: Do the cells separate into groups on the UMAP and t-SNE?
+  tab_group: Cells
+  tab_order: 6
+  tab_icon: mdi:scatter-plot
   tab_icon_color: indigo
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
   filter_sections:
-  - name: Feature selection filters
+  - name: Map filters
     icon: mdi:filter-variant
     color: indigo
-    description: How variable the genes on the dispersion scatter are
+    description: Cells by ribosomal share, genes by dispersion
   grid_sections:
-  - name: Cell embeddings
+  - name: Maps at a glance
+    icon: mdi:counter
+    color: indigo
+    description: Cells on the map, the genes behind it and the PCA it starts from
+  - name: Cells on the map
     icon: mdi:chart-scatter-plot
     color: indigo
-    description: UMAP and t-SNE, one point per cell, and the PCA behind them
-  - name: Gene expression on the map
+    description: Cell Ranger's UMAP, one point per cell, coloured by graph-based cluster
+  - name: A gene on the map
     icon: mdi:dna
-    color: pink
-    description: The same UMAP, coloured by any gene of the marker panel
-  - name: Feature selection
+    color: indigo
+    description: The same UMAP coloured by any gene of the marker panel
+  - name: t-SNE
+    icon: mdi:chart-scatter-plot
+    color: gray
+    description: The second projection Cell Ranger computes
+    collapsed: true
+  - name: Feature selection and PCA
     icon: mdi:tune
-    color: violet
-    description: Mean expression against dispersion for the genes the PCA reads
-  - name: PCA
-    icon: mdi:chart-bar
-    color: violet
-    description: Share of variance each principal component explains
+    color: gray
+    description: The variable genes the PCA reads, and the variance of each component
+    collapsed: true
   components:
+  - component_type: text
+    order: 1
+    body: >
+      Cell Ranger reduces each cell's expression to a few principal components, then draws
+      them in two dimensions with UMAP and t-SNE. Cells of one type should gather in one
+      island, coloured by one cluster. Colour the map by a gene to see which island
+      expresses it.
+    tag: sc-em-intro
+    index: em-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: interactive
-    tag: sc-em-filter-dispersion
-    index: sc-em-dispersion-filter
-    section: Feature selection filters
-    group: Gene scope
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_cell_qc
+    interactive_component_type: RangeSlider
+    column_name: pct_ribo
+    column_type: float64
+    show_histogram: true
+    display:
+      icon_name: mdi:dna
+      custom_color: orange
+    section: Map filters
+    tag: sc-em-filter-ribo
+    index: em-ribo-range
+    title: Ribosomal share (%)
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_hvg_dispersion
-    use: cellranger/hvg_dispersion_filter
     interactive_component_type: RangeSlider
     column_name: normalized_dispersion
     column_type: float64
     show_histogram: true
-    display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:chart-bell-curve'}
-    placement: left
+    display:
+      icon_name: mdi:chart-bell-curve
+      custom_color: indigo
+    section: Map filters
+    tag: sc-em-filter-dispersion
+    index: em-dispersion-range
     title: Normalised dispersion
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: text
-    tag: sc-em-intro
-    section: Cell embeddings
-    title: UMAP and t-SNE
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Two projections of the same graph-based clustering, one point per
-      cell; use each tile's Colour by menu to check whether the layout
-      follows depth or QC status rather than biology. The two cards size
-      the PCA both projections are computed from.
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_qc
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: sc-em-av-umap-cluster
-    index: sc-em-av-umap-cluster
-    section: Cell embeddings
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_qc
-    use: cellranger/umap_label
-    config: {selection_enabled: true, selection_column: barcode, controls_placement: header}
-    title: UMAP by cluster
-    description: Coloured by cluster_label (graph-based cluster and its top 2 markers); the Colour by menu switches to depth, QC status or any per-cell column.
-    title_size: h3
-    layout: {x: 0, y: 4, w: 4, h: 7}
-  - component_type: advanced_viz
-    tag: sc-em-av-tsne
-    index: sc-em-av-tsne
-    section: Cell embeddings
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_qc
-    use: cellranger/tsne_label
-    config: {selection_enabled: true, selection_column: barcode, controls_placement: header}
-    title: t-SNE by cluster
-    description: Second projection of the same graph-based clustering.
-    title_size: h3
-    layout: {x: 4, y: 4, w: 4, h: 7}
-  - component_type: text
-    tag: sc-em-gene-intro
-    section: Gene expression on the map
-    title: Colour the map by a gene
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The same UMAP bound to the per-cell expression matrix, where every
-      panel gene is a column of the searchable Colour by menu, as
-      log1p(CP10k) with 0 where the gene is undetected. The panel is the
-      run's MARKER_PANEL when set, the top markers of every cluster and
-      the most dispersed genes.
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_expression
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: sc-em-av-gene-umap
-    index: sc-em-av-gene-umap
-    section: Gene expression on the map
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_expression
-    use: cellranger/gene_umap
-    config: {controls_placement: header}
-    title: UMAP coloured by gene
-    description: Opens coloured by cluster; pick any panel gene in the Colour by menu.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 8}
-  - component_type: text
-    tag: sc-em-hvg-intro
-    section: Feature selection
-    title: Gene dispersion behind the PCA
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Mean expression against normalised dispersion for every gene Cell
-      Ranger could normalise, the genes its PCA is computed on. Genes
-      with no finite dispersion (undetected or constant) are left out.
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_hvg_dispersion
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: sc-em-av-hvg
-    index: sc-em-av-hvg
-    section: Feature selection
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_hvg_dispersion
-    use: cellranger/hvg_scatter
-    config: {color_col: detection_rate, controls_placement: header}
-    title: Mean expression vs dispersion
-    description: One point per gene Cell Ranger could normalise, coloured by the share of cells that detect it; hover for the symbol.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
+    layout: {x: 0, y: 3, w: 1, h: 3}
   - component_type: card
-    tag: sc-em-card-variance
-    index: sc-em-card-variance
-    section: Cell embeddings
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_cell_qc
+    use: cellranger/cell_qc
+    aggregation: count
+    column_name: barcode
+    column_type: object
+    secondary_layout: composition
+    breakdown_col: graphclust
+    top_n_count: 5
+    display:
+      icon_name: mdi:chart-scatter-plot
+      icon_color: indigo
+      caption: on the map, the largest clusters
+    section: Maps at a glance
+    tag: sc-em-card-cells
+    index: em-card-cells
+    title: Cells
+    description: Cells drawn on the maps. The bar shows the share the five largest clusters hold.
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_hvg_dispersion
+    use: cellranger/hvg_dispersion
+    aggregation: count
+    column_name: gene
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: selection
+    top_n_count: 2
+    display:
+      icon_name: mdi:dna
+      icon_color: violet
+      caption: genes scored, selected for the PCA
+    section: Maps at a glance
+    tag: sc-em-card-genes
+    index: em-card-genes
+    title: Genes scored
+    description: Genes with a dispersion score. The ring shows how many Cell Ranger selected for the PCA.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_pca_variance
     use: cellranger/pca_variance
     aggregation: max
     column_name: variance_explained
     column_type: float64
-    secondary_layout: histogram
-    display: {icon_name: 'mdi:chart-bar', icon_color: '#3949AB', title_color: '#3949AB', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Top component's variance
-    layout: {x: 0, y: 2, w: 4, h: 2}
+    secondary_layout: trend
+    trend_col: pc
+    display:
+      icon_name: mdi:chart-line
+      icon_color: blue
+      caption: share of variance, then component by component
+      format: percent
+    section: Maps at a glance
+    tag: sc-em-card-variance
+    index: em-card-variance
+    title: First component
+    description: Share of the variance the first principal component explains; the line follows the next ones.
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: sc-em-card-pcs
-    index: sc-em-card-pcs
-    section: Cell embeddings
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_hvg_dispersion
+    use: cellranger/hvg_dispersion
+    # A count above a cut-off, not the median: the normalised dispersion is
+    # centred per expression bin, so its median is 0 by construction.
+    aggregation: count
+    column_name: normalized_dispersion
+    column_type: float64
+    filter_expr: "col('normalized_dispersion') > 0.5"
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:chart-bell-curve
+      icon_color: grape
+      caption: above 0.5, with their dispersions
+      decimals: 1
+    section: Maps at a glance
+    tag: sc-em-card-dispersion
+    index: em-card-dispersion
+    title: Dispersed genes
+    description: Genes whose normalised dispersion passes 0.5, the Seurat and Scanpy default for a variable gene. They vary more than genes of their mean expression.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_cell_qc
+    use: cellranger/umap_label
+    config:
+      axis_prefix: UMAP
+      selection_enabled: true
+      selection_column: barcode
+    section: Cells on the map
+    tag: sc-em-umap
+    index: em-umap
+    title: UMAP by cluster
+    description: Lasso cells to filter the other tabs to them.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_cell_expression
+    use: cellranger/gene_umap
+    config:
+      axis_prefix: UMAP
+    section: A gene on the map
+    tag: sc-em-gene-umap
+    index: em-gene-umap
+    title: UMAP coloured by a gene
+    description: Pick the gene in the tile's colour control.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_cell_qc
+    use: cellranger/tsne_label
+    config:
+      axis_prefix: t-SNE
+      selection_enabled: true
+      selection_column: barcode
+    section: t-SNE
+    tag: sc-em-tsne
+    index: em-tsne
+    title: t-SNE by cluster
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: advanced_viz
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_hvg_dispersion
+    use: cellranger/hvg_scatter
+    config:
+      x_title: Mean expression
+      y_title: Normalised dispersion
+    section: Feature selection and PCA
+    tag: sc-em-hvg
+    index: em-hvg
+    title: Mean expression against dispersion
+    description: Selected genes in blue; they vary more than genes of the same mean.
+    layout: {x: 0, y: 0, w: 8, h: 5}
+  - component_type: figure
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_pca_variance
     use: cellranger/pca_variance
-    aggregation: nunique
-    column_name: pc
-    column_type: object
-    secondary_layout: uniqueness
-    display: {icon_name: 'mdi:counter', icon_color: '#3949AB', title_color: '#3949AB', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Components reported
-    description: Cell Ranger publishes the variance of the components it kept, not of every gene.
-    layout: {x: 4, y: 2, w: 4, h: 2}
-  - component_type: figure
-    tag: sc-em-fig-scree
-    section: PCA
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_pca_variance
-    use: cellranger/pca_scree
     visu_type: bar
-    dict_kwargs: {x: pc, y: variance_explained, color: sample}
-    title: PCA scree
-    description: Share of total variance each principal component explains. pc_1/pc_2/pc_3 on the cell hub use the first 3.
-    title_size: h3
-    layout: {x: 0, y: 0, w: 8, h: 5}
-
-# ============================================================================
-# Clusters
-# ============================================================================
+    mode: code
+    code_content: |-
+      # Share of the variance each principal component explains, in order.
+      d = df.sort('pc').with_columns(pl.col('pc').cast(pl.Utf8))
+      fig = px.bar(d.to_pandas(), x='pc', y='variance_explained', color='sample', barmode='group', color_discrete_map=depictio_category_colors.get('sample') or {}, labels={'pc': 'Principal component', 'variance_explained': 'Variance explained', 'sample': 'Sample'})
+      fig.update_yaxes(tickformat='.1%')
+      fig.update_layout(margin=dict(t=10))
+    section: Feature selection and PCA
+    tag: sc-em-fig-scree
+    index: em-scree
+    title: Variance per component
+    layout: {x: 0, y: 5, w: 8, h: 4}
 - title: Clusters
-  subtitle: Cluster sizes, QC medians, cell-cycle phase and how stable the clusters are across k-means resolutions
-  advanced_viz_controls: header
-  tab_order: 6
+  subtitle: Which clusters are large and clean, and which are cycling?
+  tab_group: Cells
+  tab_order: 7
   tab_icon: mdi:chart-donut
   tab_icon_color: violet
   icon: /assets/images/workflows/nf-core.png
@@ -1431,235 +1615,113 @@ tabs:
   - name: Cluster filters
     icon: mdi:filter-variant
     color: violet
-    description: Cluster size and cell-cycle phase, on top of the pinned cell filters
+    description: Cluster size and cell-cycle phase, the cards included
   grid_sections:
-  - name: Cluster composition
-    icon: mdi:chart-donut
+  - name: Clusters at a glance
+    icon: mdi:counter
     color: violet
-    description: Size and QC medians of each graph-based cluster
+    description: Cells per cluster, flagged share, phase and CellBender agreement
+  - name: Cluster sizes
+    icon: mdi:chart-bar
+    color: violet
+    description: Cells per graph-based cluster, passing and flagged
+  - name: Cluster QC profile
+    icon: mdi:chart-box-outline
+    color: violet
+    description: Each cluster's QC medians against the other clusters
   - name: Cell cycle
     icon: mdi:chart-scatter-plot
-    color: grape
-    description: S and G2/M scores per cell, and which clusters are cycling
-  - name: Cluster stability
-    icon: mdi:set-merge
-    color: grape
-    description: How graph-based clusters split across k-means resolutions
+    color: violet
+    description: S and G2/M scores per cell, and the phase mix of each cluster
+  - name: Cluster details
+    icon: mdi:table
+    color: gray
+    description: How the clusters split across k-means resolutions, and the cluster table
+    collapsed: true
   components:
+  - component_type: text
+    order: 1
+    body: >
+      Cell Ranger's graph-based clustering groups cells by expression. A cluster with a high
+      flagged share or low depth may be damaged cells rather than a cell type, and one rich in
+      S and G2/M cells may be a dividing state of another cluster.
+    tag: sc-cl-intro
+    index: cl-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: interactive
-    tag: sc-cl-filter-size
-    index: sc-cl-size-filter
-    section: Cluster filters
-    group: Cluster scope
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cluster_summary
-    use: cellranger/cluster_size_filter
     interactive_component_type: RangeSlider
     column_name: n_cells
     column_type: int64
     show_histogram: true
-    display: {title_size: md, custom_color: '#7C4DFF', icon_name: 'mdi:counter'}
-    placement: left
+    display:
+      icon_name: mdi:counter
+      custom_color: violet
+    section: Cluster filters
+    tag: sc-cl-filter-size
+    index: cl-size-range
     title: Cells per cluster
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
-    tag: sc-cl-filter-phase
-    index: sc-cl-phase-filter
-    section: Cluster filters
-    group: Cluster scope
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_cycle
-    use: cellranger/phase_filter
     interactive_component_type: MultiSelect
     column_name: phase
     column_type: object
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:shape-outline'}
-    placement: left
+    display:
+      icon_name: mdi:shape-outline
+      custom_color: orange
+    section: Cluster filters
+    tag: sc-cl-filter-phase
+    index: cl-phase-filter
     title: Cell-cycle phase
     layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: text
-    tag: sc-cl-intro
-    section: Cluster composition
-    title: Reading the clusters
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      One row per graph-based cluster: its size, QC medians and the
-      share CellBender also calls a cell, with the heatmap z-scoring
-      each metric across clusters. Cell Ranger clusters each sample on
-      its own, so a label shared by two samples is not the same
-      population.
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cluster_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: figure
-    tag: sc-cl-fig-composition
-    section: Cluster composition
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cluster_summary
-    use: cellranger/cluster_composition
-    visu_type: bar
-    dict_kwargs: {x: sample, y: pct_cells, color: cluster_label, barmode: stack}
-    title: Cluster composition per sample
-    description: "Each sample's cells split by cluster, as percentages. Labels are per sample: a colour shared by two samples is not the same population."
-    title_size: h3
-    layout: {x: 0, y: 16, w: 8, h: 5}
-  - component_type: figure
-    tag: sc-cl-fig-qcstatus
-    section: Cluster composition
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_qc
-    use: cellranger/qc_status_by_cluster
-    visu_type: bar
-    dict_kwargs: {x: cluster_label, color: qc_status}
-    title: QC status per cluster
-    description: Cell counts by qc_status within each cluster, so the bar height is also the cluster size; a cluster with a high flagged share may be a QC artefact rather than a cell type.
-    title_size: h3
-    layout: {x: 0, y: 4, w: 8, h: 5}
-  - component_type: advanced_viz
-    tag: sc-cl-av-heatmap
-    index: sc-cl-av-heatmap
-    section: Cluster composition
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cluster_summary
-    use: cellranger/cluster_qc_heatmap
-    config:
-      value_columns: [median_n_umi, median_n_genes, pct_flagged, pct_cellbender_cell]
-      normalize: col_z
-    title: Cluster QC heatmap
-    description: "Column-z-scored medians: each metric is centred across clusters, so a cell reads high or low against the other clusters on that metric."
-    title_size: h3
-    layout: {x: 0, y: 9, w: 8, h: 7}
   - component_type: card
-    tag: sc-cl-card-cells
-    index: sc-cl-card-cells
-    section: Cluster composition
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cluster_summary
     use: cellranger/cluster_summary
     aggregation: sum
     column_name: n_cells
     column_type: int64
-    secondary_layout: top_n
-    breakdown_col: cluster_label
-    top_n_count: 3
-    display: {icon_name: 'mdi:test-tube', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Cells by cluster
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    secondary_layout: composition
+    breakdown_col: graphclust
+    top_n_count: 5
+    display:
+      icon_name: mdi:test-tube
+      icon_color: violet
+      caption: in the clusters, the largest five
+    section: Clusters at a glance
+    tag: sc-cl-card-cells
+    index: cl-card-cells
+    title: Cells
+    description: Cells in the clusters in view. The bar shows the share the five largest hold.
+    layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: sc-cl-card-flagged
-    index: sc-cl-card-flagged
-    section: Cluster composition
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cluster_summary
     use: cellranger/cluster_summary
-    aggregation: median
+    # The worst cluster against a band: most clusters flag no cell, so a median
+    # sits at 0 on every run.
+    aggregation: max
     column_name: pct_flagged
     column_type: float64
-    secondary_layout: box_plot
-    display: {icon_name: 'mdi:alert-outline', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Flagged share per cluster
-    aggregations: [box_plot_stats]
-    layout: {x: 2, y: 2, w: 2, h: 2}
+    secondary_layout: threshold
+    threshold_value: 5
+    threshold_direction: max
+    threshold_warn: 10
+    display:
+      icon_name: mdi:alert-outline
+      icon_color: red
+      caption: the highest cluster; clusters against 5% and 10%
+      decimals: 1
+    section: Clusters at a glance
+    tag: sc-cl-card-flagged
+    index: cl-card-flagged
+    title: Flagged share (%)
+    description: Share of a cluster's cells the MAD rules flag, for the highest cluster. Past 10%, the cluster may be damaged cells rather than a cell type.
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: sc-cl-card-cellbender
-    index: sc-cl-card-cellbender
-    section: Cluster composition
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cluster_summary
-    use: cellranger/cluster_summary
-    aggregation: median
-    column_name: pct_cellbender_cell
-    column_type: float64
-    secondary_layout: box_plot
-    display: {icon_name: 'mdi:check-decagram', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: CellBender agreement per cluster
-    aggregations: [box_plot_stats]
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-cl-card-depth
-    index: sc-cl-card-depth
-    section: Cluster composition
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cluster_summary
-    use: cellranger/cluster_summary
-    aggregation: median
-    column_name: median_n_umi
-    column_type: float64
-    secondary_layout: box_plot
-    aggregations: [box_plot_stats]
-    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#7C4DFF', title_color: '#7C4DFF', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Cluster median depth
-    description: Quartiles of the per-cluster median UMI count; a cluster far below the box is a depth artefact candidate.
-    layout: {x: 6, y: 2, w: 2, h: 2}
-  - component_type: table
-    tag: sc-cl-table-summary
-    section: Cluster composition
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cluster_summary
-    use: cellranger/cluster_summary
-    row_selection_enabled: true
-    row_selection_column: cluster_label
-    title: Cluster summary
-    description: Selecting a row carries the cluster over to the Markers tab through the cluster_label link.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 21, w: 8, h: 6}
-  - component_type: text
-    tag: sc-cy-intro
-    section: Cell cycle
-    title: Is this cluster a cell type, or the same type cycling?
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      S and G2/M scores from the Tirosh gene sets, a cell's mean
-      expression over the set minus its mean over every gene; the phase
-      is the larger positive score, else G1. A cluster mostly in G2M or
-      S next to a G1 cluster with the same markers is one population
-      cycling, not two cell types.
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_cycle
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: sc-cy-av-scatter
-    index: sc-cy-av-scatter
-    section: Cell cycle
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_cycle
-    use: cellranger/phase_scatter
-    config: {selection_enabled: true, selection_column: barcode, controls_placement: header}
-    title: S score vs G2/M score
-    description: One point per cell, coloured by the phase call. Cells near the origin are the G1 bulk. Lasso cells to count their clusters in the bar beside it.
-    title_size: h3
-    layout: {x: 0, y: 4, w: 4, h: 6}
-  - component_type: figure
-    tag: sc-cy-fig-bycluster
-    section: Cell cycle
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_cycle
-    use: cellranger/phase_by_cluster
-    visu_type: bar
-    dict_kwargs: {x: cluster_label, color: phase}
-    title: Phase per cluster
-    description: Cell counts by phase within each cluster.
-    title_size: h3
-    layout: {x: 4, y: 4, w: 4, h: 6}
-  - component_type: card
-    tag: sc-cy-card-phase
-    index: sc-cy-card-phase
-    section: Cell cycle
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_cycle
     use: cellranger/cell_cycle
@@ -1669,84 +1731,149 @@ tabs:
     secondary_layout: donut
     breakdown_col: phase
     top_n_count: 3
-    display: {icon_name: 'mdi:chart-donut', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    display:
+      icon_name: mdi:shape-outline
+      icon_color: orange
+      caption: scored cells, by phase
+    section: Clusters at a glance
+    tag: sc-cl-card-phase
+    index: cl-card-phase
     title: Cells by phase
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    description: Cells scored for the cell cycle, by the phase their S and G2/M scores give.
+    layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
-    tag: sc-cy-card-s
-    index: sc-cy-card-s
-    section: Cell cycle
     workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_cycle
-    use: cellranger/cell_cycle
-    aggregation: median
-    column_name: s_score
+    data_collection_tag: cellranger_cluster_summary
+    use: cellranger/cluster_summary
+    # A score that sits at 100 on most clusters: the lowest cluster against a
+    # band, not a full gauge.
+    aggregation: min
+    column_name: pct_cellbender_cell
     column_type: float64
-    secondary_layout: box_plot
-    aggregations: [box_plot_stats]
-    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: S score
-    layout: {x: 2, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-cy-card-g2m
-    index: sc-cy-card-g2m
-    section: Cell cycle
+    secondary_layout: threshold
+    threshold_value: 95
+    threshold_direction: min
+    threshold_warn: 90
+    display:
+      icon_name: mdi:waves
+      icon_color: teal
+      caption: the lowest cluster; clusters against 95% and 90%
+      decimals: 1
+    section: Clusters at a glance
+    tag: sc-cl-card-cellbender
+    index: cl-card-cellbender
+    title: Kept by CellBender (%)
+    description: Share of a cluster's cells CellBender also calls a cell, for the lowest cluster. A cluster CellBender drops is likely ambient RNA.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: figure
     workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_cycle
-    use: cellranger/cell_cycle
-    aggregation: median
-    column_name: g2m_score
-    column_type: float64
-    secondary_layout: box_plot
-    aggregations: [box_plot_stats]
-    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: G2/M score
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-cy-card-cycling
-    index: sc-cy-card-cycling
-    section: Cell cycle
+    data_collection_tag: cellranger_cell_qc
+    use: cellranger/cell_qc
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Cells per graph-based cluster, the flagged ones stacked on top; one
+      # panel per sample when the run has several (clusters are per sample).
+      d = df.group_by(['sample', 'graphclust', 'qc_status']).agg(pl.len().alias('cells'))
+      d = d.with_columns(pl.col('graphclust').str.extract(r'(\d+)', 1).cast(pl.Int64).alias('_n')).sort(['_n', 'qc_status'], descending=[False, True])
+      orders = d.select(['graphclust', '_n']).unique().sort('_n').get_column('graphclust').to_list()
+      facet = {'facet_row': 'sample'} if d.get_column('sample').n_unique() > 1 else {}
+      fig = px.bar(d.to_pandas(), x='graphclust', y='cells', color='qc_status', color_discrete_map=depictio_category_colors.get('qc_status') or {}, category_orders={'graphclust': orders, 'qc_status': ['pass', 'flagged']}, labels={'graphclust': 'Cluster', 'cells': 'Cells', 'qc_status': 'QC status', 'sample': 'Sample'}, **facet)
+      fig.update_layout(margin=dict(t=10))
+    section: Cluster sizes
+    tag: sc-cl-fig-sizes
+    index: cl-sizes
+    title: Cells per cluster
+    description: Clusters in numeric order; red is the share the MAD rules flag.
+    layout: {x: 0, y: 0, w: 8, h: 4}
+  - component_type: figure
     workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_cycle
-    use: cellranger/cell_cycle
-    aggregation: count
-    column_name: barcode
-    column_type: object
-    secondary_layout: top_n
-    display: {icon_name: 'mdi:scale-balance', icon_color: '#8E24AA', title_color: '#8E24AA', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Cycling cells
-    description: Cells whose G2/M score is at least 0.05 (default cut-off, a little above the 0 the phase call uses), by cluster.
-    filter_expr: "col('g2m_score') >= 0.05"
-    breakdown_col: cluster_label
-    top_n_count: 3
-    layout: {x: 6, y: 2, w: 2, h: 2}
+    data_collection_tag: cellranger_cluster_summary
+    use: cellranger/cluster_summary
+    visu_type: heatmap
+    mode: code
+    code_content: |-
+      # Each cluster's QC medians, coloured by how far they sit from the other
+      # clusters (z-score per row), the value itself printed in the cell.
+      # Averaged over samples when the run has several. A measure with one
+      # value for every cluster (no MT- genes, no CellBender) is left out.
+      names = {'median_n_umi': 'Median UMIs', 'median_n_genes': 'Median genes', 'median_pct_mito': 'Mitochondrial %', 'pct_flagged': 'Flagged %', 'pct_cellbender_cell': 'Kept by CellBender %'}
+      have = [c for c in names if c in df.columns and df.get_column(c).drop_nulls().n_unique() > 1]
+      d = df.with_columns(pl.col('graphclust').str.extract(r'(\d+)', 1).cast(pl.Int64).alias('_n'))
+      d = d.group_by(['graphclust', '_n']).agg([pl.col(c).mean() for c in have]).sort('_n')
+      z = d.select([((pl.col(c) - pl.col(c).mean()) / pl.col(c).std()).fill_nan(0.0).fill_null(0.0).alias(names[c]) for c in have])
+      raw = d.select([pl.col(c).round(1).alias(names[c]) for c in have])
+      fig = go.Figure(go.Heatmap(z=z.to_pandas().T.values, x=d.get_column('graphclust').to_list(), y=[names[c] for c in have], text=raw.to_pandas().T.values, texttemplate='%{text}', colorscale='RdBu', reversescale=True, zmid=0, colorbar=dict(title='z-score')))
+      fig.update_xaxes(title_text='Cluster', type='category')
+      fig.update_yaxes(automargin=True)
+      fig.update_layout(margin=dict(t=10))
+    section: Cluster QC profile
+    tag: sc-cl-fig-profile
+    index: cl-qc-profile
+    title: Cluster QC medians
+    description: Red is above the other clusters, blue below; the printed value is the cluster's own.
+    layout: {x: 0, y: 0, w: 8, h: 5}
   - component_type: advanced_viz
-    tag: sc-cl-av-sankey
-    index: sc-cl-av-sankey
-    section: Cluster stability
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_cell_cycle
+    use: cellranger/phase_scatter
+    config:
+      x_title: S phase score
+      y_title: G2/M phase score
+      top_n_labels: 0
+      selection_enabled: true
+      selection_column: barcode
+    section: Cell cycle
+    tag: sc-cl-phase-scatter
+    index: cl-phase-scatter
+    title: S against G2/M score
+    description: Cells low on both scores are in G1.
+    layout: {x: 0, y: 0, w: 4, h: 6}
+  - component_type: figure
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_cell_cycle
+    use: cellranger/cell_cycle
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # Phase mix of each cluster, as a share of its cells, clusters in
+      # numeric order and named by their short id.
+      d = df.with_columns(pl.col('cluster_label').str.extract(r'(C\d+)', 1).alias('cluster'), pl.col('cluster_label').str.extract(r'C(\d+)', 1).cast(pl.Int64).alias('_n'))
+      d = d.group_by(['cluster', '_n', 'phase']).agg(pl.len().alias('cells')).sort('_n')
+      orders = d.select(['cluster', '_n']).unique().sort('_n').get_column('cluster').to_list()
+      fig = px.bar(d.to_pandas(), x='cluster', y='cells', color='phase', color_discrete_map=depictio_category_colors.get('phase') or {}, category_orders={'cluster': orders, 'phase': ['G1', 'S', 'G2M']}, labels={'cluster': 'Cluster', 'cells': 'Share of cells (%)', 'phase': 'Phase'})
+      fig.update_layout(barnorm='percent', margin=dict(t=10))
+    section: Cell cycle
+    tag: sc-cl-fig-phase
+    index: cl-phase-mix
+    title: Phase mix per cluster
+    description: A cluster rich in S and G2M is cycling.
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  - component_type: advanced_viz
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_qc
     use: cellranger/cluster_stability
-    title: Cluster stability across k
-    description: graphclust, then kmeans_6, then kmeans_10, the resolutions Cell Ranger computes by default. A graph-based cluster that fans out to several k-means clusters is a candidate for further splitting; one that stays a single ribbon is stable.
-    title_size: h3
-    layout: {x: 0, y: 0, w: 8, h: 7}
-
-# ============================================================================
-# Markers
-# ============================================================================
+    section: Cluster details
+    tag: sc-cl-stability
+    index: cl-stability
+    title: Clusters across resolutions
+    description: Graph-based clusters, then k-means with 6 and 10 clusters. Clean bands mean stable clusters.
+    layout: {x: 0, y: 0, w: 8, h: 6}
+  - component_type: table
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_cluster_summary
+    use: cellranger/cluster_summary
+    row_selection_enabled: true
+    row_selection_column: cluster_label
+    section: Cluster details
+    tag: sc-cl-table
+    index: cl-table
+    title: Cluster summary
+    layout: {x: 0, y: 6, w: 8, h: 5}
 - title: Markers
-  subtitle: Top marker genes per cluster, at every clustering resolution, and their per-cell spread
-  advanced_viz_controls: header
-  tab_order: 7
+  subtitle: Which genes mark each cluster?
+  tab_group: Genes
+  tab_order: 8
   tab_icon: mdi:dna
   tab_icon_color: pink
   icon: /assets/images/workflows/nf-core.png
@@ -1756,308 +1883,197 @@ tabs:
   - name: Marker filters
     icon: mdi:filter-variant
     color: pink
-    description: Clustering resolution, and which gene the per-cell tiles show
+    description: The clustering the markers come from, and the gene shown cell by cell
   grid_sections:
-  - name: Marker expression
-    icon: mdi:dna
+  - name: Markers at a glance
+    icon: mdi:counter
     color: pink
-    description: Mean expression and detection rate of the top marker genes, per cluster, as a dot plot
+    description: Significant markers and how strongly they are up-regulated
+  - name: Marker dot plot
+    icon: mdi:chart-scatter-plot
+    color: pink
+    description: Mean expression and share of cells expressing each marker, per cluster
+  - name: Differential expression
+    icon: mdi:chart-bar
+    color: pink
+    description: Every marker's fold change and significance, and each cluster's strongest
   - name: Per-cell marker spread
     icon: mdi:chart-box-outline
-    color: grape
-    description: The same markers cell by cell, so a bimodal cluster does not hide behind its mean
-  - name: Differential expression
-    icon: mdi:chart-scatter-plot
-    color: red
-    description: Signed log2 fold change and significance per gene, per cluster
+    color: gray
+    description: The markers cell by cell, so a bimodal cluster does not hide behind its mean
+    collapsed: true
   - name: Gene detail
-    icon: mdi:dna
-    color: red
-    description: The marker table, with the record of the ticked gene beside it across every clustering where it ranks
+    icon: mdi:table
+    color: gray
+    description: The marker tables; tick a gene to read its record
+    collapsed: true
   components:
+  - component_type: text
+    order: 1
+    body: >
+      Cell Ranger tests each cluster against all other cells and ranks the genes it
+      up-regulates. The dot plot reads best: dot size is the share of the cluster's cells
+      expressing the gene, colour its mean expression. The resolution filter switches from
+      graph-based clusters to a k-means clustering.
+    tag: sc-mk-intro
+    index: mk-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: interactive
-    tag: sc-mk-filter-resolution
-    index: sc-mk-resolution-filter
-    section: Marker filters
-    group: Marker scope
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_diffexp
-    use: cellranger/diffexp_resolution_picker
     interactive_component_type: Select
     column_name: resolution
     column_type: object
-    display: {title_size: md, custom_color: '#D81B60', icon_name: 'mdi:set-merge'}
-    placement: left
-    title: Clustering resolution
     default_value: graphclust
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: sc-mk-filter-gene
-    index: sc-mk-gene-filter
+    display:
+      icon_name: mdi:set-merge
+      custom_color: pink
     section: Marker filters
-    group: Marker scope
+    tag: sc-mk-filter-resolution
+    index: mk-resolution-filter
+    title: Clustering
+    layout: {x: 0, y: 0, w: 1, h: 2}
+  - component_type: interactive
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_expression_long
-    use: cellranger/marker_gene_picker
     interactive_component_type: Select
     column_name: gene
     column_type: object
-    display: {title_size: md, custom_color: '#E53935', icon_name: 'mdi:dna'}
-    placement: left
-    title: Gene
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: interactive
-    tag: sc-mk-filter-expression
-    index: sc-mk-expression-filter
+    display:
+      icon_name: mdi:dna
+      custom_color: red
     section: Marker filters
-    group: Marker scope
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_expression_long
-    use: cellranger/marker_expression_filter
-    interactive_component_type: RangeSlider
-    column_name: expression
-    column_type: float64
-    show_histogram: true
-    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:chart-bell-curve'}
-    placement: left
-    title: Expression, log1p(CP10k)
-    layout: {x: 0, y: 6, w: 1, h: 3}
-  - component_type: text
-    tag: sc-mk-intro
-    section: Marker expression
-    title: What marks each cluster
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The genes most enriched in each cluster against every other cell,
-      with each cluster named by its top 2 markers; the resolution
-      filter opens on the graph-based clustering. Clusters are computed
-      per sample, so a label names a population within its own sample
-      only.
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_marker_expression
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: sc-mk-av-dotplot
-    index: sc-mk-av-dotplot
-    section: Marker expression
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_marker_expression
-    use: cellranger/marker_dotplot
-    config: {max_genes: 40, gene_sort: mean, cluster_sort: name, controls_placement: header}
-    title: Marker dot plot
-    description: Dot colour = mean log-normalised expression, dot size = fraction of the cluster's cells expressing the gene. Capped at 40 genes so each row keeps a readable height.
-    title_size: h3
-    layout: {x: 0, y: 4, w: 8, h: 12}
+    tag: sc-mk-filter-gene
+    index: mk-gene-filter
+    title: Gene, cell by cell
+    layout: {x: 0, y: 2, w: 1, h: 2}
   - component_type: card
-    tag: sc-mk-card-meanexp
-    index: sc-mk-card-meanexp
-    section: Marker expression
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_marker_expression
-    use: cellranger/marker_expression
-    aggregation: median
-    column_name: mean_expression
-    column_type: float64
-    secondary_layout: box_plot
-    aggregations: [box_plot_stats]
-    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#D81B60', title_color: '#D81B60', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Mean expression, spread
-    layout: {x: 0, y: 2, w: 4, h: 2}
-  - component_type: card
-    tag: sc-mk-card-frac
-    index: sc-mk-card-frac
-    section: Marker expression
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_marker_expression
-    use: cellranger/marker_expression
-    aggregation: median
-    column_name: frac_expressing
-    column_type: float64
-    secondary_layout: box_plot
-    display: {icon_name: 'mdi:chart-donut', icon_color: '#D81B60', title_color: '#D81B60', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Detection rate in cluster
-    aggregations: [box_plot_stats]
-    layout: {x: 4, y: 2, w: 4, h: 2}
-  - component_type: table
-    tag: sc-mk-table-expression
-    section: Marker expression
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_marker_expression
-    use: cellranger/marker_expression
-    row_selection_enabled: true
-    row_selection_column: gene
-    title: Marker expression table
-    description: Cluster, gene, mean expression and detection rate behind the dot plot; select rows to narrow the dot plot to those genes.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 16, w: 8, h: 6}
-  - component_type: text
-    tag: sc-mp-intro
-    section: Per-cell marker spread
-    title: The mean hides the shape
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Every cell of the marker panel (the run's MARKER_PANEL, else the
-      top 2 markers of each cluster), so a bimodal marker does not hide
-      behind its cluster mean. Pick a gene on the left to keep one
-      panel; cells are capped per cluster.
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_expression_long
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: figure
-    tag: sc-mp-fig-bycluster
-    section: Per-cell marker spread
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_expression_long
-    use: cellranger/marker_by_cluster
-    visu_type: violin
-    dict_kwargs: {x: cluster_label, y: expression, color: cluster_label, facet_col: gene, facet_col_wrap: 4, box: true, points: false}
-    title: Marker expression per cluster, one panel per gene
-    description: One violin per cluster in each gene's panel; the Gene filter on the left narrows it to one panel.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 12}
-  - component_type: figure
-    tag: sc-mp-fig-bygene
-    section: Per-cell marker spread
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_expression_long
-    use: cellranger/marker_by_gene
-    visu_type: box
-    dict_kwargs: {x: gene, y: expression, color: gene}
-    title: Expression per gene
-    description: The panel genes side by side; narrow to one cluster with the pinned Cluster filter to see what that cluster expresses.
-    title_size: h3
-    layout: {x: 0, y: 14, w: 8, h: 6}
-  - component_type: text
-    tag: sc-mk-de-intro
-    section: Differential expression
-    title: One gene, every clustering
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      The volcano places each marker by fold change and significance
-      within its cluster, at the resolution picked on the left. Tick a
-      row of the marker table in the Gene detail section below to open
-      that gene's record beside it.
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_diffexp
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: sc-mk-av-volcano
-    index: sc-mk-av-volcano
-    section: Differential expression
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_diffexp
-    use: cellranger/cluster_volcano
-    # Only the volcano view: these are Cell Ranger's top-ranked markers per
-    # cluster, not a genome-wide test, so a QQ plot of their p-values has no
-    # null to compare against.
-    config: {views: [volcano], controls_placement: header}
-    title: Marker gene volcano
-    description: log2 fold change vs adjusted p-value, one colour per cluster. Narrows to the picked cluster and resolution through the filters.
-    title_size: h3
-    layout: {x: 0, y: 4, w: 8, h: 9}
-  - component_type: card
-    tag: sc-mk-card-genes
-    index: sc-mk-card-genes
-    section: Differential expression
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_diffexp
     use: cellranger/diffexp
-    aggregation: count
+    aggregation: nunique
     column_name: gene
     column_type: object
-    secondary_layout: top_n
-    breakdown_col: cluster_label
-    top_n_count: 3
-    display: {icon_name: 'mdi:dna', icon_color: '#E53935', title_color: '#E53935', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Significant markers
-    filter_expr: "col('adjusted_pvalue') < 0.05"
-    description: Marker rows with an adjusted p-value below 0.05, by cluster, at the resolution picked on the left.
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    filter_expr: "(col('adjusted_pvalue') < 0.05) & (col('log2fc') > 0)"
+    secondary_layout: uniqueness
+    display:
+      icon_name: mdi:dna
+      icon_color: pink
+      caption: up-regulated, and how many recur
+    section: Markers at a glance
+    tag: sc-mk-card-markers
+    index: mk-card-markers
+    title: Marker genes
+    description: Genes up-regulated in a cluster of the chosen clustering at adjusted p below 0.05. The strip shows how many mark more than one cluster.
+    layout: {x: 0, y: 0, w: 4, h: 2}
+  # Up-regulated markers only: a median over both directions of a fold change
+  # would sit near zero.
   - component_type: card
-    tag: sc-mk-card-lfc
-    index: sc-mk-card-lfc
-    section: Differential expression
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_diffexp
     use: cellranger/diffexp
     aggregation: median
     column_name: log2fc
     column_type: float64
-    secondary_layout: box_plot
-    aggregations: [box_plot_stats]
-    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#E53935', title_color: '#E53935', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: log2 fold change
-    layout: {x: 2, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-mk-card-padj
-    index: sc-mk-card-padj
+    filter_expr: "(col('adjusted_pvalue') < 0.05) & (col('log2fc') > 0)"
+    secondary_layout: histogram
+    display:
+      icon_name: mdi:trending-up
+      icon_color: red
+      caption: median log2 fold change, with the distribution
+      decimals: 2
+    section: Markers at a glance
+    tag: sc-mk-card-lfc
+    index: mk-card-lfc
+    title: Up-regulation
+    description: How much more a significant marker is expressed in its cluster than in the other cells, on a log2 scale.
+    layout: {x: 4, y: 0, w: 4, h: 2}
+  - component_type: advanced_viz
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_marker_expression
+    use: cellranger/marker_dotplot
+    config:
+      max_genes: 30
+      gene_sort: mean
+      cluster_sort: name
+    section: Marker dot plot
+    tag: sc-mk-dotplot
+    index: mk-dotplot
+    title: Marker dot plot
+    description: Graph-based clusters. Dot size is the share of cells expressing the gene, colour its mean.
+    layout: {x: 0, y: 0, w: 8, h: 8}
+  - component_type: advanced_viz
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_diffexp
+    use: cellranger/cluster_volcano
+    config:
+      views: [volcano]
+      top_n_labels: 5
+      effect_label: log2 fold change, cluster vs rest
+      significance_label: -log10 adjusted p-value
     section: Differential expression
+    tag: sc-mk-volcano
+    index: mk-volcano
+    title: Marker volcano
+    description: One point per gene and cluster, coloured by direction; the five strongest genes are named.
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: figure
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_diffexp
     use: cellranger/diffexp
-    aggregation: median
-    column_name: adjusted_pvalue
-    column_type: float64
-    secondary_layout: box_plot
-    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#E53935', title_color: '#E53935', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Adjusted p-value
-    aggregations: [box_plot_stats]
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-mk-card-counts
-    index: sc-mk-card-counts
+    visu_type: bar
+    mode: code
+    code_content: |-
+      # The strongest up-regulated marker of each cluster, named on its bar.
+      # Graph-based clusters unless the resolution filter picks another one.
+      res = df.get_column('resolution').unique().sort().to_list()
+      pick = 'graphclust' if 'graphclust' in res else (res[0] if res else '')
+      d = df.filter((pl.col('resolution') == pick) & (pl.col('adjusted_pvalue') < 0.05) & (pl.col('log2fc') > 0))
+      d = d.sort('log2fc', descending=True).group_by('cluster_label', maintain_order=True).head(1)
+      d = d.with_columns(pl.col('cluster_label').str.extract(r'(C\d+)', 1).alias('cluster'), pl.col('cluster_label').str.extract(r'C(\d+)', 1).cast(pl.Int64).alias('_n')).sort('_n')
+      fig = px.bar(d.to_pandas(), x='log2fc', y='cluster', text='gene', orientation='h', labels={'log2fc': 'log2 fold change', 'cluster': 'Cluster'})
+      fig.update_traces(textposition='inside', insidetextanchor='start')
+      fig.update_yaxes(type='category', autorange='reversed')
+      fig.update_layout(margin=dict(t=10))
     section: Differential expression
+    tag: sc-mk-fig-top
+    index: mk-top-markers
+    title: Strongest marker per cluster
+    description: The gene with the largest fold change among each cluster's significant markers.
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  - component_type: figure
     workflow_tag: scrnaseq
-    data_collection_tag: cellranger_diffexp
-    use: cellranger/diffexp
-    aggregation: median
-    column_name: mean_counts
-    column_type: float64
-    secondary_layout: box_plot
-    display: {icon_name: 'mdi:counter', icon_color: '#E53935', title_color: '#E53935', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Mean counts of markers
-    description: Mean UMI count of each marker in its cluster; a marker at a very low count is fragile however significant.
-    aggregations: [box_plot_stats]
-    layout: {x: 6, y: 2, w: 2, h: 2}
+    data_collection_tag: cellranger_cell_expression_long
+    use: cellranger/cell_expression_long
+    visu_type: violin
+    mode: code
+    code_content: |-
+      # One panel per marker gene (the first twelve, or the gene picked in the
+      # filter), one violin per cluster, clusters in numeric order.
+      genes = df.get_column('gene').unique().sort().to_list()[:12]
+      d = df.filter(pl.col('gene').is_in(genes))
+      d = d.with_columns(pl.col('cluster_label').str.extract(r'(C\d+)', 1).alias('cluster'), pl.col('cluster_label').str.extract(r'C(\d+)', 1).cast(pl.Int64).alias('_n')).sort('_n')
+      orders = d.select(['cluster', '_n']).unique().sort('_n').get_column('cluster').to_list()
+      fig = px.violin(d.to_pandas(), x='cluster', y='expression', facet_col='gene', facet_col_wrap=4, box=True, points=False, category_orders={'cluster': orders, 'gene': genes}, labels={'cluster': 'Cluster', 'expression': 'log1p(CP10k)', 'gene': 'Gene'})
+      fig.update_layout(margin=dict(t=30))
+    section: Per-cell marker spread
+    tag: sc-mk-fig-violin
+    index: mk-violin
+    title: Marker expression per cluster
+    description: Expression per cell, log1p of counts per 10 000.
+    layout: {x: 0, y: 0, w: 8, h: 7}
   - component_type: table
-    tag: sc-mk-table-diffexp
-    section: Gene detail
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_diffexp
     use: cellranger/diffexp
     row_selection_enabled: true
     row_selection_column: gene
-    title: Marker gene table
-    description: Gene, resolution, cluster, rank, mean counts, log2 fold change and adjusted p-value. Tick a row to read it in the gene record beside the table.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 0, w: 5, h: 7}
-  - component_type: advanced_viz
-    tag: sc-mk-av-record
-    index: sc-mk-av-record
     section: Gene detail
+    tag: sc-mk-table-diffexp
+    index: mk-table-diffexp
+    title: Marker genes
+    layout: {x: 0, y: 0, w: 5, h: 6}
+  - component_type: advanced_viz
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_diffexp
     viz_kind: record_card
@@ -2071,19 +2087,27 @@ tabs:
         Cluster: [resolution, cluster, cluster_label, rank_in_cluster]
         Differential expression: [log2fc, adjusted_pvalue, mean_counts]
       link_templates:
-        gene_id: 'https://www.ensembl.org/Multi/Search/Results?q={value}'
+        gene_id: https://www.ensembl.org/Multi/Search/Results?q={value}
+    section: Gene detail
+    tag: sc-mk-record
+    index: mk-record
     title: Gene record
-    description: The gene ticked in the marker table beside it, one row per clustering where it ranks as a marker; pick the resolution in the card.
-    title_size: h3
-    layout: {x: 5, y: 0, w: 3, h: 7}
-
-# ============================================================================
-# Compare selections
-# ============================================================================
-- title: Compare selections
-  subtitle: Lasso two groups of cells on the UMAP and test every panel gene between them
-  advanced_viz_controls: header
-  tab_order: 8
+    layout: {x: 5, y: 0, w: 3, h: 6}
+  - component_type: table
+    workflow_tag: scrnaseq
+    data_collection_tag: cellranger_marker_expression
+    use: cellranger/marker_expression
+    row_selection_enabled: true
+    row_selection_column: gene
+    section: Gene detail
+    tag: sc-mk-table-expression
+    index: mk-table-expression
+    title: Marker expression per cluster
+    layout: {x: 0, y: 6, w: 8, h: 5}
+- title: Compare Selections
+  subtitle: Which genes separate two groups of cells you lasso?
+  tab_group: Genes
+  tab_order: 9
   tab_icon: mdi:scale-balance
   tab_icon_color: teal
   icon: /assets/images/workflows/nf-core.png
@@ -2093,79 +2117,59 @@ tabs:
   - name: Comparison filters
     icon: mdi:filter-variant
     color: teal
-    description: Which cells are on the map before you lasso anything
+    description: Which cells are on the map before you lasso
   grid_sections:
+  - name: Cells in play
+    icon: mdi:counter
+    color: teal
+    description: The cells on the map, by QC status and by cluster
   - name: Pick the cells
     icon: mdi:chart-scatter-plot
     color: teal
-    description: The same UMAP, bound to the per-cell expression matrix, with lasso selection on
+    description: The UMAP of the marker panel, lasso on
   - name: Compare the groups
     icon: mdi:scale-balance
-    color: green
+    color: teal
     description: Every panel gene tested between the two saved groups
   components:
+  - component_type: text
+    order: 1
+    body: >
+      Lasso cells on the map and save them as group A, lasso a second set as group B, and the
+      test below compares every gene of the marker panel between them (Wilcoxon, FDR 0.05).
+      With no saved groups it compares the largest clusters.
+    tag: sc-gc-intro
+    index: gc-intro
+    layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: interactive
-    tag: sc-gc-filter-cluster
-    index: sc-gc-cluster-filter
-    section: Comparison filters
-    group: Comparison scope
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_expression
-    use: cellranger/cell_cluster_picker
     interactive_component_type: MultiSelect
     column_name: cluster_label
     column_type: object
-    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:chart-scatter-plot'}
-    placement: left
+    display:
+      icon_name: mdi:chart-donut
+      custom_color: violet
+    section: Comparison filters
+    tag: sc-gc-filter-cluster
+    index: gc-cluster-filter
     title: Clusters on the map
     layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: interactive
-    tag: sc-gc-filter-qc
-    index: sc-gc-qc-filter
-    section: Comparison filters
-    group: Comparison scope
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_expression
-    use: cellranger/cell_qc_status_picker
     interactive_component_type: SegmentedControl
     column_name: qc_status
     column_type: object
-    display: {title_size: md, custom_color: '#43A047', icon_name: 'mdi:check-decagram'}
-    placement: left
+    display:
+      icon_name: mdi:check-decagram
+      custom_color: grape
+    section: Comparison filters
+    tag: sc-gc-filter-qc
+    index: gc-qc-filter
     title: QC status
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: text
-    tag: sc-gc-intro
-    section: Pick the cells
-    title: How to compare two groups of cells
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Lasso a set of cells on the UMAP and save it as group A, lasso a
-      second set as group B, and read the volcano below for the genes
-      that separate them. With no lasso, the comparison opens on the two
-      largest clusters.
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_expression
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: advanced_viz
-    tag: sc-gc-av-umap
-    index: sc-gc-av-umap
-    section: Pick the cells
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_expression
-    use: cellranger/gene_umap
-    config: {selection_enabled: true, selection_column: barcode, controls_placement: header}
-    title: UMAP, lasso to build a group
-    description: Opens coloured by cluster; colour by any panel gene first to lasso by expression rather than by position.
-    title_size: h3
-    layout: {x: 0, y: 4, w: 8, h: 8}
+    layout: {x: 0, y: 3, w: 1, h: 2}
   - component_type: card
-    tag: sc-gc-card-cells
-    index: sc-gc-card-cells
-    section: Pick the cells
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_expression
     use: cellranger/cell_expression
@@ -2173,85 +2177,53 @@ tabs:
     column_name: barcode
     column_type: object
     secondary_layout: donut
-    breakdown_col: cluster_label
-    top_n_count: 5
-    display: {icon_name: 'mdi:chart-donut', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
+    breakdown_col: qc_status
+    top_n_count: 2
+    display:
+      icon_name: mdi:test-tube
+      icon_color: teal
+      caption: on the map, by QC status
+    section: Cells in play
+    tag: sc-gc-card-cells
+    index: gc-card-cells
     title: Cells on the map
-    layout: {x: 0, y: 2, w: 2, h: 2}
+    description: Cells the comparison can draw from, passing and flagged.
+    layout: {x: 0, y: 0, w: 4, h: 2}
   - component_type: card
-    tag: sc-gc-card-qc
-    index: sc-gc-card-qc
-    section: Pick the cells
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_expression
     use: cellranger/cell_expression
-    aggregation: count
-    column_name: barcode
-    column_type: object
-    secondary_layout: top_n
-    breakdown_col: qc_status
-    top_n_count: 2
-    display: {icon_name: 'mdi:check-decagram', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Cells by QC status
-    description: A comparison run over flagged cells is a comparison of QC artefacts; narrow it first.
-    layout: {x: 2, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-gc-card-depth
-    index: sc-gc-card-depth
-    section: Pick the cells
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_qc
-    use: cellranger/cell_qc
-    aggregation: median
-    column_name: log10_n_umi
-    column_type: float64
-    secondary_layout: box_plot
-    aggregations: [box_plot_stats]
-    display: {icon_name: 'mdi:chart-box-outline', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Depth of the cells in view
-    description: Two groups of very different depth will differ on almost every gene, for the wrong reason.
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-gc-card-genes
-    index: sc-gc-card-genes
-    section: Pick the cells
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_cell_expression_long
-    use: cellranger/cell_expression_long
     aggregation: nunique
-    column_name: gene
+    column_name: cluster_label
     column_type: object
-    secondary_layout: uniqueness
-    display: {icon_name: 'mdi:dna', icon_color: '#00897B', title_color: '#00897B', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Marker panel genes
-    description: Genes on the Markers violin; the comparison tests every gene column of the wider matrix.
-    layout: {x: 6, y: 2, w: 2, h: 2}
-  - component_type: text
-    tag: sc-gc-compare-intro
-    section: Compare the groups
-    title: What the test does
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Each gene is tested with a Wilcoxon rank-sum on the log1p(CP10k)
-      values, FDR-corrected across genes.
+    secondary_layout: composition
+    breakdown_col: cluster_label
+    top_n_count: 5
+    display:
+      icon_name: mdi:chart-donut
+      icon_color: violet
+      caption: on the map, the largest five
+    section: Cells in play
+    tag: sc-gc-card-clusters
+    index: gc-card-clusters
+    title: Clusters on the map
+    description: Clusters with cells on the map. The bar shows the share of cells the five largest hold.
+    layout: {x: 4, y: 0, w: 4, h: 2}
+  - component_type: advanced_viz
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_expression
-    layout: {x: 0, y: 0, w: 8, h: 1}
+    use: cellranger/gene_umap
+    config:
+      axis_prefix: UMAP
+      selection_enabled: true
+      selection_column: barcode
+    section: Pick the cells
+    tag: sc-gc-umap
+    index: gc-umap
+    title: UMAP, lasso to build a group
+    description: Lasso a set of cells, then save it as group A or B in the panel below.
+    layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: advanced_viz
-    tag: sc-gc-av-compare
-    index: sc-gc-av-compare
-    section: Compare the groups
     workflow_tag: scrnaseq
     data_collection_tag: cellranger_cell_expression
     use: cellranger/selection_compare
@@ -2265,306 +2237,9 @@ tabs:
       log2fc_threshold: 0.5
       top_n_labels: 20
       auto_run: true
-      controls_placement: header
-    title: Group A vs group B, gene by gene
-    description: Wilcoxon rank-sum per gene on the already-normalised values, FDR-corrected across the panel.
-    title_size: h3
-    layout: {x: 0, y: 1, w: 8, h: 8}
-
-# ============================================================================
-# Aligner concordance (optional)
-# ============================================================================
-- title: Aligner concordance
-  subtitle: Cell Ranger against simpleaf/alevin-fry and kallisto|bustools, when the run has all three
-  advanced_viz_controls: header
-  tab_order: 9
-  tab_icon: mdi:set-merge
-  tab_icon_color: orange
-  icon: /assets/images/workflows/nf-core.png
-  icon_color: green
-  workflow_system: nf-core
-  filter_sections:
-  - name: Route filters
-    icon: mdi:filter-variant
-    color: orange
-    description: One aligner route, or barcodes a given number of methods agreed on
-  grid_sections:
-  - name: Aligner headlines
-    icon: mdi:scale-balance
-    color: orange
-    description: Cells called, CellBender agreement and mapping rate, per --aligner route
-  - name: Cell-call overlap
-    icon: mdi:set-merge
-    color: red
-    description: How the three routes' cell calls, plus CellBender on each, agree on the same physical barcode
-  components:
-  - component_type: interactive
-    tag: sc-al-filter-aligner
-    index: sc-al-aligner-filter
-    section: Route filters
-    group: Route scope
-    workflow_tag: scrnaseq
-    data_collection_tag: aligner_summary
-    use: cellranger/aligner_picker
-    interactive_component_type: Select
-    column_name: aligner
-    column_type: object
-    display: {title_size: md, custom_color: '#FB8C00', icon_name: 'mdi:set-merge'}
-    placement: left
-    title: Aligner route
-    layout: {x: 0, y: 0, w: 1, h: 3}
-  - component_type: interactive
-    tag: sc-al-filter-callers
-    index: sc-al-callers-filter
-    section: Route filters
-    group: Route scope
-    workflow_tag: scrnaseq
-    data_collection_tag: cell_calls_by_method
-    use: cellranger/caller_count_filter
-    interactive_component_type: RangeSlider
-    column_name: n_callers
-    column_type: int64
-    show_histogram: true
-    display: {title_size: md, custom_color: '#E53935', icon_name: 'mdi:counter'}
-    placement: left
-    title: Methods agreeing
-    layout: {x: 0, y: 3, w: 1, h: 3}
-  - component_type: text
-    tag: sc-al-intro
-    section: Aligner headlines
-    title: Reading the aligner comparison
-    title_size: sm
-    title_align: left
-    order: 2
-    alignment: left
-    body: >
-      Optional: this tab fills only when the run used several
-      `--aligner` routes, and stays empty on a Cell Ranger-only run.
-      Barcodes are compared on the bare 16-mer, since Cell Ranger's
-      carry a `-1` GEM-well suffix the other routes do not.
-    workflow_tag: scrnaseq
-    data_collection_tag: aligner_summary
-    layout: {x: 0, y: 0, w: 8, h: 2}
-  - component_type: card
-    tag: sc-al-card-cells
-    index: sc-al-card-cells
-    section: Aligner headlines
-    workflow_tag: scrnaseq
-    data_collection_tag: aligner_summary
-    use: cellranger/aligner_summary
-    aggregation: sum
-    column_name: cells_called
-    column_type: int64
-    secondary_layout: top_n
-    breakdown_col: aligner
-    top_n_count: 3
-    display: {icon_name: 'mdi:test-tube', icon_color: '#FB8C00', title_color: '#FB8C00', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Cells called, per aligner
-    layout: {x: 0, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-al-card-cellbender
-    index: sc-al-card-cellbender
-    section: Aligner headlines
-    workflow_tag: scrnaseq
-    data_collection_tag: aligner_summary
-    use: cellranger/aligner_summary
-    aggregation: sum
-    column_name: cellbender_cells
-    column_type: int64
-    secondary_layout: top_n
-    breakdown_col: aligner
-    top_n_count: 3
-    display: {icon_name: 'mdi:filter-variant', icon_color: '#FB8C00', title_color: '#FB8C00', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: CellBender cells, per aligner
-    layout: {x: 2, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-al-card-umi
-    index: sc-al-card-umi
-    section: Aligner headlines
-    workflow_tag: scrnaseq
-    data_collection_tag: aligner_summary
-    use: cellranger/aligner_summary
-    aggregation: median
-    column_name: median_umi_per_cell
-    column_type: float64
-    secondary_layout: box_plot
-    display: {icon_name: 'mdi:counter', icon_color: '#FB8C00', title_color: '#FB8C00', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Median UMI per cell
-    aggregations: [box_plot_stats]
-    description: Median across routes of each route's median UMI per cell; kallisto reports none.
-    layout: {x: 4, y: 2, w: 2, h: 2}
-  - component_type: card
-    tag: sc-al-card-mapping
-    index: sc-al-card-mapping
-    section: Aligner headlines
-    workflow_tag: scrnaseq
-    data_collection_tag: aligner_summary
-    use: cellranger/aligner_summary
-    aggregation: median
-    column_name: mapping_rate
-    column_type: float64
-    secondary_layout: box_plot
-    display: {icon_name: 'mdi:chart-bell-curve', icon_color: '#FB8C00', title_color: '#FB8C00', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Mapping rate
-    aggregations: [box_plot_stats]
-    layout: {x: 6, y: 2, w: 2, h: 2}
-  - component_type: advanced_viz
-    tag: sc-al-av-agreement
-    index: sc-al-av-agreement
-    section: Aligner headlines
-    workflow_tag: scrnaseq
-    data_collection_tag: aligner_summary
-    use: cellranger/aligner_agreement
-    config: {selection_enabled: true, selection_column: aligner, controls_placement: header}
-    title: Own cell call vs CellBender's
-    description: One point per route. A route far off the diagonal disagrees with CellBender about how many cells there are.
-    title_size: h3
-    layout: {x: 0, y: 4, w: 4, h: 6}
-  - component_type: figure
-    tag: sc-al-fig-cells
-    section: Aligner headlines
-    workflow_tag: scrnaseq
-    data_collection_tag: aligner_summary
-    use: cellranger/aligner_cells_bar
-    visu_type: bar
-    dict_kwargs: {x: aligner, y: cells_called, color: aligner}
-    title: Cells called per route
-    description: The same three numbers as the scatter, read as magnitudes rather than as agreement.
-    title_size: h3
-    layout: {x: 4, y: 4, w: 4, h: 6}
-  - component_type: table
-    tag: sc-al-table-summary
-    section: Aligner headlines
-    workflow_tag: scrnaseq
-    data_collection_tag: aligner_summary
-    use: cellranger/aligner_summary
-    row_selection_enabled: true
-    row_selection_column: aligner
-    title: Aligner summary
-    description: "One row per --aligner route: cells called, CellBender cells, median UMI per cell and mapping rate."
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 10, w: 8, h: 4}
-  - component_type: advanced_viz
-    tag: sc-al-av-upset
-    index: sc-al-av-upset
-    section: Cell-call overlap
-    workflow_tag: scrnaseq
-    data_collection_tag: cell_calls_by_method
-    use: cellranger/cell_call_upset
-    config:
-      set_columns: [cellranger, cellranger_cellbender, simpleaf_cellbender, kallisto, kallisto_cellbender]
-      sort_by: cardinality
-      sort_order: descending
-      color_intersections_by: degree
-      show_set_sizes: true
-    title: Cell-call overlap across methods
-    description: Every barcode called a cell by at least one method, set-intersected across Cell Ranger, CellBender (on each route) and kallisto's own knee call.
-    title_size: h3
-    layout: {x: 0, y: 2, w: 8, h: 7}
-  - component_type: card
-    tag: sc-al-card-callers
-    index: sc-al-card-callers
-    section: Cell-call overlap
-    workflow_tag: scrnaseq
-    data_collection_tag: cell_calls_by_method
-    use: cellranger/cell_calls_by_method
-    aggregation: median
-    column_name: n_callers
-    column_type: int64
-    secondary_layout: histogram
-    display: {icon_name: 'mdi:counter', icon_color: '#E53935', title_color: '#E53935', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Methods agreeing per barcode
-    layout: {x: 0, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: sc-al-card-barcodes
-    index: sc-al-card-barcodes
-    section: Cell-call overlap
-    workflow_tag: scrnaseq
-    data_collection_tag: cell_calls_by_method
-    use: cellranger/cell_calls_by_method
-    aggregation: count
-    column_name: barcode_core
-    column_type: object
-    secondary_layout: uniqueness
-    display: {icon_name: 'mdi:barcode', icon_color: '#E53935', title_color: '#E53935', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Barcodes called by anyone
-    layout: {x: 2, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: sc-al-card-cr-calls
-    index: sc-al-card-cr-calls
-    section: Cell-call overlap
-    workflow_tag: scrnaseq
-    data_collection_tag: cell_calls_by_method
-    use: cellranger/cell_calls_by_method
-    aggregation: sum
-    column_name: cellranger
-    column_type: bool
-    secondary_layout: histogram
-    display: {icon_name: 'mdi:dna', icon_color: '#E53935', title_color: '#E53935', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Called by Cell Ranger
-    layout: {x: 4, y: 0, w: 2, h: 2}
-  - component_type: card
-    tag: sc-al-card-kb-calls
-    index: sc-al-card-kb-calls
-    section: Cell-call overlap
-    workflow_tag: scrnaseq
-    data_collection_tag: cell_calls_by_method
-    use: cellranger/cell_calls_by_method
-    aggregation: sum
-    column_name: kallisto
-    column_type: bool
-    secondary_layout: histogram
-    display: {icon_name: 'mdi:dna', icon_color: '#E53935', title_color: '#E53935', title_font_size: xl, value_font_size: xl}
-    title_size: sm
-    title_align: left
-    title: Called by kallisto
-    layout: {x: 6, y: 0, w: 2, h: 2}
-  - component_type: advanced_viz
-    tag: sc-al-av-knee-cellranger
-    index: sc-al-av-knee-cellranger
-    section: Cell-call overlap
-    workflow_tag: scrnaseq
-    data_collection_tag: cellranger_barcode_rank
-    use: cellranger/barcode_rank_knee
-    title: Knee curve (Cell Ranger)
-    title_size: h3
-    layout: {x: 0, y: 9, w: 4, h: 5}
-  - component_type: advanced_viz
-    tag: sc-al-av-knee-simpleaf
-    index: sc-al-av-knee-simpleaf
-    section: Cell-call overlap
-    workflow_tag: scrnaseq
-    data_collection_tag: simpleaf_barcode_rank
-    use: simpleaf/simpleaf_barcode_rank_knee
-    title: Knee curve (simpleaf/alevin-fry)
-    description: Same log-log axes as the Cell Ranger curve; directly comparable.
-    title_size: h3
-    layout: {x: 4, y: 9, w: 4, h: 5}
-  - component_type: table
-    tag: sc-al-table-calls
-    section: Cell-call overlap
-    workflow_tag: scrnaseq
-    data_collection_tag: cell_calls_by_method
-    use: cellranger/cell_calls_by_method
-    row_selection_enabled: true
-    row_selection_column: barcode_core
-    title: Cell calls by method
-    description: One row per barcode called a cell by any method; n_callers counts how many of the 5 agreed. Select rows to see which intersections of the UpSet hold them.
-    title_size: h3
-    title_align: left
-    layout: {x: 0, y: 14, w: 8, h: 6}
+    section: Compare the groups
+    tag: sc-gc-compare
+    index: gc-compare
+    title: Group A against group B, gene by gene
+    description: Values are already log1p(CP10k), so no further log is taken.
+    layout: {x: 0, y: 0, w: 8, h: 7}

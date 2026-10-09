@@ -16,6 +16,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { brandColorway, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
@@ -165,6 +166,8 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
       cancelled = true;
     };
   }, [metadata.dc_id, config.category_col]);
+  // A category wears the dashboard's colour for it.
+  const categoryPinned = usePinnedCategoryColors(config.category_col);
 
   const { genesInData, useSinglePicker } = useMemo(() => {
     if (!rows) return { genesInData: [] as string[], useSinglePicker: false };
@@ -224,6 +227,7 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
     const colourSource = stableColorMap(
       categoryUniverse ?? categories,
       paletteArr as readonly string[],
+      categoryPinned,
     );
 
     // Marker sizes from raw effect values when scaling is enabled. Range 5..14 px.
@@ -413,6 +417,7 @@ const LollipopRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, gro
     genesInData,
     useSinglePicker,
     categoryUniverse,
+    categoryPinned,
     colorScheme,
     theme,
     pointSize,

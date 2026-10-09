@@ -72,8 +72,9 @@ const ControlMessage: React.FC<{ error?: boolean; children: React.ReactNode }> =
  * MultiSelect, Select and SegmentedControl, drawn by how many values the
  * column has (`categoricalDisplay`):
  *
- *   - up to three, a segmented control: equal segments in a grey track, as
- *     many pressed at once as the filter allows (several cities, say);
+ *   - up to three short values, a segmented control: equal segments in a
+ *     grey track, as many pressed at once as the filter allows (several
+ *     cities, say);
  *   - up to ten, a dropdown listing the values as coloured chips;
  *   - past that, a dropdown with a plain list and a search field.
  *
@@ -110,7 +111,7 @@ export const StripCategorical: React.FC<StripControlProps> = ({
   if (error) return <ControlMessage error>Could not load values</ControlMessage>;
   if (options.length === 0) return <ControlMessage>No values</ControlMessage>;
 
-  const display = categoricalDisplay(options.length);
+  const display = categoricalDisplay(options);
   if (display !== 'segments') {
     return (
       <StripSelect

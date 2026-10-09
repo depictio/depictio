@@ -24,9 +24,11 @@ function linkLabel(link: string): string {
 const StepFlow: React.FC<{
   steps: Step[];
   inline: (text: string) => React.ReactNode[];
+  /** Fills a label's `{{value}}` placeholders; plain text when absent. */
+  fill?: (text: string) => React.ReactNode;
   /** The marks' colour; the theme's primary when the tile sets none. */
   accentColor?: string | null;
-}> = ({ steps, inline, accentColor }) => {
+}> = ({ steps, inline, fill, accentColor }) => {
   // A step without a label keeps the label's line when others have one, so
   // the values stay on one line across the flow.
   const labelled = steps.some((step) => step.label);
@@ -53,7 +55,7 @@ const StepFlow: React.FC<{
               <span className="depictio-step-body">
                 {(labelled || links.length > 0) && (
                   <span className="depictio-step-head">
-                    <span className="depictio-step-label">{step.label || '\u00a0'}</span>
+                    <span className="depictio-step-label">{step.label ? (fill ? fill(step.label) : step.label) : '\u00a0'}</span>
                     {links.length > 0 && (
                       // The parameters and tabs behind a step, as small icons
                       // beside its name: there when looked for, out of the way of

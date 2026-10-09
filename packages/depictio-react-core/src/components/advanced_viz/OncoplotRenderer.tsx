@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
-import Plot from 'react-plotly.js';
+import Plot from './LegendAwarePlot';
 
 import {
   fetchAdvancedVizData,
@@ -9,6 +9,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import AdvancedVizFrame from './AdvancedVizFrame';
 import { VizSwitch } from './controls/VizControls';
 import {
@@ -106,6 +107,8 @@ const OncoplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
       cancelled = true;
     };
   }, [metadata.dc_id, config.mutation_type_col]);
+  // A mutation type wears the dashboard's colour for it.
+  const mutationPinned = usePinnedCategoryColors(config.mutation_type_col);
 
   const figure = useMemo(() => {
     if (!rows) return null;
@@ -136,7 +139,11 @@ const OncoplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
 
     // Cell colour from stable mutation-type palette. Background is NaN so
     // missing cells stay blank — plotly skips them in the heatmap.
-    const colourSource = stableColorMap(mutationUniverse ?? mutList, resolveCategoricalPalette(theme, TAB10_PALETTE));
+    const colourSource = stableColorMap(
+      mutationUniverse ?? mutList,
+      resolveCategoricalPalette(theme, TAB10_PALETTE),
+      mutationPinned,
+    );
     const mutToIdx = new Map<string, number>();
     mutList.forEach((m, i) => mutToIdx.set(m, i));
 
@@ -270,7 +277,7 @@ const OncoplotRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =
         autosize: true,
       },
     };
-  }, [rows, config, sortByFreq, colorScheme, theme, mutationUniverse]);
+  }, [rows, config, sortByFreq, colorScheme, theme, mutationUniverse, mutationPinned]);
 
   // The gene ordering is the oncoplot's one analytical choice, so it is the
   // encoding tier and there is no cosmetic tier to keep behind the icon.

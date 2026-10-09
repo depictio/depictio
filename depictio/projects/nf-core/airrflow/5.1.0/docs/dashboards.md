@@ -1,210 +1,184 @@
 # nf-core/airrflow 5.1.0: Depictio dashboards
 
-This template turns the output of [nf-core/airrflow](https://nf-co.re/airrflow) 5.1.0 into a
-single four-tab Depictio dashboard. airrflow processes B and T cell receptor amplicon
-libraries into an AIRR rearrangement repertoire: it trims and assembles the reads, collapses
-them by UMI, annotates V(D)J genes with IgBLAST, groups the sequences into clones and then runs
-the [Immcantation](https://immcantation.readthedocs.io) enchantR report on top. The template
-surfaces that report, and the sequence funnel that feeds it, next to the pipeline's own MultiQC.
+One dashboard: an **Overview**, then child tabs in three groups, read as a funnel from the
+reads to the clones that expand and are shared. It follows the family rules in
+`depictio/projects/nf-core/RULES.md`, with nf-core/ampliseq 2.18.0 as the reference.
 
-Data comes from the AWS megatest run
-`results-e69d49e3f23f11a3391755b5fb7aa4283c0a2471` (the 5.1.0 release tag), a ten-sample,
-two-subject multiple sclerosis B cell study of cervical lymph node and brain lesion tissue.
+| Group | Tab | The question it answers |
+|---|---|---|
+| Data & QC | MultiQC | Did trimming and read quality hold for every sample? |
+| Data & QC | Sequence Processing | How many reads survive each pRESTO and Change-O step? |
+| Repertoire | V Gene Usage | Which V families and genes build each repertoire? |
+| Repertoire | CDR3 & Pairing | How long are CDR3 loops, and which V and J genes pair? |
+| Clonality | Clonal Diversity | How many clones does each repertoire hold, and how diverse is it? |
+| Clonality | Clonal Expansion | How strongly do the largest clones dominate each repertoire? |
+| Clonality | Clone Sharing | Which clones do the samples of one subject share? |
 
----
+[nf-core/airrflow](https://nf-co.re/airrflow) trims and assembles B or T cell receptor reads
+with pRESTO, annotates them with IgBLAST through Change-O, groups the sequences into clones
+and runs the [Immcantation](https://immcantation.readthedocs.io) enchantr report on top. The
+design comes from the validated sample sheet the pipeline writes under `pipeline_info/`:
+`GROUP_COL` names its condition column (default `treatment`, the column airrflow's schema
+documents) and `GROUP_COL_DISPLAY` its reader label (default "Condition"). A run whose sample
+sheet names the condition differently passes `--var GROUP_COL=<column>`.
 
-## How the dashboard is built
+Clones are defined within a subject, so `subject_id` is structural rather than cosmetic: it
+colours the per-sample lines and scatters, annotates the heatmaps and zeroes the
+cross-subject cells of the overlap matrix.
 
-Wave 2b: the V gene composition (rank picker) and the richness against evenness scatter draw
-their pickers as a header strip under the title
-(`controls_placement: header`), and the processing and repertoire threshold sliders show the
-column's distribution (`show_histogram: true`). The Repertoire tab also carries the two
-figures the AIRR literature expects that the report tables cannot give: a CDR3 spectratype
-per sample and a V by J pairing grid per donor. Both read the AIRR rearrangement table the
-repertoire analysis starts from (`*__repertoire-pass.tsv`, about 310 MB on the megatest)
-through two version-local recipes in `recipes/`, which read only the six or seven columns
-they need, so the raw table never reaches Delta. Both collections are optional.
+## Overview
 
-- **One funnel, four tabs.** MultiQC, then Sequence processing, then Repertoire, then
-  Clonal analysis. Each tab answers the question the previous one raises: are the reads good,
-  how many survive, what repertoire do the survivors make, and how is that repertoire
-  structured.
-- **Persistent filters.** `Sample filters` (sample, subject, condition, sex) is pinned to the
-  top of every tab's filter panel, sourced on the validated AIRR samplesheet the pipeline
-  writes. The template's links fan a selection there out to every other collection, so one pick
-  narrows the MultiQC panels, the funnel, the diversity profiles and the overlap matrix at once.
-  Tab-local filter sections are open, not collapsed.
-- **Design column (`GROUP_COL`).** The condition filter and the subject card breakdown read the
-  samplesheet column named by the `GROUP_COL` template variable (default `treatment`, the
-  condition column of airrflow's samplesheet schema), labelled `GROUP_COL_DISPLAY` (default
-  "Condition"). A run whose samplesheet names the condition differently passes
-  `--var GROUP_COL=<column>`; the nf-core `test` profile, for instance, uses `intervention`.
-- **Pinned tables.** Two at most: the AIRR samplesheet (collapsed `Sample sheet` section at the
-  top) and the repertoire summary (collapsed `Reference tables` section at the bottom), which
-  both the Repertoire and the Clonal tabs read. The sequence counts table sits collapsed at the
-  end of Sequence processing, the threshold and overlap tables at the end of Clonal analysis.
-- **Catalog provenance.** Every repertoire panel is a catalog render (`use: enchantr/...`) and
-  every MultiQC tile names its module (`use: multiqc/fastp`, `use: multiqc/fastqc`), so the tile
-  chrome shows where the panel comes from.
-- **Subject is structural, not cosmetic.** airrflow defines clones within a subject, so
-  `subject_id` colours the diversity profiles, annotates both heatmaps and zeroes the
-  cross-subject cells of the overlap matrix. It is not a display choice: a clone id under two
-  subjects is two different clones.
+The landing page, at compact width with the filter panel collapsed:
 
----
+- **Hero**: what the run is, and a link to the run parameters.
+- **About this dashboard** and **The run**: two cards side by side. The first says what the
+  dashboard shows and how to move through it; the second lists the run's facts (samples and
+  subjects from the sample sheet, the library preparation, the clonal threshold setting and
+  the input mode, from the run parameters).
+- **Pipeline**: six steps (trim, assemble, annotate, translate, clone, compare). Each step
+  opens the parameters that drive it and the tab that shows its output.
+- **Key figures**: four headline cards, each opening the tab that explains it. Samples (split
+  by condition), input reads and clones (each summed, with the spread per sample) and the
+  sequences per clone (each sample's mean clone size, the median over samples). A condition
+  and a sample filter above them narrow these four only. A route that loses one of them fills
+  its slot with an alternate (see Routes and pruning), so every route keeps four.
+- **Findings**: result rows whose values are computed under the filters, each with a link to
+  its tab: the most used V family and its share of the sequences, the median effective number
+  of clones (Hill diversity at q = 1, after rarefying), the clones seen in more than one
+  sample (counted over all samples, as the clone sets are narrowed by sample column rather
+  than by row) and the clone size class that holds most sequences. Below them, four figures in two rows, each linking
+  its tab: the V family composition per sample beside the Hill diversity profile, then the
+  clones by number of samples holding them beside the clonal homeostasis sunburst. The bar
+  of this section filters by condition and subject.
+- **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
-## MultiQC
+The persistent `Sample filters` (condition, sample id, subject, sex) sit in the collapsed
+left panel and narrow every tab through the sample sheet's links. The `Sample sheet` section
+is pinned to the bottom of every child tab, collapsed, and absent from the Overview.
 
-The main tab. `Read QC at a glance` carries the MultiQC general statistics table, the fastp
-filtered-read bars and the FastQC sequence counts. `Base quality` pairs fastp's per-base quality
-curves with FastQC's quality histograms and per-read score distribution. `Read content`
-(collapsed) holds GC, length, duplication, adapter content and the FastQC status grid.
+## Child tabs
 
-airrflow runs FastQC twice, on the raw reads and again after the mate pairs are assembled, so
-MultiQC labels the second run `fastqc-1` and the panels carry both the `<sample>` and
-`<sample>_ASSEMBLED` series. Amplicon libraries are expected to look duplicated and to sit at a
-narrow GC and length range, so most FastQC warnings here are normal.
+Each child tab opens with a short intro (the method, with a link to its tool, and how to read
+the tab), then a strip of key numbers, each card with its own colour and a secondary that
+reads it, then at most three open sections; tables and details follow, collapsed.
 
-A `Read QC scope` filter narrows the panels to selected report samples, independently of the
-persistent sample filter, because the MultiQC sample ids carry the `_ASSEMBLED` suffix.
+**MultiQC.** MultiQC panels only. Open: general statistics, fastp filtered reads and the
+FastQC sequence counts, then fastp's per-base quality beside the FastQC quality histograms.
+Collapsed: per-sequence quality, GC, length, duplication, adapter content and the status
+checks. Amplicons of one receptor locus show high duplication and a narrow GC band by design.
+Its own sample filter reads the MultiQC report.
 
-`Cohort at a glance` is pinned above all of it and rides every tab: samples broken down by
-subject, subjects broken down by condition (`GROUP_COL`), subject age as a Tukey box plot and
-the number of target loci. The samplesheet table itself stays in its own collapsed section, so
-the numbers travel with the reader while the rows behind them stay one click away.
+**Sequence Processing.** Strip: input reads, with the share kept through each pRESTO step
+(quality, pairing, UMI consensus, assembly, duplicates), and the reads per sample with their
+spread. Then the read-fate Sankey (losses peel off into a Lost lane, flows coloured by the
+step they reach; its depth control adds the Change-O steps), and per sample the sequences left
+at each step (log scale, one line per sample) beside the sequences each sample keeps per
+1,000 input reads. UMI consensus and duplicate collapsing merge many reads into one sequence,
+so that ratio is no share of reads kept. The counts table is collapsed. Filters: input reads
+and sequences per input read.
 
-The persistent `Sample filters` section carries sample, subject, condition and sex. airrflow
-keeps `treatment`, `tissue` and `population` as free submitter columns. On the megatest cohort
-`treatment` holds the sampling site and `tissue` a single timepoint, which is why the default
-`GROUP_COL=treatment` gives a useful contrast there; on another run, point `GROUP_COL` at the
-column that carries the design.
+**V Gene Usage.** Strip: distinct V genes (ranked by family), annotated sequences split by V
+family, the largest share one family takes in a sample (with every family's spread) and the
+median share of a V gene (with its distribution). Then the stacked composition per sample (V
+family by default, the eight largest named, gene resolution a switch away, a subject strip
+below) and the sample by V gene heatmap (ward on correlation, standardised per gene, subject
+annotation). Filters: V family and locus.
 
-![MultiQC](screenshots/quality-control.png)
+**CDR3 & Pairing.** Strip: productive sequences (with the share the three largest samples
+hold) and the largest share one CDR3 length takes in a sample. Then the spectratype, one line
+per sample (dashed by locus on a multi-locus run), and the V by J pairing heatmap per subject
+(rows clustered, J genes in genomic order). Collapsed: the spectratype as one bar panel per
+sample. Both collections read the AIRR rearrangement table through two version-local recipes
+in `recipes/`, which load only the columns they need. Filters: CDR3 length and locus.
 
+**Clonal Diversity.** Strip: clones (with the share the three largest samples hold) and the
+median effective number of clones (Hill diversity at q = 1, the exponential of Shannon
+entropy, on repertoires rarefied to a common depth) with its spread. Then the Hill diversity
+profile (one curve per sample against the order q, with alakazam's bootstrap band), the
+ranked Hill number at one named order beside richness against evenness, and clones against
+sequencing depth on log axes (point size: mean clone size). Collapsed: the clone definition (the SHazaM distance threshold
+and its sensitivity per subject, cards and table) and the per-sample repertoire summary.
+Filters: a clone count range and the diversity order (default "q = 1, Shannon"), which narrows
+the ranked bars only.
 
-## Sequence processing
+**Clonal Expansion.** Strip: clones as a ring by size class, sequences split by size class,
+the median share of a sample's largest clone (as a percentage) and the size of the largest clone
+with every clone's size as a histogram (most clones hold one sequence).
+Then the rank-abundance curves with their bootstrap bands, and the clonal homeostasis sunburst
+(subject, sample, size class). Filter: size class.
 
-`Funnel at a glance` carries four cards: total input reads with an attrition strip across the
-six milestone steps, representative sequences broken down by subject, annotated sequences as a
-Tukey box plot, and the median retention with its per-sample box plot. The retention card has
-no gauge: its scale depends on the library design (UMI or not, assembled input), so a fixed
-maximum would overflow on some runs.
+**Clone Sharing.** Strip: clones split by the number of samples holding them, and the
+sequences in shared clones with the share the three largest carry. Then the clones by number
+of samples (log scale), the shared-clone heatmap for every sample pair (diagonal zeroed) and
+the UpSet of exact sample sets. Collapsed: the overlap matrix as a table. Filter: samples per
+clone.
 
-`Where the reads go` is the signature panel: a Sankey of every read of every sample, following
-each group to the step it stopped at. Several steps collapse reads rather than discard them
-(UMI consensus, deduplication, the representative filter), so a low retention is expected and
-its spread across samples is what matters. The depth control adds the Change-O steps after
-IgBLAST annotation.
+## Routes and pruning
 
-`Per sample` plots the same funnel as one line per sample on a log axis, next to a retention bar
-chart. A sample whose line drops away from the rest at one step is the one to look at. The
-per-step counts table closes the tab in a collapsed section.
+airrflow's route flags are not read from `params.json` yet, so a run that skipped a step
+passes the matching `--var`. A tab left without data is dropped, and so are the Overview
+tiles and rows that pointed at it; the import re-packs the Overview grid after a drop.
 
-![Sequence processing](screenshots/sequence-processing.png)
+| Route | What changes |
+|---|---|
+| `ASSEMBLED_MODE` (`--mode assembled`) | No Sequence Processing tab; the input reads Key figure becomes input sequences. |
+| `SKIP_REPORT` | No V Gene Usage tab, V family row or V composition highlight, and no Sequence Processing tab either: airrflow parses the pRESTO logs inside its report step. The input reads Key figure becomes sequences. |
+| `SKIP_CLONAL_ANALYSIS` | No Clonality tabs, diversity, sharing or size class rows, nor their highlights; CDR3 & Pairing goes too, as its tables come from the clonal analysis. The clones and sequences per clone Key figures become unique sequences and V genes. |
+| `SKIP_THRESHOLD_REPORT` | No clone definition cards or table. |
+| `SKIP_MULTIQC` | No MultiQC tab. |
 
+No collection but the sample sheet survives every route, so each Key figure a route loses
+has an alternate on the same grid slot, bound to a collection that exists on that route
+only. The import keeps whichever card of a slot survives, and no route keeps two.
 
-## Repertoire
+| Slot | Default card | Alternate | Collection, and the route it exists on | Opens |
+|---|---|---|---|---|
+| 2 | Input reads | Input sequences: assembled sequences that entered IgBLAST | `annotation_counts_assembled`, `ASSEMBLED_MODE` | V Gene Usage |
+| 2 | Input reads | Sequences: unique annotated sequences that entered clonal assignment | `repertoire_summary_noreport`, `SKIP_REPORT` | Clonal Diversity |
+| 3 | Clones | Unique sequences: annotated sequences after duplicate collapse | `annotation_counts_noclonal`, `SKIP_CLONAL_ANALYSIS` | V Gene Usage |
+| 4 | Sequences per clone | V genes: distinct V genes, ranked by family | `v_gene_usage_noclonal`, `SKIP_CLONAL_ANALYSIS` | V Gene Usage |
 
-The Repertoire tab reads gene usage only: which V families and genes, which V-J pairs and
-which CDR3 lengths build each repertoire. Clonality and diversity moved to Clonal analysis
-(wave 3).
+The two `annotation_counts_*` collections read the Change-O table of the report
+(`repertoire_comparison/Sequence_numbers_summary/Table_sequences_assembled.tsv`) through the
+version-local recipe `recipes/annotation_counts.py`: it is the sequence count a run still
+writes without pRESTO or without clones. An alternate keeps the colour of the card it
+replaces, so no route repeats one. Combined routes keep four cards too (an assembled run
+without clonal analysis shows input sequences, unique sequences and V genes), except a run
+that skipped both the report and the clonal analysis: only its Samples card is left.
 
-`Repertoire at a glance`: V families used, V genes used (both with the per-sample count
-beside them), the largest V family share (how skewed the usage is, per sample) and the
-productive in-frame sequences behind the spectratype, broken down by subject.
+## Colours
 
-`V gene usage` pairs a stacked composition of V family and V gene fractions (switchable between
-the two resolutions in the tile header) with a clustered sample by V gene heatmap, column
-standardised so rare genes stay visible, annotated by subject.
-
-![Repertoire](screenshots/repertoire.png)
-
-
-### CDR3 spectratype and V-J pairing (Repertoire tab)
-
-`CDR3 spectratype` is one small bar panel per sample (`facet_col: sample_id`), the share of
-the sample's productive in-frame sequences at each CDR3 length in amino acids, coloured by
-donor. The CDR3 length is the IMGT junction length minus the two anchor codons, divided by
-three. Where the bell of a polyclonal repertoire centres depends on the locus (heavy chain,
-light chain, TCR beta...), so the dashboard texts do not state a range. A `CDR3 length (aa)`
-slider in `Repertoire scope` narrows the panels.
-
-`V-J pairing` is a `complex_heatmap` with one row per donor and V gene and one column per J
-gene, each cell the share of the donor's productive sequences using the pair, with
-`subject_id` as a row annotation. Rows cluster; J columns keep their genomic order. It is per
-donor because clones are defined per donor, and the sample sheet reaches it through a
-`subject_id` link.
-
-## Clonal analysis
-
-`Clonal analysis at a glance` carries six cards: clones (sum, per-sample box plot), median
-clone size (box plot), rarefied richness and evenness on the first row; the distance threshold
-and its sensitivity, each with the per-subject values beside the median, on the second. The
-threshold is fitted by shazam per subject (or set with `--clonal_threshold`); the card reports
-it without a pass or fail verdict, since no fixed cut-off applies to every locus and design.
-
-`Clones and depth` (moved here from Repertoire in wave 3) plots clones against sequencing depth
-on log axes, point size the mean clone size: a repertoire that is simply deeper sits along the
-diagonal, one that is genuinely more clonal sits below it. Beside it, richness against evenness
-puts the two halves of a Hill profile on one plane. Selecting points narrows the rest of the tab.
-
-`Diversity profiles` draws the Hill diversity profile, one curve per repertoire against the
-order q, with alakazam's bootstrap confidence band (`d_lower` to `d_upper`) shaded per sample.
-Below it, a ranked confidence-interval strip compares one Hill number per sample at a named
-order. It reads the `diversity_orders` collection (q = 0, 1 and 2 only, one labelled row per
-sample and order), so the `Diversity order` Select in `Clonal scope` (default "q = 1,
-Shannon") narrows the bars without touching the profile curves.
-
-`Clone abundance` opens with the rank-abundance curve alakazam bootstrapped: relative abundance
-against rank on log axes, one curve per sample, with the bootstrap interval shaded. Two
-repertoires whose heads look equally expanded stop looking different as soon as their intervals
-overlap. Below it, a sunburst of subject to sample to clone size class, using the standard
-clonal homeostasis bins from rare to hyperexpanded.
-
-`Sharing between samples` pairs the shared-clone heatmap for every sample pair with an UpSet of
-the higher-order intersections a pairwise view cannot show. The heatmap's diagonal is zeroed,
-and samples from different subjects always read zero because clones are subject-private.
-
-`Clonal tables` (collapsed) holds the fitted threshold per subject and the shared-clone matrix.
-
----
-
-![Clonal analysis](screenshots/clonal-analysis.png)
-
+`category_colors` is declared once, on the Overview, and read by every tab: the condition and
+the subject are coloured `auto` (each value takes a colour-blind-safe colour at import, kept
+on a re-import), the five clonal homeostasis size classes are written out (blues from rare to
+medium, then orange and red for the expanded classes), and V families and genes are coloured
+`auto:seq_count`, so the eight families with most sequences take the palette, largest first,
+and Other is grey. Code figures read the same map and follow Analysis mode's groups when it
+has some.
 
 ## Cross-selection
 
 Tables select rows and scatters select points; a pick becomes a dashboard filter that the
 project links carry to every collection they reach. Row selection is on `sample_id` in the
-pinned sample sheet and repertoire summary, in the sequence counts table and in the clonal
-overlap table, and on `subject_id` in the clonal threshold table. The clones-versus-depth
-figure and the richness-against-evenness scatter select on `sample_id`. The diversity
-profile does not select: its collection has no outgoing link, so a pick would narrow nothing.
-The clone abundance profile emits a selection but its collection has no outgoing link
-either, so it only narrows itself out of the filter.
+sample sheet, the counts table, the repertoire summary and the overlap table, and on
+`subject_id` in the threshold table. The clones-against-depth figure and the richness against
+evenness scatter select on `sample_id`.
+
+## Controls
+
+Advanced visualisation controls dock by width: to the right of a full-width tile, on top of a
+narrower one. Nothing is set per tab or per tile.
 
 ## Catalog module
 
-The recipes ship as one catalog module, `depictio/catalog/enchantr/`, holding `module.yaml`
-plus twelve `<output>.py` / `<output>.yaml` / `<output>.tsv` triples. enchantR is airrflow's own R
-package rather than an nf-core module, so `module.yaml` declares its identity in full
-(homepage, EDAM immunology and immunoproteins topics).
+The recipes ship as one catalog module, `depictio/catalog/enchantr/` (enchantr is airrflow's
+own R package rather than an nf-core module, so `module.yaml` declares its identity in full).
+Every repertoire panel is a catalog render (`use: enchantr/...`) and every MultiQC tile names
+its module (`use: multiqc/fastp`, `use: multiqc/fastqc`).
 
-| Output | What it is | Renders as |
-|---|---|---|
-| `sequence_counts` | Sequences remaining after every pRESTO and Change-O step | 4 cards, table |
-| `sequence_fates` | The same funnel as read groups, per milestone | Sankey, table |
-| `repertoire_summary` | Clone counts, clone-size spread, rarefied Hill numbers | 4 cards, scatter, richness against evenness, table |
-| `clonal_abundance` | Bootstrapped rank abundance of every clone with its confidence band | Profile with ribbon, 2 cards, table |
-| `clonal_diversity` | Hill diversity profile with bootstrap CIs | Rarefaction, CI bars, table |
-| `diversity_orders` | Hill diversity at q = 0, 1, 2 with bootstrap CIs, labelled | CI bars, order Select, table |
-| `clonal_overlap` | Sample by sample shared clone matrix | Clustered heatmap, PCoA ordination, table |
-| `clone_sizes` | Every clone with rank, frequency and size class | Sunburst, 2 cards, table |
-| `clone_sets` | Clone by sample presence matrix | UpSet, card, table |
-| `v_gene_usage` | V family and V gene fractions per sample | Stacked composition, card, table |
-| `v_gene_matrix` | Sample by V gene fraction matrix | Clustered heatmap, table |
-| `threshold_summary` | The shazam distance threshold per subject | 3 cards, table |
+## Reproducing
 
-The MultiQC modules airrflow emits (`fastp`, `fastqc`) already exist under
-`depictio/catalog/multiqc/`, which is what lets a MultiQC tile carry `use: multiqc/<module>`
-and the catalog badge.
+```bash
+python scripts/nfcore_megatest.py fetch --pipeline airrflow --version 5.1.0 --dest <DATA_ROOT>
+depictio-cli ingest --template nf-core/airrflow/5.1.0 --data-root <DATA_ROOT>
+```

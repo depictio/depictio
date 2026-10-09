@@ -240,6 +240,42 @@ def select_template_for_run(info: Any) -> str | None:
     return f"{info.pipeline_name}/{chosen}"
 
 
+def template_pipeline_version(template_id: str) -> str | None:
+    """The pipeline release a template id stands for, ``latest`` resolved.
+
+    ``nf-core/atacseq/latest`` gives ``1.2.2`` while that is the highest version
+    shipped; None when no projects root resolves the id to a version directory.
+    """
+    for projects_dir in _projects_roots():
+        resolved = _resolve_template_id_in(projects_dir, template_id)
+        for part in resolved.split("/"):
+            if _VERSION_DIR_RE.match(part):
+                return part
+    return None
+
+
+def major_release_gap(info: Any, template_id: str) -> str | None:
+    """The template's pipeline release when the run is another major release.
+
+    nf-core moves, renames and drops outputs between major releases, so a
+    template built for one major describes files a run of another may not have.
+    None when both share a major, when either version is unknown, or when the
+    template is not one of the run's pipeline.
+    """
+    name = info.pipeline_name
+    run_version = info.pipeline_version
+    if not name or not run_version or not _VERSION_DIR_RE.match(run_version):
+        return None
+    if not template_id.startswith(f"{name}/"):
+        return None
+    template_version = template_pipeline_version(template_id)
+    if template_version is None:
+        return None
+    if _version_key(template_version)[0] == _version_key(run_version)[0]:
+        return None
+    return template_version
+
+
 def _list_available_templates(projects_dir: Path) -> list[str]:
     """List available template IDs by scanning a projects directory.
 
@@ -268,11 +304,36 @@ def _list_available_templates(projects_dir: Path) -> list[str]:
     return sorted(templates)
 
 
+def merge_colliding_entries(kept: Any, other: Any) -> Any:
+    """One value for two keys that became the same once substituted.
+
+    ``kept`` wins value by value: it is the entry whose key was written as is,
+    over one whose key came from a variable. Two maps merge, a key of ``kept``
+    over the same key of ``other``. A bare ``auto`` meets a map as
+    ``{"*": "auto"}``, so ``category_colors`` keeps both the pins of one entry
+    and the "every other value" of the other.
+    """
+    if isinstance(kept, dict) and other == "auto":
+        other = {"*": "auto"}
+    if isinstance(other, dict) and kept == "auto":
+        kept = {"*": "auto"}
+    if isinstance(kept, dict) and isinstance(other, dict):
+        merged = dict(other)
+        for key, value in kept.items():
+            merged[key] = merge_colliding_entries(value, merged[key]) if key in merged else value
+        return merged
+    return kept
+
+
 def substitute_template_variables(config: Any, variables: dict[str, str]) -> Any:
     """Recursively substitute {VAR_NAME} placeholders in config dict/list/str.
 
     Uses the same {VAR_NAME} pattern as WorkflowDataLocation env var expansion,
     but resolves from an explicit variables dict rather than os.environ.
+
+    Dict keys are substituted too (``category_colors: {"{GROUP_COL}": auto}``).
+    When a substituted key lands on a key already there, the two entries merge
+    (see ``merge_colliding_entries``), the one written without a variable winning.
 
     Args:
         config: Configuration structure (dict, list, or string).
@@ -285,7 +346,18 @@ def substitute_template_variables(config: Any, variables: dict[str, str]) -> Any
         ValueError: If a required variable placeholder has no corresponding value.
     """
     if isinstance(config, dict):
-        return {k: substitute_template_variables(v, variables) for k, v in config.items()}
+        out: dict[Any, Any] = {}
+        for key, value in config.items():
+            new_key = substitute_template_variables(key, variables)
+            new_value = substitute_template_variables(value, variables)
+            if new_key not in out:
+                out[new_key] = new_value
+            elif new_key == key:
+                # Written as is, so it wins over the entry a variable made.
+                out[new_key] = merge_colliding_entries(new_value, out[new_key])
+            else:
+                out[new_key] = merge_colliding_entries(out[new_key], new_value)
+        return out
     elif isinstance(config, list):
         return [substitute_template_variables(item, variables) for item in config]
     elif isinstance(config, str):

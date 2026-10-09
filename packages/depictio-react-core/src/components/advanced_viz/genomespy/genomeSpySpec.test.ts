@@ -214,6 +214,19 @@ describe('buildGenomeSpySpec', () => {
     expect(track.encoding.color.scale.range).toEqual(['c0', 'c1', 'c2', 'c0']);
   });
 
+  it('keeps the colours the dashboard pins and cycles the palette for the rest', () => {
+    const { spec } = buildGenomeSpySpec({
+      rows: { ...rows, cls: ['x', 'y', 'x', 'z', 'y', 'z'] },
+      config: { ...base, category_col: 'cls' },
+      colors: { ...colors, pinned: { cls: { y: '#123456' } } },
+    });
+    expect(marks(spec).encoding.color.field).toBe('cls');
+    expect(marks(spec).encoding.color.scale).toEqual({
+      domain: ['x', 'y', 'z'],
+      range: ['c0', '#123456', 'c2'],
+    });
+  });
+
   it('declares the region brush once, on the vconcat root', () => {
     const { spec } = buildGenomeSpySpec({ rows, config: base, colors });
     expect((spec as any).params.map((p: any) => p.name)).toEqual([BRUSH_PARAM]);
@@ -346,6 +359,8 @@ describe('buildGenomeSpySpec', () => {
       expect(s.vconcat[0].transform).toEqual([{ type: 'filter', expr: 'datum["s"] === "S1"' }]);
       expect(s.vconcat[1].transform).toEqual([{ type: 'filter', expr: 'datum["s"] === "S2"' }]);
       expect(s.vconcat[0].title.text).toBe('S1');
+      // Lanes share the tile's height above a floor, so fullscreen draws them taller.
+      expect(s.vconcat[0].height).toEqual({ grow: 1, minPx: 60 });
       // One dataset, N lanes: the rows are not copied per lane.
       expect(Object.keys(s.datasets)).toEqual([DATASET_NAME]);
       expect(s.datasets[DATASET_NAME]).toHaveLength(4);

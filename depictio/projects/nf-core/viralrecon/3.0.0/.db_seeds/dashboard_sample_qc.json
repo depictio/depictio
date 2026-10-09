@@ -14,7 +14,30 @@
   "stored_children_data": [],
   "stored_metadata": [
     {
-      "index": "qcdx-snp-yield",
+      "index": "qc-intro",
+      "component_type": "text",
+      "title": "",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": null,
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "title_align": "left",
+      "section": null,
+      "order": 1,
+      "alignment": "left",
+      "vertical_alignment": "center",
+      "body": "Each sample's alignment and consensus, from the pipeline's [variant summary](https://nf-co.re/viralrecon/3.0.0/docs/output) and the [Nextclade](https://clades.nextstrain.org) QC of its consensus. The first scatter tells a thin sample from one that lost amplicons; lasso a point to read its record beside it.\n",
+      "surface": "none",
+      "accent": null,
+      "logo": null,
+      "logo_dark": null
+    },
+    {
+      "index": "qc-snp-yield",
       "component_type": "interactive",
       "title": "SNPs called",
       "workflow_tag": "viralrecon",
@@ -38,7 +61,6 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "md",
       "title_align": "left",
       "section": "Variant yield",
       "interactive_component_type": "RangeSlider",
@@ -53,12 +75,12 @@
       "show_marks": null,
       "show_histogram": null,
       "slider_mode": null,
-      "custom_color": "#3F51B5",
+      "custom_color": "grape",
       "icon_name": "mdi:dna",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "qcdx-indel-yield",
+      "index": "qc-indel-yield",
       "component_type": "interactive",
       "title": "Indels called",
       "workflow_tag": "viralrecon",
@@ -82,7 +104,6 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "md",
       "title_align": "left",
       "section": "Variant yield",
       "interactive_component_type": "RangeSlider",
@@ -97,12 +118,12 @@
       "show_marks": null,
       "show_histogram": null,
       "slider_mode": null,
-      "custom_color": "#3F51B5",
+      "custom_color": "violet",
       "icon_name": "mdi:dna",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "qcdx-missing",
+      "index": "qc-missing",
       "component_type": "interactive",
       "title": "Missing bases",
       "workflow_tag": "viralrecon",
@@ -126,7 +147,6 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "md",
       "title_align": "left",
       "section": "Variant yield",
       "interactive_component_type": "RangeSlider",
@@ -136,48 +156,19 @@
       "default_state": null,
       "filter_expr": null,
       "placement": "left",
-      "group": "Variant counts",
+      "group": "Consensus",
       "timescale": null,
       "show_marks": null,
       "show_histogram": null,
       "slider_mode": null,
-      "custom_color": "#F68B33",
+      "custom_color": "orange",
       "icon_name": "mdi:alert-outline",
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "6caedeac-8d71-4402-a057-27f27c4e76e8",
-      "component_type": "text",
-      "title": "QC at a glance",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "summary_metrics",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": null,
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
-        "data_collection_tag": "summary_metrics",
-        "dc_specific_properties": null,
-        "_id": null
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_align": "left",
-      "section": "QC at a glance",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "Four per-sample distributions: how much of the genome is covered at all, how many variants were called, how many reads mapped, and how many consensus bases came out as N. The last one is the strongest single quality signal of the consensus.",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "meta-genome-1x",
+      "index": "qc-card-reads",
       "component_type": "card",
-      "title": "Genome at 1x (median %)",
+      "title": "Reads mapped",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "summary_metrics",
       "wf_id": {
@@ -199,128 +190,7 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "use": "multiqc/summary_metrics",
-      "catalog_source": {
-        "toolId": "multiqc",
-        "toolName": "MultiQC",
-        "outputId": "multiqc_summary_metrics",
-        "use": "multiqc/summary_metrics",
-        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
-      },
-      "section": "QC at a glance",
-      "aggregation": "median",
-      "column_name": "pct_genome_covered_1x",
-      "column_type": "float64",
-      "value": null,
-      "aggregations": [
-        "box_plot_stats"
-      ],
-      "filter_expr": null,
-      "secondary_layout": "box_plot",
-      "breakdown_col": null,
-      "top_n_count": 3,
-      "coverage_max": null,
-      "threshold_value": null,
-      "threshold_direction": "min",
-      "threshold_warn": null,
-      "attrition_cols": [],
-      "trend_col": null,
-      "follow_region_filter": false,
-      "icon_name": "mdi:chart-areaspline",
-      "icon_color": "#2E7D32",
-      "title_color": "#2E7D32",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "42cf64a0-863d-4051-9dd6-f0f87c0cde75",
-      "component_type": "card",
-      "title": "Variants per sample (median)",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "summary_metrics",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
-        "data_collection_tag": "summary_metrics",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "use": "multiqc/summary_metrics",
-      "catalog_source": {
-        "toolId": "multiqc",
-        "toolName": "MultiQC",
-        "outputId": "multiqc_summary_metrics",
-        "use": "multiqc/summary_metrics",
-        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
-      },
-      "section": "QC at a glance",
-      "aggregation": "median",
-      "column_name": "num_variants_total",
-      "column_type": "float64",
-      "value": null,
-      "aggregations": [
-        "box_plot_stats"
-      ],
-      "filter_expr": null,
-      "secondary_layout": "box_plot",
-      "breakdown_col": null,
-      "top_n_count": 3,
-      "coverage_max": null,
-      "threshold_value": null,
-      "threshold_direction": "min",
-      "threshold_warn": null,
-      "attrition_cols": [],
-      "trend_col": null,
-      "follow_region_filter": false,
-      "icon_name": "mdi:dna",
-      "icon_color": "#FF9800",
-      "title_color": "#FF9800",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "meta-reads",
-      "component_type": "card",
-      "title": "Reads mapped (median)",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "summary_metrics",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
-        "data_collection_tag": "summary_metrics",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median reads aligned per sample; under 1,000 a sample skips variant calling by default.",
       "title_size": "sm",
       "title_align": "left",
       "use": "multiqc/summary_metrics",
@@ -336,66 +206,123 @@
       "column_name": "num_reads_mapped",
       "column_type": "float64",
       "value": null,
-      "aggregations": [
-        "box_plot_stats"
-      ],
+      "aggregations": null,
       "filter_expr": null,
-      "secondary_layout": "box_plot",
+      "secondary_layout": "threshold",
       "breakdown_col": null,
       "top_n_count": 3,
       "coverage_max": null,
+      "threshold_value": 1000,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:target",
+      "icon_color": "indigo",
+      "caption": "samples against the 1,000-read floor",
+      "decimals": 0,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "qc-card-mapped-pct",
+      "component_type": "card",
+      "title": "Reads mapped (%)",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "summary_metrics",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
+        "data_collection_tag": "summary_metrics",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median share of each sample's reads that aligned to the viral reference.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
+      "section": "QC at a glance",
+      "aggregation": "median",
+      "column_name": "pct_reads_mapped",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": "col('pct_reads_mapped').is_not_null()",
+      "secondary_layout": "gauge",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": 100,
       "threshold_value": null,
       "threshold_direction": "min",
       "threshold_warn": null,
       "attrition_cols": [],
       "trend_col": null,
       "follow_region_filter": false,
-      "icon_name": "mdi:counter",
-      "icon_color": "#3F51B5",
-      "title_color": "#3F51B5",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
+      "icon_name": "mdi:percent-outline",
+      "icon_color": "blue",
+      "caption": "median share of each sample's reads",
+      "decimals": 1,
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "qcdx-missing-card",
+      "index": "qc-card-depth",
       "component_type": "card",
-      "title": "Missing bases (median)",
+      "title": "Median depth",
       "workflow_tag": "viralrecon",
-      "data_collection_tag": "nextclade_results",
+      "data_collection_tag": "summary_metrics",
       "wf_id": {
         "$oid": "746b0f3c1e4a2d7f8e5b9c01"
       },
       "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c15"
+        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
       },
       "dc_config": {
         "type": null,
         "metatype": null,
-        "description": "Nextclade clade assignments and sequence quality metrics",
-        "data_collection_tag": "nextclade_results",
+        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
+        "data_collection_tag": "summary_metrics",
         "dc_specific_properties": null,
         "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c15"
+          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
         }
       },
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Median of each sample's median depth along the genome.",
       "title_size": "sm",
       "title_align": "left",
-      "use": "nextclade/report",
+      "use": "multiqc/summary_metrics",
       "catalog_source": {
-        "toolId": "nextclade",
-        "toolName": "Nextclade",
-        "outputId": "nextclade_report",
-        "use": "nextclade/report",
-        "description": "Per-sample clade assignment + sequence QC."
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
       },
       "section": "QC at a glance",
       "aggregation": "median",
-      "column_name": "totalMissing",
-      "column_type": "int64",
+      "column_name": "coverage_median",
+      "column_type": "float64",
       "value": null,
       "aggregations": [
         "box_plot_stats"
@@ -411,40 +338,16 @@
       "attrition_cols": [],
       "trend_col": null,
       "follow_region_filter": false,
-      "icon_name": "mdi:alert-outline",
-      "icon_color": "#F68B33",
-      "title_color": "#F68B33",
-      "title_font_size": "xl",
-      "value_font_size": "xl",
+      "icon_name": "mdi:chart-line",
+      "icon_color": "cyan",
+      "caption": "median per sample, with its spread",
+      "decimals": 0,
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "qcdx-diagnostics-header",
-      "component_type": "text",
-      "title": "Where the signals disagree",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": null,
-      "dc_config": {},
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Diagnostics",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "Coverage against variant count separates a genuinely divergent sample from one that is simply under-sequenced: both produce few calls, but only one of them is well covered. Lasso a point in the coverage scatter to read that sample's full summary record beside it. The [Nextclade](https://github.com/nextstrain/nextclade) panel below says the same thing from the consensus side, and a pick there opens the record too.",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "0727aa6c-3b22-4d7e-81e1-1de27f4d60c2",
-      "component_type": "figure",
-      "title": "Median coverage vs total variants",
+      "index": "qc-card-genome-10x",
+      "component_type": "card",
+      "title": "Genome at 10x (%)",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "summary_metrics",
       "wf_id": {
@@ -466,8 +369,8 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Spot low-coverage samples with inflated / deflated variant counts; lasso points to read them in the sample record beside it.",
-      "title_size": "h3",
+      "description": "Median share of the genome covered by 10 reads or more; failed samples sit apart at the low end.",
+      "title_size": "sm",
       "title_align": "left",
       "use": "multiqc/summary_metrics",
       "catalog_source": {
@@ -477,99 +380,33 @@
         "use": "multiqc/summary_metrics",
         "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
       },
-      "section": "Diagnostics",
-      "visu_type": "scatter",
-      "dict_kwargs": {},
-      "mode": "code",
-      "code_content": "fig = px.scatter(df.to_pandas(), x='coverage_median', y='num_variants_total',\n    color='lineage', hover_data=['sample', 'pct_genome_covered_10x'],\n    labels={'coverage_median': 'Median Coverage Depth', 'num_variants_total': 'Total Variants', 'lineage': 'Lineage'},\n    size_max=12)\nfig.update_traces(marker=dict(size=10, line=dict(width=1, color='DarkSlateGrey')))\n",
-      "displayed_data_count": 0,
-      "total_data_count": 0,
-      "was_sampled": false,
-      "filter_applied": false,
-      "max_points": null,
-      "selection_enabled": true,
-      "selection_column": "sample",
-      "font_scale": null,
+      "section": "QC at a glance",
+      "aggregation": "median",
+      "column_name": "pct_genome_covered_10x",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": "col('pct_genome_covered_10x').is_not_null()",
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "follow_region_filter": false,
+      "icon_name": "mdi:chart-areaspline",
+      "icon_color": "teal",
+      "caption": "median, with its distribution",
+      "decimals": 1,
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "f511bd02-40de-403e-a55e-27ec61a719f9",
+      "index": "qc-depth-breadth",
       "component_type": "figure",
-      "title": "Nextclade substitutions vs deletions",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "nextclade_results",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c15"
-      },
-      "dc_config": {
-        "type": null,
-        "metatype": null,
-        "description": "Nextclade clade assignments and sequence quality metrics",
-        "data_collection_tag": "nextclade_results",
-        "dc_specific_properties": null,
-        "_id": {
-          "$oid": "746b0f3c1e4a2d7f8e5b9c15"
-        }
-      },
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Per-sample mutation profile shape. Outliers signal clade-specific patterns.",
-      "title_size": "h3",
-      "title_align": "left",
-      "use": "nextclade/report",
-      "catalog_source": {
-        "toolId": "nextclade",
-        "toolName": "Nextclade",
-        "outputId": "nextclade_report",
-        "use": "nextclade/report",
-        "description": "Per-sample clade assignment + sequence QC."
-      },
-      "section": "Diagnostics",
-      "visu_type": "scatter",
-      "dict_kwargs": {},
-      "mode": "code",
-      "code_content": "fig = px.scatter(df.to_pandas(), x='totalSubstitutions', y='totalDeletions',\n    color='clade', hover_data=['sample', 'qc_overallStatus', 'coverage'],\n    labels={'totalSubstitutions': 'Total Substitutions', 'totalDeletions': 'Total Deletions', 'clade': 'Clade'},\n    opacity=0.8)\nfig.update_traces(marker=dict(size=10, line=dict(width=1, color='DarkSlateGrey')))\n",
-      "displayed_data_count": 0,
-      "total_data_count": 0,
-      "was_sampled": false,
-      "filter_applied": false,
-      "max_points": null,
-      "selection_enabled": true,
-      "selection_column": "sample",
-      "font_scale": null,
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "qcdx-coverage-header",
-      "component_type": "text",
-      "title": "Genome breadth per sample",
-      "workflow_tag": "viralrecon",
-      "data_collection_tag": "",
-      "wf_id": {
-        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
-      },
-      "dc_id": null,
-      "dc_config": {},
-      "cols_json": {},
-      "parent_index": null,
-      "last_updated": "2026-08-29T00:00:00.000000",
-      "title_size": "sm",
-      "title_align": "left",
-      "section": "Per-sample coverage",
-      "order": 2,
-      "alignment": "left",
-      "vertical_alignment": "center",
-      "body": "Breadth at 1x and 10x side by side, sample by sample; the gap between the two bars is the part of the genome covered but not deeply enough to call. The dashed line marks the template's default 80% breadth floor.",
-      "wf_tag": "nextflow/viralrecon"
-    },
-    {
-      "index": "7aa88164-8f85-4bae-819b-fc56a73d026d",
-      "component_type": "figure",
-      "title": "Genome breadth per sample at 1x and 10x",
+      "title": "Median depth against genome covered at 10x",
       "workflow_tag": "viralrecon",
       "data_collection_tag": "summary_metrics",
       "wf_id": {
@@ -591,8 +428,8 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "Per-sample share of the genome covered at 1x and at 10x, sorted by the 10x breadth.",
-      "title_size": "h3",
+      "description": "A thin sample sits low and left; a deep one under the line lost amplicons.",
+      "title_size": "sm",
       "title_align": "left",
       "use": "multiqc/summary_metrics",
       "catalog_source": {
@@ -602,23 +439,23 @@
         "use": "multiqc/summary_metrics",
         "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
       },
-      "section": "Per-sample coverage",
-      "visu_type": "bar",
+      "section": "Diagnostics",
+      "visu_type": "scatter",
       "dict_kwargs": {},
       "mode": "code",
-      "code_content": "# Samples ordered by 10x breadth. The order is pinned on the axis:\n# plotly regroups categories by trace otherwise, which breaks the sort.\norder = df.sort('pct_genome_covered_10x', descending=True, nulls_last=True)['sample'].to_list()\ndf_long = df.select('sample', 'pct_genome_covered_1x', 'pct_genome_covered_10x').unpivot(\n    index='sample', variable_name='depth', value_name='breadth',\n).with_columns(\n    pl.col('depth').replace({'pct_genome_covered_1x': 'at 1x', 'pct_genome_covered_10x': 'at 10x'})\n)\nfig = px.bar(\n    df_long.to_pandas(), x='sample', y='breadth', color='depth', barmode='group',\n    labels={'sample': 'Sample', 'breadth': 'Genome covered (%)', 'depth': 'Depth'},\n)\n# 80%: the template's default breadth floor, the same value as the\n# threshold on the Genome at 10x card.\nfig.add_hline(y=80, line_dash='dash', annotation_text='80% floor')\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9}, categoryorder='array', categoryarray=order)\n",
+      "code_content": "# Depth against 10x breadth, one point per sample: by lineage, or by\n# Analysis mode's groups when it has some. Depth on a log axis: samples\n# of one run span orders of magnitude. The dashed line is the 80% breadth\n# floor of the bars below.\nkw = depictio_group_kwargs or {'color': 'lineage', 'color_discrete_map': depictio_category_colors.get('lineage') or {}}\nfig = px.scatter(df.to_pandas(), x='coverage_median', y='pct_genome_covered_10x', log_x=True, hover_data=['sample', 'num_variants_total'], labels={'coverage_median': 'Median depth', 'pct_genome_covered_10x': 'Genome at 10x (%)', 'lineage': 'Lineage', 'num_variants_total': 'Variants called'}, **kw)\nfig.update_traces(marker=dict(size=10))\nfig.add_hline(y=80, line_dash='dash')\nfig.update_yaxes(range=[0, 105])\nfig.update_layout(margin=dict(t=10))",
       "displayed_data_count": 0,
       "total_data_count": 0,
       "was_sampled": false,
       "filter_applied": false,
       "max_points": null,
-      "selection_enabled": false,
-      "selection_column": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
       "font_scale": null,
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "qcdx-sample-record",
+      "index": "qc-sample-record",
       "component_type": "advanced_viz",
       "title": "Sample record",
       "workflow_tag": "viralrecon",
@@ -642,8 +479,8 @@
       "cols_json": {},
       "parent_index": null,
       "last_updated": "2026-08-29T00:00:00.000000",
-      "description": "The sample lassoed in the coverage scatter beside it (or picked in the Nextclade scatter or the Sample sheet), with its alignment, breadth and calls.",
-      "title_size": "h3",
+      "description": "The sample picked in the scatter or the run summary, with its alignment, breadth and calls.",
+      "title_size": "sm",
       "title_align": "left",
       "section": "Diagnostics",
       "viz_kind": "record_card",
@@ -682,17 +519,119 @@
         },
         "link_templates": null,
         "selection_source": "any",
-        "linked_component": "0727aa6c-3b22-4d7e-81e1-1de27f4d60c2",
+        "linked_component": "qc-depth-breadth",
         "max_fields": 40,
         "default_record": null
       },
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "qc-nextclade-scatter",
+      "component_type": "figure",
+      "title": "Substitutions against deletions (Nextclade)",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "nextclade_results",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c15"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Nextclade clade assignments and sequence quality metrics",
+        "data_collection_tag": "nextclade_results",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c15"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "Each consensus genome's mutation load; a point far from its clade is worth a look.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "nextclade/report",
+      "catalog_source": {
+        "toolId": "nextclade",
+        "toolName": "Nextclade",
+        "outputId": "nextclade_report",
+        "use": "nextclade/report",
+        "description": "Per-sample clade assignment + sequence QC."
+      },
+      "section": "Diagnostics",
+      "visu_type": "scatter",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "# Substitutions against deletions per consensus genome: by clade, or by\n# Analysis mode's groups when it has some.\nkw = depictio_group_kwargs or {'color': 'clade', 'color_discrete_map': depictio_category_colors.get('clade') or {}}\nfig = px.scatter(df.to_pandas(), x='totalSubstitutions', y='totalDeletions', hover_data=['sample', 'qc_overallStatus', 'totalMissing'], opacity=0.8, labels={'totalSubstitutions': 'Substitutions', 'totalDeletions': 'Deleted bases', 'clade': 'Clade', 'qc_overallStatus': 'Nextclade QC', 'totalMissing': 'Missing bases'}, **kw)\nfig.update_traces(marker=dict(size=10))\n# Counts: from zero, in whole steps (a narrow range otherwise ticks 0.5).\nfig.update_xaxes(rangemode='tozero', dtick=max(1, round((df['totalSubstitutions'].max() or 0) / 5)))\nfig.update_yaxes(rangemode='tozero', dtick=max(1, round((df['totalDeletions'].max() or 0) / 5)))\nfig.update_layout(margin=dict(t=10))",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": true,
+      "selection_column": "sample",
+      "font_scale": null,
+      "wf_tag": "nextflow/viralrecon"
+    },
+    {
+      "index": "qc-breadth",
+      "component_type": "figure",
+      "title": "Genome covered at 1x and 10x per sample",
+      "workflow_tag": "viralrecon",
+      "data_collection_tag": "summary_metrics",
+      "wf_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c01"
+      },
+      "dc_id": {
+        "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Per-sample alignment, coverage, and variant calling summary metrics",
+        "data_collection_tag": "summary_metrics",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "746b0f3c1e4a2d7f8e5b9c11"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-08-29T00:00:00.000000",
+      "description": "The gap between the two bars is genome covered, but not deeply enough to call.",
+      "title_size": "sm",
+      "title_align": "left",
+      "use": "multiqc/summary_metrics",
+      "catalog_source": {
+        "toolId": "multiqc",
+        "toolName": "MultiQC",
+        "outputId": "multiqc_summary_metrics",
+        "use": "multiqc/summary_metrics",
+        "description": "Per-sample variant-calling summary (reads mapped, coverage, SNP/indel/total variant counts, lineage) parsed from MultiQC's summary_variants_metrics table."
+      },
+      "section": "Breadth per sample",
+      "visu_type": "bar",
+      "dict_kwargs": {},
+      "mode": "code",
+      "code_content": "# Samples ordered by 10x breadth. The order is pinned on the axis:\n# plotly regroups categories by trace otherwise, which breaks the sort.\norder = df.sort('pct_genome_covered_10x', descending=True, nulls_last=True)['sample'].to_list()\nd = df.select('sample', 'pct_genome_covered_1x', 'pct_genome_covered_10x').unpivot(index='sample', variable_name='depth', value_name='breadth').with_columns(pl.col('depth').replace({'pct_genome_covered_1x': 'at 1x', 'pct_genome_covered_10x': 'at 10x'}))\nfig = px.bar(d.to_pandas(), x='sample', y='breadth', color='depth', barmode='group', labels={'sample': 'Sample', 'breadth': 'Genome covered (%)', 'depth': 'Depth'})\n# 80%: the template's breadth floor for a usable consensus.\nfig.add_hline(y=80, line_dash='dash', annotation_text='80%')\nfig.update_xaxes(tickangle=-45, tickfont={'size': 9}, categoryorder='array', categoryarray=order)\nfig.update_layout(margin=dict(t=10))",
+      "displayed_data_count": 0,
+      "total_data_count": 0,
+      "was_sampled": false,
+      "filter_applied": false,
+      "max_points": null,
+      "selection_enabled": false,
+      "selection_column": null,
+      "font_scale": null,
       "wf_tag": "nextflow/viralrecon"
     }
   ],
   "stored_edit_dashboard_mode_button": [],
   "left_panel_layout_data": [
     {
-      "i": "box-qcdx-snp-yield",
+      "i": "box-qc-snp-yield",
       "x": 0,
       "y": 0,
       "w": 1,
@@ -700,7 +639,7 @@
       "static": false
     },
     {
-      "i": "box-qcdx-indel-yield",
+      "i": "box-qc-indel-yield",
       "x": 0,
       "y": 3,
       "w": 1,
@@ -708,7 +647,7 @@
       "static": false
     },
     {
-      "i": "box-qcdx-missing",
+      "i": "box-qc-missing",
       "x": 0,
       "y": 6,
       "w": 1,
@@ -718,7 +657,7 @@
   ],
   "right_panel_layout_data": [
     {
-      "i": "box-6caedeac-8d71-4402-a057-27f27c4e76e8",
+      "i": "box-qc-intro",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -733,102 +672,42 @@
       ]
     },
     {
-      "i": "box-meta-genome-1x",
+      "i": "box-qc-card-reads",
       "x": 0,
-      "y": 1,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
     },
     {
-      "i": "box-42cf64a0-863d-4051-9dd6-f0f87c0cde75",
+      "i": "box-qc-card-mapped-pct",
       "x": 2,
-      "y": 1,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
     },
     {
-      "i": "box-meta-reads",
+      "i": "box-qc-card-depth",
       "x": 4,
-      "y": 1,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
     },
     {
-      "i": "box-qcdx-missing-card",
+      "i": "box-qc-card-genome-10x",
       "x": 6,
-      "y": 1,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
     },
     {
-      "i": "box-qcdx-diagnostics-header",
+      "i": "box-qc-depth-breadth",
       "x": 0,
       "y": 0,
-      "w": 8,
-      "h": 2,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-0727aa6c-3b22-4d7e-81e1-1de27f4d60c2",
-      "x": 0,
-      "y": 2,
       "w": 5,
-      "h": 6,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-f511bd02-40de-403e-a55e-27ec61a719f9",
-      "x": 0,
-      "y": 8,
-      "w": 8,
-      "h": 6,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-qcdx-coverage-header",
-      "x": 0,
-      "y": 0,
-      "w": 8,
-      "h": 1,
-      "static": false,
-      "resizeHandles": [
-        "se",
-        "s",
-        "e",
-        "sw",
-        "w"
-      ]
-    },
-    {
-      "i": "box-7aa88164-8f85-4bae-819b-fc56a73d026d",
-      "x": 0,
-      "y": 1,
-      "w": 8,
       "h": 5,
       "static": false,
       "resizeHandles": [
@@ -840,11 +719,41 @@
       ]
     },
     {
-      "i": "box-qcdx-sample-record",
+      "i": "box-qc-sample-record",
       "x": 5,
-      "y": 2,
+      "y": 0,
       "w": 3,
-      "h": 6,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-qc-nextclade-scatter",
+      "x": 0,
+      "y": 5,
+      "w": 8,
+      "h": 4,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-qc-breadth",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 4,
       "static": false,
       "resizeHandles": [
         "se",
@@ -858,12 +767,19 @@
   "filter_sections": [
     {
       "name": "Variant yield",
-      "icon": "mdi:tune",
+      "icon": "mdi:filter-variant",
       "color": "indigo",
-      "description": "Narrow to samples by how many calls they produced",
+      "description": "Narrows the samples by the calls they produced and the bases they miss",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     }
   ],
   "grid_sections": [
@@ -871,32 +787,59 @@
       "name": "QC at a glance",
       "icon": "mdi:counter",
       "color": "indigo",
-      "description": "Coverage, mapping rate and variant yield per sample",
+      "description": "Reads, depth and breadth over the samples in view",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     },
     {
       "name": "Diagnostics",
       "icon": "mdi:chart-scatter-plot",
-      "color": "cyan",
-      "description": "Where coverage, variant count and consensus quality disagree; lasso a sample in the coverage scatter to read its record beside it",
+      "color": "indigo",
+      "description": "Depth against breadth, then the consensus as Nextclade reads it",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     },
     {
-      "name": "Per-sample coverage",
+      "name": "Breadth per sample",
       "icon": "mdi:chart-bar",
-      "color": "teal",
-      "description": "Genome breadth, sample by sample",
+      "color": "indigo",
+      "description": "Genome covered at 1x and at 10x, sample by sample",
       "collapsed": false,
       "persistent": false,
-      "pin": "top"
+      "pin": "top",
+      "appearance": "box",
+      "exclude_tabs": null,
+      "card_variant": null,
+      "display": null,
+      "filter_bar": null,
+      "visible_filters": null,
+      "figure_style": null
     }
   ],
+  "category_colors": null,
   "funnel_filtering": true,
-  "advanced_viz_controls": "header",
+  "filter_panel_default": "open",
+  "content_width_default": "full",
+  "show_tab_header": true,
+  "show_guide": true,
+  "guide_intro": "",
+  "advanced_viz_controls": "popover",
   "autofit": true,
   "brand_theme": null,
   "buttons_data": {
@@ -909,7 +852,7 @@
     "count": 0
   },
   "title": "Sample QC",
-  "subtitle": "Per-Sample Coverage, Variant Yield, Substitution Patterns & Genome Completeness",
+  "subtitle": "Did each sample yield a well-covered, trustworthy consensus genome?",
   "icon": "/assets/images/workflows/nf-core.png",
   "icon_color": "green",
   "icon_variant": "filled",
@@ -925,7 +868,7 @@
         "flexible_metadata": null,
         "hash": null,
         "email": "admin@example.com",
-        "is_admin": true,
+        "is_admin": false,
         "is_anonymous": false,
         "is_temporary": false,
         "expiration_time": null
@@ -936,7 +879,7 @@
   },
   "is_public": true,
   "last_saved_ts": "2026-08-29 00:00:00",
-  "creation_time": "2026-09-17 09:20:46",
+  "creation_time": "2026-10-08 21:52:39",
   "screenshot_ts": "",
   "project_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
@@ -945,10 +888,14 @@
   "parent_dashboard_id": {
     "$oid": "746b0f3c1e4a2d7f8e5b9ca2"
   },
-  "tab_order": 3,
+  "tab_order": 2,
   "main_tab_name": null,
   "tab_icon": "mdi:stethoscope",
   "tab_icon_color": "indigo",
+  "tab_group": "Data & QC",
   "parent_dashboard_title": null,
-  "project_realtime": null
+  "project_realtime": null,
+  "inherited_brand_theme": null,
+  "inherited_category_colors": null,
+  "source_key": "nf-core/viralrecon:dashboards/base.yaml#Sample QC"
 }

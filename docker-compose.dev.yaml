@@ -234,6 +234,12 @@ services:
       # Container listens on 8080 (nginx-unprivileged / non-root); published
       # host port unchanged.
       - "${VIEWER_PORT:-5080}:8080"
+    environment:
+      # S3 origin the browser reads genome_view file tracks from, added to the
+      # CSP connect-src. Resolved like the backend's settings.s3.external_url
+      # (the host presigned URLs are signed for): public URL first, then the
+      # published host and port.
+      DEPICTIO_CSP_S3_ORIGIN: "${DEPICTIO_CSP_S3_ORIGIN:-${DEPICTIO_S3_PUBLIC_URL:-${DEPICTIO_S3_EXTERNAL_PROTOCOL:-http}://${DEPICTIO_S3_EXTERNAL_HOST:-${DEPICTIO_MINIO_EXTERNAL_HOST:-localhost}}:${DEPICTIO_S3_EXTERNAL_PORT:-${DEPICTIO_MINIO_EXTERNAL_PORT:-9000}}}}"
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     depends_on:

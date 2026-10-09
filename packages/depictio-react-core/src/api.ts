@@ -268,6 +268,27 @@ export interface CatalogSource {
   use?: string;
 }
 
+/**
+ * One live value of a text tile (`values.<name>`): a column of a data
+ * collection aggregated like a card's, under the dashboard's filters.
+ */
+export interface TextValueSpec {
+  /** The data collection's tag. */
+  dc: string;
+  column: string;
+  /** A card aggregation, or `top` (the largest category) / `top_share` (its
+   *  share of the total, 0-1). */
+  aggregation: string;
+  /** `top` / `top_share` only: the column summed per category (rows when unset). */
+  weight?: string | null;
+  filter_expr?: string | null;
+  /** `percent` | `integer` | `si` | `decimals:N`; unset prints like a card. */
+  format?: string | null;
+  /** Resolved at import, never written to YAML. */
+  dc_id?: string | null;
+  wf_id?: string | null;
+}
+
 export interface StoredMetadata {
   index: string;
   component_type: string;
@@ -319,6 +340,13 @@ export interface StoredMetadata {
   surface?: 'none' | 'card' | 'tinted';
   /** Palette name, CSS colour, or `tab:<name>` for that tab's colour. */
   accent?: string;
+  /** Image drawn in place of the title (a pipeline's wordmark), and its
+   *  dark-page variant; see components/textLogo.ts. */
+  logo?: string | null;
+  logo_dark?: string | null;
+  /** Live values the title and body cite as `{{name}}`, computed with the
+   *  cards (see components/textValues.ts). */
+  values?: Record<string, TextValueSpec> | null;
   parent_index?: string;
   // Interactive
   interactive_component_type?: string;

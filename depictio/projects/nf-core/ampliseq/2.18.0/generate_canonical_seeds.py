@@ -76,6 +76,8 @@ SEED_TAGS = frozenset(
         "ma_canonical",
         "bray_curtis_canonical",
         "phylogenetic_tree_metadata_canonical",
+        "read_tracking",
+        "beta_adonis",
     }
 )
 

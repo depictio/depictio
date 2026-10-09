@@ -2,8 +2,8 @@
  * Card builder form. Mirrors design_card() in
  * depictio/dash/modules/card_component/design_ui.py — title, column,
  * aggregation, colors, icon, font size, with a live preview on the right.
- * The display block (card style, caption, decimals, link, description)
- * is what a key figure on a landing page needs.
+ * The display block (card style, caption, number format, decimals, link,
+ * description) is what a key figure on a landing page needs.
  */
 import React, { useEffect, useMemo } from 'react';
 import {
@@ -42,6 +42,14 @@ const FONT_SIZES = [
   { value: 'md', label: 'M' },
   { value: 'lg', label: 'L' },
   { value: 'xl', label: 'XL' },
+];
+
+/** A card's `format`, as the YAML spells it. `decimals:N` is not offered:
+ *  the Decimals field below says the same thing. */
+const FORMAT_OPTIONS: { value: string; label: string }[] = [
+  { value: 'percent', label: 'Percent (a 0-1 fraction: 0.41 shows as 41%)' },
+  { value: 'integer', label: 'Integer (12,346)' },
+  { value: 'si', label: 'SI suffix (214k, 3.7M)' },
 ];
 
 const BACKGROUND_SWATCHES = [
@@ -306,6 +314,7 @@ const CardBuilder: React.FC = () => {
     variant?: string | null;
     caption?: string | null;
     decimals?: number | null;
+    format?: string | null;
     link?: string | null;
     description?: string;
   };
@@ -316,6 +325,15 @@ const CardBuilder: React.FC = () => {
   const ownVariant = normalizeCardVariant(config.variant);
   const dashboardId = useBuilderStore((s) => s.dashboardId);
   const link = config.link?.trim() || undefined;
+  const format = config.format?.trim() || undefined;
+  // A `decimals:N` format from YAML has no entry of its own: shown as is.
+  const formatOptions = useMemo(
+    () =>
+      format && !FORMAT_OPTIONS.some((o) => o.value === format)
+        ? [...FORMAT_OPTIONS, { value: format, label: format }]
+        : FORMAT_OPTIONS,
+    [format],
+  );
   // A card linking to the tab it sits on would go nowhere.
   const linkData = useMemo(
     () => tabLinkOptions(tabs.filter((t) => t.dashboard_id !== dashboardId), link),
@@ -682,7 +700,7 @@ const CardBuilder: React.FC = () => {
         value="display"
         icon="mdi:card-text-outline"
         title="Display"
-        subtitle="Card style, caption and decimal places"
+        subtitle="Card style, caption and number format"
       >
         <Stack gap="md">
           <Field
@@ -715,10 +733,27 @@ const CardBuilder: React.FC = () => {
             leftSection={<Icon icon="mdi:text-short" width={14} />}
           />
 
+          <Select
+            label="Number format"
+            description="How the value prints, and with it the numbers of the same column in the strip below (box plot, threshold, histogram). Counts stay whole numbers."
+            placeholder="Auto"
+            data={formatOptions}
+            value={format ?? null}
+            onChange={(val) => patchConfig({ format: val })}
+            clearable
+            leftSection={<Icon icon="mdi:numeric" width={14} />}
+            data-testid="card-format-select"
+          />
+
           <NumberInput
             label="Decimals"
-            description="Decimal places for a fractional value. Empty shows up to 4, trailing zeros dropped."
+            description={
+              format
+                ? 'Set by the number format above; clear it to pick decimal places here.'
+                : 'Decimal places for a fractional value. Empty shows up to 4, trailing zeros dropped.'
+            }
             placeholder="Auto"
+            disabled={Boolean(format)}
             value={config.decimals ?? ''}
             onChange={(val) => patchConfig({ decimals: typeof val === 'number' ? val : null })}
             min={0}

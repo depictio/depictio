@@ -4,6 +4,7 @@ import { Block, parseBlocks, parseFact, parseLinkRow, parseStatRow } from './blo
 import { InlineToken, parseInlineMarkdown } from './inlineMarkdown';
 import { MARKDOWN_CHEATSHEET, MarkdownExample } from './markdownCheatsheet';
 import { parseTabTile } from './tabLinks';
+import { splitPlaceholders } from './textValues';
 
 const examples: MarkdownExample[] = MARKDOWN_CHEATSHEET.flatMap((g) => g.examples);
 
@@ -20,6 +21,9 @@ function onlyList(blocks: Block[]): Extract<Block, { type: 'list' }> {
 }
 const allRead = <T>(items: string[], parse: (s: string) => T | null) =>
   items.length > 0 && items.every((item) => parse(item) !== null);
+/** The placeholders an example holds, by what the braces hold. */
+const placeholders = (text: string) =>
+  splitPlaceholders(text).flatMap((s) => (s.type === 'value' ? [s.key] : []));
 
 describe('MARKDOWN_CHEATSHEET', () => {
   it.each(examples.map((e) => [e.label, e] as const))('%s renders as it says', (_, ex) => {
@@ -102,11 +106,32 @@ describe('MARKDOWN_CHEATSHEET', () => {
         expect(/\d/.test(head.text) && head.text.trim().length <= 12).toBe(true);
         break;
       }
+      case 'live-value':
+        expect(blocks.map((b) => b.type)).toEqual(['paragraph']);
+        expect(placeholders(ex.example)).toEqual(['param:dada_ref_taxonomy']);
+        break;
+      case 'values-yaml':
+        // Every value the YAML declares has a name `values:` accepts.
+        expect(ex.example.startsWith('values:\n')).toBe(true);
+        for (const line of ex.example.split('\n').slice(1)) {
+          expect(line).toMatch(/^ {2}[a-z][a-z0-9_]{0,11}: \{dc: \w+, column: \w+, aggregation: \w+/);
+        }
+        break;
     }
+  });
+
+  it('declares, in its YAML example, the values the live-value examples cite', () => {
+    const yaml = examples.find((e) => e.renders === 'values-yaml')!.example;
+    const declared = [...yaml.matchAll(/^ {2}([a-z][a-z0-9_]*):/gm)].map((m) => m[1]);
+    const cited = examples
+      .filter((e) => e.renders === 'results' && placeholders(e.example).length > 0)
+      .flatMap((e) => placeholders(e.example));
+    expect(cited.length).toBeGreaterThan(0);
+    expect(new Set(cited)).toEqual(new Set(declared));
   });
 
   it('covers every rendering at least once', () => {
     const covered = new Set(examples.map((e) => e.renders));
-    expect(covered.size).toBe(16);
+    expect(covered.size).toBe(18);
   });
 });

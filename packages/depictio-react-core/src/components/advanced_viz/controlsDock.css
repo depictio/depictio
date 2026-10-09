@@ -85,9 +85,11 @@
   display: none;
 }
 
-/* Only the first few controls until "More options" is opened. */
-.dpx-viz-dock:not(.is-expanded) .dpx-viz-dock__controls > * > [data-dock-extra] {
-  display: none;
+/* Only the first few controls until "More options" is opened, inside groups
+   as well as at the top level. Important: some controls lay themselves out
+   with an inline display (a switch row is an inline flex box). */
+.dpx-viz-dock:not(.is-expanded) .dpx-viz-dock__controls [data-dock-extra] {
+  display: none !important;
 }
 .dpx-viz-dock__more {
   display: inline-flex;

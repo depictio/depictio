@@ -17,11 +17,15 @@ import {
   analysisSelectableFigureRank,
   analysisTableRank,
   demoSectionsOf,
+  excludedOnTab,
   familyOrder,
   fetchDashboard,
   foldableSectionsOf,
+  hasCards,
   pickFilterDemo,
   pickFromFamily,
+  pinnedDemoSections,
+  siblingDemoSections,
   tabDisplayName,
   takesSelection,
 } from 'depictio-react-core';
@@ -224,75 +228,78 @@ export function useGuideSources(input: GuideSourcesInput): GuideSources {
       : null;
   }, [docFor, mainId, dashboardId, dashboard, tabs]);
 
-  // ---- Sections: this tab's that fold, else the family's pinned ones, else
-  // the first sibling's.
+  // ---- Sections: the first source whose sections hold cards, out of this
+  // tab's own that fold, the family's pinned ones shown here and a sibling
+  // tab's (a folded header reading its key figures is what the demo shows).
+  // With cards in none, the first of them with a section at all.
+  const openName = labelFrom(tabs, dashboardId, '');
   const ownSections = useMemo(
     () =>
-      foldableSectionsOf(components, dashboard.grid_sections as FilterSectionSpec[] | undefined),
-    [components, dashboard.grid_sections],
+      foldableSectionsOf(
+        components,
+        dashboard.grid_sections as FilterSectionSpec[] | undefined,
+      ).filter((s) => !excludedOnTab(s.spec, openName)),
+    [components, dashboard.grid_sections, openName],
   );
   // Pinned sections are drawn on every tab with their members, so one owned
-  // by any tab is a real section a reader meets, with no fetch.
-  const pinned = useMemo(() => {
-    const grid = persistentSections.filter(
-      (s) => s.kind === 'grid' && s.components.length > 0 && s.spec.appearance !== 'plain',
-    );
-    const ownerId = grid[0]?.owner_dashboard_id;
-    if (!ownerId) return null;
-    const own = grid.filter((s) => s.owner_dashboard_id === ownerId);
-    return {
-      ownerId,
-      sections: own.map((s) => ({ spec: s.spec, members: s.components.map((c) => c.metadata) })),
-      layouts: own.flatMap((s) => s.layouts ?? []),
-    };
-  }, [persistentSections]);
-  const siblingSearch = ownSections.length === 0 && !pinned;
-  const siblingFound = useMemo(() => {
-    if (!siblingSearch) return null;
-    for (const id of family.order) {
-      if (id === dashboardId) continue;
-      const doc = docFor(id);
-      if (doc === undefined) return { pending: id } as const;
-      if (!doc) continue;
-      const found = foldableSectionsOf(doc.stored_metadata ?? [], doc.grid_sections);
-      if (found.length > 0) return { id, doc, found } as const;
-    }
-    return { none: true } as const;
-  }, [siblingSearch, family.order, dashboardId, docFor]);
-  const pendingSibling = siblingFound && 'pending' in siblingFound ? siblingFound.pending : null;
+  // by any tab is a real section a reader meets, with no fetch; except on a
+  // tab its `exclude_tabs` keeps it off.
+  const pinned = useMemo(
+    () => pinnedDemoSections(persistentSections, openName),
+    [persistentSections, openName],
+  );
+  const siblingSearch = !ownSections.some(hasCards) && !pinned?.sections.some(hasCards);
+  const sibling = useMemo(
+    () =>
+      siblingSearch
+        ? siblingDemoSections(
+            family.order.filter((id) => id !== dashboardId),
+            docFor,
+            family.labelOf,
+          )
+        : null,
+    [siblingSearch, family.order, family.labelOf, dashboardId, docFor],
+  );
+  const pendingSibling = sibling?.status === 'pending' ? sibling.need : null;
   useEffect(() => {
     if (pendingSibling) request(pendingSibling);
   }, [pendingSibling, request]);
 
   const sections = useMemo<SectionsDemoSource | null | undefined>(() => {
-    if (ownSections.length > 0) {
-      return {
-        dashboardId,
-        tabLabel: labelFrom(tabs, dashboardId),
-        scope: 'tab',
-        sections: demoSectionsOf(ownSections, DEMO_SECTIONS),
-        layoutData: dashboard.right_panel_layout_data,
-      };
-    }
-    if (pinned) {
-      return {
-        dashboardId: pinned.ownerId,
-        tabLabel: labelFrom(tabs, pinned.ownerId),
-        scope: 'pinned',
-        sections: demoSectionsOf(pinned.sections, DEMO_SECTIONS),
-        layoutData: pinned.layouts,
-      };
-    }
-    if (!siblingFound || 'pending' in siblingFound) return undefined;
-    if ('none' in siblingFound) return null;
-    return {
-      dashboardId: siblingFound.id,
-      tabLabel: labelFrom(tabs, siblingFound.id),
-      scope: 'sibling',
-      sections: demoSectionsOf(siblingFound.found, DEMO_SECTIONS),
-      layoutData: siblingFound.doc.right_panel_layout_data,
-    };
-  }, [ownSections, pinned, siblingFound, dashboardId, dashboard, tabs]);
+    const own: SectionsDemoSource | null = ownSections.length
+      ? {
+          dashboardId,
+          tabLabel: labelFrom(tabs, dashboardId),
+          scope: 'tab',
+          sections: demoSectionsOf(ownSections, DEMO_SECTIONS),
+          layoutData: dashboard.right_panel_layout_data,
+        }
+      : null;
+    const pin: SectionsDemoSource | null = pinned
+      ? {
+          dashboardId: pinned.ownerId,
+          tabLabel: labelFrom(tabs, pinned.ownerId),
+          scope: 'pinned',
+          sections: demoSectionsOf(pinned.sections, DEMO_SECTIONS),
+          layoutData: pinned.layouts,
+        }
+      : null;
+    if (ownSections.some(hasCards)) return own;
+    if (pinned?.sections.some(hasCards)) return pin;
+    if (!sibling || sibling.status === 'pending') return undefined;
+    const sib: SectionsDemoSource | null =
+      sibling.status === 'found'
+        ? {
+            dashboardId: sibling.dashboardId,
+            tabLabel: labelFrom(tabs, sibling.dashboardId),
+            scope: 'sibling',
+            sections: demoSectionsOf(sibling.sections, DEMO_SECTIONS),
+            layoutData: docFor(sibling.dashboardId)?.right_panel_layout_data,
+          }
+        : null;
+    if (sibling.status === 'found' && sibling.sections.some(hasCards)) return sib;
+    return own ?? pin ?? sib;
+  }, [ownSections, pinned, sibling, dashboardId, dashboard, tabs, docFor]);
 
   // ---- Analysis: a figure to draw the groups on, a table to tick, a card to
   // read per group. The figure is the best of the family's — one that draws

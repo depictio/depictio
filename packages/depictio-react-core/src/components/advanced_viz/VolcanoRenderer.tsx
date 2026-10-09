@@ -8,7 +8,7 @@ import {
   useMantineColorScheme,
   useMantineTheme,
 } from '@mantine/core';
-import Plot from 'react-plotly.js';
+import Plot from './LegendAwarePlot';
 
 import {
   fetchAdvancedVizData,
@@ -16,6 +16,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import { isStaleFetch } from '../../fetchQueue';
 import { adaptGlTrace, SVG_MAX_POINTS, useWebglSlot } from '../../webglBudget';
 import AdvancedVizFrame from './AdvancedVizFrame';
@@ -35,6 +36,8 @@ import { applyDataTheme, applyLayoutTheme, plotlyAxisOverrides, plotlyThemeFragm
 import {
   classifyTiers,
   genomicInflation,
+  MA_TABLE_COLUMNS,
+  maTableOf,
   matchSearch,
   offeredDeViews,
   qqConfidenceBand,
@@ -59,6 +62,9 @@ interface VolcanoConfig {
   significance_threshold?: number;
   effect_threshold?: number;
   top_n_labels?: number;
+  /** Volcano axis titles in words; unset, the column names. */
+  effect_label?: string | null;
+  significance_label?: string | null;
   /** MA and QQ view bindings. See deViews.ts for why they live on this config. */
   avg_log_intensity_col?: string | null;
   log2_fold_change_col?: string | null;
@@ -69,7 +75,12 @@ interface VolcanoConfig {
   point_size?: number;
   view?: DeView;
   views?: DeView[] | null;
+  /** Or an MA table of its own (`ma_dc_tag`), for a test with no abundance. */
+  ma_wf_id?: string | null;
+  ma_dc_id?: string | null;
 }
+
+const MA_TABLE_COLUMN_LIST = Object.values(MA_TABLE_COLUMNS);
 
 interface Props {
   metadata: StoredMetadata & { viz_kind?: string; config?: VolcanoConfig };
@@ -109,6 +120,8 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   const theme = useMantineTheme();
   const isDark = colorScheme === 'dark';
   const config = (metadata.config || {}) as VolcanoConfig;
+  // The QQ view's categories wear the dashboard's colours for `category_col`.
+  const categoryPinned = usePinnedCategoryColors(config.category_col);
 
   // Tier-2 controls (never enter the global filter array). The thresholds and
   // the label budget say what the chart is, so they persist; the search box is
@@ -145,6 +158,10 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
   // The MA view's y is a log fold change, which for most tables is the same
   // column the volcano puts on x.
   const maYCol = config.log2_fold_change_col || config.effect_size_col;
+  // Or the MA view reads a table of its own, in the MA plot's canonical
+  // columns, fetched only while that view is on screen.
+  const maTable = useMemo(() => maTableOf(config), [config]);
+  const maFromTable = activeView === 'ma' && maTable !== null;
 
   // One fetch for the tile: the union over every view it can show, so the
   // switch is instant and never re-queries a 17M-row table.
@@ -269,6 +286,49 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     };
   }, [metadata.wf_id, metadata.dc_id, JSON.stringify(requiredCols), filterSig, refreshTick, fullLoad]);
 
+  // The MA table: same filters as the test's table (its contrast column is
+  // narrowed by the same contrast filter), kept whole below the cutoff.
+  const [maRows, setMaRows] = useState<Record<string, unknown[]> | null>(null);
+  const [maLoading, setMaLoading] = useState<boolean>(false);
+  const [maError, setMaError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!maFromTable || !maTable) return;
+    let cancelled = false;
+    const ctrl = new AbortController();
+    setMaLoading(true);
+    setMaError(null);
+    fetchAdvancedVizData(
+      {
+        wfId: maTable.wfId,
+        dcId: maTable.dcId,
+        columns: MA_TABLE_COLUMN_LIST,
+        filters,
+        fullLoad,
+        vizKind: 'ma',
+        tail: {
+          column: MA_TABLE_COLUMNS.significance,
+          direction: 'low',
+          threshold: config.significance_threshold ?? 0.05,
+        },
+      },
+      ctrl.signal,
+    )
+      .then((res) => {
+        if (!cancelled) setMaRows(res.rows);
+      })
+      .catch((err: unknown) => {
+        if (cancelled || isStaleFetch(err)) return;
+        setMaError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setMaLoading(false);
+      });
+    return () => {
+      cancelled = true;
+      ctrl.abort();
+    };
+  }, [maFromTable, maTable?.wfId, maTable?.dcId, filterSig, refreshTick, fullLoad]);
+
   // Every view draws a marker cloud, so the tile always competes for one of the
   // bounded WebGL slots. Without one it renders as SVG, see webglBudget.
   const glGranted = useWebglSlot(true);
@@ -285,10 +345,36 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
         ps: (rows[pValueCol] || []) as number[],
         ids: config.feature_id_col ? ids : null,
         cats: config.category_col ? ((rows[config.category_col] || []) as (string | number)[]) : null,
+        catColours: categoryPinned,
         showCi,
         showIdentity,
         pointSize,
         topN,
+        isDark,
+        theme,
+        glGranted,
+      });
+    }
+
+    if (maFromTable) {
+      if (!maRows) return null;
+      const c = MA_TABLE_COLUMNS;
+      const maIds = (maRows[c.featureId] || []) as (string | number)[];
+      return buildMa({
+        xs: (maRows[c.avgLogIntensity] || []) as number[],
+        ys: (maRows[c.log2FoldChange] || []) as number[],
+        sigRaw: (maRows[c.significance] || []) as number[],
+        ids: maIds,
+        labels: (maRows[c.label] as (string | number)[] | undefined) ?? maIds,
+        xTitle: 'Mean log abundance',
+        yTitle: config.effect_label || 'Log fold change',
+        sigTitle: c.significance,
+        isNegLog10: false,
+        sigThreshold,
+        fcThreshold,
+        topN,
+        search,
+        showLabels,
         isDark,
         theme,
         glGranted,
@@ -323,8 +409,9 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       ids,
       labels,
       isNegLog10: Boolean(config.significance_is_neg_log10),
-      effectTitle: config.effect_size_col,
+      effectTitle: config.effect_label || config.effect_size_col,
       sigTitle: config.significance_col,
+      sigAxisTitle: config.significance_label || undefined,
       sigThreshold,
       effectThreshold,
       topN,
@@ -336,6 +423,8 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     });
   }, [
     rows,
+    maRows,
+    maFromTable,
     config,
     activeView,
     pValueCol,
@@ -349,6 +438,7 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     showCi,
     showIdentity,
     pointSize,
+    categoryPinned,
     isDark,
     theme,
     glGranted,
@@ -568,10 +658,16 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
     layout: plotLayout,
     pointIdIndex: 0,
     pointIdColumn:
-      (activeView === 'qq' ? config.feature_id_col : config.label_col || config.feature_id_col) ||
-      undefined,
+      (maFromTable
+        ? MA_TABLE_COLUMNS.label
+        : activeView === 'qq'
+          ? config.feature_id_col
+          : config.label_col || config.feature_id_col) || undefined,
     variant: offered.length > 1 ? activeView : undefined,
   });
+
+  // The rows behind the figure on screen, for the frame's data view.
+  const shownRows = maFromTable ? maRows : rows;
 
   return (
     <AdvancedVizFrame
@@ -579,11 +675,11 @@ const VolcanoRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, grou
       subtitle={(metadata as any).description || (metadata as any).subtitle}
       primaryControls={primaryControls}
       controls={controls}
-      loading={loading}
-      error={error}
-      emptyMessage={rows && Object.values(rows)[0]?.length === 0 ? 'No data' : undefined}
-      dataRows={rows ?? undefined}
-      dataColumns={requiredCols}
+      loading={loading || (maFromTable && maLoading)}
+      error={error || (maFromTable ? maError : null)}
+      emptyMessage={shownRows && Object.values(shownRows)[0]?.length === 0 ? 'No data' : undefined}
+      dataRows={shownRows ?? undefined}
+      dataColumns={maFromTable ? MA_TABLE_COLUMN_LIST : requiredCols}
       counts={figure?.counts}
       tierAnnotation={tierAnnotation}
       badges={annotations.badges}
@@ -639,6 +735,8 @@ function buildVolcano(input: {
   isNegLog10: boolean;
   effectTitle: string;
   sigTitle: string;
+  /** The y axis title; unset, `-log10(<significance column>)`. */
+  sigAxisTitle?: string;
   sigThreshold: number;
   effectThreshold: number;
   topN: number;
@@ -744,7 +842,10 @@ function buildVolcano(input: {
       },
       yaxis: {
         ...plotlyAxisOverrides(input.isDark, input.theme),
-        title: { text: isNegLog10 ? input.sigTitle : `-log10(${input.sigTitle})` },
+        title: {
+          text:
+            input.sigAxisTitle ?? (isNegLog10 ? input.sigTitle : `-log10(${input.sigTitle})`),
+        },
       },
       shapes: [
         { type: 'line' as const, x0: -input.effectThreshold, x1: -input.effectThreshold, yref: 'paper', y0: 0, y1: 1, line: DOTTED_GUIDE },
@@ -886,6 +987,9 @@ function buildQq(input: {
   ps: number[];
   ids: (string | number)[] | null;
   cats: (string | number)[] | null;
+  /** Colours pinned for the categories (the dashboard's, see
+   *  `columnCategoryColors`); the rest take the palette. */
+  catColours?: Record<string, string> | null;
   showCi: boolean;
   showIdentity: boolean;
   pointSize: number;
@@ -906,7 +1010,11 @@ function buildQq(input: {
 
   if (cats) {
     const names = Array.from(new Set(cats.map(String))).sort();
-    const colours = stableColorMap(names, resolveCategoricalPalette(input.theme, TAB10_PALETTE));
+    const colours = stableColorMap(
+      names,
+      resolveCategoricalPalette(input.theme, TAB10_PALETTE),
+      input.catColours,
+    );
     const allPs: number[] = [];
     for (const name of names) {
       const indices: number[] = [];

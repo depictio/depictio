@@ -7,7 +7,12 @@
  * instead, per demo. Nothing in it reaches the dashboard's filters.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { bulkComputeCards, enrichFilterWithDcId, mergeFiltersBySource } from 'depictio-react-core';
+import {
+  bulkComputeCards,
+  enrichFilterWithDcId,
+  hasLiveValues,
+  mergeFiltersBySource,
+} from 'depictio-react-core';
 import type {
   BulkComputeOptions,
   InteractiveFilter,
@@ -126,10 +131,11 @@ export function useDemoCards(
   return state;
 }
 
-/** The cards among `members`, by id. */
+/** The cards among `members`, by id, and the text tiles computed with them
+ *  (live values, see `hasLiveValues`). */
 export function useCardIds(members: readonly StoredMetadata[]): string[] {
   const key = members
-    .filter((m) => m.component_type === 'card')
+    .filter((m) => m.component_type === 'card' || hasLiveValues(m))
     .map((m) => m.index)
     .join('|');
   return useMemo(() => (key ? key.split('|') : []), [key]);

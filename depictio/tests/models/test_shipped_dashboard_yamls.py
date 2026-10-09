@@ -29,6 +29,7 @@ The three checks below are deliberately of different kinds:
 
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -38,6 +39,7 @@ import yaml
 
 from depictio.models.components.advanced_viz.component import AdvancedVizLiteComponent
 from depictio.models.components.advanced_viz.record_link import side_panel_pairs
+from depictio.models.components.text_layout import estimate_text_rows, rendered_text
 from depictio.models.models.dashboards import DashboardDataLite
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -259,7 +261,9 @@ def test_component_sections_are_declared_in_the_right_list(path: Path):
     section under `filter_sections` fails silently — the section still renders,
     just expanded and with no icon, which looks like a styling slip rather than
     a mis-filed declaration. Interactive components live in the filter panel;
-    everything else lives in the grid.
+    everything else lives in the grid, except the controls of a grid section's
+    filter bar (`filter_bar`, or `display: strip`), which name that grid
+    section (stripLayout.ts `isBarMember`).
     """
     doc = yaml.safe_load(path.read_text())
     errors: list[str] = []
@@ -267,6 +271,11 @@ def test_component_sections_are_declared_in_the_right_list(path: Path):
         declared = {
             "filter_sections": {s.get("name") for s in tab.get("filter_sections") or []},
             "grid_sections": {s.get("name") for s in tab.get("grid_sections") or []},
+        }
+        bar_sections = {
+            s.get("name")
+            for s in tab.get("grid_sections") or []
+            if s.get("filter_bar") or s.get("display") == "strip"
         }
         for comp in tab.get("components") or []:
             if not isinstance(comp, dict):
@@ -280,6 +289,12 @@ def test_component_sections_are_declared_in_the_right_list(path: Path):
                 else ("grid_sections", "filter_sections")
             )
             if section in declared[mine]:
+                continue
+            if (
+                comp.get("component_type") == "interactive"
+                and comp.get("placement") != "top"
+                and section in bar_sections
+            ):
                 continue
             where = f" (it is declared under {other})" if section in declared[other] else ""
             errors.append(
@@ -322,17 +337,20 @@ def test_section_icons_and_colors_are_bundled(path: Path):
 @pytest.mark.no_db
 @pytest.mark.parametrize("path", _shipped_yamls(), ids=_rel)
 def test_upset_set_colouring_declares_its_palette(path: Path):
-    """`color_intersections_by: set` without `set_colors` paints the plot black.
+    """`color_intersections_by: set` names where its set colours come from.
 
-    plotly-upset's `_compute_bar_colors` returns `self.color` for every bar when
-    no set -> colour map was supplied, and that default is `#333333`. Two shipped
-    dashboards were rendering an entirely black UpSet this way, before any
-    filter was applied. A template whose set names are only known at ingest
-    cannot supply a map, so it has to pick `degree` colouring instead.
+    plotly-upset falls back to a generic qualitative palette when no set ->
+    colour map was supplied, so the sets get colours no other tile uses. The
+    colours are declared either on the component (`set_colors`) or, when the
+    sets are the values of a metadata column whose values are only known at
+    ingest, through `set_category_column` naming a column of the main tab's
+    `category_colors` (an `auto` entry resolves to every value at import).
     """
     doc = yaml.safe_load(path.read_text())
+    tabs = _tabs_of(doc)
+    family_colors = (tabs[0][1].get("category_colors") or {}) if tabs else {}
     errors: list[str] = []
-    for label, tab in _tabs_of(doc):
+    for label, tab in tabs:
         for comp in tab.get("components") or []:
             if not isinstance(comp, dict):
                 continue
@@ -341,36 +359,27 @@ def test_upset_set_colouring_declares_its_palette(path: Path):
                 continue
             if config.get("color_intersections_by") != "set":
                 continue
-            if not config.get("set_colors"):
-                errors.append(
-                    f"{label} [{comp.get('tag', '?')}]: color_intersections_by "
-                    "'set' with no set_colors renders every bar #333333; "
-                    "supply set_colors or use 'degree'"
-                )
-    assert not errors, f"{_rel(path)} has an all-black UpSet:\n" + "\n".join(errors)
+            if config.get("set_colors"):
+                continue
+            if config.get("set_category_column") in family_colors:
+                continue
+            errors.append(
+                f"{label} [{comp.get('tag', '?')}]: color_intersections_by 'set' with no "
+                "set_colors and no set_category_column in the main tab's category_colors "
+                "draws the sets in colours no other tile uses; supply one or use 'degree'"
+            )
+    assert not errors, f"{_rel(path)} has an UpSet with undeclared set colours:\n" + "\n".join(
+        errors
+    )
 
 
-# A grid row is ~100px. A full-width text tile fits its title plus roughly two
-# lines of body in one row; past that the text overflows the tile, because
-# TextRenderer applies no maxHeight, overflow or line clamp.
-# Roughly what one grid row fits at the full 8-column width. The viewer
-# autofits text tiles at render, so this guards the STORED estimate against
-# going wildly wrong (which is what the first paint shows), not the final
-# rendered size.
 # `packages/depictio-react-core/src/gridConfig.ts`.
 GRID_COLUMNS = 8
 
-_TEXT_CHARS_PER_ROW = 300
 
-# `[label](https://…)` renders as `label`, so the href is authored characters
-# that never reach the tile. Counting it would push a tile over budget for
-# adding a link, i.e. penalise the very thing the renderer just learned to do.
-_MARKDOWN_LINK = re.compile(r"\[([^\]\n]+)\]\((?:https?://[^)\s]+|/[^)\s]*)\)")
-
-
-def _rendered_length(body: str) -> int:
-    """Characters the reader actually sees, which is what has to fit."""
-    return len(_MARKDOWN_LINK.sub(r"\1", body))
+def _autofits(tab: dict, comp: dict) -> bool:
+    """Whether the viewer sizes this text tile to its content at render."""
+    return tab.get("autofit") is not False and (comp.get("layout") or {}).get("fit") != "fixed"
 
 
 @pytest.mark.no_db
@@ -382,9 +391,12 @@ def _rendered_length(body: str) -> int:
 def test_text_tiles_are_tall_enough_for_their_body(path: Path):
     """Every shipped dashboard, not just the demo ones.
 
-    Heights are derived rather than hand-pinned: `build_reference_dashboard.py`
-    runs the same rule over the tiles it generates, so reworded prose cannot
-    silently start overflowing.
+    The stored height only decides the first paint: the viewer autofits text
+    tiles at render, so an autofitting tile needs half of the estimate (it grows
+    from there), and only a `fit: fixed` tile, or one on a tab with autofit off,
+    has to hold the whole body. The estimate counts block markdown per block
+    (`text_layout.estimate_text_rows`), the same rule
+    `build_reference_dashboard.py` sizes its generated tiles with.
     """
     doc = yaml.safe_load(path.read_text())
     errors: list[str] = []
@@ -392,16 +404,16 @@ def test_text_tiles_are_tall_enough_for_their_body(path: Path):
         for comp in tab.get("components") or []:
             if not isinstance(comp, dict) or comp.get("component_type") != "text":
                 continue
-            body = comp.get("body") or ""
-            height = (comp.get("layout") or {}).get("h")
+            layout = comp.get("layout") or {}
+            height = layout.get("h")
             if height is None:
                 continue
-            budget = _TEXT_CHARS_PER_ROW * height
-            shown = _rendered_length(body)
-            if shown > budget:
+            need = estimate_text_rows(comp.get("body") or "", layout.get("w") or GRID_COLUMNS)
+            floor = math.ceil(need / 2) if _autofits(tab, comp) else need
+            if height < floor:
                 errors.append(
-                    f"{label} [{comp.get('tag', '?')}]: {shown} chars in h={height} "
-                    f"(fits ~{budget}); raise h or trim the body"
+                    f"{label} [{comp.get('tag', '?')}]: h={height} for a body of ~{need} rows "
+                    f"(needs h>={floor}); raise h or trim the body"
                 )
     assert not errors, f"{_rel(path)} has overflowing text tiles:\n" + "\n".join(errors)
 
@@ -553,10 +565,52 @@ def test_a_tool_link_costs_the_tile_nothing():
     """The href is authored, not rendered, so it must not eat the height budget."""
     plain = "Peak calling is done by MACS2, per sample."
     linked = "Peak calling is done by [MACS2](https://github.com/macs3-project/MACS), per sample."
-    assert _rendered_length(linked) == len(plain)
-    assert _rendered_length(plain) == len(plain)
+    assert rendered_text(linked) == plain
+    assert rendered_text(plain) == plain
+    # Tab and run-parameter links render as their label too.
+    assert rendered_text("See [Alpha](tab:Alpha Diversity) and [the run](params:dada2).") == (
+        "See Alpha and the run."
+    )
     # A bare bracket pair is not a link and keeps its characters.
-    assert _rendered_length("see [1] below") == len("see [1] below")
+    assert rendered_text("see [1] below") == "see [1] below"
+
+
+@pytest.mark.no_db
+@pytest.mark.parametrize(
+    ("body", "width", "rows"),
+    [
+        ("One short sentence.", 8, 1),
+        # A folded paragraph of ~600 characters: six lines at full width, twelve at half.
+        ("word " * 120, 8, 2),
+        ("word " * 120, 4, 4),
+        # Each heading and list item takes a line however short it is.
+        (
+            "### Data & QC\n- [MultiQC](tab:MultiQC): Did the run work?\n"
+            "### Taxa\n- [Community](tab:Community): Who is there?\n"
+            "- [Differential](tab:Differential): What differs?",
+            8,
+            2,
+        ),
+        # A steps flow is one band across a wide tile, and runs down a narrow one.
+        (":::\n", 8, 1),
+        (
+            "::: steps\n1. ![](icon:mdi:dna) **Trim** primers\n"
+            "2. ![](icon:mdi:filter) **Denoise** DADA2\n:::",
+            8,
+            2,
+        ),
+        (
+            "::: steps\n1. ![](icon:mdi:dna) **Trim** primers\n"
+            "2. ![](icon:mdi:filter) **Denoise** DADA2\n:::",
+            4,
+            2,
+        ),
+        # Table rules are not drawn as a line.
+        ("| a | b |\n|---|---|\n| 1 | 2 |", 8, 1),
+    ],
+)
+def test_estimate_text_rows_counts_blocks(body: str, width: int, rows: int):
+    assert estimate_text_rows(body, width) == rows
 
 
 def _viz_kind_of(comp: dict[str, Any]) -> str:

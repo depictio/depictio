@@ -16,6 +16,29 @@ function isLive(item: HTMLElement): boolean {
   return true;
 }
 
+/** The controls of one item of the panel: itself, or, for a titled group
+ *  (`VizControlGroup`: a divider over a grid), the controls in its grid. A
+ *  group counts as the controls it holds, so a panel of three groups no
+ *  longer shows every control of all three before "More options". */
+function controlsOf(item: HTMLElement): HTMLElement[] {
+  const stack = item.firstElementChild as HTMLElement | null;
+  const isGroup =
+    stack?.classList.contains('mantine-Stack-root') &&
+    stack.firstElementChild?.classList.contains('mantine-Divider-root');
+  if (isGroup) {
+    const grid = stack!.lastElementChild as HTMLElement | null;
+    return grid ? (Array.from(grid.children) as HTMLElement[]) : [item];
+  }
+  // A renderer that hands every control over in one bare stack (the tree's
+  // summary): its children are the controls. Two of them taking input tells
+  // it from one control laid out as a stack (a label over a switch).
+  if (item.classList.contains('mantine-Stack-root')) {
+    const kids = Array.from(item.children) as HTMLElement[];
+    if (kids.filter((k) => k.querySelector('input, textarea')).length >= 2) return kids;
+  }
+  return [item];
+}
+
 /**
  * A renderer's controls docked beside or above its plot (see controlsDock.ts),
  * showing a few and folding the rest under "More options": a panel listing all
@@ -41,18 +64,26 @@ const DockedControls: React.FC<{
     let count = -1;
     const apply = () => {
       const items = Array.from(root.children) as HTMLElement[];
-      if (items.length === count) return;
-      count = items.length;
-      const keep = pickEssentials(items.map(isLive));
+      const groups = items.map(controlsOf);
+      const units = groups.flat();
+      if (units.length === count) return;
+      count = units.length;
+      const keep = pickEssentials(units.map(isLive));
+      const mark = (el: HTMLElement, extra: boolean) =>
+        extra ? el.setAttribute('data-dock-extra', '') : el.removeAttribute('data-dock-extra');
+      units.forEach((u, i) => mark(u, !keep[i]));
+      // A group none of whose controls made the cut folds whole, its title
+      // with it; one that keeps any stays, showing only those.
       items.forEach((it, i) => {
-        if (keep[i]) it.removeAttribute('data-dock-extra');
-        else it.setAttribute('data-dock-extra', '');
+        if (groups[i][0] !== it) mark(it, groups[i].every((u) => u.hasAttribute('data-dock-extra')));
       });
       setExtra(keep.filter((k) => !k).length);
     };
     apply();
+    // Subtree: a group's controls can come and go without the panel's own
+    // children changing. Only the count of controls re-runs the pick.
     const mo = new MutationObserver(apply);
-    mo.observe(root, { childList: true });
+    mo.observe(root, { childList: true, subtree: true });
     return () => mo.disconnect();
   }, [controls]);
 

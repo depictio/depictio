@@ -9,7 +9,8 @@ a. a pinned table is not shown again in a tab (same DC, same ``use``);
 b. a card ``top_n`` secondary only under an aggregation with a per-group meaning
    (not percentile / skewness / kurtosis / mode);
 c. ``threshold_warn`` lies on the failing side of ``threshold_value``;
-d. a text tile body is at most 3 sentences;
+d. a text tile body is at most 3 sentences of prose (headings, list items,
+   table rows and ``:::`` blocks are layout, not sentences);
 e. no ``forbidden_terms`` (from the sibling megatest.yaml) in any dashboard text;
 f. (warn only) no average / median of a percentage or fraction column unless the
    card is scoped by a ``filter_expr`` (review P10);
@@ -181,13 +182,48 @@ def count_sentences(text: str) -> int:
     return len(_SENTENCE_END_RE.findall(body)) + 1
 
 
+_BLOCK_LINE_RE = re.compile(r"^\s*(?:#|[-*+]\s|\d+[.)]\s|\||-{3,}\s*$)")
+_FENCE_RE = re.compile(r"^\s*:::")
+_LINK_RE = re.compile(r"(!?)\[([^\]\n]*)\]\([^)\n]*\)")
+_PLACEHOLDER_RE = re.compile(r"\{\{[^{}\n]+\}\}")
+
+
+def prose_of(body: str) -> str:
+    """The paragraphs of a text body, without its block markdown.
+
+    A body is read by the reader as prose plus layout: a heading, a list of tab
+    tiles, the rows of a findings list or a ``::: steps`` flow are not sentences,
+    and the sentence rule would otherwise count every ``1. [Tab](tab:X)`` item.
+    Link targets, icons and live-value placeholders are dropped too.
+    """
+    kept: list[str] = []
+    fenced = False
+    for line in str(body).splitlines():
+        if _FENCE_RE.match(line):
+            fenced = not fenced
+            continue
+        if fenced or _BLOCK_LINE_RE.match(line):
+            continue
+        kept.append(line)
+    text = _LINK_RE.sub(lambda m: "" if m.group(1) else m.group(2), "\n".join(kept))
+    return _PLACEHOLDER_RE.sub("x", text)
+
+
 def check_text_intro_length(template_id: str) -> list[Violation]:
+    """At most ``MAX_INTRO_SENTENCES`` per paragraph (RULES.md, Prose).
+
+    Per paragraph, not per tile: an "About" card of two short paragraphs reads
+    as easily as one of three sentences. A folded (``>``) body keeps its
+    paragraphs on single lines with no blank line between them, so it is still
+    counted whole, the stricter reading.
+    """
     out: list[Violation] = []
     for label, tab in _iter_tabs(template_id):
         for c in _components(tab, "text"):
-            n = count_sentences(c.get("body") or "")
+            paragraphs = re.split(r"\n\s*\n", prose_of(c.get("body") or ""))
+            n = max((count_sentences(p) for p in paragraphs), default=0)
             if n > MAX_INTRO_SENTENCES:
-                out.append(f"{label} {_label(c)}: {n} sentences")
+                out.append(f"{label} {_label(c)}: {n} sentences in one paragraph")
     return out
 
 
@@ -210,9 +246,13 @@ def _dashboard_texts(template_id: str) -> Iterator[tuple[str, str]]:
                 if section.get(key):
                     yield f"{label} section.{key}", str(section[key])
         for c in _components(tab):
-            for key in ("title", "description", "body"):
+            for key in ("title", "description", "body", "caption", "subtitle"):
                 if c.get(key):
                     yield f"{label} {_label(c)}.{key}", str(c[key])
+            # A live value's filter can pin a megatest sample as surely as prose can.
+            for name, spec in (c.get("values") or {}).items():
+                if isinstance(spec, dict) and spec.get("filter_expr"):
+                    yield f"{label} {_label(c)}.values.{name}", str(spec["filter_expr"])
 
 
 def check_forbidden_terms(template_id: str) -> list[Violation]:
@@ -226,6 +266,28 @@ def check_forbidden_terms(template_id: str) -> list[Violation]:
         for term, pattern in patterns
         if pattern.search(text)
     ]
+
+
+def check_group_col_in_filter_expr(template_id: str) -> list[Violation]:
+    """No ``filter_expr`` names ``{GROUP_COL}`` (RULES.md, Conditional routes and pruning).
+
+    Without metadata the variable resolves to the ``__no_group__`` sentinel, which
+    the filter guard rejects as a dunder, so the import fails before any pruning.
+    """
+    out: list[Violation] = []
+    for label, tab in _iter_tabs(template_id):
+        for c in _components(tab):
+            exprs = [("filter_expr", c.get("filter_expr"))] + [
+                (f"values.{name}", spec.get("filter_expr"))
+                for name, spec in (c.get("values") or {}).items()
+                if isinstance(spec, dict)
+            ]
+            out += [
+                f"{label} {_label(c)}.{where}: {expr}"
+                for where, expr in exprs
+                if expr and "{GROUP_COL}" in str(expr)
+            ]
+    return out
 
 
 PERCENT_COLUMN_RE = re.compile(r"(_pct|percent|_frac)$", re.IGNORECASE)
@@ -277,6 +339,7 @@ RULES: dict[str, Callable[[str], list[Violation]]] = {
     "threshold_warn_side": check_threshold_warn_side,
     "text_intro_length": check_text_intro_length,
     "forbidden_terms": check_forbidden_terms,
+    "group_col_in_filter_expr": check_group_col_in_filter_expr,
     "no_mean_of_percentages": check_no_mean_of_percentages,
     "record_card_linked_source": check_record_card_linked_source,
     "record_card_linked": check_record_card_linked,
@@ -323,6 +386,11 @@ def test_no_forbidden_terms_in_dashboard_text(template_id: str) -> None:
     _assert_clean(check_forbidden_terms(template_id))
 
 
+@pytest.mark.parametrize("template_id", TEMPLATE_IDS)
+def test_no_group_col_in_filter_expr(template_id: str) -> None:
+    _assert_clean(check_group_col_in_filter_expr(template_id))
+
+
 @pytest.mark.parametrize("template_id", [pytest.param(t, id=t) for t in _template_ids()])
 def test_no_mean_of_percentages_warn_only(template_id: str) -> None:
     """P10, warn level: reported, never failing."""
@@ -360,6 +428,35 @@ def test_record_card_linked_warn_only(template_id: str) -> None:
 )
 def test_count_sentences(text: str, expected: int) -> None:
     assert count_sentences(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("body", "expected"),
+    [
+        # Layout only: a steps flow, tab tiles under group headings, findings rows.
+        (
+            "::: steps\n1. ![](icon:mdi:dna) **Trim** primers. [Settings](params:primer)\n"
+            "2. ![](icon:mdi:filter) **Denoise** DADA2\n:::",
+            0,
+        ),
+        (
+            "### Data & QC\n- [MultiQC](tab:MultiQC): Did the run work?\n"
+            "### Taxa\n1. [Community](tab:Community): Who is there?\n"
+            "2. [Differential](tab:Differential): What differs?",
+            0,
+        ),
+        (
+            "- **{{share}}** of reads are {{top}}. [Community](tab:Community)\n"
+            "- **{{n_sig}}** phyla differ. [Differential](tab:Differential)",
+            0,
+        ),
+        # Prose around the layout still counts.
+        ("## How to read\nStart with the overview. Then open a tab.\n- [QC](tab:QC): ok", 2),
+        ("Plain prose. With [a link](tab:QC). And a third.", 3),
+    ],
+)
+def test_sentence_rule_counts_prose_only(body: str, expected: int) -> None:
+    assert count_sentences(prose_of(body)) == expected
 
 
 def test_rules_catch_synthetic_violations(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -424,6 +521,13 @@ def test_rules_catch_synthetic_violations(tmp_path: Path, monkeypatch: pytest.Mo
                         "column_name": "cpg_percent",
                         "filter_expr": "col('context') == 'CpG'",
                     },
+                    {
+                        "component_type": "card",
+                        "tag": "bygroup",
+                        "aggregation": "max",
+                        "column_name": "r2",
+                        "filter_expr": "col('term') == '{GROUP_COL}'",
+                    },
                 ],
             },
         ],
@@ -441,6 +545,8 @@ def test_rules_catch_synthetic_violations(tmp_path: Path, monkeypatch: pytest.Mo
     # Word boundary: "TP53x" is not "TP53"; case-insensitive: "na12878." is.
     assert check_forbidden_terms(tid) == ["base.yaml:Demo tab.subtitle: 'NA12878'"]
     assert len(check_no_mean_of_percentages(tid)) == 1
+    [by_group] = check_group_col_in_filter_expr(tid)
+    assert " bygroup.filter_expr: " in by_group
 
 
 def test_record_card_rules_catch_synthetic_violations(

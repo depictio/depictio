@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from depictio.cli.cli.utils import templates as templates_module
-from depictio.cli.cli.utils.templates import detect_template_from_run_dir
+from depictio.cli.cli.utils.templates import detect_template_from_run_dir, major_release_gap
 
 # Versions the synthetic projects tree ships. 2.15.0 sits between two of them
 # and 2.8.0 is older than all of them, which is what the fallback policy turns on.
@@ -108,6 +108,43 @@ class TestVersionFallback:
         assert info is not None
         assert info.pipeline_version == "2.13.0"
         assert template_id == "nf-core/ampliseq/2.14.0"  # lowest: run predates them all
+
+
+class TestMajorReleaseGap:
+    """The CLI warns when the template it uses is another major release than the run."""
+
+    def test_newer_major_run_on_the_highest_template(
+        self, tmp_path: Path, shipped_templates: Path
+    ) -> None:
+        run = _nextflow_run(tmp_path / "run", "3.0.1")
+        template_id, info = detect_template_from_run_dir(run)
+        assert template_id == "nf-core/ampliseq/2.18.0"
+        assert major_release_gap(info, template_id) == "2.18.0"
+
+    def test_older_major_run_on_the_lowest_template(
+        self, tmp_path: Path, shipped_templates: Path
+    ) -> None:
+        run = _nextflow_run(tmp_path / "run", "1.9.0")
+        template_id, info = detect_template_from_run_dir(run)
+        assert major_release_gap(info, template_id) == "2.14.0"
+
+    def test_same_major_fallback_is_no_gap(self, tmp_path: Path, shipped_templates: Path) -> None:
+        run = _nextflow_run(tmp_path / "run", "2.15.0")
+        template_id, info = detect_template_from_run_dir(run)
+        assert template_id == "nf-core/ampliseq/2.14.0"
+        assert major_release_gap(info, template_id) is None
+
+    def test_latest_resolves_before_comparing(
+        self, tmp_path: Path, shipped_templates: Path
+    ) -> None:
+        _, info = detect_template_from_run_dir(_nextflow_run(tmp_path / "run", "3.0.1"))
+        assert major_release_gap(info, "nf-core/ampliseq/latest") == "2.18.0"
+
+    def test_another_pipeline_template_is_not_compared(
+        self, tmp_path: Path, shipped_templates: Path
+    ) -> None:
+        _, info = detect_template_from_run_dir(_nextflow_run(tmp_path / "run", "3.0.1"))
+        assert major_release_gap(info, "nf-core/rnaseq/3.26.0") is None
 
 
 class TestNoSelection:

@@ -13,6 +13,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import polars as pl
+from plotly.basedatatypes import BaseFigure, BasePlotlyType
 from RestrictedPython import compile_restricted
 from RestrictedPython.Guards import safe_builtins, safe_globals
 
@@ -29,10 +30,38 @@ def safe_getattr(obj, name, default=None, getattr=getattr):
     return getattr(obj, name, default)
 
 
-def safe_setitem(obj, key, value):
-    """Safe setitem for pandas DataFrame and Series operations."""
-    obj[key] = value
-    return obj
+_EMPTY_FRAME = pd.DataFrame()
+# What a figure writes into: the containers and frames it builds, the pandas
+# indexers behind `df.loc[mask, "col"] = v`, and plotly figures and their parts.
+_WRITABLE: tuple[type, ...] = (
+    dict,
+    list,
+    set,
+    np.ndarray,
+    pd.DataFrame,
+    pd.Series,
+    type(_EMPTY_FRAME.loc),
+    type(_EMPTY_FRAME.iloc),
+    type(_EMPTY_FRAME.at),
+    type(_EMPTY_FRAME.iat),
+    BaseFigure,
+    BasePlotlyType,
+)
+
+
+def safe_write(obj):
+    """The object a subscript or attribute write lands on, if a figure may write to it.
+
+    RestrictedPython compiles ``obj[key] = value`` and ``obj.attr = value`` to a
+    write on ``_write_(obj)``, so the guard takes the object alone and returns
+    the target of the write. A figure can fill a labels dict, add a pandas
+    column or set a layout field. Anything else is refused: the modules and
+    classes in the globals (``px``, ``pl.DataFrame``...) are shared by every
+    render in the process, and a write there would patch them for the next one.
+    """
+    if isinstance(obj, _WRITABLE):
+        return obj
+    raise TypeError(f"A code figure cannot write to a {type(obj).__name__} object")
 
 
 def safe_setattr(obj, name, value, setattr=setattr):
@@ -88,7 +117,7 @@ class SimpleCodeExecutor:
             # Guards for dataframe operations
             "_getitem_": safe_getitem,
             "_getattr_": safe_getattr,
-            "_write_": safe_setitem,
+            "_write_": safe_write,
             "_setattr_": safe_setattr,
             # Additional safe functions for complex operations
             "_iter_unpack_sequence_": safe_iter_unpack_sequence,

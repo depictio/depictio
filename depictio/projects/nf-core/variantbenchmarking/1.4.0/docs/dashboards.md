@@ -1,203 +1,162 @@
 # nf-core/variantbenchmarking 1.4.0: Depictio dashboards
 
-This template turns the output of [nf-core/variantbenchmarking](https://nf-co.re/variantbenchmarking)
-1.4.0 into interactive Depictio dashboards. The pipeline benchmarks variant callers
-against a truth set (precision / recall / F1); the template surfaces those numbers as the
-same panels the pipeline's own `bin/plots.R` produces, plus the integrated MultiQC report.
+One dashboard: an **Overview**, then one child tab per variant type, in two groups.
+[nf-core/variantbenchmarking](https://nf-co.re/variantbenchmarking) compares the calls of one
+or more callers with a truth set and scores each callset on precision, recall and F1. A run
+benchmarks one variant type, so a run shows the Overview and the tab of its type. The family
+rules are in `depictio/projects/nf-core/RULES.md`.
 
-The template is split into **three per-variant-type projects**, named after the pipeline's own
-`analysis × variant_type` axis. Each has a **Benchmark** tab (the analytical funnel) and a
-**MultiQC** tab (the pipeline's report), except structural, which has no separate summary table
-in the pipeline, so it is MultiQC-only.
+| Group | Tab | The question it answers |
+|---|---|---|
+| Small variants | Germline | How well does each germline callset recover the truth set? |
+| Small variants | Somatic | How well does each somatic caller recover the truth set? |
+| Structural | Structural & CNV | How well do the structural callsets match the truth set? |
 
-| Project | analysis / variant_type | Truth set | Benchmark tools |
-|---|---|---|---|
-| Germline small variants | `germline` / `small` | GIAB / HG002 | hap.py, rtg-tools vcfeval |
-| Somatic indels | `somatic` / `indel` | SEQC2 | som.py, rtg-tools vcfeval |
-| Structural variants | `somatic` / `sv` | HG002 Tier1 | truvari, SURVIVOR (MultiQC only) |
+The pipeline writes no MultiQC report into the collections this template reads, and it has no
+sample sheet, so there is no MultiQC tab, no `Data & QC` group, no persistent sample filters
+and no Sample sheet section. Every benchmark collection shares one vocabulary: `label` is the
+callset id the pipeline benchmarked, `caller` the tool behind it, `truth_set` the truth set it
+was scored against (read from the benchmark file name) and, for Wittyer, `stats_type` the
+scoring level (`Event` or `Base`).
 
-Data is sourced from the most recent AWS megatest run
-(`results-8b21c01749c4447b285d242a198127736f3ffe51`, 2026-04-22), the only run covering both
-germline (`small/`) and somatic (`indel/`) benchmarks.
+## Overview
 
----
+The landing page, at compact width with the filter panel collapsed:
 
-## How the dashboards are built
+- **Hero**: what the run is, and a link to the run parameters.
+- **About this dashboard** and **The run**: two cards side by side. The second lists the
+  analysis and variant type, the truth set, the benchmarking methods and the genome from the
+  run parameters, and the number of callsets of the run's route.
+- **Pipeline**: the calls are prepared (normalised, deduplicated), scored against the truth set
+  on the route of the run's variant type, then summarised per tool. The template writes one
+  step per route, each citing the callset count of its route's collection and opening its tab;
+  the import drops the steps of the routes the run did not take, so a run shows four steps.
+- **Key figures**: per route, four headline cards opening its tab: the true positives (split by
+  caller), the median F1 (with its spread), the median recall and the median precision. The
+  germline recall passes at 0.9 (warns below 0.8), the somatic precision at 0.5 (warns below
+  0.25), the structural recall at 0.8 (warns below 0.6). The cards print as many digits as a
+  value needs, so a near-empty benchmark (a test profile scoring a few calls against a whole
+  truth set) reads 3.39e-4 rather than 0.000. A caller and a callset filter above them narrow
+  these four only.
+- **Findings**: three or four result rows per route, computed under the filters, each linking
+  its tab. Germline: the best vcfeval F1 and its caller, the hap.py SNP and indel F1 of the PASS
+  calls, and the caller with most false positives. Somatic: the most true positives any callset
+  reaches out of the truth variants (the scale of the benchmark), the best som.py F1 and its
+  caller, the caller with most false positives, and the best rtg-tools vcfeval F1. Structural: the
+  best Truvari F1 and its caller, the best SVanalyzer F1, and the Wittyer F1 per event against
+  per base. Below them, four figures per route in two rows: germline, the precision-recall
+  scatter and hap.py F1 by variant type, then the quality-threshold sweep and the error counts;
+  somatic, the precision-recall scatter and the recall intervals, then the error counts and the
+  precision intervals (the allele-fraction strata stay on the tab, since a run can write them
+  for some callers only); structural, the Truvari precision-recall scatter and the SVanalyzer
+  F1, then the Truvari error counts and the Wittyer F1. The bar of this section filters by
+  caller and callset.
+- **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
-All three projects follow the same layout the other bundled templates use (ampliseq,
-viralrecon, iris, penguins):
+## Child tabs
 
-- **Sections.** Every tab is a stack of named grid sections, each opened by a short text tile
-  that states what the section shows. Sections read as a funnel: run-level cards first, the
-  signature precision-recall view next, then the error breakdown, the stratifications and
-  finally the reference tables.
-- **Filter panel.** Interactive controls live in the left panel, grouped into collapsible
-  filter sections (`Callsets` / `Callers`, `Score ranges`, a tool-specific scope). Range sliders
-  on F1 / precision / recall narrow every panel that reads the same table; the template's
-  `links` carry a caller pick across som.py, its allele-fraction strata and the rtg-tools
-  cross-check.
-- **Multi-metric cards.** The four cards of the first section each carry a secondary strip:
-  a donut of callsets by truth set or variant type, a Tukey box plot of F1, a gauge for the
-  mean precision or recall, and a pass / warn / fail count against an accuracy threshold.
-- **Catalog provenance.** Every benchmark plot is a catalog render (`use: rtgtools/pr_scatter`,
-  `sompy/confusion`, `happy/pr_curve`, ...) and every MultiQC tile names its module
-  (`use: multiqc/happy`, `multiqc/sompy`, `multiqc/truvari`, `multiqc/bcftools`), so the tile
-  chrome shows where the panel comes from.
-- **Row selection.** The callset tables select rows on their identifier: `label` for the
-  vcfeval, truvari, SVbenchmark and Wittyer tables, `caller` for the som.py and somatic
-  vcfeval tables. A picked row narrows the cards, confusion matrix and plots that read the
-  same table. A pick in the som.py summary also reaches its allele-fraction strata and the
-  rtg-tools cross-check through the `links`, and a pick in the truvari table reaches the
-  SVbenchmark and Wittyer panels. The hap.py pooled
-  summary and threshold sweep have no callset column and do not select.
-- **Pinned reference tables.** The raw summary rows sit in a collapsed `Reference tables`
-  section that is persistent and pinned to the bottom, so it trails the MultiQC tab as well.
+Each tab opens with a short intro (the method, with a link to its tool, and how to read the
+tab), then a strip of four key numbers, each card with its own colour and a secondary that
+reads it, then at most three open sections; tables and the cross-check follow, collapsed. The
+precision-recall scatters colour each callset by its caller and draw no point labels (callset
+ids pile up); the iso-F1 contours read F1 off the plane.
 
----
+**Germline.** Strip: F1 (box plot), recall against a 0.9 floor, false positives (the callers
+with most) and true positives (split by caller). Then the vcfeval precision-recall scatter
+beside the error counts per callset, and hap.py's F1 by variant type (all calls against PASS
+calls) beside the quality-threshold sweep. Collapsed: the vcfeval, hap.py and sweep tables.
+Filters: caller, callset, hap.py variant type and hap.py calls (ALL or PASS).
 
-## Germline small variants
+**Somatic.** Strip: F1 (box plot), precision against a 0.5 floor, false positives (the callers
+with most) and true positives (split by caller). Then the som.py precision-recall
+scatter beside the error counts, the precision and recall with their binomial 95% intervals,
+and the false positives per allele-fraction bin, by bin and by caller. som.py bins a false
+positive by the caller's allele fraction but a true positive or a miss by the truth set's, so
+with a truth set that carries none, recall and F1 per bin stay empty and only the false
+positives are defined per bin. Collapsed: the rtg-tools vcfeval cross-check (scatter and
+table) and the som.py summary and strata tables. Filters: caller and allele-fraction bin; the
+caller reaches the strata and the cross-check through the links.
 
-### Benchmark
+**Structural & CNV.** Strip: true positives (split by caller), F1 (box plot), recall against a
+0.8 floor and precision (distribution), all from Truvari. Then the Truvari precision-recall
+scatter beside its error counts, and the SVanalyzer F1 per callset beside the Wittyer F1 per
+event and per base. Collapsed: the Truvari, SVanalyzer and Wittyer tables. Filters: callset,
+caller and Wittyer level; the callset reaches SVanalyzer and Wittyer through the links.
 
-Five sections. **Benchmark at a glance** carries the intro and four cards (callsets by truth
-set, F1 box plot, precision gauge, recall against a 0.9 threshold). **Precision vs recall** is
-the signature view: the precision-recall benchmark scatter (each point a callset, size = true
-positives, colour = F1, dotted lines = equal-F1 contours) next to a ranked F1 strip.
-**Error profile** places the confusion matrix (TP / FP / FN per callset) above false-positive and
-false-negative bars. **hap.py stratification** splits F1 by SNP vs INDEL (ALL vs PASS, grouped
-bars) and sweeps the quality threshold as a PR curve with AUC. **Reference tables** (collapsed,
-pinned) holds the vcfeval, hap.py and threshold-sweep rows.
+## Undefined metrics
 
-Filters: `Callsets` (sample, truth set), `Score ranges` (F1, precision, recall sliders) and
-`hap.py scope` (ALL / PASS segmented control, variant type).
+A ratio with nothing to divide is left empty, not printed as 0: the precision of a callset that
+made no calls (som.py and Truvari write 0.0, rtg-tools leaves it blank), the recall of a
+stratum without truth variants, and the F1 of either. Such a callset drops out of the medians
+and maxima instead of pinning them to 0, and its recall stays a measured 0 of the truth set.
 
-![Germline small-variant benchmark](screenshots/germline-benchmark.png)
+## Routes and pruning
 
-### MultiQC
+Every collection is optional: a run writes one family of tables, and whichever collection was
+required would fail every other route. The Overview gives each route its own row of Key
+figures, its own pair of bar filters and its own four highlights, on slots of their own. A run
+on one route drops the other two blocks and the import re-packs the sections, so the Overview
+reads as one row of cards and two rows of highlights. A data root holding two routes keeps
+both blocks, stacked.
 
-**Report at a glance** (general statistics), **hap.py panels** (SNP and INDEL, catalog-badged as
-`multiqc/happy`) and a collapsed **Variant statistics** section with the bcftools substitution
-types and indel-length distribution. A `Report samples` filter narrows the panels.
+| Route (`--variant_type`) | What remains |
+|---|---|
+| `small` (germline) | The Germline tab, the germline cards, rows and highlights. |
+| `snv` or `indel` (somatic) | The Somatic tab, the somatic cards, rows and highlights. |
+| `structural` | The Structural & CNV tab, the structural cards, rows and highlights. |
+| `copynumber` | Only the Wittyer tiles of the Structural & CNV tab and the Wittyer row. |
 
-![Germline MultiQC](screenshots/germline-multiqc.png)
+## Colours
 
----
+`category_colors` is declared once, on the Overview, and read by every tab: callers take `auto`
+(a colour-blind-safe colour each at import), hap.py's SNP and INDEL and its ALL and PASS calls
+are written out, and Wittyer's Event and Base levels too.
 
-## Somatic indels
+## Cross-selection
 
-### Benchmark
+The callset tables select rows on their identifier: `label` for the vcfeval, Truvari,
+SVanalyzer and Wittyer tables, `caller` for the som.py tables and the somatic vcfeval table. A
+pick narrows the tiles that read the same table; a som.py pick also reaches its
+allele-fraction strata and the cross-check, and a Truvari pick reaches the SVanalyzer and
+Wittyer tiles, through the links. The hap.py pooled summary and threshold sweep have no
+callset column and do not select.
 
-Same funnel, tuned for somatic indels. Somatic indels are hard, so recall is low and the callers
-sit to the left of the PR benchmark; the cards therefore pair a recall gauge with a precision
-threshold (0.5, warn at 0.25). **Error profile** puts false positives on a log axis, because an
-over-calling caller (freebayes here) emits thousands against a handful from the others.
-**Allele-fraction strata** shows F1 and recall per allele-fraction bin as grouped bars, one
-bar per caller.
-**Confidence intervals** carries the precision and recall forest plots with som.py's binomial
-95% intervals. A collapsed **rtg-tools cross-check** scores the same callers with vcfeval, and
-**Reference tables** (collapsed, pinned) holds the som.py summary and strata rows.
+## Controls
 
-Filters: `Callers` (caller, variant type), `Score ranges` and `Allele fraction` (AF bin).
+Advanced visualisation controls dock by width: to the right of a full-width tile, on top of a
+narrower one. Nothing is set per tab or per tile.
 
-![Somatic indel benchmark](screenshots/somatic-benchmark.png)
+## Per-variant-type projects
 
-### MultiQC
-
-**Report at a glance**, **som.py panels** (combined / indel / SNV, `multiqc/sompy`) and a collapsed
-**Variant statistics** section with the bcftools substitution types and variant depths.
-
-![Somatic MultiQC](screenshots/somatic-multiqc.png)
-
----
-
-## Structural variants (MultiQC only)
-
-Structural variants have no separate summary table in the pipeline: the benchmark numbers live in
-the MultiQC report. **Benchmark at a glance** carries the general statistics (truvari precision /
-recall / F1 and genotype concordance per callset), **truvari benchmark** pairs the
-precision-vs-recall scatter with the TP / FP / FN classifications (`multiqc/truvari`), and a
-collapsed **SV callset** section holds SURVIVOR's merged-callset summary and the pipeline's
-variant-calling summary. Cards and native benchmark panels would need a general-statistics
-recipe for truvari, which the template does not ship yet.
-
-![Structural MultiQC](screenshots/structural-multiqc.png)
-
----
-
-## Umbrella project
-
-`dashboards/base.yaml` at the template root is the single-project variant for a data root that
-holds both `small/` and `indel/` (the megatest layout). Its Overview tab carries the germline
-and somatic cards and precision-recall benchmarks side by side; a persistent, pinned `Callsets`
-filter section follows the reader into the Germline and Somatic (small variants) tabs, which add
-the error, stratification and confidence-interval sections. Every tab keeps its own open
-filters, and the advanced visualisation controls sit in the tile header.
-
-Vocabulary, shared by every benchmark collection since wave 3:
-
-- `label`: the callset id the pipeline benchmarked;
-- `caller`: the variant-calling tool behind it (som.py's `Caller` column when present);
-- `truth_set`: the truth set it was scored against, read from the benchmark file name;
-- `tp_base`: the truth-set size (true positives plus false negatives), which the Truth-set
-  variants cards sum;
-- `stats_type` (Wittyer): `Event` or `Base` scoring, one bar group each.
-
-F1 is read on the precision-recall scatters (equal-F1 contours) and the ranked strips; the
-separate F1 bar figures and the false-positive and false-negative bars that repeated the
-confusion matrix are gone. The Structural & CNV tab binds the optional Truvari, SVanalyzer and
-Wittyer collections, linked on `label`, and is dropped by the importer on a run that lacks
-them. Thresholds (recall and precision floors on the cards) are stated in each tab intro.
-
----
+`categories/{small,indel,structural}/` are separate templates, one project per variant type,
+each with a Benchmark tab and the pipeline's MultiQC report. They keep their own layout and
+are not part of this dashboard.
 
 ## Benchmarking visualisation kinds
 
-The template's benchmark tabs are built from a set of reusable, benchmarking-specific advanced-viz
-kinds. Each is demonstrated as a one-viz tab of the **Advanced Visualisations** showcase dashboard
-(synthetic demo data), where the gear exposes a full set of controls (colour scale, normalisation,
-point size, labels, axis range).
+The tabs are built from reusable benchmarking kinds, each demonstrated in the Advanced
+Visualisations showcase dashboard.
 
-### Precision-recall benchmark (`pr_benchmark`)
-
-Each point is a variant caller at its (recall, precision); dotted lines are equal-F1 contours, the
-diagonal is recall = precision. Top-right is best.
+- **Precision-recall benchmark** (`pr_benchmark`): each callset at its (recall, precision),
+  dotted equal-F1 contours, the diagonal where recall equals precision. Top right is best.
+- **ROC / PR curve** (`roc_pr_curve`): threshold-sweep curves with their AUC; the view switch
+  draws the PR curve, the ROC or precision and recall against the threshold.
+- **Confusion matrix** (`confusion_matrix`): TP, FP and FN per callset, the shade normalised
+  per callset, the label the raw count.
+- **Metric with its interval** (`metric_ci_bars`): a point estimate and its 95% interval per
+  caller, the axis zoomed so tight intervals stay readable.
 
 ![Precision-recall benchmark](screenshots/advviz-pr-benchmark.png)
 
-### ROC / PR curve (`roc_pr_curve`)
-
-Threshold-sweep curves, one per caller, with per-curve AUC. The in-panel tab bar switches between
-**PR curve** (precision vs recall), **ROC** (TPR vs FPR, with the random-classifier diagonal) and
-**vs threshold** (precision and recall vs quality).
-
-![ROC / PR curve](screenshots/advviz-roc-pr-curve.png)
-
-### Confusion matrix (`confusion_matrix`)
-
-TP / FP / FN per caller. Cell shade is the per-caller normalised fraction (so cells stay comparable
-when TP is far larger than FP and FN); the label is the raw count, rendered with luminance-aware
-contrast so it stays readable on both dark and light cells.
-
-![Confusion matrix](screenshots/advviz-confusion-matrix.png)
-
-### Metric ± CI forest (`metric_ci_bars`)
-
-Point estimate + 95 % confidence interval per caller. The dot is the value, the horizontal line the
-CI; the x-axis auto-zooms so tight intervals stay readable.
-
-![Metric ± CI forest](screenshots/advviz-metric-ci-forest.png)
-
----
-
 ## Catalog modules
 
-The recipes ship as catalog modules under `depictio/catalog/<tool>/`, each a full card
-(`module.yaml` + `<recipe>.py` + `<recipe>.yaml` + a `.tsv` fixture). `renders_as` declares the
-module → plot bindings the dashboards reference via `use:`.
-
 `rtgtools` (vcfeval_summary) · `happy` (summary, roc) · `sompy` (summary, regions) ·
-`truvari` (summary) · `svanalyzer` (svbenchmark) · `wittyer` (summary).
+`truvari` (summary) · `svanalyzer` (svbenchmark) · `wittyer` (summary), under
+`depictio/catalog/<tool>/`; `renders_as` declares the plots the dashboards reference by `use:`.
 
-The MultiQC sections the pipeline emits are declared under `depictio/catalog/multiqc/`
-(`happy.yaml`, `sompy.yaml`, `truvari.yaml`, next to `bcftools.yaml`), which is what lets a
-MultiQC tile carry `use: multiqc/<module>` and the catalog badge.
+## Reproducing
+
+```bash
+python scripts/nfcore_megatest.py fetch --pipeline variantbenchmarking --version 1.4.0 --dest <DATA_ROOT>
+depictio-cli ingest --template nf-core/variantbenchmarking/1.4.0 --data-root <DATA_ROOT>
+```

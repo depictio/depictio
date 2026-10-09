@@ -76,6 +76,10 @@ export interface GenomeSpyThemeColors {
   ruleColor: string;
   /** Categorical hues, one per chromosome or category, cycled. */
   palette: readonly string[];
+  /** Colours the dashboard pins, by column then value (see
+   *  `columnCategoryColors`): a value they name keeps that colour, the others
+   *  cycle the palette. */
+  pinned?: Record<string, Record<string, string>> | null;
 }
 
 /** One gene of the bundled annotation asset, already decoded. */
@@ -352,11 +356,15 @@ export function regionFromInterval(
 const ANNOTATION_LANE_HEIGHT = 34;
 /** Minimum height of one data lane once several are stacked. */
 const FACET_LANE_HEIGHT = 60;
+/** A stacked lane takes its share of the tile and never less than its floor,
+ *  so a taller tile, or the tile in fullscreen, draws taller lanes. */
+const FACET_LANE_SIZE = { grow: 1, minPx: FACET_LANE_HEIGHT };
 
 function colourEncoding(
   field: string,
   domain: string[],
   palette: readonly string[],
+  pinned?: Record<string, string> | null,
 ): Record<string, unknown> {
   return {
     field,
@@ -364,7 +372,7 @@ function colourEncoding(
     legend: null,
     scale: {
       domain,
-      range: domain.map((_, i) => palette[i % palette.length]),
+      range: domain.map((value, i) => pinned?.[value] ?? palette[i % palette.length]),
     },
   };
 }
@@ -386,7 +394,13 @@ function buildDataLane(
   mark: 'point' | 'rect' | 'bar',
   chromosomes: string[],
   categories: string[],
-  opts: { name: string; pickParam: string; filterExpr?: string; title?: string; height?: number },
+  opts: {
+    name: string;
+    pickParam: string;
+    filterExpr?: string;
+    title?: string;
+    height?: { grow: number; minPx: number };
+  },
 ): Record<string, unknown> {
   const colourField = config.category_col && categories.length ? config.category_col : config.chr_col;
   const colourDomain = colourField === config.chr_col ? chromosomes : categories;
@@ -405,7 +419,7 @@ function buildDataLane(
       title: config.score_title ?? config.score_col,
       axis: { grid: true },
     },
-    color: colourEncoding(colourField, colourDomain, colors.palette),
+    color: colourEncoding(colourField, colourDomain, colors.palette, colors.pinned?.[colourField]),
     opacity: {
       value: config.opacity ?? 0.85,
       // A picked mark is drawn fully opaque, so the click has visible feedback
@@ -565,7 +579,7 @@ export function buildGenomeSpySpec({
           // copy of the rows rather than N.
           filterExpr: `datum[${JSON.stringify(sampleCol)}] === ${JSON.stringify(sample)}`,
           title: sample,
-          height: FACET_LANE_HEIGHT,
+          height: FACET_LANE_SIZE,
         }),
       );
     });

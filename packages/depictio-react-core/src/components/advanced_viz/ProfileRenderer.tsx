@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
-import Plot from 'react-plotly.js';
+import Plot from './LegendAwarePlot';
 
 import {
   AdvancedVizKind,
@@ -10,6 +10,7 @@ import {
   StoredMetadata,
 } from '../../api';
 import { resolveCategoricalPalette, stableColorMap, TAB10_PALETTE } from '../../colors';
+import { usePinnedCategoryColors } from '../../hooks/useCategoryColors';
 import {
   advancedVizSelectionColumn,
   advancedVizSelectionFilter,
@@ -21,6 +22,7 @@ import AdvancedVizFrame from './AdvancedVizFrame';
 import { usePlotAnnotationLayer } from '../annotations/usePlotAnnotationLayer';
 import type { PlotGraphHandlers } from '../annotations/usePlotAnnotationLayer';
 import { supportsAdvancedVizAnnotation } from '../../annotations/plotDecorate';
+import { withAlpha } from '../../annotations/toPlotly';
 import type { PlotEventHandlers } from '../../annotations/plotDecorate';
 import {
   VizControlGroup,
@@ -123,24 +125,6 @@ const SLOPE_PANEL: [number, number] = [0, 0.26];
 const DEFAULT_DERIVATIVE_WINDOW = 5;
 
 const PALETTE = TAB10_PALETTE;
-
-/** `#rgb` / `#rrggbb` to `rgba(...)`. Returns the input untouched for any
- *  colour it does not recognise, so a themed `rgba(...)` passes through. */
-function withAlpha(colour: string, alpha: number): string {
-  const match = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(colour.trim());
-  if (!match) return colour;
-  const hex =
-    match[1].length === 3
-      ? match[1]
-          .split('')
-          .map((c) => c + c)
-          .join('')
-      : match[1];
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
 
 /**
  * Pure presentation wrapper around `<Plot>`, memoised on the (already themed
@@ -259,6 +243,8 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       cancelled = true;
     };
   }, [metadata.dc_id, config.series_col]);
+  // A series wears the dashboard's colour for its value of `series_col`.
+  const pinnedColours = usePinnedCategoryColors(config.series_col);
 
   const [rows, setRows] = useState<Record<string, unknown[]> | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -356,7 +342,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
       bySeries.get(name)!.sort((a, b) => a.x - b.x);
     }
 
-    const colours = stableColorMap(seriesUniverse ?? names, palette, null);
+    const colours = stableColorMap(seriesUniverse ?? names, palette, pinnedColours);
     const dimming = selectedSeries.size > 0;
 
     const xLabel = config.x_title || config.x_col || 'x';
@@ -617,6 +603,7 @@ const ProfileRenderer: React.FC<Props> = ({ metadata, filters, refreshTick, onFi
     isDark,
     theme,
     palette,
+    pinnedColours,
     seriesUniverse,
     selectedSeries,
     logX,

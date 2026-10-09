@@ -267,34 +267,6 @@ workflows:
               "fragment_ions": "Matched fragment ions (with --annotate_ions)"
               "fragment_error_ppm": "Median absolute fragment mass error, ppm (with --annotate_ions)"
 
-      - data_collection_tag: "mhcquant_sample_summary"
-        description: "One row per sample: yield, length signature, score and retention-time error, and replicate reproducibility"
-        config:
-          type: "Table"
-          metatype: "Aggregate"
-          source: "transformed"
-          transform:
-            recipe: "mhcquant/sample_summary.py"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "sample": "Sample id"
-              "psms": "Peptide-spectrum matches behind the sample's peptides"
-              "peptides": "Distinct peptide sequences"
-              "peptidoforms": "Distinct peptidoforms (sequence and modifications)"
-              "proteins": "Distinct source proteins"
-              "modified_fraction": "Share of precursors carrying a modification"
-              "median_length": "Median peptide length"
-              "ninemer_fraction": "Share of distinct sequences that are 9-mers"
-              "class_i_fraction": "Share of distinct sequences of 8 to 12 residues"
-              "class_ii_fraction": "Share of distinct sequences of 13 to 25 residues"
-              "median_score": "Median peptide score"
-              "median_abs_rt_error_min": "Median absolute difference between observed and predicted retention time, minutes"
-              "replicates": "Quantified replicates of the sample"
-              "all_replicates_fraction": "Share of peptides quantified in every replicate"
-              "replicate_median_r": "Median Pearson r of log10 intensities over replicate pairs"
-              "replicate_min_r": "Lowest Pearson r of log10 intensities over replicate pairs"
-
       - data_collection_tag: "mhcquant_length_distribution"
         description: "Distinct peptide sequences per length and sample, as counts and shares"
         config:
@@ -385,6 +357,36 @@ workflows:
               "replicate_label": "Replicate index as a label"
               "detected": "1 when the peptide was quantified in the replicate"
               "log10_intensity": "log10 intensity in the replicate, charge states summed"
+
+      # After replicate_intensity: ingest builds collections in this order and
+      # the summary reads that table for its replicate columns.
+      - data_collection_tag: "mhcquant_sample_summary"
+        description: "One row per sample: yield, length signature, score and retention-time error, and replicate reproducibility"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "mhcquant/sample_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample id"
+              "psms": "Peptide-spectrum matches behind the sample's peptides"
+              "peptides": "Distinct peptide sequences"
+              "peptidoforms": "Distinct peptidoforms (sequence and modifications)"
+              "proteins": "Distinct source proteins"
+              "modified_fraction": "Share of precursors carrying a modification"
+              "median_length": "Median peptide length"
+              "ninemer_fraction": "Share of distinct sequences that are 9-mers"
+              "class_i_fraction": "Share of distinct sequences of 8 to 12 residues"
+              "class_ii_fraction": "Share of distinct sequences of 13 to 25 residues"
+              "median_score": "Median peptide score"
+              "median_abs_rt_error_min": "Median absolute difference between observed and predicted retention time, minutes"
+              "replicates": "Quantified replicates of the sample"
+              "all_replicates_fraction": "Share of peptides quantified in every replicate"
+              "replicate_median_r": "Median Pearson r of log10 intensities over replicate pairs"
+              "replicate_min_r": "Lowest Pearson r of log10 intensities over replicate pairs"
 
       - data_collection_tag: "mhcquant_replicate_pairs"
         optional: true  # only with --quantify

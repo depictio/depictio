@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Text, useMantineColorScheme, useMantineTheme } from '@mantine/core';
-import Plot from 'react-plotly.js';
+import Plot from './LegendAwarePlot';
 
 import {
   AdvancedVizKind,

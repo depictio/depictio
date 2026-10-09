@@ -216,14 +216,42 @@ export function offeredDeViews(config: {
   p_value_col?: string | null;
   significance_col?: string | null;
   significance_is_neg_log10?: boolean;
+  ma_wf_id?: string | null;
+  ma_dc_id?: string | null;
 }): DeView[] {
   const allowed = config.views && config.views.length > 0 ? config.views : DE_VIEWS;
-  const hasMa = Boolean(config.avg_log_intensity_col);
+  const hasMa = Boolean(config.avg_log_intensity_col) || maTableOf(config) !== null;
   const hasQq = Boolean(config.p_value_col) || !config.significance_is_neg_log10;
   return DE_VIEWS.filter(
     (view) =>
       allowed.includes(view) && (view === 'volcano' || (view === 'ma' ? hasMa : hasQq)),
   );
+}
+
+/**
+ * The columns of an MA table of its own: the MA plot's canonical columns, which
+ * a recipe writes for a test whose table has no mean abundance (ANCOM-BC).
+ */
+export const MA_TABLE_COLUMNS = {
+  featureId: 'feature_id',
+  avgLogIntensity: 'avg_log_intensity',
+  log2FoldChange: 'log2_fold_change',
+  significance: 'significance',
+  label: 'label',
+} as const;
+
+/**
+ * The table the MA view reads when it is not the test's own: bound with
+ * `ma_dc_tag` (resolved to `ma_wf_id`/`ma_dc_id` at import). An abundance
+ * column in the test's table wins, since that needs no second fetch.
+ */
+export function maTableOf(config: {
+  avg_log_intensity_col?: string | null;
+  ma_wf_id?: string | null;
+  ma_dc_id?: string | null;
+}): { wfId: string; dcId: string } | null {
+  if (config.avg_log_intensity_col || !config.ma_wf_id || !config.ma_dc_id) return null;
+  return { wfId: config.ma_wf_id, dcId: config.ma_dc_id };
 }
 
 /** The view to draw: the author's pick, or the first one the bindings allow. */

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Group, Stack, Tooltip } from '@mantine/core';
 
-import { formatCardNumber, hexWithAlpha, percent } from './format';
+import { formatAggregate, formatCardNumber, hexWithAlpha, percent } from './format';
 import { METRIC, MetricCaption, MetricStrip, TooltipDivider, TooltipStat } from './tokens';
 import type { BreakdownPayload } from './types';
 
@@ -34,12 +34,19 @@ const TopNMetric: React.FC<{
   payload: BreakdownPayload;
   color?: string | null;
   shares?: boolean;
-}> = ({ payload, color, shares = true }) => {
+  /** The card's `format`, for the per-group values of a ``shares={false}``
+   *  strip, which are in the card's unit. Shares print as they always did. */
+  format?: string;
+}> = ({ payload, color, shares = true, format }) => {
   if (!payload.top.length) return null;
   const barFill = hexWithAlpha(color, 0.75);
   const tailRows = Math.max(0, payload.unique_values - payload.top.length);
   const tailShare = Math.max(0, 1 - (payload.top_share ?? 0));
   const kind = payload.breakdown_kind || 'count';
+  // A row count under a share layout; else the group's value of the card's
+  // own aggregation, which the card's `format` reads like the value above it.
+  const groupValue = (v: number) =>
+    shares ? formatCardNumber(v) : formatAggregate(kind, v, format);
   const maxAbs = Math.max(0, ...payload.top.map((r) => Math.abs(Number(r.count) || 0)));
   const barPct = (row: BreakdownPayload['top'][number]): number =>
     shares
@@ -58,7 +65,7 @@ const TopNMetric: React.FC<{
               <TooltipStat label={row.name} value={`#${idx + 1}`} strong />
               <TooltipStat
                 label={shares ? 'count' : kind}
-                value={formatCardNumber(Number(row.count))}
+                value={groupValue(Number(row.count))}
               />
               {shares ? <TooltipStat label="share" value={percent(row.percent, 1)} /> : null}
               {idx === payload.top.length - 1 && tailRows > 0 ? (
@@ -111,7 +118,7 @@ const TopNMetric: React.FC<{
               <MetricCaption>
                 {shares
                   ? `${formatCardNumber(Number(row.count))} (${percent(row.percent)})`
-                  : formatCardNumber(Number(row.count))}
+                  : groupValue(Number(row.count))}
               </MetricCaption>
             </Box>
           </Group>

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useMantineColorScheme, useMantineTheme } from '@mantine/core';
-import Plot from 'react-plotly.js';
+import Plot from './LegendAwarePlot';
 
 import { fetchAdvancedVizData, InteractiveFilter, StoredMetadata } from '../../api';
 import AdvancedVizFrame from './AdvancedVizFrame';
@@ -97,7 +97,9 @@ const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     const lower = (rows[config.lower_col] || []) as number[];
     const upper = (rows[config.upper_col] || []) as number[];
 
-    let order = labels.map((_, i) => i);
+    // A row with no estimate (a callset that made no call has no precision)
+    // is left out, rather than drawn as a point at 0.
+    let order = labels.map((_, i) => i).filter((i) => Number.isFinite(value[i]));
     order = order.sort((a, b) => (sortDesc ? value[b] - value[a] : value[a] - value[b]));
     // Horizontal bars read top→bottom; reverse so the best sits at the top.
     order.reverse();
@@ -113,7 +115,14 @@ const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
     // dot so it never collides with the horizontal CI whisker.
     const lo = Math.min(...order.map((i) => lower[i] ?? value[i] ?? 0));
     const hi = Math.max(...order.map((i) => upper[i] ?? value[i] ?? 0));
-    const pad = Math.max((hi - lo) * 0.15, 0.01);
+    // A rate (precision, recall, F1) stays inside [0, 1]. Any other metric (a
+    // Hill number, a count) takes its own range: capping it at 1 reversed the
+    // axis and hid every point.
+    const isRate = lo >= 0 && hi <= 1;
+    const pad = Math.max((hi - lo) * 0.15, isRate ? 0.01 : Math.abs(hi) * 0.01 || 1);
+    const range = isRate
+      ? [Math.max(0, lo - pad), Math.min(1, hi + pad)]
+      : [lo >= 0 ? Math.max(0, lo - pad) : lo - pad, hi + pad];
 
     return {
       // Labels on the y axis, i.e. the rows the tile has to be tall enough
@@ -163,7 +172,7 @@ const MetricCiBarsRenderer: React.FC<Props> = ({ metadata, filters, refreshTick,
         xaxis: {
           ...plotlyAxisOverrides(isDark, theme),
           title: { text: `${metricName} (95% CI)` },
-          range: [Math.max(0, lo - pad), Math.min(1, hi + pad)],
+          range,
         },
         yaxis: { ...plotlyAxisOverrides(isDark, theme), automargin: true },
         showlegend: false,

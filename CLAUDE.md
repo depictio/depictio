@@ -98,7 +98,8 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   components won't appear in fresh deployments
 - Project dir `depictio/projects/{group}/{project}[/{version}]/` holds both
   `dashboards/*.yaml` and `.db_seeds/*.json`
-- Multi-tab dashboards: one JSON per tab (e.g. nf-core `dashboard_multiqc.json`)
+- Multi-tab dashboards: one JSON per tab (e.g. nf-core `dashboard_overview.json` for the main tab,
+  `dashboard_multiqc.json` for the MultiQC child)
 - Reseed a running instance in place: `depictio/dev_scripts/reseed_project.py` (`/reseed`)
 - nf-core template versions: seeding/CLI/CI/docs auto-resolve the **highest** version dir
   (`nf-core/<pipeline>/latest` works as a template id). New version = run
