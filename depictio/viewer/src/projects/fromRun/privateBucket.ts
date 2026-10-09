@@ -57,6 +57,15 @@ export function openSection(
   };
 }
 
+/** A read refused in the folder browser: the section opens for `bucket` as
+ *  for a refusal in the field, unless details were typed for another bucket.
+ *  Those are not dropped by a folder the reader only looked at; the switch
+ *  there opens the section for `bucket` on purpose. */
+export function offerSection(prev: PrivateBucketState, bucket: string): PrivateBucketState {
+  if (prev.bucket && prev.bucket !== bucket && !runStorageFieldsBlank(prev.fields)) return prev;
+  return openSection(prev, bucket, { refused: true });
+}
+
 /** Close the section: the details are forgotten, the bucket and its refusal
  *  remembered, and the section stays closed until the reader reopens it. */
 export function closeSection(prev: PrivateBucketState): PrivateBucketState {

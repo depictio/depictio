@@ -370,7 +370,7 @@ def test_a_denied_read_with_storage_keeps_its_code_and_says_nothing_of_the_keys(
             f"s3://{PRIVATE}/runs/", storage=_storage(), request=_request(), current_user=_user()
         )
     assert (exc.value.status_code, exc.value.code) == (422, "s3_access_denied")
-    assert "storage" in exc.value.detail
+    assert "access key and secret given" in exc.value.detail
     assert KEY_ID not in exc.value.detail and not _echoed(exc.value)
 
 

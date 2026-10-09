@@ -293,8 +293,8 @@ def _credentials_phrase(target: S3Target) -> str:
         return "without credentials, as a public bucket"
     if target.kind == "project":
         if target.unsigned:
-            return "without credentials, as the project's storage settings carry no access key"
-        return "with the project's storage credentials"
+            return "without credentials, as the storage settings give no access key"
+        return "with the access key and secret given"
     if target.kind == "instance":
         return "with the S3 credentials of the Depictio configuration"
     return "with the server's own credentials"
@@ -307,10 +307,7 @@ def _access_denied_hint(target: S3Target) -> str:
             "project, or ask an administrator to take it off the public bucket list."
         )
     if target.kind == "project":
-        return (
-            "Check the access key and secret in the project's storage settings, and that "
-            "they may read this bucket."
-        )
+        return "Check the access key and secret, and that they may read this bucket."
     if target.kind == "instance":
         return "Check the S3 credentials in the Depictio CLI configuration."
     return "Ask an administrator to check the server's access to this bucket."
@@ -318,7 +315,7 @@ def _access_denied_hint(target: S3Target) -> str:
 
 def _store_phrase(target: S3Target) -> str:
     if target.kind == "project":
-        return "at the endpoint in the project's storage settings"
+        return "at the endpoint of the storage settings"
     if target.kind == "instance":
         return "in the configured S3 storage"
     return "on AWS S3"
@@ -326,16 +323,13 @@ def _store_phrase(target: S3Target) -> str:
 
 def _wrong_region_hint(target: S3Target) -> str:
     if target.kind == "project":
-        return (
-            "Set the bucket's region in the project's storage settings; testing the "
-            "storage settings detects it."
-        )
+        return "Set the bucket's region in the storage settings; a connection test detects it."
     return "The read could not follow it."
 
 
 def _unreachable_hint(target: S3Target) -> str:
     if target.kind == "project":
-        return "if it keeps failing, check the endpoint in the project's storage settings."
+        return "if it keeps failing, check the endpoint of the storage settings."
     return "if it keeps failing, ask an administrator to check the storage."
 
 
@@ -586,7 +580,7 @@ def project_target(
     secret = config.secret_access_key
     if bool(key_id) != bool(secret):
         raise S3AccessRefused(
-            "The project's storage settings have an access key without its secret, or a "
+            "The storage settings have an access key without its secret, or a "
             "secret without its key. Enter both, or clear both to read without credentials."
         )
     return S3Target(
@@ -679,10 +673,10 @@ def resolve_s3_target(
         if bucket_list_matches(policy.credentialed_s3_buckets, bucket, key):
             return S3Target(kind="ambient", bucket=bucket, key=key, timeout_s=timeout_s)
         raise S3AccessRefused(
-            f"{url} cannot be read by the server: the project has no storage settings "
-            "and the bucket is not one this instance allows. Add the bucket's endpoint "
-            "and credentials in the project's storage settings, or ask an administrator "
-            "to allow it."
+            f"{url} cannot be read by the server: the bucket is not one this instance "
+            "allows, and no credentials were given for it. Give the bucket's endpoint "
+            "and credentials (a project's storage settings, or the private bucket of a "
+            "run folder), or ask an administrator to allow it."
         )
     if instance_s3 is not None and _has_instance_keys(instance_s3):
         return instance_target(instance_s3, bucket, key, timeout_s=timeout_s)

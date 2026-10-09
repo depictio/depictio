@@ -1051,4 +1051,135 @@ test.describe("Browse for a run folder", () => {
     // Only the first read of the field, before any details, went without them.
     expect(inspects.filter((call) => call.method === "GET").map((call) => call.value)).toEqual([RUN]);
   });
+
+  test("a bucket refused in the browser asks for its details there, and opens once they connect", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    const BUCKET = "s3://private-runs/";
+    const PIPELINE = `${BUCKET}ampliseq/`;
+    const RUN = `${PIPELINE}run-7/`;
+    const OTHER = "s3://other-runs/run-1/";
+    const KEYS = { access_key_id: "AKIAE2EPRIVATEKEY", secret_access_key: "e2e-private-secret-value" };
+    const TYPED = { endpoint_url: null, region: null, ...KEYS };
+    // The region the connection test finds is sent from then on.
+    const CONNECTED = { ...TYPED, region: "eu-west-1" };
+    const DENIED = {
+      status: 403,
+      json: { detail: "Access to this bucket was denied.", code: "s3_access_denied" },
+    };
+    const LISTINGS: Record<string, StubAnswer> = {
+      [BUCKET]: listing(BUCKET, BUCKET, [entry(PIPELINE)]),
+      [PIPELINE]: listing(PIPELINE, BUCKET, [entry(RUN)]),
+      [RUN]: listing(RUN, BUCKET, [entry(`${RUN}multiqc/`), entry(`${RUN}pipeline_info/`)], {
+        looks_like_run: true,
+      }),
+    };
+    const runRecords = {
+      looks_like_run: true,
+      markers: ["pipeline_info", "multiqc"],
+      folders: { count: 2, names: ["multiqc", "pipeline_info"] },
+      detected: detected(),
+    };
+
+    // Local folders only: the server lists no S3 location of its own.
+    await setRunFolderFlags(page, { local: true, remote: false });
+    await stubFolders(page);
+    // Registered last, so asked first: the bucket is read only with its details.
+    const dirs = await stubFolderRoute(page, "**/api/v1/projects/s3_dirs**", "url", (url, storage) =>
+      storage ? (LISTINGS[url] ?? null) : DENIED,
+    );
+    const inspects = await stubFolderRoute(
+      page,
+      "**/api/v1/projects/folder_inspect**",
+      "location",
+      (location, storage) => {
+        if (!location.startsWith("s3://")) return { json: inspection(location) };
+        if (!storage) return DENIED;
+        return { json: inspection(location, location === RUN ? runRecords : {}) };
+      },
+    );
+    const tests: Array<Record<string, unknown>> = [];
+    await page.route("**/api/v1/projects/storage_test", (route: Route) => {
+      tests.push(route.request().postDataJSON());
+      return route.fulfill({
+        json: {
+          success: true,
+          message: "Bucket 'private-runs' is reachable. Its region is eu-west-1.",
+          detected_region: "eu-west-1",
+        },
+      });
+    });
+
+    await loginAsAdmin();
+    await openBrowser(page);
+    const modal = page.locator("[data-testid='browse-modal']");
+    await expect(modal.locator("[data-testid='browse-group-s3']")).toHaveCount(0);
+
+    // The bucket cannot be listed without its details: the form that asks
+    // for them opens under the path bar.
+    await goTo(page, RUN);
+    await expect(modal).toContainText(
+      "This server browses no S3 location without the bucket\u2019s credentials.",
+    );
+    const form = modal.locator("[data-testid='browse-private-bucket']");
+    const section = form.locator("[data-testid='run-private-bucket-section']");
+    await expect(section).toBeVisible();
+    await expect(section.locator("[data-testid='run-private-bucket-name']")).toHaveText("private-runs");
+    await section.locator("[data-testid='run-private-bucket-access-key']").fill(KEYS.access_key_id);
+    await section.locator("[data-testid='run-private-bucket-secret']").fill(KEYS.secret_access_key);
+    await section.locator("[data-testid='run-private-bucket-test']").click();
+
+    // Connected: the bucket is the S3 root, the browser opens on the folder,
+    // and the form gives its place back.
+    await expect(treeNode(page, BUCKET)).toContainText("private-runs");
+    await expect(treeNode(page, RUN)).toHaveAttribute("data-selected", "true");
+    const detail = page.locator("[data-testid='browse-detail']");
+    await expect(detail).toHaveAttribute("data-path", RUN);
+    await expect(detail.locator("[data-testid='browse-detail-run-badge']")).toBeVisible();
+    await expect(form).toHaveCount(0);
+    expect(tests).toEqual([{ location: RUN, storage: TYPED }]);
+
+    // Picked, the folder fills the field, under which the same details wait.
+    await page.locator("[data-testid='browse-select']").click();
+    await expect(page.locator("[data-testid='run-data-root-input']")).toHaveValue(RUN);
+    const tabSection = page.locator("[data-testid='run-private-bucket-section']");
+    await expect(tabSection.locator("[data-testid='run-private-bucket-access-key']")).toHaveValue(
+      KEYS.access_key_id,
+    );
+    await expect(tabSection.locator("[data-testid='run-private-bucket-region']")).toHaveValue(
+      "eu-west-1",
+    );
+    await expect(page.locator("[data-testid='run-detection-card']")).toHaveAttribute(
+      "data-state",
+      "ready",
+      { timeout: 20_000 },
+    );
+
+    // Another bucket refused in the browser offers its own switch, closed:
+    // looking at it does not drop the details typed for the first one.
+    await page.locator("[data-testid='run-browse-local']").click();
+    await expect(treeNode(page, RUN)).toHaveAttribute("data-selected", "true");
+    await goTo(page, OTHER);
+    await expect(modal).toContainText("Access to this bucket was denied.");
+    await expect(form.locator("[data-testid='run-private-bucket-toggle']")).not.toBeChecked();
+    await expect(form.locator("[data-testid='run-private-bucket-section']")).toHaveCount(0);
+    await expect(treeNode(page, BUCKET)).toBeVisible();
+    await page.locator("[data-testid='browse-cancel']").click();
+    await expect(tabSection.locator("[data-testid='run-private-bucket-access-key']")).toHaveValue(
+      KEYS.access_key_id,
+    );
+
+    // Every read of the bucket carried its details, from the test on with
+    // the region found; the other bucket was asked without any.
+    const privateDirs = dirs.filter((call) => call.value.startsWith(BUCKET));
+    expect(privateDirs.map((call) => call.value)).toEqual(expect.arrayContaining([BUCKET, PIPELINE, RUN]));
+    for (const call of privateDirs) expect(call).toMatchObject({ method: "POST", storage: CONNECTED });
+    expect(dirs.filter((call) => call.value === OTHER)).toEqual([
+      expect.objectContaining({ method: "GET", storage: null }),
+    ]);
+    const privateInspects = inspects.filter((call) => call.value.startsWith(BUCKET));
+    expect(privateInspects.length).toBeGreaterThan(0);
+    for (const call of privateInspects) expect(call).toMatchObject({ method: "POST", storage: CONNECTED });
+  });
 });

@@ -758,7 +758,7 @@ class TestErrorMapping:
             denied, _resolve("s3://lab/x", project=_project())
         )
         public = S3AccessFailed.from_client_error(denied, _public())
-        assert "project's storage" in project.detail
+        assert "access key and secret" in project.detail
         assert "public" in public.detail
 
     def test_transport_and_credential_errors(self):

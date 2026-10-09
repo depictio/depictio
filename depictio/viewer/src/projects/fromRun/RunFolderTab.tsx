@@ -21,6 +21,7 @@ import {
   apiErrorCode,
   createProjectFromRun,
   defaultVersionFor,
+  EMPTY_RUN_STORAGE_FIELDS,
   findRunPipeline,
   groupRunTemplates,
   inspectFolder,
@@ -47,7 +48,13 @@ import { useStepSettling } from '../hooks/useStepSettling';
 import FolderBrowserModal from './browser/FolderBrowserModal';
 import { DetectionCard } from './DetectionCard';
 import type { DetectionState } from './DetectionCard';
-import { closeSection, followBucket, NO_PRIVATE_BUCKET, openSection } from './privateBucket';
+import {
+  closeSection,
+  followBucket,
+  NO_PRIVATE_BUCKET,
+  offerSection,
+  openSection,
+} from './privateBucket';
 import type { OpenPrivateBucketOptions, PrivateBucketState } from './privateBucket';
 import { PrivateBucketSection } from './PrivateBucketSection';
 import { rememberRunFolder } from './recentFolders';
@@ -131,6 +138,12 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   /** Bumped when the folder should be read again with other connection
    *  details (a successful test, the section closed). */
   const [storageEpoch, setStorageEpoch] = useState(0);
+  /** The details the folder browser reads its private bucket with: set when
+   *  it opens and when a test in it connects, not on every keystroke, since
+   *  new details start a fresh tree. */
+  const [browseBinding, setBrowseBinding] = useState<RunStorageBinding | null>(null);
+  /** Bumped by a test in the browser that connected. */
+  const [browseEpoch, setBrowseEpoch] = useState(0);
 
   useEffect(() => {
     if (!opened) return;
@@ -148,6 +161,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     setBrowseOpened(false);
     setPrivateBucket(NO_PRIVATE_BUCKET);
     setPreviewNeedsBucket(false);
+    setBrowseBinding(null);
   }, [opened]);
 
   const trimmedRoot = dataRoot.trim();
@@ -194,15 +208,75 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
     [],
   );
 
-  const handlePrivateBucketToggle = (open: boolean) => {
+  const handlePrivateBucketToggle = (open: boolean, location: string) => {
     if (open) {
-      openPrivateBucket(trimmedRoot, { byReader: true });
+      openPrivateBucket(location, { byReader: true });
       return;
     }
-    // Closing forgets the details; a folder read with them is read again
-    // without them.
-    if (storageBinding) setStorageEpoch((n) => n + 1);
+    // Closing forgets the details; the folder in the field, read with them,
+    // is read again without them.
+    if (rootStorage) setStorageEpoch((n) => n + 1);
     setPrivateBucket(closeSection);
+  };
+
+  // The browser's details go with the section's: another bucket, or the
+  // section closed, and the browser forgets them.
+  useEffect(() => {
+    setBrowseBinding((prev) =>
+      prev && (!privateBucket.open || prev.bucket !== privateBucket.bucket) ? null : prev,
+    );
+  }, [privateBucket.open, privateBucket.bucket]);
+
+  // A test in the browser connected: from now on it reads the bucket with
+  // these details, the region the test found included.
+  useEffect(() => {
+    if (browseEpoch > 0) setBrowseBinding(storageBindingRef.current);
+  }, [browseEpoch]);
+
+  const openBrowser = () => {
+    // The details of the field's bucket, or of the bucket last opened in the
+    // browser while the field names none; never another bucket's.
+    const own = storageBinding && (!rootBucket || storageBinding.bucket === rootBucket);
+    setBrowseBinding(own ? storageBinding : null);
+    setBrowseOpened(true);
+  };
+
+  const closeBrowser = () => {
+    setBrowseOpened(false);
+    // A bucket opened in the browser and left there: the section follows
+    // the field again.
+    if (rootBucket) setPrivateBucket((prev) => followBucket(prev, rootBucket));
+  };
+
+  /** The section for the bucket of `location`: under the field, or in the
+   *  folder browser for a folder refused there. Both show the same details. */
+  const renderPrivateBucket = (location: string, inBrowser: boolean) => {
+    const bucket = s3BucketOf(location);
+    if (!bucket) return null;
+    // Under the field, the section shows its bucket until it follows the
+    // field; in the browser, details typed for another bucket never show
+    // under this one (its switch opens a section of its own).
+    const mine = !inBrowser || privateBucket.bucket === bucket;
+    return (
+      <PrivateBucketSection
+        location={location}
+        bucket={inBrowser ? bucket : privateBucket.bucket ?? bucket}
+        open={mine && privateBucket.open}
+        refused={mine ? privateBucket.refused : true}
+        onOpenChange={(open) => handlePrivateBucketToggle(open, location)}
+        fields={mine ? privateBucket.fields : EMPTY_RUN_STORAGE_FIELDS}
+        onFieldsChange={(fields) => setPrivateBucket((prev) => ({ ...prev, fields }))}
+        fieldErrors={mine ? storageFieldErrors : {}}
+        onRegionDetected={(region) =>
+          setPrivateBucket((prev) => ({ ...prev, fields: { ...prev.fields, region } }))
+        }
+        onConnected={() => {
+          if (bucket === rootBucket) setStorageEpoch((n) => n + 1);
+          if (inBrowser) setBrowseEpoch((n) => n + 1);
+        }}
+        disabledReason={privateBucketDisabledReason}
+      />
+    );
   };
 
   // Another bucket in the field: the section follows it (`followBucket`).
@@ -265,8 +339,8 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   let detectionErrorHint: string | null = null;
   let detectionErrorMessage: string | null = null;
   if (detectionView.status === 'error' && isPrivateBucketRefusal(detectionView.code)) {
-    // Read without connection details, the server's reason points at the
-    // storage settings of a project that does not exist yet.
+    // Read without connection details, the server's reason is written for
+    // every caller; this one is the run tab's.
     if (!rootStorage) {
       detectionErrorMessage =
         'The server cannot read this bucket on its own: it is not public, and not one this server is set up to read.';
@@ -526,7 +600,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
                     <Button
                       variant="default"
                       leftSection={<Icon icon="mdi:folder-open-outline" width={16} />}
-                      onClick={() => setBrowseOpened(true)}
+                      onClick={openBrowser}
                       data-testid="run-browse-local"
                     >
                       Browse
@@ -539,23 +613,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
               data-testid="run-data-root-input"
             />
 
-            {rootBucket && (
-              <PrivateBucketSection
-                location={trimmedRoot}
-                bucket={privateBucket.bucket ?? rootBucket}
-                open={privateBucket.open}
-                refused={privateBucket.refused}
-                onOpenChange={handlePrivateBucketToggle}
-                fields={privateBucket.fields}
-                onFieldsChange={(fields) => setPrivateBucket((prev) => ({ ...prev, fields }))}
-                fieldErrors={storageFieldErrors}
-                onRegionDetected={(region) =>
-                  setPrivateBucket((prev) => ({ ...prev, fields: { ...prev.fields, region } }))
-                }
-                onConnected={() => setStorageEpoch((n) => n + 1)}
-                disabledReason={privateBucketDisabledReason}
-              />
-            )}
+            {renderPrivateBucket(trimmedRoot, false)}
 
             <DetectionCard
               state={detectionView}
@@ -681,8 +739,11 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
         <FolderBrowserModal
           stackId={BROWSE_STACK_ID}
           opened={opened && browseOpened}
-          onClose={() => setBrowseOpened(false)}
+          onClose={closeBrowser}
           onSelect={(path) => {
+            // The section follows the folder picked, as it does the field.
+            const bucket = s3BucketOf(path);
+            if (bucket) setPrivateBucket((prev) => followBucket(prev, bucket));
             changeDataRoot(path);
             setInspectTarget(path);
             // The browser read it with the bucket's details: read it again
@@ -693,7 +754,12 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
           initialLocation={trimmedRoot}
           localEnabled={localDataRootsEnabled}
           s3Enabled={remoteBrowseEnabled}
-          privateBucket={rootStorage ? storageBinding : null}
+          privateBucket={browseBinding}
+          credentialsForm={(location) => renderPrivateBucket(location, true)}
+          onCredentialsNeeded={(location) => {
+            const bucket = s3BucketOf(location);
+            if (bucket) setPrivateBucket((prev) => offerSection(prev, bucket));
+          }}
           templates={templates}
         />
       )}
