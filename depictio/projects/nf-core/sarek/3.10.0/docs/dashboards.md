@@ -29,8 +29,7 @@ comparison: nf-core/variantbenchmarking has its own template for that.
 
 The landing page, at compact width with the filter panel collapsed:
 
-- **Hero**: what the run is, and a link to the run parameters. No sarek wordmark ships with
-  the viewer, so the hero has no logo.
+- **Hero**: the sarek wordmark, what the run is, and a link to the run parameters.
 - **About this dashboard** and **The run**: two cards side by side. The second lists the
   samples, the callsets and callers, the genome and the aligner, from the sample hub, the
   bcftools summary and the run parameters. The `tools` parameter is not printed: a

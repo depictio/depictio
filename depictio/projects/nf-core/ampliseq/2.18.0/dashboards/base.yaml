@@ -114,9 +114,10 @@ main_dashboard:
     layout: {x: 2, y: 0, w: 2, h: 1}
   - component_type: text
     title: nf-core/ampliseq
-    # The pipeline's wordmark, as in its docs. No dark variant is shipped yet,
-    # so a dark page draws the title as text.
+    # The pipeline's wordmark, as in its docs: the light one bundled, the dark one
+    # read from its repository. Where a logo cannot load, the title is drawn as text.
     logo: /assets/images/workflows/ampliseq.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/ampliseq/master/docs/images/nf-core-ampliseq_logo_dark.png
     order: 1
     body: >
       Amplicon reads turned into a census of each sample's community: who is there, how diverse

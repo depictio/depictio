@@ -138,6 +138,8 @@ main_dashboard:
     layout: {x: 2, y: 0, w: 2, h: 1}
   - component_type: text
     title: nf-core/sarek
+    logo: https://raw.githubusercontent.com/nf-core/sarek/master/docs/images/nf-core-sarek_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/sarek/master/docs/images/nf-core-sarek_logo_dark.png
     order: 1
     body: >
       Germline variant calling from reads to genes: how deeply the targets were covered, what

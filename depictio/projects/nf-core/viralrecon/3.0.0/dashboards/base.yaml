@@ -155,6 +155,8 @@ main_dashboard:
     layout: {x: 2, y: 0, w: 2, h: 1}
   - component_type: text
     title: nf-core/viralrecon
+    logo: https://raw.githubusercontent.com/nf-core/viralrecon/master/docs/images/nf-core-viralrecon_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/viralrecon/master/docs/images/nf-core-viralrecon_logo_dark.png
     order: 1
     body: >
       Viral genomes from amplicon or metagenomic reads: how well each sample was covered, which

@@ -828,7 +828,11 @@ const TextRenderer: React.FC<TextRendererProps> = ({
 
   const hasTitle = rawTitle.trim().length > 0;
   const { colorScheme } = useMantineColorScheme();
-  const logoSrc = textLogoSrc(metadata.logo, metadata.logo_dark, colorScheme === 'dark');
+  const wantedLogo = textLogoSrc(metadata.logo, metadata.logo_dark, colorScheme === 'dark');
+  // A logo that fails to load (an instance without internet, a moved file)
+  // gives way to the title as text rather than a broken image.
+  const [failedLogo, setFailedLogo] = useState<string | null>(null);
+  const logoSrc = wantedLogo && wantedLogo !== failedLogo ? wantedLogo : null;
   const fill = useMemo(
     () => makeFill(metadata.values, liveValues, liveLoading, valueChips),
     [metadata.values, liveValues, liveLoading, valueChips],
@@ -927,6 +931,7 @@ const TextRenderer: React.FC<TextRendererProps> = ({
             <img
               src={logoSrc}
               alt={rawTitle}
+              onError={() => setFailedLogo(logoSrc)}
               style={{ height: '1.15em', width: 'auto', maxWidth: '100%', verticalAlign: 'top' }}
             />
           ) : (

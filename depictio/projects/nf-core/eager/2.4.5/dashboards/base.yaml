@@ -161,9 +161,11 @@ main_dashboard:
     index: ov-kf-library
     title: Library
     layout: {x: 2, y: 0, w: 2, h: 1}
-  # No wordmark of the pipeline is shipped, so the title is drawn as text.
+  # The pipeline's wordmark, read from its repository. eager ships no dark-page
+  # variant, so a dark page, or a page that cannot load it, draws the title as text.
   - component_type: text
     title: nf-core/eager
+    logo: https://raw.githubusercontent.com/nf-core/eager/master/docs/images/nf-core-eager_logo.png
     order: 1
     body: >
       Ancient-DNA reads followed from trimming to genotypes: how much of each extract is the

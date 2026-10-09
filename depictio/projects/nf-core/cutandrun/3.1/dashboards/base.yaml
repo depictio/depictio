@@ -129,6 +129,8 @@ main_dashboard:
     layout: {x: 2, y: 0, w: 2, h: 1}
   - component_type: text
     title: nf-core/cutandrun
+    logo: https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/images/nf-core-cutandrun_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/cutandrun/master/docs/images/nf-core-cutandrun_logo_dark.png
     order: 1
     body: >
       CUT&RUN and CUT&Tag libraries turned into fragments, peaks called against the IgG

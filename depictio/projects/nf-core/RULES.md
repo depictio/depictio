@@ -43,7 +43,7 @@ At most **24 grid rows** at compact width, in this order:
 
 | Block | Section | Content | Size |
 |---|---|---|---|
-| Hero | none | one text: `title: nf-core/<pipeline>`, its wordmark as `logo:` (and `logo_dark:`) when `depictio/api/static_assets/images/workflows/` ships it, one sentence on what the run is, a `[Run parameters](params:)` link | w8 h1 |
+| Hero | none | one text: `title: nf-core/<pipeline>`, its wordmark as `logo:` and `logo_dark:` (the pipeline's `docs/images/nf-core-<pipeline>_logo_light.png` and `_logo_dark.png` on `raw.githubusercontent.com/nf-core/<pipeline>/master/`; a logo that cannot load gives way to the title as text), one sentence on what the run is, a `[Run parameters](params:)` link | w8 h1 |
 | About | none | two `surface: card` texts side by side: `### About this dashboard` (what it shows, how to use it) and `### The run` (an icon list of run facts from `{{param:…}}` and `values:`) | w5 h3 + w3 h3 |
 | Pipeline | none | a `surface: card` text with `accent: <colour>`: a `###` heading, one intro line, then a `::: steps` flow of 4 to 6 icon-led steps, each with `params:` and `tab:` links | w8 h3 |
 | Key figures | `appearance: plain`, `card_variant: headline`, `filter_bar: true`, `visible_filters: 2` | at least 2 filters (the group, then the sample), then 4 cards, each with `caption`, `link: tab:<Tab>` and a `description` | 4 × w2 h2 |

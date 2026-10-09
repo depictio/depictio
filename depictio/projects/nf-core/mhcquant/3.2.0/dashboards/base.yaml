@@ -132,9 +132,12 @@ main_dashboard:
     index: ov-kf-sample
     title: Sample
     layout: {x: 2, y: 0, w: 2, h: 1}
-  # No wordmark of the pipeline is shipped, so the title is drawn as text.
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
   - component_type: text
     title: nf-core/mhcquant
+    logo: https://raw.githubusercontent.com/nf-core/mhcquant/master/docs/images/nf-core-mhcquant_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/mhcquant/master/docs/images/nf-core-mhcquant_logo_dark.png
     order: 1
     body: >
       Immunopeptidomics spectra turned into the peptides each sample presents on its MHC

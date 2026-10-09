@@ -139,6 +139,8 @@ main_dashboard:
     layout: {x: 2, y: 0, w: 2, h: 1}
   - component_type: text
     title: nf-core/genomeassembler
+    logo: https://raw.githubusercontent.com/nf-core/genomeassembler/master/docs/images/nf-core-genomeassembler_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/genomeassembler/master/docs/images/nf-core-genomeassembler_logo_dark.png
     order: 1
     body: >
       Genomes assembled from long reads, then polished and scaffolded, with every stage scored

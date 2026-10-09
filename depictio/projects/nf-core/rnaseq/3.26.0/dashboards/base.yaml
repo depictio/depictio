@@ -117,6 +117,8 @@ main_dashboard:
     layout: {x: 2, y: 0, w: 2, h: 1}
   - component_type: text
     title: nf-core/rnaseq
+    logo: https://raw.githubusercontent.com/nf-core/rnaseq/master/docs/images/nf-core-rnaseq_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/rnaseq/master/docs/images/nf-core-rnaseq_logo_dark.png
     order: 1
     body: >
       Bulk RNA-seq libraries trimmed, aligned and quantified into gene expression: how

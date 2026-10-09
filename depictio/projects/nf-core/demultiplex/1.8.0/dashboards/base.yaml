@@ -133,9 +133,12 @@ main_dashboard:
     index: ov-kf-library
     title: Library
     layout: {x: 2, y: 0, w: 2, h: 1}
-  # No wordmark is shipped for demultiplex, so the hero draws the title as text.
+  # The pipeline's wordmark, read from its repository; where it cannot load (no
+  # internet), the title is drawn as text.
   - component_type: text
     title: nf-core/demultiplex
+    logo: https://raw.githubusercontent.com/nf-core/demultiplex/master/docs/images/nf-core-demultiplex_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/demultiplex/master/docs/images/nf-core-demultiplex_logo_dark.png
     order: 1
     body: >
       One sequencing run split into its libraries: how the lanes delivered, how evenly
