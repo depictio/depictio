@@ -17,12 +17,14 @@ function fixed(digits: number): Intl.NumberFormat {
 }
 
 const SMALL = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 3 });
+const TINY = new Intl.NumberFormat('en-US', { maximumSignificantDigits: 2 });
 
 /**
  * A card number, readable at a glance: thousands separators, and decimals that
  * shrink as the magnitude grows (879,737,777 / 3,641 / 907.1 / 12.35 / 0.0123).
- * Integers are never rounded; values too small for three significant digits
- * switch to scientific notation rather than printing as 0.
+ * Integers are never rounded; values under 0.001 keep two significant digits
+ * (0.00032), and only values under 0.0001 switch to scientific notation rather
+ * than printing as 0.
  */
 export function formatCardNumber(v: number): string {
   if (!Number.isFinite(v)) return '—';
@@ -32,6 +34,7 @@ export function formatCardNumber(v: number): string {
   if (abs >= 100) return fixed(1).format(v);
   if (abs >= 1) return fixed(2).format(v);
   if (abs >= 0.001) return SMALL.format(v);
+  if (abs >= 0.0001) return TINY.format(v);
   return v.toExponential(2);
 }
 
@@ -86,7 +89,8 @@ function si(v: number): string {
 /**
  * A number in one of the formats a card's `format` and a text tile's live
  * value share: `percent` (a 0-1 fraction times 100: 41%, but 4.7% under ten,
- * so a small share keeps the digit that tells it from 4%), `integer`, `si`
+ * so a small share keeps the digit that tells it from 4%, and 0.032% under
+ * one, so a share that is not zero never prints as 0%), `integer`, `si`
  * (214k, 3.7M) or `decimals:N`. Anything else, or no format, prints as
  * `formatCardNumber` does.
  */
@@ -95,7 +99,10 @@ export function formatNumber(v: number, format?: string | null): string {
   const f = typeof format === 'string' ? format.trim() : '';
   if (f === 'percent') {
     const pct = v * 100;
-    return `${Math.abs(pct) < 10 ? ONE_DECIMAL.format(pct) : INTEGER.format(pct)}%`;
+    const abs = Math.abs(pct);
+    if (abs >= 10) return `${INTEGER.format(pct)}%`;
+    if (abs >= 1 || pct === 0) return `${ONE_DECIMAL.format(pct)}%`;
+    return `${TINY.format(pct)}%`;
   }
   // `|| 0`: -0.4 rounds to -0, which prints as "-0".
   if (f === 'integer') return INTEGER.format(Math.round(v) || 0);

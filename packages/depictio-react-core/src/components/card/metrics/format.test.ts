@@ -29,6 +29,7 @@ describe('formatCardNumber', () => {
   });
 
   it('keeps tiny values visible and non-finite values blank', () => {
+    expect(formatCardNumber(0.000322)).toBe('0.00032');
     expect(formatCardNumber(0.0000123)).toBe('1.23e-5');
     expect(formatCardNumber(Number.NaN)).toBe('—');
   });
@@ -51,6 +52,12 @@ describe('formatNumber', () => {
     expect(formatNumber(0.047, 'percent')).toBe('4.7%');
     expect(formatNumber(1, 'percent')).toBe('100%');
     expect(formatNumber(0, 'percent')).toBe('0%');
+  });
+
+  it('keeps a share under 1% off 0%, at two significant digits', () => {
+    expect(formatNumber(0.000322, 'percent')).toBe('0.032%');
+    expect(formatNumber(0.0047, 'percent')).toBe('0.47%');
+    expect(formatNumber(0.01, 'percent')).toBe('1%');
   });
 
   it('abbreviates large values with SI suffixes', () => {
