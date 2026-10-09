@@ -38,7 +38,7 @@ template:
       description: "Set when the run used --skip_report_threshold, or an explicit --clonal_threshold instead of 'auto'. Prunes the threshold summary DC."
       required: false
     - name: "SKIP_MULTIQC"
-      description: "Set when the run used --skip_multiqc (params.json skip_multiqc). Prunes the MultiQC DC; the MultiQC panels of the main tab then render empty, the other tabs are unaffected."
+      description: "Set when the run used --skip_multiqc (params.json skip_multiqc). Prunes the MultiQC DC, which drops the MultiQC tab; the other tabs are unaffected."
       required: false
     - name: "ASSEMBLED_MODE"
       description: "Set when the run used --mode assembled (params.json mode). Prunes the pRESTO log DCs: assembled input skips read pre-processing entirely."
