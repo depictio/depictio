@@ -7047,7 +7047,7 @@
           "mode": "expected-cis",
           "name": "Contact probability P(s)",
           "path_glob": "**/*_balanced.txt",
-          "rawYaml": "id: cooltools_distance_profile\nname: Contact probability P(s)\nmode: expected-cis\ndescription: >-\n  Contact probability against genomic distance, recomputed from the balanced\n  cooler dump over log-spaced distance bins, one curve per chromosome plus the\n  genome-wide pooled curve, with the log-log slope alongside it.\nfind:\n  path_glob: \"**/*_balanced.txt\"\nrecipe: cooltools/distance_profile.py\nfixture: distance_profile.tsv\nrenders_as:\n  - id: ps_curve\n    component: advanced_viz\n    kind: profile\n    roles: {series: chrom, x: distance, y: contact_probability}\n  # The derivative of the same curve. Read on its own axis, because a slope\n  # near -1 and a probability near 0.1 share no scale.\n  - id: ps_slope\n    component: advanced_viz\n    kind: profile\n    roles: {series: chrom, x: distance, y: log10_slope}\n  - { component: card, column: log10_slope, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: card, column: contact_probability, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
+          "rawYaml": "id: cooltools_distance_profile\nname: Contact probability P(s)\nmode: expected-cis\ndescription: >-\n  Contact probability against genomic distance, recomputed from the balanced\n  cooler dump over log-spaced distance bins, one curve per chromosome plus the\n  genome-wide pooled curve, with the log-log slope alongside it.\nfind:\n  path_glob: \"**/*_balanced.txt\"\nrecipe: cooltools/distance_profile.py\nfixture: distance_profile.tsv\nrenders_as:\n  - id: ps_curve\n    component: advanced_viz\n    kind: profile\n    roles: {series: chrom, x: distance, y: contact_probability}\n  # The derivative of the same curve. Read on its own axis, because a slope\n  # near -1 and a probability near 0.1 share no scale.\n  - id: ps_slope\n    component: advanced_viz\n    kind: profile\n    roles: {series: chrom, x: distance, y: log10_slope}\n  # The pooled curve only: a median over it and the per-chromosome curves\n  # counts the genome twice.\n  - { component: card, column: log10_slope, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot, filter_expr: \"col('chrom') == 'all'\" }\n  - { component: card, column: contact_probability, aggregation: max, aggregations: [box_plot_stats], secondary_layout: box_plot }\n  - { component: table }\n",
           "recipe": "cooltools/distance_profile.py",
           "renders_as": [
             {
@@ -7088,6 +7088,7 @@
               "columns": [],
               "component": "card",
               "dict_kwargs": {},
+              "filter_expr": "col('chrom') == 'all'",
               "roles": {},
               "secondary_layout": "box_plot"
             },
