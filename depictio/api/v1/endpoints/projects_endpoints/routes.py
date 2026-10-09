@@ -697,6 +697,8 @@ async def trigger_project_ingestion(
     await asyncio.to_thread(jobs_store.attach_task, job.job_id, async_result.id)
     logger.info(f"Browser-triggered ingestion for project {project_id}: job {job.job_id}")
     return {"job_id": job.job_id, "run_id": run_id, "already_running": False}
+
+
 @projects_endpoint_router.post("/ingest_manifest", response_model=ManifestIngestReport)
 async def ingest_manifest(
     payload: IngestManifestRequest,

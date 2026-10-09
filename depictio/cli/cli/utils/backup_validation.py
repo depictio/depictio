@@ -76,6 +76,8 @@ class DashboardVersionCounterBackupDoc(BaseModel):
 
     family_id: str
     seq: int
+
+
 class ProjectStorageConfigBackupDoc(BaseModel):
     """Per-project S3 read credentials, as written by
     `projects_endpoints.storage_config._set_project_storage`.

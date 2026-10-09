@@ -37,7 +37,6 @@ import {
   Alert,
   Anchor,
   Modal,
-  SegmentedControl,
   Select,
   Switch,
   Textarea,
