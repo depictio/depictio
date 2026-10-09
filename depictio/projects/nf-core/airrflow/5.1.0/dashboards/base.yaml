@@ -3,11 +3,12 @@
 #
 # Routes: template.yaml prunes data collections per run. --mode assembled drops
 # the pRESTO logs (sequence_counts, sequence_fates) and with them the Sequence
-# Processing tab; --skip_report drops the V gene tables; --skip_clonal_analysis
-# drops every clonal table, and the clonal tabs go with them. No collection other
-# than the sample sheet survives every route, so the Key figures read the
-# collections of the default fastq route: --mode assembled leaves three cards,
-# --skip_clonal_analysis two.
+# Processing tab; --skip_report drops the V gene tables and the pRESTO logs
+# (the log parser runs inside the report); --skip_clonal_analysis drops every
+# clonal table, and the clonal tabs go with them. No collection other than the
+# sample sheet survives every route, so each Key figure a route loses has an
+# alternate on the same grid slot, bound to a `_<route>` collection that exists
+# on that route only: the import draws whichever card of a slot survives.
 main_dashboard:
   title: nf-core/airrflow
   subtitle: Immune receptor repertoires, from reads to the clones that expand and are shared
@@ -117,6 +118,8 @@ main_dashboard:
     layout: {x: 2, y: 0, w: 2, h: 1}
   - component_type: text
     title: nf-core/airrflow
+    logo: https://raw.githubusercontent.com/nf-core/airrflow/master/docs/images/nf-core-airrflow_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/airrflow/master/docs/images/nf-core-airrflow_logo_dark.png
     order: 1
     body: >
       B and T cell receptor reads turned into repertoires: the V genes each sample uses, the
@@ -170,7 +173,12 @@ main_dashboard:
     index: ov-steps
     layout: {x: 0, y: 4, w: 8, h: 3}
   # Key figures: one card per stage of the funnel, each opening the tab that
-  # explains it. The icon colour is that tab's colour.
+  # explains it. The icon colour is that tab's colour; a route alternate keeps
+  # the colour of the slot it fills, so no route repeats one.
+  #   slot x2: Input reads | Input sequences (--mode assembled)
+  #            | Sequences (--skip_report)
+  #   slot x4: Clones | Unique sequences (--skip_clonal_analysis)
+  #   slot x6: Sequences per clone | V genes (--skip_clonal_analysis)
   - component_type: card
     workflow_tag: airrflow
     data_collection_tag: samplesheet
@@ -210,6 +218,49 @@ main_dashboard:
     title: Input reads
     description: Read pairs that entered pRESTO. The box shows how they spread over the samples.
     layout: {x: 2, y: 0, w: 2, h: 2}
+  # --mode assembled: pRESTO never runs, so the slot counts the assembled
+  # sequences that entered IgBLAST, from the report's Change-O table.
+  - component_type: card
+    workflow_tag: airrflow
+    data_collection_tag: annotation_counts_assembled
+    aggregation: sum
+    column_name: input
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:import
+      icon_color: indigo
+      caption: summed, with the spread per sample
+      link: tab:V Gene Usage
+    section: Key figures
+    tag: airr-ov-kf-input-assembled
+    index: ov-kf-input-assembled
+    title: Input sequences
+    description: Assembled sequences that entered IgBLAST annotation. The box shows how they spread over the samples.
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  # --skip_report: the pRESTO log parser runs inside the report, so the slot
+  # counts the sequences that entered clonal assignment instead.
+  - component_type: card
+    workflow_tag: airrflow
+    data_collection_tag: repertoire_summary_noreport
+    use: enchantr/repertoire_summary
+    aggregation: sum
+    column_name: sequences
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: indigo
+      caption: summed, with the spread per sample
+      link: tab:Clonal Diversity
+    section: Key figures
+    tag: airr-ov-kf-sequences-noreport
+    index: ov-kf-sequences-noreport
+    title: Sequences
+    description: Unique annotated sequences that entered clonal assignment. The box shows how they spread over the samples.
+    layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: airrflow
     data_collection_tag: repertoire_summary
@@ -229,6 +280,28 @@ main_dashboard:
     index: ov-kf-clones
     title: Clones
     description: Clones over the samples in view. The box shows how many each sample holds.
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  # --skip_clonal_analysis: no clones, so the slot counts the unique annotated
+  # sequences the clones would have been built from, the repertoire the V Gene
+  # Usage tab reads.
+  - component_type: card
+    workflow_tag: airrflow
+    data_collection_tag: annotation_counts_noclonal
+    aggregation: sum
+    column_name: collapsed
+    column_type: int64
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    display:
+      icon_name: mdi:layers-outline
+      icon_color: teal
+      caption: summed, with the spread per sample
+      link: tab:V Gene Usage
+    section: Key figures
+    tag: airr-ov-kf-unique-noclonal
+    index: ov-kf-unique-noclonal
+    title: Unique sequences
+    description: Annotated sequences left after duplicate collapse, the repertoire the V gene tables count. The box shows how they spread over the samples.
     layout: {x: 4, y: 0, w: 2, h: 2}
   # sequences_per_clone is each sample's mean clone size, so the median is of
   # samples. The pRESTO retention ratio is not a Key figure: consensus and
@@ -253,6 +326,30 @@ main_dashboard:
     index: ov-kf-clone-size
     title: Sequences per clone
     description: Each sample's sequences over its clones, the median over samples. Near 1, most clones hold one sequence.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  # --skip_clonal_analysis: the report still counts V genes, so the slot shows
+  # how many the repertoires use, ranked by family as in the ampliseq Phyla card.
+  - component_type: card
+    workflow_tag: airrflow
+    data_collection_tag: v_gene_usage_noclonal
+    use: enchantr/v_gene_usage
+    aggregation: nunique
+    column_name: taxon
+    column_type: object
+    filter_expr: "col('rank') == 'V gene'"
+    secondary_layout: composition
+    breakdown_col: v_family
+    top_n_count: 5
+    display:
+      icon_name: mdi:dna
+      icon_color: blue
+      caption: distinct V genes, the richest families
+      link: tab:V Gene Usage
+    section: Key figures
+    tag: airr-ov-kf-vgenes-noclonal
+    index: ov-kf-vgenes-noclonal
+    title: V genes
+    description: Distinct V genes over the samples in view. The bars rank the V families by the genes they hold.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Findings filter bar: the group, then the subject the clones are defined in.
   - component_type: interactive

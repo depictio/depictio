@@ -40,7 +40,8 @@ The landing page, at compact width with the filter panel collapsed:
 - **Key figures**: four headline cards, each opening the tab that explains it. Samples (split
   by condition), input reads and clones (each summed, with the spread per sample) and the
   sequences per clone (each sample's mean clone size, the median over samples). A condition
-  and a sample filter above them narrow these four only.
+  and a sample filter above them narrow these four only. A route that loses one of them fills
+  its slot with an alternate (see Routes and pruning), so every route keeps four.
 - **Findings**: result rows whose values are computed under the filters, each with a link to
   its tab: the most used V family and its share of the sequences, the median effective number
   of clones (Hill diversity at q = 1, after rarefying), the clones seen in more than one
@@ -120,16 +121,30 @@ tiles and rows that pointed at it; the import re-packs the Overview grid after a
 
 | Route | What changes |
 |---|---|
-| `ASSEMBLED_MODE` (`--mode assembled`) | No Sequence Processing tab; the input reads Key figure drops. |
-| `SKIP_REPORT` | No V Gene Usage tab, V family row or V composition highlight. |
-| `SKIP_CLONAL_ANALYSIS` | No Clonality tabs, clones or sequences per clone Key figures, diversity, sharing or size class rows, nor their highlights; CDR3 & Pairing goes too, as its tables come from the clonal analysis. |
+| `ASSEMBLED_MODE` (`--mode assembled`) | No Sequence Processing tab; the input reads Key figure becomes input sequences. |
+| `SKIP_REPORT` | No V Gene Usage tab, V family row or V composition highlight, and no Sequence Processing tab either: airrflow parses the pRESTO logs inside its report step. The input reads Key figure becomes sequences. |
+| `SKIP_CLONAL_ANALYSIS` | No Clonality tabs, diversity, sharing or size class rows, nor their highlights; CDR3 & Pairing goes too, as its tables come from the clonal analysis. The clones and sequences per clone Key figures become unique sequences and V genes. |
 | `SKIP_THRESHOLD_REPORT` | No clone definition cards or table. |
 | `SKIP_MULTIQC` | No MultiQC tab. |
 
-No collection but the sample sheet survives every route, so the Key figures read the
-collections of the default fastq route: `--mode assembled` leaves three cards and
-`--skip_clonal_analysis` two. Filling those slots needs alternate collections that exist on
-that route only, which the template does not declare yet.
+No collection but the sample sheet survives every route, so each Key figure a route loses
+has an alternate on the same grid slot, bound to a collection that exists on that route
+only. The import keeps whichever card of a slot survives, and no route keeps two.
+
+| Slot | Default card | Alternate | Collection, and the route it exists on | Opens |
+|---|---|---|---|---|
+| 2 | Input reads | Input sequences: assembled sequences that entered IgBLAST | `annotation_counts_assembled`, `ASSEMBLED_MODE` | V Gene Usage |
+| 2 | Input reads | Sequences: unique annotated sequences that entered clonal assignment | `repertoire_summary_noreport`, `SKIP_REPORT` | Clonal Diversity |
+| 3 | Clones | Unique sequences: annotated sequences after duplicate collapse | `annotation_counts_noclonal`, `SKIP_CLONAL_ANALYSIS` | V Gene Usage |
+| 4 | Sequences per clone | V genes: distinct V genes, ranked by family | `v_gene_usage_noclonal`, `SKIP_CLONAL_ANALYSIS` | V Gene Usage |
+
+The two `annotation_counts_*` collections read the Change-O table of the report
+(`repertoire_comparison/Sequence_numbers_summary/Table_sequences_assembled.tsv`) through the
+version-local recipe `recipes/annotation_counts.py`: it is the sequence count a run still
+writes without pRESTO or without clones. An alternate keeps the colour of the card it
+replaces, so no route repeats one. Combined routes keep four cards too (an assembled run
+without clonal analysis shows input sequences, unique sequences and V genes), except a run
+that skipped both the report and the clonal analysis: only its Samples card is left.
 
 ## Colours
 

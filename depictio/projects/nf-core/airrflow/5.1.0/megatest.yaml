@@ -50,7 +50,8 @@ keys:
   # enchantR find-threshold report: the shazam distance threshold per subject.
   - clonal_analysis/find_threshold/all_reps_dist_report/tables/all_reps_threshold-summary.tsv
   # Repertoire comparison report: V family and V gene usage per sample, plus the
-  # Change-O half of the sequence funnel.
+  # Change-O half of the sequence funnel (also read by the annotation_counts
+  # recipe behind the assembled and no-clonal Key figure alternates).
   - repertoire_comparison/V_family/V_family_distribution_data.tsv
   - repertoire_comparison/V_family/V_gene_distribution_by_sequence_data.tsv
   - repertoire_comparison/Sequence_numbers_summary/Table_sequences_assembled.tsv

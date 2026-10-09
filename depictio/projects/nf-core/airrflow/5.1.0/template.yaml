@@ -32,7 +32,7 @@ template:
       description: "Set when the run used --skip_clonal_analysis (params.json skip_clonal_analysis). Prunes every clonal_analysis/ derived DC."
       required: false
     - name: "SKIP_REPORT"
-      description: "Set when the run used --skip_report (params.json skip_report). Prunes the repertoire_comparison/ derived DCs."
+      description: "Set when the run used --skip_report (params.json skip_report). Prunes the repertoire_comparison/ and parsed_logs/ derived DCs: the pRESTO log parser runs inside the report step."
       required: false
     - name: "SKIP_THRESHOLD_REPORT"
       description: "Set when the run used --skip_report_threshold, or an explicit --clonal_threshold instead of 'auto'. Prunes the threshold summary DC."
@@ -121,17 +121,22 @@ template:
         - data_collection_tag: "samplesheet"
           scan_filename: "{SAMPLESHEET_FILE}"
     # --skip_clonal_analysis: clonal_analysis/ is never written, so every DC
-    # derived from the repertoire analysis and find-threshold reports goes.
+    # derived from the repertoire analysis and find-threshold reports goes, and
+    # so do the two that read its AIRR rearrangement table.
     - if_var_present: "SKIP_CLONAL_ANALYSIS"
       remove_dc_tags:
-        ["repertoire_summary", "clonal_diversity", "diversity_orders", "clonal_abundance", "clone_sizes",
-         "clone_sets", "clonal_overlap", "threshold_summary"]
+        ["repertoire_summary", "repertoire_summary_noreport", "clonal_diversity", "diversity_orders",
+         "clonal_abundance", "clone_sizes", "clone_sets", "clonal_overlap", "threshold_summary",
+         "cdr3_spectratype", "vj_usage_matrix"]
       dashboards: ["dashboards/base.yaml"]
-    # --skip_report: repertoire_comparison/ is absent, which also removes the
-    # Change-O half of the sequence funnel (sequence_counts falls back to the
-    # pRESTO columns on its own, its second source is optional).
+    # --skip_report: the report step writes repertoire_comparison/ and, in
+    # airrflow 5.1.0, also runs the pRESTO log parser (PARSE_LOGS sits inside
+    # REPERTOIRE_ANALYSIS_REPORTING), so parsed_logs/ is absent as well and the
+    # whole sequence funnel goes with the V gene tables.
     - if_var_present: "SKIP_REPORT"
-      remove_dc_tags: ["v_gene_usage", "v_gene_matrix"]
+      remove_dc_tags:
+        ["v_gene_usage", "v_gene_matrix", "v_gene_usage_noclonal", "sequence_counts", "sequence_fates",
+         "annotation_counts_assembled", "annotation_counts_noclonal"]
       dashboards: ["dashboards/base.yaml"]
     # --skip_report_threshold, or an explicit --clonal_threshold: no fit, so no
     # find_threshold report.
@@ -146,6 +151,23 @@ template:
     # never runs and parsed_logs/ does not exist.
     - if_var_present: "ASSEMBLED_MODE"
       remove_dc_tags: ["sequence_counts", "sequence_fates"]
+      dashboards: ["dashboards/base.yaml"]
+    # Route alternates of the Overview's Key figures. Each `_<route>` collection
+    # feeds a card that shares a grid slot with a card the route loses, so it
+    # exists on that route only: removed whenever its flag is absent, and with
+    # the step it reads (above). No route keeps two cards of one slot.
+    #   annotation_counts_assembled  input sequences, in place of the input reads
+    #   annotation_counts_noclonal   unique sequences, in place of the clones
+    #   v_gene_usage_noclonal        V genes, in place of the sequences per clone
+    #   repertoire_summary_noreport  sequences, in place of the input reads
+    - if_var_absent: "ASSEMBLED_MODE"
+      remove_dc_tags: ["annotation_counts_assembled"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_absent: "SKIP_CLONAL_ANALYSIS"
+      remove_dc_tags: ["annotation_counts_noclonal", "v_gene_usage_noclonal"]
+      dashboards: ["dashboards/base.yaml"]
+    - if_var_absent: "SKIP_REPORT"
+      remove_dc_tags: ["repertoire_summary_noreport"]
       dashboards: ["dashboards/base.yaml"]
 
 # ============================================================================
@@ -294,8 +316,80 @@ workflows:
               "collapsed": "Last funnel level, or 'Lost' when the reads stopped earlier"
               "reads": "How many reads followed this exact path"
 
+      # Route alternates (see the conditionals): the report's Change-O chain,
+      # which needs neither pRESTO nor the clonal analysis. One version-local
+      # recipe, declared twice so each copy lives on one route only: the input
+      # sequences card of --mode assembled, the unique sequences card of
+      # --skip_clonal_analysis. Both copies exist on a run that took both routes.
+      - data_collection_tag: "annotation_counts_assembled"
+        description: "Assembled sequences through V(D)J annotation and QC, one row per sample (--mode assembled only)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/airrflow/annotation_counts.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "input": "Sequences that entered V(D)J annotation, the first count the sample logged"
+              "converted": "Assembled AIRR records converted back to FASTA for reassignment"
+              "igblast_assigned": "Sequences IgBLAST was run on"
+              "annotated": "Sequences with a parsed IgBLAST annotation (MakeDb)"
+              "quality_pass": "Annotated sequences that passed the alignment quality filter"
+              "productive": "Productive sequences"
+              "junction_mod3": "Productive sequences whose junction length is a multiple of 3"
+              "germlines": "Sequences with a reconstructed germline"
+              "chimera_pass": "Sequences that passed the chimera filter"
+              "collapsed": "Unique annotated sequences after duplicate collapse"
+
+      - data_collection_tag: "annotation_counts_noclonal"
+        description: "Sequences through V(D)J annotation and QC, one row per sample (--skip_clonal_analysis only)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/airrflow/annotation_counts.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "input": "Sequences that entered V(D)J annotation, the first count the sample logged"
+              "converted": "Assembled AIRR records converted back to FASTA for reassignment"
+              "igblast_assigned": "Sequences IgBLAST was run on"
+              "annotated": "Sequences with a parsed IgBLAST annotation (MakeDb)"
+              "quality_pass": "Annotated sequences that passed the alignment quality filter"
+              "productive": "Productive sequences"
+              "junction_mod3": "Productive sequences whose junction length is a multiple of 3"
+              "germlines": "Sequences with a reconstructed germline"
+              "chimera_pass": "Sequences that passed the chimera filter"
+              "collapsed": "Unique annotated sequences after duplicate collapse"
+
       - data_collection_tag: "repertoire_summary"
         description: "Per-sample clone counts, clone-size spread and rarefied Hill numbers with confidence bounds"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "enchantr/repertoire_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "subject_id": "Donor the sample came from"
+              "sequences": "Sequences that entered clonal assignment"
+              "number_of_clones": "Clones those sequences collapsed into"
+              "sequences_per_clone": "Mean clone size"
+              "richness": "Hill number at q=0, rarefied to a common depth"
+              "shannon": "Hill number at q=1 (exponential Shannon)"
+              "simpson": "Hill number at q=2 (inverse Simpson)"
+              "evenness": "Shannon Hill number divided by richness"
+
+      # Route alternate (see the conditionals): with --skip_report the pRESTO
+      # logs are gone too, so the sequences that entered clonal assignment fill
+      # the input reads slot. Exists on that route only.
+      - data_collection_tag: "repertoire_summary_noreport"
+        description: "Per-sample clone counts and Hill numbers, the input reads alternate (--skip_report only)"
         config:
           type: "Table"
           source: "transformed"
@@ -457,6 +551,26 @@ workflows:
               "sample_id": "Sample identifier"
               "subject_id": "Donor the sample came from"
 
+      # Route alternate (see the conditionals): the report still counts V genes
+      # when the clonal analysis is skipped, so the V gene card fills the
+      # sequences per clone slot. Exists on that route only.
+      - data_collection_tag: "v_gene_usage_noclonal"
+        description: "V gene usage per sample, the sequences per clone alternate (--skip_clonal_analysis only)"
+        config:
+          type: "Table"
+          source: "transformed"
+          transform:
+            recipe: "enchantr/v_gene_usage.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample_id": "Sample identifier"
+              "locus": "Receptor locus the genes belong to"
+              "rank": "Resolution of the row, 'V family' or 'V gene'"
+              "taxon": "The V family or V gene name"
+              "v_family": "V family, also filled in on gene rows"
+              "seq_freq": "Share of the sample's sequences using this gene or family"
+
       # The two collections below read the AIRR rearrangement table enchantR's
       # repertoire analysis starts from (clonal_analysis/.../repertoires/
       # *__repertoire-pass.tsv, about 300 MB on the megatest). The recipes read
@@ -550,6 +664,48 @@ links:
       resolver: "direct"
       target_field: "sample_id"
     description: "Filter the attrition flow by samplesheet samples"
+    enabled: true
+
+  # The Key figure route alternates: the Overview's filter bar narrows them the
+  # way it narrows the cards they replace.
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "annotation_counts_assembled"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the assembled-route annotation counts by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "annotation_counts_noclonal"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the no-clonal-route annotation counts by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "v_gene_usage_noclonal"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the no-clonal-route V gene usage by samplesheet samples"
+    enabled: true
+
+  - source_dc_tag: "samplesheet"
+    source_column: "sample_id"
+    target_dc_tag: "repertoire_summary_noreport"
+    target_type: "table"
+    link_config:
+      resolver: "direct"
+      target_field: "sample_id"
+    description: "Filter the no-report-route repertoire summary by samplesheet samples"
     enabled: true
 
   - source_dc_tag: "samplesheet"
