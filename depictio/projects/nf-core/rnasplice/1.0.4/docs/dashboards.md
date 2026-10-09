@@ -112,8 +112,8 @@ junction reads against transcript abundances. Only the rMATS one is labelled, wi
 symbols of its top genes. Then a sashimi of the junctions around the called rMATS events:
 one lane per condition, one arc per junction labelled with its mean reads per replicate. A
 gene picked in the left panel draws that gene's locus; without a pick the tile opens on
-the busiest cluster of junctions, the others in its locus menu, and its View switch redraws
-the junctions in GenomeSpy. Collapsed: the rMATS event table with the event record card
+the busiest cluster of junctions, the others in its locus menu. It offers the arc view
+only: the GenomeSpy view does not yet draw every condition's lane. Collapsed: the rMATS event table with the event record card
 beside it (inclusion and junction reads per condition, the locus linked to the UCSC browser
 on `GENOME`), and the SUPPA2 event table. Filters: event type, call and absolute PSI
 change, each narrowing both tools.
