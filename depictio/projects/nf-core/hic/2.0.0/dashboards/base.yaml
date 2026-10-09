@@ -243,6 +243,9 @@ main_dashboard:
     aggregation: median
     column_name: log10_slope
     column_type: float64
+    # The pooled curve only: the table also holds one curve per chromosome, and
+    # a median over both counts the genome twice (the Findings row reads the same).
+    filter_expr: "col('chrom') == 'all'"
     aggregations: [box_plot_stats]
     secondary_layout: box_plot
     display:
@@ -255,7 +258,7 @@ main_dashboard:
     tag: hc-ov-kf-slope
     index: ov-kf-slope
     title: Decay slope
-    description: Median log-log slope of contact probability against genomic distance, over every distance bin and chromosome.
+    description: Median log-log slope of the genome-wide pooled contact probability against genomic distance, over every distance bin.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: hic
@@ -878,7 +881,7 @@ tabs:
     tag: hc-dd-card-slope
     index: dd-card-slope
     title: Log-log slope
-    description: Median local slope of P(s) over every distance bin of the chromosomes in view.
+    description: Median local slope of P(s) over every distance bin of the curves in view, the pooled one included.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: hic

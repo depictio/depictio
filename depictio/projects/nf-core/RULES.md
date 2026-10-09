@@ -213,6 +213,10 @@ A KPI strip is four different readings, not four numbers in one style:
   genome-wide under a section that says "region".
 - Give a `box_plot` or `histogram` secondary enough `decimals` to tell its values apart:
   "49 · 49 · 49" reads as one value.
+- A table that holds a pooled row beside its parts (`chrom == 'all'` in a distance profile,
+  `chrom == 'total'` in mosdepth) counts the whole twice under an unfiltered median. A card
+  and a text value that read the same quantity take the same `filter_expr`, or the Key
+  figure and the Findings row disagree.
 
 ## 6. Filters
 
