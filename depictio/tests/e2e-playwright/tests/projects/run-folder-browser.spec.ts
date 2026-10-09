@@ -121,7 +121,19 @@ const RUN_INFO = {
   extra: {},
 };
 
-/** The dry run behind "What this template finds here". */
+/** How run42's tasks ended, from its execution trace. */
+const RUN_TASKS = {
+  trace: `${RUN42}/pipeline_info/execution_trace_2026-10-01_10-00-00.txt`,
+  total: 12,
+  completed: 10,
+  cached: 2,
+  failed: 0,
+  retried: 1,
+  other: 0,
+  partial: false,
+};
+
+/** The dry run behind the checks of a recognised folder. */
 function findingsReport(dataRoot: string) {
   return {
     project_id: null,
@@ -180,6 +192,45 @@ function findingsReport(dataRoot: string) {
     run_id: null,
     dry_run: true,
     success: true,
+    run_info: { ...RUN_INFO, tasks: RUN_TASKS },
+    input_files: [
+      {
+        name: "SAMPLESHEET_FILE",
+        description: "Path to the ampliseq samplesheet.",
+        required: false,
+        location: `${dataRoot}/input/samplesheet.csv`,
+        found: true,
+        used_by: ["samplesheet"],
+      },
+      {
+        name: "METADATA_FILE",
+        description: "Path to sample metadata TSV.",
+        required: false,
+        location: null,
+        found: null,
+        used_by: ["metadata", "ancombc_results"],
+      },
+    ],
+  };
+}
+
+/** The start of multiqc_data.json's sibling table, as the server reads it. */
+function filePreview(location: string) {
+  return {
+    location,
+    name: location.split("/").pop(),
+    size: 12_600,
+    format: "table",
+    columns: ["Sample", "reads", "gc_pct"],
+    rows: [
+      ["S1", "120034", "51.2"],
+      ["S2", "98012", null],
+    ],
+    columns_total: 3,
+    rows_total: 1240,
+    text: null,
+    truncated: true,
+    reason: null,
   };
 }
 
@@ -370,9 +421,8 @@ test.describe("Browse for a run folder", () => {
       "nf-core/ampliseq",
     );
     await expect(detail.locator("[data-testid='browse-detail-version']")).toHaveText("v2.16.0");
-    await expect(detail.locator("[data-testid='browse-detail-template-version']")).toHaveText(
-      "v2.16.0",
-    );
+    // One version when the run and the template agree.
+    await expect(detail.locator("[data-testid='browse-detail-template-version']")).toHaveCount(0);
     await expect(detail.locator("[data-testid='browse-detail-run-badge']")).toBeVisible();
     const markers = detail.locator("[data-testid='browse-detail-markers']");
     await expect(markers.locator("[data-marker='pipeline_info']")).toBeVisible();
@@ -465,7 +515,7 @@ test.describe("Browse for a run folder", () => {
     );
   });
 
-  test("the detail pane compares the run with its template, previews pipeline_info, lists what the template finds, and opens a sub-folder", async ({
+  test("the detail pane checks the run against its template, previews pipeline_info and the files found, and opens a sub-folder", async ({
     loginAsAdmin,
     page,
   }) => {
@@ -477,14 +527,20 @@ test.describe("Browse for a run folder", () => {
       dryRuns.push(body);
       return route.fulfill({ json: findingsReport(String(body.data_root)) });
     });
+    const previews: Array<Record<string, unknown>> = [];
+    await page.route("**/api/v1/projects/run_file_preview", (route: Route) => {
+      const body = (route.request().postDataJSON() ?? {}) as Record<string, unknown>;
+      previews.push(body);
+      return route.fulfill({ json: filePreview(String(body.location)) });
+    });
 
     await loginAsAdmin();
     await openBrowser(page);
     await goTo(page, RUN42);
     const detail = page.locator("[data-testid='browse-detail']");
 
-    // The run and the template side by side, every row agreeing.
-    await expect(detail.locator("[data-testid='browse-detail-comparison']")).toContainText("This run");
+    // One line per check, the identity ones agreeing.
+    await expect(detail.locator("[data-testid='browse-detail-comparison']")).toContainText("Checks");
     for (const row of ["pipeline", "version", "engine"]) {
       await expect(detail.locator(`[data-testid='browse-detail-${row}-agreement']`)).toHaveAttribute(
         "data-agreement",
@@ -492,14 +548,29 @@ test.describe("Browse for a run folder", () => {
       );
     }
 
-    // What the template finds is asked for only when unfolded, as a dry run.
-    expect(dryRuns).toHaveLength(0);
-    await detail.locator("[data-testid='browse-detail-findings-toggle']").click();
-    await expect(detail.locator("[data-testid='browse-detail-findings-summary']")).toHaveText(
-      "2 of 2 collections found",
-    );
+    // The checks read from the run's records come from one dry run, asked
+    // for as soon as the folder is recognised.
+    await expect(detail.locator("[data-testid='browse-detail-findings-summary']")).toHaveText("2 found");
     expect(dryRuns).toHaveLength(1);
     expect(dryRuns[0]).toMatchObject({ data_root: RUN42, template_id: "nf-core/ampliseq/2.16.0", dry_run: true });
+    await expect(detail.locator("[data-testid='browse-detail-engine']")).toHaveText("Nextflow 25.04.6");
+    const tasks = detail.locator("[data-testid='browse-detail-check-tasks']");
+    await expect(tasks).toHaveAttribute("data-status", "ok");
+    await expect(tasks).toHaveText(/12 tasks completed \(2 from cache, 1 after a retry\), none failed/);
+    await expect(detail.locator("[data-testid='browse-detail-check-folder']")).toContainText(
+      "One run, listed in full",
+    );
+    // An optional input file the run has not is said, not counted as a failure.
+    const inputs = detail.locator("[data-testid='browse-detail-check-inputs']");
+    await expect(inputs).toHaveAttribute("data-status", "info");
+    await expect(inputs).toContainText("samplesheet.csv · METADATA_FILE not set");
+    await detail.locator("[data-testid='browse-detail-check-inputs-toggle']").click();
+    await expect(detail.locator("[data-testid='run-input-files'] [data-input='METADATA_FILE']")).toContainText(
+      "used by metadata, ancombc_results",
+    );
+
+    // The collections open onto one line per collection.
+    await detail.locator("[data-testid='browse-detail-findings-toggle']").click();
     // A file index shows its rule and the real path of what it matched.
     await detail.locator("[data-testid='run-preview-details-toggle-multiqc_data']").click();
     const samples = detail.locator("[data-testid='run-preview-samples-multiqc_data']");
@@ -509,6 +580,18 @@ test.describe("Browse for a run folder", () => {
       `${RUN42}/multiqc/multiqc_data/multiqc_data.json`,
     );
     await expect(samples).toContainText("and 6 more files");
+    // A file found opens onto its first rows, read by the server.
+    await samples.locator("[data-testid='file-preview-toggle']").first().click();
+    const preview = samples.locator("[data-testid='file-preview']");
+    await expect(preview.locator("[data-testid='file-preview-table'] th")).toHaveText(["Sample", "reads", "gc_pct"]);
+    await expect(preview.locator("[data-testid='file-preview-footer']")).toHaveText("First 2 rows of 1,240 · 12 KB");
+    expect(previews).toEqual([
+      {
+        data_root: RUN42,
+        location: `${RUN42}/multiqc/multiqc_data/multiqc_data.json`,
+        max_rows: 20,
+      },
+    ]);
     // A table shows the recipe applied and what each input found.
     await detail.locator("[data-testid='run-preview-details-toggle-alpha_diversity']").click();
     const recipe = detail.locator("[data-testid='run-preview-details-alpha_diversity']");

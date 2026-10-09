@@ -142,6 +142,13 @@ async function stubFromRun(
   return bodies;
 }
 
+/** The plan the Preview step asked for: the last dry run sent. The checks of
+ *  the detection card send a dry run of their own as soon as a template is
+ *  known, so the first one is theirs. */
+function lastDryRun(bodies: FromRunBody[]): FromRunBody | undefined {
+  return bodies.filter((body) => body.dry_run).pop();
+}
+
 /** Open the run tab and type the run folder; the tab reads it on its own. */
 async function openWithFolder(page: Page, folder = DATA_ROOT): Promise<void> {
   await openRunTab(page);
@@ -196,8 +203,8 @@ test.describe("Create project from a run folder", () => {
 
     await page.locator("[data-testid='run-data-root-input']").fill(DATA_ROOT);
 
-    // The card says what made the run and which template is used, each
-    // version on its own side.
+    // The card checks the run against the template, one line each: one
+    // version when both sides agree.
     await expect(card).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
     await expect(card.locator("[data-testid='run-detected-pipeline']")).toHaveText(
       "nf-core/ampliseq",
@@ -209,15 +216,15 @@ test.describe("Create project from a run folder", () => {
       "data-template-id",
       TEMPLATE_ID,
     );
-    await expect(card.locator("[data-testid='run-detected-template-version']")).toHaveText(
-      "v2.16.0",
+    await expect(card.locator("[data-testid='run-detected-template-version']")).toHaveCount(0);
+    await expect(card.locator("[data-testid='run-detected-check-version']")).toContainText(
+      "the version the template was written for",
     );
     const match = card.locator("[data-testid='run-detected-match']");
     await expect(match).toHaveAttribute("data-match", "exact");
     await expect(match).toHaveText("Exact match");
-    // One table, the run beside the template, each row marked.
-    await expect(card).toContainText("This run");
-    await expect(card).toContainText("Depictio template");
+    // Each check marked.
+    await expect(card.locator("[data-testid='run-detected-comparison']")).toContainText("Checks");
     for (const row of ["pipeline", "version", "engine"]) {
       await expect(card.locator(`[data-testid='run-detected-${row}-agreement']`)).toHaveAttribute(
         "data-agreement",
@@ -300,8 +307,8 @@ test.describe("Create project from a run folder", () => {
     await expect(page.locator("[data-testid='run-preview-report']")).toBeVisible({
       timeout: 20_000,
     });
-    expect(bodies[0]?.template_id).toBe(TEMPLATE_ID);
-    expect(bodies[0]?.variables).toEqual({ GROUP_COL: "habitat" });
+    expect(lastDryRun(bodies)?.template_id).toBe(TEMPLATE_ID);
+    expect(lastDryRun(bodies)?.variables).toEqual({ GROUP_COL: "habitat" });
     await expect(page.locator("[data-testid='run-summary-match']")).toHaveAttribute(
       "data-match",
       "exact",
@@ -351,9 +358,9 @@ test.describe("Create project from a run folder", () => {
       "data-agreement",
       "differs",
     );
-    const detail = card.locator("[data-testid='run-detected-match-detail']");
-    await expect(detail).toContainText("v2.16.0");
-    await expect(detail).toContainText("v2.14.0");
+    await expect(card.locator("[data-testid='run-detected-match-detail']")).toHaveText(
+      "The template you picked was written for another version.",
+    );
     // The pipeline is still the detected one; the version no longer is.
     await expect(page.locator("[data-testid='run-pipeline-detected']")).toBeVisible();
     await expect(page.locator("[data-testid='run-version-detected']")).toHaveCount(0);
@@ -381,7 +388,7 @@ test.describe("Create project from a run folder", () => {
     await expect(page.locator("[data-testid='run-preview-report']")).toBeVisible({
       timeout: 20_000,
     });
-    expect(bodies[0]?.template_id).toBe("nf-core/ampliseq/2.14.0");
+    expect(lastDryRun(bodies)?.template_id).toBe("nf-core/ampliseq/2.14.0");
     const summaryMatch = page.locator("[data-testid='run-summary-match']");
     await expect(summaryMatch).toHaveAttribute("data-match", "other-version");
     await expect(page.locator("[data-testid='run-summary-version']")).toHaveText("v2.16.0");
@@ -416,9 +423,9 @@ test.describe("Create project from a run folder", () => {
     const match = card.locator("[data-testid='run-detected-match']");
     await expect(match).toHaveAttribute("data-match", "closest");
     await expect(match).toHaveText("Closest available version");
-    const detail = card.locator("[data-testid='run-detected-match-detail']");
-    await expect(detail).toContainText("v2.17.0");
-    await expect(detail).toContainText("v2.16.0");
+    await expect(card.locator("[data-testid='run-detected-match-detail']")).toContainText(
+      "the closest one is used",
+    );
 
     // The detected (closest) version is the one filled in and says so, and no
     // template version claims to match the run.
@@ -553,11 +560,17 @@ test.describe("Create project from a run folder", () => {
     await expect(settings).not.toContainText("DATA_ROOT");
     await expect(settings).not.toContainText("s3://");
 
-    // The runs found in the folder are on the screen too.
-    await expect(preview.locator("[data-testid='run-detected-runs']")).toContainText("run_1");
-
-    // A truncated listing says the counts are a lower bound.
-    await expect(preview.locator("[data-testid='run-truncated-warning']")).toBeVisible();
+    // The folder check says how many runs were read and that the listing
+    // was cut short (so the counts are a lower bound); the runs are listed
+    // under it.
+    const folderCheck = preview.locator("[data-testid='run-summary-check-folder']");
+    await expect(folderCheck).toHaveAttribute("data-status", "warn");
+    await expect(folderCheck).toContainText("read together");
+    await expect(folderCheck).toContainText("the listing stopped early");
+    await preview.locator("[data-testid='run-summary-check-folder-toggle']").click();
+    await expect(preview.locator("[data-testid='run-summary-detected-runs']")).toContainText(
+      "run_1",
+    );
 
     // Nothing matched, so Create is refused with the reason visible.
     await expect(page.locator("[data-testid='run-no-match-warning']")).toBeVisible();
@@ -655,7 +668,7 @@ test.describe("Create project from a run folder", () => {
     // Optional collections start folded (a folded panel has no height but
     // stays in the page, so its region's aria-hidden says it is shut).
     const optional = preview.locator("[data-testid='run-section-optional']");
-    const optionalToggle = optional.locator("button[aria-expanded]");
+    const optionalToggle = optional.getByRole("button", { name: /Optional, not found/ });
     const optionalPanel = optional.getByRole("region", { includeHidden: true });
     await expect(optionalToggle).toHaveAttribute("aria-expanded", "false");
     await expect(optionalPanel).toHaveAttribute("aria-hidden", "true");
@@ -724,7 +737,7 @@ test.describe("Create project from a run folder", () => {
     await expect(page.locator("[data-testid='run-preview-report']")).toBeVisible({
       timeout: 20_000,
     });
-    expect(bodies[0]?.template_id).toBe("nf-core/rnaseq/3.26.0");
+    expect(lastDryRun(bodies)?.template_id).toBe("nf-core/rnaseq/3.26.0");
   });
 
   test("an unreadable folder still previews, and an unrecognised pipeline asks for a template", async ({
@@ -1034,7 +1047,9 @@ test.describe("Create project from a run folder", () => {
 
     const modal = page.locator("[data-testid='run-created-modal']");
     await expect(modal).toBeVisible({ timeout: 20_000 });
-    expect(bodies.map((body) => body.dry_run)).toEqual([true, false]);
+    // The checks' dry run, the preview, then the creation: one creation, last.
+    expect(bodies.filter((body) => body.dry_run === false)).toHaveLength(1);
+    expect(bodies[bodies.length - 1]?.dry_run).toBe(false);
     for (const body of bodies) expect(body.storage).toEqual(withRegion);
     await expect(modal.locator("[data-testid='run-created-storage-saved']")).toContainText(
       "Storage settings saved for this project",

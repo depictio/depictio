@@ -621,6 +621,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             templateTitle={previewTitle}
             templateEngine={engineOf(preview?.template_id)}
             detection={detected}
+            storage={rootStorage}
           />
         </Stepper.Step>
 
@@ -630,6 +631,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             templateTitle={previewTitle}
             templateEngine={engineOf(preview?.template_id)}
             detection={detected}
+            storage={rootStorage}
             projectName={displayName}
             savesStorage={Boolean(rootStorage)}
           />

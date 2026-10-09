@@ -9,7 +9,7 @@ import { Alert, Box, Button, Center, Group, Loader, Paper, Stack, Text } from '@
 import { Icon } from '@iconify/react';
 
 import { runCollectionTotals, useBrandAccents } from 'depictio-react-core';
-import type { DetectedTemplate, FromRunReport } from 'depictio-react-core';
+import type { DetectedTemplate, FromRunReport, RunStorageIn } from 'depictio-react-core';
 
 import { plural } from './plural';
 import { RunPreview, RunSummaryCard } from './RunPreview';
@@ -68,6 +68,8 @@ interface RunPreviewStepProps {
   templateTitle: string | null;
   /** The engine the template was written for, when the catalog says. */
   templateEngine?: string | null;
+  /** The private bucket's connection details, to preview its files. */
+  storage?: RunStorageIn | null;
   detection: DetectedTemplate | null;
 }
 
@@ -83,6 +85,7 @@ export const RunPreviewStep: React.FC<RunPreviewStepProps> = ({
   templateTitle,
   templateEngine = null,
   detection,
+  storage = null,
 }) => {
   const accent = useBrandAccents();
   return (
@@ -148,6 +151,7 @@ export const RunPreviewStep: React.FC<RunPreviewStepProps> = ({
           templateTitle={templateTitle}
           templateEngine={templateEngine}
           detection={detection}
+          storage={storage}
         />
       )}
     </Stack>
@@ -160,6 +164,8 @@ interface RunCreateStepProps {
   templateTitle: string | null;
   /** The engine the template was written for, when the catalog says. */
   templateEngine?: string | null;
+  /** The private bucket's connection details, to preview its files. */
+  storage?: RunStorageIn | null;
   detection: DetectedTemplate | null;
   /** The name the project will get. */
   projectName: string;
@@ -172,6 +178,7 @@ export const RunCreateStep: React.FC<RunCreateStepProps> = ({
   templateTitle,
   templateEngine = null,
   detection,
+  storage = null,
   projectName,
   savesStorage,
 }) => {
@@ -185,6 +192,7 @@ export const RunCreateStep: React.FC<RunCreateStepProps> = ({
           templateTitle={templateTitle}
           templateEngine={templateEngine}
           detection={detection}
+          storage={storage}
         />
       )}
       <Paper withBorder radius="md" p="lg">

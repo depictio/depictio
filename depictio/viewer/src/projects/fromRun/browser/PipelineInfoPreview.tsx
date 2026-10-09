@@ -24,6 +24,7 @@ import { relativeToRunFolder } from 'depictio-react-core';
 import type { RunInfoSummary, RunReportFile } from 'depictio-react-core';
 
 import { engineLabel, WorkflowEngineLogo } from '../../template';
+import { fileSize } from '../fileSize';
 import { FolderPath } from '../FolderPath';
 import { plural } from '../plural';
 
@@ -52,20 +53,6 @@ const EXTRA_LABEL: Record<string, string> = {
   pipeline_version_raw: 'Version as written',
   identity_from_run: 'Identity read from',
 };
-
-/** "12.3 KB", "1.2 MB". */
-function fileSize(bytes: number | null): string | null {
-  if (bytes === null || bytes < 0) return null;
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB'];
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit += 1;
-  }
-  return `${value.toFixed(value < 10 ? 1 : 0)} ${units[unit]}`;
-}
 
 function paramText(value: string | number | boolean | null): string {
   if (value === null) return 'null';

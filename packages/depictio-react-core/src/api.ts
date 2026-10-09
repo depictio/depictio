@@ -4242,6 +4242,27 @@ export interface FromRunReport {
    *  settings. False on a dry run and without `storage`; older backends
    *  omit it. */
   storage_saved?: boolean;
+  /** The run's own records under the data root. Null when no engine
+   *  recognised the folder; older backends omit it. */
+  run_info?: RunInfoSummary | null;
+  /** The files the template is pointed at (its `*_FILE` variables), in the
+   *  template's order. Older backends omit it. */
+  input_files?: RunInputFile[];
+}
+
+/** One file a template variable points at (`SAMPLESHEET_FILE`, ...), as the
+ *  dry run resolved it. */
+export interface RunInputFile {
+  /** The template variable, e.g. `METADATA_FILE`. */
+  name: string;
+  description: string | null;
+  required: boolean;
+  /** Real path or `s3://` URL; null when the variable is not set. */
+  location: string | null;
+  /** The file exists under the data root; null when that cannot be told. */
+  found: boolean | null;
+  /** Data collections that read it, or that a condition on it switches. */
+  used_by: string[];
 }
 
 /** Create (or, with `dryRun`, plan) a project from a pipeline run folder.
@@ -4251,6 +4272,7 @@ export interface FromRunReport {
  *  `s3_access_denied`, ...). */
 export async function createProjectFromRun(
   input: FromRunRequest,
+  options: { signal?: AbortSignal } = {},
 ): Promise<FromRunReport> {
   const res = await authFetch(`${API_BASE}/projects/from_run`, {
     method: 'POST',
@@ -4262,6 +4284,7 @@ export async function createProjectFromRun(
       dry_run: Boolean(input.dryRun),
       ...(input.storage ? { storage: input.storage } : {}),
     }),
+    signal: options.signal,
   });
   if (!res.ok) await throwHttpDetailError(res, 'Failed to create project from run folder');
   return (await res.json()) as FromRunReport;
@@ -4397,6 +4420,80 @@ export interface RunInfoSummary {
   reports: RunReportFile[];
   /** Other details the engine's reader kept, as text. */
   extra: Record<string, string>;
+  /** The tasks of the run, from its execution trace. Null without a trace
+   *  (or a trace with no status); older backends omit it. */
+  tasks?: RunTaskSummary | null;
+  /** "pipeline version" pairs, when the folder holds runs of more than one
+   *  pipeline or version. Older backends omit it. */
+  identities_seen?: string[];
+  /** How many run sub-folders the identity was read across, when more than
+   *  the folder itself. Older backends omit it. */
+  runs_scanned?: number | null;
+}
+
+/** The tasks of a run, by the status of each task's last attempt. */
+export interface RunTaskSummary {
+  /** The trace read: a real path or an `s3://` URL. */
+  trace: string;
+  total: number;
+  completed: number;
+  cached: number;
+  /** Last attempt FAILED or ABORTED. */
+  failed: number;
+  /** Failed once, then completed (or cached). */
+  retried: number;
+  /** Last attempt in any other status: the run did not finish them. */
+  other: number;
+  /** The trace was bigger than the server reads: counts cover its start. */
+  partial: boolean;
+}
+
+/** Response of POST /projects/run_file_preview: the start of one file of a
+ *  run folder. */
+export interface RunFilePreview {
+  location: string;
+  name: string;
+  /** Bytes; null when unknown. */
+  size: number | null;
+  /** `none`: not previewable (binary, an HTML report, too large); `reason`
+   *  says why. */
+  format: 'table' | 'text' | 'none';
+  columns: string[];
+  /** Cells as text, long ones clipped. */
+  rows: Array<Array<string | null>>;
+  columns_total: number;
+  /** Known for a parquet file and for a table read in full; null otherwise. */
+  rows_total: number | null;
+  text: string | null;
+  /** Rows, columns or text were cut. */
+  truncated: boolean;
+  reason: string | null;
+}
+
+/** Read the start of one file of a run folder: its first rows as a table, or
+ *  its first lines. `location` must be under `dataRoot`; the folder is read
+ *  with the same checks as a dry run of `createProjectFromRun`. */
+export async function previewRunFile(
+  input: {
+    dataRoot: string;
+    location: string;
+    storage?: RunStorageIn | null;
+    maxRows?: number;
+  },
+  options: { signal?: AbortSignal } = {},
+): Promise<RunFilePreview> {
+  const res = await authFetch(`${API_BASE}/projects/run_file_preview`, {
+    method: 'POST',
+    body: JSON.stringify({
+      data_root: input.dataRoot,
+      location: input.location,
+      max_rows: input.maxRows ?? 20,
+      ...(input.storage ? { storage: input.storage } : {}),
+    }),
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to preview the file');
+  return (await res.json()) as RunFilePreview;
 }
 
 /** Response of GET /projects/folder_inspect: what one folder holds, and the

@@ -248,6 +248,23 @@ class TestParity:
             root.read_bytes("pipeline_info/params_2026-01-17.json")
         assert root.url("pipeline_info/params_2026-01-17.json") in str(excinfo.value)
 
+    def test_read_head_reads_the_start_and_sizes_the_whole(self, root):
+        rel = "input/Samplesheet_full.tsv"
+        assert root.read_head(rel, 8) == (_body(rel)[:8], len(_body(rel)))
+
+    def test_read_head_past_the_end_is_the_whole_file(self, root):
+        rel = "logs/nextflow.log"
+        assert root.read_head(rel, 1024) == (_body(rel), len(_body(rel)))
+
+    def test_read_head_of_nothing_still_sizes_the_file(self, root):
+        rel = "logs/nextflow.log"
+        assert root.read_head(rel, 0) == (b"", len(_body(rel)))
+
+    @pytest.mark.parametrize("rel", ["pipeline_info/params_2026-01-17.json", "pipeline_info"])
+    def test_read_head_of_anything_but_a_file_is_absent(self, root, rel):
+        with pytest.raises(FileNotFoundError):
+            root.read_head(rel, 8)
+
 
 # ── the two sides where they legitimately differ ─────────────────────────────
 
@@ -371,6 +388,38 @@ class TestTruncation:
         install_s3_listing(monkeypatch, bodies, page_size=5)
         root = S3DataRoot(S3_ROOT, s3_cli_config(), max_keys=5)
         assert root.read_bytes("f9.csv") == b"body 9"
+
+    def test_read_head_asks_s3_for_a_range_only(self, monkeypatch):
+        body = b"0123456789" * 10
+        client = install_s3_listing(monkeypatch, {f"{S3_KEY_PREFIX}big.txt": body})
+        root = data_root_for(S3_ROOT, s3_cli_config())
+        assert root.read_head("big.txt", 16) == (body[:16], len(body))
+        assert client.get_object_ranges == ["bytes=0-15"]
+
+    def test_read_head_sizes_an_object_from_its_content_range(self, monkeypatch):
+        """A key past a truncated listing has no listed size: S3's answer gives it."""
+        bodies = {f"{S3_KEY_PREFIX}f{i}.csv": f"body {i}".encode() * 3 for i in range(10)}
+        install_s3_listing(monkeypatch, bodies, page_size=5)
+        root = S3DataRoot(S3_ROOT, s3_cli_config(), max_keys=5)
+        assert "f9.csv" not in {obj.relative for obj in root.objects}
+        assert root.read_head("f9.csv", 4) == (b"body", len(b"body 9" * 3))
+
+    def test_read_head_of_an_empty_object_asks_nothing(self, monkeypatch):
+        """A range on an empty object is an error, and there is nothing to read."""
+        client = install_s3_listing(monkeypatch, {f"{S3_KEY_PREFIX}empty.txt": b""})
+        root = data_root_for(S3_ROOT, s3_cli_config())
+        assert root.read_head("empty.txt", 16) == (b"", 0)
+        assert client.get_object_calls == []
+
+    def test_read_head_reads_no_more_than_asked_from_a_store_ignoring_the_range(self, monkeypatch):
+        class _WholeObjects(StubS3Client):
+            def get_object(self, Bucket, Key, Range=None):  # noqa: N803 - boto3's spelling
+                return super().get_object(Bucket, Key)
+
+        body = b"x" * 100
+        install_s3_client(monkeypatch, _WholeObjects({f"{S3_KEY_PREFIX}big.txt": body}))
+        root = data_root_for(S3_ROOT, s3_cli_config())
+        assert root.read_head("big.txt", 10) == (b"x" * 10, 100)
 
 
 class TestReadDecision:
@@ -499,6 +548,18 @@ class TestS3Failures:
             root.read_bytes("x.csv")
         assert exc.value.code == "s3_access_denied"
         assert f"{S3_ROOT}/x.csv" in exc.value.detail
+        assert "s3.example" not in exc.value.detail
+
+    def test_a_denied_ranged_read_is_coded_alike(self, monkeypatch):
+        class _DeniedReads(StubS3Client):
+            def get_object(self, Bucket, Key, Range=None):  # noqa: N803 - boto3's spelling
+                raise s3_client_error("AccessDenied", 403, "GetObject")
+
+        install_s3_client(monkeypatch, _DeniedReads({f"{S3_KEY_PREFIX}x.csv": b"x"}))
+        root = data_root_for(S3_ROOT, s3_cli_config())
+        with pytest.raises(S3AccessFailed) as exc:
+            root.read_head("x.csv", 8)
+        assert exc.value.code == "s3_access_denied"
         assert "s3.example" not in exc.value.detail
 
     def test_an_object_gone_since_a_truncated_listing_is_absent(self, monkeypatch):

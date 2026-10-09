@@ -320,6 +320,15 @@ class DataRoot(Protocol):
         """Size of the file ``rel`` in bytes, or None when it is unknown or absent."""
         ...
 
+    def read_head(self, rel: str, max_bytes: int) -> tuple[bytes, int | None]:
+        """The first ``max_bytes`` bytes of ``rel``, and its full size (None when unknown).
+
+        For a look at a file that may be large, such as a preview or a run's
+        trace: no more than ``max_bytes`` is ever read. Same checks and the
+        same errors as :meth:`read_bytes`.
+        """
+        ...
+
     def storage_options(self) -> dict | None:
         """Polars storage options for reading this root, or None when local."""
         ...
@@ -426,7 +435,8 @@ class LocalDataRoot:
             return None
         return "" if str(relative) == "." else relative.as_posix()
 
-    def read_bytes(self, rel: str) -> bytes:
+    def _readable_file(self, rel: str) -> Path:
+        """The path of file ``rel``, once the policy lets it be read."""
         path = self._child(rel)
         if not path.is_file():
             raise FileNotFoundError(f"No such file under the data root: {path}")
@@ -434,7 +444,15 @@ class LocalDataRoot:
             raise LocalPathRefused(
                 f"'{path}' is outside the folders this server may read.", "local_path_outside"
             )
-        return path.read_bytes()
+        return path
+
+    def read_bytes(self, rel: str) -> bytes:
+        return self._readable_file(rel).read_bytes()
+
+    def read_head(self, rel: str, max_bytes: int) -> tuple[bytes, int | None]:
+        with self._readable_file(rel).open("rb") as handle:
+            # The size of the file opened, so the two always describe one file.
+            return handle.read(max(max_bytes, 0)), os.fstat(handle.fileno()).st_size
 
     def size(self, rel: str) -> int | None:
         path = self._child(rel)
@@ -445,6 +463,15 @@ class LocalDataRoot:
 
 
 # ── remote ───────────────────────────────────────────────────────────────────
+
+
+def _range_total(content_range: str | None) -> int | None:
+    """The object size a ``Content-Range`` answer names (``bytes 0-99/1234``), or None.
+
+    None too for an unknown total (``bytes 0-99/*``) and anything malformed.
+    """
+    total = (content_range or "").rpartition("/")[2].strip()
+    return int(total) if total.isdigit() else None
 
 
 class S3DataRoot:
@@ -599,25 +626,68 @@ class S3DataRoot:
             return None
         return _normalize_relative(location)
 
+    def _listed_key(self, rel: str) -> str:
+        """The key of ``rel`` (normalised), unless a complete listing says it is absent.
+
+        A complete listing is authoritative, so an absent key is answered
+        without a round trip. A truncated one is not, and falls through to S3
+        rather than claiming the object does not exist.
+        """
+        if rel not in self._files and not self.truncated:
+            raise FileNotFoundError(f"No such object under the data root: {self.url(rel)}")
+        return f"{self._prefix}{rel}"
+
+    def _read_failure(self, exc: Exception, rel: str, key: str) -> Exception:
+        """What a failed GetObject of ``rel`` is raised as: absent, or coded."""
+        from botocore.exceptions import ClientError
+
+        if isinstance(exc, ClientError) and is_missing_object(exc):
+            return FileNotFoundError(f"No such object under the data root: {self.url(rel)}")
+        # Coded and sanitized: the API answers with it as it is.
+        return S3AccessFailed.from_exception(exc, self._target.with_key(key))
+
     def read_bytes(self, rel: str) -> bytes:
         rel = _normalize_relative(rel)
-        url = self.url(rel)
-        if rel not in self._files and not self.truncated:
-            # A complete listing is authoritative, so an absent key can be
-            # answered without a round trip. A truncated one is not, and falls
-            # through to S3 rather than claiming the object does not exist.
-            raise FileNotFoundError(f"No such object under the data root: {url}")
-        key = f"{self._prefix}{rel}"
+        key = self._listed_key(rel)
         try:
             response = self._client.get_object(Bucket=self._bucket, Key=key)
             return response["Body"].read()
         except Exception as exc:
-            from botocore.exceptions import ClientError
+            raise self._read_failure(exc, rel, key) from exc
 
-            if isinstance(exc, ClientError) and is_missing_object(exc):
-                raise FileNotFoundError(f"No such object under the data root: {url}") from exc
-            # Coded and sanitized: the API answers with it as it is.
-            raise S3AccessFailed.from_exception(exc, self._target.with_key(key)) from exc
+    def read_head(self, rel: str, max_bytes: int) -> tuple[bytes, int | None]:
+        """One ranged GetObject: S3 sends no more than ``max_bytes`` bytes.
+
+        The size is the total of the answer's ``Content-Range``, else the
+        listing's. An object the listing sizes at zero bytes is not asked for:
+        a range on an empty object is an error (416), and there is nothing to read.
+        """
+        rel = _normalize_relative(rel)
+        key = self._listed_key(rel)
+        listed = self._files.get(rel)
+        listed_size = listed.size if listed is not None and listed.size >= 0 else None
+        if max_bytes <= 0 or listed_size == 0:
+            return b"", listed_size
+        try:
+            response = self._client.get_object(
+                Bucket=self._bucket, Key=key, Range=f"bytes=0-{max_bytes - 1}"
+            )
+            body = response["Body"]
+            try:
+                # Bounded here too: a store that ignores Range sends the whole object.
+                head = body.read(max_bytes)
+            finally:
+                body.close()
+        except Exception as exc:
+            raise self._read_failure(exc, rel, key) from exc
+        total = _range_total(response.get("ContentRange"))
+        if total is None:
+            total = listed_size
+        if total is None and not response.get("ContentRange"):
+            # No range in the answer: the store sent the whole object, so its
+            # length is the size.
+            total = response.get("ContentLength")
+        return head, total
 
     def size(self, rel: str) -> int | None:
         # From the listing: no request per file, and -1 means it reported none.

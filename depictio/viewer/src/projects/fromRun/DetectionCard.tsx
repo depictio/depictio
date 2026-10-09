@@ -1,9 +1,9 @@
 /**
  * What Depictio read in the run folder as soon as one is chosen or typed:
- * the run next to the template it would use, compared row by row, with
- * what that template finds in the folder one click away. Loading, an
- * unreadable folder and a folder nobody recognised are states of this card,
- * not separate alerts.
+ * the checks of the run against the template it would use (the run's
+ * records, the files the template is pointed at, what it finds), each one
+ * line, the collections one click away. Loading, an unreadable folder and a
+ * folder nobody recognised are states of this card, not separate alerts.
  */
 import React from 'react';
 import { Button, Group, Loader, Paper, Stack, Text, ThemeIcon } from '@mantine/core';
@@ -11,8 +11,8 @@ import { Icon } from '@iconify/react';
 
 import type { FolderInspection, RunStorageIn, RunTemplateMatch } from 'depictio-react-core';
 
-import { RunTemplateTable } from './RunIdentity';
-import { TemplateFindings } from './TemplateFindings';
+import { RunChecks } from './RunChecks';
+import { useRunPlan } from './runPlan';
 
 export type DetectionState =
   | { status: 'idle' }
@@ -56,6 +56,34 @@ const Line: React.FC<{ icon: string; color: string; children: React.ReactNode }>
     </Stack>
   </Group>
 );
+
+/** The checks of a recognised folder, its dry run asked for as soon as a
+ *  template is known. */
+const DetectedChecks: React.FC<{
+  result: FolderInspection;
+  templateId: string | null;
+  templateTitle: string | null;
+  templateEngine: string | null;
+  match: RunTemplateMatch | null;
+  storage: RunStorageIn | null;
+}> = ({ result, templateId, templateTitle, templateEngine, match, storage }) => {
+  const plan = useRunPlan(result.location, templateId, storage);
+  return (
+    <RunChecks
+      location={result.location}
+      run={result.detected}
+      templateId={templateId}
+      templateName={templateTitle}
+      templateEngine={templateEngine}
+      match={match}
+      plan={plan}
+      runInfo={result.run_info ?? null}
+      listingCut={result.truncated}
+      storage={storage}
+      testIdPrefix="run-detected"
+    />
+  );
+};
 
 export const DetectionCard: React.FC<DetectionCardProps> = ({
   state,
@@ -112,26 +140,15 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
       );
     } else {
       const detectedId = detected.template_id;
-      const usedId = templateId ?? detectedId;
       body = (
         <Stack gap="sm">
-          <RunTemplateTable
-            run={detected}
-            templateId={usedId}
-            templateName={templateTitle}
+          <DetectedChecks
+            result={result}
+            templateId={templateId ?? detectedId}
+            templateTitle={templateTitle}
             templateEngine={templateEngine}
             match={match}
-            testIdPrefix="run-detected"
-            footer={
-              usedId ? (
-                <TemplateFindings
-                  location={result.location}
-                  templateId={usedId}
-                  storage={storage}
-                  testIdPrefix="run-detected"
-                />
-              ) : null
-            }
+            storage={storage}
           />
           {onUseDetected && detectedId && templateId && templateId !== detectedId && (
             <Group>

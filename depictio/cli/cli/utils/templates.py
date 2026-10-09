@@ -924,6 +924,56 @@ def _apply_conditionals(
     return config, active_dashboards, removal_reasons
 
 
+def _placeholders_in(node: Any) -> set[str]:
+    """The ``{NAME}`` placeholders anywhere in a YAML node, keys and values alike."""
+    if isinstance(node, str):
+        return set(_TEMPLATE_VAR_RE.findall(node))
+    if isinstance(node, dict):
+        return set().union(*(_placeholders_in(k) | _placeholders_in(v) for k, v in node.items()))
+    if isinstance(node, list):
+        return set().union(*(_placeholders_in(item) for item in node))
+    return set()
+
+
+def variable_users(template_id: str, names: list[str]) -> dict[str, list[str]]:
+    """The data collections of template ``template_id`` each variable of ``names`` reaches.
+
+    A collection reaches ``NAME`` when its definition holds the placeholder
+    ``{NAME}`` (a file it scans, a path a recipe source is pointed at), or when
+    a conditional on ``NAME`` (``if_var_present`` / ``if_var_absent``) removes
+    or repoints it. Read from the template as written, before any
+    substitution: a resolved configuration holds no placeholder any more, nor
+    a collection a conditional removed, so it could not say either.
+
+    Tags in the order the template declares its collections; one that only a
+    conditional names, and the template does not declare, comes after them.
+    """
+    raw_config = _load_yaml(str(locate_template(template_id)))
+    section = raw_config.pop("template", None) or {}
+    switched: dict[str, list[str]] = {name: [] for name in names}
+    for rule in section.get("conditional") or []:
+        conditional = TemplateConditional(**rule)
+        for name in {conditional.if_var_present, conditional.if_var_absent} & set(names):
+            switched[name] += conditional.remove_dc_tags
+            switched[name] += [
+                override.data_collection_tag for override in conditional.override_dcs
+            ]
+
+    users: dict[str, list[str]] = {name: [] for name in names}
+    for workflow in raw_config.get("workflows") or []:
+        for dc in workflow.get("data_collections") or []:
+            tag = dc.get("data_collection_tag")
+            if not tag:
+                continue
+            mentioned = _placeholders_in(dc)
+            for name in names:
+                if (name in mentioned or tag in switched[name]) and tag not in users[name]:
+                    users[name].append(tag)
+    for name in names:
+        users[name] += [tag for tag in dict.fromkeys(switched[name]) if tag not in users[name]]
+    return users
+
+
 # ---------------------------------------------------------------------------
 # Run provenance collection
 # ---------------------------------------------------------------------------

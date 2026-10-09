@@ -3,9 +3,9 @@
  * and what Depictio recognises in it, read with `inspectFolder` on selection
  * (a newer selection cancels the request still in flight).
  *
- * Top down: the folder and its path; the run next to the template Depictio
- * would read it with, compared row by row, with what that template finds in
- * the folder one click away; the run records that make it a run folder (its
+ * Top down: the folder and its path; the checks of the run against the
+ * template Depictio would read it with (one line each, what the template
+ * finds one click away); the run records that make it a run folder (its
  * `pipeline_info`, previewable, and its MultiQC report); the search for run
  * folders below it; and its contents, one list, folders first, each folder
  * one click from opening. Once a search ran, its hits (`RunSearchResults`)
@@ -46,9 +46,9 @@ import type { FolderInspection, RunStorageIn, TemplateInfo } from 'depictio-reac
 import { FlowBadge } from '../FlowBadge';
 import { FolderPath } from '../FolderPath';
 import { plural } from '../plural';
-import { RunTemplateTable } from '../RunIdentity';
+import { RunChecks } from '../RunChecks';
 import { MARKER_META, MarkerIcon } from '../RunMarkers';
-import { TemplateFindings } from '../TemplateFindings';
+import { useRunPlan } from '../runPlan';
 import { PipelineInfoPreview } from './PipelineInfoPreview';
 import { RunSearchResults } from './RunSearchResults';
 import type { FindState } from './RunSearchResults';
@@ -367,6 +367,39 @@ const ContentsSection: React.FC<{
   );
 };
 
+/** The checks of a recognised folder, against the template detected in it. */
+const BrowseChecks: React.FC<{
+  result: FolderInspection;
+  templateName: string | null;
+  templateEngine: string | null;
+  storage: RunStorageIn | null;
+}> = ({ result, templateName, templateEngine, storage }) => {
+  const detected = result.detected;
+  const templateId = detected?.template_id ?? null;
+  const plan = useRunPlan(result.location, templateId, storage);
+  return (
+    <RunChecks
+      location={result.location}
+      run={detected}
+      templateId={templateId}
+      templateName={templateName}
+      templateEngine={templateEngine}
+      match={runTemplateMatch({
+        runPipeline: detected?.pipeline,
+        runVersion: detected?.version,
+        templateId,
+        detectedTemplateId: templateId,
+        detectedMatch: detected?.match ?? null,
+      })}
+      plan={plan}
+      runInfo={result.run_info ?? null}
+      listingCut={result.truncated}
+      storage={storage}
+      testIdPrefix="browse-detail"
+    />
+  );
+};
+
 export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
   location,
   templatesById,
@@ -485,35 +518,12 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
       {result && (
         <>
           {detected?.pipeline ? (
-            <Section
-              title="The run and its template"
-              description="What the pipeline wrote about this run, next to the template Depictio would read it with."
-            >
-              <RunTemplateTable
-                run={detected}
-                templateId={detected.template_id}
-                templateName={template?.name ?? null}
-                templateEngine={template?.engine}
-                match={runTemplateMatch({
-                  runPipeline: detected.pipeline,
-                  runVersion: detected.version,
-                  templateId: detected.template_id,
-                  detectedTemplateId: detected.template_id,
-                  detectedMatch: detected.match ?? null,
-                })}
-                testIdPrefix="browse-detail"
-                footer={
-                  detected.template_id ? (
-                    <TemplateFindings
-                      location={result.location}
-                      templateId={detected.template_id}
-                      storage={storageFor?.(result.location) ?? null}
-                      testIdPrefix="browse-detail"
-                    />
-                  ) : null
-                }
-              />
-            </Section>
+            <BrowseChecks
+              result={result}
+              templateName={template?.name ?? null}
+              templateEngine={template?.engine ?? null}
+              storage={storageFor?.(result.location) ?? null}
+            />
           ) : (
             <Text size="sm" c="dimmed" data-testid="browse-detail-not-recognised">
               {result.looks_like_run
