@@ -7,6 +7,7 @@ as a bare `NameError` inside the tile, so the set is worth pinning.
 
 from __future__ import annotations
 
+import plotly.express as px
 import polars as pl
 import pytest
 
@@ -105,8 +106,10 @@ def test_for_loop_unpacking_still_works():
     [
         "labels = {}\nlabels['x'] = 'Temperature'",
         "pdf = df.to_pandas()\npdf['z'] = pdf['x'] * 2",
+        "pdf = df.to_pandas()\npdf.loc[pdf['x'] > 1, 'x'] = 0",
+        "f = px.scatter(df.to_pandas(), x='x', y='y')\nf.layout.title.text = 'T'",
     ],
-    ids=["dict", "pandas-column"],
+    ids=["dict", "pandas-column", "pandas-loc", "plotly-layout"],
 )
 def test_subscript_assignment_runs_in_a_code_figure(assignment: str) -> None:
     """`obj[key] = value` compiles to `_write_(obj)[key] = value`.
@@ -118,3 +121,25 @@ def test_subscript_assignment_runs_in_a_code_figure(assignment: str) -> None:
     code = f"{assignment}\nfig = px.scatter(df.to_pandas(), x='x', y='y')\n"
     ok, _, message = SimpleCodeExecutor().execute_code(code, _frame())
     assert ok, message
+
+
+@pytest.mark.parametrize(
+    ("write", "patched"),
+    [
+        ("px.stash = []", lambda: hasattr(px, "stash")),
+        (
+            "pl.DataFrame.filter = lambda self, *a, **k: self",
+            lambda: pl.DataFrame.filter.__name__ == "<lambda>",
+        ),
+    ],
+    ids=["module-attribute", "class-method"],
+)
+def test_a_code_figure_cannot_patch_shared_modules(write: str, patched) -> None:
+    """The modules and classes in the globals are shared by every render in the
+    process: a write there would patch them for the next figure, another
+    user's included."""
+    code = f"{write}\nfig = px.scatter(df.to_pandas(), x='x', y='y')\n"
+    ok, _, message = SimpleCodeExecutor().execute_code(code, _frame())
+    assert not ok
+    assert "cannot write" in message
+    assert not patched()
