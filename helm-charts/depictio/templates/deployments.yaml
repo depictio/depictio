@@ -732,6 +732,10 @@ spec:
             #    cluster.local (EMBL ops-k1 uses ops-k1.embl.de).
             - name: DEPICTIO_API_UPSTREAM
               value: "{{ .Release.Name }}-depictio-backend.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain | default "cluster.local" }}:{{ .Values.backend.service.httpPort }}"
+            # S3 origin appended to the CSP connect-src, so genome_view file
+            # tracks can read their presigned URLs from the browser.
+            - name: DEPICTIO_CSP_S3_ORIGIN
+              value: {{ include "depictio.s3CspOrigin" . | quote }}
           ports:
             - containerPort: 8080
           resources:

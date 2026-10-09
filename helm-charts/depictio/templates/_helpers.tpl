@@ -177,6 +177,28 @@ Construct the full HTTPS bundled S3 store URL
 {{- end }}
 
 {{/*
+Origin (scheme://host[:port]) of the S3 endpoint the browser reads from: the
+URL the backend ConfigMap hands the API as DEPICTIO_S3_PUBLIC_URL, which
+presigned indexed-file URLs are signed for. The viewer's nginx appends it to
+the CSP connect-src (DEPICTIO_CSP_S3_ORIGIN). Empty when no URL is set.
+*/}}
+{{- define "depictio.s3CspOrigin" -}}
+{{- $s3 := include "depictio.s3" . | fromYaml -}}
+{{- $url := "" -}}
+{{- if $s3.enabled -}}
+{{- $url = include "depictio.s3UrlWithProtocol" . -}}
+{{- else -}}
+{{- $url = index ($s3.env | default dict) "DEPICTIO_S3_PUBLIC_URL" | default "" -}}
+{{- end -}}
+{{- if $url -}}
+{{- $parsed := urlParse $url -}}
+{{- if $parsed.host -}}
+{{- printf "%s://%s" $parsed.scheme $parsed.host -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 =============================================================================
 S3 storage values (with legacy `minio` key compatibility)
 =============================================================================
