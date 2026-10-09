@@ -12,9 +12,12 @@ from __future__ import annotations
 import pytest
 
 from depictio.api.v1.endpoints.dashboards_endpoints.data_versions import (
+    NOT_IN_VERSION,
     DataVersionPins,
+    collection_statuses,
     pins_from_stamps,
     resolve_data_versions,
+    stale_version_detail,
 )
 
 DC_A = "646b0f3c1e4a2d7f8e5b9003"
@@ -37,7 +40,7 @@ def test_delta_stamps_become_pins():
 
     assert pins.for_dc(DC_A) == 0
     assert pins.for_dc(DC_B) == 5
-    assert pins.warning() is None
+    assert pins.unresolved == {}
 
 
 def test_version_zero_is_a_real_pin():
@@ -55,9 +58,7 @@ def test_unversioned_collections_are_reported_not_hidden():
 
     assert pins.for_dc(DC_A) == 1
     assert pins.for_dc(DC_B) is None, "reads current data"
-    assert DC_B in pins.unresolved
-    warning = pins.warning()
-    assert warning and DC_B in warning and "no_delta_version_recorded" in warning
+    assert pins.unresolved == {DC_B: "no_delta_version_recorded"}
 
 
 def test_mixed_dashboards_pin_what_they_can():
@@ -74,7 +75,6 @@ def test_no_stamps_is_inert():
     pins = pins_from_stamps([])
 
     assert not pins.active
-    assert pins.warning() is None
 
 
 # ── Request resolution ──────────────────────────────────────────────────────
@@ -183,24 +183,152 @@ def test_a_child_tab_reads_its_familys_versions(monkeypatch):
     assert pins.for_dc(DC_A) == 2
 
 
-def test_garbage_override_is_ignored_not_crashed():
-    """A malformed client value must not 500 the render."""
-    pins = resolve_data_versions({"data_versions": {DC_A: "not-a-number"}})
+@pytest.mark.parametrize("value", [True, False, 3.7, "3", -1, "not-a-number", [1], {"v": 1}])
+def test_a_data_version_that_is_not_a_commit_number_is_an_error(value):
+    """A commit is an int of 0 or more. ``int()`` took ``True`` as commit 1,
+    ``3.7`` and ``"3"`` as commit 3, and a negative one failed later, inside
+    deltalake, as a 500 for a table and a silent null for a card."""
+    with pytest.raises(ValueError, match="must be a Delta commit number"):
+        resolve_data_versions({"data_versions": {DC_A: value}})
 
-    assert pins.for_dc(DC_A) is None
+
+def test_data_versions_must_be_a_mapping():
+    with pytest.raises(ValueError, match="data_versions must map"):
+        resolve_data_versions({"data_versions": [DC_A, 1]})
 
 
-def test_response_meta_carries_the_warning():
-    """The viewer renders this in the banner, so it has to survive the trip."""
-    pins = pins_from_stamps([_none_stamp(DC_A, "no_delta_version_recorded")])
-    pins.as_of_version_id = "v-abc"
+def test_a_stale_version_has_the_detail_the_editor_matches(monkeypatch):
+    """The editor drops a selection whose version is gone by this sentence."""
+    from depictio.api.v1.endpoints.dashboards_endpoints import version_store
 
-    meta = pins.as_response_meta()
+    monkeypatch.setattr(version_store, "get_version", lambda vid: None)
 
-    assert meta["as_of_version_id"] == "v-abc"
-    assert meta["pinned"] == {}
-    assert meta["unresolved"] == {DC_A: "no_delta_version_recorded"}
-    assert meta["warning"]
+    with pytest.raises(ValueError) as exc:
+        resolve_data_versions({"as_of_version": "v-gone"})
+
+    assert str(exc.value) == stale_version_detail("v-gone") == "Version v-gone no longer exists."
+
+
+# ── A collection the version never stamped ─────────────────────────────────
+
+
+def test_a_collection_added_since_is_reported_not_dropped():
+    """It reads current data, and says so, instead of vanishing from the list."""
+    pins = pins_from_stamps([_delta_stamp(DC_A, 1)], referenced=[DC_A, DC_B])
+
+    assert pins.pins == {DC_A: 1}
+    assert pins.unresolved == {DC_B: NOT_IN_VERSION}
+
+
+def test_the_dashboards_collections_are_checked_against_the_stamps(monkeypatch):
+    _stub_version(monkeypatch, [_delta_stamp(DC_A, 0)], family_id=FAMILY)
+    dashboard = {
+        "dashboard_id": FAMILY,
+        "is_main_tab": True,
+        "stored_metadata": [{"index": "a", "dc_id": DC_A}, {"index": "b", "dc_id": DC_B}],
+    }
+
+    pins = resolve_data_versions({"as_of_version": "abc"}, dashboard=dashboard)
+
+    assert pins.unresolved == {DC_B: NOT_IN_VERSION}
+
+
+# ── What each collection shows ─────────────────────────────────────────────
+
+
+DC_C = "646b0f3c1e4a2d7f8e5b9005"
+DC_D = "646b0f3c1e4a2d7f8e5b9006"
+
+IDENTITIES = {
+    DC_A: {"workflow_tag": "wf", "data_collection_tag": "a", "dc_type": "table"},
+    DC_B: {"workflow_tag": "wf", "data_collection_tag": "b", "dc_type": "table"},
+    DC_C: {"workflow_tag": "wf", "data_collection_tag": "c", "dc_type": "multiqc"},
+}
+
+
+def _by_dc(entries):
+    return {entry["dc_id"]: entry for entry in entries}
+
+
+def test_statuses_name_every_collection_and_why(monkeypatch):
+    _stub_version(
+        monkeypatch,
+        [
+            _delta_stamp(DC_A, 2),
+            {**_none_stamp(DC_C, "manifest_versioning_not_enabled"), "dc_type": "multiqc"},
+            # Read by the version, by no component now, and gone from the project.
+            {
+                **_delta_stamp(DC_D, 7),
+                "workflow_tag": "old",
+                "data_collection_tag": "d",
+                "dc_type": "table",
+            },
+        ],
+        family_id=FAMILY,
+    )
+    pins = resolve_data_versions(
+        {"as_of_version": "abc"},
+        dashboard={"dashboard_id": FAMILY, "is_main_tab": True},
+        referenced=[DC_A, DC_B, DC_C],
+    )
+
+    entries = collection_statuses(pins, [DC_A, DC_B, DC_C], IDENTITIES)
+
+    assert [e["dc_id"] for e in entries] == [DC_A, DC_B, DC_C, DC_D]
+    got = _by_dc(entries)
+    assert got[DC_A] == {
+        "dc_id": DC_A,
+        "workflow_tag": "wf",
+        "data_collection_tag": "a",
+        "dc_type": "table",
+        "status": "pinned",
+        "delta_version": 2,
+        "reason": None,
+    }
+    assert (got[DC_B]["status"], got[DC_B]["reason"]) == ("live", NOT_IN_VERSION)
+    assert (got[DC_C]["status"], got[DC_C]["reason"]) == (
+        "not_versioned",
+        "manifest_versioning_not_enabled",
+    )
+    assert (got[DC_D]["status"], got[DC_D]["delta_version"]) == ("pinned", 7)
+    assert got[DC_D]["data_collection_tag"] == "d", "falls back to the stamp's identity"
+
+
+def test_a_collection_kept_live_says_so(monkeypatch):
+    _stub_version(monkeypatch, [_delta_stamp(DC_A, 2)], family_id=FAMILY)
+    pins = resolve_data_versions(
+        {"as_of_version": "abc", "data_versions": {DC_A: None}},
+        dashboard={"dashboard_id": FAMILY, "is_main_tab": True},
+        referenced=[DC_A],
+    )
+
+    (entry,) = collection_statuses(pins, [DC_A], IDENTITIES)
+
+    assert (entry["status"], entry["delta_version"], entry["reason"]) == (
+        "live",
+        None,
+        "kept_live",
+    )
+
+
+def test_without_time_travel_everything_is_live_without_a_reason():
+    entries = collection_statuses(DataVersionPins(), [DC_A, DC_C], IDENTITIES)
+
+    assert [(e["status"], e["reason"]) for e in entries] == [
+        ("live", None),
+        ("not_versioned", "manifest_versioning_not_enabled"),
+    ]
+
+
+def test_an_image_collection_pins_its_manifest_not_its_pixels():
+    entries = collection_statuses(
+        DataVersionPins(pins={DC_A: 1}), [DC_A], {DC_A: {"dc_type": "image"}}
+    )
+
+    assert (entries[0]["status"], entries[0]["reason"]) == (
+        "pinned",
+        "image_pixels_not_versioned",
+    )
 
 
 def test_pins_are_inert_by_default():

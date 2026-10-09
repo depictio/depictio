@@ -9,7 +9,7 @@ that looks right and lies:
 * data ignored   -> yesterday's chart drawn over today's numbers.
 
 This drives the exact calls the modal makes (`bulk_compute_cards` with
-`component_overrides` + `data_versions`) and asserts the values differ where
+`definition_version` + `data_versions`) and asserts the values differ where
 they must. Run against the live stack after `rebuild_demo.py`.
 """
 
@@ -133,7 +133,7 @@ else:
         body = {
             "filters": [],
             "component_ids": [target],
-            "component_overrides": {target: component},
+            "definition_version": v["version_id"],
         }
         if delta is not None:
             body["data_versions"] = {dc_id: delta}
@@ -171,7 +171,7 @@ if target is not None:
             json={
                 "filters": [],
                 "component_ids": [target],
-                "component_overrides": {target: component},
+                "definition_version": named[-1]["version_id"],
                 "data_versions": {dc_id: delta},
             },
             timeout=60,
@@ -205,7 +205,7 @@ if target is not None:
             json={
                 "filters": [],
                 "component_ids": [target],
-                "component_overrides": {target: component_in(first, target)},
+                "definition_version": named[0]["version_id"],
                 "data_versions": {str((component or {}).get("dc_id")): 0},
             },
             timeout=60,
@@ -228,15 +228,14 @@ print("\n5. Same data both sides isolates the configuration change")
 if target is not None:
     dc_id = str((component_in(last, target) or {}).get("dc_id") or "")
     at_same_commit = {}
-    for label, detail in (("v1 config", first), ("v4 config", last)):
-        component = component_in(detail, target)
+    for label, version in (("v1 config", named[0]), ("v4 config", named[-1])):
         res = requests.post(
             f"{API}/dashboards/bulk_compute_cards/{DASH}",
             headers=H,
             json={
                 "filters": [],
                 "component_ids": [target],
-                "component_overrides": {target: component},
+                "definition_version": version["version_id"],
                 # Both panes on the newest commit.
                 "data_versions": {dc_id: 3},
             },
@@ -254,8 +253,8 @@ if target is not None:
         fail("same data, different config", f"identical: {at_same_commit['v1 config']}")
 
 print("\n6. A figure honours its past version's definition, not today's")
-# Cards had `component_overrides`; figures and tables did not, so the modal
-# drew a past version's data with today's chart definition. The demo turns the
+# Cards once took a past definition and figures and tables did not, so the
+# modal drew a past version's data with today's chart definition. The demo turns the
 # bare box plot of v1 into a bar in v3 and a customised violin in v4, which is
 # visible in the trace type the server returns.
 figure_target = None
@@ -287,7 +286,7 @@ else:
             json={
                 "filters": [],
                 "theme": "light",
-                "component_overrides": {index: component},
+                "definition_version": v["version_id"],
             },
             timeout=90,
         )
@@ -307,8 +306,25 @@ else:
     else:
         fail(
             "the rendered chart type follows the version",
-            f"all identical ({set(seen_types.values())}) — the override was ignored",
+            f"all identical ({set(seen_types.values())}): definition_version was ignored",
         )
+
+print("\n7. A client-supplied definition is refused")
+# Renders once accepted whole component definitions from the request body, so a
+# viewer could hand the server a figure in code mode. The key is retired with a
+# 400 rather than ignored, so an old client fails visibly.
+if target is not None:
+    res = requests.post(
+        f"{API}/dashboards/bulk_compute_cards/{DASH}",
+        headers=H,
+        json={
+            "filters": [],
+            "component_ids": [target],
+            "component_overrides": {target: component_in(first, target)},
+        },
+        timeout=60,
+    )
+    check("component_overrides status", res.status_code, 400)
 
 print()
 if failures:

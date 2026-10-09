@@ -159,20 +159,41 @@ for label, want in (("v1 Survey", 50), ("v2 Extended", 100), ("v4 Complete", 150
 print("\n4. Equal row counts, different values — a version-blind cache would pass on rows alone")
 # v1 and v2 both hold 100 rows and the same two varieties. Only Setosa's
 # re-measured petal lengths separate them, so this is the pair that a check
-# based on row counts would wave through.
-for delta_version, want in ((1, 2.861), (2, 3.164)):
+# based on row counts would wave through. Read through v1 Survey's petal card,
+# which averaged petal.length (later versions take its max): the definition
+# comes from that version, the data from each commit in turn.
+v1 = named.get("v1 Survey")
+v1_detail = (
+    requests.get(f"{API}/dashboards/versions/{v1['version_id']}", headers=H, timeout=30).json()
+    if v1
+    else {}
+)
+petal = next(
+    (
+        str(c["index"])
+        for tab in v1_detail.get("tabs") or []
+        for c in tab.get("stored_metadata") or []
+        if c.get("component_type") == "card"
+        and c.get("column_name") == "petal.length"
+        and c.get("aggregation") in ("average", "mean")
+    ),
+    None,
+)
+if petal is None:
+    check("v1 Survey averages petal.length", "no such card", "a card")
+for delta_version, want in ((1, 2.861), (2, 3.164)) if petal else ():
     res = requests.post(
         f"{API}/dashboards/bulk_compute_cards/{DASH}",
         headers=H,
         json={
             "filters": [],
-            "component_ids": [CARD],
+            "component_ids": [petal],
             "data_versions": {DC: delta_version},
-            "component_overrides": {CARD: {"column_name": "petal.length", "aggregation": "mean"}},
+            "definition_version": v1["version_id"],
         },
         timeout=60,
     ).json()
-    close(f"mean petal.length @ delta v{delta_version}", res["values"][CARD], want, tol=5e-3)
+    close(f"mean petal.length @ delta v{delta_version}", res["values"][petal], want, tol=5e-3)
 
 print("\n5. Live reads are unaffected by the pinned reads above (no cache poisoning)")
 res = requests.post(
@@ -184,7 +205,9 @@ res = requests.post(
 check("live count still current", res["values"][CARD], 150.0)
 
 print("\n6. Boundaries hold")
-res = requests.post(
+# A definition in the request body is refused outright: it once let any viewer
+# point a card at another collection or hand a figure code to run.
+r = requests.post(
     f"{API}/dashboards/bulk_compute_cards/{DASH}",
     headers=H,
     json={
@@ -195,8 +218,8 @@ res = requests.post(
         },
     },
     timeout=60,
-).json()
-check("dc_id override ignored", res["values"][CARD], 150.0)
+)
+check("component_overrides refused", r.status_code, 400)
 
 r = requests.post(
     f"{API}/dashboards/bulk_compute_cards/{DASH}",
@@ -209,10 +232,10 @@ check("stale as_of_version rejected", r.status_code, 400)
 r = requests.post(
     f"{API}/dashboards/bulk_compute_cards/{DASH}",
     headers=H,
-    json={"filters": [], "component_ids": [CARD], "component_overrides": {CARD: "not-a-dict"}},
+    json={"filters": [], "component_ids": [CARD], "definition_version": "does-not-exist"},
     timeout=60,
 )
-check("malformed override degrades gracefully", r.status_code, 200)
+check("stale definition_version rejected", r.status_code, 400)
 
 print("\n7. Dataset history powers the picker")
 hist = requests.get(f"{API}/deltatables/history/{DC}", headers=H, timeout=30).json()

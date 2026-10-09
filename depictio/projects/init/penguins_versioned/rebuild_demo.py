@@ -406,9 +406,16 @@ def stamps_of(api: Api, version_id: str) -> dict[str, dict]:
 
 
 class Reads:
-    """The render endpoints, pinned. All read-only."""
+    """The render endpoints, pinned. All read-only.
 
-    def __init__(self, api: Api, dashboard_id: str):
+    Each probe asks a component a question one of the stored versions defined
+    it to ask, and names that version (``definition_version``): the server
+    reads the definition from it, since a render takes no definition from the
+    request body. A question no version defines is a ``Fail``, never a read
+    through whatever the component holds today.
+    """
+
+    def __init__(self, api: Api, dashboard_id: str, versions: list[dict]):
         from depictio.models.components.lite import index_from_tag
 
         self.api = api
@@ -416,6 +423,7 @@ class Reads:
         doc = api.get(f"/dashboards/get/{dashboard_id}", "get dashboard")
         indices = {str(c.get("index")) for c in doc.get("stored_metadata") or []}
         self.card_pf = index_from_tag("card-birds")
+        self.card_mass = index_from_tag("card-mass")
         self.card_dd = index_from_tag("card-sexed")
         self.table_pf = index_from_tag("table-measurements")
         self.fig_pf = index_from_tag("fig-morph")
@@ -425,6 +433,7 @@ class Reads:
             i: i in indices
             for i in (
                 self.card_pf,
+                self.card_mass,
                 self.card_dd,
                 self.table_pf,
                 self.fig_pf,
@@ -432,12 +441,32 @@ class Reads:
                 self.fig_join,
             )
         }
+        # The first version, oldest first, to define each card question and to
+        # hold each figure: v1 averages body mass where later versions take
+        # the median, and plots fig-morph without the trend line v3 adds.
+        self.cards: dict[tuple[str, str, str], str] = {}
+        self.figures: dict[str, str] = {}
+        for version in versions:
+            detail = api.get(f"/dashboards/versions/{version['version_id']}", "version detail")
+            for tab in detail.get("tabs") or []:
+                if str(tab.get("dashboard_id")) != dashboard_id:
+                    continue
+                for c in tab.get("stored_metadata") or []:
+                    index = str(c.get("index"))
+                    if c.get("component_type") == "card":
+                        question = (index, str(c.get("column_name")), str(c.get("aggregation")))
+                        self.cards.setdefault(question, version["version_id"])
+                    elif c.get("component_type") == "figure":
+                        self.figures.setdefault(index, version["version_id"])
 
     def card(self, index: str, column: str, aggregation: str, **pins: Any) -> float | None:
+        version_id = self.cards.get((index, column, aggregation))
+        if version_id is None:
+            raise Fail(f"no stored version defines card {index} as {aggregation}({column})")
         body = {
             "filters": [],
             "component_ids": [index],
-            "component_overrides": {index: {"column_name": column, "aggregation": aggregation}},
+            "definition_version": version_id,
             **pins,
         }
         result = self.api.post(
@@ -450,21 +479,22 @@ class Reads:
         return self.card(self.card_pf, "individual_id", "count", **pins)
 
     def mean_mass(self, **pins: Any) -> float | None:
-        return self.card(self.card_pf, "body_mass_g", "average", **pins)
+        return self.card(self.card_mass, "body_mass_g", "average", **pins)
 
     def sexed(self, **pins: Any) -> float | None:
         return self.card(self.card_dd, "sex", "count", **pins)
 
-    def census(self, **pins: Any) -> float | None:
-        return self.card(self.card_dd, "individual_id", "count", **pins)
-
     def joined(self, **pins: Any) -> tuple[float | None, float | None, float | None]:
-        """(birds, mean body mass, sex recorded) of the join, through its card."""
-        return (
-            self.card(self.card_join, "individual_id", "count", **pins),
-            self.card(self.card_join, "body_mass_g", "average", **pins),
-            self.card(self.card_join, "sex", "count", **pins),
-        )
+        """(birds, mean body mass, sex recorded) of the join.
+
+        The mean through its card. No card counts the join's birds or sexes,
+        so those come from its box plot of body mass by sex, which draws one
+        point per row with the bird's sex as its x.
+        """
+        xs, ys = self._points(self.fig_join, **pins)
+        sexed = sum(1 for x in xs if x not in (None, "") and x == x)  # NaN != NaN
+        mass = self.card(self.card_join, "body_mass_g", "average", **pins)
+        return float(len(ys)), mass, float(sexed)
 
     def table(self, **pins: Any) -> tuple[int, float]:
         body = {
@@ -484,31 +514,32 @@ class Reads:
         return int(payload.get("total") or 0), round(sum(float(r["body_mass_g"]) for r in rows), 1)
 
     def figure(self, index: str | None = None, **pins: Any) -> tuple[int, float]:
-        # Overridden to a plain scatter of body mass, the way component history
-        # sends a stored definition: one trace, one point per row.
-        index = index or self.fig_pf
-        body = {
-            "filters": [],
-            "theme": "light",
-            "component_overrides": {
-                index: {
-                    "visu_type": "scatter",
-                    "dict_kwargs": {"x": "flipper_length_mm", "y": "body_mass_g"},
-                }
-            },
-            **pins,
-        }
+        """(points, sum of body mass) of a figure plotting body mass as its y."""
+        _, ys = self._points(index or self.fig_pf, **pins)
+        return len(ys), round(sum(ys), 1)
+
+    def _points(self, index: str, **pins: Any) -> tuple[list[Any], list[float]]:
+        """Every trace's x and y, drawn from the first version holding the figure."""
+        version_id = self.figures.get(index)
+        if version_id is None:
+            raise Fail(f"no stored version holds figure {index}")
+        body = {"filters": [], "theme": "light", "definition_version": version_id, **pins}
         spec = self.api.post(
             f"/dashboards/render_figure/{self.dashboard_id}/{index}",
             "render_figure",
             json=body,
         )
-        ys = [
-            y
-            for trace in (spec.get("figure") or {}).get("data") or []
-            for y in _plotly_values(trace.get("y"))
-        ]
-        return len(ys), round(sum(ys), 1)
+        traces = (spec.get("figure") or {}).get("data") or []
+        xs = [x for trace in traces for x in _plotly_raw(trace.get("x"))]
+        ys = [y for trace in traces for y in _plotly_values(trace.get("y"))]
+        return xs, ys
+
+
+def _plotly_raw(values: Any) -> list[Any]:
+    """A trace's ``x`` as given: categories stay strings, typed arrays decode."""
+    if isinstance(values, dict) and "bdata" in values:
+        return _plotly_values(values)
+    return list(values or [])
 
 
 #: Plotly's typed-array dtypes, as `array` module type codes.
@@ -618,7 +649,7 @@ def verify(api: Api, upto: int) -> None:
         _log(f"    -> {JOIN_NAME} stamps ascend ({join_stamps}): it moved with either input")
 
     # -- time travel reads -----------------------------------------------------
-    reads = Reads(api, dashboard_id)
+    reads = Reads(api, dashboard_id, versions)
     expected = expected_commit_values()
     _check_pinned_commits(reads, expected, upto)
     _check_as_of(reads, steps, versions)
@@ -647,14 +678,14 @@ def _check_pinned_commits(reads: Reads, expected: dict[str, list[float]], upto: 
     if not reads.has[reads.card_dd]:
         _log(f"    {DD}: skipped, the live dashboard has no card on it yet (v1)")
         dd_rows = []
+    # Its row counts are the commits' and the stamps' above: no main-tab
+    # component counts demographic_data rows, so only its sexes are read here.
     for k, rows in enumerate(dd_rows):
         pins = {"data_versions": {DC_IDS[DD]: k}}
-        census, sexed = reads.census(**pins), reads.sexed(**pins)
-        if census != rows or sexed != expected[DD][k]:
-            raise Fail(
-                f"{DD} @ delta {k}: {census} birds, {sexed} sexed; want {rows}, {expected[DD][k]}"
-            )
-        _log(f"    {DD} @ delta {k}: {census:>5.0f} birds   sex recorded {sexed:5.0f}")
+        sexed = reads.sexed(**pins)
+        if sexed != expected[DD][k]:
+            raise Fail(f"{DD} @ delta {k} ({rows} rows): {sexed} sexed; want {expected[DD][k]}")
+        _log(f"    {DD} @ delta {k}: {rows:>5} birds   sex recorded {sexed:5.0f}")
     if len(pf_rows) >= 3 and pf_rows[1] == pf_rows[2]:
         if _close(expected[PF][1], expected[PF][2]):
             raise Fail("batch 3 did not change any body mass")
@@ -697,29 +728,26 @@ def _check_as_of(reads: Reads, steps: tuple[Step, ...], versions: list[dict]) ->
         got = (
             reads.birds(**pins),
             reads.mean_mass(**pins),
-            reads.census(**pins) if with_dd else float(step.rows[DD]),
             reads.sexed(**pins) if with_dd else None,
         )
-        if got[0] != step.rows[PF] or got[2] != step.rows[DD]:
-            raise Fail(
-                f"as of {step.label}: {got[0]} / {got[2]} birds, want {step.rows[PF]} / {step.rows[DD]}"
-            )
+        if got[0] != step.rows[PF]:
+            raise Fail(f"as of {step.label}: {got[0]} birds, want {step.rows[PF]}")
         seen.append(got)
-        sex = "-" if got[3] is None else f"{got[3]:.0f}"
+        sex = "-" if got[2] is None else f"{got[2]:.0f}"
         _log(
             f"    {step.label:26} birds {got[0]:>4.0f}  mean mass {got[1]:8.2f} g  "
-            f"census {got[2]:>4.0f}  sex recorded {sex:>4}"
+            f"sex recorded {sex:>4}"
         )
     if len(seen) >= 3:
         v2, v3 = seen[1], seen[2]
-        if v2[0] != v3[0] or _close(v2[1], v3[1]) or v2[2:] != v3[2:]:
+        if v2[0] != v3[0] or _close(v2[1], v3[1]) or v2[2] != v3[2]:
             raise Fail(f"v2 -> v3 should move body mass only: {v2} -> {v3}")
         _log(
-            "    -> v2 -> v3: same birds, body mass moved, census identical (demographic_data pin held)"
+            "    -> v2 -> v3: same birds, body mass moved, sexes identical (demographic_data pin held)"
         )
     if len(seen) >= 5:
         v4, v5 = seen[3], seen[4]
-        if v4[:2] != v5[:2] or v4[3] == v5[3]:
+        if v4[:2] != v5[:2] or v4[2] == v5[2]:
             raise Fail(f"v4 -> v5 should move the sex count only: {v4} -> {v5}")
         _log("    -> v4 -> v5: body mass identical (physical_features pin held), sex count moved")
 

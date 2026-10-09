@@ -780,9 +780,9 @@ def build_read() -> str:
     s.text(490, 200, "POST /render_figure", size=16, anchor="start", weight="bold")
     s.text(490, 232, "as_of_version: v1", size=14, anchor="start")
     s.text(490, 256, "→ every stamp becomes a pin", size=13, colour=DIM, anchor="start")
-    s.text(490, 292, "component_overrides: {…}", size=14, anchor="start")
-    s.text(490, 316, "→ the definition it was saved with", size=13, colour=DIM, anchor="start")
-    s.text(490, 348, "wf_id · dc_id · dc_config refused", size=13, colour=RED, anchor="start")
+    s.text(490, 292, "definition_version: v1", size=14, anchor="start")
+    s.text(490, 316, "→ the server reads v1's definition", size=13, colour=DIM, anchor="start")
+    s.text(490, 348, "a definition in the body is refused", size=13, colour=RED, anchor="start")
 
     s.arrow(row.right + 12, 214, body.x - 14, 232)
     s.arrow(340, 372, body.x - 14, 292)

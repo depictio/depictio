@@ -46,7 +46,13 @@ if v1 is None:
 print(f"dashboard={DASH} restoring from {v1['label']!r}\n")
 
 detail = requests.get(f"{API}/dashboards/versions/{v1['version_id']}", headers=H, timeout=30).json()
-snapshot = {str(c["index"]): c for tab in detail["tabs"] for c in tab.get("stored_metadata") or []}
+# The main tab only: an index is unique within a tab, and the restore names both.
+snapshot = {
+    str(c["index"]): c
+    for tab in detail["tabs"]
+    if str(tab.get("dashboard_id")) == DASH
+    for c in tab.get("stored_metadata") or []
+}
 
 live = requests.get(f"{API}/dashboards/get/{DASH}", headers=H, timeout=30).json()
 live_by_index = {str(c["index"]): c for c in live.get("stored_metadata") or []}
@@ -82,7 +88,7 @@ print("1. Restoring one component changes only that component")
 r = requests.post(
     f"{API}/dashboards/versions/{v1['version_id']}/restore_component",
     headers=H,
-    json={"component_index": target},
+    json={"component_index": target, "tab_id": DASH},
     timeout=60,
 )
 check("restore status", r.status_code, 200)
@@ -139,7 +145,7 @@ if back:
     requests.post(
         f"{API}/dashboards/versions/{back['version_id']}/restore_component",
         headers=H,
-        json={"component_index": target},
+        json={"component_index": target, "tab_id": DASH},
         timeout=60,
     )
     final = requests.get(f"{API}/dashboards/get/{DASH}", headers=H, timeout=30).json()

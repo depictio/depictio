@@ -74,6 +74,7 @@ def ctx(monkeypatch: pytest.MonkeyPatch):
         "dashboards": dashboards,
         "granted": granted,
         "versioning": versioning,
+        "version_store": version_store,
     }
 
 
@@ -112,10 +113,13 @@ def _by_index(components, index):
     return next(c for c in components if str(c.get("index")) == index)
 
 
-def _restore(ctx, version_id, index, **body):
+def _restore(ctx, version_id, index, *, tab_id=None, **body):
+    if tab_id is None:
+        # The main tab: every family here is a single tab but the two-tab tests'.
+        tab_id = ctx["version_store"].get_version(version_id)["tabs"][0]["dashboard_id"]
     return ctx["client"].post(
         f"{API}/versions/{version_id}/restore_component",
-        json={"component_index": index, **body},
+        json={"component_index": index, "tab_id": str(tab_id), **body},
     )
 
 
@@ -426,3 +430,72 @@ def test_an_imported_grid_entry_is_found_by_its_box_prefix(ctx) -> None:
 
     layout = ctx["dashboards"].find_one({"dashboard_id": did})["right_panel_layout_data"]
     assert layout == [{"i": "box-a", "x": 0, "y": 0, "w": 4, "h": 2}]
+
+
+# ── an index is unique within a tab, not across a family ────────────────────
+
+
+def _add_child_tab(ctx, parent, *, components, title="Child"):
+    tid = ObjectId()
+    ctx["dashboards"].insert_one(
+        {
+            "_id": tid,
+            "dashboard_id": tid,
+            "project_id": ObjectId(),
+            "title": title,
+            "is_main_tab": False,
+            "parent_dashboard_id": parent,
+            "tab_order": 1,
+            "stored_metadata": components,
+            "left_panel_layout_data": [],
+            "right_panel_layout_data": [],
+            "permissions": {"owners": [{"email": "owner@example.com"}]},
+            "is_public": False,
+        }
+    )
+    return tid
+
+
+def test_the_named_tab_is_restored_when_two_tabs_share_an_index(ctx) -> None:
+    """Two tabs once derived the same id from the same tag.
+
+    A lookup by index alone found the main tab's component first, so restoring
+    the child's chart wrote the main tab's definition over the main tab.
+    """
+    did = _make_dashboard(ctx, components=[{"index": "a", "title": "Main A v1"}])
+    child = _add_child_tab(ctx, did, components=[{"index": "a", "title": "Child A v1"}])
+    record = _capture(ctx, did, kind="explicit")
+    for tab, title in ((did, "Main A v2"), (child, "Child A v2")):
+        ctx["dashboards"].update_one(
+            {"dashboard_id": tab}, {"$set": {"stored_metadata": [{"index": "a", "title": title}]}}
+        )
+
+    response = _restore(ctx, record.version_id, "a", tab_id=child)
+    assert response.status_code == 200, response.text
+
+    assert _by_index(_components(ctx, child), "a")["title"] == "Child A v1"
+    assert _by_index(_components(ctx, did), "a")["title"] == "Main A v2"
+
+
+def test_a_component_absent_from_the_named_tab_is_a_404(ctx) -> None:
+    """Present on another tab of the version is not present on this one."""
+    did = _make_dashboard(ctx, components=[{"index": "a", "title": "Main A"}])
+    child = _add_child_tab(ctx, did, components=[{"index": "b", "title": "Child B"}])
+    record = _capture(ctx, did, kind="explicit")
+
+    response = _restore(ctx, record.version_id, "a", tab_id=child)
+
+    assert response.status_code == 404, response.text
+    assert "a" not in [c["index"] for c in _components(ctx, child)]
+
+
+def test_tab_id_is_required(ctx) -> None:
+    did = _make_dashboard(ctx, components=[{"index": "a", "title": "A"}])
+    record = _capture(ctx, did, kind="explicit")
+
+    response = ctx["client"].post(
+        f"{API}/versions/{record.version_id}/restore_component",
+        json={"component_index": "a"},
+    )
+
+    assert response.status_code == 422, response.text

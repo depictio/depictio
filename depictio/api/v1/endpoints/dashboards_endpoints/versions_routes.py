@@ -60,6 +60,10 @@ class RestoreComponentRequest(BaseModel):
     """Put one component back, leaving every other component alone."""
 
     component_index: str = Field(min_length=1, max_length=200)
+    #: The tab the component sits on in that version. An index is only unique
+    #: within a tab: two tabs once derived the same id from the same tag, and a
+    #: lookup by index alone restored whichever came first into the wrong tab.
+    tab_id: str = Field(min_length=1, max_length=64)
     #: Restore the component's place too: its grid position and size, and the
     #: section, group or panel it sat in. Off by default: the usual request is
     #: "give me back what this chart *showed*", and moving the surrounding
@@ -660,12 +664,13 @@ async def restore_component_from_version(
     if not main:
         raise HTTPException(status_code=404, detail="Dashboard family's main tab not found.")
 
-    # Locate the component in the snapshot, remembering which tab held it: a
-    # component restored into the wrong tab would be as good as lost.
+    # Locate the component in the snapshot by tab and index: a component
+    # restored into the wrong tab would be as good as lost.
     located = next(
         (
             (tab, component)
             for tab in record.get("tabs") or []
+            if str(tab.get("dashboard_id") or "") == payload.tab_id
             for component in tab.get("stored_metadata") or []
             if str(component.get("index") or "") == index
         ),
@@ -674,7 +679,9 @@ async def restore_component_from_version(
     if located is None:
         raise HTTPException(
             status_code=404,
-            detail=f"Component {index} does not exist in version {version_id}.",
+            detail=(
+                f"Component {index} does not exist on tab {payload.tab_id} in version {version_id}."
+            ),
         )
     snapshot_tab, snapshot_component = located
 

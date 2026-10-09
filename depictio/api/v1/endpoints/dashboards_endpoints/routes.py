@@ -34,6 +34,9 @@ from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
 )
 from depictio.api.v1.endpoints.dashboards_endpoints.data_versions import (
     DataVersionPins,
+    check_version_family,
+    collection_statuses,
+    referenced_dc_ids,
     resolve_data_versions,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import (
@@ -128,106 +131,218 @@ def _data_pins(request: dict, dashboard_data: dict) -> DataVersionPins:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-#: Card fields a stored version may override when recomputing a past value.
-#: Everything that decides *what* the card computes and how it is labelled —
-#: but nothing that decides *which collection* is read. See the call site.
-_CARD_DEFINITION_FIELDS = frozenset(
-    {
-        "column_name",
-        "aggregation",
-        "aggregations",
-        "breakdown_col",
-        "secondary_layout",
-        "title",
-        "cols_json",
-    }
-)
+#: The body key renders once took client-supplied component definitions under.
+#: Any viewer of a project (or visitor of a public one) could send a figure
+#: ``mode: code`` with code of their own, and the server ran it. Refused rather
+#: than ignored, so a client still sending it fails visibly instead of quietly
+#: drawing today's definition under a past label.
+_RETIRED_OVERRIDE_KEY = "component_overrides"
 
-#: Fields of a figure that decide what is plotted. `dict_kwargs` carries the
-#: axis/colour assignments and `visu_type` the chart kind, which is what makes
-#: "this was a histogram and is now a box plot" visible in component history.
-_FIGURE_DEFINITION_FIELDS = frozenset(
-    {
-        "dict_kwargs",
-        "visu_type",
-        "mode",
-        "code_content",
-        "title",
-        "cols_json",
-    }
-)
-
-#: Fields of a table that decide what is shown. Column selection and ordering
-#: only.
-_TABLE_DEFINITION_FIELDS = frozenset(
-    {
-        "columns",
-        "visible_columns",
-        "column_order",
-        "title",
-        "cols_json",
-    }
-)
-
-#: Per component type, the fields a client may override on a render request.
-#:
-#: Allow-lists rather than a denylist, and identical in spirit across types:
-#: `wf_id` / `dc_id` / `dc_config` are absent from every one of them because
-#: those decide *which collection is read*. Honouring them from the request
-#: would let a caller compute over data the dashboard does not reference and
-#: whose permissions were never checked. Everything here is presentation.
-_DEFINITION_FIELDS: dict[str, frozenset[str]] = {
-    "card": _CARD_DEFINITION_FIELDS,
-    "figure": _FIGURE_DEFINITION_FIELDS,
-    "table": _TABLE_DEFINITION_FIELDS,
-}
+#: What a stored definition never replaces on a live component. ``index`` is
+#: its identity; ``wf_id`` / ``dc_id`` / ``dc_config`` decide which collection
+#: is read, and the live ones are what the dashboard's project was checked for.
+_LIVE_IDENTITY_FIELDS: tuple[str, ...] = ("index", "wf_id", "dc_id", "dc_config")
 
 
-def _definition_override(override: Any, component_type: str) -> dict:
-    """The subset of a client-supplied component definition we will honour.
+def _definition_version_id(request: dict | None) -> str | None:
+    """The ``definition_version`` a render request names, or None.
 
-    Returns `{}` for anything malformed or for a type with no allow-list, so a
-    bad payload falls back to the live definition rather than failing the
-    request — one broken component in a modal should not blank the rest of the
-    dashboard.
+    400 for a request still carrying ``component_overrides``.
     """
-    if not isinstance(override, dict):
-        return {}
-    allowed = _DEFINITION_FIELDS.get(component_type)
-    if not allowed:
-        return {}
-    return {key: value for key, value in override.items() if key in allowed and value is not None}
+    if not isinstance(request, dict):
+        return None
+    if _RETIRED_OVERRIDE_KEY in request:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "component_overrides is no longer accepted. Send definition_version "
+                "(the id of the version to draw the component from) instead."
+            ),
+        )
+    value = request.get("definition_version")
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str):
+        raise HTTPException(status_code=400, detail="definition_version must be a version id.")
+    return value
 
 
-def _card_definition_override(override: Any) -> dict:
-    """Back-compat alias for the card allow-list."""
-    return _definition_override(override, "card")
+def _definition_tab(dashboard_data: dict, version_id: str) -> dict | None:
+    """The rendered tab as ``version_id`` holds it, or None if it held none.
 
-
-def _apply_component_override(component: dict, request: dict) -> dict:
-    """Draw a component from a past version's stored definition.
-
-    A dashboard version records what each component *was*, but the render
-    endpoints read the component from the live document. Without this, the
-    component-history modal would draw a past version's data using today's
-    chart definition and label it as the past — a view that never existed.
-
-    Only ever narrows to the allow-list for the component's own type, which is
-    taken from the *live* component rather than the request: letting a caller
-    declare the type would let them pick which allow-list to be judged by.
+    Loads that one tab only (see ``version_store.get_version_tab``). 400 for a
+    version that no longer exists or belongs to another tab family, with the
+    details ``as_of_version`` answers with, so a client handles both halves of
+    a time-travelling render the same way.
     """
-    overrides = request.get("component_overrides")
-    if not isinstance(overrides, dict) or not overrides:
-        return component
-    override = overrides.get(str(component.get("index")))
-    narrowed = _definition_override(override, str(component.get("component_type") or ""))
-    if not narrowed:
-        return component
-    logger.info(
-        f"component override on {component.get('index')}: {sorted(narrowed)} "
-        f"(type={component.get('component_type')})"
+    tab_id = str(dashboard_data.get("dashboard_id") or dashboard_data.get("_id"))
+    record = version_store.get_version_tab(version_id, tab_id)
+    try:
+        check_version_family(record, version_id, dashboard_data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    tabs = (record or {}).get("tabs") or []
+    return tabs[0] if tabs else None
+
+
+def _find_component(components: Any, component_id: str, component_type: str) -> dict | None:
+    """The component of this id and type in a ``stored_metadata`` list."""
+    return next(
+        (
+            m
+            for m in components or []
+            if str(m.get("index")) == component_id and m.get("component_type") == component_type
+        ),
+        None,
     )
-    return {**component, **narrowed}
+
+
+def _component_dc(component: dict) -> tuple[str, str]:
+    """``(wf_id, dc_id)`` as strings; MultiQC components may say ``data_collection_id``."""
+    dc_id = component.get("dc_id") or component.get("data_collection_id")
+    return str(component.get("wf_id") or ""), str(dc_id or "")
+
+
+def _project_collections(project_id: Any) -> dict[str, dict[str, Any]]:
+    """Every data collection of a project by id: its workflow, tags and type."""
+    if not project_id or not ObjectId.is_valid(str(project_id)):
+        return {}
+    project = projects_collection.find_one(
+        {"_id": ObjectId(str(project_id))},
+        {
+            "workflows._id": 1,
+            "workflows.name": 1,
+            "workflows.workflow_tag": 1,
+            "workflows.data_collections._id": 1,
+            "workflows.data_collections.data_collection_tag": 1,
+            "workflows.data_collections.config.type": 1,
+        },
+    )
+    collections: dict[str, dict[str, Any]] = {}
+    for workflow in (project or {}).get("workflows") or []:
+        for dc in workflow.get("data_collections") or []:
+            collections[str(dc.get("_id"))] = {
+                "workflow_id": workflow.get("_id"),
+                "workflow_tag": workflow.get("workflow_tag") or workflow.get("name") or "",
+                "data_collection_tag": dc.get("data_collection_tag") or "",
+                "dc_type": str((dc.get("config") or {}).get("type") or ""),
+            }
+    return collections
+
+
+def _collection_in_project(component: dict, project_id: Any) -> bool:
+    """Whether the collection ``component`` reads belongs to the project."""
+    wf_id, dc_id = _component_dc(component)
+    found = _project_collections(project_id).get(dc_id) if dc_id else None
+    return found is not None and (not wf_id or str(found["workflow_id"]) == wf_id)
+
+
+def _component_from_version(
+    tab: dict | None,
+    live: dict | None,
+    component_id: str,
+    component_type: str,
+    *,
+    project_id: Any,
+    version_id: str,
+    label: str,
+) -> dict:
+    """A component as a stored version defines it, ready to render.
+
+    The stored definition replaces the live one wholesale: a field the version
+    did not hold is absent here too, rather than today's value showing through
+    under the version's label. Only ``_LIVE_IDENTITY_FIELDS`` stay live, and
+    only when the version read the same collection; a definition written for
+    another collection would be drawn over data it never read, so that is a
+    409.
+
+    A component deleted since has no live fields to keep. It is drawn from the
+    version alone once its collection is checked to belong to the dashboard's
+    project (404 otherwise), and its Delta location is then looked up from that
+    collection rather than taken from the snapshot.
+
+    Stored definitions are editor-authored content from the ledger, so a code
+    figure's ``code_content`` is drawn as written: no request can supply one.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints.versions_routes import _rehydrate_ids
+
+    stored = _find_component((tab or {}).get("stored_metadata"), component_id, component_type)
+    if stored is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{label} component '{component_id}' did not exist in version {version_id}.",
+        )
+    # Snapshots hold ObjectIds as strings; the renderers expect them as a live
+    # document holds them.
+    definition = _rehydrate_ids(stored)
+
+    if live is not None:
+        if _component_dc(stored) != _component_dc(live):
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "This component read a different data collection in that version, "
+                    "so it cannot be drawn from that version's definition."
+                ),
+            )
+        for key in _LIVE_IDENTITY_FIELDS:
+            if key in live:
+                definition[key] = live[key]
+            else:
+                definition.pop(key, None)
+        return definition
+
+    if not _collection_in_project(stored, project_id):
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"{label} component '{component_id}' read a data collection this "
+                "dashboard's project no longer holds."
+            ),
+        )
+    dc_config = dict(definition.get("dc_config") or {})
+    dc_config.pop("delta_location", None)
+    definition["dc_config"] = dc_config
+    return definition
+
+
+def _render_component(
+    dashboard_data: dict,
+    component_id: str,
+    component_type: str,
+    request: dict | None,
+    *,
+    label: str | None = None,
+) -> dict:
+    """The component a render draws: the live one, or a version's definition of it.
+
+    With ``definition_version`` in the body, the component as that version
+    held it on this tab (see ``_component_from_version``); a cross-tab
+    component is rendered under its owner tab's id, so it is found the same
+    way. Without it, the live component, 404 when there is none.
+
+    Call only once the caller's permission on the dashboard is checked, as
+    with ``_data_pins``: a version id is never resolved for someone who cannot
+    open the dashboard.
+    """
+    label = label or component_type.capitalize()
+    live = _find_component(dashboard_data.get("stored_metadata"), component_id, component_type)
+    version_id = _definition_version_id(request)
+    if version_id is None:
+        if live is None:
+            raise HTTPException(
+                status_code=404, detail=f"{label} component '{component_id}' not found."
+            )
+        return live
+    return _component_from_version(
+        _definition_tab(dashboard_data, version_id),
+        live,
+        component_id,
+        component_type,
+        project_id=dashboard_data.get("project_id"),
+        version_id=version_id,
+        label=label,
+    )
 
 
 def _ensure_baseline_quietly(
@@ -2533,6 +2648,7 @@ def _component_context(
     filters: list[dict],
     current_user: User,
     access_token: str | None,
+    request: dict | None = None,
 ) -> _ComponentContext:
     """Resolve and authorise a stored component, and prepare its data-load inputs.
 
@@ -2544,6 +2660,9 @@ def _component_context(
     Deliberately stops *before* loading the frame: callers disagree about how
     (``load_deltatable_lite`` vs the sorted/schema variants the table endpoint
     needs), so each does its own load with its own error message.
+
+    ``request`` is the render body: its ``definition_version`` draws the
+    component as a stored version defines it (see ``_render_component``).
     """
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -2553,19 +2672,7 @@ def _component_context(
     if not project_id or not check_project_permission(project_id, current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Permission denied.")
 
-    component = next(
-        (
-            m
-            for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id and m.get("component_type") == component_type
-        ),
-        None,
-    )
-    if component is None:
-        raise HTTPException(
-            status_code=404,
-            detail=f"{component_type.capitalize()} component '{component_id}' not found.",
-        )
+    component = _render_component(dashboard_data, component_id, component_type, request)
 
     wf_id = component.get("wf_id")
     dc_id = component.get("dc_id")
@@ -2687,6 +2794,84 @@ def _frame_top_value(df: Any, column: str, aggregation: str, weight: str | None)
     return _coerce_agg_result(raw, aggregation)
 
 
+def _cards_to_compute(
+    dashboard_data: dict, request: dict, requested_ids: list[str] | None
+) -> tuple[list[dict], dict[str, dict]]:
+    """The cards a bulk compute reads, and why any it was asked for cannot be drawn.
+
+    The live cards, or with ``definition_version`` the cards as that version
+    held them on this tab, each resolved as ``_render_component`` resolves one
+    (from one load of the tab, for all of them). A card that cannot be drawn
+    from the version is left out and reported as ``{status, detail}`` under its
+    id, with the status the single-component renders answer: one card whose
+    collection changed must not blank every other card of a preview.
+    """
+    live_cards = [
+        m for m in dashboard_data.get("stored_metadata") or [] if m.get("component_type") == "card"
+    ]
+    version_id = _definition_version_id(request)
+    if version_id is None:
+        requested = set(requested_ids) if requested_ids else None
+        return [m for m in live_cards if requested is None or str(m.get("index")) in requested], {}
+
+    tab = _definition_tab(dashboard_data, version_id)
+    wanted = list(
+        dict.fromkeys(
+            [str(i) for i in requested_ids]
+            if requested_ids
+            else [
+                str(m.get("index"))
+                for m in (tab or {}).get("stored_metadata") or []
+                if m.get("component_type") == "card"
+            ]
+        )
+    )
+    live_by_id = {str(m.get("index")): m for m in live_cards}
+    cards: list[dict] = []
+    errors: dict[str, dict] = {}
+    for idx in wanted:
+        try:
+            cards.append(
+                _component_from_version(
+                    tab,
+                    live_by_id.get(idx),
+                    idx,
+                    "card",
+                    project_id=dashboard_data.get("project_id"),
+                    version_id=version_id,
+                    label="Card",
+                )
+            )
+        except HTTPException as exc:
+            errors[idx] = {"status": exc.status_code, "detail": exc.detail}
+    return cards, errors
+
+
+def _texts_to_compute(
+    dashboard_data: dict, request: dict, requested_ids: list[str] | None
+) -> list[dict]:
+    """The text tiles with live values a bulk compute reads.
+
+    The live tiles, or with ``definition_version`` the tab's tiles as that
+    version held them: a value's column and aggregation are part of the
+    definition, as a card's are.
+    """
+    version_id = _definition_version_id(request)
+    source = (
+        (_definition_tab(dashboard_data, version_id) or {}).get("stored_metadata")
+        if version_id is not None
+        else dashboard_data.get("stored_metadata")
+    )
+    requested = set(requested_ids) if requested_ids else None
+    return [
+        m
+        for m in source or []
+        if m.get("component_type") == "text"
+        and _text_has_live_values(m)
+        and (requested is None or str(m.get("index")) in requested)
+    ]
+
+
 @dashboards_endpoint_router.post("/bulk_compute_cards/{dashboard_id}")
 def bulk_compute_cards(
     dashboard_id: PyObjectId,
@@ -2707,8 +2892,16 @@ def bulk_compute_cards(
                  "interactive_component_type": "MultiSelect"},
                 ...
             ],
-            "component_ids": ["...", ...]   # optional; defaults to all cards
+            "component_ids": ["...", ...],  # optional; defaults to all cards
+            "as_of_version": "<version id>",   # optional, see ``_data_pins``
+            "data_versions": {"<dc_id>": <int | null>},
+            "definition_version": "<version id>"  # optional, see below
         }
+
+    ``definition_version`` computes the cards as that version defined them on
+    this tab (its cards, when ``component_ids`` is absent). A card that version
+    cannot draw is reported in ``definition_errors`` rather than failing the
+    rest.
 
     Response:
         {
@@ -2731,6 +2924,12 @@ def bulk_compute_cards(
         one entry per value: ``values["<text index>"] = {"<name>": <number,
         string or null>, "param:<KEY>": <string or null>}``. Numbers are raw;
         the viewer formats them.
+
+        ``definition_errors`` (only with ``definition_version``, only when some
+        card failed): ``{"<component_index>": {"status": 404 | 409, "detail": str}}``,
+        each such card's value being null. 409: the card read another data
+        collection in that version. 404: it did not exist in that version, or
+        it was deleted since and its collection is no longer in the project.
 
     Notes:
         - Uses load_deltatable_lite with the same metadata format as Dash so
@@ -2769,45 +2968,29 @@ def bulk_compute_cards(
         raise HTTPException(status_code=403, detail="Permission denied.")
 
     pins = _data_pins(request, dashboard_data)
-    stored_metadata = dashboard_data.get("stored_metadata") or []
 
-    # Collect card components (optionally filtered by component_ids)
-    requested = set(requested_ids) if requested_ids else None
-    cards = [
-        m
-        for m in stored_metadata
-        if m.get("component_type") == "card"
-        and (requested is None or str(m.get("index")) in requested)
-    ]
+    # A card's *config* (column, aggregation, breakdown, filter expression) is
+    # versioned alongside its layout, so a past version's value is computed
+    # with that version's definition: today's aggregation over yesterday's data
+    # would answer a question nobody asked.
+    cards, definition_errors = _cards_to_compute(dashboard_data, request, requested_ids)
+
     # A text tile's live values ride along as cards of their own (see
     # `_text_value_cards`), so they get the cards' filters, link resolution,
     # `filter_expr`, caches and pushdown without a path of their own. Folded
     # back under the tile's index at the end.
-    texts = [
-        m
-        for m in stored_metadata
-        if m.get("component_type") == "text"
-        and _text_has_live_values(m)
-        and (requested is None or str(m.get("index")) in requested)
-    ]
+    texts = _texts_to_compute(dashboard_data, request, requested_ids)
     cards = cards + [vc for text in texts for vc in _text_value_cards(text)]
 
-    # Historical card definitions, for the component-history modal. A card's
-    # *config* — column, aggregation, breakdown — is versioned alongside its
-    # layout, so computing a past version's value against the card's current
-    # definition would answer a question nobody asked: it would apply today's
-    # aggregation to yesterday's data and present it as "how it looked".
-    #
-    # Restricted to the presentation fields that decide what a card computes.
-    # `wf_id`/`dc_id`/`dc_config` are deliberately NOT overridable: those
-    # decide *which collection is read*, and taking them from the request
-    # would let a caller compute over data this dashboard does not reference
-    # (and whose permissions were never checked). A card not already on this
-    # dashboard is likewise ignored, since the loop only visits `cards`.
-    cards = [_apply_component_override(card, request) for card in cards]
-
     if not cards and not texts:
-        return {"values": {}, "filter_applied": bool(filters), "filter_count": len(filters)}
+        empty: dict[str, Any] = {
+            "values": {idx: None for idx in definition_errors},
+            "filter_applied": bool(filters),
+            "filter_count": len(filters),
+        }
+        if definition_errors:
+            empty["definition_errors"] = definition_errors
+        return empty
 
     # Build init_data mapping for load_deltatable_lite to avoid per-card API calls
     init_data: dict[str, dict] = {}
@@ -3412,7 +3595,7 @@ def bulk_compute_cards(
             folded[f"param:{key}"] = run_params.get(key)
         values[text_idx] = folded
 
-    return {
+    result: dict[str, Any] = {
         "values": values,
         "secondary_values": secondary_values,
         "aggregations": aggregations_per_card,
@@ -3420,6 +3603,11 @@ def bulk_compute_cards(
         "filter_applied": len(base_filter_metadata) > 0,
         "filter_count": len(base_filter_metadata),
     }
+    if definition_errors:
+        for idx in definition_errors:
+            values.setdefault(idx, None)
+        result["definition_errors"] = definition_errors
+    return result
 
 
 # ============================================================================
@@ -3688,21 +3876,10 @@ async def render_figure_endpoint(
         raise HTTPException(status_code=403, detail="Permission denied.")
 
     pins = _data_pins(request, dashboard_data)
-    component = next(
-        (
-            m
-            for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id and m.get("component_type") == "figure"
-        ),
-        None,
-    )
-    if component is None:
-        raise HTTPException(status_code=404, detail=f"Figure component '{component_id}' not found.")
-
-    # Component history renders a *past* version of this figure. Without this
-    # the endpoint would draw that version's data with today's chart
-    # definition — a histogram shown as the box plot it later became.
-    component = _apply_component_override(component, request)
+    # A past version's definition when the body names one: without it, that
+    # version's data would be drawn with today's chart, a histogram shown as the
+    # box plot it later became.
+    component = _render_component(dashboard_data, component_id, "figure", request)
 
     wf_id = component.get("wf_id")
     dc_id = component.get("dc_id")
@@ -3900,19 +4077,8 @@ def render_table_endpoint(
         raise HTTPException(status_code=403, detail="Permission denied.")
 
     pins = _data_pins(request, dashboard_data)
-    component = next(
-        (
-            m
-            for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id and m.get("component_type") == "table"
-        ),
-        None,
-    )
-    if component is None:
-        raise HTTPException(status_code=404, detail=f"Table component '{component_id}' not found.")
-
     # As in render_figure: a past version's column selection, not today's.
-    component = _apply_component_override(component, request)
+    component = _render_component(dashboard_data, component_id, "table", request)
 
     wf_id = component.get("wf_id")
     dc_id = component.get("dc_id")
@@ -4182,16 +4348,8 @@ def render_image_paths_endpoint(
         raise HTTPException(status_code=403, detail="Permission denied.")
 
     pins = _data_pins(body, dashboard_data)
-    component = next(
-        (
-            m
-            for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id and m.get("component_type") == "image"
-        ),
-        None,
-    )
-    if component is None:
-        raise HTTPException(status_code=404, detail=f"Image component '{component_id}' not found.")
+    # A past version's image column too, not only its manifest commit.
+    component = _render_component(dashboard_data, component_id, "image", body)
 
     wf_id = component.get("wf_id")
     dc_id = component.get("dc_id")
@@ -4354,6 +4512,7 @@ def render_map_endpoint(
         filters=request.get("filters") or [],
         current_user=current_user,
         access_token=access_token,
+        request=request,
     )
     pins = _data_pins(request, ctx.dashboard)
     component = ctx.component
@@ -4540,6 +4699,7 @@ def map_data_endpoint(
         filters=request.get("filters") or [],
         current_user=current_user,
         access_token=access_token,
+        request=request,
     )
     # Resolved outside the ``try`` below: a stale or foreign version is the
     # caller's 400, not a 422 "could not read this data collection".
@@ -4672,9 +4832,55 @@ def get_floating_components(
     return {"parent_dashboard_id": str(parent_id), "components": _floating_components_of(tabs)}
 
 
+#: The tab fields the cross-tab payload is built from, live or from a version.
+_CROSS_TAB_FIELDS: tuple[str, ...] = (
+    "dashboard_id",
+    "title",
+    "tab_order",
+    "stored_metadata",
+    "grid_sections",
+    "filter_sections",
+    "right_panel_layout_data",
+)
+
+
+def _version_family_tabs(version_id: str, parent_id: Any) -> tuple[list[dict[str, Any]], list[str]]:
+    """The family's tabs as ``version_id`` holds them, for the cross-tab payload.
+
+    404 for an unknown version or one of another family, as the ``?version=``
+    preview answers (``_overlay_version``). Tabs deleted since are left out and
+    their ids returned: their components render under the owner tab's id, and
+    a tab that no longer exists has nothing to render them against.
+    """
+    record = version_store.get_version_tabs(version_id, _CROSS_TAB_FIELDS)
+    if not record:
+        raise HTTPException(status_code=404, detail="Version not found.")
+    if record.get("family_id") != str(parent_id):
+        raise HTTPException(
+            status_code=404, detail="That version does not belong to this dashboard."
+        )
+    snapshot = record.get("tabs") or []
+    ids = [
+        ObjectId(str(t["dashboard_id"]))
+        for t in snapshot
+        if ObjectId.is_valid(str(t.get("dashboard_id")))
+    ]
+    alive = {
+        str(doc.get("dashboard_id"))
+        for doc in dashboards_collection.find({"dashboard_id": {"$in": ids}}, {"dashboard_id": 1})
+    }
+    tabs = [t for t in snapshot if str(t.get("dashboard_id")) in alive]
+    omitted = [
+        str(t.get("dashboard_id")) for t in snapshot if str(t.get("dashboard_id")) not in alive
+    ]
+    tabs.sort(key=lambda t: (t.get("tab_order") is None, t.get("tab_order") or 0))
+    return tabs, omitted
+
+
 @dashboards_endpoint_router.get("/cross_tab_components/{dashboard_id}")
 def get_cross_tab_components(
     dashboard_id: PyObjectId,
+    version_id: str | None = None,
     current_user: User = Depends(get_user_or_anonymous),
 ):
     """Return everything a tab renders on behalf of its siblings, in one request.
@@ -4689,20 +4895,25 @@ def get_cross_tab_components(
 
     Sections are keyed ``(owner_dashboard_id, kind, name)``: two tabs each
     declaring a persistent section with the same name stay two sections.
+
+    With ``version_id``, the sections and floating maps as that version held
+    them, for a ``?version=`` preview: otherwise the preview of a child tab
+    showed today's cross-tab content under the version's banner. The renders
+    then name the same version as ``definition_version`` with the owner's id,
+    which finds each component on its owner tab in that version.
+    ``omitted_tab_ids`` lists the owner tabs deleted since, whose content
+    cannot be drawn.
     """
+    # A preview reads the tabs from the version, so the live ones are only
+    # needed for the permission check and the family id.
     parent_id, tabs = _resolve_tab_family(
         dashboard_id,
         current_user,
-        {
-            "dashboard_id": 1,
-            "title": 1,
-            "tab_order": 1,
-            "stored_metadata": 1,
-            "grid_sections": 1,
-            "filter_sections": 1,
-            "right_panel_layout_data": 1,
-        },
+        {"dashboard_id": 1} if version_id else {name: 1 for name in _CROSS_TAB_FIELDS},
     )
+    omitted: list[str] = []
+    if version_id:
+        tabs, omitted = _version_family_tabs(version_id, parent_id)
 
     persistent_sections: list[dict[str, Any]] = []
     for tab in tabs:
@@ -4769,11 +4980,15 @@ def get_cross_tab_components(
                     }
                 )
 
-    return {
+    payload: dict[str, Any] = {
         "parent_dashboard_id": str(parent_id),
         "floating": _floating_components_of(tabs),
         "persistent_sections": persistent_sections,
     }
+    if version_id:
+        payload["version_id"] = version_id
+        payload["omitted_tab_ids"] = omitted
+    return payload
 
 
 # ============================================================================
@@ -4811,18 +5026,7 @@ async def render_jbrowse_endpoint(
     if not project_id or not check_project_permission(project_id, current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Permission denied.")
 
-    component = next(
-        (
-            m
-            for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id and m.get("component_type") == "jbrowse"
-        ),
-        None,
-    )
-    if component is None:
-        raise HTTPException(
-            status_code=404, detail=f"JBrowse component '{component_id}' not found."
-        )
+    component = _render_component(dashboard_data, component_id, "jbrowse", request, label="JBrowse")
 
     wf_id = component.get("wf_id")
     dc_id = component.get("dc_id")
@@ -5249,18 +5453,10 @@ def render_multiqc_endpoint(
     if not project_id or not check_project_permission(project_id, current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Permission denied.")
 
-    component = next(
-        (
-            m
-            for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id and m.get("component_type") == "multiqc"
-        ),
-        None,
-    )
-    if component is None:
-        raise HTTPException(
-            status_code=404, detail=f"MultiQC component '{component_id}' not found."
-        )
+    # A past version's module and plot when the body names one. The data is
+    # not versioned (MultiQC reports are plain parquet), which
+    # `data_version_status` reports as such.
+    component = _render_component(dashboard_data, component_id, "multiqc", request, label="MultiQC")
 
     selected_module, selected_plot, selected_dataset, is_gs = _resolve_selected_keys(component)
 
@@ -5650,18 +5846,10 @@ def render_multiqc_general_stats_endpoint(
     if not project_id or not check_project_permission(project_id, current_user, "viewer"):
         raise HTTPException(status_code=403, detail="Permission denied.")
 
-    component = next(
-        (
-            m
-            for m in (dashboard_data.get("stored_metadata") or [])
-            if str(m.get("index")) == component_id and m.get("component_type") == "multiqc"
-        ),
-        None,
-    )
-    if component is None:
-        raise HTTPException(
-            status_code=404, detail=f"MultiQC component '{component_id}' not found."
-        )
+    # A past version's module and plot when the body names one. The data is
+    # not versioned (MultiQC reports are plain parquet), which
+    # `data_version_status` reports as such.
+    component = _render_component(dashboard_data, component_id, "multiqc", request, label="MultiQC")
 
     s3_locations = component.get("s3_locations") or []
     dc_id = component.get("dc_id") or component.get("data_collection_id")
@@ -6071,20 +6259,21 @@ def _regenerate_component_fields(component: dict, project_id: PyObjectId | None 
 
 
 def _tag_derived_indices(lite: Any) -> set[str]:
-    """Ids on this dashboard that were derived from a component's YAML tag.
+    """Ids on this dashboard that a re-import of the same YAML gives again.
 
-    Recomputed from the lite components rather than read off the built
-    document, because ``tag`` is intentionally not persisted. An id only counts
-    when it still equals what the tag derives, so an explicitly supplied
-    ``index`` is not mistaken for a derived one.
+    Every tagged component's: the id its tag derives within the tab's scope
+    (``DashboardDataLite.tag_scope``), or the ``index`` the YAML states, which an
+    export writes whenever the tag would not derive it. Read off the lite
+    components rather than the built document, because ``tag`` is not
+    persisted. Untagged components are left out; their ids are random anyway.
     """
+    scope = getattr(lite, "tag_scope", None)
     keep: set[str] = set()
     for component in getattr(lite, "components", None) or []:
         data = component if isinstance(component, dict) else component.model_dump()
         tag = data.get("tag")
-        index = data.get("index")
-        if tag and index and str(index) == index_from_tag(str(tag)):
-            keep.add(str(index))
+        if tag:
+            keep.add(str(data.get("index") or index_from_tag(str(tag), scope)))
     return keep
 
 
@@ -7251,8 +7440,14 @@ def _import_family_tabs(
         orders = dashboards_collection.find(family, {"tab_order": 1})
         next_order = max((tab.get("tab_order") or 0 for tab in orders), default=0) + 1
     for idx, tab_data in enumerate(tabs_data):
+        # Every entry of `tabs:` is a child tab, written so or not. Its ids are
+        # scoped by its title (see `DashboardDataLite.tag_scope`), so a tag the
+        # main tab also uses names a different component here.
         tab_yaml = yaml.dump(
-            tab_data, default_flow_style=False, allow_unicode=True, sort_keys=False
+            {**tab_data, "is_main_tab": False},
+            default_flow_style=False,
+            allow_unicode=True,
+            sort_keys=False,
         )
         tab_lite = DashboardDataLite.from_yaml(tab_yaml)
 
@@ -7864,7 +8059,8 @@ async def export_dashboard_as_yaml(
         main_dict.pop(field, None)
     if "components" in main_dict:
         main_dict["components"] = [
-            DashboardDataLite._clean_component_for_yaml(c) for c in main_dict["components"]
+            DashboardDataLite._clean_component_for_yaml(c, main_lite.tag_scope)
+            for c in main_dict["components"]
         ]
     multi_tab_dict["main_dashboard"] = DashboardDataLite._build_ordered_dashboard_dict(main_dict)
 
@@ -7882,7 +8078,8 @@ async def export_dashboard_as_yaml(
             child_dict.pop(field, None)
         if "components" in child_dict:
             child_dict["components"] = [
-                DashboardDataLite._clean_component_for_yaml(c) for c in child_dict["components"]
+                DashboardDataLite._clean_component_for_yaml(c, child_lite.tag_scope)
+                for c in child_dict["components"]
             ]
         tabs_list.append(DashboardDataLite._build_ordered_dashboard_dict(child_dict))
 
@@ -9054,3 +9251,304 @@ def funnel_values_endpoint(
         "filter_count": len(active_filters),
         **stage_column_fields,
     }
+
+
+# ============================================================================
+# Data time travel: filter options and what each collection shows
+# ============================================================================
+
+#: Most distinct values one option list returns, as ``/deltatables/unique_values``.
+_FILTER_OPTIONS_LIMIT = 1000
+
+
+def _viewable_dashboard(dashboard_id: PyObjectId, current_user: User) -> dict:
+    """The dashboard document, 404 when unknown and 403 without viewer access."""
+    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard_data:
+        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
+    project_id = dashboard_data.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+    return dashboard_data
+
+
+def _latest_column_spec(dc_id: str, column: str) -> dict[str, Any] | None:
+    """The newest complete aggregation's spec entry for one column, as
+    ``{type, specs}``. A finalize still pending has no specs yet."""
+    from depictio.api.v1.db import deltatables_collection
+
+    doc = deltatables_collection.find_one(
+        {"data_collection_id": ObjectId(dc_id)}, {"aggregation": 1}
+    )
+    aggregations = (doc or {}).get("aggregation") or []
+    raw = (latest_complete_aggregation(aggregations) or {}).get("aggregation_columns_specs")
+    if isinstance(raw, list):
+        for entry in raw:
+            if isinstance(entry, dict) and entry.get("name") == column:
+                return {"type": entry.get("type"), "specs": entry.get("specs") or {}}
+        return None
+    if isinstance(raw, dict) and isinstance(raw.get(column), dict):
+        # Legacy dict shape: the column's specs, its type among them.
+        specs = raw[column]
+        return {"type": specs.get("type"), "specs": specs}
+    return None
+
+
+def _range_from_spec(entry: dict[str, Any] | None) -> dict[str, Any]:
+    """``{min, max, dtype, unique}`` from a column's spec entry, as the viewer reads it."""
+    specs = (entry or {}).get("specs") or {}
+
+    def _number(value: Any) -> Any:
+        return value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+    return {
+        "min": _number(specs.get("min")),
+        "max": _number(specs.get("max")),
+        "dtype": (entry or {}).get("type"),
+        "unique": _number(specs.get("unique")),
+    }
+
+
+def _computed_filter_options(
+    *,
+    dc_id: str,
+    dc_info: dict[str, Any],
+    column: str,
+    kind: str,
+    filter_expr: str | None,
+    limit: int,
+    delta_version: int | None,
+) -> dict[str, Any]:
+    """Filter options read from the collection itself, at ``delta_version``.
+
+    The path for a pinned read, and for a range narrowed by ``filter_expr``
+    (the precomputed specs describe the whole latest commit only). Cached
+    under a key salted with the pin, so a historical option list is never
+    filed under, nor served from, the live one.
+    """
+    import polars as pl
+
+    from depictio.api.cache import get_cache
+    from depictio.api.v1.db import deltatables_collection
+    from depictio.api.v1.deltatables_utils import _version_salt_for, open_deltatable_scan
+    from depictio.api.v1.endpoints.deltatables_endpoints.utils import (
+        _legacy_type_name,
+        _polars_type_name,
+    )
+    from depictio.models.components.filter_expr import build_filter_expr, validate_filter_expr
+
+    salt = _version_salt_for(dc_id, delta_version)
+    cache_key = f"filter_options_{kind}_{dc_id}_{column}_{limit}_{filter_expr or 'nofilter'}_{salt}"
+    try:
+        cached = get_cache().get(cache_key)
+        if cached is not None:
+            return cached
+    except Exception as exc:  # the cache is an optimisation, never a dependency
+        logger.debug(f"filter_options: cache read failed for {cache_key}: {exc}")
+
+    dc_type = dc_info.get("dc_type") or "table"
+    if delta_version is not None and versioning._classify_dc(dc_type) != "delta":
+        # Checked here because the scan builder swallows the ValueError a pin on
+        # a collection with no commit log raises, which would surface as a 500.
+        raise HTTPException(
+            status_code=400,
+            detail=f"Time travel is not available for '{dc_type}' collections: they have "
+            "no commit log.",
+        )
+
+    deltatable = deltatables_collection.find_one(
+        {"data_collection_id": ObjectId(dc_id)}, {"delta_table_location": 1}
+    )
+    location = (deltatable or {}).get("delta_table_location")
+    if not location:
+        raise HTTPException(status_code=404, detail=f"No Delta table for data collection {dc_id}.")
+
+    scan = open_deltatable_scan(
+        workflow_id=str(dc_info.get("workflow_id")),
+        data_collection_id=dc_id,
+        init_data={dc_id: {"delta_location": location, "dc_type": dc_type, "size_bytes": 0}},
+        delta_version=delta_version,
+    )
+    if scan is None:
+        raise HTTPException(status_code=500, detail=f"Could not read data collection {dc_id}.")
+
+    try:
+        schema = scan.collect_schema()
+        if column not in schema.names():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Column '{column}' not found in data collection {dc_id}.",
+            )
+        if filter_expr:
+            try:
+                validate_filter_expr(filter_expr)
+                scan = scan.filter(build_filter_expr(filter_expr))
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"Invalid filter_expr: {exc}")
+
+        if kind == "unique":
+            values = scan.select(column).unique().limit(limit).collect()[column]
+            result: dict[str, Any] = {
+                "column": column,
+                "values": sorted({str(v) for v in values.drop_nulls().to_list()}),
+            }
+        else:
+            dtype = schema[column]
+            base = pl.col(column)
+            if dtype in (pl.Float32, pl.Float64):
+                base = base.fill_nan(None)  # as the precomputed specs count NaN
+            row = (
+                scan.select(
+                    base.min().alias("min"),
+                    base.max().alias("max"),
+                    base.drop_nulls().n_unique().alias("unique"),
+                    pl.col(column).null_count().alias("nulls"),
+                )
+                .collect()
+                .row(0, named=True)
+            )
+            numeric = dtype.is_numeric()
+            # The type name the latest specs recorded wins when it still fits
+            # this commit's dtype, so the slider reads the column as it does
+            # live; otherwise the commit's own.
+            names = {_polars_type_name(dtype), _legacy_type_name(dtype, bool(row["nulls"]))}
+            recorded = (_latest_column_spec(dc_id, column) or {}).get("type")
+            result = {
+                "min": row["min"] if numeric else None,
+                "max": row["max"] if numeric else None,
+                "dtype": recorded if recorded in names else _polars_type_name(dtype),
+                "unique": int(row["unique"]),
+            }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"filter_options: reading {column} of {dc_id} failed: {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to read filter options: {exc}")
+
+    try:
+        get_cache().set(cache_key, result)
+    except Exception as exc:
+        logger.debug(f"filter_options: cache write failed for {cache_key}: {exc}")
+    return result
+
+
+@dashboards_endpoint_router.post("/filter_options/{dashboard_id}")
+async def filter_options_endpoint(
+    dashboard_id: PyObjectId,
+    request: dict,
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """The options an interactive filter offers, at the data version in effect.
+
+    A filter's option list read today's data while the tiles beside it showed a
+    pinned version: a variety select offered values the pinned data does not
+    hold, and picking one emptied every chart.
+
+    Request body:
+        {"dc_id": str, "column": str, "kind": "unique" | "range",
+         "filter_expr": str (optional),
+         "as_of_version": str, "data_versions": {"<dc_id>": int | null}}
+
+    Response, the shapes ``GET /deltatables/unique_values/{dc}`` and a column's
+    ``/deltatables/specs/{dc}`` entry give:
+        unique: {"column": str, "values": [str, ...]}
+        range:  {"min": number | null, "max": number | null,
+                 "dtype": str | null, "unique": int | null}
+
+    Viewer permission on the dashboard; ``dc_id`` must belong to its project
+    (404 otherwise). The pins resolve exactly as a render's do (``_data_pins``,
+    with the same 400s). Unpinned, the answer comes from the paths the viewer
+    used before, cache included.
+    """
+    dc_id = request.get("dc_id")
+    column = request.get("column")
+    kind = request.get("kind")
+    filter_expr = request.get("filter_expr") or None
+    if not isinstance(dc_id, str) or not dc_id or not isinstance(column, str) or not column:
+        raise HTTPException(status_code=400, detail="dc_id and column are required.")
+    if kind not in ("unique", "range"):
+        raise HTTPException(status_code=400, detail="kind must be 'unique' or 'range'.")
+    if filter_expr is not None and not isinstance(filter_expr, str):
+        raise HTTPException(status_code=400, detail="filter_expr must be a string.")
+
+    def _resolve() -> tuple[dict[str, Any], int | None]:
+        dashboard_data = _viewable_dashboard(dashboard_id, current_user)
+        dc_info = _project_collections(dashboard_data.get("project_id")).get(dc_id)
+        if dc_info is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Data collection {dc_id} is not part of this dashboard's project.",
+            )
+        return dc_info, _data_pins(request, dashboard_data).for_dc(dc_id)
+
+    dc_info, delta_version = await run_in_threadpool(_resolve)
+
+    if delta_version is None and kind == "unique":
+        from depictio.api.v1.endpoints.deltatables_endpoints.routes import get_unique_values
+
+        return await get_unique_values(
+            PyObjectId(dc_id),
+            column=column,
+            limit=_FILTER_OPTIONS_LIMIT,
+            filter_expr=filter_expr,
+            current_user=current_user,
+        )
+    if delta_version is None and not filter_expr:
+        return _range_from_spec(await run_in_threadpool(_latest_column_spec, dc_id, column))
+
+    return await run_in_threadpool(
+        lambda: _computed_filter_options(
+            dc_id=dc_id,
+            dc_info=dc_info,
+            column=column,
+            kind=kind,
+            filter_expr=filter_expr,
+            limit=_FILTER_OPTIONS_LIMIT,
+            delta_version=delta_version,
+        )
+    )
+
+
+@dashboards_endpoint_router.post("/data_version_status/{dashboard_id}")
+def data_version_status_endpoint(
+    dashboard_id: PyObjectId,
+    request: dict | None = Body(default=None),
+    current_user: User = Depends(get_user_or_anonymous),
+):
+    """What each data collection of a tab family shows under a time-travel request.
+
+    A banner saying "every value is from v3" was wrong for anything v3 could
+    not pin: a collection added since, one kept live, MultiQC reports. The
+    client asks this once per selection and badges what still shows live data.
+
+    Request body: ``{"as_of_version": str, "data_versions": {"<dc_id>": int | null}}``,
+    both optional, resolved exactly as a render resolves them (same 400s).
+
+    Response:
+        {"collections": [{"dc_id", "workflow_tag", "data_collection_tag",
+                          "dc_type", "status": "pinned" | "live" | "not_versioned",
+                          "delta_version": int | null, "reason": str | null}]}
+
+    One entry per collection the family's live components read, then per
+    collection the version stamped that none of them reads any more. See
+    ``data_versions.collection_statuses`` for the statuses and reasons.
+    """
+    dashboard_data = _viewable_dashboard(dashboard_id, current_user)
+    family_id = versioning.resolve_family_id(dashboard_data) or dashboard_data["dashboard_id"]
+    family = sorted(
+        dashboards_collection.find(
+            {"$or": [{"dashboard_id": family_id}, {"parent_dashboard_id": family_id}]},
+            {"is_main_tab": 1, "tab_order": 1, "stored_metadata": 1},
+        ),
+        # Main tab first, then tab order, so the list reads as the tabs do.
+        key=lambda tab: (tab.get("is_main_tab") is False, tab.get("tab_order") or 0),
+    )
+    referenced = referenced_dc_ids(
+        [component for tab in family for component in tab.get("stored_metadata") or []]
+    )
+    try:
+        pins = resolve_data_versions(request or {}, dashboard=dashboard_data, referenced=referenced)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    identities = _project_collections(dashboard_data.get("project_id"))
+    return {"collections": collection_statuses(pins, referenced, identities)}

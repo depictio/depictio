@@ -44,12 +44,21 @@ from depictio.models.components.types import CardVariant, FigureStyle
 _COMPONENT_TAG_NAMESPACE = uuid.UUID("b3f1a7c4-6d2e-4f88-9a05-1c7e2b9d4e60")
 
 
-def index_from_tag(tag: str | None) -> str:
-    """Stable component id for a tag, or a fresh random one when untagged."""
+def index_from_tag(tag: str | None, scope: str | None = None) -> str:
+    """Stable component id for a tag, or a fresh random one when untagged.
+
+    ``scope`` namespaces the id within a tab family: a main tab passes none, so
+    its ids are its tags' alone, and a child tab passes its title (see
+    ``DashboardDataLite.tag_scope``). Without it, a tag reused on two tabs of one
+    family (iris's overview and petal tabs share eight) named one component
+    twice, and restoring one of them from history overwrote the other.
+    """
     tag = (tag or "").strip()
     if not tag:
         return str(uuid.uuid4())
-    return str(uuid.uuid5(_COMPONENT_TAG_NAMESPACE, tag))
+    scope = (scope or "").strip()
+    name = f"{scope}\n{tag}" if scope else tag
+    return str(uuid.uuid5(_COMPONENT_TAG_NAMESPACE, name))
 
 
 class BaseLiteComponent(BaseModel):

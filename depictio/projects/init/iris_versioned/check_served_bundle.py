@@ -55,7 +55,7 @@ REQUIRED = {
         "versionKey",
         "definitionKey",
     ],
-    f"{PKG}/dataVersions.tsx": ["component_overrides", "data_versions"],
+    f"{PKG}/dataVersions.tsx": ["definition_version", "data_versions"],
     "/src/EditorApp.tsx": [
         "DataVersionProvider",
         "ComponentVersionModal",
@@ -64,13 +64,13 @@ REQUIRED = {
     ],
     # The viewer must NOT offer to re-point live data; that is edit-mode only.
     # Asserted as an absence below.
-    # `componentOverrides` is required, not optional: a `?version=` preview that
+    # `definitionVersionId` is required, not optional: a `?version=` preview that
     # sends only data pins renders a past version's numbers through today's
     # component definitions and labels the result as the past. That was a real
     # bug, and it is invisible in source review because both halves are correct
     # on their own.
-    "/src/App.tsx": ["DataVersionProvider", "componentOverrides"],
-    "/src/versions/preview.ts": ["overridesFromVersion"],
+    "/src/App.tsx": ["DataVersionProvider", "definitionVersionId"],
+    "/src/versions/preview.ts": ["definitionVersionFromPreview"],
 }
 
 #: module path -> markers that must be ABSENT. Time travel controls belong to

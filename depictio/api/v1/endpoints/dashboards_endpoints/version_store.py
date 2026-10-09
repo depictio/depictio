@@ -170,6 +170,31 @@ def get_version(version_id: str) -> Optional[dict[str, Any]]:
     return dashboard_versions_collection.find_one({"version_id": version_id})
 
 
+def get_version_tab(version_id: str, tab_id: str) -> Optional[dict[str, Any]]:
+    """A version's family id and its one tab ``tab_id``, never the other tabs.
+
+    For a render drawing a component from a past version: a record holds the
+    whole family's snapshot, and pulling all of it for every tile would cost
+    that much per tile. ``tabs`` is absent when the version holds no such tab.
+    """
+    return dashboard_versions_collection.find_one(
+        {"version_id": version_id},
+        {
+            "_id": 0,
+            "version_id": 1,
+            "family_id": 1,
+            "tabs": {"$elemMatch": {"dashboard_id": tab_id}},
+        },
+    )
+
+
+def get_version_tabs(version_id: str, tab_fields: tuple[str, ...]) -> Optional[dict[str, Any]]:
+    """A version's family id and, of every tab, only ``tab_fields``."""
+    projection: dict[str, Any] = {"_id": 0, "version_id": 1, "family_id": 1}
+    projection.update({f"tabs.{name}": 1 for name in tab_fields})
+    return dashboard_versions_collection.find_one({"version_id": version_id}, projection)
+
+
 def list_versions(
     family_id: str, *, limit: int = 50, before_seq: int | None = None, pinned_only: bool = False
 ) -> list[dict[str, Any]]:

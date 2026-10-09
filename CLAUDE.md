@@ -127,27 +127,41 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
 - Preview **merges** the snapshot onto the live document server-side (`_overlay_version`
   in `routes.py`, 404 for a version of another family): a `TabSnapshot` has no
   `project_id`/`permissions` by design, so rendering it alone breaks data resolution.
-  `src/versions/preview.ts` only adds the data pins and `component_overrides` to render
-  requests. Guarded by `pnpm run check:preview` (no JS test runner in this tree)
+  `src/versions/preview.ts` only adds `as_of_version` and `definition_version` to render
+  requests. Guarded by `pnpm run check:preview` (no JS test runner in this tree).
+  Cross-tab sections and floating maps come from
+  `GET /cross_tab_components/{id}?version_id=` (same family check, 404)
 - Version history covers **layout, components and data**. `DataCollectionStamp` is read
   back: `as_of_version` expands a version's stamps into per-collection pins, and
-  `data_versions: {dc_id: N}` overrides one. A stale version id is a **400**, never a
-  silent fall back to current data
+  `data_versions: {dc_id: N}` (a non-bool int >= 0, or null for live) overrides one. A
+  stale version id is a **400** with the fixed detail `"Version <id> no longer exists."`
+  (the editor matches it), never a silent fall back to current data
 - A time-travelling render needs **both halves** in the request body: `as_of_version` /
-  `data_versions` for the data, and `component_overrides` for the definition. Sending
+  `data_versions` for the data, and `definition_version` for the definition. Sending
   only the pins renders a past version's data through today's chart config and labels it
   as the past. Both halves were missing once, and neither failure raised
-- `component_overrides` is narrowed server-side by `_DEFINITION_FIELDS` (per component
-  type, presentation fields only). `wf_id`/`dc_id`/`dc_config` are absent from every
-  allow-list: they decide *which collection is read*, and honouring them from a request
-  body would read data the dashboard does not reference and whose permissions were never
-  checked
+- `definition_version` names a stored version; the **server** reads the component from
+  it (`_component_from_version` in `routes.py`, tab by the rendered dashboard id, then
+  component by index) and replaces the live definition wholesale, except `index`, `wf_id`,
+  `dc_id` and `dc_config`, which stay live. 409 when that version read another
+  collection; a component deleted since renders from the version only if its collection
+  is still in the project. Renders take **no definition from the request body**: the old
+  `component_overrides` let any viewer hand the server a figure in code mode, and is now
+  a 400
+- Anything else a pinned view reads must honour the pins too: filter option lists come
+  from `POST /filter_options/{id}`, and `POST /data_version_status/{id}` says per
+  collection whether it is `pinned`, `live` (with a reason, e.g. `not_in_version` for a
+  collection added since) or `not_versioned`. A render never carries that list
 - Cache keys are salted with the pin, so a historical read is its own entry rather than
   colliding with the live one. A pinned read never comes from the `USE_LOCAL_FILES`
   mirror, which only holds the newest commit
-- Component ids come from a UUID5 of stable content, **not** regenerated on import.
-  Three places must agree; `_regenerate_component_indices` runs on import and will
-  silently undo it. Without stable ids no component-level history can match anything
+- Component ids come from a UUID5 of the YAML tag, **not** regenerated on import. A child
+  tab's ids are scoped by its title (`DashboardDataLite.tag_scope`), so two tabs sharing
+  a tag never share an id; tags must be unique within a tab. Three places must agree
+  (`index_from_tag`, `to_full`, `_tag_derived_indices`); `_regenerate_component_indices`
+  runs on import and will silently undo it. Export writes an id its tag does not derive,
+  so a round trip keeps it. `restore_component` takes `tab_id` with the index. Without
+  stable ids no component-level history can match anything
 - Time-travel UI is **edit mode only** (timeline, dataset picker, component history):
   all of it writes or re-points data. The viewer keeps only the `?version=` preview.
   `check_served_bundle.py` asserts that split in the *served bundle*, in both directions

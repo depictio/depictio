@@ -67,9 +67,9 @@
   <text x="490.0" y="200.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="16" fill="#1e1e1e" text-anchor="start" font-weight="bold">POST /render_figure</text>
   <text x="490.0" y="232.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#1e1e1e" text-anchor="start" font-weight="normal">as_of_version: v1</text>
   <text x="490.0" y="256.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="start" font-weight="normal">→ every stamp becomes a pin</text>
-  <text x="490.0" y="292.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#1e1e1e" text-anchor="start" font-weight="normal">component_overrides: {…}</text>
-  <text x="490.0" y="316.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="start" font-weight="normal">→ the definition it was saved with</text>
-  <text x="490.0" y="348.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#c92a2a" text-anchor="start" font-weight="normal">wf_id · dc_id · dc_config refused</text>
+  <text x="490.0" y="292.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#1e1e1e" text-anchor="start" font-weight="normal">definition_version: v1</text>
+  <text x="490.0" y="316.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="start" font-weight="normal">→ the server reads v1's definition</text>
+  <text x="490.0" y="348.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#c92a2a" text-anchor="start" font-weight="normal">a definition in the body is refused</text>
   <path d="M369.3,213.8 C397.0,220.1 428.2,224.3 455.7,232.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M369.2,213.6 C397.8,220.6 428.0,225.4 455.1,232.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M456.3,232.2 C451.7,228.7 449.8,226.7 445.7,223.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
