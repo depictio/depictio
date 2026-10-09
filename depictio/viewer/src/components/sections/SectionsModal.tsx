@@ -16,7 +16,7 @@ import { Icon } from '@iconify/react';
 import type { DashboardData, FilterSectionSpec } from 'depictio-react-core';
 
 import SectionList from './SectionList';
-import { SECTION_ACCENT } from './SectionModal';
+import { SECTION_ACCENT } from './sectionIcons';
 import type { SectionKind, SectionOp } from './sectionMutations';
 import { sectionsFor } from './sectionMutations';
 

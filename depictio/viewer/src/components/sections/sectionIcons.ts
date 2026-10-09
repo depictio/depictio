@@ -11,6 +11,10 @@
  * Every id used by a section in the reference dashboards is listed here, which
  * is what makes those icons resolve in a built bundle.
  */
+/** Grape is the sections accent — distinct from the orange of dashboards and
+ *  tabs, so the two families of dialog stay tellable apart at a glance. */
+export const SECTION_ACCENT = 'grape';
+
 export interface IconOption {
   value: string;
   label: string;
