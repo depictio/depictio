@@ -203,6 +203,12 @@ describe('buildFileGenomeSpec', () => {
     expect(spec.vconcat[0].data.lazy.type).toBe('vcf');
   });
 
+  it('lets each lane grow with the tile, above a floor', () => {
+    // A fixed lane height left a fullscreen tile's lanes at their tile size.
+    const built = buildFileGenomeSpec({ manifest: manifest({ files: [entry()] }), colors, assemblyContigs: contigs });
+    expect((built.spec as any).vconcat[0].height).toEqual({ grow: 1, minPx: 70 });
+  });
+
   it('caps the lanes and reports how many it dropped', () => {
     const files = ['a', 'b', 'c'].map((s) => entry({ sample: s, name: `${s}.vcf.gz` }));
     const built = buildFileGenomeSpec({

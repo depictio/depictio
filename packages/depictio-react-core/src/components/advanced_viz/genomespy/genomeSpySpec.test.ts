@@ -359,6 +359,8 @@ describe('buildGenomeSpySpec', () => {
       expect(s.vconcat[0].transform).toEqual([{ type: 'filter', expr: 'datum["s"] === "S1"' }]);
       expect(s.vconcat[1].transform).toEqual([{ type: 'filter', expr: 'datum["s"] === "S2"' }]);
       expect(s.vconcat[0].title.text).toBe('S1');
+      // Lanes share the tile's height above a floor, so fullscreen draws them taller.
+      expect(s.vconcat[0].height).toEqual({ grow: 1, minPx: 60 });
       // One dataset, N lanes: the rows are not copied per lane.
       expect(Object.keys(s.datasets)).toEqual([DATASET_NAME]);
       expect(s.datasets[DATASET_NAME]).toHaveLength(4);

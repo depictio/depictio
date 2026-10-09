@@ -356,6 +356,9 @@ export function regionFromInterval(
 const ANNOTATION_LANE_HEIGHT = 34;
 /** Minimum height of one data lane once several are stacked. */
 const FACET_LANE_HEIGHT = 60;
+/** A stacked lane takes its share of the tile and never less than its floor,
+ *  so a taller tile, or the tile in fullscreen, draws taller lanes. */
+const FACET_LANE_SIZE = { grow: 1, minPx: FACET_LANE_HEIGHT };
 
 function colourEncoding(
   field: string,
@@ -391,7 +394,13 @@ function buildDataLane(
   mark: 'point' | 'rect' | 'bar',
   chromosomes: string[],
   categories: string[],
-  opts: { name: string; pickParam: string; filterExpr?: string; title?: string; height?: number },
+  opts: {
+    name: string;
+    pickParam: string;
+    filterExpr?: string;
+    title?: string;
+    height?: { grow: number; minPx: number };
+  },
 ): Record<string, unknown> {
   const colourField = config.category_col && categories.length ? config.category_col : config.chr_col;
   const colourDomain = colourField === config.chr_col ? chromosomes : categories;
@@ -570,7 +579,7 @@ export function buildGenomeSpySpec({
           // copy of the rows rather than N.
           filterExpr: `datum[${JSON.stringify(sampleCol)}] === ${JSON.stringify(sample)}`,
           title: sample,
-          height: FACET_LANE_HEIGHT,
+          height: FACET_LANE_SIZE,
         }),
       );
     });
