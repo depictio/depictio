@@ -458,6 +458,15 @@ export {
   fetchVersionCompatibility,
   fetchDeltaHistory,
   restoreComponentFromVersion,
+  fetchDataVersionStatus,
+  fetchUniqueValuesAt,
+  fetchColumnRangeAt,
+  HttpError,
+  isHttpStatus,
+  isStaleDataVersionError,
+  isStaleDataVersionDetail,
+  DATA_VERSION_GONE_EVENT,
+  DEFINITION_COLLECTION_CHANGED_MESSAGE,
   previewFigure,
   previewMultiQC,
   fetchMultiQCBuilderOptions,
@@ -737,7 +746,15 @@ export {
   useDataVersions,
   useDataVersionRequest,
   dataVersionBody,
+  dataPinBody,
+  isDataVersionActive,
 } from './dataVersions';
+export {
+  CurrentDataBadge,
+  isCurrentDataOnlyType,
+  showsCurrentDataOnly,
+  CURRENT_DATA_HINT,
+} from './components/chrome/CurrentDataBadge';
 export { renderDefinitionKey } from './renderKey';
 export type { DataVersionPins, DataVersionState } from './dataVersions';
 
@@ -849,6 +866,11 @@ export type {
   DashboardVersionTab,
   DashboardVersionDetail,
   RestoreVersionResult,
+  DataPinFields,
+  DataVersionCollectionState,
+  DataVersionCollectionStatus,
+  DataVersionStatusResponse,
+  DataVersionGoneDetail,
   CompatibilityCheck,
   CompatibilityReport,
   DeltaVersionEntry,

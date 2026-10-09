@@ -9,10 +9,24 @@
  * instead of flashing a skeleton.
  *
  * Cleared on page reload — the caches have always lived that long.
+ *
+ * While a data version is active (`DataVersionProvider`), options and bounds
+ * come from that version's data through `filter_options` instead: the
+ * per-collection endpoints only know the newest commit, so a select would
+ * offer values the pinned data does not hold. The pins are part of the cache
+ * key, so a version's options never answer for the live ones.
  */
 import { useEffect, useState } from 'react';
 
-import { ColumnRange, fetchColumnRange, fetchUniqueValues } from '../../api';
+import {
+  ColumnRange,
+  fetchColumnRange,
+  fetchColumnRangeAt,
+  fetchUniqueValues,
+  fetchUniqueValuesAt,
+  type DataPinFields,
+} from '../../api';
+import { dataPinBody, isDataVersionActive, useDataVersions } from '../../dataVersions';
 
 interface Loadable<T> {
   data: T;
@@ -22,14 +36,33 @@ interface Loadable<T> {
 
 const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
+/**
+ * The pins a filter read goes out with, or null for a live read.
+ *
+ * Null also when there is no dashboard to resolve a version against: the
+ * versioned endpoint is per dashboard, and a host that sets pins without one
+ * (none does today) keeps the live read rather than failing every control.
+ */
+export function useFilterDataPins(): { dashboardId: string; pins: DataPinFields; key: string } | null {
+  const state = useDataVersions();
+  if (!state.dashboardId || !isDataVersionActive(state)) return null;
+  const pins = dataPinBody(state);
+  return { dashboardId: state.dashboardId, pins, key: JSON.stringify(pins) };
+}
+
 // ---------------------------------------------------------------- unique values
 
 const uniqueValuesPending = new Map<string, Promise<string[]>>();
 const uniqueValuesResolved = new Map<string, string[]>();
 
-/** Cache key: `filter_expr` changes the option set, so it is part of it. */
-const uniqueValuesKey = (dcId?: string, column?: string, filterExpr?: string | null) =>
-  dcId && column ? `${dcId}|${column}|${filterExpr || ''}` : null;
+/** Cache key: `filter_expr` and the data pins change the option set, so they
+ *  are part of it. */
+const uniqueValuesKey = (
+  dcId?: string,
+  column?: string,
+  filterExpr?: string | null,
+  pinKey?: string,
+) => (dcId && column ? `${dcId}|${column}|${filterExpr || ''}|${pinKey || ''}` : null);
 
 /**
  * A categorical column's distinct values (`fetchUniqueValues`). `loading` is
@@ -42,7 +75,8 @@ export function useUniqueValues(
   columnName: string | undefined,
   filterExpr?: string | null,
 ): Loadable<string[]> {
-  const key = uniqueValuesKey(dcId, columnName, filterExpr);
+  const versioned = useFilterDataPins();
+  const key = uniqueValuesKey(dcId, columnName, filterExpr, versioned?.key);
   const [state, setState] = useState<Loadable<string[]>>(() => {
     const hit = key ? uniqueValuesResolved.get(key) : undefined;
     return { data: hit ?? [], loading: Boolean(key) && !hit, error: null };
@@ -61,7 +95,9 @@ export function useUniqueValues(
     let cancelled = false;
     let pending = uniqueValuesPending.get(key);
     if (!pending) {
-      pending = fetchUniqueValues(dcId, columnName, filterExpr);
+      pending = versioned
+        ? fetchUniqueValuesAt(versioned.dashboardId, dcId, columnName, versioned.pins, filterExpr)
+        : fetchUniqueValues(dcId, columnName, filterExpr);
       uniqueValuesPending.set(key, pending);
     }
     pending
@@ -77,7 +113,7 @@ export function useUniqueValues(
     return () => {
       cancelled = true;
     };
-    // `key` covers all three inputs.
+    // `key` covers every input, the pins included.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
@@ -99,7 +135,8 @@ export function useColumnRange(
   dcId: string | undefined,
   columnName: string | undefined,
 ): Loadable<ColumnRange | null> {
-  const key = dcId && columnName ? `${dcId}|${columnName}` : null;
+  const versioned = useFilterDataPins();
+  const key = dcId && columnName ? `${dcId}|${columnName}|${versioned?.key ?? ''}` : null;
   const [state, setState] = useState<Loadable<ColumnRange | null>>(() => {
     const hit = key ? rangeResolved.get(key) : undefined;
     return { data: hit ?? null, loading: Boolean(key) && !hit, error: null };
@@ -118,7 +155,9 @@ export function useColumnRange(
     let cancelled = false;
     let pending = rangePending.get(key);
     if (!pending) {
-      pending = fetchColumnRange(dcId, columnName);
+      pending = versioned
+        ? fetchColumnRangeAt(versioned.dashboardId, dcId, columnName, versioned.pins)
+        : fetchColumnRange(dcId, columnName);
       rangePending.set(key, pending);
     }
     pending

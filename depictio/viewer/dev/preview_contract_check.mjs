@@ -6,9 +6,14 @@
  * The server overlays a version's content onto the live document
  * (`GET /dashboards/get/{id}?version_id=`), so the client no longer merges
  * snapshots. What it still owns is the render half: every render request of a
- * preview has to carry the version's data pins (`as_of_version`) and its
- * component definitions (`component_overrides`), or a past layout is drawn
- * through today's definitions over today's data and labelled as the past.
+ * preview has to carry the version's data pins (`as_of_version`) and the
+ * version to read component definitions from (`definition_version`), or a past
+ * layout is drawn through today's definitions over today's data and labelled
+ * as the past.
+ *
+ * The client sends no definitions of its own any more: the server reads them
+ * from the stored version, and `component_overrides` is refused with a 400.
+ * So this also asserts the old key never comes back.
  *
  * Executes the real `previewDataRequest` and `dataVersionBody` rather than a
  * reimplementation: a check that restates the logic can only confirm the
@@ -18,8 +23,8 @@
  */
 
 import {
+  definitionVersionFromPreview,
   extractPreviewVersionId,
-  overridesFromVersion,
   previewDataRequest,
 } from '../src/versions/preview.ts';
 // Straight at the source file, as the sibling checks do: importing the package
@@ -72,55 +77,43 @@ const overlaid = {
   },
 };
 
-console.log('— a live dashboard adds nothing to render requests —');
+console.log('== a live dashboard adds nothing to render requests ==');
 check('no preview block -> null', previewDataRequest(live), null);
 check('no dashboard yet -> null', previewDataRequest(null), null);
 check('a live read sends neither key', Object.keys(dataVersionBody({})), []);
 
-console.log('— the data follows the previewed version —');
+console.log('== the data and the definitions follow the previewed version ==');
 const req = previewDataRequest(overlaid);
 check('as-of is the version from the preview block', req?.asOfVersionId, 'v-abc');
-
-console.log('— the overlaid definitions travel as component_overrides —');
-check('every overlaid component is keyed by index', Object.keys(req?.componentOverrides ?? {}).sort(), [
-  'a',
-  'b',
-]);
 // The bug this guards: the card's live definition says `max`, the version
-// says `average`. The override has to carry the version's, not the live one.
-check('the version definition wins, not the live one', req?.componentOverrides?.a, {
-  index: 'a',
-  aggregation: 'average',
-});
-check(
-  'a preview of an empty tab sends no overrides key',
-  previewDataRequest({ ...overlaid, stored_metadata: [] })?.componentOverrides,
-  undefined,
-);
+// says `average`. The server reads the version's definition when it is told
+// which version, so the request has to name it.
+check('the definition version is the previewed one', req?.definitionVersionId, 'v-abc');
+check('definitionVersionFromPreview reads the block', definitionVersionFromPreview(overlaid), 'v-abc');
+check('definitionVersionFromPreview on live -> null', definitionVersionFromPreview(live), null);
 
-console.log('— the pins follow the server, not the URL —');
+console.log('== the pins follow the server, not the URL ==');
 // `?version=` in the URL is not proof the overlay was applied. Pinning data on
 // the strength of the URL alone would draw the live layout over past data.
 global.window = { location: { search: '?version=v-abc' } };
 check('URL says preview, payload does not -> null', previewDataRequest(live), null);
 
-console.log('— overridesFromVersion —');
-check('a component with no index is skipped', overridesFromVersion([{ title: 'x' }]), {});
-check('undefined metadata is empty, not a throw', overridesFromVersion(undefined), {});
-
 // The seam that actually matters: the request has to survive into the body.
 // Checking `previewDataRequest` alone would pass even if the body builder
 // dropped a key on the way.
-console.log('— the request reaches the body —');
+console.log('== the request reaches the body ==');
 const body = dataVersionBody(req ?? {});
 check('as_of_version reaches the body', body.as_of_version, 'v-abc');
-check('component_overrides reaches the body', Object.keys(body.component_overrides ?? {}).sort(), [
-  'a',
-  'b',
-]);
+check('definition_version reaches the body', body.definition_version, 'v-abc');
+check('no component_overrides: the server refuses it', 'component_overrides' in body, false);
 check('no stray data_versions for a whole-version preview', 'data_versions' in body, false);
+check(
+  'the editor sends no definition version (data only)',
+  'definition_version' in dataVersionBody({ asOfVersionId: 'v-abc', pins: {} }),
+  false,
+);
 
-console.log('— ?version= parsing —');
+console.log('== ?version= parsing ==');
 global.window = { location: { search: '?version=abc123' } };
 check('reads the id', extractPreviewVersionId(), 'abc123');
 global.window = { location: { search: '' } };

@@ -24,6 +24,8 @@
 
 import React, { createContext, useContext, useMemo } from 'react';
 
+import type { DataPinFields } from './api';
+
 /** Per-collection Delta commit. `null` means "this one reads live data",
  *  which is how a component escapes a dashboard-wide pin. */
 export type DataVersionPins = Record<string, number | null>;
@@ -34,20 +36,23 @@ export interface DataVersionState {
   /** Per-collection overrides applied on top of `asOfVersionId`. */
   pins?: DataVersionPins;
   /**
-   * Component definitions to render *instead of* the live ones, keyed by
-   * component index.
+   * Stored dashboard version to read component *definitions* from, instead of
+   * the live document.
    *
    * Travels beside the pins because it answers the other half of the same
    * question. A render endpoint reads the component from the live dashboard
    * document, so pinning only the data draws a past version's numbers with
-   * today's chart definition — a histogram shown as the box plot it later
-   * became. Component history supplies both; every other caller supplies
-   * neither.
-   *
-   * The server narrows this to a per-type allow-list of presentation fields;
-   * nothing here can change which collection is read.
+   * today's chart definition: a histogram shown as the box plot it later
+   * became. The server reads the definition out of that version itself, so
+   * nothing in a request body can change which collection is read.
    */
-  componentOverrides?: Record<string, Record<string, unknown>>;
+  definitionVersionId?: string | null;
+  /**
+   * The tab the pins were chosen on. Requests that are not per component (a
+   * filter's options, the banners' status) resolve `as_of_version` against
+   * this tab's family.
+   */
+  dashboardId?: string | null;
 }
 
 const DataVersionContext = createContext<DataVersionState>({});
@@ -59,17 +64,17 @@ export interface DataVersionProviderProps extends DataVersionState {
 export const DataVersionProvider: React.FC<DataVersionProviderProps> = ({
   asOfVersionId,
   pins,
-  componentOverrides,
+  definitionVersionId,
+  dashboardId,
   children,
 }) => {
   // Keyed on content, not identity: callers build these inline, so a new
   // object every render would re-run every renderer's fetch effect.
   const pinKey = JSON.stringify(pins ?? {});
-  const overrideKey = JSON.stringify(componentOverrides ?? {});
   const value = useMemo(
-    () => ({ asOfVersionId, pins, componentOverrides }),
+    () => ({ asOfVersionId, pins, definitionVersionId, dashboardId }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [asOfVersionId, pinKey, overrideKey],
+    [asOfVersionId, pinKey, definitionVersionId, dashboardId],
   );
 
   return (
@@ -84,6 +89,19 @@ export function useDataVersions(): DataVersionState {
 }
 
 /**
+ * The data half of a request: `as_of_version` and `data_versions`, without the
+ * definition. What a filter's options and the status endpoint take, since
+ * neither draws a component.
+ */
+export function dataPinBody(state: DataVersionState): DataPinFields {
+  const body: DataPinFields = {};
+  if (state.asOfVersionId) body.as_of_version = state.asOfVersionId;
+  const pins = state.pins;
+  if (pins && Object.keys(pins).length > 0) body.data_versions = { ...pins };
+  return body;
+}
+
+/**
  * The time-travel fields to merge into a render request body.
  *
  * Returns an empty object when nothing is pinned, so an unpinned request is
@@ -91,19 +109,21 @@ export function useDataVersions(): DataVersionState {
  * changes, no behaviour change for every existing caller.
  */
 export function dataVersionBody(state: DataVersionState): Record<string, unknown> {
-  const body: Record<string, unknown> = {};
-
-  if (state.asOfVersionId) body.as_of_version = state.asOfVersionId;
-
-  const pins = state.pins;
-  if (pins && Object.keys(pins).length > 0) body.data_versions = { ...pins };
-
-  const overrides = state.componentOverrides;
-  if (overrides && Object.keys(overrides).length > 0) {
-    body.component_overrides = overrides;
-  }
-
+  const body: Record<string, unknown> = { ...dataPinBody(state) };
+  if (state.definitionVersionId) body.definition_version = state.definitionVersionId;
   return body;
+}
+
+/**
+ * Is anything on screen read from past data?
+ *
+ * True under a version's data or any numeric pin. A `null` pin alone is not
+ * past data: it only says "stay live", which means something only under a
+ * version.
+ */
+export function isDataVersionActive(state: DataVersionState): boolean {
+  if (state.asOfVersionId) return true;
+  return Object.values(state.pins ?? {}).some((v) => typeof v === 'number');
 }
 
 /**
@@ -119,16 +139,15 @@ export function dataVersionBody(state: DataVersionState): Record<string, unknown
 export function useDataVersionRequest(): {
   body: Record<string, unknown>;
   key: string;
+  /** For `renderDefinitionKey`: a definition read from another version is a
+   *  different definition, even when the local metadata did not change. */
+  definitionVersionId: string | null;
 } {
   const state = useDataVersions();
   const body = useMemo(
     () => dataVersionBody(state),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      state.asOfVersionId,
-      JSON.stringify(state.pins ?? {}),
-      JSON.stringify(state.componentOverrides ?? {}),
-    ],
+    [state.asOfVersionId, JSON.stringify(state.pins ?? {}), state.definitionVersionId],
   );
-  return { body, key: JSON.stringify(body) };
+  return { body, key: JSON.stringify(body), definitionVersionId: state.definitionVersionId ?? null };
 }

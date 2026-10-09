@@ -11,6 +11,11 @@
  */
 
 import { renderDefinitionKey } from '../../../packages/depictio-react-core/src/renderKey';
+import {
+  isTableReady,
+  tableGridIdentity,
+  tableGridKey,
+} from '../../../packages/depictio-react-core/src/components/tableVersionFollow';
 
 let failures = 0;
 function check(label, got, want) {
@@ -78,6 +83,34 @@ check(
   renderDefinitionKey(restored) !== renderDefinitionKey(base),
   true,
 );
+
+console.log('\n6. The definition version is part of the key');
+// A preview or the component-history modal reads the definition from a stored
+// version the client never sees. Two versions can hold identical local
+// metadata (the overlay already swapped it in) yet different server-side
+// definitions; without the id in the key, stepping between them keeps the
+// first chart.
+check('v1 differs from live', renderDefinitionKey(base, 'v1') !== renderDefinitionKey(base), true);
+check('v1 differs from v2', renderDefinitionKey(base, 'v1') !== renderDefinitionKey(base, 'v2'), true);
+check('null is live', renderDefinitionKey(base, null) === renderDefinitionKey(base), true);
+check('absent component with a version -> empty', renderDefinitionKey(null, 'v1'), '');
+
+console.log('\n7. The table follows a pin or definition change after mount');
+// The table grid is an infinite-row model: its datasource is installed once.
+// Before, changing the data version under a mounted table kept the rows of
+// the first one. The grid identity is what remounts it.
+const live = tableGridIdentity('{}', renderDefinitionKey(base));
+const pinned = tableGridIdentity('{"data_versions":{"dc1":0}}', renderDefinitionKey(base));
+const defV1 = tableGridIdentity('{}', renderDefinitionKey(base, 'v1'));
+check('a pin changes the identity', live !== pinned, true);
+check('a definition version changes the identity', live !== defV1, true);
+check('the grid key moves with it', tableGridKey(false, 1, live) !== tableGridKey(false, 1, pinned), true);
+// Ready is derived, not stored: the render right after the change must not
+// count as ready for the new identity, or the grid would mount once with the
+// previous datasource and fetch the old rows.
+check('ready for the identity it bootstrapped', isTableReady(live, live), true);
+check('not ready for a new identity', isTableReady(live, pinned), false);
+check('not ready before any bootstrap', isTableReady(null, live), false);
 
 console.log();
 if (failures) {

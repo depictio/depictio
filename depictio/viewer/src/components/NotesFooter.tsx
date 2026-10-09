@@ -31,6 +31,8 @@ interface NotesFooterProps {
    *  view of the same content. Server still authorizes the underlying save
    *  endpoint; this is a UI-level affordance. */
   permissions?: DashboardPermissions;
+  /** After each notes save (see `useNotesEditor`). */
+  onSaved?: () => void;
 }
 
 const STORAGE_KEY_PREFIX = 'notes-footer-open:';
@@ -55,6 +57,7 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
   dashboardId,
   initialContent,
   permissions,
+  onSaved,
 }) => {
   const [opened, setOpened] = useState<boolean>(() => readStoredOpen(dashboardId));
   const [fullscreen, setFullscreen] = useState<boolean>(false);
@@ -62,6 +65,7 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
     dashboardId,
     initialContent,
     permissions,
+    onSaved,
   );
 
   const handleToggle = useCallback(() => {

@@ -44,9 +44,11 @@ import {
   fetchFunnelValues,
   fetchMultiQCSampleMappings,
   fetchUniqueValues,
+  fetchUniqueValuesAt,
   InteractiveFilter,
   StoredMetadata,
 } from './api';
+import { dataPinBody, isDataVersionActive, useDataVersions } from './dataVersions';
 import { fetchSpecsCached, multiqcDcIds, specsHaveColumn } from './dcSpecs';
 import { filtersInScope, type FilterScopes } from './filterScope';
 
@@ -80,8 +82,11 @@ interface AvailableValuesContextValue {
 const AvailableValuesContext =
   createContext<AvailableValuesContextValue | null>(null);
 
-function key(dcId: string, columnName: string): string {
-  return `${dcId}|${columnName}`;
+/** `pinKey` is the active data version's pins, empty for live data: an
+ *  intersection computed over one version's values says nothing about
+ *  another's. */
+function key(dcId: string, columnName: string, pinKey: string): string {
+  return `${dcId}|${columnName}|${pinKey}`;
 }
 
 interface DataDcEntry {
@@ -220,6 +225,26 @@ export const AvailableFilterValuesProvider: React.FC<
   // Tracks which keys are currently being computed so we don't double-fetch.
   const inFlightRef = useRef<Set<string>>(new Set());
 
+  // While a data version is active, each collection's values are read at that
+  // version (`filter_options`): the per-collection endpoint only knows the
+  // newest commit, and greying against it would mark the pinned data's own
+  // values as absent.
+  const versionState = useDataVersions();
+  const versioned =
+    versionState.dashboardId && isDataVersionActive(versionState)
+      ? { dashboardId: versionState.dashboardId, pins: dataPinBody(versionState) }
+      : null;
+  const pinKey = versioned ? JSON.stringify(versioned.pins) : '';
+  const uniqueValuesFor = useCallback(
+    (dcId: string, columnName: string) =>
+      versioned
+        ? fetchUniqueValuesAt(versioned.dashboardId, dcId, columnName, versioned.pins)
+        : fetchUniqueValues(dcId, columnName),
+    // `pinKey` is the content of `versioned.pins`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [versioned?.dashboardId, pinKey],
+  );
+
   // --- Funnel layer (issue #939) ---------------------------------------
   const funnelEnabled = Boolean(funnel?.enabled && funnel.dashboardId);
   // Components that asked for funnel data (via useAvailableSet's ownIndex).
@@ -324,7 +349,7 @@ export const AvailableFilterValuesProvider: React.FC<
         setFunnelTargetsVersion((v) => v + 1);
       }
       if (!dcId || !columnName) return;
-      const k = key(dcId, columnName);
+      const k = key(dcId, columnName, pinKey);
       if (k in cache) return;
       if (inFlightRef.current.has(k)) return;
 
@@ -380,13 +405,13 @@ export const AvailableFilterValuesProvider: React.FC<
         }
         if (entry.dcId === dcId) {
           // The filter's own source DC carries the column by construction.
-          return fetchUniqueValues(entry.dcId, columnName).then((values) => new Set(values));
+          return uniqueValuesFor(entry.dcId, columnName).then((values) => new Set(values));
         }
         // Another delta DC: ask for its values only when its specs list the
         // column. Absent column (or no specs) = no constraint, no request.
         return fetchSpecsCached(entry.dcId).then((specs) =>
           specsHaveColumn(specs, columnName)
-            ? fetchUniqueValues(entry.dcId, columnName).then((values) => new Set(values))
+            ? uniqueValuesFor(entry.dcId, columnName).then((values) => new Set(values))
             : new Set<string>(),
         );
       };
@@ -424,7 +449,7 @@ export const AvailableFilterValuesProvider: React.FC<
           inFlightRef.current.delete(k);
         });
     },
-    [cache, dcs, effectiveProjectId],
+    [cache, dcs, effectiveProjectId, pinKey, uniqueValuesFor],
   );
 
   const getFunnelState = useCallback(
@@ -447,9 +472,9 @@ export const AvailableFilterValuesProvider: React.FC<
         // Not computed yet → static intersection keeps the display sensible
         // while the funnel request is in flight.
       }
-      return cache[key(dcId, columnName)] ?? null;
+      return cache[key(dcId, columnName, pinKey)] ?? null;
     },
-    [cache, funnelEnabled, funnelState],
+    [cache, funnelEnabled, funnelState, pinKey],
   );
 
   const value = useMemo(

@@ -10,13 +10,16 @@
  * shared with every other spec running in parallel.
  *
  * The content change between the bookmark and the restore is a tab rename sent
- * to the API (`PATCH /dashboards/tab/{id}`), then a reload of the editor. The
- * header breadcrumb is built from the tab list, which a restore does not
- * refetch, so the restored title is asserted on the stored document (the source
- * of truth) rather than on the header.
+ * to the API (`PATCH /dashboards/tab/{id}`), then a reload of the editor. A
+ * restore refetches both the tab list and the dashboard, so the restored title
+ * is asserted twice: on the stored document (the source of truth) and in the
+ * header breadcrumb, without a reload (what the user actually sees).
  *
- * Does not depend on Delta history existing for the data: the Data version
- * section is asserted to render, and its picker only to be coherent.
+ * The main test does not depend on Delta history existing for the data: the
+ * Data version section is asserted to render, and its picker only to be
+ * coherent. Data time travel itself runs against the `iris_versioned` fixture
+ * (`depictio/projects/init/iris_versioned/`), and is skipped where that
+ * fixture has not been built.
  */
 
 import type { APIRequestContext, Locator, Page } from "@playwright/test";
@@ -105,10 +108,72 @@ async function storedTitle(request: APIRequestContext, id: string): Promise<stri
   return ((await res.json()) as { title?: string }).title ?? null;
 }
 
+/** Replaces the dashboard's content with one text tile and saves it, which
+ *  captures a version. The tile's id stays the same across calls, so every
+ *  save is a new version of the same component. */
+async function saveTextTile(
+  request: APIRequestContext,
+  id: string,
+  index: string,
+  title: string,
+  body: string,
+): Promise<void> {
+  const headers = await authHeaders(request);
+  const getRes = await request.get(`${API_URL}${API_PREFIX}/dashboards/get/${id}`, { headers });
+  expect(getRes.ok(), "reading the dashboard should succeed").toBe(true);
+  const doc = (await getRes.json()) as Record<string, unknown>;
+  doc.stored_metadata = [{ index, component_type: "text", title, body }];
+  doc.right_panel_layout_data = [{ i: index, x: 0, y: 0, w: 6, h: 2 }];
+  doc.notes_content = "";
+  const saveRes = await request.post(`${API_URL}${API_PREFIX}/dashboards/save/${id}`, {
+    headers,
+    data: doc,
+  });
+  expect(saveRes.ok(), "saving the text tile should succeed").toBe(true);
+}
+
+const IRIS_VERSIONED_TITLE = "Iris Versioned — Survey";
+
+/** The `iris_versioned` fixture's dashboard, or null where it was not built. */
+async function findIrisVersioned(request: APIRequestContext): Promise<string | null> {
+  const res = await request.get(`${API_URL}${API_PREFIX}/dashboards/list`, {
+    headers: await authHeaders(request),
+  });
+  if (!res.ok()) return null;
+  const body = (await res.json()) as { dashboards?: DashboardEntry[] } | DashboardEntry[];
+  const entries = Array.isArray(body) ? body : (body.dashboards ?? []);
+  return entries.find((d) => d.title === IRIS_VERSIONED_TITLE)?.dashboard_id ?? null;
+}
+
+
+/** Waits for a POST to `/dashboards/versions/{vid}/restore` to succeed. */
+function waitForRestore(page: Page) {
+  return page.waitForResponse(
+    (res) =>
+      res.request().method() === "POST" &&
+      /\/dashboards\/versions\/[^/]+\/restore$/.test(new URL(res.url()).pathname) &&
+      res.ok(),
+  );
+}
+
+/** The editor header's breadcrumb (`<dashboard> / <tab>`). It stays mounted
+ *  behind the Settings modal, so it can be read while the modal is open. */
+function headerTitle(page: Page): Locator {
+  return page.locator('[data-tour-id="header-title"] h3').first();
+}
+
 async function deleteDashboardViaApi(request: APIRequestContext, id: string): Promise<void> {
   await request.delete(`${API_URL}${API_PREFIX}/dashboards/delete/${id}`, {
     headers: await authHeaders(request),
   });
+}
+
+/** A Mantine Modal puts its `data-testid` on its root, which has no box of its
+ *  own (the overlay and the content are fixed): Playwright reads the root as
+ *  hidden whether the modal is open or not, so `toBeVisible` never passes and
+ *  `toBeHidden` always does. Visibility is read off the dialog inside it. */
+function dialog(page: Page, testId: string): Locator {
+  return page.getByTestId(testId).getByRole("dialog");
 }
 
 /** Opens the editor's Settings modal. Works at both widths: the labelled
@@ -116,7 +181,7 @@ async function deleteDashboardViaApi(request: APIRequestContext, id: string): Pr
  *  not in the accessibility tree. */
 async function openSettings(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await expect(page.getByTestId("settings-modal")).toBeVisible();
+  await expect(dialog(page, "settings-modal")).toBeVisible();
 }
 
 async function openHistory(page: Page): Promise<void> {
@@ -137,7 +202,7 @@ async function openRowMenu(page: Page, row: Locator): Promise<Locator> {
 
 async function closeSettings(page: Page): Promise<void> {
   await page.keyboard.press("Escape");
-  await expect(page.getByTestId("settings-modal")).toBeHidden();
+  await expect(dialog(page, "settings-modal")).toBeHidden();
 }
 
 /** Opens `/dashboard-edit/{id}` and waits for the header's Settings button. */
@@ -196,12 +261,12 @@ test.describe("Dashboard version history", () => {
 
       await test.step("bookmark the current state", async () => {
         await page.getByTestId("version-snapshot").click();
-        await expect(page.getByTestId("version-bookmark-dialog")).toBeVisible();
+        await expect(dialog(page, "version-bookmark-dialog")).toBeVisible();
         // Empty names are refused: Bookmark stays disabled until one is typed.
         await expect(page.getByTestId("version-bookmark-confirm")).toBeDisabled();
         await page.getByTestId("version-bookmark-label").fill(bookmarkLabel);
         await page.getByTestId("version-bookmark-confirm").click();
-        await expect(page.getByTestId("version-bookmark-dialog")).toBeHidden();
+        await expect(dialog(page, "version-bookmark-dialog")).toBeHidden();
 
         // Naming the current state writes a new explicit version, or names the
         // newest one when nothing changed: either way the top row carries it.
@@ -237,6 +302,8 @@ test.describe("Dashboard version history", () => {
         );
         expect(changedSeq).toBeGreaterThan(bookmarkSeq);
         expect(await storedTitle(request, id)).toBe(changedTitle);
+        // The baseline for the restore below: the header names the change.
+        await expect(headerTitle(page)).toContainText(changedTitle);
       });
 
       await test.step("restore the bookmark without a page reload", async () => {
@@ -248,17 +315,14 @@ test.describe("Dashboard version history", () => {
 
         const bookmarked = rows.filter({ hasText: bookmarkLabel });
         await bookmarked.getByTestId("version-restore").click();
-        await expect(page.getByTestId("version-restore-dialog")).toBeVisible();
+        await expect(dialog(page, "version-restore-dialog")).toBeVisible();
 
-        const restored = page.waitForResponse(
-          (res) =>
-            res.request().method() === "POST" &&
-            /\/dashboards\/versions\/[^/]+\/restore$/.test(new URL(res.url()).pathname) &&
-            res.ok(),
-        );
+        const restored = waitForRestore(page);
         await page.getByTestId("version-restore-confirm").click();
         await restored;
-        await expect(page.getByTestId("version-restore-dialog")).toBeHidden();
+        await expect(dialog(page, "version-restore-dialog")).toBeHidden();
+        // The bookmark kept the current tab, so nothing warns it away.
+        await expect(page.getByTestId("version-restore-removes-tab")).toHaveCount(0);
 
         // A restore row heads the history, and the state it replaced is still
         // listed (the changed version, now one step down).
@@ -266,6 +330,10 @@ test.describe("Dashboard version history", () => {
         await expect(rows.filter({ hasText: changedLabel })).toHaveCount(1);
 
         expect(await storedTitle(request, id)).toBe(originalTitle);
+        // And the editor shows it: the restore refetched the tab list and the
+        // dashboard, so the header no longer names the change.
+        await expect(headerTitle(page)).toContainText(originalTitle);
+        await expect(headerTitle(page)).not.toContainText("(changed)");
         const marker = await page.evaluate(
           () => (window as unknown as { __e2eNoReload?: number }).__e2eNoReload,
         );
@@ -281,15 +349,24 @@ test.describe("Dashboard version history", () => {
           "aria-disabled",
           "true",
         );
+        // The top row is already a restore (the one above), so its kind alone
+        // proves nothing: the undo has to put a *newer* restore on top.
+        const topSeqBefore = Number(await rows.first().getAttribute("data-version-seq"));
         await changed.getByTestId("version-restore").click();
-        await expect(page.getByTestId("version-restore-dialog")).toBeVisible();
+        await expect(dialog(page, "version-restore-dialog")).toBeVisible();
+        const undone = waitForRestore(page);
         await page.getByTestId("version-restore-confirm").click();
-        await expect(page.getByTestId("version-restore-dialog")).toBeHidden();
+        await undone;
+        await expect(dialog(page, "version-restore-dialog")).toBeHidden();
+        await expect
+          .poll(async () => Number(await rows.first().getAttribute("data-version-seq")), {
+            message: "the undo should head the history",
+          })
+          .toBeGreaterThan(topSeqBefore);
         await expect(rows.first()).toHaveAttribute("data-version-kind", "restore");
 
-        await expect
-          .poll(() => storedTitle(request, id), { message: "the change should be back" })
-          .toBe(changedTitle);
+        expect(await storedTitle(request, id)).toBe(changedTitle);
+        await expect(headerTitle(page)).toContainText(changedTitle);
         const marker = await page.evaluate(
           () => (window as unknown as { __e2eNoReload?: number }).__e2eNoReload,
         );
@@ -314,6 +391,15 @@ test.describe("Dashboard version history", () => {
         await expect(preview.locator("[data-tour-id='editor-save']")).toHaveCount(0);
         // The banner is the way out, and the version param stays in the URL.
         await expect(preview.getByTestId("version-banner-exit")).toBeVisible();
+        // Read-only: restoring lives in the editor's History, which the owner
+        // is pointed to instead.
+        await expect(preview.getByTestId("version-banner-restore")).toHaveCount(0);
+        await expect(preview.getByTestId("version-banner-open-editor")).toHaveAttribute(
+          "href",
+          `/dashboard-edit/${id}`,
+        );
+        // The banner says which data it shows rather than claiming all of it.
+        await expect(preview.getByTestId("version-banner-data")).not.toContainText(/all data|every value/i);
         expect(new URL(preview.url()).searchParams.get("version")).toBeTruthy();
         await preview.close();
 
@@ -349,9 +435,9 @@ test.describe("Dashboard version history", () => {
         const count = await rows.count();
         const menu = await openRowMenu(page, target);
         await menu.getByTestId("version-delete").click();
-        await expect(page.getByTestId("version-delete-dialog")).toBeVisible();
+        await expect(dialog(page, "version-delete-dialog")).toBeVisible();
         await page.getByTestId("version-delete-confirm").click();
-        await expect(page.getByTestId("version-delete-dialog")).toBeHidden();
+        await expect(dialog(page, "version-delete-dialog")).toBeHidden();
         await expect(rows).toHaveCount(count - 1);
         await expect(rows.filter({ hasText: changedLabel })).toHaveCount(0);
       });
@@ -415,6 +501,95 @@ test.describe("Dashboard version history", () => {
     }
   });
 
+  test("component history shows a tile as it was in each version", async ({
+    page,
+    request,
+    loginAsAdmin,
+  }) => {
+    test.setTimeout(120_000);
+    await loginAsAdmin();
+    const { id } = await createOwnDashboard(page, request, "E2E Component History");
+
+    try {
+      const index = crypto.randomUUID();
+      const stamp = Date.now();
+      const first = { label: `e2e tile v1 ${stamp}`, body: `First wording ${stamp}` };
+      const second = { label: `e2e tile v2 ${stamp}`, body: `Second wording ${stamp}` };
+      await saveTextTile(request, id, index, "History tile", first.body);
+      await nameCurrentState(request, id, first.label);
+      await saveTextTile(request, id, index, "History tile", second.body);
+      await nameCurrentState(request, id, second.label);
+
+      await openEditor(page, id);
+      const tile = page.locator(".react-grid-item").filter({ hasText: second.body });
+      await expect(tile).toHaveCount(1, { timeout: 30_000 });
+      await tile.hover();
+      await tile.getByRole("button", { name: "Component actions" }).click();
+      await page.getByTestId("component-history-action").click();
+
+      const modal = dialog(page, "component-version-modal");
+      await expect(modal).toBeVisible();
+      const select = modal.getByTestId("component-version-select");
+      await expect(select).toBeVisible();
+
+      // Both named versions are listed for this tile.
+      await select.click();
+      await expect(page.getByRole("option", { name: new RegExp(first.label) })).toHaveCount(1);
+      await expect(page.getByRole("option", { name: new RegExp(second.label) })).toHaveCount(1);
+
+      // And each one draws the tile as that version stored it, not as it is now.
+      await page.getByRole("option", { name: new RegExp(first.label) }).click();
+      await expect(modal).toContainText(first.body);
+      await select.click();
+      await page.getByRole("option", { name: new RegExp(second.label) }).click();
+      await expect(modal).toContainText(second.body);
+    } finally {
+      await deleteDashboardViaApi(request, id);
+    }
+  });
+
+  test("data version: a card reads the data a past version was saved with", async ({
+    page,
+    request,
+    loginAsAdmin,
+  }) => {
+    test.setTimeout(120_000);
+    await loginAsAdmin();
+    const id = await findIrisVersioned(request);
+    test.skip(
+      !id,
+      `"${IRIS_VERSIONED_TITLE}" is not on this stack: build it with ` +
+        "depictio/projects/init/iris_versioned/rebuild_demo.py.",
+    );
+    const before = (await listVersions(request, id!)).total;
+
+    await openEditor(page, id!);
+    // `\b` keeps 150 from matching 50: the fixture's v1 holds 50 flowers, its
+    // newest data 150.
+    const card = page.locator("[data-component-index]").filter({ hasText: "Flowers Measured" });
+    await expect(card).toContainText(/\b150\b/, { timeout: 30_000 });
+
+    await openSettings(page);
+    await page.getByTestId("settings-nav-data-version").click();
+    await page.getByTestId("data-version-select").click();
+    await page.getByRole("option", { name: /^v1 Survey/ }).click();
+    await page.getByTestId("data-version-use").click();
+    await expect(dialog(page, "settings-modal")).toBeHidden();
+
+    await expect(page.getByTestId("data-version-banner")).toBeVisible();
+    await expect(page.getByTestId("data-version-banner-detail")).not.toContainText(
+      /all data|every value/i,
+    );
+    await expect(card).toContainText(/\b50\b/, { timeout: 30_000 });
+    await expect(card).not.toContainText(/\b150\b/);
+
+    // Back to the present, and the view-only change wrote nothing.
+    await page.getByTestId("data-version-banner").getByRole("button", { name: "Back to current data" }).click();
+    await expect(page.getByTestId("data-version-banner")).toHaveCount(0);
+    await expect(card).toContainText(/\b150\b/, { timeout: 30_000 });
+    expect((await listVersions(request, id!)).total).toBe(before);
+  });
+
   test("mobile: the History section is reachable from the nav select", async ({
     page,
     request,
@@ -428,9 +603,13 @@ test.describe("Dashboard version history", () => {
     try {
       await nameCurrentState(request, id, "e2e mobile version");
 
-      await page.setViewportSize({ width: 375, height: 812 });
+      // Opened at the desktop width, then narrowed: at phone widths main's
+      // editor header (Add, Save, Analysis, Exit Edit) pushes its Settings icon
+      // out of view, which is the header's problem, not this section's. The
+      // modal follows the width live.
       await openEditor(page, id);
       await openSettings(page);
+      await page.setViewportSize({ width: 375, height: 812 });
 
       // At 640px and below the rail becomes a Select.
       await expect(page.getByTestId("settings-nav-history")).toHaveCount(0);

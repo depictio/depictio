@@ -126,8 +126,14 @@ import {
   AdvancedVizPlacementDefaultProvider,
   DataVersionProvider,
   dataVersionBody,
+  dataPinBody,
+  fetchDashboardVersion,
+  isCurrentDataOnlyType,
+  isHttpStatus,
+  DATA_VERSION_GONE_EVENT,
 } from 'depictio-react-core';
 import type {
+  DataVersionGoneDetail,
   DataVersionPins,
   DashboardData,
   DashboardPermissions,
@@ -158,9 +164,11 @@ import type { TabDefaults, TabModalSubmitPayload } from './chrome';
 import { useTabGroupActions } from './chrome/useTabGroupActions';
 import ComponentVersionModal from './versions/ComponentVersionModal';
 import DataVersionPanel from './versions/DataVersionPanel';
-import VersionHistoryPanel from './versions/VersionHistoryPanel';
+import VersionHistoryPanel, { type RestoreOutcome } from './versions/VersionHistoryPanel';
 import { useVersionHistory } from './versions/useVersionHistory';
 import DataVersionBanner from './versions/DataVersionBanner';
+import type { PinnedLabel } from './versions/dataVersionStatus';
+import { useDataVersionStatus } from './versions/useDataVersionStatus';
 import { collectDataCollections } from './versions/useDatasetHistories';
 import NotesFooter from './components/NotesFooter';
 import { dashboardHref } from './dashboards/lib/dashboardLinks';
@@ -403,45 +411,112 @@ const EditorApp: React.FC = () => {
   // Data time travel: view-state only, never persisted, cleared by a reload.
   // The viewer only ever pins a `?version=` preview; choosing data is here.
   const [dataPins, setDataPins] = useState<DataVersionPins>({});
-  // The stored version whose data stamps drive the view: its id, its name for
-  // the banner, and the collections it recorded no data version for.
-  const [asOf, setAsOf] = useState<{
-    versionId: string;
-    label: string;
-    unresolved: string[];
-  } | null>(null);
+  // The stored version whose data stamps drive the view: its id and its name
+  // for the banner. Which collections it reaches is the server's to say
+  // (`useDataVersionStatus` below).
+  const [asOf, setAsOf] = useState<{ versionId: string; label: string } | null>(null);
   const asOfVersionId = asOf?.versionId ?? null;
+  const asOfRef = useRef<string | null>(null);
+  asOfRef.current = asOfVersionId;
   const versionBody = useMemo(
     () => dataVersionBody({ asOfVersionId, pins: dataPins }),
     [asOfVersionId, dataPins],
   );
   const versionKey = JSON.stringify(versionBody);
   const timeTravelling = Object.keys(versionBody).length > 0;
-  const pinnedLabels = useMemo(() => {
+  // Every pin the editor holds, named, keyed by collection id: two collections
+  // may share a tag. A `null` version is a collection kept on its latest data
+  // under a version's data.
+  const pinnedLabels = useMemo<PinnedLabel[]>(() => {
     const byId = new Map(
       collectDataCollections(dashboard?.stored_metadata).map((c) => [c.dcId, c.label]),
     );
     return Object.entries(dataPins)
-      .filter(([, v]) => typeof v === 'number')
+      .filter(([, v]) => typeof v === 'number' || (v === null && asOfVersionId))
       .map(([dcId, version]) => ({
+        dcId,
         label: byId.get(dcId) ?? dcId,
-        version: version as number,
+        version: typeof version === 'number' ? version : null,
       }));
-  }, [dataPins, dashboard?.stored_metadata]);
+  }, [dataPins, dashboard?.stored_metadata, asOfVersionId]);
   const clearDataVersions = useCallback(() => {
     setDataPins({});
     setAsOf(null);
   }, []);
-  const handleAsOfChange = useCallback(
-    (versionId: string, label: string, unresolved: string[]) => {
-      setAsOf({ versionId, label, unresolved });
-      // A version's stamps replace per-collection pins rather than mixing
-      // with pins chosen against another baseline.
-      setDataPins({});
+  const handleAsOfChange = useCallback((versionId: string, label: string) => {
+    setAsOf({ versionId, label });
+    // A version's stamps replace per-collection pins rather than mixing
+    // with pins chosen against another baseline.
+    setDataPins({});
+  }, []);
+  /** The version behind "Data version" is gone (deleted, or pruned by a later
+   *  save): drop it, once, and say so, rather than leave every render failing
+   *  under a banner that names it. */
+  const dropStaleDataVersion = useCallback(
+    (versionId: string) => {
+      if (asOfRef.current !== versionId) return;
+      asOfRef.current = null;
+      clearDataVersions();
+      notifications.show({
+        color: 'yellow',
+        title: 'Data version no longer available',
+        message: 'The version whose data you were viewing no longer exists. Showing current data.',
+      });
     },
-    [],
+    [clearDataVersions],
+  );
+  // Every render path raises this on a stale `as_of_version` (see `api.ts`).
+  useEffect(() => {
+    const onGone = (event: Event) => {
+      const id = (event as CustomEvent<DataVersionGoneDetail>).detail?.asOfVersionId;
+      if (id) dropStaleDataVersion(id);
+    };
+    window.addEventListener(DATA_VERSION_GONE_EVENT, onGone);
+    return () => window.removeEventListener(DATA_VERSION_GONE_EVENT, onGone);
+  }, [dropStaleDataVersion]);
+  // The commit the version recorded per collection, for the picker's "this
+  // version's data" option. A 404 is the version gone.
+  const [asOfStamps, setAsOfStamps] = useState<Record<string, number | undefined>>({});
+  useEffect(() => {
+    setAsOfStamps({});
+    if (!asOfVersionId) return;
+    let cancelled = false;
+    fetchDashboardVersion(asOfVersionId)
+      .then((detail) => {
+        if (cancelled) return;
+        const stamps: Record<string, number | undefined> = {};
+        for (const stamp of detail.data_collections || []) {
+          stamps[String(stamp.dc_id)] =
+            stamp.version_kind === 'delta' && typeof stamp.delta_version === 'number'
+              ? stamp.delta_version
+              : undefined;
+        }
+        setAsOfStamps(stamps);
+      })
+      .catch((err) => {
+        if (!cancelled && isHttpStatus(err, 404)) dropStaleDataVersion(asOfVersionId);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [asOfVersionId, dropStaleDataVersion]);
+  // What the banner says about each collection. Rechecked when the version
+  // list reloads, since a save can prune the version in use.
+  const dataVersionStatus = useDataVersionStatus(
+    dashboardId,
+    timeTravelling ? dataPinBody({ asOfVersionId, pins: dataPins }) : null,
+    familyVersions,
+  );
+  const currentDataOnlyCount = useMemo(
+    () =>
+      (dashboard?.stored_metadata || []).filter((m) => isCurrentDataOnlyType(m.component_type))
+        .length,
+    [dashboard?.stored_metadata],
   );
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set once the editor is navigating away from a tab that no longer exists;
+  // every save is refused from then on (see `scheduleSave`).
+  const leavingRef = useRef(false);
   // Latest dashboard ref so the debounced save uses fresh state. We update
   // it synchronously alongside setDashboard via `applyDashboard` — relying on
   // a post-render useEffect lets react-grid-layout's onLayoutChange fire with
@@ -740,7 +815,9 @@ const EditorApp: React.FC = () => {
   /** Debounced save: schedule a POST 500ms after the last layout mutation. */
   const scheduleSave = useCallback(
     (next: DashboardData) => {
-      if (!dashboardId) return;
+      // Leaving a tab a restore deleted: `/save` upserts, so any save from
+      // here on would bring the tab back from the stale state on screen.
+      if (!dashboardId || leavingRef.current) return;
       applyDashboard(next);
       setSaveStatus('saving');
       if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -2189,25 +2266,68 @@ const EditorApp: React.FC = () => {
    * work". The layout listeners also fire on remount with the new layout,
    * which `layoutsEqual` then correctly treats as a no-op.
    *
+   * A restore can delete the tab being edited (a version that predates it).
+   * Staying would leave its grid on screen, and the next drag would `/save`
+   * it back into existence from the stale state, so the editor leaves for the
+   * family's main tab instead: when the version is known not to hold the tab,
+   * or when the refetch answers 404. Any other refetch failure is shown, not
+   * swallowed: the editor would otherwise sit on the pre-restore state.
+   *
    * Also reloads the version list, which now starts with the `restore` row
    * (and the pre-restore state it captured first): the settings stay open on
-   * History and show it, and the tile menu's History entry sees it too.
+   * History and show it, and the tile menu's History entry sees it too. And
+   * the cross-tab components, since a restore can change the parent's
+   * persistent sections and floating maps as well.
    */
-  const handleRestored = useCallback(() => {
-    if (!dashboardId) return;
-    if (saveTimer.current) {
-      clearTimeout(saveTimer.current);
-      saveTimer.current = null;
-    }
-    setSaveStatus('idle');
-    // A restore can rename, recreate or delete tabs, so the sidebar and the
-    // header breadcrumb need the family again, not just this tab. This also
-    // reloads the version list.
-    void refreshTabList();
-    void fetchDashboard(dashboardId)
-      .then(applyServerDashboard)
-      .catch(() => undefined);
-  }, [dashboardId, applyServerDashboard, refreshTabList]);
+  const handleRestored = useCallback(
+    (outcome?: RestoreOutcome) => {
+      if (!dashboardId) return;
+      if (saveTimer.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+      }
+      setSaveStatus('idle');
+      const familyMainId =
+        outcome?.familyId ||
+        (dashboardRef.current?.parent_dashboard_id as string | null | undefined) ||
+        crossTab.familyId ||
+        dashboardId;
+      const leave = () => {
+        leavingRef.current = true;
+        if (saveTimer.current) {
+          clearTimeout(saveTimer.current);
+          saveTimer.current = null;
+        }
+        window.location.assign(dashboardHref(String(familyMainId), 'edit'));
+      };
+      const removed =
+        outcome?.removesCurrentTab ||
+        Boolean(outcome?.result.deleted_tab_ids?.includes(dashboardId));
+      if (removed && String(familyMainId) !== dashboardId) {
+        leave();
+        return;
+      }
+      // A restore can rename, recreate or delete tabs, so the sidebar and the
+      // header breadcrumb need the family again, not just this tab. This also
+      // reloads the version list.
+      void refreshTabList();
+      crossTab.reload();
+      fetchDashboard(dashboardId)
+        .then(applyServerDashboard)
+        .catch((err) => {
+          if (isHttpStatus(err, 404) && String(familyMainId) !== dashboardId) {
+            leave();
+            return;
+          }
+          notifications.show({
+            color: 'red',
+            title: 'Could not reload the restored dashboard',
+            message: `${err instanceof Error ? err.message : String(err)}. Reload the page before editing.`,
+          });
+        });
+    },
+    [dashboardId, applyServerDashboard, refreshTabList, crossTab],
+  );
 
   /** Force-save: cancel any pending debounce and POST current state now.
    *  Mirrors depictio/dash/layouts/save.py:save_dashboard_minimal — uses
@@ -2406,7 +2526,7 @@ const EditorApp: React.FC = () => {
   return (
     <>
     {/* Renderers read their pin from here, as in the viewer's preview. */}
-    <DataVersionProvider asOfVersionId={asOfVersionId} pins={dataPins}>
+    <DataVersionProvider asOfVersionId={asOfVersionId} pins={dataPins} dashboardId={dashboardId}>
     <InspectorProviders control={inspectorControl}>
     {/* Tier-2 viz controls an author touches here are written back onto the
         component's config; the dashboard-wide default decides where every
@@ -2553,7 +2673,9 @@ const EditorApp: React.FC = () => {
           <DataVersionBanner
             pinned={pinnedLabels}
             asOfLabel={asOf?.label}
-            unresolved={asOf?.unresolved}
+            collections={dataVersionStatus.collections}
+            statusError={dataVersionStatus.error}
+            currentDataOnly={currentDataOnlyCount}
             onClear={clearDataVersions}
           />
         )}
@@ -2807,6 +2929,8 @@ const EditorApp: React.FC = () => {
               dashboardId={dashboardId}
               initialContent={(dashboard.notes_content as string) ?? ''}
               permissions={dashboard.permissions as DashboardPermissions | undefined}
+              // A notes save records a version too, outside `saveStatus`.
+              onSaved={reloadVersions}
             />
           )}
           {dashboard && dashboardId && (
@@ -2839,7 +2963,7 @@ const EditorApp: React.FC = () => {
 
       {inspectorEnabled && (
         <AppShell.Aside p={0}>
-          <Inspector dashboard={dashboard} dashboardId={dashboardId} />
+          <Inspector dashboard={dashboard} dashboardId={dashboardId} onNotesSaved={reloadVersions} />
         </AppShell.Aside>
       )}
 
@@ -2888,6 +3012,7 @@ const EditorApp: React.FC = () => {
               onPinsChange={setDataPins}
               asOfVersionId={asOfVersionId}
               asOfLabel={asOf?.label ?? null}
+              asOfStamps={asOfStamps}
               onAsOfChange={handleAsOfChange}
               onClear={clearDataVersions}
               onDone={closeSettings}

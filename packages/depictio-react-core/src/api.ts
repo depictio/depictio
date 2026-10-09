@@ -239,24 +239,131 @@ async function throwHttpError(res: Response, prefix: string): Promise<never> {
   throw new HttpStatusError(`${prefix}: ${res.status} ${text}`.trimEnd(), res.status);
 }
 
+/**
+ * An `HttpStatusError` that also keeps the server's `detail`.
+ *
+ * The message is what it always was, so callers that only show
+ * `err.message` see no difference. Callers that have to tell a missing
+ * resource from a broken one (a restore that removed the tab being edited, a
+ * data version deleted while in use) read `status` instead of parsing text.
+ * A subclass, so code that checks `instanceof HttpStatusError` (following a
+ * job, which stops on a refusal) still recognises these failures.
+ */
+export class HttpError extends HttpStatusError {
+  /** The server's `detail`, as text, when the body carried one. */
+  readonly detail: string | null;
+
+  constructor(message: string, status: number, detail: string | null = null) {
+    super(message, status);
+    this.name = 'HttpError';
+    this.detail = detail;
+  }
+}
+
+/** True for an `HttpError` with this status. */
+export function isHttpStatus(err: unknown, status: number): boolean {
+  return err instanceof HttpError && err.status === status;
+}
+
+/** The `detail` of an error body as text, or null. Object details (a code
+ *  plus a message) are reduced to their message, else serialised. */
+async function readErrorDetail(res: Response): Promise<string | null> {
+  try {
+    const body = await res.json();
+    const detail = body?.detail;
+    if (detail == null) return null;
+    if (typeof detail === 'string') return detail;
+    if (typeof detail === 'object' && typeof detail.message === 'string') return detail.message;
+    return JSON.stringify(detail);
+  } catch {
+    // ignore non-JSON error bodies
+    return null;
+  }
+}
+
 /** Throw using FastAPI's `{detail}` envelope when present, otherwise fall back
- *  to `<fallback-or-prefix>: <status>`. Both single-string and JSON `detail`
- *  bodies are surfaced (the latter stringified). */
+ *  to `<prefix>: <status>`. Both single-string and JSON `detail` bodies are
+ *  surfaced (the latter reduced to its message, else stringified). */
 async function throwHttpDetailError(
   res: Response,
   prefix: string,
 ): Promise<never> {
-  let message = `${prefix}: ${res.status}`;
-  try {
-    const body = await res.json();
-    if (body?.detail) {
-      message =
-        typeof body.detail === 'string' ? body.detail : JSON.stringify(body.detail);
-    }
-  } catch {
-    // ignore non-JSON error bodies
+  const detail = await readErrorDetail(res);
+  throw new HttpError(detail ?? `${prefix}: ${res.status}`, res.status, detail);
+}
+
+// ── Render errors that belong to data time travel ──────────────────────────
+
+/** Window event fired when a render names a data version (`as_of_version`)
+ *  that no longer exists. `detail.asOfVersionId` is the id the request sent,
+ *  so a listener can tell its own stale pin from someone else's. */
+export const DATA_VERSION_GONE_EVENT = 'depictio:data-version-gone';
+
+export interface DataVersionGoneDetail {
+  asOfVersionId: string | null;
+  message: string;
+}
+
+/** Shown on a tile whose stored version read a different data collection
+ *  than the live component does (HTTP 409 on a `definition_version` render). */
+export const DEFINITION_COLLECTION_CHANGED_MESSAGE =
+  'This component read a different data collection in that version, so it cannot be drawn from it.';
+
+/**
+ * Does this failure mean "the data version you asked for is gone"?
+ *
+ * The server answers a stale `as_of_version` with a 400 whose detail starts
+ * with "Version" and says it "no longer exists". Matched loosely, on purpose:
+ * the wording may gain an id or a code, and a miss here only means the
+ * editor keeps the stale pin until the user clears it.
+ */
+export function isStaleDataVersionDetail(status: number, detail: string | null): boolean {
+  if (status !== 400 || !detail) return false;
+  const text = detail.trim();
+  return /^version\b/i.test(text) && /no longer exists/i.test(text);
+}
+
+/** `isStaleDataVersionDetail` for an error thrown by a render call. */
+export function isStaleDataVersionError(err: unknown): boolean {
+  return err instanceof HttpError && isStaleDataVersionDetail(err.status, err.detail);
+}
+
+/**
+ * Throw for a failed render, keeping the two failures time travel can cause
+ * readable on the tile:
+ *
+ *   409  the version's definition read another collection: a sentence the
+ *        tile can show as is, rather than "Failed to render figure: 409";
+ *   400  the `as_of_version` was deleted: the server's own detail, and a
+ *        window event so the editor can drop the stale pin once for every
+ *        tile, rather than each tile failing on its own.
+ *
+ * Every other failure keeps its old message.
+ */
+async function throwRenderError(
+  res: Response,
+  prefix: string,
+  dataVersions?: Record<string, unknown>,
+): Promise<never> {
+  const detail = await readErrorDetail(res);
+  if (res.status === 409) {
+    throw new HttpError(DEFINITION_COLLECTION_CHANGED_MESSAGE, 409, detail);
   }
-  throw new HttpStatusError(message, res.status);
+  if (isStaleDataVersionDetail(res.status, detail)) {
+    const asOf = dataVersions?.as_of_version;
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(
+        new CustomEvent<DataVersionGoneDetail>(DATA_VERSION_GONE_EVENT, {
+          detail: {
+            asOfVersionId: typeof asOf === 'string' ? asOf : null,
+            message: detail as string,
+          },
+        }),
+      );
+    }
+    throw new HttpError(detail as string, res.status, detail);
+  }
+  throw new HttpError(`${prefix}: ${res.status}`, res.status, detail);
 }
 
 /** 24-char hex id matching MongoDB ObjectId shape. Mirrors the format used by
@@ -564,7 +671,9 @@ export async function fetchDashboard(
 ): Promise<DashboardData> {
   const qs = versionId ? `?version_id=${encodeURIComponent(versionId)}` : '';
   const res = await authFetch(`${API_BASE}/dashboards/get/${dashboardId}${qs}`);
-  if (!res.ok) throw new Error(`Failed to fetch dashboard: ${res.status}`);
+  if (!res.ok) {
+    throw new HttpError(`Failed to fetch dashboard: ${res.status}`, res.status);
+  }
   return res.json();
 }
 
@@ -645,9 +754,14 @@ export interface CrossTabComponentsResponse {
  * Supersedes `fetchFloatingComponents` for the viewer. Resolves empty rather
  * than throwing, for the same reason as `fetchFloatingComponents`: the caller
  * uses this result to validate filters hydrated from storage.
+ *
+ * With `versionId`, the sections and maps come back as they were in that
+ * stored version, so a `?version=` preview of a child tab does not draw the
+ * parent's sections as they are today.
  */
 export async function fetchCrossTabComponents(
   dashboardId: string,
+  versionId?: string | null,
 ): Promise<CrossTabComponentsResponse> {
   const empty: CrossTabComponentsResponse = {
     parent_dashboard_id: null,
@@ -655,8 +769,9 @@ export async function fetchCrossTabComponents(
     persistent_sections: [],
   };
   try {
+    const qs = versionId ? `?version_id=${encodeURIComponent(versionId)}` : '';
     const res = await authFetch(
-      `${API_BASE}/dashboards/cross_tab_components/${dashboardId}`,
+      `${API_BASE}/dashboards/cross_tab_components/${dashboardId}${qs}`,
     );
     if (!res.ok) return empty;
     const data = await res.json();
@@ -948,6 +1063,121 @@ export interface ColumnRange {
   unique?: number | null;
 }
 
+/** The data pins a filter-option or status request carries: the subset of
+ *  `dataVersionBody` that says which data, without the definition. */
+export interface DataPinFields {
+  as_of_version?: string;
+  data_versions?: Record<string, number | null>;
+}
+
+export interface FilterOptionsRequest extends DataPinFields {
+  dc_id: string;
+  column: string;
+  kind: 'unique' | 'range';
+  filter_expr?: string | null;
+}
+
+/**
+ * A filter control's options read at a data version.
+ *
+ * The per-collection endpoints (`unique_values`, `specs`) only know the
+ * newest commit, so while a data version is active a select would offer
+ * values the pinned data does not hold and a slider would span today's
+ * bounds. This one resolves the pins against the dashboard's family, as the
+ * render endpoints do. Callers use it only while a version is active; live
+ * reads keep the cached per-collection endpoints.
+ */
+async function fetchFilterOptions(
+  dashboardId: string,
+  request: FilterOptionsRequest,
+): Promise<Record<string, unknown>> {
+  const res = await authFetch(`${API_BASE}/dashboards/filter_options/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify(request),
+  });
+  if (!res.ok) await throwRenderError(res, 'Failed to fetch filter options', { ...request });
+  return res.json();
+}
+
+/** `fetchUniqueValues` at a data version (see `fetchFilterOptions`). */
+export async function fetchUniqueValuesAt(
+  dashboardId: string,
+  dcId: string,
+  columnName: string,
+  pins: DataPinFields,
+  filterExpr?: string | null,
+): Promise<string[]> {
+  const body = await fetchFilterOptions(dashboardId, {
+    dc_id: dcId,
+    column: columnName,
+    kind: 'unique',
+    ...(filterExpr ? { filter_expr: filterExpr } : {}),
+    ...pins,
+  });
+  const values = body.values;
+  return Array.isArray(values) ? values.map(String) : [];
+}
+
+/** `fetchColumnRange` at a data version (see `fetchFilterOptions`). */
+export async function fetchColumnRangeAt(
+  dashboardId: string,
+  dcId: string,
+  columnName: string,
+  pins: DataPinFields,
+): Promise<ColumnRange> {
+  const body = await fetchFilterOptions(dashboardId, {
+    dc_id: dcId,
+    column: columnName,
+    kind: 'range',
+    ...pins,
+  });
+  return {
+    min: typeof body.min === 'number' ? body.min : null,
+    max: typeof body.max === 'number' ? body.max : null,
+    dtype: typeof body.dtype === 'string' ? body.dtype : null,
+    unique: typeof body.unique === 'number' ? body.unique : null,
+  };
+}
+
+/** How one collection is drawn under a set of data pins. */
+export type DataVersionCollectionState = 'pinned' | 'live' | 'not_versioned';
+
+export interface DataVersionCollectionStatus {
+  dc_id: string;
+  workflow_tag?: string | null;
+  data_collection_tag?: string | null;
+  dc_type?: string | null;
+  status: DataVersionCollectionState;
+  /** The commit read, for a pinned collection. */
+  delta_version?: number | null;
+  /** Why a collection is live or not versioned, in the server's words. */
+  reason?: string | null;
+}
+
+export interface DataVersionStatusResponse {
+  collections: DataVersionCollectionStatus[];
+}
+
+/**
+ * Which of the dashboard's collections the given pins actually reach.
+ *
+ * The banners state this rather than infer it: a version can pin one
+ * collection, leave another live on purpose, and have recorded nothing for a
+ * third, and only the server knows which is which.
+ */
+export async function fetchDataVersionStatus(
+  dashboardId: string,
+  pins: DataPinFields,
+): Promise<DataVersionStatusResponse> {
+  const res = await authFetch(`${API_BASE}/dashboards/data_version_status/${dashboardId}`, {
+    method: 'POST',
+    body: JSON.stringify(pins),
+  });
+  if (!res.ok) await throwRenderError(res, 'Failed to fetch data version status', { ...pins });
+  const body = (await res.json()) as Partial<DataVersionStatusResponse>;
+  return { collections: Array.isArray(body.collections) ? body.collections : [] };
+}
+
 /** Numeric range bounds for a column — backs RangeSlider min/max.
  *  Reads precomputed min/max from /deltatables/specs/{dcId}.
  */
@@ -1084,7 +1314,7 @@ export async function bulkComputeCards(
   options?: BulkComputeOptions,
   signal?: AbortSignal,
   /** Data time travel: `as_of_version` / `data_versions` /
-   *  `component_overrides`, from `dataVersionBody`. Last so existing callers
+   *  `definition_version`, from `dataVersionBody`. Last so existing callers
    *  keep their positions. */
   dataVersions?: Record<string, unknown>,
 ): Promise<BulkComputeResponse> {
@@ -1110,7 +1340,7 @@ export async function bulkComputeCards(
       signal,
     },
   );
-  if (!res.ok) throw new Error(`Failed to bulk-compute cards: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to bulk-compute cards', dataVersions);
   return res.json();
 }
 
@@ -1180,7 +1410,7 @@ export async function renderFigure(
   fullLoad = false,
   signal?: AbortSignal,
   options?: RenderFigureOptions,
-  /** Data time travel pins + definition overrides; see `bulkComputeCards`. */
+  /** Data time travel pins + definition version; see `bulkComputeCards`. */
   dataVersions?: Record<string, unknown>,
 ): Promise<FigureResponse> {
   // Grouping state rides in the body only when coloring is actually requested,
@@ -1215,7 +1445,7 @@ export async function renderFigure(
       signal,
     },
   );
-  if (!res.ok) throw new Error(`Failed to render figure: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to render figure', dataVersions);
   return res.json();
 }
 
@@ -1972,7 +2202,7 @@ export async function renderTable(
   sortBy?: string | null,
   sortDir: 'asc' | 'desc' = 'desc',
   signal?: AbortSignal,
-  /** Data time travel pins + definition overrides; see `bulkComputeCards`. */
+  /** Data time travel pins + definition version; see `bulkComputeCards`. */
   dataVersions?: Record<string, unknown>,
 ): Promise<TableResponse> {
   const res = await authFetch(
@@ -1990,7 +2220,7 @@ export async function renderTable(
       signal,
     },
   );
-  if (!res.ok) throw new Error(`Failed to render table: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to render table', dataVersions);
   return res.json();
 }
 
@@ -2040,7 +2270,7 @@ export async function fetchImagePaths(
       }),
     },
   );
-  if (!res.ok) throw new Error(`Failed to fetch image paths: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to fetch image paths', dataVersions);
   return (await res.json()) as ImageGridResponse;
 }
 
@@ -2059,7 +2289,7 @@ export async function renderMap(
       body: JSON.stringify({ filters, theme, ...(dataVersions ?? {}) }),
     },
   );
-  if (!res.ok) throw new Error(`Failed to render map: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to render map', dataVersions);
   return res.json();
 }
 
@@ -2093,7 +2323,7 @@ export async function fetchMapData(
       signal,
     },
   );
-  if (!res.ok) throw new Error(`Failed to fetch map data: ${res.status}`);
+  if (!res.ok) await throwRenderError(res, 'Failed to fetch map data', dataVersions);
   return (await res.json()) as MapDataResponse;
 }
 
@@ -5990,6 +6220,9 @@ export interface RestoreVersionResult {
   tabs_updated: number;
   tabs_created: number;
   tabs_deleted: number;
+  /** Ids of the tabs the restore deleted, from servers that list them. The
+   *  count alone cannot say whether the tab being edited was one of them. */
+  deleted_tab_ids?: string[];
 }
 
 /** Version timeline for a dashboard family, newest first. */
@@ -6152,6 +6385,9 @@ export interface RestoreComponentResult {
  */
 export async function restoreComponentFromVersion(
   versionId: string,
+  /** The tab the component lives on. Required: component ids are only unique
+   *  within a tab, and a version holds the whole family. */
+  tabId: string,
   componentIndex: string,
   restoreLayout = false,
 ): Promise<RestoreComponentResult> {
@@ -6160,6 +6396,7 @@ export async function restoreComponentFromVersion(
     {
       method: 'POST',
       body: JSON.stringify({
+        tab_id: tabId,
         component_index: componentIndex,
         restore_layout: restoreLayout,
       }),

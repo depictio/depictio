@@ -56,7 +56,9 @@ interface VersionTimelineItemProps {
   version: DashboardVersionSummary;
   /** This version matches the live dashboard, so restoring it is a no-op. */
   isCurrent: boolean;
-  /** This version's data is what the editor is drawing from (Data version). */
+  /** This version's data is what the editor is drawing from (Data version).
+   *  Deleting it would leave every render pointing at a version that no
+   *  longer exists, so Delete waits until the editor is back on current data. */
   dataActive?: boolean;
   /** Draw a rule above the row: every row of a day group but its first. */
   withDivider?: boolean;
@@ -137,7 +139,11 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
   const coverage = dataCoverageLabel(version.data_version_kinds || {});
   // A bookmark takes over the icon, so its label has to keep the kind.
   const kindLabel = version.pinned ? `${meta.label}, bookmarked` : meta.label;
-  const deleteBlocked = canDelete ? null : "Only the dashboard's owners can delete a version";
+  let deleteBlocked: string | null = null;
+  if (!canDelete) deleteBlocked = "Only the dashboard's owners can delete a version";
+  else if (dataActive) {
+    deleteBlocked = 'Its data is in use under Data version. Go back to current data first.';
+  }
   const toggle = () => setExpanded((open) => !open);
 
   return (
@@ -270,26 +276,37 @@ const VersionTimelineItem: React.FC<VersionTimelineItemProps> = ({
               <Menu.Divider />
               {/* Unavailable stays focusable, with its reason written out: not
                   `disabled` or `data-disabled`, which the menu's arrow keys skip,
-                  and a tooltip would not show on touch. */}
-              <Menu.Item
-                color={deleteBlocked ? undefined : 'red'}
-                c={deleteBlocked ? 'dimmed' : undefined}
-                leftSection={<Icon icon="mdi:delete-outline" width={14} />}
-                aria-disabled={deleteBlocked ? true : undefined}
-                closeMenuOnClick={!deleteBlocked}
-                style={deleteBlocked ? { cursor: 'not-allowed' } : undefined}
-                onClick={() => {
-                  if (!deleteBlocked) onDelete(version);
-                }}
-                data-testid="version-delete"
+                  and a tooltip alone would not show on touch. The tooltip
+                  repeats it for a pointer. */}
+              <Tooltip
+                label={deleteBlocked}
+                disabled={!deleteBlocked}
+                withArrow
+                multiline
+                w={220}
+                position="left"
+                zIndex={Z_LAYERS.tooltip}
               >
-                Delete
-                {deleteBlocked && (
-                  <Text component="span" size="xs" c="dimmed" display="block">
-                    {deleteBlocked}
-                  </Text>
-                )}
-              </Menu.Item>
+                <Menu.Item
+                  color={deleteBlocked ? undefined : 'red'}
+                  c={deleteBlocked ? 'dimmed' : undefined}
+                  leftSection={<Icon icon="mdi:delete-outline" width={14} />}
+                  aria-disabled={deleteBlocked ? true : undefined}
+                  closeMenuOnClick={!deleteBlocked}
+                  style={deleteBlocked ? { cursor: 'not-allowed' } : undefined}
+                  onClick={() => {
+                    if (!deleteBlocked) onDelete(version);
+                  }}
+                  data-testid="version-delete"
+                >
+                  Delete
+                  {deleteBlocked && (
+                    <Text component="span" size="xs" c="dimmed" display="block">
+                      {deleteBlocked}
+                    </Text>
+                  )}
+                </Menu.Item>
+              </Tooltip>
             </Menu.Dropdown>
           </Menu>
 

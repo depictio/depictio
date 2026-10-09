@@ -92,7 +92,13 @@ export function useDatasetHistories(
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!enabled || collections.length === 0) return;
+    // Another set of collections, or none wanted: the previous histories
+    // describe neither, and a load cancelled below must not stay "loading".
+    setHistories([]);
+    if (!enabled || collections.length === 0) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
     Promise.all(collections.map((c) => loadOne(c.dcId, c.label)))

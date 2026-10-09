@@ -70,6 +70,7 @@ import {
   valuesHoverText,
 } from './funnelStages';
 import FunnelValuesMatrix, { type MatrixStage } from './FunnelValuesMatrix';
+import CurrentDataBadge from '../chrome/CurrentDataBadge';
 
 const formatValue = (value: unknown): string => {
   if (Array.isArray(value)) return value.map(String).join(', ');
@@ -418,6 +419,8 @@ const FunnelView: React.FC<FunnelViewProps> = ({
         <Group gap="xs">
           <Icon icon="mdi:filter-check-outline" width={18} height={18} />
           <Text fw={600}>Filter funnel</Text>
+          {/* Its counts come from the latest data even under a data version. */}
+          <CurrentDataBadge componentType="funnel" />
           {(loading || awaitingColumn) && data && <Loader size="xs" />}
         </Group>
       }

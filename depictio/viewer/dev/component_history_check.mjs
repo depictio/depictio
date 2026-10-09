@@ -16,11 +16,21 @@
  *      against current;
  *   4. Delta version 0 survives every hop. It is falsy, and the first commit
  *      is the one people most want to reach.
+ *
+ * And two about the definition half: the past pane names the version the
+ * server should read the component from (`definition_version`; the client no
+ * longer sends definitions, `component_overrides` is a 400), and the
+ * component it shows and restores is the one on *this* tab.
  */
 
 import { dataVersionBody } from '../../../packages/depictio-react-core/src/dataVersions';
 // The real functions the modal calls, not a re-implementation of them.
-import { pinsForComponent, resolveDataVersion } from '../src/versions/dataVersionChoice';
+import {
+  componentInVersion,
+  paneRequest,
+  pinsForComponent,
+  resolveDataVersion,
+} from '../src/versions/dataVersionChoice';
 
 let failures = 0;
 function check(label, got, want) {
@@ -127,6 +137,58 @@ console.log('\n7. Each distinct selection produces a distinct effect key');
 const keys = [0, 1, 2, 3].map((v) => JSON.stringify(dataVersionBody({ pins: { [DC]: v } })));
 keys.push(JSON.stringify(dataVersionBody({ pins: {} })));
 check('distinct keys', new Set(keys).size, keys.length);
+
+console.log('\n8. The past pane names its version; the compare pane draws the live definition');
+// What the panes send is `dataVersionBody(paneRequest(...))`, the exact call
+// `VersionedComponent` makes.
+const past = dataVersionBody(
+  paneRequest(DC, { dataOverride: undefined, useHistoricalData: true, versionDataVersion: 0 }, 'v-1'),
+);
+check('past pane: data and definition from v-1', past, {
+  data_versions: { [DC]: 0 },
+  definition_version: 'v-1',
+});
+check('past pane sends no component_overrides', 'component_overrides' in past, false);
+const pastLiveData = dataVersionBody(
+  paneRequest(DC, { dataOverride: null, useHistoricalData: true, versionDataVersion: 0 }, 'v-1'),
+);
+// "Old chart, today's data": the definition still comes from the version.
+check('old config + live data keeps the definition', pastLiveData, { definition_version: 'v-1' });
+const compare = dataVersionBody(
+  paneRequest(DC, { dataOverride: null, useHistoricalData: false, versionDataVersion: undefined }, null),
+);
+check('compare pane: live definition, live data', compare, {});
+const compareAtV1 = dataVersionBody(
+  paneRequest(DC, { dataOverride: 1, useHistoricalData: false, versionDataVersion: undefined }, null),
+);
+check('compare pane pinned to v1 still draws the live definition', compareAtV1, {
+  data_versions: { [DC]: 1 },
+});
+// The key the renderers refetch on must move with the definition too, or
+// stepping from one version to the next on the same data would keep the
+// previous version's chart.
+check(
+  'two versions on the same data have distinct keys',
+  JSON.stringify(dataVersionBody({ pins: { [DC]: 0 }, definitionVersionId: 'v-1' })) !==
+    JSON.stringify(dataVersionBody({ pins: { [DC]: 0 }, definitionVersionId: 'v-2' })),
+  true,
+);
+
+console.log('\n9. The component is looked up on its own tab');
+// Two tabs of one family share a component id (ids derive from tags). The
+// first match across tabs is the sibling's component; the modal must show,
+// and restore, the one on the tab it was opened from.
+const version = {
+  tabs: [
+    { dashboard_id: 'tab-a', stored_metadata: [{ index: 'card-1', aggregation: 'max' }] },
+    { dashboard_id: 'tab-b', stored_metadata: [{ index: 'card-1', aggregation: 'average' }] },
+  ],
+};
+check('tab-b gets its own card', componentInVersion(version, 'tab-b', 'card-1')?.aggregation, 'average');
+check('tab-a gets its own card', componentInVersion(version, 'tab-a', 'card-1')?.aggregation, 'max');
+check('absent from this tab -> null', componentInVersion(version, 'tab-a', 'card-2'), null);
+check('tab absent from the version -> null', componentInVersion(version, 'tab-c', 'card-1'), null);
+check('no tabs at all -> null', componentInVersion({}, 'tab-a', 'card-1'), null);
 
 console.log();
 if (failures) {

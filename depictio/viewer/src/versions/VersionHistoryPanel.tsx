@@ -15,7 +15,7 @@
  * away from being autosaved over the present.
  */
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Button,
@@ -32,6 +32,7 @@ import { Icon } from '@iconify/react';
 import {
   createDashboardVersion,
   deleteDashboardVersion,
+  fetchDashboardVersion,
   pinDashboardVersion,
   renameDashboardVersion,
   restoreDashboardVersion,
@@ -39,6 +40,7 @@ import {
   useBrandScopeAttributes,
   Z_LAYERS,
   type DashboardVersionSummary,
+  type RestoreVersionResult,
 } from 'depictio-react-core';
 
 import { groupByDay, versionTitle } from './format';
@@ -58,8 +60,53 @@ interface VersionHistoryPanelProps {
   dataVersionId?: string | null;
   /** A restore landed. The host refetches the dashboard (a restore can add or
    *  remove whole tabs) and reloads `history`, which then shows the new
-   *  `restore` row. */
-  onRestored: () => void;
+   *  `restore` row. Called after a restore only: every other action here
+   *  reloads the list itself. */
+  onRestored: (outcome: RestoreOutcome) => void;
+}
+
+/** What the host needs to follow a restore. */
+export interface RestoreOutcome {
+  result: RestoreVersionResult;
+  /** The family's main tab: where to go when the tab being edited is gone. */
+  familyId: string;
+  /** The version has no copy of the tab being edited, so the restore removed
+   *  it. Known before the restore, from the version's own tab list. */
+  removesCurrentTab: boolean;
+}
+
+/**
+ * Does restoring this version delete the tab being edited?
+ *
+ * A restore deletes every child tab the version does not hold, and never the
+ * main tab. Read from the version's detail when the restore dialog opens, so
+ * the dialog can warn before, and the host can leave the tab after, rather
+ * than learn it from a 404.
+ */
+function useRemovesTab(
+  versionId: string | null,
+  familyId: string | null,
+  dashboardId: string | null,
+): boolean {
+  const [removes, setRemoves] = useState(false);
+  useEffect(() => {
+    setRemoves(false);
+    if (!versionId || !dashboardId || !familyId || dashboardId === familyId) return;
+    let cancelled = false;
+    fetchDashboardVersion(versionId)
+      .then((detail) => {
+        if (cancelled) return;
+        const held = (detail.tabs || []).some((tab) => String(tab.dashboard_id) === dashboardId);
+        setRemoves(!held);
+      })
+      .catch(() => {
+        // Unknown: no warning. The host still leaves the tab on a 404.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [versionId, familyId, dashboardId]);
+  return removes;
 }
 
 type PendingAction =
@@ -134,21 +181,29 @@ const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
 
   const groups = useMemo(() => groupByDay(versions), [versions]);
 
+  const restoring = pending?.type === 'restore' ? pending.version : null;
+  const removesCurrentTab = useRemovesTab(
+    restoring?.version_id ?? null,
+    restoring?.family_id ?? null,
+    dashboardId,
+  );
+
   const closeDialog = useCallback(() => setPending(null), []);
 
   /**
-   * Run a write, then bring the list up to date.
+   * Run a write, then bring the list up to date (`after`, a reload by default).
    *
-   * A restore hands over to `onRestored` instead of reloading here: it is the
+   * A restore passes its own `after`, handing over to `onRestored`: it is the
    * one action that changes what the dashboard *is*, so the host refetches
-   * the dashboard as well, and reloads the shared list along with it.
+   * the dashboard as well, and reloads the shared list along with it. Every
+   * other action (bookmark, rename, delete, snapshot) only reloads the list.
    */
   const run = useCallback(
-    async (work: () => Promise<string>, opts: { restores?: boolean } = {}) => {
+    async (work: () => Promise<string>, after?: () => void) => {
       setBusy(true);
       try {
         const message = await work();
-        if (opts.restores) onRestored();
+        if (after) after();
         else await reload();
         notifications.show({ color: 'teal', title: 'Version history', message });
         closeDialog();
@@ -162,7 +217,7 @@ const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
         setBusy(false);
       }
     },
-    [reload, onRestored, closeDialog],
+    [reload, closeDialog],
   );
 
   const handlePreview = useCallback(
@@ -239,15 +294,19 @@ const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
   const confirmRestore = () => {
     if (pending?.type !== 'restore') return;
     const { version } = pending;
+    let outcome: RestoreOutcome | null = null;
     void run(
       async () => {
         const result = await restoreDashboardVersion(version.version_id);
+        outcome = { result, familyId: version.family_id, removesCurrentTab };
         const bits = [`Restored ${versionTitle(version)}`];
         if (result.tabs_created) bits.push(`${result.tabs_created} tab(s) recreated`);
         if (result.tabs_deleted) bits.push(`${result.tabs_deleted} tab(s) removed`);
         return `${bits.join(' · ')}.`;
       },
-      { restores: true },
+      () => {
+        if (outcome) onRestored(outcome);
+      },
     );
   };
 
@@ -474,6 +533,17 @@ const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
           <VersionCompatibilityPanel
             versionId={shown?.type === 'restore' ? shown.version.version_id : null}
           />
+          {removesCurrentTab && (
+            <Alert
+              color="orange"
+              variant="light"
+              icon={<Icon icon="mdi:tab-remove" width={16} />}
+              data-testid="version-restore-removes-tab"
+            >
+              This tab did not exist in {shownTitle}, so restoring it removes this tab. The
+              editor then opens the dashboard&apos;s main tab.
+            </Alert>
+          )}
           <Alert color="blue" variant="light" icon={<Icon icon="mdi:information" width={16} />}>
             The current state is saved as a version first, so you can undo this. Access
             permissions are never changed by a restore.

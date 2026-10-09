@@ -35,7 +35,7 @@ import {
 import { Icon } from '@iconify/react';
 import { Z_LAYERS, type DataVersionPins, type StoredMetadata } from 'depictio-react-core';
 
-import { buildDataVersionOptions, LIVE, withPin } from './dataVersionChoice';
+import { buildDataVersionOptions, pinToValue, withPin } from './dataVersionChoice';
 import { absDateTime } from './format';
 import { useDatasetHistories } from './useDatasetHistories';
 
@@ -43,6 +43,14 @@ interface DatasetVersionPickerProps {
   metadata: StoredMetadata[] | undefined;
   pins: DataVersionPins;
   onPinsChange: (pins: DataVersionPins) => void;
+  /** Set while a dashboard version's data is in use. Each collection then
+   *  defaults to that version's data, and "Latest data" becomes an explicit
+   *  exception (a `null` pin) rather than a no-op. */
+  asOfVersionId?: string | null;
+  /** The commit that version recorded per collection, for the default
+   *  option's label. Missing while it loads, or for a collection it did not
+   *  stamp. */
+  asOfStamps?: Record<string, number | undefined>;
 }
 
 /** Fetches every collection's history on mount. It lives in the settings'
@@ -52,7 +60,10 @@ const DatasetVersionPicker: React.FC<DatasetVersionPickerProps> = ({
   metadata,
   pins,
   onPinsChange,
+  asOfVersionId = null,
+  asOfStamps,
 }) => {
+  const asOf = Boolean(asOfVersionId);
   const { histories, loading } = useDatasetHistories(metadata, true);
 
   if (loading && histories.length === 0) {
@@ -76,12 +87,18 @@ const DatasetVersionPicker: React.FC<DatasetVersionPickerProps> = ({
       {histories.map((history) => {
         const pinned = pins[history.dcId];
         const isPinned = typeof pinned === 'number';
-        const pinnedCommit = isPinned
-          ? history.commits.find((c) => c.version === pinned)
-          : undefined;
+        const stamped = asOfStamps?.[history.dcId];
+        // The commit on screen: its own pin, else the version's.
+        const shownVersion = isPinned ? pinned : asOf && pinned === undefined ? stamped : undefined;
+        const pinnedCommit =
+          typeof shownVersion === 'number'
+            ? history.commits.find((c) => c.version === shownVersion)
+            : undefined;
         const options = buildDataVersionOptions({
           commits: history.commits,
           currentVersion: history.currentVersion,
+          withVersionDefault: asOf,
+          versionDataVersion: stamped,
         });
 
         return (
@@ -104,6 +121,12 @@ const DatasetVersionPicker: React.FC<DatasetVersionPickerProps> = ({
                     Pinned v{pinned}
                   </Badge>
                 )}
+                {/* The exception to a version's data, said in words too. */}
+                {asOf && pinned === null && (
+                  <Badge size="sm" color="gray" variant="light" style={{ flexShrink: 0 }}>
+                    Latest data
+                  </Badge>
+                )}
               </Group>
 
               {history.error ? (
@@ -115,8 +138,8 @@ const DatasetVersionPicker: React.FC<DatasetVersionPickerProps> = ({
                   <Select
                     size="xs"
                     data={options}
-                    value={isPinned ? String(pinned) : LIVE}
-                    onChange={(value) => onPinsChange(withPin(pins, history.dcId, value))}
+                    value={pinToValue(pinned, asOf)}
+                    onChange={(value) => onPinsChange(withPin(pins, history.dcId, value, asOf))}
                     // Rendered inside the Settings drawer or modal: the
                     // dropdown has to clear that layer, not open behind it.
                     comboboxProps={{ withinPortal: true, zIndex: Z_LAYERS.tooltip }}

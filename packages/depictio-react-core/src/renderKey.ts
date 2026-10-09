@@ -61,11 +61,20 @@ const RENDER_DEFINING_FIELDS = [
  * the save path stamps it. The explicit fields are what make this correct when
  * a write forgets to, which a restore writing a stored snapshot verbatim
  * plausibly could.
+ *
+ * `definitionVersionId` is the stored version the server reads the definition
+ * from (`definition_version`), when there is one. It leads the key: the
+ * server draws that version's definition whatever the local metadata says, so
+ * moving to another version is a new definition even when the metadata the
+ * client holds did not change.
  */
-export function renderDefinitionKey(metadata: StoredMetadata | null | undefined): string {
+export function renderDefinitionKey(
+  metadata: StoredMetadata | null | undefined,
+  definitionVersionId?: string | null,
+): string {
   if (!metadata) return '';
   const source = metadata as unknown as Record<string, unknown>;
-  const parts: unknown[] = [];
+  const parts: unknown[] = [definitionVersionId ?? null];
   for (const field of RENDER_DEFINING_FIELDS) {
     parts.push(source[field] ?? null);
   }

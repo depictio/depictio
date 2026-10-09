@@ -73,11 +73,13 @@ import {
 import { absDateTime, kindMeta, versionTitle } from './format';
 import {
   buildDataVersionOptions,
+  componentInVersion,
   dataOverrideToValue,
-  pinsForComponent,
+  paneRequest,
   resolveDataVersion,
   valueToDataOverride,
   type DataOverride,
+  type PaneRequest,
 } from './dataVersionChoice';
 import { useDatasetHistories, type DatasetHistory } from './useDatasetHistories';
 
@@ -111,24 +113,6 @@ function componentIndex(metadata: StoredMetadata | null): string {
   return metadata ? String((metadata as Record<string, unknown>).index ?? '') : '';
 }
 
-/** Find this component inside a stored version, across every tab.
- *
- * Returns null when the version predates the component, which is a normal
- * outcome worth stating rather than an error: it is exactly the answer to
- * "when did this first appear?". */
-function componentInVersion(
-  version: DashboardVersionDetail,
-  index: string,
-): StoredMetadata | null {
-  for (const tab of version.tabs || []) {
-    for (const component of tab.stored_metadata || []) {
-      const candidate = component as Record<string, unknown>;
-      if (String(candidate.index ?? '') === index) return component as StoredMetadata;
-    }
-  }
-  return null;
-}
-
 /** The Delta commit this version recorded for the component's collection.
  *  `undefined` when the collection had no recorded provenance, which the UI
  *  reports rather than silently drawing live data. */
@@ -156,7 +140,8 @@ const VersionedComponent: React.FC<{
   metadata: StoredMetadata;
   dashboardId: string | null;
   index: string;
-  pins: Record<string, number | null>;
+  /** Which data, and which version's definition (null for the live one). */
+  request: PaneRequest;
   /** Height is fixed by the caller rather than left to the content.
    *  Plotly measures its container at mount; inside a modal that is still
    *  animating open, that measurement is zero or near-zero and the figure
@@ -164,7 +149,8 @@ const VersionedComponent: React.FC<{
    *  the component only looked right *after* switching versions. */
   height: number;
   ready: boolean;
-}> = ({ metadata, dashboardId, index, pins, height, ready }) => {
+}> = ({ metadata, dashboardId, index, request, height, ready }) => {
+  const { pins, definitionVersionId } = request;
   const isCard = String((metadata as Record<string, unknown>).component_type ?? '') === 'card';
 
   // A card's value comes from the dashboard's bulk-compute pass, not from the
@@ -176,16 +162,12 @@ const VersionedComponent: React.FC<{
   const [cardLoading, setCardLoading] = useState(false);
   const pinKey = JSON.stringify(pins);
 
-  // The component's *definition* is versioned too, not just its data. Sent on
-  // every render path — cards via bulk-compute below, figures and tables via
-  // the context — because the render endpoints read the component from the
-  // live dashboard document, so pinning only the data would draw a past
-  // version's numbers with today's chart definition.
-  const overrides = useMemo(
-    () => ({ [index]: metadata as Record<string, unknown> }),
-    [index, metadata],
-  );
-
+  // The component's *definition* is versioned too, not just its data. The
+  // version's id goes out on every render path (cards via bulk-compute below,
+  // figures and tables via the context) and the server reads the definition
+  // from that version: the render endpoints otherwise read the live document,
+  // so pinning only the data would draw a past version's numbers with today's
+  // chart definition. A component deleted since renders from the version too.
   useEffect(() => {
     if (!ready || !isCard || !dashboardId || !index) return;
     let cancelled = false;
@@ -196,7 +178,7 @@ const VersionedComponent: React.FC<{
       [index],
       undefined,
       undefined,
-      dataVersionBody({ pins, componentOverrides: overrides }),
+      dataVersionBody({ pins, definitionVersionId }),
     )
       .then((res) => {
         if (cancelled) return;
@@ -213,17 +195,21 @@ const VersionedComponent: React.FC<{
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, isCard, dashboardId, index, pinKey, overrides]);
+  }, [ready, isCard, dashboardId, index, pinKey, definitionVersionId]);
 
   return (
-    <DataVersionProvider pins={pins} componentOverrides={overrides}>
+    <DataVersionProvider
+      pins={pins}
+      definitionVersionId={definitionVersionId}
+      dashboardId={dashboardId}
+    >
       <Box style={{ height, minHeight: height }}>
         {ready ? (
           <ComponentRenderer
             // Remount per (config, data) pair. The renderers cache by component
             // id, and reusing the instance would show the previous version's
             // figure until the next fetch lands.
-            key={`${index}-${pinKey}-${renderDefinitionKey(metadata)}`}
+            key={`${index}-${pinKey}-${renderDefinitionKey(metadata, definitionVersionId)}`}
             metadata={metadata}
             filters={[] as InteractiveFilter[]}
             dashboardId={dashboardId ?? undefined}
@@ -374,6 +360,7 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
       setSelectedId(null);
       setDetail(null);
       setError(null);
+      setUseHistoricalData(true);
       setDataOverride(undefined);
       setCompare(false);
       setCompareOverride(null);
@@ -404,8 +391,8 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
   }, [opened, selectedId]);
 
   const historical = useMemo(
-    () => (detail && index ? componentInVersion(detail, index) : null),
-    [detail, index],
+    () => (detail && index && dashboardId ? componentInVersion(detail, dashboardId, index) : null),
+    [detail, dashboardId, index],
   );
 
   /** What the selected version recorded, before any manual override. */
@@ -422,23 +409,27 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
   );
 
   // Scoped to this modal only. The dashboard behind it keeps whatever it was
-  // showing — the comparison is a lens, not a mode switch.
-  const pins = useMemo(() => pinsForComponent(dcId, dataVersion), [dcId, dataVersion]);
+  // showing: the comparison is a lens, not a mode switch. The definition is
+  // the version `historical` was read from, which can trail `selectedId` for
+  // a moment while the next version's detail loads.
+  const definitionVersionId = detail?.version_id ?? selectedId;
+  const pastRequest = useMemo(
+    () =>
+      paneRequest(dcId, { dataOverride, useHistoricalData, versionDataVersion }, definitionVersionId),
+    [dcId, dataOverride, useHistoricalData, versionDataVersion, definitionVersionId],
+  );
 
   /** The compare pane reads whatever it was pointed at, defaulting to live.
    *  `useHistoricalData` is deliberately not consulted: that switch describes
    *  the version being examined, and this pane is not it. */
-  const compareDataVersion = useMemo(
-    () => resolveDataVersion({
-      dataOverride: compareOverride,
-      useHistoricalData: false,
-      versionDataVersion: undefined,
-    }),
+  const compareChoice = useMemo(
+    () => ({ dataOverride: compareOverride, useHistoricalData: false, versionDataVersion: undefined }),
     [compareOverride],
   );
-  const comparePins = useMemo(
-    () => pinsForComponent(dcId, compareDataVersion),
-    [dcId, compareDataVersion],
+  const compareDataVersion = useMemo(() => resolveDataVersion(compareChoice), [compareChoice]);
+  const compareRequest = useMemo(
+    () => paneRequest(dcId, compareChoice, null),
+    [dcId, compareChoice],
   );
 
   // Commits available for the manual override. Fetched only while the modal is
@@ -500,11 +491,16 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
   }, [restoring]);
 
   const handleRestore = useCallback(async () => {
-    if (!selectedId || !index) return;
+    if (!selectedId || !index || !dashboardId) return;
     setRestoring(true);
     setRestoreError(null);
     try {
-      const result = await restoreComponentFromVersion(selectedId, index, restoreLayout);
+      const result = await restoreComponentFromVersion(
+        selectedId,
+        dashboardId,
+        index,
+        restoreLayout,
+      );
       notifications.show({
         color: 'green',
         title: result.readded ? 'Component restored' : 'Component reverted',
@@ -522,7 +518,7 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
     } finally {
       setRestoring(false);
     }
-  }, [selectedId, index, restoreLayout, selectedTitle, onClose, onRestored]);
+  }, [selectedId, dashboardId, index, restoreLayout, selectedTitle, onClose, onRestored]);
 
   /** Height of one rendered pane.
    *
@@ -568,7 +564,7 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
         metadata={historical}
         dashboardId={dashboardId}
         index={index}
-        pins={pins}
+        request={pastRequest}
         height={paneHeight}
         ready={ready}
       />
@@ -645,7 +641,7 @@ const ComponentVersionModal: React.FC<ComponentVersionModalProps> = ({
                 metadata={metadata}
                 dashboardId={dashboardId}
                 index={index}
-                pins={comparePins}
+                request={compareRequest}
                 height={paneHeight}
                 ready={ready}
               />

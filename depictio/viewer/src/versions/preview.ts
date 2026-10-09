@@ -15,10 +15,14 @@
  * data, and labels the result as the past. `previewDataRequest` supplies the
  * two fields that close that gap, for `DataVersionProvider`:
  *
- *   `asOfVersionId`      the version whose data stamps the server expands into
- *                        per-collection Delta pins (`as_of_version`);
- *   `componentOverrides` the overlaid component definitions, keyed by index
- *                        (`component_overrides`).
+ *   `asOfVersionId`        the version whose data stamps the server expands
+ *                          into per-collection Delta pins (`as_of_version`);
+ *   `definitionVersionId`  the version the server reads each component's
+ *                          definition from (`definition_version`).
+ *
+ * Both are the previewed version's id. The client sends no definitions of its
+ * own: the server reads them out of the stored version, so nothing in a
+ * request body can point a read at another collection.
  */
 
 import type { DashboardData, DataVersionState } from 'depictio-react-core';
@@ -43,54 +47,32 @@ export function exitPreview(): void {
 }
 
 /**
- * The snapshot's component definitions, keyed by component index, in the shape
- * the render endpoints accept as `component_overrides`.
+ * The version whose component definitions a preview renders, or null when the
+ * dashboard is the live one.
  *
- * On this repo's own demo, a preview without them showed a card headed "Mean
+ * On this repo's own demo, a preview without it showed a card headed "Mean
  * Petal Length (Average)" holding 1.9, which is the *max*: the aggregation the
  * same component id was later changed to. A wrong number under a confident
  * label is worse than a blank, because nothing on screen contradicts it.
  *
- * Sends the whole stored component rather than a hand-picked subset: the server
- * narrows it to a per-type allow-list of presentation fields (`_DEFINITION_FIELDS`
- * in `routes.py`), and duplicating that list here would be a second copy to
- * keep in sync. `wf_id` / `dc_id` / `dc_config` are rejected there, so this
- * cannot redirect a read at another collection.
+ * Keyed off the server's `preview` block rather than the URL: the block is
+ * only present when the overlay was actually applied, so a definition
+ * version is never sent against content that is not the version's.
  */
-export function overridesFromVersion(
-  // Deliberately a looser shape than `StoredMetadata`. A snapshot stores
-  // components as plain records, and an older version can hold a component
-  // whose fields no longer satisfy today's stricter type; refusing to read it
-  // would break history for exactly the versions history exists to reach.
-  metadata: ReadonlyArray<Record<string, unknown>> | undefined,
-): Record<string, Record<string, unknown>> {
-  const out: Record<string, Record<string, unknown>> = {};
-  for (const meta of metadata || []) {
-    const index = String(meta.index ?? '');
-    if (!index) continue;
-    out[index] = meta;
-  }
-  return out;
+export function definitionVersionFromPreview(
+  dashboard: Pick<DashboardData, 'preview'> | null | undefined,
+): string | null {
+  return dashboard?.preview?.version_id || null;
 }
 
 /**
  * What a previewed dashboard adds to every render request, or null when the
  * dashboard is the live one.
- *
- * Keyed off the server's `preview` block rather than the URL: the block is
- * only present when the overlay was actually applied, so the data pins can
- * never be sent against content that is not the version's.
  */
 export function previewDataRequest(
-  dashboard: Pick<DashboardData, 'preview' | 'stored_metadata'> | null | undefined,
+  dashboard: Pick<DashboardData, 'preview'> | null | undefined,
 ): DataVersionState | null {
-  const versionId = dashboard?.preview?.version_id;
-  if (!dashboard || !versionId) return null;
-  const overrides = overridesFromVersion(
-    dashboard.stored_metadata as unknown as ReadonlyArray<Record<string, unknown>> | undefined,
-  );
-  return {
-    asOfVersionId: versionId,
-    componentOverrides: Object.keys(overrides).length ? overrides : undefined,
-  };
+  const versionId = definitionVersionFromPreview(dashboard);
+  if (!versionId) return null;
+  return { asOfVersionId: versionId, definitionVersionId: versionId };
 }

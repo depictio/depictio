@@ -75,10 +75,14 @@ const ImageRenderer: React.FC<ImageRendererProps> = ({
   // Data time travel: `body` merges into the request, `key` goes in the fetch
   // effect's deps so a pin change actually refetches instead of relabelling
   // stale data.
-  const { body: versionBody, key: versionKey } = useDataVersionRequest();
+  const {
+    body: versionBody,
+    key: versionKey,
+    definitionVersionId,
+  } = useDataVersionRequest();
   // See FigureRenderer: identity does not move when a definition is
   // replaced in place.
-  const definitionKey = renderDefinitionKey(metadata);
+  const definitionKey = renderDefinitionKey(metadata, definitionVersionId);
   const imageColumn = (metadata.image_column as string) || '';
   const s3BaseFolder = (metadata.s3_base_folder as string) || '';
   const thumbnailSize =

@@ -11,7 +11,11 @@
  * deliberately independent, and this is where that independence lives.
  */
 
-import type { DataVersionPins } from 'depictio-react-core';
+import type {
+  DashboardVersionDetail,
+  DataVersionPins,
+  StoredMetadata,
+} from 'depictio-react-core';
 
 /** What the user picked in the dataset select, if anything.
  *
@@ -31,6 +35,28 @@ export interface DataVersionChoice {
   useHistoricalData: boolean;
   /** The Delta commit the selected dashboard version recorded, if any. */
   versionDataVersion: number | undefined;
+}
+
+/** Find a component inside a stored version: on its own tab, by id.
+ *
+ * A version holds the whole tab family, and a component id is only unique
+ * within a tab (ids derive from tags, which two tabs may share). Taking the
+ * first match across tabs showed, and restored, a sibling tab's component.
+ *
+ * Returns null when the version predates the component (or its tab), which
+ * is a normal outcome worth stating rather than an error: it is exactly the
+ * answer to "when did this first appear?". */
+export function componentInVersion(
+  version: Pick<DashboardVersionDetail, 'tabs'>,
+  tabId: string,
+  index: string,
+): StoredMetadata | null {
+  const tab = (version.tabs || []).find((t) => String(t.dashboard_id) === tabId);
+  for (const component of tab?.stored_metadata || []) {
+    const candidate = component as Record<string, unknown>;
+    if (String(candidate.index ?? '') === index) return component as StoredMetadata;
+  }
+  return null;
 }
 
 /**
@@ -60,6 +86,34 @@ export function pinsForComponent(
   dataVersion: number | undefined,
 ): Record<string, number> {
   return dcId && typeof dataVersion === 'number' ? { [dcId]: dataVersion } : {};
+}
+
+/** What one pane of the component-history modal asks the server for: which
+ *  data (`pins`) and whose definition (`definitionVersionId`, null for the
+ *  live component). */
+export interface PaneRequest {
+  pins: Record<string, number>;
+  definitionVersionId: string | null;
+}
+
+/**
+ * The request behind one pane.
+ *
+ * The past pane passes the version it shows; the compare pane passes null,
+ * so it draws the live definition, and a choice that ignores the version's
+ * stamp (`useHistoricalData: false`, no `versionDataVersion`), so it defaults
+ * to live data. Both panes go through here, so the two axes stay independent
+ * in exactly one place.
+ */
+export function paneRequest(
+  dcId: string,
+  choice: DataVersionChoice,
+  definitionVersionId: string | null,
+): PaneRequest {
+  return {
+    pins: pinsForComponent(dcId, resolveDataVersion(choice)),
+    definitionVersionId,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -170,19 +224,44 @@ export function valueToDataOverride(value: string | null): DataOverride {
   return Number(value);
 }
 
-/** The pins after picking `value` in one collection's select: a commit pins
- *  that collection, the latest data (or an empty value) unpins it. Always a
- *  new object, so a switch replaces the previous pin rather than adding one. */
+/**
+ * The pins after picking `value` in one collection's select. Always a new
+ * object, so a switch replaces the previous pin rather than adding one.
+ *
+ *   a commit             pins that collection to it;
+ *   `VERSION_DEFAULT`    drops the collection's own pin, so it follows the
+ *                        version's data again (or the latest data, with none);
+ *   `LIVE`               the latest data. Under a version's data (`asOf`) that
+ *                        is an explicit `null`, which the server reads as "stay
+ *                        live" for this collection; deleting the key instead
+ *                        would leave it on the version's commit, so picking
+ *                        "Latest data" would do nothing. Without a version a
+ *                        missing key already means live, and keeping it
+ *                        missing leaves the request byte-identical.
+ */
 export function withPin(
   pins: DataVersionPins,
   dcId: string,
   value: string | null,
+  asOf = false,
 ): DataVersionPins {
   const next = { ...pins };
-  if (!value || value === LIVE) {
+  if (!value || value === VERSION_DEFAULT) {
     delete next[dcId];
+  } else if (value === LIVE) {
+    if (asOf) next[dcId] = null;
+    else delete next[dcId];
   } else {
     next[dcId] = Number(value);
   }
   return next;
+}
+
+/** The select value showing one collection's pin. Under a version's data a
+ *  collection with no pin of its own follows that version (`VERSION_DEFAULT`);
+ *  without one it is on its latest data. */
+export function pinToValue(pin: number | null | undefined, asOf: boolean): string {
+  if (typeof pin === 'number') return String(pin);
+  if (pin === null) return LIVE;
+  return asOf ? VERSION_DEFAULT : LIVE;
 }

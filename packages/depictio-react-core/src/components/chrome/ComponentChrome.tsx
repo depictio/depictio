@@ -9,6 +9,7 @@ import FullscreenButton from './FullscreenButton';
 import InspectButton from './InspectButton';
 import { useInspectorControl } from './InspectorContext';
 import CommentsButton from './CommentsButton';
+import CurrentDataBadge from './CurrentDataBadge';
 import { useCommentsControl } from './CommentsContext';
 import AnnotateButton from './AnnotateButton';
 import { useAnnotationLayer } from '../../annotations/AnnotationLayerContext';
@@ -490,6 +491,12 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
         {!vertical && clearSlot}
       </Group>
       {children}
+      {/* Pinned at the bottom-left, out of the action row: a hover-only badge
+       *  would let the tile pass for the past at rest, and the top-left is
+       *  where a figure draws its title. Renders nothing on live data. */}
+      <span className="depictio-current-data-badge dgl-no-drag">
+        <CurrentDataBadge componentType={componentType} />
+      </span>
     </div>
   );
 };

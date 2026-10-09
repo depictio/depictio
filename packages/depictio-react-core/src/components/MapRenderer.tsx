@@ -115,11 +115,15 @@ const MapRenderer: React.FC<MapRendererProps> = ({
   // Data time travel: `body` merges into the request, `key` goes in the fetch
   // effect's deps so a pin change actually refetches instead of relabelling
   // stale data.
-  const { body: versionBody, key: versionKey } = useDataVersionRequest();
+  const {
+    body: versionBody,
+    key: versionKey,
+    definitionVersionId,
+  } = useDataVersionRequest();
   // `metadata.index` is identity and never moves, so a component whose
   // *definition* was swapped underneath a mounted renderer (a restore, an
   // in-place edit) would keep showing the old chart until a page reload.
-  const definitionKey = renderDefinitionKey(metadata);
+  const definitionKey = renderDefinitionKey(metadata, definitionVersionId);
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
 
   const selectionEnabled = isMapSelectionEnabled(metadata, !!onFilterChange);

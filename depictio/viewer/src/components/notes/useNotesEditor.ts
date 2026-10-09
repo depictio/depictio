@@ -35,6 +35,9 @@ export function useNotesEditor(
   dashboardId: string,
   initialContent: string,
   permissions?: DashboardPermissions,
+  /** After each successful save. A notes save goes to `/save`, which records
+   *  a dashboard version, so the editor reloads its version list from here. */
+  onSaved?: () => void,
 ): NotesEditorState {
   const [status, setStatus] = useState<NotesSaveStatus>('idle');
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -61,6 +64,9 @@ export function useNotesEditor(
   // pre-auth value and permanently block saves.
   const canEditRef = useRef(canEdit);
   canEditRef.current = canEdit;
+  // Read at save time, so a new callback identity does not rebuild the save.
+  const onSavedRef = useRef(onSaved);
+  onSavedRef.current = onSaved;
 
   const scheduleSave = useCallback(
     (html: string) => {
@@ -72,6 +78,7 @@ export function useNotesEditor(
             lastSavedRef.current = html;
             setStatus('saved');
             setSavedAt(new Date());
+            onSavedRef.current?.();
           })
           .catch((err) => {
             console.error('[notes] save failed:', err);

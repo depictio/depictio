@@ -30,7 +30,6 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import {
-  fetchDashboardVersion,
   Z_LAYERS,
   type DashboardVersionSummary,
   type DataVersionPins,
@@ -39,6 +38,7 @@ import {
 
 import { Field } from '../components/settings/SettingsSections';
 import DatasetVersionPicker from './DatasetVersionPicker';
+import type { PinnedLabel } from './dataVersionStatus';
 import { absDateTime, versionTitle } from './format';
 import type { VersionHistory } from './useVersionHistory';
 
@@ -49,16 +49,18 @@ interface DataVersionPanelProps {
   history: VersionHistory;
   /** Per-collection pins currently applied. */
   pins: DataVersionPins;
-  /** The same pins, named for display. */
-  pinnedLabels: Array<{ label: string; version: number }>;
+  /** The same pins, named for display. A `null` version is a collection kept
+   *  on its latest data under a version's data. */
+  pinnedLabels: PinnedLabel[];
   onPinsChange: (pins: DataVersionPins) => void;
   /** Stored version whose data stamps are driving the view, if any. */
   asOfVersionId: string | null;
   asOfLabel: string | null;
-  /** `label` names the version in the banner; `unresolved` names the
-   *  collections that version recorded no data version for, which keep
-   *  showing current data and which the banner has to say so about. */
-  onAsOfChange: (versionId: string, label: string, unresolved: string[]) => void;
+  /** The commit that version recorded per collection. */
+  asOfStamps?: Record<string, number | undefined>;
+  /** `label` names the version in the banner. Which collections it reaches
+   *  is the server's to say (`data_version_status`), not this panel's. */
+  onAsOfChange: (versionId: string, label: string) => void;
   /** Back to current data everywhere. */
   onClear: () => void;
   /** Close the settings, once a version's data is chosen. */
@@ -77,21 +79,6 @@ function statusTitle(travelling: boolean, asOfLabel: string | null): string {
   return 'Showing historical data';
 }
 
-/** The collections a version recorded no Delta commit for. Fetched from the
- *  version's detail because the summary carries only counts. A failure is not
- *  worth blocking on: the server resolves the stamps either way, and the
- *  banner is merely less specific. */
-async function unresolvedCollections(versionId: string): Promise<string[]> {
-  try {
-    const detail = await fetchDashboardVersion(versionId);
-    return (detail.data_collections || [])
-      .filter((stamp) => stamp.version_kind !== 'delta')
-      .map((stamp) => stamp.data_collection_tag || String(stamp.dc_id));
-  } catch {
-    return [];
-  }
-}
-
 const DataVersionPanel: React.FC<DataVersionPanelProps> = ({
   metadata,
   history,
@@ -100,13 +87,13 @@ const DataVersionPanel: React.FC<DataVersionPanelProps> = ({
   onPinsChange,
   asOfVersionId,
   asOfLabel,
+  asOfStamps,
   onAsOfChange,
   onClear,
   onDone,
 }) => {
   const { versions, hasMore } = history;
   const [selected, setSelected] = useState<string | null>(asOfVersionId);
-  const [resolving, setResolving] = useState(false);
 
   const options = useMemo(
     () =>
@@ -122,13 +109,10 @@ const DataVersionPanel: React.FC<DataVersionPanelProps> = ({
 
   const travelling = Boolean(asOfVersionId) || pinnedLabels.length > 0;
 
-  const applyVersionData = async () => {
+  const applyVersionData = () => {
     const version = versions.find((v) => v.version_id === selected);
     if (!version) return;
-    setResolving(true);
-    const unresolved = await unresolvedCollections(version.version_id);
-    setResolving(false);
-    onAsOfChange(version.version_id, versionTitle(version), unresolved);
+    onAsOfChange(version.version_id, versionTitle(version));
     onDone();
   };
 
@@ -167,8 +151,13 @@ const DataVersionPanel: React.FC<DataVersionPanelProps> = ({
               {pinnedLabels.length > 0 && (
                 <Group gap={4} wrap="wrap">
                   {pinnedLabels.map((pin) => (
-                    <Badge key={pin.label} size="sm" variant="light" color="yellow">
-                      {pin.label} v{pin.version}
+                    <Badge
+                      key={pin.dcId}
+                      size="sm"
+                      variant="light"
+                      color={pin.version === null ? 'gray' : 'yellow'}
+                    >
+                      {pin.version === null ? `${pin.label} latest` : `${pin.label} v${pin.version}`}
                     </Badge>
                   ))}
                 </Group>
@@ -218,8 +207,7 @@ const DataVersionPanel: React.FC<DataVersionPanelProps> = ({
           <Button
             size="xs"
             leftSection={<Icon icon="mdi:database-clock-outline" width={14} />}
-            onClick={() => void applyVersionData()}
-            loading={resolving}
+            onClick={applyVersionData}
             disabled={!selected || selected === asOfVersionId}
             data-testid="data-version-use"
           >
@@ -237,12 +225,18 @@ const DataVersionPanel: React.FC<DataVersionPanelProps> = ({
         label="One collection"
         description={
           "Pin a single collection to one of its commits, such as today's layout against " +
-          "last month's data. Applied as you pick, and wins over the version above for " +
-          'that collection.'
+          "last month's data. Applied as you pick. While a version's data is in use, a " +
+          'choice here wins over it for that collection, Latest data included.'
         }
         testId="data-version-per-collection"
       >
-        <DatasetVersionPicker metadata={metadata} pins={pins} onPinsChange={onPinsChange} />
+        <DatasetVersionPicker
+          metadata={metadata}
+          pins={pins}
+          onPinsChange={onPinsChange}
+          asOfVersionId={asOfVersionId}
+          asOfStamps={asOfStamps}
+        />
       </Field>
 
       <Text size="xs" c="dimmed">
