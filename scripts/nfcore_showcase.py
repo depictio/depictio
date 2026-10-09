@@ -281,16 +281,19 @@ SCENARIOS: list[Scenario] = [
         "somatic_snv",
         note="somatic route: the som.py tables the other two scenarios cannot reach",
     ),
-    # sequencing-runs: DATA_ROOT is the PARENT of the run_* directories, so this
-    # single project holds both runs. Pointing it at one run_* directory instead
-    # would match runs_regex against that run's own subdirectories and find none.
+    # sequencing-runs: DATA_ROOT is the PARENT of the run_* directories.
+    # Pointing it at one run_* directory instead would match runs_regex against
+    # that run's own subdirectories and find none. The nanopore run gets a
+    # parent of its own (nanopore/run_1 links to ../run_nanopore): route
+    # conditionals (platform, ARTIC sources) apply per project, so a project
+    # mixing an illumina and a nanopore run takes one layout for both.
     Scenario(
         "viralrecon",
         "3.0.0",
-        "illumina-nanopore",
-        subpath="viralrecon/3.0.0",
-        note="two runs in one project (sequencing-runs)",
-        runs=("run_illumina_amplicon", "run_nanopore"),
+        "nanopore",
+        subpath="viralrecon/3.0.0/nanopore",
+        note="ARTIC route (platform nanopore), restructured under run_1/",
+        runs=("run_1",),
     ),
     Scenario(
         "viralrecon",
