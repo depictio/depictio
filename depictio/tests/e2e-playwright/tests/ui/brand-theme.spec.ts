@@ -142,8 +142,8 @@ test.describe("Instance brand theme", () => {
 
     await loginAsAdmin();
 
-    // Stock instance: the depictio wordmark is already in the rail, so a badge
-    // repeating it would be noise.
+    // Stock instance: the depictio wordmark is already on screen (the Classic
+    // rail, the Glass top bar), so a badge repeating it would be noise.
     //
     // Assert on the response. The first half of this test describes the
     // default state, so it passes whether or not these calls land — a 401 here
@@ -152,13 +152,14 @@ test.describe("Instance brand theme", () => {
     await page.goto("/dashboards");
     const rail = page.locator("[data-testid='app-sidebar']");
     await expect(rail).toBeVisible({ timeout: 15_000 });
-    // The rail is what carries the attribution, so its own theme toggle being
-    // in the DOM means the footer stack rendered and a count of 0 is a real
-    // absence rather than a not-yet. Attached rather than visible: the testid
-    // sits on the Mantine Switch's <input>, which the track paints over and
-    // Playwright therefore reports as hidden (see theme-toggle.spec.ts, which
-    // asserts the same element the same way).
-    await expect(rail.locator("[data-testid='theme-toggle']")).toBeAttached();
+    // The theme toggle renders beside the attribution in both chrome styles
+    // (the Classic rail's footer stack, the Glass top bar's keys), so its
+    // being in the DOM means that stack rendered and a count of 0 is a real
+    // absence rather than a not-yet. Attached rather than visible: in Classic
+    // the testid sits on the Mantine Switch's <input>, which the track paints
+    // over and Playwright therefore reports as hidden (see
+    // theme-toggle.spec.ts, which asserts the same element the same way).
+    await expect(page.locator("[data-testid='theme-toggle']")).toBeAttached();
     await expect(attribution).toHaveCount(0);
 
     // `logo_mode: "none"` takes the wordmark off the screen, which is exactly

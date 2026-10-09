@@ -402,6 +402,7 @@ export const TopBar: React.FC<{
     <div
       className="hy-top-title dc-header"
       data-tour-id="header-title"
+      data-testid="header-breadcrumb"
       style={{ ['--gl-title-color' as string]: model.titleColor } as React.CSSProperties}
     >
       {model.dashboardName && (

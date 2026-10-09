@@ -36,6 +36,7 @@ const DefaultShell: React.FC<DashboardShellProps> = ({
   const { docked } = filters;
   return (
     <AppShell
+      data-testid="app-shell"
       header={{
         height: {
           base: chrome.layout.headerHeightMobile ?? chrome.layout.headerHeight,

@@ -413,7 +413,12 @@ const GlassPage: React.FC<GlassPageProps> = ({
   const Icon = SECTION_ICON[section];
 
   return (
-    <div className="gp-shell" data-side={open ? 'open' : 'folded'} data-section={section}>
+    <div
+      className="gp-shell"
+      data-testid="app-shell"
+      data-side={open ? 'open' : 'folded'}
+      data-section={section}
+    >
       <TopBar section={section} crumbs={crumbs} />
       <Sidebar section={section} open={open} onToggle={toggle} />
       <main className="gp-main">

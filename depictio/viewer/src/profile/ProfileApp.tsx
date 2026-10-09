@@ -238,14 +238,18 @@ const ProfileApp: React.FC = () => {
 
   if (glass) {
     return (
-      <GlassPage section="profile" title="Profile" description="Your account, your password and your CLI access.">
-        {body}
-      </GlassPage>
+      <>
+        <GlassPage section="profile" title="Profile" description="Your account, your password and your CLI access.">
+          {body}
+        </GlassPage>
+        {modals}
+      </>
     );
   }
 
   return (
     <AppShell
+      data-testid="app-shell"
       layout="alt"
       header={{ height: 64 }}
       navbar={{
