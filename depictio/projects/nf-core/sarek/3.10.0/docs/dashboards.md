@@ -117,8 +117,8 @@ burden and protein position tables. Filters: biotype, caller and impact class.
 
 **Locus.** A depth navigator in 1 Mb windows drives three tracks on one axis through the
 region links: the depth per interval, the calls over the gene lane and the annotated VCFs read
-from their files. It opens on a default region in the second megabase of chromosome 1, small
-enough for the file track to fetch. The four cards (calls by caller, depth per interval,
+from their files. It opens on a default region in the second megabase of chromosome 1, inside
+the 2 Mb under which the file track reads its VCFs. The four cards (calls by caller, depth per interval,
 allele fraction, depth at the call) take `follow_region_filter: true`, so they follow the
 region and recount it on every brush or locus entry. Filters: caller and variant type.
 

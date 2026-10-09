@@ -2469,11 +2469,14 @@ tabs:
       assembly: '{GENOME}'
       point_size: 6
       file_max_lanes: 8
+      # 2 Mb, not the 1 Mb default: the navigator's default region spans 1 Mb,
+      # and a lazy file lane reads nothing until the view is under its window.
+      file_window_size: 2000000
       region_filter_enabled: false
       follow_region_filter: true
     section: One region, four tracks
     tag: sk-loc-av-vcf
     index: loc-vcf-files
     title: The annotated VCFs, read from the files
-    description: Each callset's annotated VCF, range-read through its index below 1 Mb, one lane per callset.
+    description: Each callset's annotated VCF, range-read through its index below 2 Mb, one lane per callset.
     layout: {x: 0, y: 12, w: 8, h: 5}
