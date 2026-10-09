@@ -1,0 +1,307 @@
+/*
+ * Glass filter panel. The structure and behaviour are the base panel's,
+ * untouched: accordion sections (accent, icon, name, description, pin,
+ * chevron), groups that fold inside them, each filter a label over a
+ * full-width control. Only the look changes:
+ *
+ *  - a section is the canvas's section a size down: the same frosted card,
+ *    rim and full-height accent edge, the same header (chevron, icon, name
+ *    over a one-line description) at the canvas's type ratios, one header
+ *    height whether the section is open or folded;
+ *  - a group is only its caption (small capitals, count, chevron);
+ *  - one vertical rhythm (section, group, label, control), one outlined
+ *    input style; the panel's tools sit in the title row;
+ *  - one hover for every row of every side panel: a faint tint, nothing else.
+ */
+
+/* ------------------------------------------------- the tools, title row */
+
+:root[data-chrome='glass'] .hy-drawer-card {
+  position: relative;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .dc-filter-panel-header {
+  position: absolute;
+  top: 0;
+  right: 46px;
+  z-index: 2;
+  height: var(--gl-panel-head-h);
+  min-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .dc-filter-panel-header .mantine-Group-root {
+  gap: 0 !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .dc-filter-panel-header .hy-key--labelled {
+  width: 30px;
+  padding: 0 !important;
+  justify-content: center;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .dc-filter-panel-header .hy-key--labelled .hy-key-label {
+  display: none;
+}
+:root[data-chrome='glass'][data-chrome] .hy-drawer [data-tour-id='filter-panel'] {
+  padding-top: 2px !important;
+}
+:root[data-chrome='glass'][data-chrome] .hy-drawer .hy-drawer-head .hy-meta {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 10px;
+  background: var(--gl-accent);
+  color: var(--mantine-color-white);
+  font-size: 11px;
+  font-weight: 700;
+}
+:root[data-chrome='glass'] .hy-drawer-body--filters {
+  background: transparent;
+}
+
+/* ------------------------------------------------------------ sections */
+
+/* The canvas section (glass.css), scaled to the panel: 16 / 14px type there,
+   14 / 12.25px here; a 22px icon there, 19px here. */
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-accordion.is-compact .depictio-section-item {
+  /* Room for the hairline ring, which the list's scroller would clip. */
+  margin-inline: 1px;
+  padding-inline-start: 0 !important;
+  border: 1px solid var(--gl-rim) !important;
+  border-radius: 24px !important;
+  background: light-dark(
+    color-mix(in srgb, var(--mantine-color-white) 42%, transparent),
+    color-mix(in srgb, var(--mantine-color-dark-7) 45%, transparent)
+  ) !important;
+  box-shadow: 0 0 0 1px var(--gl-hair), inset 3px 0 0 color-mix(in srgb, var(--section-accent) 75%, transparent) !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-accordion.is-compact .depictio-section-item + .depictio-section-item {
+  margin-top: 10px !important;
+}
+/* One header, open or folded, with or without a description. */
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-accordion.is-compact .depictio-section-control,
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-accordion.is-compact .depictio-section-item[data-active] .depictio-section-control {
+  box-sizing: border-box;
+  min-height: 64px;
+  padding: 12px 14px 12px 12px !important;
+  border: 0 !important;
+  border-radius: 23px !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-accordion.is-compact .depictio-section-item[data-active] .depictio-section-control {
+  border-end-start-radius: 0 !important;
+  border-end-end-radius: 0 !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-accordion.is-compact .mantine-Accordion-chevron {
+  align-self: center;
+  margin: 0 10px 0 2px !important;
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-accordion.is-compact .mantine-Accordion-label {
+  min-width: 0;
+  padding: 0 !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-accordion.is-compact .mantine-Accordion-label > .mantine-Group-root {
+  padding-right: 0 !important;
+  align-items: center !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-accordion.is-compact .mantine-Accordion-label > .mantine-Group-root > .mantine-Group-root {
+  gap: 10px !important;
+  align-items: center !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-accordion.is-compact .mantine-Accordion-label > .mantine-Group-root > .mantine-Group-root > svg:first-child {
+  width: 19px;
+  height: 19px;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-accordion.is-compact .mantine-Accordion-label .mantine-Group-root > .mantine-Text-root:first-child {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  line-height: 1.4 !important;
+  color: var(--gl-fg) !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-accordion.is-compact .mantine-Accordion-label .mantine-Group-root + .mantine-Text-root {
+  margin-top: 0;
+  overflow: hidden;
+  white-space: nowrap !important;
+  text-overflow: ellipsis !important;
+  font-size: 12.25px !important;
+  line-height: 1.45 !important;
+  color: var(--mantine-color-dimmed) !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-accordion.is-compact .depictio-section-content {
+  padding: 4px 14px 14px !important;
+}
+
+/* -------------------------------------------------------------- groups */
+
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-content .mantine-Paper-root:not(.dc-tile) {
+  margin-top: 6px;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-content .mantine-Paper-root:not(.dc-tile) > .mantine-Group-root:first-child {
+  margin-bottom: 8px !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-content .mantine-Paper-root:not(.dc-tile) > .mantine-Group-root:first-child .mantine-Text-root {
+  font-size: 11px !important;
+  font-weight: 650 !important;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gl-muted) !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-content .mantine-Paper-root:not(.dc-tile) > .mantine-Group-root:first-child svg {
+  color: var(--gl-faint) !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-content .mantine-Paper-root:not(.dc-tile) > .mantine-Group-root:first-child .mantine-Badge-root {
+  height: 16px;
+  padding: 0 5px;
+  border-radius: 8px;
+  font-size: 10px;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-content .mantine-Divider-root {
+  display: none;
+}
+
+/* ------------------------------------------------- rows: one hover, a tint */
+
+:root[data-chrome='glass'] {
+  --gl-row-hover: light-dark(
+    color-mix(in srgb, var(--mantine-color-gray-9) 4%, transparent),
+    color-mix(in srgb, var(--mantine-color-dark-0) 6%, transparent)
+  );
+}
+/* Mantine's own hover fill (the Comments group rows, default buttons). */
+:root[data-chrome='glass'] :is(.hy-drawer, .hy-sheet, .hy-inspector, .dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen'])) {
+  --mantine-color-default-hover: var(--gl-row-hover);
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet, .hy-inspector, .dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen'])) :is(.mantine-Accordion-control, .mantine-NavLink-root),
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-content .mantine-Paper-root:not(.dc-tile) > .mantine-Group-root:first-child > button {
+  transition: background-color 120ms ease !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet, .hy-inspector, .dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen'])) :is(.mantine-Accordion-control, .mantine-NavLink-root):hover,
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-content .mantine-Paper-root:not(.dc-tile) > .mantine-Group-root:first-child > button:hover {
+  background-color: var(--gl-row-hover) !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .depictio-section-content .mantine-Paper-root:not(.dc-tile) > .mantine-Group-root:first-child > button {
+  margin-inline: -6px;
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet, .hy-inspector, .dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen'])) .dashboard-component-hover:hover {
+  box-shadow: none !important;
+}
+
+/* ------------------------------------------- filters: label over control */
+
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) :is(.depictio-section-content > div, .depictio-section-content .mantine-Paper-root > div) > .mantine-Stack-root {
+  gap: 14px !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) :is(.depictio-component-chrome > .mantine-Stack-root, .depictio-component-chrome > .dc-tile > .mantine-Stack-root) {
+  gap: 6px !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) :is(.depictio-component-chrome > .mantine-Stack-root, .depictio-component-chrome > .dc-tile > .mantine-Stack-root) > .mantine-Group-root:first-child .mantine-Text-root {
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  line-height: 1.4 !important;
+  color: var(--gl-fg) !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) :is(.depictio-component-chrome > .mantine-Stack-root, .depictio-component-chrome > .dc-tile > .mantine-Stack-root) > .mantine-Group-root:first-child svg {
+  width: 14px;
+  height: 14px;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) .dc-tile.mantine-Paper-root {
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* One input style in the panel, the search included: outlined, 34px. */
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) :is(.depictio-section-content, [data-tour-id='filter-panel'] > .mantine-InputWrapper-root) .mantine-Input-input {
+  --input-height: 34px !important;
+  --input-fz: 13px !important;
+  border: 1px solid color-mix(in srgb, var(--gl-fg) 13%, transparent) !important;
+  border-radius: 10px !important;
+  background: var(--gl-surface) !important;
+  box-shadow: none !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) :is(.depictio-section-content, [data-tour-id='filter-panel'] > .mantine-InputWrapper-root) .mantine-Input-input:hover {
+  border-color: color-mix(in srgb, var(--gl-fg) 24%, transparent) !important;
+}
+:root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) :is(.depictio-section-content, [data-tour-id='filter-panel'] > .mantine-InputWrapper-root) .mantine-Input-input:is(:focus, :focus-within) {
+  border-color: var(--gl-accent) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gl-accent) 16%, transparent) !important;
+}
+
+/* ------------------------------------------- select fields, selected state */
+
+/* The chosen values ride in one row of pills (the field never grows taller);
+ * the clear button is a quiet square; the options mark the chosen ones with
+ * the accent and a check. */
+:root[data-chrome='glass'] .mantine-MultiSelect-pillsList {
+  flex-wrap: nowrap !important;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, currentColor 85%, transparent);
+  mask-image: linear-gradient(90deg, currentColor 85%, transparent);
+}
+:root[data-chrome='glass'] .mantine-MultiSelect-inputField {
+  min-width: 3ch !important;
+}
+:root[data-chrome='glass'] .mantine-MultiSelect-pill {
+  flex: none;
+  height: 22px;
+  padding-inline: 8px 3px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--gl-accent) 14%, transparent) !important;
+  color: var(--gl-accent-fg) !important;
+  font-size: 12px;
+  font-weight: 600;
+}
+:root[data-chrome='glass'] .mantine-MultiSelect-pill .mantine-Pill-remove {
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  border-radius: 5px;
+  color: inherit;
+  opacity: 0.7;
+}
+:root[data-chrome='glass'] .mantine-MultiSelect-pill .mantine-Pill-remove:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--gl-accent) 20%, transparent);
+}
+:root[data-chrome='glass'] :is(.mantine-MultiSelect-section, .mantine-Select-section) .mantine-CloseButton-root {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  border-radius: 6px;
+  color: var(--gl-faint);
+}
+:root[data-chrome='glass'] :is(.mantine-MultiSelect-section, .mantine-Select-section) .mantine-CloseButton-root:hover {
+  background: var(--gl-hover);
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] :is(.mantine-Combobox-dropdown, .mantine-MultiSelect-dropdown, .mantine-Select-dropdown) {
+  padding: 4px;
+}
+:root[data-chrome='glass'] :is(.mantine-Combobox-option, .mantine-MultiSelect-option, .mantine-Select-option) {
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+:root[data-chrome='glass'] :is(.mantine-Combobox-option, .mantine-MultiSelect-option, .mantine-Select-option):is([data-combobox-selected], :hover) {
+  background: var(--gl-hover) !important;
+  color: var(--gl-fg) !important;
+}
+:root[data-chrome='glass'] :is(.mantine-Combobox-option, .mantine-MultiSelect-option, .mantine-Select-option)[data-checked] {
+  color: var(--gl-accent-fg) !important;
+  font-weight: 600;
+}
+:root[data-chrome='glass'] :is(.mantine-Combobox-option, .mantine-MultiSelect-option, .mantine-Select-option)[data-checked] svg {
+  color: var(--gl-accent-fg);
+}

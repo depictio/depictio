@@ -61,7 +61,7 @@ import {
   startSessionKeepAlive,
   validateSession,
 } from 'depictio-react-core';
-import { UiScaleContext } from 'depictio-react-core';
+import { UiScaleContext, useChromeStyle } from 'depictio-react-core';
 import BootSplash from './components/BootSplash';
 import { brandCssVariablesResolver, buildDepictioTheme } from './theme';
 import { readStoredScheme } from './hooks/useColorScheme';
@@ -171,7 +171,11 @@ function ParentColorSchemeBridge() {
 function ThemeRoot({ children }: { children: React.ReactNode }) {
   const { scale } = useUiScalePref();
   const branding = React.useSyncExternalStore(subscribeBranding, getBranding);
-  const theme = React.useMemo(() => buildDepictioTheme({ brand: branding }), [branding]);
+  const chrome = useChromeStyle().themeOverrides;
+  const theme = React.useMemo(
+    () => buildDepictioTheme({ brand: branding, chrome }),
+    [branding, chrome],
+  );
   const cssVariablesResolver = React.useMemo(
     () => brandCssVariablesResolver(branding),
     [branding],
@@ -351,7 +355,8 @@ function bootstrapPublicConfig(): void {
 // `/auth`, and `AuthApp.POST_AUTH_REDIRECT` brings them back here.
 const isBareRoot = /^\/(dashboard\/?)?$/.test(window.location.pathname);
 if (isBareRoot) {
-  window.location.replace('/dashboards');
+  // The query rides along so a `?chrome=` look-and-feel pick survives the hop.
+  window.location.replace(`/dashboards${window.location.search}`);
 } else {
   bootstrapPublicConfig();
   bootstrapSession().finally(() => {

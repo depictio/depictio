@@ -1,0 +1,1448 @@
+/* Glass: the page layout (Shell.tsx).
+ *
+ * Structure and sizes only. Every colour, surface, radius and shadow is a
+ * `--gl-*` token defined in glass.css. The `.hy-*` classes only exist under
+ * this Shell; rules that reach shared pieces (sheets in a portal, the
+ * Analysis drawer, the notes button, the tab intro) are scoped to
+ * [data-chrome='glass']. */
+
+/* =================================================================== shell */
+
+.hy-shell {
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  background: var(--gl-canvas-bg);
+  color: var(--gl-fg);
+}
+
+/* ---------------------------------------------------------------- top bar */
+
+.hy-top {
+  grid-row: 1;
+  grid-column: 1 / -1;
+  position: relative;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  margin: var(--gl-top-inset);
+  padding: 0 12px 0 14px;
+  border-radius: var(--gl-top-radius);
+  background: var(--gl-top-bg);
+  border: var(--gl-top-border);
+  box-shadow: var(--gl-top-shadow);
+  -webkit-backdrop-filter: var(--gl-top-filter);
+  backdrop-filter: var(--gl-top-filter);
+}
+.hy-top-brand {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 8px 0 4px;
+  color: var(--gl-fg);
+  text-decoration: none;
+  border-radius: 10px;
+  outline: none;
+  transition: background-color 150ms ease;
+}
+.hy-top-brand:hover {
+  background: var(--gl-hover);
+}
+.hy-top-brand:focus-visible {
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.hy-top-brand > span:first-child {
+  display: block !important;
+  line-height: 0;
+}
+/* Virgil, for the wordmark and nowhere else. */
+.hy-wordmark {
+  font-family: 'Virgil', var(--mantine-font-family);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: var(--gl-wordmark, var(--gl-fg));
+  white-space: nowrap;
+}
+.hy-top-powered {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+.hy-top-powered:empty {
+  display: none;
+}
+/* The credit's wordmark is one raster for both themes: ink it for dark. */
+:root[data-mantine-color-scheme='dark'] .hy-top-powered img {
+  filter: invert(1) hue-rotate(180deg) !important;
+}
+.hy-top-rule {
+  flex: none;
+  width: 1px;
+  height: 26px;
+  background: var(--gl-line);
+}
+.hy-top-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.hy-top .hy-top-dash {
+  display: block !important;
+  min-width: 0;
+  max-width: 34ch;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  font-weight: 550;
+  color: var(--gl-muted);
+}
+.hy-top-chev {
+  flex: none;
+  color: var(--gl-faint);
+}
+.hy-top-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: calc(var(--gl-key-radius) - 2px);
+  background: color-mix(in srgb, var(--gl-title-color, var(--gl-accent)) 13%, transparent);
+}
+.hy-top-icon .dc-header-tab-icon {
+  display: block !important;
+  width: 18px !important;
+  height: 18px !important;
+}
+.hy-top .hy-top-tab {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 17px;
+  font-weight: 750;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--gl-fg);
+}
+.hy-top .hy-top-extras {
+  display: inline-flex !important;
+}
+.hy-top-mode {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+}
+.hy-top-keys {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.hy-group--top {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.hy-key--top {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--gl-key-radius);
+  color: var(--gl-muted);
+}
+.hy-key--top:not(:disabled):hover {
+  color: var(--gl-fg);
+  background: var(--gl-hover);
+}
+.hy-top .hy-avatar {
+  margin: 0 0 0 6px;
+  width: 34px;
+  height: 34px;
+  border-color: var(--gl-line);
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+}
+
+/* ---------------------------------------------------------------- sidebar */
+
+.hy-side {
+  grid-row: 2;
+  grid-column: 1;
+  position: relative;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  min-height: 0;
+  margin: var(--gl-rail-inset);
+  padding: 14px 10px 10px;
+  border-radius: var(--gl-rail-radius);
+  background: var(--gl-rail-bg);
+  color: var(--gl-rail-fg);
+  box-shadow: var(--gl-rail-shadow);
+  -webkit-backdrop-filter: var(--gl-rail-filter);
+  backdrop-filter: var(--gl-rail-filter);
+  overflow: hidden;
+}
+.hy-shell[data-side='folded'] .hy-side {
+  align-items: center;
+  padding-inline: 0;
+}
+.hy-side-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  margin-bottom: 4px;
+}
+.hy-shell[data-side='folded'] .hy-side-head {
+  justify-content: center;
+  margin-bottom: 8px;
+}
+.hy-shell[data-side='folded'] .hy-side-head .hy-flex {
+  display: none;
+}
+.hy-fold {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--gl-rail-line);
+  border-radius: calc(var(--gl-key-radius) - 2px);
+  background: transparent;
+  color: var(--gl-rail-muted);
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+.hy-fold:hover {
+  color: var(--gl-rail-fg);
+  background: var(--gl-rail-hover);
+}
+.hy-fold:focus-visible {
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.hy-shell[data-side='folded'] .hy-fold {
+  width: 40px;
+  height: 36px;
+}
+.hy-side-scroll {
+  flex: 0 1 auto;
+  width: 100%;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.hy-side-scroll::-webkit-scrollbar {
+  display: none;
+}
+.hy-side .hy-side-heading {
+  padding: 0 10px;
+  color: var(--gl-rail-faint);
+}
+.hy-side .hy-tablist {
+  padding: 0;
+}
+.hy-side .hy-tablist-group {
+  color: var(--gl-rail-faint);
+}
+.hy-side .hy-tablist-section + .hy-tablist-section {
+  border-top-color: var(--gl-rail-line);
+}
+.hy-side .hy-tablist-item {
+  --dc-tab-icon: var(--gl-rail-muted);
+  min-height: 40px;
+  color: var(--gl-rail-fg);
+  font-size: 14px;
+}
+.hy-side .hy-tablist-item:hover {
+  background: var(--gl-rail-hover);
+}
+.hy-side .hy-tablist-icon {
+  color: var(--gl-tab-ink);
+}
+.hy-side-tools,
+.hy-side-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  width: 100%;
+}
+.hy-shell[data-side='folded'] :is(.hy-side-tools, .hy-side-foot) {
+  align-items: center;
+}
+.hy-side-spacer {
+  flex: 1;
+  min-height: 12px;
+}
+.hy-rail-tabs {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding-block: 2px;
+}
+.hy-sep {
+  flex: none;
+  width: 16px;
+  height: 1px;
+  margin: 4px 0;
+  background: var(--gl-rail-line);
+}
+.hy-rule {
+  flex: none;
+  align-self: stretch;
+  height: 1px;
+  margin: 8px 6px;
+  background: var(--gl-rail-line);
+}
+.hy-shell[data-side='folded'] .hy-rule {
+  align-self: center;
+  width: 28px;
+  margin-inline: 0;
+}
+
+.hy-group--rail {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+/* A row of the sidebar: icon and name; folded, the icon alone. */
+.hy-row,
+.hy-side .hy-key--rail {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 12px;
+  width: 100%;
+  height: 40px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--gl-key-radius);
+  background: transparent;
+  color: var(--gl-rail-muted);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+.hy-row:hover,
+.hy-side .hy-key--rail:not(:disabled):hover {
+  color: var(--gl-rail-fg);
+  background: var(--gl-rail-hover);
+}
+.hy-row:focus-visible {
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.hy-row-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+}
+.hy-row-label,
+.hy-key--rail .hy-key-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hy-key--rail .hy-glyph {
+  margin-inline: 0.5px;
+}
+.hy-key--rail .hy-bubble {
+  position: static;
+  margin-left: auto;
+  box-shadow: none;
+}
+.hy-shell[data-side='folded'] :is(.hy-row, .hy-key--rail) {
+  width: 40px;
+  padding: 0;
+  justify-content: center;
+}
+.hy-shell[data-side='folded'] :is(.hy-row-label, .hy-key--rail .hy-key-label) {
+  display: none;
+}
+.hy-shell[data-side='folded'] .hy-key--rail .hy-bubble {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  margin: 0;
+}
+
+/* A folded tab: a tile with its icon in the rail's ink. */
+.hy-tab {
+  --dc-tab-icon: var(--gl-rail-muted);
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--gl-key-radius);
+  color: var(--gl-rail-muted);
+  text-decoration: none;
+  outline: none;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+.hy-tab:hover {
+  --dc-tab-icon: var(--gl-rail-fg);
+  color: var(--gl-rail-fg);
+  background: var(--gl-rail-hover);
+}
+.hy-tab:focus-visible {
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.hy-tab svg {
+  width: 20px;
+  height: 20px;
+}
+.hy-tab img {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+/* The editor's own tab list in the open sidebar: its foot (theme, status,
+ * profile) already lives in the top bar. */
+.hy-side-editor [data-testid='sidebar-guide'],
+.hy-side-editor .dc-sidebar-footer,
+.hy-side-editor .dc-sidebar-back,
+.hy-side-editor .dc-sidebar-inner > .mantine-Stack-root:first-child > .mantine-Divider-root {
+  display: none;
+}
+.hy-side-editor .depictio-chrome-tabs .mantine-Tabs-tab {
+  min-height: 38px;
+  border-radius: var(--gl-key-radius);
+  font-size: 13.5px;
+  font-weight: 550;
+}
+.hy-side-editor .dc-sidebar-heading {
+  font-size: 10.5px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.09em;
+  color: var(--gl-faint) !important;
+}
+
+.hy-avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--gl-line);
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  text-decoration: none;
+  outline: none;
+}
+.hy-avatar:focus-visible {
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.hy-avatar--sm {
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  border-color: transparent;
+  font-size: 10px;
+}
+.hy-tip-eyebrow {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.7;
+}
+
+/* ----------------------------------------------------------------- drawer */
+
+.hy-drawer {
+  grid-row: 2;
+  grid-column: 2;
+  position: relative;
+  z-index: 20;
+  min-width: 0;
+  overflow: hidden;
+}
+.hy-drawer-card {
+  display: flex;
+  flex-direction: column;
+  height: calc(100% - 2 * var(--gl-pane-inset));
+  margin-block: var(--gl-pane-inset);
+  margin-left: calc(var(--gl-drawer-gap) - var(--gl-rail-inset));
+  border-radius: var(--gl-drawer-radius);
+  background: var(--gl-drawer-bg);
+  border: var(--gl-drawer-border);
+  box-shadow: var(--gl-drawer-shadow);
+  -webkit-backdrop-filter: var(--gl-float-filter);
+  backdrop-filter: var(--gl-float-filter);
+  overflow: hidden;
+}
+.hy-shell:not([data-panel]) .hy-drawer-card {
+  box-shadow: none;
+}
+.hy-drawer-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: var(--gl-panel-head-h);
+  padding: 0 calc(var(--gl-panel-pad) - 6px) 0 var(--gl-panel-pad);
+}
+.hy-drawer-title {
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  color: var(--gl-fg);
+  white-space: nowrap;
+}
+.hy-flex {
+  flex: 1;
+}
+.hy-meta {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+  white-space: nowrap;
+}
+.hy-meta--quiet {
+  background: transparent;
+  color: var(--gl-faint);
+  font-weight: 500;
+  padding: 0;
+}
+.hy-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--gl-key-radius);
+  background: transparent;
+  color: var(--gl-muted);
+  cursor: pointer;
+  outline: none;
+}
+.hy-close:hover {
+  background: var(--gl-hover);
+  color: var(--gl-fg);
+}
+.hy-close:focus-visible {
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.hy-drawer-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.hy-drawer-body--filters {
+  overflow: hidden;
+}
+
+/* The panel's own title would repeat the drawer's: its tools stay, as a
+ * second row of the head (same surface, one hairline under both). */
+.hy-drawer .dc-filter-panel-header,
+.hy-sheet .dc-filter-panel-header {
+  justify-content: flex-end !important;
+  margin: calc(-1 * var(--gl-panel-pad)) calc(-1 * var(--gl-panel-pad)) var(--gl-panel-pad) !important;
+  padding: 0 calc(var(--gl-panel-pad) - 6px) 8px;
+  min-height: 40px;
+  border: 0 !important;
+  border-bottom: 1px solid var(--gl-line-soft) !important;
+  background: var(--gl-drawer-bg) !important;
+}
+.hy-drawer .dc-filter-panel-header > .mantine-Group-root:first-child,
+.hy-sheet .dc-filter-panel-header > .mantine-Group-root:first-child {
+  display: none;
+}
+.hy-drawer [data-tour-id='filter-panel'] {
+  padding: var(--gl-panel-pad) !important;
+  border-radius: 0 !important;
+}
+.hy-drawer:has(.dc-filter-panel-header) .hy-drawer-head {
+  border-bottom: 0;
+}
+/* The list scrolls with a reserved gutter; slide it into the panel's padding
+ * (Shell.tsx measures the bar) so cards end where the search field ends. */
+.hy-drawer [data-tour-id='filter-panel'] > div[style*='scrollbar-gutter'] {
+  margin-right: calc(-1 * var(--gl-panel-pad));
+  padding-right: max(0px, calc(var(--gl-panel-pad) - var(--gl-sbw, 0px)));
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+/* ------------------------------------------------------- filter sections */
+
+/* The section filter bar on the canvas: the same card, one row per filter
+ * (badge, name, control), its tools held to the first row. */
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__badge {
+  border-radius: 8px !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__name {
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-strip-track {
+  background: var(--gl-raised) !important;
+}
+
+/* The tab list: the Tabs drawer and the phone sheet. */
+.hy-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--gl-faint);
+}
+.hy-tablist {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 10px 12px;
+}
+.hy-tablist-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hy-tablist-section + .hy-tablist-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--gl-line-soft);
+}
+.hy-tablist-group {
+  padding: 4px 10px 6px;
+}
+.hy-tablist-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 10px;
+  border-radius: var(--gl-key-radius);
+  color: var(--gl-fg);
+  font-size: 13.5px;
+  font-weight: 550;
+  text-decoration: none;
+  outline: none;
+  transition: background-color 120ms ease;
+}
+.hy-tablist-item:hover {
+  background: var(--gl-hover);
+}
+.hy-tablist-item:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--gl-ring);
+}
+.hy-tablist-icon {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  flex: none;
+}
+.hy-tablist-icon svg,
+.hy-tablist-icon img {
+  width: 18px !important;
+  height: 18px !important;
+}
+.hy-tablist-label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.hy-tablist-quiet {
+  color: var(--gl-muted);
+  font-weight: 500;
+}
+
+/* ------------------------------------------------------------------- main */
+
+.hy-main {
+  grid-row: 2;
+  grid-column: 3;
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+/* Room the floating dock takes at the foot of the canvas: its height, the
+ * gap under it and a breath above it, so the last row always clears it. */
+.hy-shell {
+  --gl-dock-h: 56px;
+  --gl-dock-gap: 18px;
+  --gl-dock-reserve: calc(var(--gl-dock-h) + var(--gl-dock-gap) + 20px);
+}
+.hy-shell[data-density='compact'] {
+  --gl-dock-h: 46px;
+  --gl-dock-gap: 12px;
+}
+.hy-stage {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* The canvas scrolls under the dock; at rest its padding keeps every tile
+ * clear of it. A plain surface: no pattern from any layer under it. */
+.hy-stage > [data-testid='dashboard-content'] {
+  flex: 1 1 0;
+  height: auto !important;
+  padding: var(--gl-canvas-top) var(--gl-gutter) var(--gl-dock-reserve) !important;
+  /* The reader's page width (Settings > Your view), as the default layout
+   * applies it: the canvas centres in the room it has. */
+  padding-inline: max(var(--gl-gutter), calc((100% - var(--gl-content-max, 100%)) / 2)) !important;
+  scroll-padding-block: 12px var(--gl-dock-reserve);
+  background-image: none !important;
+}
+/* The dashboard body is a flex child with a zero basis: its tiles overflowed
+ * it, so the reserve above sat under the first screen instead of after the
+ * last row. Growing it to its content puts the reserve at the very end. */
+.hy-stage > [data-testid='dashboard-content'] > * {
+  flex: 1 0 auto !important;
+}
+/* A `placement: top` strip (the Timeline) heads the canvas, full width of the
+ * reading column; the canvas scrolls under it, the dock stays at the foot. */
+.hy-stage:has(> .hy-strip) > [data-testid='dashboard-content'] {
+  padding-top: 12px !important;
+}
+.hy-strip {
+  flex: none;
+  margin: var(--gl-canvas-top) 0 0;
+  margin-inline: max(var(--gl-gutter), calc((100% - var(--gl-content-max, 100%)) / 2));
+  border-radius: var(--gl-tile-radius);
+  overflow: hidden;
+  border: 1px solid var(--gl-line);
+  background: var(--gl-surface);
+}
+.hy-strip > * {
+  border-top: 0 !important;
+  background: transparent !important;
+}
+.hy-inspector {
+  grid-row: 2;
+  grid-column: 4;
+  min-width: 0;
+  overflow: auto;
+  background: var(--gl-surface);
+  border-left: 1px solid var(--gl-line);
+}
+
+/* ------------------------------------------------------------------- dock */
+
+.hy-dock {
+  position: absolute;
+  bottom: var(--gl-dock-gap);
+  left: calc((100% - var(--gl-pad-r, 0px)) / 2);
+  translate: -50% 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+  border-radius: calc(var(--gl-float-radius) + 2px);
+  background: var(--gl-float-bg);
+  border: 1px solid var(--gl-float-line);
+  box-shadow: var(--gl-float-shadow);
+  -webkit-backdrop-filter: var(--gl-float-filter);
+  backdrop-filter: var(--gl-float-filter);
+  transition: left 250ms ease;
+}
+.hy-dock-sep {
+  flex: none;
+  width: 1px;
+  height: 24px;
+  margin-inline: 6px;
+  background: var(--gl-line);
+}
+.hy-group--dock {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* ----------------------------------------------------------------- keys */
+
+.hy-key {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--gl-muted);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 160ms ease;
+}
+.hy-key svg {
+  flex: none;
+  pointer-events: none;
+}
+.hy-key:focus-visible {
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.hy-key:disabled,
+.hy-key[aria-disabled='true'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.hy-key--dock.hy-key--square {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--gl-key-radius);
+}
+.hy-key--dock.hy-key--labelled {
+  height: 42px;
+  padding-inline: 13px 17px;
+  border-radius: var(--gl-key-radius);
+}
+.hy-key--bar.hy-key--square {
+  width: 30px;
+  height: 30px;
+  border-radius: calc(var(--gl-key-radius) - 2px);
+}
+.hy-key--bar.hy-key--labelled {
+  height: 30px;
+  padding-inline: 10px 12px;
+  border-radius: calc(var(--gl-key-radius) - 2px);
+  font-size: 12.5px;
+}
+.hy-key--menu {
+  width: auto !important;
+  padding-inline: 6px !important;
+  gap: 2px;
+}
+.hy-key--sheet {
+  width: 100%;
+  height: 48px;
+  justify-content: flex-start;
+  gap: 12px;
+  padding-inline: 12px;
+  border-radius: var(--gl-key-radius);
+  font-size: 14.5px;
+  font-weight: 550;
+  color: var(--gl-fg);
+}
+.hy-key--sheet .hy-key-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+}
+.hy-key--tabbar {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 56px;
+  flex-direction: column;
+  gap: 3px;
+  padding-inline: 2px;
+  border-radius: var(--gl-key-radius);
+}
+.hy-key--tabbar .hy-key-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+.hy-key-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.hy-key-caret {
+  margin-left: -2px;
+  opacity: 0.65;
+}
+
+.hy-count,
+.hy-bubble {
+  display: inline-grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  padding-inline: 5px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 750;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  background: var(--gl-badge-bg);
+  color: var(--gl-badge-fg);
+}
+.hy-bubble {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 17px;
+  height: 17px;
+  padding-inline: 4px;
+  font-size: 10px;
+  box-shadow: 0 0 0 2px var(--gl-badge-ring);
+}
+.hy-key--tabbar .hy-bubble {
+  top: 5px;
+  right: auto;
+  left: calc(50% + 4px);
+}
+.hy-dot {
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  margin-left: -2px;
+  border-radius: 50%;
+  background: currentColor;
+}
+.hy-key--tabbar .hy-dot {
+  display: none;
+}
+.hy-well {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* A tray: tools of one run that share a frame (panel headers, strips). */
+.hy-group--bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.hy-group--sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hy-group--sheet > :not(.hy-key) {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding-inline: 8px;
+}
+
+/* =================================================================== phone */
+
+.hy-shell--phone {
+  display: block;
+}
+.hy-shell--phone .hy-main {
+  position: absolute;
+  inset: 60px 0 var(--dc-bottom-offset, 0px);
+  height: auto;
+}
+.hy-shell--phone .hy-stage > [data-testid='dashboard-content'] {
+  padding: 12px 10px 16px !important;
+  scroll-padding-top: 12px;
+}
+.hy-shell--phone .hy-strip {
+  margin: 10px 10px 0;
+}
+
+/* The top bar, compact: logo, then dashboard over tab, then Edit. */
+.hy-top--compact {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  margin: 0;
+  gap: 10px;
+  padding: 0 8px 0 6px;
+  border-radius: 0;
+}
+.hy-top--compact .hy-top-brand {
+  padding: 0 4px;
+}
+.hy-top--compact .hy-top-rule {
+  height: 22px;
+}
+.hy-top--compact .hy-top-title {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1px;
+}
+.hy-top--compact :is(.hy-top-chev, .hy-top-icon, .hy-top-extras) {
+  display: none !important;
+}
+.hy-top--compact .hy-top-dash {
+  max-width: none;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.hy-top--compact .hy-top-tab {
+  font-size: 16px;
+}
+.hy-top--compact .hy-group--bar {
+  gap: 4px;
+}
+.hy-top--compact .hy-key--bar {
+  height: 40px;
+  min-width: 40px;
+}
+.hy-top--compact .hy-key--bar.hy-key--square {
+  width: 40px;
+}
+.hy-top--compact .hy-key--bar.hy-key--labelled {
+  width: 40px;
+  padding: 0;
+}
+
+.hy-tabbar {
+  position: fixed;
+  z-index: 150;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.hy-sheet {
+  max-height: 88dvh;
+}
+/* A list sheet takes its content's height, not the screen's. */
+.hy-sheet:not(.hy-sheet--tall) {
+  flex: 0 0 auto !important;
+  height: auto !important;
+}
+.hy-sheet-body {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0 !important;
+}
+.hy-sheet-grab {
+  flex: none;
+  width: 38px;
+  height: 4px;
+  margin: 8px auto 0;
+  border-radius: 2px;
+  background: var(--gl-line);
+}
+.hy-sheet .hy-drawer-head {
+  height: 52px;
+}
+.hy-sheet .hy-close {
+  width: 40px;
+  height: 40px;
+}
+.hy-sheet-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 8px calc(16px + env(safe-area-inset-bottom, 0px));
+}
+.hy-sheet-content .hy-tablist {
+  padding-inline: 2px;
+}
+.hy-sheet-content .hy-tablist-item {
+  min-height: 48px;
+  font-size: 15px;
+}
+.hy-sheet-filters {
+  height: 100%;
+}
+.hy-sheet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hy-sheet-rule {
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--gl-line-soft);
+}
+.hy-sheet-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 0 12px;
+  border-radius: var(--gl-key-radius);
+  color: var(--gl-fg);
+  font-size: 14.5px;
+  font-weight: 550;
+  text-decoration: none;
+}
+.hy-sheet-link:hover,
+.hy-sheet-link:active {
+  background: var(--gl-hover);
+}
+.hy-sheet-link-text {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* ================================================================ compact */
+
+/* The reader's Compact page width tightens the chrome with the canvas:
+ * a lower bar, slimmer rows, a smaller dock, closer tiles. */
+.hy-shell[data-density='compact'] {
+  --gl-gutter: 14px;
+  --gl-canvas-top: 12px;
+}
+.hy-shell[data-density='compact'] .hy-top {
+  gap: 10px;
+}
+.hy-shell[data-density='compact'] .hy-top .hy-top-tab {
+  font-size: 15.5px;
+}
+.hy-shell[data-density='compact'] .hy-top .hy-top-dash {
+  font-size: 13px;
+}
+.hy-shell[data-density='compact'] .hy-top-icon {
+  width: 26px;
+  height: 26px;
+}
+.hy-shell[data-density='compact'] .hy-key--top {
+  width: 34px;
+  height: 34px;
+}
+.hy-shell[data-density='compact'] .hy-top .hy-avatar {
+  width: 30px;
+  height: 30px;
+}
+.hy-shell[data-density='compact'] .hy-side {
+  padding-top: 10px;
+}
+.hy-shell[data-density='compact'] :is(.hy-row, .hy-side .hy-key--rail) {
+  height: 34px;
+  font-size: 13px;
+  gap: 10px;
+}
+.hy-shell[data-density='compact'] .hy-side .hy-tablist-item {
+  min-height: 34px;
+  font-size: 13px;
+}
+.hy-shell[data-density='compact'] .hy-tab {
+  width: 36px;
+  height: 36px;
+}
+.hy-shell[data-density='compact'] .hy-dock {
+  padding: 4px;
+}
+.hy-shell[data-density='compact'] .hy-key--dock.hy-key--square {
+  width: 36px;
+  height: 36px;
+}
+.hy-shell[data-density='compact'] .hy-key--dock.hy-key--labelled,
+.hy-shell[data-density='compact'] .hy-dock .hy-key {
+  height: 36px;
+  font-size: 12.5px;
+}
+.hy-shell[data-density='compact'] .depictio-section-item + .depictio-section-item {
+  margin-top: 10px !important;
+}
+
+/* ============================================================== engaged */
+
+/* A key whose mode is on, or whose panel is open, is engaged: it lights in
+ * the accent and, in the dock, opens out to show its name, so a click
+ * visibly answers whatever it opened. The panels say they are open by being
+ * in the document (Shell.tsx, useOpenSurfaces). */
+.hy-slot {
+  display: contents;
+}
+.hy-key-peek {
+  display: none;
+}
+:is(
+    .hy-dock .hy-key--on,
+    .hy-shell[data-hy-showing~='comments'] [data-hy-slot='comments'] .hy-key,
+    .hy-shell[data-hy-showing~='search'] [data-hy-slot='search'] .hy-key,
+    .hy-shell[data-hy-showing~='analysis'] [data-hy-slot='analysis'] .hy-key,
+    .hy-shell[data-hy-showing~='settings'] [data-hy-slot='settings'] .hy-key
+  ) {
+  color: var(--gl-on-fg) !important;
+  background: var(--gl-on-bg) !important;
+  box-shadow: var(--gl-on-ring) !important;
+}
+.hy-dock
+  :is(
+    .hy-key--on,
+    .hy-shell[data-hy-showing~='comments'] [data-hy-slot='comments'] .hy-key,
+    .hy-shell[data-hy-showing~='search'] [data-hy-slot='search'] .hy-key,
+    .hy-shell[data-hy-showing~='analysis'] [data-hy-slot='analysis'] .hy-key
+  ).hy-key--square {
+  width: auto;
+  padding-inline: 11px 15px;
+}
+.hy-dock
+  :is(
+    .hy-key--on,
+    .hy-shell[data-hy-showing~='comments'] [data-hy-slot='comments'] .hy-key,
+    .hy-shell[data-hy-showing~='search'] [data-hy-slot='search'] .hy-key,
+    .hy-shell[data-hy-showing~='analysis'] [data-hy-slot='analysis'] .hy-key
+  )
+  .hy-key-peek {
+  display: inline;
+  animation: hy-peek 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.hy-shell[data-hy-showing~='notes'] .dc-notes-toggle {
+  color: var(--gl-on-fg) !important;
+  background: var(--gl-on-bg) !important;
+  box-shadow: var(--gl-on-ring), var(--gl-float-shadow) !important;
+}
+@keyframes hy-peek {
+  from {
+    opacity: 0;
+    translate: -6px 0;
+  }
+}
+
+/* The panels a key opens arrive from it: the side cards rise from the dock's
+ * edge of the page, Search rises out of the dock, Settings drops from its key
+ * in the top bar. `translate` composes with the transforms Mantine animates. */
+@keyframes hy-rise {
+  from {
+    opacity: 0;
+    translate: 0 28px;
+    scale: 0.985;
+  }
+}
+@keyframes hy-drop {
+  from {
+    opacity: 0;
+    translate: 0 -10px;
+    scale: 0.96;
+  }
+}
+
+/* ===================================================== shared page pieces */
+
+/* The Guide lays over the canvas: clear of the dock. */
+:root[data-chrome='glass'] .hy-shell .depictio-guide-layer {
+  padding-top: 12px;
+  padding-bottom: 96px;
+  background: var(--gl-canvas-bg);
+}
+
+/* Every side panel (Filters, Analysis, Comments, Notes, the inspector) is
+ * one container: the same card radius, line, surface and shadow, a 56px head
+ * with one hairline under it, then a body and a foot on the same 16px inner
+ * edge. The panels outside the shell read these from the root. */
+:root[data-chrome='glass'] {
+  --gl-panel-pad: 16px;
+  --gl-panel-head-h: 56px;
+}
+:root[data-chrome='glass'] :is(.dc-analysis-panel, [data-testid='comments-drawer'], .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen'])) .mantine-Drawer-header {
+  min-height: var(--gl-panel-head-h);
+  padding: 0 calc(var(--gl-panel-pad) - 6px) 0 var(--gl-panel-pad) !important;
+}
+:root[data-chrome='glass'] :is(.dc-analysis-panel, [data-testid='comments-drawer']) .mantine-Drawer-body {
+  padding: var(--gl-panel-pad) !important;
+}
+:root[data-chrome='glass'] .hy-inspector {
+  margin: var(--gl-pane-inset);
+  border: 1px solid var(--gl-float-line) !important;
+  border-radius: var(--gl-pane-radius);
+  background: var(--gl-panel-bg) !important;
+  box-shadow: var(--gl-float-shadow);
+}
+
+/* The right panels (Analysis, Comments) float as cards under the top bar,
+ * their foot level with the dock's. */
+:root[data-chrome='glass'] :is(.dc-analysis-panel, [data-testid='comments-drawer'] .mantine-Drawer-content) {
+  --drawer-offset: var(--gl-pane-inset);
+  border-radius: var(--gl-pane-radius);
+  border: 1px solid var(--gl-float-line);
+  background: var(--gl-panel-bg);
+  box-shadow: var(--gl-float-shadow) !important;
+  -webkit-backdrop-filter: var(--gl-float-filter);
+  backdrop-filter: var(--gl-float-filter);
+  transform-origin: 50% 100%;
+}
+:root[data-chrome='glass'] [data-testid='comments-drawer'] .mantine-Drawer-inner {
+  top: var(--gl-top-offset, 0px) !important;
+}
+:root[data-chrome='glass'] :is(.dc-analysis-panel, [data-testid='comments-drawer']) .mantine-Drawer-header {
+  background: transparent;
+  border-bottom: 1px solid var(--gl-line-soft);
+}
+@media (min-width: 48em) {
+  :root[data-chrome='glass'] :is(.dc-analysis-panel, [data-testid='comments-drawer'] .mantine-Drawer-content) {
+    animation: hy-rise 340ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  /* Search rises out of the dock, centred over the canvas. */
+  :root[data-chrome='glass'] .mantine-Modal-inner:has(> [data-testid='dashboard-spotlight']) {
+    align-items: flex-end !important;
+    padding: 0 0 86px var(--gl-nav-offset, 0px) !important;
+  }
+  :root[data-chrome='glass'] [data-testid='dashboard-spotlight'] {
+    transform-origin: 50% 100%;
+    animation: hy-rise 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  /* Settings drops from its key, at the top bar's right end. */
+  :root[data-chrome='glass'] .mantine-Modal-root[data-testid='settings-modal'] .mantine-Modal-inner {
+    justify-content: flex-end !important;
+    align-items: flex-start !important;
+    padding: calc(var(--gl-top-offset, 0px) + 6px) 12px 12px !important;
+  }
+  :root[data-chrome='glass'] .mantine-Modal-root[data-testid='settings-modal'] .mantine-Modal-content {
+    max-height: calc(100dvh - var(--gl-top-offset, 0px) - 24px);
+    transform-origin: 100% 0;
+    animation: hy-drop 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+
+  /* The notes open as a card over their button, bottom right. */
+  :root[data-chrome='glass'] .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen']) .mantine-Drawer-inner {
+    left: auto !important;
+    right: 0 !important;
+    width: min(640px, calc(100vw - var(--gl-nav-offset, 0px) - 24px)) !important;
+  }
+  :root[data-chrome='glass'] .mantine-Drawer-root:has([aria-label='Expand notes to fullscreen']) .mantine-Drawer-content {
+    --drawer-offset: var(--gl-pane-inset);
+    margin-bottom: 84px !important;
+    max-height: calc(100dvh - var(--gl-top-offset, 0px) - 108px);
+    border-radius: var(--gl-pane-radius);
+    border: 1px solid var(--gl-float-line);
+    background: var(--gl-panel-bg);
+    box-shadow: var(--gl-float-shadow) !important;
+    -webkit-backdrop-filter: var(--gl-float-filter);
+    backdrop-filter: var(--gl-float-filter);
+    transform-origin: 100% 100%;
+    animation: hy-rise 300ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+}
+
+/* The notes button: level with the dock, past its right end. */
+:root[data-chrome='glass'] .dc-notes-toggle {
+  width: 46px !important;
+  height: 46px !important;
+  min-width: 46px !important;
+  min-height: 46px !important;
+  right: calc(20px + var(--gl-pad-r, 0px)) !important;
+  bottom: calc(24px + var(--dc-bottom-offset, 0px)) !important;
+  border-radius: var(--gl-float-radius) !important;
+  background: var(--gl-float-bg) !important;
+  color: var(--gl-muted) !important;
+  border: 1px solid var(--gl-float-line) !important;
+  box-shadow: var(--gl-float-shadow) !important;
+  -webkit-backdrop-filter: var(--gl-float-filter);
+  backdrop-filter: var(--gl-float-filter);
+  transition: right 250ms ease;
+}
+:root[data-chrome='glass'] .dc-notes-toggle:hover {
+  color: var(--gl-accent-fg) !important;
+}
+@media (max-width: 47.99em) {
+  :root[data-chrome='glass'] .dc-notes-toggle {
+    right: 12px !important;
+    bottom: calc(12px + var(--dc-bottom-offset, 0px)) !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hy-tab,
+  .hy-row,
+  .hy-top-brand,
+  .hy-tablist-item,
+  .hy-key,
+  .hy-dock {
+    transition: none !important;
+  }
+  .hy-key-peek,
+  :root[data-chrome='glass'] :is(
+      .dc-analysis-panel,
+      [data-testid='comments-drawer'] .mantine-Drawer-content,
+      [data-testid='dashboard-spotlight'],
+      .mantine-Modal-content,
+      .mantine-Drawer-content
+    ) {
+    animation: none !important;
+  }
+}
+
+/* Menus from the filter panel's toolbar open beside the panel (Shell.tsx,
+ * useMenusBeside) rather than over its first section. */
+:root[data-chrome='glass'] [data-hy-beside] {
+  top: var(--gl-beside-y) !important;
+  left: var(--gl-beside-x) !important;
+  transform-origin: left top !important;
+}

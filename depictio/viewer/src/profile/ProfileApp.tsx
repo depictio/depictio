@@ -18,6 +18,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
+import { GlassPage, useGlassPages } from '../chrome/variants/glass/pages';
 
 import {
   clearSession,
@@ -85,6 +86,7 @@ const ProfileApp: React.FC = () => {
   const [desktopOpened, toggleDesktop] = useProfileSidebar();
 
   usePageTitle('Profile');
+  const glass = useGlassPages();
 
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +111,138 @@ const ProfileApp: React.FC = () => {
   }, []);
 
   const states = buttonStates(status);
+
+  const body = (
+    <>
+      {loading ? (
+        <Center mih={300}>
+          <Loader />
+        </Center>
+      ) : !user ? (
+        <Center mih={300}>
+          <Stack align="center" gap="xs">
+            <Icon
+              icon="mdi:account-off"
+              width={32}
+              color="var(--mantine-color-gray-6)"
+            />
+            <Text c="dimmed">No authenticated user.</Text>
+            <Button component="a" href="/auth" variant="light">
+              Sign In
+            </Button>
+          </Stack>
+        </Center>
+      ) : (
+        <Paper shadow="md" radius="lg" p="xl" withBorder>
+          <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
+            <Paper
+              radius="lg"
+              p="xl"
+              shadow="md"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                minHeight: 200,
+                minWidth: 200,
+              }}
+            >
+              <AvatarFromEmail email={user.email} />
+            </Paper>
+
+            <Stack gap="lg">
+              <Group justify="space-between">
+                <Title order={2} fw={600}>
+                  User Profile
+                </Title>
+                <Icon icon="mdi:account-circle" width={36} height={36} />
+              </Group>
+              <Divider variant="dashed" my="md" size="sm" />
+
+              <Stack gap="xs" style={{ padding: '16px 0' }}>
+                <UserInfoRow label="Email" value={user.email} />
+                <UserInfoRow label="Database ID" value={user.id || 'N/A'} />
+                <UserInfoRow label="Registration Date" value={user.registration_date || 'N/A'} />
+                <UserInfoRow label="Last login" value={user.last_login || 'N/A'} />
+                <UserInfoRow label="Admin" value={user.is_admin ? 'Yes' : 'No'} />
+              </Stack>
+
+              <Group gap="md" justify="flex-start" mt="lg">
+                <Button
+                  variant="filled"
+                  radius="md"
+                  disabled={states.logoutDisabled}
+                  onClick={handleLogout}
+                  leftSection={<Icon icon="mdi:logout" width={20} />}
+                  data-testid="logout-button"
+                  styles={{
+                    root: {
+                      backgroundColor: states.logoutDisabled ? undefined : brandColors.red,
+                    },
+                  }}
+                >
+                  Logout
+                </Button>
+
+                <Button
+                  variant="filled"
+                  radius="md"
+                  disabled={states.editPasswordDisabled}
+                  onClick={openEditPassword}
+                  leftSection={<Icon icon="mdi:lock-outline" width={20} />}
+                  data-testid="edit-password-button"
+                  styles={{
+                    root: {
+                      backgroundColor: states.editPasswordDisabled
+                        ? undefined
+                        : brandColors.blue,
+                    },
+                  }}
+                >
+                  Edit Password
+                </Button>
+
+                <Button
+                  component="a"
+                  href={states.cliAgentsDisabled ? undefined : '/cli-agents'}
+                  variant="filled"
+                  radius="md"
+                  disabled={states.cliAgentsDisabled}
+                  leftSection={<Icon icon="mdi:console" width={20} />}
+                  data-testid="cli-agents-button"
+                  styles={{
+                    root: {
+                      backgroundColor: states.cliAgentsDisabled
+                        ? undefined
+                        : brandColors.green,
+                    },
+                  }}
+                >
+                  CLI Agents
+                </Button>
+              </Group>
+
+              <Box mt="md" />
+            </Stack>
+          </SimpleGrid>
+        </Paper>
+      )}
+    </>
+  );
+
+  const modals = (
+    <>
+      <EditPasswordModal opened={editPasswordOpened} onClose={closeEditPassword} />
+    </>
+  );
+
+  if (glass) {
+    return (
+      <GlassPage section="profile" title="Profile" description="Your account, your password and your CLI access.">
+        {body}
+      </GlassPage>
+    );
+  }
 
   return (
     <AppShell
@@ -158,123 +292,10 @@ const ProfileApp: React.FC = () => {
 
       <AppShell.Main>
         <Container size="lg" p="xl" fluid>
-          {loading ? (
-            <Center mih={300}>
-              <Loader />
-            </Center>
-          ) : !user ? (
-            <Center mih={300}>
-              <Stack align="center" gap="xs">
-                <Icon
-                  icon="mdi:account-off"
-                  width={32}
-                  color="var(--mantine-color-gray-6)"
-                />
-                <Text c="dimmed">No authenticated user.</Text>
-                <Button component="a" href="/auth" variant="light">
-                  Sign In
-                </Button>
-              </Stack>
-            </Center>
-          ) : (
-            <Paper shadow="md" radius="lg" p="xl" withBorder>
-              <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
-                <Paper
-                  radius="lg"
-                  p="xl"
-                  shadow="md"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    minHeight: 200,
-                    minWidth: 200,
-                  }}
-                >
-                  <AvatarFromEmail email={user.email} />
-                </Paper>
-
-                <Stack gap="lg">
-                  <Group justify="space-between">
-                    <Title order={2} fw={600}>
-                      User Profile
-                    </Title>
-                    <Icon icon="mdi:account-circle" width={36} height={36} />
-                  </Group>
-                  <Divider variant="dashed" my="md" size="sm" />
-
-                  <Stack gap="xs" style={{ padding: '16px 0' }}>
-                    <UserInfoRow label="Email" value={user.email} />
-                    <UserInfoRow label="Database ID" value={user.id || 'N/A'} />
-                    <UserInfoRow label="Registration Date" value={user.registration_date || 'N/A'} />
-                    <UserInfoRow label="Last login" value={user.last_login || 'N/A'} />
-                    <UserInfoRow label="Admin" value={user.is_admin ? 'Yes' : 'No'} />
-                  </Stack>
-
-                  <Group gap="md" justify="flex-start" mt="lg">
-                    <Button
-                      variant="filled"
-                      radius="md"
-                      disabled={states.logoutDisabled}
-                      onClick={handleLogout}
-                      leftSection={<Icon icon="mdi:logout" width={20} />}
-                      data-testid="logout-button"
-                      styles={{
-                        root: {
-                          backgroundColor: states.logoutDisabled ? undefined : brandColors.red,
-                        },
-                      }}
-                    >
-                      Logout
-                    </Button>
-
-                    <Button
-                      variant="filled"
-                      radius="md"
-                      disabled={states.editPasswordDisabled}
-                      onClick={openEditPassword}
-                      leftSection={<Icon icon="mdi:lock-outline" width={20} />}
-                      data-testid="edit-password-button"
-                      styles={{
-                        root: {
-                          backgroundColor: states.editPasswordDisabled
-                            ? undefined
-                            : brandColors.blue,
-                        },
-                      }}
-                    >
-                      Edit Password
-                    </Button>
-
-                    <Button
-                      component="a"
-                      href={states.cliAgentsDisabled ? undefined : '/cli-agents'}
-                      variant="filled"
-                      radius="md"
-                      disabled={states.cliAgentsDisabled}
-                      leftSection={<Icon icon="mdi:console" width={20} />}
-                      data-testid="cli-agents-button"
-                      styles={{
-                        root: {
-                          backgroundColor: states.cliAgentsDisabled
-                            ? undefined
-                            : brandColors.green,
-                        },
-                      }}
-                    >
-                      CLI Agents
-                    </Button>
-                  </Group>
-
-                  <Box mt="md" />
-                </Stack>
-              </SimpleGrid>
-            </Paper>
-          )}
+          {body}
         </Container>
       </AppShell.Main>
-
-      <EditPasswordModal opened={editPasswordOpened} onClose={closeEditPassword} />
+      {modals}
     </AppShell>
   );
 };

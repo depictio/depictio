@@ -89,6 +89,8 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
       <Tooltip label="Dashboard notes" position="left" withArrow>
         <ActionIcon
           aria-label="Toggle dashboard notes"
+          className="dc-notes-toggle"
+          data-testid="notes-toggle"
           onClick={handleToggle}
           variant="filled"
           color="gray"
@@ -96,7 +98,8 @@ const NotesFooter: React.FC<NotesFooterProps> = ({
           radius="xl"
           style={{
             position: 'fixed',
-            bottom: 16,
+            // Clears a layout's bottom action bar, when it has one.
+            bottom: 'calc(16px + var(--dc-bottom-offset, 0px))',
             right: 16,
             zIndex: Z_LAYERS.furniture,
             boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',

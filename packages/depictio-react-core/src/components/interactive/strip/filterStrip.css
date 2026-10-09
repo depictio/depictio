@@ -204,50 +204,8 @@
   min-height: var(--strip-control-height);
 }
 
-.depictio-filter-strip__more,
-.depictio-filter-strip__reset {
-  all: unset;
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 12px;
-  border-radius: var(--mantine-radius-md);
-  font-size: var(--mantine-font-size-sm);
-  font-weight: 500;
-  line-height: 1;
-  white-space: nowrap;
-  cursor: pointer;
-  transition:
-    background-color 120ms ease,
-    color 120ms ease;
-}
-
-.depictio-filter-strip__more {
-  color: var(--mantine-color-text);
-  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
-}
-
-.depictio-filter-strip__more:hover {
-  background: light-dark(var(--mantine-color-gray-2), var(--mantine-color-dark-5));
-}
-
-.depictio-filter-strip__reset {
-  padding-inline: 8px;
-  color: var(--mantine-color-dimmed);
-}
-
-.depictio-filter-strip__reset:hover {
-  color: var(--mantine-color-text);
-  background: light-dark(var(--mantine-color-gray-1), var(--mantine-color-dark-6));
-}
-
-.depictio-filter-strip__more:focus-visible,
-.depictio-filter-strip__reset:focus-visible {
-  outline: 2px solid var(--mantine-primary-color-filled);
-  outline-offset: 1px;
-}
+/* The More / Reset controls are ChromeButtons: their look is the chrome
+   style's (secondary / danger roles). Only the counts are drawn here. */
 
 .depictio-filter-strip__count {
   display: inline-flex;
@@ -282,6 +240,7 @@
 
 .depictio-filter-strip__more {
   position: relative;
+  overflow: visible;
 }
 
 /* How many folded filters are set: a bubble on the button's corner, so it

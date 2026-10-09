@@ -27,7 +27,7 @@ export type SidebarSection =
   | 'profile'
   | 'cli-agents';
 
-interface NavEntry {
+export interface NavEntry {
   key: SidebarSection;
   label: string;
   icon: string;
@@ -41,7 +41,7 @@ interface NavEntry {
 /** Mirrors `depictio/dash/layouts/sidebar.py:186-240` (4 NavLinks with same
  *  icons + colors). The Administration entry is hidden in Dash via a callback
  *  that flips visibility on `is_admin` — we filter the same way client-side. */
-const NAV_ENTRIES: NavEntry[] = [
+export const NAV_ENTRIES: NavEntry[] = [
   {
     key: 'dashboards',
     label: 'Dashboards',
@@ -80,15 +80,17 @@ interface AppSidebarProps {
   active: SidebarSection;
 }
 
-const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
+/** The entries this reader may see: Administration only for admins (matches
+ *  the Dash sidebar visibility callback at sidebar.py:721-756). Shared with
+ *  the Glass page shell (chrome/variants/glass/pages). */
+export function useAppNavEntries(): NavEntry[] {
   const { user } = useCurrentUser();
-  const brand = useBranding();
+  return NAV_ENTRIES.filter((entry) => entry.key !== 'admin' || Boolean(user?.is_admin));
+}
 
-  // Show the Administration link only to admins (matches the Dash sidebar
-  // visibility callback at sidebar.py:721-756).
-  const entries = NAV_ENTRIES.filter(
-    (entry) => entry.key !== 'admin' || Boolean(user?.is_admin),
-  );
+const AppSidebar: React.FC<AppSidebarProps> = ({ active }) => {
+  const brand = useBranding();
+  const entries = useAppNavEntries();
 
   return (
     <Stack gap="sm" h="100%" justify="space-between" data-testid="app-sidebar">

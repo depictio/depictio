@@ -454,6 +454,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
   // viewports.
   return (
     <div
+      className="dc-list-table"
       style={{
         border: '1px solid var(--mantine-color-default-border)',
         borderRadius: 8,
