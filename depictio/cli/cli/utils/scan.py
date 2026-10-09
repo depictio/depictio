@@ -93,12 +93,20 @@ def scan_single_file(
             # logger.debug(f"File {file_name} does not match regex, skipping.")
             return None
 
+    # A zero-byte output is a step that wrote nothing (SEACR on a library with
+    # no peaks): it holds no rows, and a File cannot have size zero.
+    filesize = os.path.getsize(file_location)
+    if filesize == 0:
+        rich_print_checked_statement(
+            f"Skipped empty file {escape(file_location)}: zero bytes, no rows", "warning"
+        )
+        return None
+
     # Get file details.
     creation_time_float = os.path.getctime(file_location)
     modification_time_float = os.path.getmtime(file_location)
     creation_time_iso = format_timestamp(creation_time_float)
     modification_time_iso = format_timestamp(modification_time_float)
-    filesize = os.path.getsize(file_location)
     file_hash = generate_file_hash(file_name, filesize, creation_time_iso, modification_time_iso)
     logger.debug(f"File Hash for {file_name}: {file_hash}")
 
