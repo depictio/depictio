@@ -1,5 +1,12 @@
 import { createContext, useContext } from 'react';
-import { createTheme, DEFAULT_THEME, type MantineColorsTuple, type MantineTheme } from '@mantine/core';
+import {
+  createTheme,
+  DEFAULT_THEME,
+  mergeThemeOverrides,
+  type MantineColorsTuple,
+  type MantineTheme,
+  type MantineThemeOverride,
+} from '@mantine/core';
 import { generateColors } from '@mantine/colors-generator';
 
 /**
@@ -176,6 +183,8 @@ function paletteOverrides(theme: BrandTheme): Record<string, MantineColorsTuple>
 export interface DepictioThemeOptions {
   /** Resolved brand theme; omit for the stock (unbranded) Depictio look. */
   brand?: BrandTheme | null;
+  /** The active chrome style's theme overrides, laid over the brand theme. */
+  chrome?: MantineThemeOverride | null;
 }
 
 const DEFAULT_FONT_FAMILY =
@@ -207,7 +216,7 @@ export function buildDepictioTheme(options: DepictioThemeOptions = {}) {
     colors[BRAND_PALETTES.primary] = stock[primaryColor] ?? stock.blue;
   }
 
-  return createTheme({
+  const theme = createTheme({
     fontFamily: brand?.font_family || DEFAULT_FONT_FAMILY,
     fontFamilyMonospace: 'Menlo, Monaco, Consolas, "Courier New", monospace',
     defaultRadius: (brand?.default_radius as 'xs' | 'sm' | 'md' | 'lg' | 'xl') || 'md',
@@ -233,6 +242,7 @@ export function buildDepictioTheme(options: DepictioThemeOptions = {}) {
       },
     },
   });
+  return options.chrome ? mergeThemeOverrides(theme, options.chrome) : theme;
 }
 
 /** Back-compat alias: the unbranded theme. */

@@ -28,6 +28,7 @@ import type {
 import { emptyDashboardFilters } from './hooks/useDashboardViewPrefs';
 import { useBrandAccents } from 'depictio-react-core';
 import ShareViewButton from '../components/listing/ShareViewButton';
+import GlassTray from '../chrome/variants/glass/pages/GlassTray';
 import CardDisplayMenu from './CardDisplayMenu';
 
 export type FilterOption = { value: string; label: string };
@@ -375,7 +376,7 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
 
   return (
     <Stack gap="xs" mb="md">
-      <Group gap="xs" wrap="nowrap" align="center">
+      <Group gap="xs" wrap="nowrap" align="center" className="dc-list-toolbar">
         <TextInput
           placeholder="Search dashboards…"
           value={prefs.search}
@@ -418,60 +419,62 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
           />
         )}
 
-        <Tooltip
-          label={
-            pinDisabled
-              ? 'Pinning is disabled in public mode'
-              : prefs.onlyPinned
-                ? 'Show all dashboards'
-                : `Show favorites only${pinnedCount ? ` (${pinnedCount})` : ''}`
-          }
-          withinPortal
-        >
-          <ActionIcon
-            variant={prefs.onlyPinned ? 'light' : 'default'}
-            color={prefs.onlyPinned ? 'yellow' : undefined}
-            size="lg"
-            radius="md"
-            onClick={() => setOnlyPinned(!prefs.onlyPinned)}
-            disabled={pinDisabled || (pinnedCount === 0 && !prefs.onlyPinned)}
-            aria-label="Toggle favorites filter"
-            aria-pressed={prefs.onlyPinned}
+        <GlassTray>
+          <Tooltip
+            label={
+              pinDisabled
+                ? 'Pinning is disabled in public mode'
+                : prefs.onlyPinned
+                  ? 'Show all dashboards'
+                  : `Show favorites only${pinnedCount ? ` (${pinnedCount})` : ''}`
+            }
+            withinPortal
           >
-            <Icon
-              icon={prefs.onlyPinned ? 'mdi:star' : 'mdi:star-outline'}
-              width={18}
-            />
-          </ActionIcon>
-        </Tooltip>
+            <ActionIcon
+              variant={prefs.onlyPinned ? 'light' : 'default'}
+              color={prefs.onlyPinned ? 'yellow' : undefined}
+              size="lg"
+              radius="md"
+              onClick={() => setOnlyPinned(!prefs.onlyPinned)}
+              disabled={pinDisabled || (pinnedCount === 0 && !prefs.onlyPinned)}
+              aria-label="Toggle favorites filter"
+              aria-pressed={prefs.onlyPinned}
+            >
+              <Icon
+                icon={prefs.onlyPinned ? 'mdi:star' : 'mdi:star-outline'}
+                width={18}
+              />
+            </ActionIcon>
+          </Tooltip>
 
-        <FilterPopover
-          prefs={prefs}
-          projectOptions={projectOptions}
-          ownerOptions={ownerOptions}
-          templateOptions={templateOptions}
-          workflowOptions={workflowOptions}
-          setFilters={setFilters}
-        />
-
-        <ShareViewButton
-          describes={
-            hasAnyActive
-              ? `this filtered view (${matchingCount} dashboard${matchingCount === 1 ? '' : 's'})`
-              : 'the full dashboard list'
-          }
-        />
-
-        {showCardDisplay && (
-          <CardDisplayMenu
-            cardsPerRow={prefs.cardsPerRow}
-            cardBadges={prefs.cardBadges}
-            onCardsPerRowChange={setCardsPerRow}
-            onCardBadgesChange={setCardBadges}
+          <FilterPopover
+            prefs={prefs}
+            projectOptions={projectOptions}
+            ownerOptions={ownerOptions}
+            templateOptions={templateOptions}
+            workflowOptions={workflowOptions}
+            setFilters={setFilters}
           />
-        )}
 
-        <ViewPicker value={prefs.view} onChange={setView} />
+          <ShareViewButton
+            describes={
+              hasAnyActive
+                ? `this filtered view (${matchingCount} dashboard${matchingCount === 1 ? '' : 's'})`
+                : 'the full dashboard list'
+            }
+          />
+
+          {showCardDisplay && (
+            <CardDisplayMenu
+              cardsPerRow={prefs.cardsPerRow}
+              cardBadges={prefs.cardBadges}
+              onCardsPerRowChange={setCardsPerRow}
+              onCardBadgesChange={setCardBadges}
+            />
+          )}
+
+          <ViewPicker value={prefs.view} onChange={setView} />
+        </GlassTray>
       </Group>
 
       {showFilterChips && activeFilterChips.length > 0 && (

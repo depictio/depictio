@@ -2,6 +2,8 @@ import { Button, Group, PasswordInput, Stack, Text, TextInput } from '@mantine/c
 import { useState } from 'react';
 import { loginUser, persistSession, registerUser } from 'depictio-react-core';
 
+import { useGlassPages } from '../../chrome/variants/glass/pages';
+
 const EMAIL_RE = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/;
 
 interface Props {
@@ -16,6 +18,7 @@ export default function RegisterForm({ onSwitchToLogin, onSuccess }: Props) {
   const [confirm, setConfirm] = useState('');
   const [feedback, setFeedback] = useState<{ kind: 'error' | 'success'; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const glass = useGlassPages();
 
   const emailValid = EMAIL_RE.test(email);
   const canSubmit =
@@ -51,6 +54,61 @@ export default function RegisterForm({ onSwitchToLogin, onSuccess }: Props) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  // Glass: one column, the commit full width; the way back to sign in is the
+  // card's foot (AuthApp).
+  if (glass) {
+    return (
+      <>
+        <TextInput
+          label="Email"
+          placeholder="name@example.org"
+          value={email}
+          onChange={(e) => setEmail(e.currentTarget.value)}
+          error={email.length > 0 && !emailValid ? 'Enter a valid email address' : null}
+          autoComplete="email"
+          data-autofocus
+          data-testid="register-email"
+        />
+        <PasswordInput
+          label="Password"
+          placeholder="Choose a password"
+          value={password}
+          onChange={(e) => setPassword(e.currentTarget.value)}
+          autoComplete="new-password"
+          data-testid="register-password"
+        />
+        <PasswordInput
+          label="Confirm password"
+          placeholder="Type it again"
+          value={confirm}
+          onChange={(e) => setConfirm(e.currentTarget.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+          autoComplete="new-password"
+          data-testid="register-confirm-password"
+        />
+        {feedback && (
+          <p
+            className={feedback.kind === 'error' ? 'gp-auth-error' : 'gp-auth-ok'}
+            role={feedback.kind === 'error' ? 'alert' : 'status'}
+            data-testid="user-feedback-message-register"
+          >
+            {feedback.text}
+          </p>
+        )}
+        <Button
+          fullWidth
+          mt={4}
+          loading={submitting}
+          disabled={!canSubmit}
+          onClick={handleSubmit}
+          data-testid="register-button"
+        >
+          Create account
+        </Button>
+      </>
+    );
   }
 
   return (

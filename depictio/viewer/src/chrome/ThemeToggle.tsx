@@ -18,7 +18,7 @@ const ThemeToggle: React.FC = () => {
 
   return (
     <Switch
-      size="lg"
+      size="md"
       color={color}
       checked={checked}
       onChange={() => toggle()}

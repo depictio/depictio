@@ -203,7 +203,7 @@ export const InteractiveFrame: React.FC<InteractiveFrameProps> = ({ compact, chi
       radius="md"
       shadow="xs"
       withBorder
-      className="dashboard-component-hover"
+      className="dashboard-component-hover dc-tile dc-tile--interactive"
       style={{
         height: '100%',
         display: 'flex',

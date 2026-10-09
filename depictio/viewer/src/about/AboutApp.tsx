@@ -15,6 +15,7 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
+import { GlassPage, useGlassPages } from '../chrome/variants/glass/pages';
 
 import { AppSidebar } from '../chrome';
 import { usePageTitle } from '../branding';
@@ -104,6 +105,89 @@ const AboutApp: React.FC = () => {
   const [desktopOpened, { toggle: toggleDesktop }] = useDisclosure(true);
 
   usePageTitle('About');
+  const glass = useGlassPages();
+
+  const body = (
+    <>
+      <Stack gap={48}>
+        <AboutSection title="Resources">
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xl">
+            <AboutCard
+              icon="mdi:github"
+              title="GitHub Repository"
+              description="Explore the source code of Depictio on GitHub."
+              buttonLabel="GitHub"
+              buttonIcon="mdi:github"
+              href="https://github.com/depictio/depictio"
+            />
+            <AboutCard
+              icon="mdi:file-document"
+              title="Documentation"
+              description="Learn how to use Depictio with our comprehensive documentation."
+              buttonLabel="Documentation"
+              buttonIcon="mdi:file-document-box"
+              href="https://depictio.github.io/depictio-docs/"
+            />
+          </SimpleGrid>
+        </AboutSection>
+
+        <AboutSection title="Funding">
+          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="xl">
+            <AboutCard
+              imagePath={`${LOGO_BASE}/EN_fundedbyEU_VERTICAL_RGB_POS.png`}
+              title="Marie Sklodowska-Curie Grant"
+              description="This project has received funding from the European Union's Horizon 2020 research and innovation programme under the Marie Sklodowska-Curie grant agreement No 945405"
+              href="https://marie-sklodowska-curie-actions.ec.europa.eu/"
+            />
+            <AboutCard
+              imagePath={`${LOGO_BASE}/AriseLogo300dpi.png`}
+              title="ARISE Programme"
+              description="ARISE is a postdoctoral research programme for technology developers, hosted at EMBL."
+              href="https://www.embl.org/about/info/arise/"
+            />
+            <AboutCard
+              imagePath={`${LOGO_BASE}/EMBL_logo_colour_DIGITAL.png`}
+              title="EMBL"
+              description="The European Molecular Biology Laboratory is Europe's flagship laboratory for the life sciences."
+              href="https://www.embl.org/"
+            />
+          </SimpleGrid>
+        </AboutSection>
+
+        <AboutSection title="Academic Partners">
+          <Center>
+            <div style={{ width: '100%', maxWidth: SINGLE_CARD_WIDTH }}>
+              <AboutCard
+                imagePath={`${LOGO_BASE}/scilifelab_logo.png`}
+                title="SciLifeLab Data Centre"
+                description="SciLifeLab Data Centre provides data-driven life science research infrastructure and expertise to accelerate open science in Sweden and beyond."
+                href="https://www.scilifelab.se/data/"
+              />
+            </div>
+          </Center>
+        </AboutSection>
+
+        {/* Computed rather than written out, so the notice cannot go
+            stale the way the hardcoded 2025 did. */}
+        <Text size="xs" c="dimmed" ta="center">
+          {new Date().getFullYear()} Depictio. Developed by Thomas Weber. All rights
+          reserved.
+        </Text>
+      </Stack>
+    </>
+  );
+
+  if (glass) {
+    return (
+      <GlassPage
+        section="about"
+        title="About"
+        description="Where depictio lives, how to learn it and who builds it."
+      >
+        {body}
+      </GlassPage>
+    );
+  }
 
   return (
     <AppShell
@@ -157,71 +241,7 @@ const AboutApp: React.FC = () => {
 
       <AppShell.Main>
         <Container size="lg" py="xl">
-          <Stack gap={48}>
-            <AboutSection title="Resources">
-              <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="xl">
-                <AboutCard
-                  icon="mdi:github"
-                  title="GitHub Repository"
-                  description="Explore the source code of Depictio on GitHub."
-                  buttonLabel="GitHub"
-                  buttonIcon="mdi:github"
-                  href="https://github.com/depictio/depictio"
-                />
-                <AboutCard
-                  icon="mdi:file-document"
-                  title="Documentation"
-                  description="Learn how to use Depictio with our comprehensive documentation."
-                  buttonLabel="Documentation"
-                  buttonIcon="mdi:file-document-box"
-                  href="https://depictio.github.io/depictio-docs/"
-                />
-              </SimpleGrid>
-            </AboutSection>
-
-            <AboutSection title="Funding">
-              <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="xl">
-                <AboutCard
-                  imagePath={`${LOGO_BASE}/EN_fundedbyEU_VERTICAL_RGB_POS.png`}
-                  title="Marie Sklodowska-Curie Grant"
-                  description="This project has received funding from the European Union's Horizon 2020 research and innovation programme under the Marie Sklodowska-Curie grant agreement No 945405"
-                  href="https://marie-sklodowska-curie-actions.ec.europa.eu/"
-                />
-                <AboutCard
-                  imagePath={`${LOGO_BASE}/AriseLogo300dpi.png`}
-                  title="ARISE Programme"
-                  description="ARISE is a postdoctoral research programme for technology developers, hosted at EMBL."
-                  href="https://www.embl.org/about/info/arise/"
-                />
-                <AboutCard
-                  imagePath={`${LOGO_BASE}/EMBL_logo_colour_DIGITAL.png`}
-                  title="EMBL"
-                  description="The European Molecular Biology Laboratory is Europe's flagship laboratory for the life sciences."
-                  href="https://www.embl.org/"
-                />
-              </SimpleGrid>
-            </AboutSection>
-
-            <AboutSection title="Academic Partners">
-              <Center>
-                <div style={{ width: '100%', maxWidth: SINGLE_CARD_WIDTH }}>
-                  <AboutCard
-                    imagePath={`${LOGO_BASE}/scilifelab_logo.png`}
-                    title="SciLifeLab Data Centre"
-                    description="SciLifeLab Data Centre provides data-driven life science research infrastructure and expertise to accelerate open science in Sweden and beyond."
-                    href="https://www.scilifelab.se/data/"
-                  />
-                </div>
-              </Center>
-            </AboutSection>
-
-            {/* Computed rather than written out, so the notice cannot go
-                stale the way the hardcoded 2025 did. */}
-            <Text size="xs" c="dimmed" ta="center">
-              {new Date().getFullYear()} Depictio. Developed by Thomas Weber. All rights
-              reserved.
-            </Text>
-          </Stack>
+          {body}
         </Container>
       </AppShell.Main>
     </AppShell>

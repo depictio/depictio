@@ -25,8 +25,8 @@ const ProfileBadge: React.FC = () => {
       <Button
         component="a"
         href="/auth/login"
-        variant="outline"
-        color="blue"
+        variant="light"
+        color="gray"
         size="xs"
         leftSection={<Icon icon="mdi:login" width={14} />}
       >

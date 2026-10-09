@@ -33,6 +33,7 @@ import {
 } from './StripControls';
 import { stripControlKind, stripLabel, stripShowsIcon, visibleFilterCount } from './stripLayout';
 import './filterStrip.css';
+import { ChromeButton } from '../../../chrome/ChromeButton';
 
 /** The brand's primary, as the dashboard's `BrandScope` resolved it. */
 const BRAND_ACCENT = 'var(--mantine-primary-color-filled)';
@@ -58,8 +59,45 @@ export interface FilterStripProps {
 
 /** Whether the bar's control for `m` is narrowing anything. Selections made on
  *  a chart carry a `source`; the bar's own value never does. */
-const isMemberActive = (filters: InteractiveFilter[], m: StoredMetadata) =>
+export const isMemberActive = (filters: InteractiveFilter[], m: StoredMetadata) =>
   filters.some((f) => f.index === m.index && f.source === undefined && isFilterActive(f));
+
+/**
+ * The compact control the bar draws for one filter, on its own: a layout that
+ * puts each filter in a chip, a popover or a drawer row of its own uses this
+ * rather than the whole bar.
+ */
+export const FilterStripControl: React.FC<{
+  metadata: StoredMetadata;
+  filters: InteractiveFilter[];
+  onFilterChange?: (filter: InteractiveFilter) => void;
+  /** Visible name; the metadata's short label by default. */
+  label?: string;
+}> = ({ metadata, filters, onFilterChange, label: labelProp }) => {
+  const kind = stripControlKind(metadata.interactive_component_type);
+  const label = labelProp ?? stripLabel(metadata, interactiveTitle(metadata));
+  const accent = interactiveAccent(metadata) ?? BRAND_ACCENT;
+  const props = { metadata, filters, onFilterChange, label };
+  switch (kind) {
+    case 'categorical':
+      return <StripCategorical {...props} />;
+    case 'range':
+      return <StripRange {...props} accent={accent} />;
+    case 'slider':
+      return <StripSlider {...props} accent={accent} />;
+    case 'toggle':
+      return <StripToggle {...props} accent={accent} />;
+    case 'date':
+      return <StripDate {...props} />;
+    default:
+      return (
+        <Text size="xs" c="dimmed">
+          {metadata.interactive_component_type} has no filter-bar form; it works in the
+          filter panel.
+        </Text>
+      );
+  }
+};
 
 const FilterStripItem: React.FC<{
   metadata: StoredMetadata;
@@ -76,33 +114,14 @@ const FilterStripItem: React.FC<{
   const label = stripLabel(metadata, title);
   const accent = interactiveAccent(metadata) ?? BRAND_ACCENT;
   const active = isMemberActive(filters, metadata);
-  const props = { metadata, filters, onFilterChange, label };
-
-  let control: React.ReactNode;
-  switch (kind) {
-    case 'categorical':
-      control = <StripCategorical {...props} />;
-      break;
-    case 'range':
-      control = <StripRange {...props} accent={accent} />;
-      break;
-    case 'slider':
-      control = <StripSlider {...props} accent={accent} />;
-      break;
-    case 'toggle':
-      control = <StripToggle {...props} accent={accent} />;
-      break;
-    case 'date':
-      control = <StripDate {...props} />;
-      break;
-    default:
-      control = (
-        <Text size="xs" c="dimmed">
-          {metadata.interactive_component_type} has no filter-bar form; it works in the
-          filter panel.
-        </Text>
-      );
-  }
+  const control = (
+    <FilterStripControl
+      metadata={metadata}
+      filters={filters}
+      onFilterChange={onFilterChange}
+      label={label}
+    />
+  );
 
   return (
     <div
@@ -216,8 +235,17 @@ export const FilterStrip: React.FC<FilterStripProps> = ({
               maw={260}
               openDelay={300}
             >
-              <button
-                type="button"
+              <ChromeButton
+                role="secondary"
+                icon={expanded ? 'lessFilters' : 'moreFilters'}
+                label={
+                  expanded
+                    ? 'Fewer filters'
+                    : `More filters: ${folded.length} hidden${
+                        foldedActive > 0 ? `, ${foldedActive} active` : ''
+                      }`
+                }
+                tooltip={null}
                 className="depictio-filter-strip__more"
                 aria-expanded={expanded}
                 aria-controls={gridId}
@@ -229,37 +257,39 @@ export const FilterStrip: React.FC<FilterStripProps> = ({
                       }`
                 }
                 onClick={() => setExpanded((v) => !v)}
+                rightSection={
+                  <>
+                    <span
+                      className="depictio-filter-strip__count"
+                      data-hidden={expanded || undefined}
+                    >
+                      {folded.length}
+                    </span>
+                    {/* Folded filters still filter: say how many, or a reader
+                        would wonder why the figures disagree with the chips. */}
+                    {!expanded && foldedActive > 0 && (
+                      <span className="depictio-filter-strip__active-count">{foldedActive}</span>
+                    )}
+                  </>
+                }
               >
-                <Icon
-                  icon={expanded ? 'mdi:chevron-up' : 'mdi:tune-variant'}
-                  width={16}
-                  height={16}
-                />
                 <span className="depictio-filter-strip__more-label">
                   <span data-shown={!expanded}>More filters</span>
                   <span data-shown={expanded}>Fewer filters</span>
                 </span>
-                <span className="depictio-filter-strip__count" data-hidden={expanded || undefined}>
-                  {folded.length}
-                </span>
-                {/* Folded filters still filter: say how many, or a reader
-                    would wonder why the figures disagree with the chips. */}
-                {!expanded && foldedActive > 0 && (
-                  <span className="depictio-filter-strip__active-count">{foldedActive}</span>
-                )}
-              </button>
+              </ChromeButton>
             </Tooltip>
           )}
           {onReset && (
-            <button
-              type="button"
+            <ChromeButton
+              role="danger"
+              icon="reset"
+              label="Reset"
+              tooltip={null}
               className="depictio-filter-strip__reset"
               data-hidden={!canReset || undefined}
               onClick={onReset}
-            >
-              <Icon icon="mdi:filter-remove-outline" width={15} height={15} />
-              <span>Reset</span>
-            </button>
+            />
           )}
         </div>
       )}

@@ -11,6 +11,7 @@ import {
   type BrandTheme,
 } from '../../brandTheme';
 import { useResolvedBrandTheme } from './useResolvedBrandTheme';
+import { useChromeStyle } from '../../chrome/chromeStyle';
 
 /**
  * Applies a dashboard's brand override to its own subtree (#397).
@@ -68,7 +69,11 @@ const ScopedProvider: React.FC<{ theme: BrandTheme; children: React.ReactNode }>
   // lands the hook hands back the unresolved merge, which already carries
   // every colour the chrome needs.
   const resolved = useResolvedBrandTheme(merged);
-  const mantineTheme = React.useMemo(() => buildDepictioTheme({ brand: resolved }), [resolved]);
+  const chrome = useChromeStyle().themeOverrides;
+  const mantineTheme = React.useMemo(
+    () => buildDepictioTheme({ brand: resolved, chrome }),
+    [resolved, chrome],
+  );
   const cssVariablesResolver = React.useMemo(
     () => brandCssVariablesResolver(resolved),
     [resolved],

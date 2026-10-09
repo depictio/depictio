@@ -12,6 +12,7 @@
 import type { MantineTheme } from '@mantine/core';
 
 import { brandColorway } from '../../colors';
+import { applyChromePlotly } from '../../chrome/plotlyPatch';
 
 export interface PlotlyThemeColors {
   textColor: string;
@@ -158,7 +159,8 @@ export function applyLayoutTheme(
 
   // Theme-level overrides win — put them AFTER the per-key pass so explicit
   // theme values aren't clobbered by server-baked defaults from the input.
-  return {
+  // The active chrome style's patch goes last of all.
+  return applyChromePlotly({
     ...out,
     template: isDark ? 'plotly_dark' : 'plotly_white',
     plot_bgcolor: c.bgColor,
@@ -167,7 +169,7 @@ export function applyLayoutTheme(
     // Plotly only reaches for the colorway on traces that named no colour of
     // their own, so a figure that colours its traces explicitly is untouched.
     ...(c.colorway ? { colorway: c.colorway } : {}),
-  };
+  }, isDark ? 'dark' : 'light');
 }
 
 /** Trace-level retint — covers per-trace `colorbar` (heatmap, contour),

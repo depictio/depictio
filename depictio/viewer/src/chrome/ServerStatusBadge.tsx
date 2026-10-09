@@ -5,7 +5,7 @@ import { useServerStatus } from '../hooks/useServerStatus';
 
 /**
  * Mirrors the Dash sidebar footer status badge:
- * - online → green dot, "Server online — v{version}"
+ * - online → green dot, "Server online · v{version}"
  * - offline / unknown → red outline, "Server offline"
  */
 const ServerStatusBadge: React.FC = () => {
@@ -14,7 +14,7 @@ const ServerStatusBadge: React.FC = () => {
   if (status === 'online') {
     return (
       <Badge variant="dot" color="green" size="sm">
-        {version ? `Server online — v${version}` : 'Server online'}
+        {version ? `Server online · v${version}` : 'Server online'}
       </Badge>
     );
   }

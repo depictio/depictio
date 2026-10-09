@@ -1,10 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import {
   ActionIcon,
-  AppShell,
   Button,
   Center,
-  Drawer,
   Group,
   Text,
   Loader,
@@ -59,7 +57,6 @@ import {
   SelectionGroupsPanel,
   SaveGroupContext,
   BrandScope,
-  Z_LAYERS,
   tabLinkKey,
   buildGuideModel,
   resolveGuideSettings,
@@ -102,7 +99,11 @@ const ingestionBannerKey = (projectId: string) =>
  *  enough that a single deliberate change still feels immediate. */
 const FILTER_DEBOUNCE_MS = 250;
 import { notifications } from '@mantine/notifications';
-import { Header, Sidebar, RunParametersHost, SettingsDrawer, TabIntro } from './chrome';
+import { Sidebar, RunParametersHost, SettingsDrawer, TabIntro } from './chrome';
+import type { HeaderAction } from './chrome/Header';
+import ShellHost from './chrome/shell/ShellHost';
+import type { FilterPanelOptions } from './chrome/shell/types';
+import { useChromeVariant } from './chrome/variants';
 import TabLinkProvider from './chrome/TabLinkProvider';
 import { useSidebarOpen } from './hooks/useSidebarOpen';
 import { useContentScaleStyle } from './hooks/useUiScalePref';
@@ -111,7 +112,7 @@ import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
-import FilterPanelResizer, { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
+import { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
 import GroupingHeaderControl, {
   ANALYSIS_PANEL_WIDTH_PX,
 } from './components/GroupingHeaderControl';
@@ -940,6 +941,8 @@ const App: React.FC = () => {
     () => tabSiblings.find((d) => !d.parent_dashboard_id) || null,
     [tabSiblings],
   );
+  // The reader's chrome style (Glass or Classic, see chrome/variants).
+  useChromeVariant();
 
   const interactiveComponents = useMemo(
     () => (dashboard?.stored_metadata || []).filter((m) => m.component_type === 'interactive'),
@@ -1217,6 +1220,424 @@ const App: React.FC = () => {
     [guide, isNarrow, mobileOpened, toggleMobile, leftComponents, openFilterDrawer],
   );
 
+  // The page's regions, handed to the active chrome style's Shell (see
+  // chrome/shell/types.ts), which decides where each one goes.
+  const ready = Boolean(dashboard) && !loading && !error;
+  const headerActions: HeaderAction[] = [];
+  if (dashboard) {
+    headerActions.push({ id: 'comments', group: 'read', node: <CommentsHeaderButton /> });
+    headerActions.push({
+      id: 'analysis',
+      group: 'read',
+      node: (
+        <GroupingHeaderControl
+          groupCount={groupsApi.groups.length}
+          colorBy={groupsApi.colorBy}
+          opened={analysisOpen}
+          onOpenedChange={handleAnalysisOpenChange}
+          armed={analysisArmed}
+          onToggle={handleAnalysisToggle}
+          pushesContent={!isNarrow}
+        >
+          {groupsSection}
+        </GroupingHeaderControl>
+      ),
+    });
+  }
+  if (realtimeEnabled) {
+    headerActions.push({
+      id: 'realtime',
+      group: 'read',
+      node: (
+        <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
+          <RealtimeIndicator
+            status={realtime.status}
+            mode={realtimeMode}
+            paused={realtimePaused}
+            pendingUpdate={realtime.pendingUpdate}
+            onModeChange={persistMode}
+            onPausedChange={setRealtimePaused}
+            onAcknowledgePending={() => {
+              realtime.acknowledgePending();
+              triggerRefresh();
+            }}
+            journal={journal}
+            onClearJournal={clearJournal}
+            onHighlightBatch={handleHighlightBatch}
+            onClearHighlight={handleClearHighlight}
+            activeHighlightKey={activeHighlight?.batchKey}
+          />
+        </span>
+      ),
+    });
+  }
+  const guideEntry =
+      guideSettings.enabled && dashboard
+        ? {
+            open: guide.open,
+            href: guide.href,
+            onOpen: openGuideFromSidebar,
+            onClose: closeGuideFromSidebar,
+          }
+        : undefined;
+  const filterPanel = (opts?: FilterPanelOptions) =>
+    dashboard ? (
+      <FilterPanel
+        components={leftComponents}
+        allMetadata={summaryMetadata}
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        onResetAllFilters={handleResetAllFilters}
+        layoutData={dashboard.left_panel_layout_data}
+        filterSections={panelFilterSections}
+        dashboardId={dashboardId}
+        stateScopeId={panelScopeId}
+        headerActions={<MapPanelControl panel={mapPanel} />}
+        refreshTick={refreshTick}
+        collapsed={opts?.docked ? !filterPanelOpened : undefined}
+        onToggleCollapsed={opts?.docked ? toggleFilterPanel : undefined}
+        funnel={{
+          enabled: funnelEnabled,
+          onToggle: () => setFunnelEnabled((v) => !v),
+          onOpenView: () => setFunnelViewOpen(true),
+        }}
+        groupSummaryRows={groupSummaryRows}
+        footer={
+          opts?.docked ? (
+            <MapPanelDock
+              panel={mapPanel}
+              // Docked maps render data, so they must see active group
+              // filters too (instant copy: group toggles are single clicks,
+              // no debounce needed). Tab-wide only: a section bar's filters
+              // stay with its section.
+              filters={tabFilters}
+              onFilterChange={handleFilterChange}
+              refreshTick={refreshTick}
+            />
+          ) : undefined
+        }
+      />
+    ) : null;
+  const boot = (
+    <>
+      {dashboard?.preview && (
+        <VersionPreviewBanner
+          preview={dashboard.preview}
+          dashboardId={dashboardId}
+          // Restoring is a write, so it lives in the editor's History; an
+          // owner gets the way there. The editor route is owner-only.
+          editHref={isOwner && dashboardId ? dashboardHref(dashboardId, 'edit') : null}
+          currentDataOnly={currentDataOnlyCount}
+        />
+      )}
+      {ingestionHealth &&
+        ingestionProjectId &&
+        !ingestionBannerDismissed &&
+        (ingestionHealth.health === 'missing_required' ||
+          ingestionHealth.health === 'partial') &&
+        (() => {
+          const critical = ingestionHealth.health === 'missing_required';
+          const color = critical ? 'red' : 'yellow';
+          const dismiss = () => {
+            setIngestionBannerDismissed(true);
+            try {
+              localStorage.setItem(ingestionBannerKey(ingestionProjectId), '1');
+            } catch {
+              /* storage unavailable — dismissal is in-memory only this session */
+            }
+          };
+          // Compact one-line bar: softer for "partial", stronger for the
+          // critical "missing required" case. Uses Mantine color tokens so it
+          // tracks the theme (no hardcoded literals).
+          return (
+            <Paper
+              m="sm"
+              py={6}
+              px="sm"
+              radius="md"
+              withBorder
+              style={{ backgroundColor: `var(--mantine-color-${color}-light)` }}
+            >
+              <Group justify="space-between" align="center" wrap="nowrap" gap="sm">
+                <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
+                  <Icon
+                    icon={critical ? 'mdi:alert-octagon' : 'mdi:alert'}
+                    width={18}
+                    color={`var(--mantine-color-${color}-7)`}
+                  />
+                  <Text size="sm" fw={500} truncate>
+                    {critical
+                      ? `${ingestionHealth.required_missing} required data collection(s) were not ingested.`
+                      : 'Ingestion partial — some optional data collections are missing.'}
+                  </Text>
+                </Group>
+                <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
+                  <Button
+                    component="a"
+                    href={`/projects/${ingestionProjectId}#ingestion`}
+                    size="xs"
+                    radius="xl"
+                    variant="white"
+                    color={color}
+                    leftSection={
+                      <Icon icon="mdi:clipboard-text-search-outline" width={15} />
+                    }
+                    rightSection={<Icon icon="mdi:arrow-right" width={15} />}
+                  >
+                    View report
+                  </Button>
+                  <ActionIcon
+                    variant="filled"
+                    color={color}
+                    radius="xl"
+                    size="md"
+                    onClick={dismiss}
+                    aria-label="Dismiss"
+                  >
+                    <Icon icon="mdi:close" width={16} />
+                  </ActionIcon>
+                </Group>
+              </Group>
+            </Paper>
+          );
+        })()}
+      {/* Dashboard-document fetch: no panels exist yet, so there is nothing
+          for the header indicator to count. No prose — the title is already on
+          screen, so naming the phase adds nothing. */}
+      {loading && <BootSplash />}
+      {error && <Text c="red" p="lg">{error}</Text>}
+    </>
+  );
+  const canvas =
+    ready && dashboard ? (
+      <Box
+        data-testid="dashboard-content"
+        // Under the Guide: kept mounted (and its figures loaded) for when
+        // the Guide closes, but neither painted nor in the focus order.
+        // Only the canvas: the filter panel stays on screen beside the
+        // Guide, so its "Show me" rings the real panel in place.
+        aria-hidden={guide.open || undefined}
+        style={{
+          visibility: guide.open ? 'hidden' : undefined,
+          // Page-width preference: the canvas centres in what the
+          // filter panel leaves, the panel staying by the sidebar.
+          padding: 4,
+          ...(contentMaxWidth !== null
+            ? {
+                paddingInline: `max(4px, calc((100% - ${contentMaxWidth}px) / 2))`,
+                transition: 'padding 200ms ease',
+              }
+            : null),
+          height: '100%',
+          minWidth: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          // Content font-size preference — scales the dashboard tiles
+          // below, never the surrounding chrome (header, sidebar, panel).
+          ...contentScaleStyle,
+        }}
+      >
+        {/* The tab's own description, ahead of everything the canvas
+            holds — including a foreign `pin: top` section, which would
+            otherwise introduce another tab before this one is named. */}
+        <TabIntro dashboard={dashboard} activeTab={activeTab} />
+        {/* Only claims the leftover height when nothing follows it —
+            otherwise a short grid would push the bottom-pinned sections
+            to the fold with a gap above them. */}
+        <Box style={{ flex: bottomGridSections.length > 0 ? '0 0 auto' : 1, minHeight: 0 }}>
+          {rightComponents.length === 0 ? (
+            <>
+            {topSectionsHost}
+            <Center style={{ height: '100%', minHeight: 320 }}>
+              <Stack align="center" gap="md" maw={420}>
+                <Box
+                  style={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: '50%',
+                    background: 'var(--mantine-color-gray-1)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <Icon icon="mdi:view-dashboard-outline" width={36} color="var(--mantine-color-gray-5)" />
+                </Box>
+                <Stack gap={4} align="center">
+                  <Title order={4} fw={700} ta="center">
+                    This dashboard is empty
+                  </Title>
+                  <Text size="sm" c="dimmed" ta="center">
+                    No components have been added yet.
+                    {canEditNow && ' Start editing to add visualizations, tables, and more.'}
+                  </Text>
+                </Stack>
+                {canEditNow && (
+                  <Button
+                    component="a"
+                    href={`/dashboard-edit/${dashboardId}`}
+                    leftSection={<Icon icon="mdi:pencil" width={16} />}
+                    size="md"
+                    variant="filled"
+                  >
+                    Start editing
+                  </Button>
+                )}
+              </Stack>
+            </Center>
+            </>
+          ) : (
+            <DashboardGrid
+              dashboardId={dashboardId!}
+              metadataList={rightComponents}
+              layoutData={dashboard.right_panel_layout_data}
+              gridSections={dashboard.grid_sections}
+              beforeSections={topSectionsHost}
+              filters={deferredFilters}
+              controlFilters={filters}
+              filterScopes={filterScopes}
+              onResetFilters={handleResetFilterIndices}
+              onFilterChange={handleFilterChange}
+              cardValues={cardValues}
+              cardSecondaryValues={cardSecondaryValues}
+              cardValuesLoading={cardsLoading}
+              refreshTick={refreshTick}
+              activeHighlight={activeHighlight}
+              groupRender={groupRender}
+              isDraggable={false}
+              isResizable={false}
+              editMode={false}
+              autofit={dashboard?.autofit !== false}
+            />
+          )}
+        </Box>
+        {bottomGridSections.length > 0 && (
+          <div style={{ flexShrink: 0 }}>
+            <PersistentSectionsHost
+              sections={bottomGridSections}
+              familyId={crossTab.familyId}
+              slot="bottom"
+              filters={deferredFilters}
+              controlFilters={filters}
+              filterScopes={filterScopes}
+              onResetBarFilters={handleResetFilterIndices}
+              onFilterChange={handleFilterChange}
+              refreshTick={refreshTick}
+              groupRender={groupRender}
+              bulkOptions={groupsApi.bulkOptions}
+              onResetFilters={handleResetAllFilters}
+              autofit={dashboard?.autofit !== false}
+            />
+          </div>
+        )}
+      </Box>
+    ) : null;
+  // Full-width footer spanning both the filter panel and the content column.
+  // Hosts top-placement interactive controls (the Timeline scrubber) as an
+  // always-visible global filter, pinned below the scrollable columns.
+  const topStrip =
+    ready && topComponents.length > 0 ? (
+      <Box
+        px="md"
+        py={6}
+        style={{
+          flexShrink: 0,
+          width: '100%',
+          borderTop: '1px solid var(--mantine-color-default-border)',
+          background: 'var(--mantine-color-body)',
+        }}
+      >
+        <Box style={contentScaleStyle}>
+          <TopPanel
+            components={topComponents}
+            filters={filters}
+            onFilterChange={handleFilterChange}
+            refreshTick={refreshTick}
+          />
+        </Box>
+      </Box>
+    ) : null;
+  const overlays = (
+    <>
+      {dashboardId && (
+        <FunnelView
+          opened={funnelViewOpen}
+          onClose={() => setFunnelViewOpen(false)}
+          dashboardId={dashboardId}
+          filters={tabDeferredFilters}
+          groups={groupsApi.groups}
+        />
+      )}
+      {/* The page's fixed furniture sits above the Guide's layer; hidden
+          with the canvas while the Guide is up. */}
+      <div style={guide.open ? { visibility: 'hidden' } : undefined}>
+        {/* Unmounted while previewing. It would start from the snapshot's
+            notes, and `saveDashboardNotes` writes the editor's text onto the
+            live dashboard it re-reads, so a save here would put a past
+            version's notes over the live ones. */}
+        {dashboard && dashboardId && !inspectorEnabled && !previewVersionId && (
+          <NotesFooter
+            dashboardId={dashboardId}
+            initialContent={(dashboard.notes_content as string) ?? ''}
+            permissions={dashboard.permissions as DashboardPermissions | undefined}
+          />
+        )}
+        {dashboard && dashboardId && (
+          <MapPanelSurface
+            panel={mapPanel}
+            // Floating maps render data: give them group filters too (see the
+            // docked MapPanelDock above), and the tab's only.
+            filters={tabFilters}
+            onFilterChange={handleFilterChange}
+            refreshTick={refreshTick}
+          />
+        )}
+      </div>
+      {guide.open && guideModel && dashboard && dashboardId && (
+        <DashboardGuide
+          model={guideModel}
+          dashboardId={dashboardId}
+          dashboard={dashboard}
+          components={rightComponents}
+          tabs={tabSiblings}
+          persistentSections={crossTab.persistentSections}
+          dashboardName={parentTab?.title || dashboard.title || 'Dashboard'}
+          tabName={guideModel.tabs.current?.label ?? dashboard.title ?? 'the tab'}
+          intro={guideSettings.intro}
+          mode="view"
+          onClose={guide.closeGuide}
+          onOpenYourView={() => openSettingsAt('view')}
+        />
+      )}
+    </>
+  );
+  const outside = (
+    <>
+      <SettingsDrawer
+        opened={settingsOpened}
+        onClose={closeSettings}
+        dashboard={dashboard}
+        initialSection={settingsSection}
+      />
+      {/* Opens on a dashboard's `params:` links. */}
+      <RunParametersHost dashboard={dashboard} />
+      {/* Cmd/Ctrl+K and the header's magnifier: search every tab. */}
+      <DashboardSpotlight
+        opened={searchOpened}
+        onOpen={openSearch}
+        onClose={closeSearch}
+        tabs={tabSiblings}
+        currentId={dashboardId}
+        dashboard={dashboard}
+        mode="view"
+        ready={Boolean(dashboard) && !loading && !error}
+        onBeforeFocus={uncoverForSearch}
+      />
+    </>
+  );
+
   return (
     // Every renderer reads its pin from here rather than taking it as a prop:
     // the fetch happens deep in the shared component package, and the decision
@@ -1259,568 +1680,82 @@ const App: React.FC = () => {
         onApplyViewState={handleApplyViewState}
         currentUser={currentUser}
       >
-      <AppShell
-      header={{ height: 50 }}
-      navbar={{
-        width: 250,
-        breakpoint: 'sm',
-        collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
-      }}
-      aside={inspectorAside}
-      padding={0}
-      transitionDuration={300}
-      transitionTimingFunction="ease"
-    >
-      <AppShell.Header data-tour-id="header-title">
-        <Header
-          dashboardId={dashboardId}
-          dashboard={dashboard}
-          activeTab={activeTab}
-          parentTab={parentTab}
-          mobileOpened={mobileOpened}
-          desktopOpened={desktopOpened}
-          onToggleMobile={toggleMobile}
-          onToggleDesktop={toggleDesktop}
-          onOpenSettings={() => openSettingsAt()}
-          onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
-          filterCount={activeFilterCount}
-          onOpenSearch={dashboard ? openSearch : undefined}
-          cardsLoading={cardsLoading}
-          isOwner={canEditNow}
-          titleExtras={
+      <ShellHost
+        mode="view"
+        isNarrow={Boolean(isNarrow)}
+        ready={ready}
+        headerProps={{
+          dashboardId,
+          dashboard,
+          activeTab,
+          parentTab,
+          mobileOpened,
+          desktopOpened,
+          onToggleMobile: toggleMobile,
+          onToggleDesktop: toggleDesktop,
+          onOpenSettings: () => openSettingsAt(),
+          onOpenFilters: isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined,
+          filterCount: activeFilterCount,
+          onOpenSearch: dashboard ? openSearch : undefined,
+          cardsLoading,
+          isOwner: canEditNow,
+          titleExtras:
             dashboard && !loading && !error ? (
               <DashboardLoadIndicator metadataList={rightComponents} cardsLoading={cardsLoading} />
-            ) : undefined
-          }
-          // Undefined rather than an empty fragment when realtime is off:
-          // the header rules this slot off from the action buttons, and an
-          // empty group would leave a divider with nothing beside it.
-          rightExtras={
-            dashboard || realtimeEnabled ? (
-            <>
-              {dashboard && <CommentsHeaderButton />}
-              {dashboard && (
-                <GroupingHeaderControl
-                  groupCount={groupsApi.groups.length}
-                  colorBy={groupsApi.colorBy}
-                  opened={analysisOpen}
-                  onOpenedChange={handleAnalysisOpenChange}
-                  armed={analysisArmed}
-                  onToggle={handleAnalysisToggle}
-                  pushesContent={!isNarrow}
-                >
-                  {groupsSection}
-                </GroupingHeaderControl>
-              )}
-              {realtimeEnabled && (
-                <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
-                  <RealtimeIndicator
-                    status={realtime.status}
-                    mode={realtimeMode}
-                    paused={realtimePaused}
-                    pendingUpdate={realtime.pendingUpdate}
-                    onModeChange={persistMode}
-                    onPausedChange={setRealtimePaused}
-                    onAcknowledgePending={() => {
-                      realtime.acknowledgePending();
-                      triggerRefresh();
-                    }}
-                    journal={journal}
-                    onClearJournal={clearJournal}
-                    onHighlightBatch={handleHighlightBatch}
-                    onClearHighlight={handleClearHighlight}
-                    activeHighlightKey={activeHighlight?.batchKey}
-                  />
-                </span>
-              )}
-            </>
-            ) : undefined
-          }
-        />
-      </AppShell.Header>
-
-      <AppShell.Navbar p="md" data-tour-id="sidebar">
-        <Sidebar
-          tabs={tabSiblings}
-          activeId={dashboardId}
-          versionId={previewVersionId}
-          brandTheme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}
-          guide={
-            guideSettings.enabled && dashboard
-              ? {
-                  open: guide.open,
-                  href: guide.href,
-                  onOpen: openGuideFromSidebar,
-                  onClose: closeGuideFromSidebar,
-                }
-              : undefined
-          }
-        />
-      </AppShell.Navbar>
-
-      <AppShell.Main
-        style={{
-          height: 'calc(100vh - 50px)',
-          // The Analysis panel is a Drawer, not an AppShell slot (the single
-          // `aside` belongs to the inspector), so nothing offsets the content
-          // for it and it would sit on top of the rightmost tiles — the ones
-          // a user opens it to lasso a group out of. Pad by exactly its width
-          // and let the grid re-measure (see ANALYSIS_PANEL_TOGGLE_EVENT).
-          // Not on a narrow viewport, where the panel is ~92vw and padding
-          // would leave no dashboard at all: there it overlays, as a drawer.
-          paddingRight: analysisOpen && !isNarrow ? ANALYSIS_PANEL_WIDTH_PX : 0,
-          transition: 'padding-right 250ms ease',
+            ) : undefined,
+          extraActions: headerActions,
         }}
-      >
-        {dashboard?.preview && (
-          <VersionPreviewBanner
-            preview={dashboard.preview}
-            dashboardId={dashboardId}
-            // Restoring is a write, so it lives in the editor's History; an
-            // owner gets the way there. The editor route is owner-only.
-            editHref={isOwner && dashboardId ? dashboardHref(dashboardId, 'edit') : null}
-            currentDataOnly={currentDataOnlyCount}
-          />
-        )}
-        {ingestionHealth &&
-          ingestionProjectId &&
-          !ingestionBannerDismissed &&
-          (ingestionHealth.health === 'missing_required' ||
-            ingestionHealth.health === 'partial') &&
-          (() => {
-            const critical = ingestionHealth.health === 'missing_required';
-            const color = critical ? 'red' : 'yellow';
-            const dismiss = () => {
-              setIngestionBannerDismissed(true);
-              try {
-                localStorage.setItem(ingestionBannerKey(ingestionProjectId), '1');
-              } catch {
-                /* storage unavailable — dismissal is in-memory only this session */
-              }
-            };
-            // Compact one-line bar: softer for "partial", stronger for the
-            // critical "missing required" case. Uses Mantine color tokens so it
-            // tracks the theme (no hardcoded literals).
-            return (
-              <Paper
-                m="sm"
-                py={6}
-                px="sm"
-                radius="md"
-                withBorder
-                style={{ backgroundColor: `var(--mantine-color-${color}-light)` }}
-              >
-                <Group justify="space-between" align="center" wrap="nowrap" gap="sm">
-                  <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
-                    <Icon
-                      icon={critical ? 'mdi:alert-octagon' : 'mdi:alert'}
-                      width={18}
-                      color={`var(--mantine-color-${color}-7)`}
-                    />
-                    <Text size="sm" fw={500} truncate>
-                      {critical
-                        ? `${ingestionHealth.required_missing} required data collection(s) were not ingested.`
-                        : 'Ingestion partial — some optional data collections are missing.'}
-                    </Text>
-                  </Group>
-                  <Group gap={8} wrap="nowrap" style={{ flexShrink: 0 }}>
-                    <Button
-                      component="a"
-                      href={`/projects/${ingestionProjectId}#ingestion`}
-                      size="xs"
-                      radius="xl"
-                      variant="white"
-                      color={color}
-                      leftSection={
-                        <Icon icon="mdi:clipboard-text-search-outline" width={15} />
-                      }
-                      rightSection={<Icon icon="mdi:arrow-right" width={15} />}
-                    >
-                      View report
-                    </Button>
-                    <ActionIcon
-                      variant="filled"
-                      color={color}
-                      radius="xl"
-                      size="md"
-                      onClick={dismiss}
-                      aria-label="Dismiss"
-                    >
-                      <Icon icon="mdi:close" width={16} />
-                    </ActionIcon>
-                  </Group>
-                </Group>
-              </Paper>
-            );
-          })()}
-        {/* Dashboard-document fetch: no panels exist yet, so there is nothing
-            for the header indicator to count. No prose — the title is already on
-            screen, so naming the phase adds nothing. */}
-        {loading && <BootSplash />}
-        {error && <Text c="red" p="lg">{error}</Text>}
-        {dashboard && !loading && !error && (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              height: '100%',
-              width: '100%',
-              overflow: 'hidden',
-            }}
-          >
-          <div
-            ref={filterPanelLayoutRef}
-            // Cast because `CSSProperties` has no index signature for custom
-            // properties, and the name is a constant rather than a literal.
-            style={{
-              // The panel track comes from a variable so a drag can move it
-              // without a React render — see `useFilterPanelWidth`. React owns
-              // the value everywhere else, including here on every commit.
-              [FILTER_PANEL_WIDTH_VAR]: `${
-                filterPanelOpened ? filterPanelWidth : FILTER_PANEL_RAIL_WIDTH
-              }px`,
-              display: 'grid',
-              // Panel | drag handle | content. The handle gets a real column
-              // rather than floating over the panel edge, so it can't overlap
-              // the controls underneath. The track count stays at three
-              // whatever the panel's state, because `grid-template-columns`
-              // only animates between templates with matching track counts.
-              gridTemplateColumns: isNarrow
-                ? '1fr'
-                : `var(${FILTER_PANEL_WIDTH_VAR}) ` +
-                  `${filterPanelOpened ? FILTER_PANEL_RESIZER_WIDTH : 0}px 1fr`,
-              // Matches the panel's own toggle duration so the grid items,
-              // which animate on `body.panel-transitioning`, stay in lockstep.
-              // Dropped while dragging: the transition is for the collapse
-              // toggle, and easing every pointermove over 300ms is what makes
-              // the handle feel like it's being towed rather than moved.
-              transition: filterPanelResizing
-                ? 'none'
-                : 'grid-template-columns 300ms ease',
-              flex: 1,
-              minHeight: 0,
-              width: '100%',
-              gap: 4,
-              overflow: 'hidden',
-            } as React.CSSProperties}
-          >
-            {!isNarrow && (
-              <Box
-                px={4}
-                py={4}
-                style={{
-                  // The panel scrolls its own filter list, so this wrapper must
-                  // not scroll too — that is what keeps the docked map pinned
-                  // to the bottom while a long list scrolls past it.
-                  height: '100%',
-                  minWidth: 0,
-                  overflow: 'hidden',
-                }}
-              >
-                <FilterPanel
-                  components={leftComponents}
-                  allMetadata={summaryMetadata}
-                  filters={filters}
-                  onFilterChange={handleFilterChange}
-                  onResetAllFilters={handleResetAllFilters}
-                  layoutData={dashboard.left_panel_layout_data}
-                  filterSections={panelFilterSections}
-                  dashboardId={dashboardId}
-                  stateScopeId={panelScopeId}
-                  headerActions={<MapPanelControl panel={mapPanel} />}
-                  refreshTick={refreshTick}
-                  collapsed={!filterPanelOpened}
-                  onToggleCollapsed={toggleFilterPanel}
-                  funnel={{
-                    enabled: funnelEnabled,
-                    onToggle: () => setFunnelEnabled((v) => !v),
-                    onOpenView: () => setFunnelViewOpen(true),
-                  }}
-                  groupSummaryRows={groupSummaryRows}
-                  footer={
-                    <MapPanelDock
-                      panel={mapPanel}
-                      // Docked maps render data, so they must see active group
-                      // filters too (instant copy: group toggles are single
-                      // clicks, no debounce needed). Tab-wide only: a section
-                      // bar's filters stay with its section.
-                      filters={tabFilters}
-                      onFilterChange={handleFilterChange}
-                      refreshTick={refreshTick}
-                    />
-                  }
-                />
-              </Box>
-            )}
-            {!isNarrow && (
-              <FilterPanelResizer
-                onPointerDown={beginFilterPanelResize}
-                onNudge={nudgeFilterPanelWidth}
-                collapsed={!filterPanelOpened}
-              />
-            )}
-            <Box
-              data-testid="dashboard-content"
-              // Under the Guide: kept mounted (and its figures loaded) for when
-              // the Guide closes, but neither painted nor in the focus order.
-              // Only the canvas: the filter panel stays on screen beside the
-              // Guide, so its "Show me" rings the real panel in place.
-              aria-hidden={guide.open || undefined}
-              style={{
-                visibility: guide.open ? 'hidden' : undefined,
-                // Page-width preference: the canvas centres in what the
-                // filter panel leaves, the panel staying by the sidebar.
-                padding: 4,
-                ...(contentMaxWidth !== null
-                  ? {
-                      paddingInline: `max(4px, calc((100% - ${contentMaxWidth}px) / 2))`,
-                      transition: 'padding 200ms ease',
-                    }
-                  : null),
-                height: '100%',
-                minWidth: 0,
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                display: 'flex',
-                flexDirection: 'column',
-                // Content font-size preference — scales the dashboard tiles
-                // below, never the surrounding chrome (header, sidebar, panel).
-                ...contentScaleStyle,
-              }}
-            >
-              {/* The tab's own description, ahead of everything the canvas
-                  holds — including a foreign `pin: top` section, which would
-                  otherwise introduce another tab before this one is named. */}
-              <TabIntro dashboard={dashboard} activeTab={activeTab} />
-              {/* Only claims the leftover height when nothing follows it —
-                  otherwise a short grid would push the bottom-pinned sections
-                  to the fold with a gap above them. */}
-              <Box style={{ flex: bottomGridSections.length > 0 ? '0 0 auto' : 1, minHeight: 0 }}>
-                {rightComponents.length === 0 ? (
-                  <>
-                  {topSectionsHost}
-                  <Center style={{ height: '100%', minHeight: 320 }}>
-                    <Stack align="center" gap="md" maw={420}>
-                      <Box
-                        style={{
-                          width: 72,
-                          height: 72,
-                          borderRadius: '50%',
-                          background: 'var(--mantine-color-gray-1)',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                        }}
-                      >
-                        <Icon icon="mdi:view-dashboard-outline" width={36} color="var(--mantine-color-gray-5)" />
-                      </Box>
-                      <Stack gap={4} align="center">
-                        <Title order={4} fw={700} ta="center">
-                          This dashboard is empty
-                        </Title>
-                        <Text size="sm" c="dimmed" ta="center">
-                          No components have been added yet.
-                          {canEditNow && ' Start editing to add visualizations, tables, and more.'}
-                        </Text>
-                      </Stack>
-                      {canEditNow && (
-                        <Button
-                          component="a"
-                          href={`/dashboard-edit/${dashboardId}`}
-                          leftSection={<Icon icon="mdi:pencil" width={16} />}
-                          size="md"
-                          variant="filled"
-                        >
-                          Start editing
-                        </Button>
-                      )}
-                    </Stack>
-                  </Center>
-                  </>
-                ) : (
-                  <DashboardGrid
-                    dashboardId={dashboardId!}
-                    metadataList={rightComponents}
-                    layoutData={dashboard.right_panel_layout_data}
-                    gridSections={dashboard.grid_sections}
-                    beforeSections={topSectionsHost}
-                    filters={deferredFilters}
-                    controlFilters={filters}
-                    filterScopes={filterScopes}
-                    onResetFilters={handleResetFilterIndices}
-                    onFilterChange={handleFilterChange}
-                    cardValues={cardValues}
-                    cardSecondaryValues={cardSecondaryValues}
-                    cardValuesLoading={cardsLoading}
-                    refreshTick={refreshTick}
-                    activeHighlight={activeHighlight}
-                    groupRender={groupRender}
-                    isDraggable={false}
-                    isResizable={false}
-                    editMode={false}
-                    autofit={dashboard?.autofit !== false}
-                  />
-                )}
-              </Box>
-              {bottomGridSections.length > 0 && (
-                <div style={{ flexShrink: 0 }}>
-                  <PersistentSectionsHost
-                    sections={bottomGridSections}
-                    familyId={crossTab.familyId}
-                    slot="bottom"
-                    filters={deferredFilters}
-                    controlFilters={filters}
-                    filterScopes={filterScopes}
-                    onResetBarFilters={handleResetFilterIndices}
-                    onFilterChange={handleFilterChange}
-                    refreshTick={refreshTick}
-                    groupRender={groupRender}
-                    bulkOptions={groupsApi.bulkOptions}
-                    onResetFilters={handleResetAllFilters}
-                    autofit={dashboard?.autofit !== false}
-                  />
-                </div>
-              )}
-            </Box>
-          </div>
-          {/* Full-width footer spanning both the filter panel and the content
-              column. Hosts top-placement interactive controls (the Timeline
-              scrubber) as an always-visible global filter, pinned below the
-              scrollable columns. */}
-          {topComponents.length > 0 && (
-            <Box
-              px="md"
-              py={6}
-              style={{
-                flexShrink: 0,
-                width: '100%',
-                borderTop: '1px solid var(--mantine-color-default-border)',
-                background: 'var(--mantine-color-body)',
-              }}
-            >
-              <Box style={contentScaleStyle}>
-                <TopPanel
-                  components={topComponents}
-                  filters={filters}
-                  onFilterChange={handleFilterChange}
-                  refreshTick={refreshTick}
-                />
-              </Box>
-            </Box>
-          )}
-          </div>
-        )}
-        {/* Narrow screens: the panel the grid no longer has room for. No
-            collapse control inside — the drawer's own close is the way out. */}
-        {dashboard && isNarrow && (
-          <Drawer
-            opened={filterDrawerOpened}
-            onClose={closeFilterDrawer}
-            position="left"
-            size="min(320px, 85vw)"
-            zIndex={Z_LAYERS.overlay}
-            title="Filters"
-          >
-            <FilterPanel
-              components={leftComponents}
-              allMetadata={summaryMetadata}
-              filters={filters}
-              onFilterChange={handleFilterChange}
-              onResetAllFilters={handleResetAllFilters}
-              layoutData={dashboard.left_panel_layout_data}
-              filterSections={panelFilterSections}
-              dashboardId={dashboardId}
-              stateScopeId={panelScopeId}
-              refreshTick={refreshTick}
-              funnel={{
-                enabled: funnelEnabled,
-                onToggle: () => setFunnelEnabled((v) => !v),
-                onOpenView: () => setFunnelViewOpen(true),
-              }}
-              groupSummaryRows={groupSummaryRows}
-              headerActions={<MapPanelControl panel={mapPanel} />}
+        nav={{
+          node: (
+            <Sidebar
+              tabs={tabSiblings}
+              activeId={dashboardId}
+              versionId={previewVersionId}
+              brandTheme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}
+              guide={guideEntry}
             />
-          </Drawer>
-        )}
-        {dashboardId && (
-          <FunnelView
-            opened={funnelViewOpen}
-            onClose={() => setFunnelViewOpen(false)}
-            dashboardId={dashboardId}
-            filters={tabDeferredFilters}
-            groups={groupsApi.groups}
-          />
-        )}
-        {/* The page's fixed furniture sits above the Guide's layer; hidden
-            with the canvas while the Guide is up. */}
-        <div style={guide.open ? { visibility: 'hidden' } : undefined}>
-          {/* Unmounted while previewing. It would start from the snapshot's
-              notes, and `saveDashboardNotes` writes the editor's text onto the
-              live dashboard it re-reads, so a save here would put a past
-              version's notes over the live ones. */}
-          {dashboard && dashboardId && !inspectorEnabled && !previewVersionId && (
-            <NotesFooter
-              dashboardId={dashboardId}
-              initialContent={(dashboard.notes_content as string) ?? ''}
-              permissions={dashboard.permissions as DashboardPermissions | undefined}
-            />
-          )}
-          {dashboard && dashboardId && (
-            <MapPanelSurface
-              panel={mapPanel}
-              // Floating maps render data: give them group filters too (see the
-              // docked MapPanelDock above), and the tab's only.
-              filters={tabFilters}
-              onFilterChange={handleFilterChange}
-              refreshTick={refreshTick}
-            />
-          )}
-        </div>
-        {guide.open && guideModel && dashboard && dashboardId && (
-          <DashboardGuide
-            model={guideModel}
-            dashboardId={dashboardId}
-            dashboard={dashboard}
-            components={rightComponents}
-            tabs={tabSiblings}
-            persistentSections={crossTab.persistentSections}
-            dashboardName={parentTab?.title || dashboard.title || 'Dashboard'}
-            tabName={guideModel.tabs.current?.label ?? dashboard.title ?? 'the tab'}
-            intro={guideSettings.intro}
-            mode="view"
-            onClose={guide.closeGuide}
-            onOpenYourView={() => openSettingsAt('view')}
-          />
-        )}
-      </AppShell.Main>
-
-      {inspectorEnabled && (
-        <AppShell.Aside p={0}>
-          <Inspector dashboard={dashboard} dashboardId={dashboardId} />
-        </AppShell.Aside>
-      )}
-
-      <SettingsDrawer
-        opened={settingsOpened}
-        onClose={closeSettings}
-        dashboard={dashboard}
-        initialSection={settingsSection}
+          ),
+          tabs: tabSiblings,
+          activeId: dashboardId,
+          guide: guideEntry,
+          versionId: previewVersionId,
+          mobileOpened,
+          desktopOpened,
+          toggleMobile,
+          toggleDesktop,
+        }}
+        boot={boot}
+        canvas={canvas}
+        topStrip={topStrip}
+        filters={{
+          members: leftComponents,
+          values: filters,
+          onChange: handleFilterChange,
+          reset: handleResetAllFilters,
+          count: activeFilterCount,
+          panel: filterPanel,
+          docked: {
+            opened: filterPanelOpened,
+            toggle: toggleFilterPanel,
+            width: filterPanelWidth,
+            widthVar: FILTER_PANEL_WIDTH_VAR,
+            layoutRef: filterPanelLayoutRef,
+            resizing: filterPanelResizing,
+            beginResize: beginFilterPanelResize,
+            nudge: nudgeFilterPanelWidth,
+          },
+          drawer: { opened: filterDrawerOpened, open: openFilterDrawer, close: closeFilterDrawer },
+        }}
+        overlays={overlays}
+        outside={outside}
+        inspector={{
+          enabled: inspectorEnabled,
+          node: <Inspector dashboard={dashboard} dashboardId={dashboardId} />,
+          aside: inspectorAside,
+        }}
+        analysis={{ open: analysisOpen, widthPx: ANALYSIS_PANEL_WIDTH_PX }}
+        guideOpen={guide.open}
       />
-      {/* Opens on a dashboard's `params:` links. */}
-      <RunParametersHost dashboard={dashboard} />
-      {/* Cmd/Ctrl+K and the header's magnifier: search every tab. */}
-      <DashboardSpotlight
-        opened={searchOpened}
-        onOpen={openSearch}
-        onClose={closeSearch}
-        tabs={tabSiblings}
-        currentId={dashboardId}
-        dashboard={dashboard}
-        mode="view"
-        ready={Boolean(dashboard) && !loading && !error}
-        onBeforeFocus={uncoverForSearch}
-      />
-    </AppShell>
       </CommentsProvider>
       </TabLinkProvider>
       </CategoryColorsContext.Provider>
