@@ -9,7 +9,9 @@
  * bar with suggestions. Keyboard: arrows move and expand, Enter selects.
  *
  * With a private bucket's connection details, that bucket is listed under
- * "S3" too and everything in it is read with them.
+ * "S3" too and everything in it is read with them. A folder refused for want
+ * of them opens the form that asks for them below the path bar; once a test
+ * connects, the browser opens that folder.
  *
  * Rendered inside the create dialog's `Modal.Stack`, so it opens above that
  * dialog and Escape closes only this one.
@@ -17,6 +19,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActionIcon,
+  Box,
   Button,
   Grid,
   Group,
@@ -35,6 +38,7 @@ import { Icon } from '@iconify/react';
 
 import {
   folderSource,
+  isPrivateBucketRefusal,
   s3BucketOf,
   shortenFolder,
   storageForLocation,
@@ -113,8 +117,13 @@ interface FolderBrowserModalProps {
   /** The server may browse the S3 locations it lists. */
   s3Enabled: boolean;
   /** A private bucket and its connection details: listed under "S3" and
-   *  read with them. */
+   *  read with them. A new object starts a fresh tree. */
   privateBucket?: RunStorageBinding | null;
+  /** The connection details form for the bucket of `location`, shown below
+   *  the path bar when reading it was refused for want of them. */
+  credentialsForm?: (location: string) => React.ReactNode;
+  /** Reading `location` was refused for want of its bucket's details. */
+  onCredentialsNeeded?: (location: string) => void;
   /** For the names of the templates recognised in folders. */
   templates: TemplateInfo[];
 }
@@ -128,6 +137,8 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
   localEnabled,
   s3Enabled,
   privateBucket = null,
+  credentialsForm,
+  onCredentialsNeeded,
   templates,
 }) => {
   const folderTree = useFolderTree({ opened, localEnabled, s3Enabled, privateBucket });
@@ -138,6 +149,9 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
   const [pathError, setPathError] = useState<string | null>(null);
   const [revealing, setRevealing] = useState(false);
   const [revealTarget, setRevealTarget] = useState<string | null>(null);
+  /** A location refused for want of its bucket's connection details: the
+   *  form for them shows, and the location opens once they are given. */
+  const [credentialsFor, setCredentialsFor] = useState<string | null>(null);
   const [recent, setRecent] = useState<RecentRunFolders>({ local: [], s3: [] });
   /** Run markers read by the detail pane, by location. */
   const [inspected, setInspected] = useState<Record<string, boolean>>({});
@@ -169,6 +183,8 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
       selectionRun.current += 1;
       setRevealing(false);
       setRevealTarget(null);
+      // The form stays while the reader stays in its bucket.
+      setCredentialsFor((cur) => (cur && s3BucketOf(cur) !== s3BucketOf(path) ? null : cur));
       selectFolder(path);
     },
     [selectFolder],
@@ -184,9 +200,16 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
       if (run !== selectionRun.current) return;
       setRevealing(false);
       if (!result.ok) {
-        if (!quiet && result.error) setPathError(result.error);
+        const target = location.trim();
+        const needsCredentials =
+          Boolean(credentialsForm) && Boolean(s3BucketOf(target)) && isPrivateBucketRefusal(result.code);
+        setCredentialsFor(needsCredentials ? target : null);
+        if (needsCredentials) onCredentialsNeeded?.(target);
+        // Said even on opening: the form below needs its reason.
+        if ((!quiet || needsCredentials) && result.error) setPathError(result.error);
         return;
       }
+      setCredentialsFor(null);
       tree.setExpandedState((prev) => {
         const next = { ...prev };
         for (const key of result.expand) next[key] = true;
@@ -195,7 +218,7 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
       selectFolder(result.path);
       setRevealTarget(result.path);
     },
-    [folderTree, tree, selectFolder],
+    [folderTree, tree, selectFolder, credentialsForm, onCredentialsNeeded],
   );
 
   // Every opening starts from the roots, on the field's folder when it can
@@ -209,12 +232,15 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
     setPathError(null);
     setRevealing(false);
     setRevealTarget(null);
+    setCredentialsFor(null);
     setInspected({});
     setRecent(readRecentRunFolders());
     const start = (initialLocation ?? '').trim();
     if (start) {
       const source = folderSource(start);
-      if ((source === 's3' && s3Shown) || (source === 'local' && localEnabled)) {
+      // An S3 folder the server cannot list opens the form for its bucket.
+      const s3Browsable = s3Shown || Boolean(credentialsForm);
+      if ((source === 's3' && s3Browsable) || (source === 'local' && localEnabled)) {
         setPathInput(start);
         void goTo(start, true);
       }
@@ -222,6 +248,15 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
     // Only opening matters: the field cannot change while this modal is on top.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened]);
+
+  // The details of the refused folder's bucket were given (a successful
+  // test): open it, in the fresh tree they start.
+  useEffect(() => {
+    if (!opened || !credentialsFor || !storageForLocation(credentialsFor, privateBucket)) return;
+    void goTo(credentialsFor);
+    // Only new details matter; `goTo` clears the refused folder on success.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [privateBucket]);
 
   // Expanding a folder lists its sub-folders, once.
   useEffect(() => {
@@ -347,6 +382,10 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
           busy={revealing}
           placeholder={localEnabled ? '/path/to/results/run42 or s3://bucket/run42/' : 's3://bucket/results/run42/'}
         />
+
+        {credentialsFor && credentialsForm && (
+          <Box data-testid="browse-private-bucket">{credentialsForm(credentialsFor)}</Box>
+        )}
 
         <Grid gutter="md">
           <Grid.Col span={{ base: 12, md: 4 }}>

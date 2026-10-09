@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TreeNodeData } from '@mantine/core';
 
 import {
+  apiErrorCode,
   folderAncestors,
   folderName,
   folderSource,
@@ -65,8 +66,10 @@ export interface ChildrenState {
 
 export type RevealResult =
   | { ok: true; path: string; expand: string[] }
-  /** `error` is empty when the browser closed meanwhile (nothing to say). */
-  | { ok: false; error: string };
+  /** `error` is empty when the browser closed meanwhile (nothing to say);
+   *  `code` is the server's error code, or `s3_refused` for an S3 location
+   *  the browser cannot list without the bucket's credentials. */
+  | { ok: false; error: string; code?: string | null };
 
 export interface TreeNodeProps {
   kind: 'group' | 'folder' | 'placeholder';
@@ -128,11 +131,11 @@ export function useFolderTree({
 }) {
   /** The S3 group is shown for the listed locations, a private bucket, or both. */
   const s3Shown = s3Enabled || Boolean(privateBucket);
-  /** Read at request time, so `load` stays the same function: the details
-   *  cannot change while the browser is open (it sits above the form). */
+  /** Read at request time, so `load` stays the same function. New details
+   *  (another bucket, a successful test) are a new object, and start a fresh
+   *  tree: nothing listed with the previous ones is kept. */
   const privateRef = useRef(privateBucket);
   privateRef.current = privateBucket;
-  const privateKey = privateBucket?.bucket ?? null;
   const [nodes, setNodes] = useState<Record<string, FolderNode>>({});
   const [children, setChildren] = useState<Record<string, ChildrenState>>({});
   /** Mirrors `children` synchronously, so a load can tell "already listed"
@@ -250,7 +253,7 @@ export function useFolderTree({
       epoch.current += 1;
       inflight.current.clear();
     };
-  }, [opened, localEnabled, s3Shown, privateKey, load]);
+  }, [opened, localEnabled, s3Shown, privateBucket, load]);
 
   /** Record what an inspection learnt about a folder's run markers. */
   const markRun = useCallback((path: string, looksLikeRun: boolean) => {
@@ -267,7 +270,11 @@ export function useFolderTree({
       if (!target) return { ok: false, error: 'Type a folder path first.' };
       const source = folderSource(target);
       if (source === 's3' && !s3Shown) {
-        return { ok: false, error: 'Browsing S3 is not available on this server.' };
+        return {
+          ok: false,
+          error: 'This server browses no S3 location without the bucket\u2019s credentials.',
+          code: 's3_refused',
+        };
       }
       if (source === 'local') {
         if (!localEnabled) {
@@ -290,7 +297,11 @@ export function useFolderTree({
         listing = await fetchListing(target, s3Enabled, privateRef.current);
       } catch (err) {
         if (run !== epoch.current) return { ok: false, error: '' };
-        return { ok: false, error: (err as Error).message || 'This folder could not be opened.' };
+        return {
+          ok: false,
+          error: (err as Error).message || 'This folder could not be opened.',
+          code: apiErrorCode(err),
+        };
       }
       if (run !== epoch.current) return { ok: false, error: '' };
       const resolved = normalizeFolder(listing.path ?? target);
