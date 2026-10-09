@@ -100,23 +100,37 @@ def _rescan(workflow, runs: list[dict], files: list[dict]):
     runs_response.json.return_value = runs
     cli_config = MagicMock()
     cli_config.user.model_dump.side_effect = lambda: {**OWNER, "token": None}
+
+    def _deleted(ids, *_args, **_kwargs):
+        # The batch deletes answer with how many the server removed.
+        return len(ids)
+
     with (
         patch("depictio.cli.cli.utils.scan.api_get_files_by_dc_id", return_value=files_response),
         patch("depictio.cli.cli.utils.scan.api_get_runs_by_wf_id", return_value=runs_response),
-        patch("depictio.cli.cli.utils.scan.api_create_files"),
+        patch(
+            "depictio.cli.cli.utils.scan.api_create_files_chunked",
+            return_value=[MagicMock(status_code=200)],
+        ),
         patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch") as upsert,
-        patch("depictio.cli.cli.utils.scan.api_delete_run") as delete_run,
-        patch("depictio.cli.cli.utils.scan.api_delete_file") as delete_file,
+        patch("depictio.cli.cli.utils.scan.api_delete_runs", side_effect=_deleted) as delete_runs,
+        patch("depictio.cli.cli.utils.scan.api_delete_files", side_effect=_deleted) as delete_files,
     ):
+        upsert.return_value = MagicMock(status_code=200)
         result = scan_files_for_workflow(
             workflow=workflow,
             data_collections=workflow.data_collections,
             CLI_config=cli_config,
-            command_parameters={"rescan_folders": True, "sync_files": True, "rich_tables": False},
+            command_parameters={
+                "rescan_folders": True,
+                "sync_files": True,
+                "rich_tables": False,
+                "state_cache": False,
+            },
         )
     assert result["result"] == "success"
-    deleted_files = {c.kwargs["file_id"] for c in delete_file.call_args_list}
-    deleted_runs = {c.kwargs["run_id"] for c in delete_run.call_args_list}
+    deleted_files = {i for c in delete_files.call_args_list for i in c.args[0]}
+    deleted_runs = {i for c in delete_runs.call_args_list for i in c.args[0]}
     return deleted_files, deleted_runs, upsert
 
 

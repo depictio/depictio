@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from sketch import (  # noqa: E402
     DIM,
     GREEN,
-    GREEN_INK,
+    TICK_GREEN,
     GREY,
     INK,
     LIGHT_GREY,
@@ -184,7 +184,7 @@ def run_folder_flow() -> Sketch:
         s.arrow(c.cx, c.bottom, 655 + (c.cx - 655) * 0.12, 652)
 
     page(s, 60, 640, 74, 78, fill=VIOLET)
-    for i, colour in enumerate((GREEN_INK, GREEN_INK, GREEN_INK, "#fab005", GREY)):
+    for i, colour in enumerate((TICK_GREEN, TICK_GREEN, TICK_GREEN, "#fab005", GREY)):
         dot(s, 72, 656 + i * 12, colour)
     s.text(
         60,
@@ -272,7 +272,7 @@ def dependency_order() -> Sketch:
     s.text(418, ys[4] + 17, "same, one level further", size=12, anchor="start", colour=RED)
 
     # -- ordered ----------------------------------------------------------
-    ys = panel(390, "In dependency order", GREEN_INK)
+    ys = panel(390, "In dependency order", TICK_GREEN)
     bar(ys[0], t0, 560, YELLOW)
     tick(s, 578, ys[0] + 12)
     bar(ys[1], t0, 640, YELLOW)

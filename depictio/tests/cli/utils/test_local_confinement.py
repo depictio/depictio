@@ -143,7 +143,8 @@ def test_the_recursive_walk_registers_only_what_stays(local_on):
     results = scan.process_files(
         path=str(local_on.run / "tables"),
         run=SimpleNamespace(id=ObjectId(), run_tag="run42"),
-        data_collection=SimpleNamespace(id=ObjectId()),
+        # No scan block: the walk applies no depth or exclusion bounds.
+        data_collection=SimpleNamespace(id=ObjectId(), config=SimpleNamespace(scan=None)),
         permissions=Permission(owners=[UserBase(id=ObjectId(), email="me@example.com")]),
         existing_files={},
         skip_regex=True,
