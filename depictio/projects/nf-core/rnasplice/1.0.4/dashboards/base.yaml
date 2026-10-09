@@ -1768,10 +1768,8 @@ tabs:
       color_by: sample
       min_count: 2
       top_n: 25
-      # Arcs only: the GenomeSpy view draws the first condition's lane empty
-      # and squeezes the domes of the second at its foot (platform follow-up).
       view: plotly
-      views: [plotly]
+      views: [plotly, genomespy]
     section: Event junctions
     tag: rs-ev-sashimi
     index: rs-ev-sashimi
