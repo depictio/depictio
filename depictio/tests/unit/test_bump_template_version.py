@@ -84,3 +84,14 @@ def test_bump_refusals_and_dry_run(btv: ModuleType, pipeline_dir: Path) -> None:
         btv.bump("nope", "1.0.0", projects_dir=pipeline_dir)
     btv.bump("ampliseq", "2.18.0", projects_dir=pipeline_dir, dry_run=True)
     assert not (pipeline_dir / "ampliseq" / "2.18.0").exists()
+
+
+def test_rewrite_leaves_longer_numbers_alone(btv: ModuleType, tmp_path: Path) -> None:
+    """A short version like 3.1 is also inside 3.11.0 or 3.14, which are not it."""
+    (tmp_path / "versions.yml").write_text(
+        "nf-core/cutandrun: '3.1'\npython: 3.11.0\nratio: 3.14\nsee v3.1/docs and 13.1.\n"
+    )
+    btv.rewrite_versions(tmp_path, "3.1", "3.2.2")
+    assert (tmp_path / "versions.yml").read_text() == (
+        "nf-core/cutandrun: '3.2.2'\npython: 3.11.0\nratio: 3.14\nsee v3.2.2/docs and 13.1.\n"
+    )
