@@ -114,21 +114,30 @@ _DESIGN_IN_DATA_ROOT = ("METADATA_FILE", "{data_root}/input/sample_metadata.tsv"
 # showcase that listed them would suggest a version choice a visitor never has
 # to make; the seeding, CLI, CI and docs all resolve the highest version dir.
 SCENARIOS: list[Scenario] = [
-    Scenario("airrflow", "5.1.0", "megatest", note="nf-core AWS megatest (= test_full)"),
+    # 5.1.1 has no megatest prefix: the megatest and TCR runs are the 5.1.0 ones,
+    # which 5.1.1 publishes in the same layout; the CI run is an EMBL HPC 5.1.1 run.
+    Scenario(
+        "airrflow",
+        "5.1.1",
+        "megatest",
+        subpath="airrflow/5.1.0/megatest",
+        note="nf-core AWS 5.1.0 megatest (= test_full; no 5.1.1 megatest)",
+    ),
     # The CI samplesheets carry no `treatment` column (the GROUP_COL default), so
     # each names the column that varies in its own sheet.
     Scenario(
         "airrflow",
-        "5.1.0",
+        "5.1.1",
         "test",
-        note="CI profile, 6 samples",
+        note="EMBL HPC run, CI profile, 6 samples",
         vars=(("GROUP_COL", "cell_subset"),),
     ),
     Scenario(
         "airrflow",
-        "5.1.0",
+        "5.1.1",
         "test_tcr",
-        note="TCR instead of BCR: same collections, different receptor",
+        subpath="airrflow/5.1.0/test_tcr",
+        note="5.1.0 TCR run: same collections, different receptor",
         vars=(("GROUP_COL", "subject_id"),),
     ),
     # ampliseq has no megatest on disk; 2.16.0 carries two locally produced runs
@@ -148,26 +157,36 @@ SCENARIOS: list[Scenario] = [
         "test_pplace",
         note="phylogenetic placement, a route no other ampliseq scenario takes",
     ),
-    # The chipseq and atacseq megatests were aligned to hg19, not the GENOME
-    # default; their CI profiles run on a yeast genome no GENOME value covers.
+    # atacseq 2.x and chipseq 2.x have no usable megatest: their scenarios are
+    # EMBL HPC runs. atacseq's test_full was aligned to hg19, not the GENOME
+    # default; the CI profiles run on a yeast genome no GENOME value covers.
     Scenario(
         "atacseq",
-        "1.2.2",
-        "megatest",
-        note="MultiQC reprocessed; hg19",
+        "2.1.2",
+        "test_full",
+        note="EMBL HPC run (no 2.x megatest); hg19",
         vars=(("GENOME", "hg19"),),
     ),
-    Scenario("atacseq", "1.2.2", "test", note="CI profile; needs the HOMER glob fix"),
+    Scenario("atacseq", "2.1.2", "test", note="CI profile, yeast"),
+    Scenario("atacseq", "2.1.2", "test_controls", note="control route: libraries with an input"),
+    Scenario("chipseq", "2.1.0", "test", note="EMBL HPC run (no 2.x megatest); yeast, one antibody"),
+    Scenario("chipseq", "2.1.0", "test_star", note="STAR route: adds the STAR MultiQC module"),
+    # No 3.2.x megatest: EMBL HPC runs, with the MultiQC 1.19 report reprocessed
+    # beside them, which MULTIQC_REPROCESSED binds.
     Scenario(
-        "chipseq",
-        "1.2.0",
-        "megatest",
-        note="MultiQC reprocessed; hg19, vendored design",
-        vars=(_DESIGN_IN_DATA_ROOT, ("GENOME", "hg19")),
+        "cutandrun",
+        "3.2.2",
+        "test_full",
+        note="EMBL HPC run (no 3.2.x megatest); MultiQC reprocessed",
+        vars=(("MULTIQC_REPROCESSED", "true"),),
     ),
-    Scenario("chipseq", "1.2.0", "test", note="CI profile; needs the HOMER glob fix"),
-    Scenario("cutandrun", "3.1", "megatest", note="MultiQC reprocessed"),
-    Scenario("cutandrun", "3.1", "test_full_small", note="MultiQC reprocessed"),
+    Scenario(
+        "cutandrun",
+        "3.2.2",
+        "test_full_small",
+        note="EMBL HPC run, chr20 only; MultiQC reprocessed",
+        vars=(("MULTIQC_REPROCESSED", "true"),),
+    ),
     Scenario(
         "demultiplex",
         "1.8.0",
