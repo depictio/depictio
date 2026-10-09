@@ -31,7 +31,6 @@ import {
   normalizeCardVariant,
   normalizeFigureStyle,
   SECTION_BAR_DEFAULT_VISIBLE,
-  SectionIcon,
 } from 'depictio-react-core';
 import type { CardVariant, FigureStyle, FilterSectionSpec } from 'depictio-react-core';
 
@@ -42,7 +41,7 @@ import {
   SwitchField,
   useOpenSections,
 } from '../settings/SettingsSections';
-import { SECTION_COLOR_OPTIONS, iconOptionsWith } from './sectionIcons';
+import { SECTION_ACCENT, SECTION_COLOR_OPTIONS, iconOptionsWith } from './sectionIcons';
 import type { SectionKind } from './sectionMutations';
 import { BarPreview, LayoutChoice, SectionBarPreview, TilesPreview } from './SectionLayoutChoice';
 
@@ -305,23 +304,19 @@ const SectionForm: React.FC<SectionFormProps> = ({
         </Stack>
       )}
 
-      <Group align="flex-end" gap="sm" wrap="nowrap">
-        {/* Live preview of exactly what the section header will draw. */}
-        <SectionIcon spec={{ icon, color }} size={20} fallbackIcon="mdi:shape-outline" />
-        <TextInput
-          label="Name"
-          description="Components join a section by this name"
-          placeholder="e.g. Quality"
-          value={name}
-          onChange={(e) => setName(e.currentTarget.value)}
-          error={duplicate ? 'A section with this name already exists here' : undefined}
-          style={{ flex: 1 }}
-          data-autofocus
-        />
-      </Group>
+      <TextInput
+        label="Name"
+        description="Components join a section by this name"
+        placeholder="e.g. Quality"
+        value={name}
+        onChange={(e) => setName(e.currentTarget.value)}
+        error={duplicate ? 'A section with this name already exists here' : undefined}
+        data-autofocus
+      />
 
       <SectionAccordion value={open} onChange={setOpen} testId="section-form-sections">
         <SettingsSection
+          color={SECTION_ACCENT}
           value="look"
           icon="mdi:palette-outline"
           title="Look"
@@ -356,7 +351,14 @@ const SectionForm: React.FC<SectionFormProps> = ({
                 onChange={(v) => setColor(v ?? '')}
                 allowDeselect={false}
                 comboboxProps={{ withinPortal: false }}
-                leftSection={<Icon icon="mdi:palette" width={16} />}
+                // The chosen colour, as the Icon select beside it shows the chosen icon.
+                leftSection={
+                  color ? (
+                    <ColorSwatch size={14} color={`var(--mantine-color-${color}-6)`} withShadow={false} />
+                  ) : (
+                    <Icon icon="mdi:palette" width={16} />
+                  )
+                }
                 renderOption={({ option }) => (
                   <Group gap="xs" wrap="nowrap">
                     <ColorSwatch
@@ -383,6 +385,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
 
         {kind === 'grid' && (
           <SettingsSection
+            color={SECTION_ACCENT}
             value="layout"
             icon="mdi:view-dashboard-outline"
             title="Layout"
@@ -450,6 +453,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
 
         {kind === 'grid' && !isStrip && (
           <SettingsSection
+            color={SECTION_ACCENT}
             value="section-filters"
             icon="mdi:filter-variant"
             title="Section filters"
@@ -510,6 +514,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
 
         {kind === 'grid' && !isStrip && (
           <SettingsSection
+            color={SECTION_ACCENT}
             value="styles"
             icon="mdi:card-text-outline"
             title="Card and figure style"
@@ -544,6 +549,7 @@ const SectionForm: React.FC<SectionFormProps> = ({
 
         {kind === 'filter' && (
           <SettingsSection
+            color={SECTION_ACCENT}
             value="behaviour"
             icon="mdi:arrow-collapse-vertical"
             title="Behaviour"
@@ -560,6 +566,8 @@ const SectionForm: React.FC<SectionFormProps> = ({
         )}
 
         <SettingsSection
+
+          color={SECTION_ACCENT}
           value="every-tab"
           icon="mdi:pin-outline"
           title="Every tab"

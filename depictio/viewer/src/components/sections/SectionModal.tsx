@@ -19,12 +19,9 @@ import { interactiveTitle, stripLabel } from 'depictio-react-core';
 import type { DashboardData, FilterSectionSpec } from 'depictio-react-core';
 
 import SectionForm from './SectionForm';
+import { SECTION_ACCENT } from './sectionIcons';
 import type { SectionKind, SectionOp } from './sectionMutations';
 import { sectionsFor } from './sectionMutations';
-
-/** Grape is the sections accent — distinct from the orange of dashboards and
- *  tabs, so the two families of dialog stay tellable apart at a glance. */
-export const SECTION_ACCENT = 'grape';
 
 const KIND_LABEL: Record<SectionKind, string> = {
   grid: 'Dashboard grid',

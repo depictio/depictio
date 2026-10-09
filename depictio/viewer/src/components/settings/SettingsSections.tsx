@@ -16,6 +16,7 @@
  */
 import React from 'react';
 import { Accordion, Group, Stack, Switch, Text, ThemeIcon } from '@mantine/core';
+import type { MantineColor } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 // ---------------------------------------------------------------------------
@@ -26,14 +27,18 @@ import { Icon } from '@iconify/react';
  * Header of one section: icon, title, and a one-line subtitle saying what the
  * section is for. Every section uses this one, so a panel reads as a list of
  * like things rather than a stack of ad-hoc headings.
+ *
+ * `color` tints the icon for a dialog with its own accent (the section modal's
+ * grape); without it the icon takes the theme's primary colour.
  */
 export const SectionHeader: React.FC<{
   icon: string;
   title: React.ReactNode;
   subtitle?: React.ReactNode;
-}> = ({ icon, title, subtitle }) => (
+  color?: MantineColor;
+}> = ({ icon, title, subtitle, color }) => (
   <Group gap="sm" wrap="nowrap" align="center">
-    <ThemeIcon variant="light" size="md" radius="md">
+    <ThemeIcon variant="light" size="md" radius="md" color={color}>
       <Icon icon={icon} width={16} />
     </ThemeIcon>
     <Stack gap={0} style={{ minWidth: 0 }}>
@@ -175,12 +180,13 @@ export const SettingsSection: React.FC<{
   icon: string;
   title: React.ReactNode;
   subtitle?: React.ReactNode;
+  color?: MantineColor;
   testId?: string;
   children: React.ReactNode;
-}> = ({ value, icon, title, subtitle, testId, children }) => (
+}> = ({ value, icon, title, subtitle, color, testId, children }) => (
   <Accordion.Item value={value} data-testid={testId}>
     <Accordion.Control>
-      <SectionHeader icon={icon} title={title} subtitle={subtitle} />
+      <SectionHeader icon={icon} title={title} subtitle={subtitle} color={color} />
     </Accordion.Control>
     <Accordion.Panel>{children}</Accordion.Panel>
   </Accordion.Item>
