@@ -119,15 +119,9 @@ const CnvLocusView: React.FC<CnvLocusViewProps> = ({
   });
 
   useEffect(() => {
-    if (!api) return;
-    try {
-      setGenomeSpyRows(api, data as unknown as Record<string, unknown>[]);
-    } catch {
-      // A shape change (facet, BAF, thresholds) and a data change can land in
-      // the same commit: the hook has then already finalised this `api` and
-      // not yet published its successor, which is built from the current rows
-      // anyway and gets them again when it arrives.
-    }
+    // A shape change (facet, BAF, thresholds) and a data change can land in the
+    // same commit; setGenomeSpyRows skips the embed the hook just finalised.
+    if (api) setGenomeSpyRows(api, data as unknown as Record<string, unknown>[]);
   }, [api, data]);
 
   useEffect(() => {

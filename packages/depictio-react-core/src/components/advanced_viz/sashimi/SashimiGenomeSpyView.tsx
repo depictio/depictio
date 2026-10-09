@@ -173,8 +173,10 @@ const SashimiGenomeSpyView: React.FC<SashimiGenomeSpyViewProps> = (props) => {
   useEffect(() => {
     if (!api) return;
     setGenomeSpyRows(api, junctions as unknown as Record<string, unknown>[]);
-    api.datasets.set(EXONS_DATASET, exons);
-    if (coverage) api.datasets.set(COVERAGE_DATASET, coverage);
+    setGenomeSpyRows(api, exons as unknown as Record<string, unknown>[], EXONS_DATASET);
+    if (coverage) {
+      setGenomeSpyRows(api, coverage as unknown as Record<string, unknown>[], COVERAGE_DATASET);
+    }
   }, [api, junctions, exons, coverage]);
 
   // A region pick, a zoom from the Plotly view, or a followed dashboard region.

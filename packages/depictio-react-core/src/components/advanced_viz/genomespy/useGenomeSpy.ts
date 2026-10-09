@@ -60,6 +60,27 @@ export interface UseGenomeSpyResult {
 }
 
 /**
+ * Embeds this hook has torn down. React publishes the successor one render
+ * late, so in the commit where a viz control changes the spec, the renderer's
+ * own effects still hold the old embed, and GenomeSpy throws on any data or
+ * zoom call made through it ("Cannot update named data through a finalized
+ * embed"). The helpers below skip a finalized embed; its successor is built
+ * from the current rows and zooms again when it arrives.
+ */
+const finalizedEmbeds = new WeakSet<EmbedResult>();
+
+/** Tear an embed down and remember it, so later calls through it are no-ops. */
+export function finalizeGenomeSpy(api: EmbedResult): void {
+  finalizedEmbeds.add(api);
+  api.finalize();
+}
+
+/** False once the hook has torn `api` down. */
+export function isGenomeSpyLive(api: EmbedResult): boolean {
+  return !finalizedEmbeds.has(api);
+}
+
+/**
  * Contigs of a GenomeSpy built-in assembly (hg38, mm10, …).
  *
  * Resolved through the same dynamic import as the embed so the package stays
@@ -153,7 +174,7 @@ export function useGenomeSpy(
     return () => {
       cancelled = true;
       for (const off of unsubscribes) off();
-      live?.finalize();
+      if (live) finalizeGenomeSpy(live);
       setApi(null);
     };
   }, [container, spec, backend, lazySources]);
@@ -161,9 +182,14 @@ export function useGenomeSpy(
   return { api, error };
 }
 
-/** Replace the track's rows in place, without a remount. */
-export function setGenomeSpyRows(api: EmbedResult, rows: Record<string, unknown>[]): void {
-  api.datasets.set(DATASET_NAME, rows);
+/** Replace a dataset's rows in place, without a remount. */
+export function setGenomeSpyRows(
+  api: EmbedResult,
+  rows: Record<string, unknown>[],
+  dataset: string = DATASET_NAME,
+): void {
+  if (!isGenomeSpyLive(api)) return;
+  api.datasets.set(dataset, rows);
 }
 
 /**
@@ -186,6 +212,7 @@ export async function zoomToRegion(
   region: { chrom: string; start: number; end: number } | null,
   contigs?: readonly Contig[] | null,
 ): Promise<void> {
+  if (!isGenomeSpyLive(api)) return;
   const scale = api.getScaleResolutionByName(GENOME_SCALE_NAME);
   if (!scale || !scale.isZoomable()) return;
   if (!region) {
