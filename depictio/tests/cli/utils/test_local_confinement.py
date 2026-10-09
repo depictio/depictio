@@ -92,6 +92,15 @@ def test_the_data_root_refuses_to_read_what_leaves(local_on):
         root.read_bytes(".hidden/secret.csv")
 
 
+def test_the_start_of_a_file_is_refused_alike(local_on):
+    root = LocalDataRoot(str(local_on.run))
+    assert root.read_head("tables/counts.csv", 6) == (b"sample", len(b"sample,n\nS1,1\n"))
+    for rel in ("tables/escape.csv", ".hidden/secret.csv"):
+        with pytest.raises(LocalPathRefused) as exc:
+            root.read_head(rel, 6)
+        assert str(local_on.outside) not in str(exc.value)
+
+
 def test_without_local_folders_the_data_root_is_unchanged(run_folder):
     root = LocalDataRoot(str(run_folder.run))
     assert "tables/escape.csv" in root.glob("tables/*.csv")

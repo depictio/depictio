@@ -41,7 +41,8 @@ class StubS3Client:
 
     ``pages_served`` and ``get_object_calls`` are what the "one listing answers
     everything" and "the client is built once" tests assert on; ``listings``
-    records the parameters of every listing asked for.
+    records the parameters of every listing asked for, ``get_object_ranges``
+    the ``Range`` of every read (None for a whole object).
     """
 
     def __init__(self, bodies: dict[str, bytes], page_size: int = 100, is_truncated=None):
@@ -50,6 +51,7 @@ class StubS3Client:
         self.is_truncated = is_truncated
         self.pages_served = 0
         self.get_object_calls: list[str] = []
+        self.get_object_ranges: list[str | None] = []
         self.listings: list[dict] = []
 
     def _pages_for(self, prefix: str, delimiter: str | None = None):
@@ -107,9 +109,25 @@ class StubS3Client:
 
         return _Paginator()
 
-    def get_object(self, Bucket, Key):  # noqa: N803 - boto3's own spelling
+    def get_object(self, Bucket, Key, Range=None):  # noqa: N803 - boto3's own spelling
+        """The object, or with ``Range`` (``bytes=FIRST-LAST``) that slice of it,
+        sized the way S3 answers a ranged read (``ContentRange``).
+
+        A whole object comes with no size: the reads that bound a download of
+        unknown size are tested on that answer.
+        """
         self.get_object_calls.append(Key)
-        return {"Body": io.BytesIO(self.bodies[Key])}
+        self.get_object_ranges.append(Range)
+        body = self.bodies[Key]
+        if Range is None:
+            return {"Body": io.BytesIO(body)}
+        first, _, last = Range.removeprefix("bytes=").partition("-")
+        chunk = body[int(first) : int(last) + 1]
+        return {
+            "Body": io.BytesIO(chunk),
+            "ContentLength": len(chunk),
+            "ContentRange": f"bytes {first}-{int(first) + len(chunk) - 1}/{len(body)}",
+        }
 
 
 def s3_client_error(code: str, status: int, operation: str = "ListObjectsV2") -> ClientError:

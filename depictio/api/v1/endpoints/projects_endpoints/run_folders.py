@@ -27,8 +27,9 @@ whole bucket, as far as the keys allow.
 Every read is bounded: one listing page per S3 folder (and one more below its
 ``multiqc/``, when it has one, to tell a run marker from a folder that only
 shares the name), a capped walk below a local folder, a capped key listing
-below an S3 prefix, and template detection for the first
-:data:`FIND_DETECT_RUNS` runs found.
+below an S3 prefix, the first :data:`MAX_TRACE_BYTES` of a run's execution
+trace, and template detection for the first :data:`FIND_DETECT_RUNS` runs
+found.
 
 Synchronous: the routes dispatch via ``asyncio.to_thread``.
 """
@@ -72,6 +73,12 @@ from depictio.api.v1.endpoints.projects_endpoints.local_dirs import (
     require_local_caller,
     run_markers,
 )
+from depictio.api.v1.endpoints.projects_endpoints.run_records import (
+    RunInfoSummary,
+    RunReportFile,
+    RunReportKind,
+    RunTaskSummary,
+)
 from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
     RunStorageIn,
     read_settings,
@@ -80,6 +87,7 @@ from depictio.models.local_access import LocalDataPolicy, LocalPathRefused
 from depictio.models.logging import logger
 from depictio.models.models.run_info import WorkflowRunInfo
 from depictio.models.s3_access import (
+    S3AccessError,
     S3AccessFailed,
     S3AccessRefused,
     S3Target,
@@ -109,6 +117,13 @@ SECRET_PARAM_NAME = re.compile(
     r"|hook_?url|webhook",
     re.IGNORECASE,
 )
+
+# How much of the run's execution trace is read for its task counts. A line per
+# task attempt is a few hundred bytes, so this covers tens of thousands of tasks.
+MAX_TRACE_BYTES = 8 * 1024 * 1024
+# The trace's status of an attempt that ended well, and of one that did not.
+TRACE_DONE = frozenset({"COMPLETED", "CACHED"})
+TRACE_FAILED = frozenset({"FAILED", "ABORTED"})
 
 # find_runs below a local folder: how deep, and how many folders it opens.
 FIND_MAX_DEPTH = 6
@@ -155,10 +170,6 @@ class FolderNames(BaseModel):
     names: list[str] = Field(default_factory=list)
 
 
-RunReportKind = Literal[
-    "software_versions", "params", "execution_report", "execution_trace", "pipeline_dag"
-]
-
 # Which ``WorkflowRunInfo`` field holds the location of each kind of report.
 _REPORT_FIELDS: tuple[tuple[RunReportKind, str], ...] = (
     ("software_versions", "software_versions_path"),
@@ -167,41 +178,6 @@ _REPORT_FIELDS: tuple[tuple[RunReportKind, str], ...] = (
     ("execution_trace", "execution_trace_path"),
     ("pipeline_dag", "pipeline_dag_path"),
 )
-
-
-class RunReportFile(BaseModel):
-    """One file the run's engine wrote about the run, such as its execution report.
-
-    ``location`` is its real path, or its ``s3://`` URL. ``size`` is in bytes,
-    None when unknown.
-    """
-
-    kind: RunReportKind
-    location: str
-    name: str
-    size: int | None = None
-
-
-class RunInfoSummary(BaseModel):
-    """What the run's own records say about it, for display.
-
-    ``params`` holds at most :data:`MAX_RUN_PARAMS` of the run's parameters,
-    by name: a list or a mapping is written as JSON, a long text is cut at
-    :data:`MAX_PARAM_CHARS` characters, and a parameter whose name says it
-    holds a credential is shown as :data:`HIDDEN_PARAM`. ``params_total`` is
-    how many the run has. ``extra`` is the engine's other details that are a
-    single text or number.
-    """
-
-    engine: str | None = None
-    engine_version: str | None = None
-    run_name: str | None = None
-    homepage: str | None = None
-    params: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
-    params_total: int = 0
-    tools_executed: list[str] = Field(default_factory=list)
-    reports: list[RunReportFile] = Field(default_factory=list)
-    extra: dict[str, str] = Field(default_factory=dict)
 
 
 class FolderInspection(BaseModel):
@@ -584,6 +560,99 @@ def _report_size(
         return None
 
 
+def _trace_tasks(text: str, *, trace: str, partial: bool = False) -> RunTaskSummary | None:
+    """The task counts of execution trace ``text``, a tab-separated table with a header.
+
+    The columns are found by name. A task is keyed by its ``name`` (every
+    attempt of one keeps it), else its ``hash``; a line with neither counts
+    on its own. None when there is no ``status`` column: nothing to count.
+    """
+    lines = text.splitlines()
+    if not lines:
+        return None
+    columns = {column.strip(): index for index, column in enumerate(lines[0].split("\t"))}
+    status_at = columns.get("status")
+    if status_at is None:
+        return None
+    key_at = columns.get("name", columns.get("hash"))
+
+    last: dict[str, str] = {}
+    failed: set[str] = set()
+    retried: set[str] = set()
+    for number, line in enumerate(lines[1:]):
+        cells = line.split("\t")
+        if not line.strip() or status_at >= len(cells):
+            continue
+        status = cells[status_at].strip().upper()
+        key = cells[key_at].strip() if key_at is not None and key_at < len(cells) else ""
+        key = key or f"#{number}"
+        if status in TRACE_FAILED:
+            failed.add(key)
+        elif status in TRACE_DONE and key in failed:
+            retried.add(key)
+        last[key] = status
+
+    finals = list(last.values())
+    return RunTaskSummary(
+        trace=trace,
+        total=len(finals),
+        completed=finals.count("COMPLETED"),
+        cached=finals.count("CACHED"),
+        failed=sum(status in TRACE_FAILED for status in finals),
+        retried=len(retried),
+        other=sum(status not in TRACE_DONE | TRACE_FAILED for status in finals),
+        partial=partial,
+    )
+
+
+def _run_tasks(
+    info: WorkflowRunInfo, root, policy: LocalDataPolicy | None
+) -> RunTaskSummary | None:
+    """The task counts of the run's execution trace, None when there is none to read.
+
+    The trace is the one the engine's reader picked (the newest by name, as a
+    resumed run writes one per launch), read from ``root`` itself: on S3,
+    detection read a copy holding an empty stand-in for it. Through the
+    root's own reads and guards, so an ``s3://`` root reads with its resolved
+    target, and a local one only where ``policy`` lets the server read data,
+    as :func:`_report_size`. At most :data:`MAX_TRACE_BYTES`, ``partial`` when
+    the trace is larger, its last cut line dropped.
+
+    Any failure is logged and gives None, an S3 refusal included, and nothing
+    is read in its place: the counts are a display nicety, never a reason to
+    fail an inspection or a dry run.
+    """
+    location = info.execution_trace_path
+    relative = root.relative_of(location) if location and root is not None else None
+    if relative is None:
+        return None
+    if not root.is_remote and (policy is None or not policy.allows(location)):
+        return None
+    try:
+        head, size = root.read_head(relative, MAX_TRACE_BYTES)
+    except (OSError, ValueError, S3AccessError) as exc:
+        logger.info(f"run info: cannot read the execution trace {location}: {exc}")
+        return None
+    partial = size > len(head) if size is not None else len(head) >= MAX_TRACE_BYTES
+    text = head.decode("utf-8", errors="replace")
+    if partial:
+        text = text[: text.rfind("\n") + 1]
+    return _trace_tasks(text, trace=root.url(relative), partial=partial)
+
+
+def _identities_seen(extra: dict) -> list[str]:
+    """``WorkflowRunInfo.extra["identities_seen"]``: each pipeline and version of
+    a folder holding runs of more than one, as text."""
+    seen = extra.get("identities_seen")
+    return [str(identity) for identity in seen] if isinstance(seen, list) else []
+
+
+def _runs_scanned(extra: dict) -> int | None:
+    """``WorkflowRunInfo.extra["run_subdirs_scanned"]``: how many run folders were read."""
+    scanned = extra.get("run_subdirs_scanned")
+    return scanned if isinstance(scanned, int) and not isinstance(scanned, bool) else None
+
+
 def _run_info_summary(
     info: WorkflowRunInfo | None, root, policy: LocalDataPolicy | None = None
 ) -> RunInfoSummary | None:
@@ -591,7 +660,8 @@ def _run_info_summary(
 
     The report locations are those ``run_detection.read_run_info_for_root``
     mapped back below the root; ``policy`` is the local-data policy a local
-    root was confined with (see :func:`_report_size`).
+    root was confined with (see :func:`_report_size`). The task counts come
+    from the run's execution trace (:func:`_run_tasks`), the one report read.
     """
     if info is None:
         return None
@@ -620,6 +690,9 @@ def _run_info_summary(
         tools_executed=sorted(info.tools_executed),
         reports=reports,
         extra=_run_extra(info.extra),
+        tasks=_run_tasks(info, root, policy),
+        identities_seen=_identities_seen(info.extra),
+        runs_scanned=_runs_scanned(info.extra),
     )
 
 
@@ -693,7 +766,9 @@ def inspect_folder(
     reads the folder the way ``POST /projects/from_run`` does, so what it names
     is what the creation would pick. ``run_info`` comes from that same read:
     the sizes of the run's reports from the S3 listing it made, or from the
-    files themselves on this computer, never from their contents.
+    files themselves on this computer, never from their contents. The one
+    report read is the execution trace, its first :data:`MAX_TRACE_BYTES`,
+    for the task counts (``run_info.tasks``).
     """
     if is_s3_url(location):
         folder = _s3_folder(location, storage)

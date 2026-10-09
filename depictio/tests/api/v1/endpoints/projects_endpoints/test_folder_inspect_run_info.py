@@ -4,7 +4,8 @@ The run's provenance comes from the same read that detects its template: the
 engine and its version, the run's parameters, the tools it ran and the reports
 it wrote, each with its size. A size comes from the S3 listing the detection
 already made, or from a stat of a file the local-data policy lets the server
-read; no report is ever read for it.
+read; no report is ever read for it. The one report read is the execution
+trace, for the task counts (``test_run_info_tasks.py``).
 
 No network: S3 is the shared stub (``depictio/tests/cli/s3_stubs.py``).
 """
@@ -281,8 +282,14 @@ def test_an_s3_run_takes_its_report_sizes_from_the_listing(monkeypatch):
         len(REPORT),
     )
     assert _reports(run_info)["software_versions"][2] == len(_versions())
-    # Only what detection opens is fetched: never a report, for its size or otherwise.
-    assert not any("execution_" in key or "pipeline_dag" in key for key in client.get_object_calls)
+    # Only what detection opens is fetched, and the execution trace for its task
+    # counts, once and ranged: never another report, for its size or otherwise.
+    reads = list(zip(client.get_object_calls, client.get_object_ranges, strict=True))
+    assert not any("execution_report" in key or "pipeline_dag" in key for key, _range in reads)
+    trace_key = "runs/r/pipeline_info/execution_trace_2026-01-01_10-00-00.txt"
+    assert [r for key, r in reads if key == trace_key] == [
+        f"bytes=0-{run_folders.MAX_TRACE_BYTES - 1}"
+    ]
 
 
 # ── the summary itself ───────────────────────────────────────────────────────
@@ -305,7 +312,17 @@ def test_extra_keeps_single_texts_and_numbers():
         "pipeline_version_raw": "v2.16.0-g3d5c7e5",
         "run_subdirs_scanned": "3",
     }
+    # The list extra leaves out, and the count as a number.
+    assert summary.identities_seen == ["nf-core/a 1.0", "nf-core/a 2.0"]
+    assert summary.runs_scanned == 3
     assert (summary.reports, summary.params, summary.params_total) == ([], {}, 0)
+    assert summary.tasks is None
+
+
+def test_a_single_run_has_no_identities_nor_run_count():
+    summary = run_folders._run_info_summary(WorkflowRunInfo(engine="nextflow"), root=None)
+    assert summary is not None
+    assert (summary.identities_seen, summary.runs_scanned) == ([], None)
 
 
 def test_a_non_finite_number_is_shown_as_text():

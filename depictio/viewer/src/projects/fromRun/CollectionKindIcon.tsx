@@ -88,8 +88,11 @@ export function collectionKindMeta(dc: Pick<FromRunDCPreview, 'kind' | 'mode' | 
 
 export const CollectionKindIcon: React.FC<{
   dc: Pick<FromRunDCPreview, 'kind' | 'mode' | 'data_collection_tag'>;
-}> = ({ dc }) => {
+  /** `sm` in a one-line row. */
+  size?: 'sm' | 'lg';
+}> = ({ dc, size = 'lg' }) => {
   const meta = collectionKindMeta(dc);
+  const glyph = size === 'lg' ? 18 : 14;
   return (
     <Tooltip
       label={`${meta.label}: ${meta.description}`}
@@ -101,12 +104,16 @@ export const CollectionKindIcon: React.FC<{
       <ThemeIcon
         variant="light"
         color={meta.color}
-        size="lg"
+        size={size === 'lg' ? 'lg' : 'md'}
         radius="md"
         aria-label={meta.label}
         data-kind={meta.label}
       >
-        {meta.icon ? <Icon icon={meta.icon} width={18} /> : <DcTypeIcon type="multiqc" size={18} withTooltip={false} />}
+        {meta.icon ? (
+          <Icon icon={meta.icon} width={glyph} />
+        ) : (
+          <DcTypeIcon type="multiqc" size={glyph} withTooltip={false} />
+        )}
       </ThemeIcon>
     </Tooltip>
   );

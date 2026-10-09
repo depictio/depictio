@@ -72,6 +72,7 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _dispatch_refresh_tasks,
     _skip_dependants_of_absent_collections,
 )
+from depictio.api.v1.endpoints.projects_endpoints.run_records import RunInfoSummary
 from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
     ProjectStorageConfigIn,
     RunStorageIn,
@@ -270,6 +271,26 @@ def _report_rows(preview_rows) -> list[FromRunDCPreview]:
     return list(rows.values())
 
 
+class RunInputFile(BaseModel):
+    """One file of the run the template reads through a variable, such as its samplesheet.
+
+    ``name`` is the variable (``SAMPLESHEET_FILE``), ``description`` and
+    ``required`` as the template declares it. ``location`` is where it
+    resolved to, a real path or an ``s3://`` URL, None when it is not set.
+    ``found`` says whether the data root holds it, None when that cannot be
+    told: a location outside the root, or one a partial listing does not name.
+    ``used_by`` are the data collections that read it or that a conditional on
+    it switches (see ``templates.variable_users``).
+    """
+
+    name: str
+    description: str | None = None
+    required: bool = False
+    location: str | None = None
+    found: bool | None = None
+    used_by: list[str] = Field(default_factory=list)
+
+
 class FromRunReport(BaseModel):
     """Result of a from_run request: the plan, and what was created from it.
 
@@ -293,6 +314,11 @@ class FromRunReport(BaseModel):
     dashboards: list[DashboardImportResult] = Field(default_factory=list)
     pruned_optional_dcs: list[str] = Field(default_factory=list)
     truncated: bool = False
+    # What the run's own records say, as GET /projects/folder_inspect shows
+    # them; None when no engine recognised the folder.
+    run_info: RunInfoSummary | None = None
+    # Each file variable the template declares (``*_FILE``), in its order.
+    input_files: list[RunInputFile] = Field(default_factory=list)
     # Ingestion-run id to poll via GET /projects/refresh_manifest/{run_id}.
     run_id: str | None = None
     # The request's storage settings were stored on the created project.
@@ -379,6 +405,24 @@ def _run_folder_read_config(storage: ProjectS3Config | None = None) -> _RunFolde
     return _RunFolderReads(
         s3_storage=settings.s3, remote_storage_options=storage, storage_only=storage is not None
     )
+
+
+def _request_read_config(
+    data_root: str, storage: RunStorageIn | None
+) -> tuple[ProjectStorageConfigIn | None, _RunFolderReads]:
+    """The storage settings a request typed in for ``data_root``, and the reads they make.
+
+    The settings apply to an ``s3://`` data root only, validated first as a
+    saved config is (``RunStorageIn.settings_for``); without them, or for a
+    folder on this computer, the read configuration is the instance's (see
+    :func:`_run_folder_read_config`). Every route that opens a run folder a
+    request names decides it here, so all of them read it alike.
+    """
+    settings_in = (
+        storage.settings_for(data_root) if storage is not None and is_s3_url(data_root) else None
+    )
+    reads = _run_folder_read_config(read_settings(settings_in) if settings_in is not None else None)
+    return settings_in, reads
 
 
 def _is_local_path(data_root: str) -> bool:
@@ -527,8 +571,80 @@ def _detect_run(root) -> tuple[str | None, Any]:
         return None, None
 
 
-def _detect_template(root) -> tuple[str, DetectedTemplate]:
-    """The template id recognised in ``root``, with what the folder said.
+def _read_run(root):
+    """The run's provenance in ``root``, without choosing a template; None when
+    no engine recognises it. For a request that named its template: the one
+    read :func:`_detect_run` makes otherwise, with the same handling of a
+    failed read."""
+    from depictio.cli.cli.utils.run_detection import read_run_info_for_root
+
+    try:
+        return read_run_info_for_root(root)
+    except S3AccessError:
+        raise
+    except (OSError, ValueError) as exc:
+        logger.warning(f"Reading the run in {root.location} failed: {exc}")
+        return None
+
+
+def _run_info_report(info, root) -> RunInfoSummary | None:
+    """What ``GET /projects/folder_inspect`` shows of run ``info``, read from ``root``.
+
+    ``run_folders._run_info_summary``, with the policy a local root was
+    confined with (``_build_local_data_root``), so the trace is read under
+    the same guard as there.
+    """
+    from depictio.api.v1.endpoints.projects_endpoints.run_folders import _run_info_summary
+
+    return _run_info_summary(info, root, None if root.is_remote else local_data_policy())
+
+
+def _input_file(variable, value: str | None, root, users: list[str]) -> RunInputFile:
+    """One :class:`RunInputFile`: template variable ``variable`` resolved to ``value``.
+
+    Judged on the root's own terms: ``relative_of`` says whether the value
+    lies below it, and ``exists`` whether it is there, which a partial
+    listing cannot deny.
+    """
+    location = found = None
+    if value:
+        relative = root.relative_of(value)
+        location = value if relative is None else root.url(relative)
+        if relative is not None:
+            found = True if root.exists(relative) else (None if root.truncated else False)
+    return RunInputFile(
+        name=variable.name,
+        description=variable.description or None,
+        required=variable.required,
+        location=location,
+        found=found,
+        used_by=users,
+    )
+
+
+def _input_files(template_id: str, metadata, variables: dict[str, str], root) -> list[RunInputFile]:
+    """One :class:`RunInputFile` per file variable (``*_FILE``) template
+    ``template_id`` declares, in its order, resolved to ``variables``.
+
+    ``variables`` is everything resolution settled, the run's auto-detected
+    files and the template's defaults included, rather than the subset the
+    preview reports.
+    """
+    from depictio.cli.cli.utils.templates import variable_users
+
+    declared = [variable for variable in metadata.variables if variable.name.endswith("_FILE")]
+    if not declared:
+        return []
+    users = variable_users(template_id, [variable.name for variable in declared])
+    return [
+        _input_file(variable, variables.get(variable.name), root, users[variable.name])
+        for variable in declared
+    ]
+
+
+def _detect_template(root) -> tuple[str, DetectedTemplate, Any]:
+    """The template id recognised in ``root``, with what the folder said, and the
+    run's provenance it was decided from.
 
     A folder no installed template fits is a 422 coded
     ``template_not_detected``: the caller picks one. A read that fails while
@@ -550,7 +666,7 @@ def _detect_template(root) -> tuple[str, DetectedTemplate]:
                 "template to continue."
             )
         raise CodedHTTPException(422, detail, "template_not_detected")
-    return template_id, detected
+    return template_id, detected, info
 
 
 def _skip_reason(row) -> str:
@@ -796,22 +912,20 @@ def _create_project_from_run(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
 
-    storage_settings = (
-        storage.settings_for(data_root) if storage is not None and is_s3_url(data_root) else None
-    )
-    read_config = _run_folder_read_config(
-        read_settings(storage_settings) if storage_settings is not None else None
-    )
+    storage_settings, read_config = _request_read_config(data_root, storage)
     root = _build_data_root(data_root, read_config, request=request, current_user=current_user)
     _assert_variables_confined(variables or {}, root)
 
     detected: DetectedTemplate | None = None
     if template_id is None:
-        template_id, detected = _detect_template(root)
+        template_id, detected, run = _detect_template(root)
         try:
             validate_template_id(template_id)
         except ValueError as exc:  # pragma: no cover - detection yields catalog ids
             raise HTTPException(status_code=422, detail=str(exc))
+    else:
+        # Detection did not run, so the run is read for the report alone.
+        run = _read_run(root)
 
     # One root, two consumers. resolve_template gives the config the project is
     # built from; preview_data_root gives the per-collection rows the UI shows.
@@ -865,6 +979,8 @@ def _create_project_from_run(
         data_collections=_report_rows(preview.data_collections),
         pruned_optional_dcs=list(preview.pruned_optional_dcs),
         truncated=preview.truncated,
+        run_info=_run_info_report(run, root),
+        input_files=_input_files(template_id, template_metadata, resolved_vars, root),
         dry_run=dry_run,
     )
 

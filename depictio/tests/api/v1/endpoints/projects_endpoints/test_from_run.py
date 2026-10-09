@@ -410,6 +410,13 @@ def test_a_real_run_creates_the_project_and_dispatches_one_task_per_collection(
     assert report.dry_run is False
     assert report.project_id is not None
     assert report.run_id is not None
+    # The report of a creation is the dry run's, the run and its files included.
+    assert report.run_info is not None and report.run_info.engine == "nextflow"
+    assert [entry.name for entry in report.input_files] == [
+        "SAMPLESHEET_FILE",
+        "TREE_FILE",
+        "METADATA_FILE",
+    ]
 
     stored = mock_db["projects"].find_one({"_id": ObjectId(report.project_id)})
     assert stored is not None

@@ -1,19 +1,17 @@
 /**
- * The run-folder plan: a summary header (what made the run, the template
- * used, the run folder written once, how many collections are ready), then
- * the data collections grouped by what needs a look first: "Not found" and
- * "Ready to ingest" open, "Optional, not found" folded (it informs, it is not
- * a problem), then the template settings the server resolved, folded too.
- * Every path is written relative to the run folder, which is what tells a
- * folder set one level off.
+ * The run-folder plan: a summary header (the template used, how many
+ * collections are ready, the checks of the run against the template, the run
+ * folder written once), then the data collections grouped by what needs a
+ * look first: "Not found" and "Found" open, "Optional, not found" folded (it
+ * informs, it is not a problem), then the template settings the server
+ * resolved, folded too. Every path is written relative to the run folder,
+ * which is what tells a folder set one level off.
  *
  * Renders the dry-run plan on the Preview step and, unchanged, the real report
  * after creation (where dashboards that failed to import are listed too).
  */
 import React from 'react';
 import {
-  Alert,
-  Code,
   Divider,
   Group,
   Paper,
@@ -25,14 +23,19 @@ import {
 import { Icon } from '@iconify/react';
 
 import { runCollectionTotals, runTemplateMatch, splitTemplateId } from 'depictio-react-core';
-import type { DetectedTemplate, FromRunReport, RunTemplateMatch } from 'depictio-react-core';
+import type {
+  DetectedTemplate,
+  FromRunReport,
+  RunStorageIn,
+  RunTemplateMatch,
+} from 'depictio-react-core';
 
 import { TemplateSourceLogo } from '../template';
 import { CollectionPlan } from './CollectionPlan';
 import { FolderPath } from './FolderPath';
 import { plural } from './plural';
-import { RunTemplateTable } from './RunIdentity';
-import type { RunInfo } from './RunIdentity';
+import { RunChecks } from './RunChecks';
+import type { RunInfo } from './RunChecks';
 import { ResolvedSettings } from './TemplateSettings';
 
 /** Red when nothing is ready, yellow when some is, green when all is. */
@@ -105,15 +108,18 @@ interface RunSummaryCardProps {
   /** What was read in the folder before the preview, used when the report
    *  carries no detection of its own (a template was chosen). */
   detection: DetectedTemplate | null;
+  /** The private bucket's connection details, to preview its files. */
+  storage?: RunStorageIn | null;
 }
 
-/** The header of the plan: who made the run, the template used, the run
- *  folder once, and the ready count. */
+/** The header of the plan: the template used, the ready count, the checks
+ *  and the run folder once. */
 export const RunSummaryCard: React.FC<RunSummaryCardProps> = ({
   report,
   templateTitle,
   templateEngine = null,
   detection,
+  storage = null,
 }) => {
   const run = reportRunInfo(report, detection);
   const match = reportMatch(report, detection);
@@ -136,14 +142,17 @@ export const RunSummaryCard: React.FC<RunSummaryCardProps> = ({
         <ReadyRing ready={ready} considered={considered} />
       </Group>
       <Divider my="sm" />
-      <RunTemplateTable
+      <RunChecks
+        location={report.data_root}
         run={run}
         templateId={report.template_id}
         templateName={templateTitle}
         templateEngine={templateEngine}
         match={match}
+        plan={{ status: 'ready', report }}
+        storage={storage}
+        withPlan={false}
         testIdPrefix="run-summary"
-        templateHeading="Template used"
       />
       <Group gap="xs" mt="sm" wrap="nowrap" style={{ minWidth: 0 }}>
         <Text size="xs" fw={700} c="dimmed" tt="uppercase" style={{ flexShrink: 0 }}>
@@ -160,6 +169,7 @@ export const RunPreview: React.FC<RunSummaryCardProps> = ({
   templateTitle,
   templateEngine = null,
   detection,
+  storage = null,
 }) => {
   const failedDashboards = report.dashboards.filter((d) => !d.success);
   const settings = Object.entries(report.resolved_variables ?? {}).filter(
@@ -173,21 +183,8 @@ export const RunPreview: React.FC<RunSummaryCardProps> = ({
         templateTitle={templateTitle}
         templateEngine={templateEngine}
         detection={detection}
+        storage={storage}
       />
-
-      {report.truncated && (
-        <Alert
-          color="yellow"
-          variant="light"
-          icon={<Icon icon="mdi:information-outline" width={16} />}
-          data-testid="run-truncated-warning"
-        >
-          <Text size="sm">
-            The folder listing was cut short, so every count below is a lower bound. More
-            files are picked up at ingestion.
-          </Text>
-        </Alert>
-      )}
 
       {report.data_collections.length === 0 ? (
         <Group gap="xs" wrap="nowrap" data-testid="run-preview-empty">
@@ -199,21 +196,10 @@ export const RunPreview: React.FC<RunSummaryCardProps> = ({
           </Text>
         </Group>
       ) : (
-        <CollectionPlan rows={report.data_collections} dataRoot={report.data_root} />
+        <CollectionPlan rows={report.data_collections} dataRoot={report.data_root} storage={storage} />
       )}
 
       {settings.length > 0 && <ResolvedSettings settings={settings} dataRoot={report.data_root} />}
-
-      {report.detected_runs.length > 0 && (
-        <Group gap={6} wrap="wrap" data-testid="run-detected-runs">
-          <Text size="xs" c="dimmed">
-            Runs found in this folder:
-          </Text>
-          {report.detected_runs.map((name) => (
-            <Code key={name}>{name}</Code>
-          ))}
-        </Group>
-      )}
 
       {failedDashboards.length > 0 && (
         <Stack gap={4} data-testid="run-failed-dashboards">

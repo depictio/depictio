@@ -63,6 +63,11 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _ingest_manifest_into_project,
     _refresh_manifest_in_project,
 )
+from depictio.api.v1.endpoints.projects_endpoints.run_file_preview import (
+    RunFilePreview,
+    RunFilePreviewRequest,
+    preview_run_file,
+)
 from depictio.api.v1.endpoints.projects_endpoints.run_folders import (
     FindRunsRequest,
     FolderInspection,
@@ -986,6 +991,11 @@ async def create_project_from_run(
     poll via ``GET /projects/refresh_manifest/{run_id}``. ``dry_run=true``
     returns the same per-collection plan and creates nothing.
 
+    Either way the report also says what the run's own records say about it
+    (``run_info``, as ``GET /projects/folder_inspect`` shows it) and where
+    each file the template reads through a variable resolved
+    (``input_files``: found or not, and the collections that use it).
+
     The run folder is an ``s3://`` prefix or, when local folders are on, a
     folder on the server's disk. Without ``template_id`` the pipeline is
     recognised from the folder (``detected_template`` in the report).
@@ -1014,6 +1024,35 @@ async def create_project_from_run(
         dry_run=payload.dry_run,
         request=request,
         storage=payload.storage,
+    )
+
+
+@projects_endpoint_router.post("/run_file_preview", response_model=RunFilePreview)
+async def post_run_file_preview(
+    payload: RunFilePreviewRequest,
+    request: Request,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Show the start of one file of a run folder, before a project is made from it.
+
+    For the run-folder dialog of ``POST /projects/from_run``: the first rows of
+    a table (CSV, TSV, a plain text table, gzipped or not, parquet), the first
+    lines of a text, or in plain words why a file is not shown (an HTML
+    report, an image, an archive). ``data_root`` and ``storage`` are read
+    exactly as ``from_run`` reads them, with its refusals and its public-mode
+    gate; ``location`` must be a file below ``data_root``.
+
+    Bounded: at most 64 KB of the file is read (256 KB once a gzip file is
+    decompressed), and a parquet file of at most 512 MB shows its first rows
+    and its row count, read from its metadata. Refusals answer
+    ``{detail, code}``.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    # The from_run gate: the preview is a step of creating a project.
+    _reject_non_admin_in_public_mode(current_user, "Project creation")
+    return await _run_coded_off_loop(
+        preview_run_file, payload, request=request, current_user=current_user
     )
 
 
@@ -1084,7 +1123,11 @@ async def get_folder_inspect(
 ):
     """Describe one folder: its direct sub-folders and files, whether it looks
     like a run, and (``detect``, the default) the template its run fits, with
-    what the run's own records say about it (``run_info``).
+    what the run's own records say about it (``run_info``): its engine,
+    parameters, tools and reports, how many runs it holds and of which
+    pipelines when it holds several, and how its tasks ended, counted from
+    the first 8 MB of its execution trace (``run_info.tasks``, ``partial``
+    when the trace is larger).
 
     ``location`` is a folder on this computer (``depictio local``, with the
     guards of ``GET /projects/local_dirs``) or an ``s3://`` location (with
