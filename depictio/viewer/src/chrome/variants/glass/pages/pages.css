@@ -1,0 +1,1212 @@
+/* Glass pages: the management pages (dashboards, projects, admin, about,
+ * profile) in the Glass language. The tokens (--gl-*) are the
+ * dashboard chrome's own, from ../glass.css; nothing here defines a colour
+ * of its own. Every rule is scoped to [data-chrome='glass'], so the
+ * base chrome keeps today's look. Portalled surfaces (modals, menus,
+ * popovers) opened from a page carry [data-gp-page] on <html>. */
+
+/* A run of icon keys that share a frosted tray. Without Glass it is no box at
+ * all, so the base toolbars lay out exactly as before. */
+.gp-tray {
+  display: contents;
+}
+
+:root[data-chrome='glass'] {
+  --gp-side-open: 244px;
+  --gp-side-folded: 76px;
+  --gp-top-h: 66px;
+  --gp-radius: 18px;
+  --gp-radius-lg: 22px;
+  --gp-radius-input: 12px;
+  --gp-pad: 16px;
+  --gp-head-h: 56px;
+  --gp-card-bg: var(--gl-surface);
+  --gp-card-shadow: 0 0 0 1px var(--gl-hair), 0 1px 2px var(--gl-shade-a), 0 14px 32px -20px var(--gl-shade-b);
+  --gp-card-shadow-hover: 0 0 0 1px var(--gl-hair), 0 2px 4px var(--gl-shade-a), 0 22px 44px -22px var(--gl-shade-b);
+  --gp-input-bg: light-dark(var(--mantine-color-white), color-mix(in srgb, var(--mantine-color-dark-7) 72%, transparent));
+  --gp-input-line: light-dark(
+    color-mix(in srgb, var(--mantine-color-gray-9) 16%, transparent),
+    color-mix(in srgb, var(--mantine-color-white) 14%, transparent)
+  );
+  --gp-input-line-hover: light-dark(
+    color-mix(in srgb, var(--mantine-color-gray-9) 28%, transparent),
+    color-mix(in srgb, var(--mantine-color-white) 24%, transparent)
+  );
+  --gp-focus: 0 0 0 3px color-mix(in srgb, var(--gl-accent) 22%, transparent);
+  --gp-raised: light-dark(var(--mantine-color-white), color-mix(in srgb, var(--mantine-color-white) 12%, transparent));
+}
+
+/* ================================================================= shell */
+
+.gp-shell {
+  --gp-side-w: var(--gp-side-open);
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-rows: var(--gp-top-h) minmax(0, 1fr);
+  grid-template-columns: var(--gp-side-w) minmax(0, 1fr);
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+  background: var(--gl-paper);
+  color: var(--gl-fg);
+  transition: grid-template-columns 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.gp-shell[data-side='folded'] {
+  --gp-side-w: var(--gp-side-folded);
+}
+.gp-flex {
+  flex: 1;
+  min-width: 0;
+}
+.gp-flex-col {
+  flex: 1;
+  min-height: 12px;
+}
+.gp-eyebrow {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--gl-faint);
+}
+
+/* --------------------------------------------------------------- top bar */
+
+.gp-top {
+  grid-row: 1;
+  grid-column: 1 / -1;
+  position: relative;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  margin: 8px 10px 0;
+  padding: 0 10px 0 14px;
+  border-radius: 18px;
+  background: var(--gl-glass-strong);
+  border: 1px solid var(--gl-rim);
+  box-shadow: var(--gl-float-shadow);
+  -webkit-backdrop-filter: var(--gl-float-filter);
+  backdrop-filter: var(--gl-float-filter);
+}
+.gp-brand {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 8px 0 4px;
+  border-radius: 10px;
+  color: var(--gl-fg);
+  text-decoration: none;
+  outline: none;
+  transition: background-color 150ms ease;
+}
+.gp-brand:hover {
+  background: var(--gl-well);
+}
+.gp-brand:focus-visible {
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.gp-brand > span:first-child {
+  display: block !important;
+  line-height: 0;
+}
+/* Virgil, for the wordmark and nowhere else. */
+.gp-wordmark {
+  font-family: 'Virgil', var(--mantine-font-family);
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0.01em;
+  color: var(--gl-fg);
+  white-space: nowrap;
+}
+.gp-top-rule {
+  flex: none;
+  width: 1px;
+  height: 26px;
+  background: var(--gl-hair);
+}
+.gp-trail {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 14px;
+}
+.gp-trail-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 10px;
+  color: light-dark(
+    color-mix(in oklab, var(--gp-tint) 82%, var(--mantine-color-black)),
+    color-mix(in oklab, var(--gp-tint) 70%, var(--mantine-color-white))
+  );
+  background: color-mix(in srgb, var(--gp-tint) 13%, transparent);
+}
+.gp-trail-link,
+.gp-trail-here {
+  min-width: 0;
+  max-width: 34ch;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.gp-trail-link {
+  flex: 0 1 auto;
+  color: var(--gl-muted);
+  font-weight: 550;
+  text-decoration: none;
+  border-radius: 6px;
+  outline: none;
+}
+.gp-trail-link:hover {
+  color: var(--gl-fg);
+}
+.gp-trail-link:focus-visible {
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.gp-trail-here {
+  flex: 0 1 auto;
+  color: var(--gl-fg);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.gp-trail-chev {
+  flex: none;
+  color: var(--gl-faint);
+}
+.gp-top-powered {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+.gp-top-powered:empty {
+  display: none;
+}
+:root[data-mantine-color-scheme='dark'] .gp-top-powered img {
+  filter: invert(1) hue-rotate(180deg) !important;
+}
+.gp-top-keys {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* An icon key: quiet until hovered, a ring when focused by keyboard. */
+.gp-key {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--gl-key-radius);
+  background: transparent;
+  color: var(--gl-muted);
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+.gp-key:hover {
+  color: var(--gl-fg);
+  background: var(--gl-well);
+}
+.gp-key:focus-visible {
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.gp-avatar {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  margin-left: 6px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--gl-hair);
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  cursor: pointer;
+  outline: none;
+}
+.gp-avatar:focus-visible {
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.gp-avatar--idle {
+  opacity: 0.5;
+  cursor: default;
+}
+.gp-menu-who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px 6px;
+}
+.gp-menu-who-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--gl-fg);
+}
+.gp-menu-who-role {
+  font-size: 12px;
+  color: var(--gl-muted);
+}
+
+/* --------------------------------------------------------------- sidebar */
+
+.gp-side {
+  grid-row: 2;
+  grid-column: 1;
+  position: relative;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  margin: 10px;
+  padding: 14px 10px 12px;
+  border-radius: 22px;
+  border: 1px solid var(--gl-rim);
+  background: var(--gl-glass);
+  color: var(--gl-fg);
+  box-shadow: var(--gl-float-shadow);
+  -webkit-backdrop-filter: var(--gl-float-filter);
+  backdrop-filter: var(--gl-float-filter);
+  overflow: hidden;
+}
+.gp-shell[data-side='folded'] .gp-side {
+  align-items: center;
+  padding-inline: 0;
+}
+.gp-side-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  margin-bottom: 8px;
+  padding-left: 10px;
+}
+.gp-shell[data-side='folded'] .gp-side-head {
+  justify-content: center;
+  padding-left: 0;
+}
+.gp-shell[data-side='folded'] .gp-side-head .gp-flex {
+  display: none;
+}
+.gp-fold {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--gl-hair);
+  border-radius: calc(var(--gl-key-radius) - 2px);
+  background: transparent;
+  color: var(--gl-rail-muted);
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+.gp-fold:hover {
+  color: var(--gl-fg);
+  background: var(--gl-well);
+}
+.gp-fold:focus-visible {
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.gp-shell[data-side='folded'] .gp-fold {
+  width: 40px;
+  height: 36px;
+}
+.gp-side-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+.gp-shell[data-side='folded'] .gp-side-rows {
+  align-items: center;
+}
+.gp-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: 40px;
+  padding: 0 10px 0 12px;
+  border-radius: var(--gl-key-radius);
+  color: var(--gl-fg);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+  outline: none;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 200ms ease,
+    translate 260ms var(--gl-spring);
+}
+.gp-row:hover {
+  background: var(--gl-well);
+}
+.gp-row:focus-visible {
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.gp-row-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  color: light-dark(
+    color-mix(in oklab, var(--gp-tint) 82%, var(--mantine-color-black)),
+    color-mix(in oklab, var(--gp-tint) 70%, var(--mantine-color-white))
+  );
+}
+.gp-row-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The page that is open: a raised pill with the section's tick. */
+.gp-row[data-active] {
+  background: var(--gp-raised);
+  box-shadow:
+    inset 0 1px 0 var(--gl-rim),
+    0 0 0 1px var(--gl-hair),
+    0 6px 16px -8px var(--gl-shade-b);
+  font-weight: 650;
+}
+.gp-row[data-active]::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  width: 3px;
+  height: 16px;
+  margin-top: -8px;
+  border-radius: 3px;
+  background: var(--gp-tint);
+}
+.gp-shell[data-side='folded'] .gp-row {
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  justify-content: center;
+}
+.gp-shell[data-side='folded'] .gp-row-label {
+  display: none;
+}
+.gp-shell[data-side='folded'] .gp-row[data-active]::after {
+  left: 50%;
+  top: auto;
+  bottom: 4px;
+  width: 12px;
+  height: 3px;
+  margin: 0 0 0 -6px;
+}
+.gp-rule {
+  flex: none;
+  align-self: stretch;
+  height: 1px;
+  margin: 8px 6px 10px;
+  background: var(--gl-hair);
+}
+.gp-shell[data-side='folded'] .gp-rule {
+  align-self: center;
+  width: 28px;
+  margin-inline: 0;
+}
+.gp-side-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 0 10px;
+}
+.gp-shell[data-side='folded'] .gp-side-foot {
+  align-items: center;
+  padding: 0;
+}
+.gp-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 24px;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--gl-muted);
+  font-variant-numeric: tabular-nums;
+}
+.gp-status-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mantine-color-green-6);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mantine-color-green-6) 20%, transparent);
+}
+.gp-status[data-state='offline'] .gp-status-dot {
+  background: var(--mantine-color-red-6);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mantine-color-red-6) 20%, transparent);
+}
+.gp-status[data-state='unknown'] .gp-status-dot {
+  background: var(--gl-faint);
+  box-shadow: none;
+}
+.gp-shell[data-side='folded'] .gp-status-text {
+  display: none;
+}
+.gp-mode {
+  align-self: flex-start;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+  font-size: 11.5px;
+  font-weight: 650;
+}
+
+/* ------------------------------------------------------------------ main */
+
+.gp-main {
+  grid-row: 2;
+  grid-column: 2;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  padding: 10px 20px 56px 10px;
+}
+.gp-page {
+  max-width: 1480px;
+  margin: 0 auto;
+}
+.gp-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 64px;
+  padding: 8px 2px 20px;
+}
+.gp-head-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  color: light-dark(
+    color-mix(in oklab, var(--gp-tint) 82%, var(--mantine-color-black)),
+    color-mix(in oklab, var(--gp-tint) 70%, var(--mantine-color-white))
+  );
+  background: color-mix(in srgb, var(--gp-tint) 13%, var(--gl-surface));
+  box-shadow:
+    inset 0 1px 0 var(--gl-rim),
+    0 0 0 1px var(--gl-hair),
+    0 6px 16px -10px var(--gl-shade-b);
+}
+.gp-head-text {
+  flex: 1;
+  min-width: 0;
+}
+.gp-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 750;
+  line-height: 1.15;
+  letter-spacing: -0.022em;
+  color: var(--gl-fg);
+  overflow-wrap: anywhere;
+}
+.gp-desc {
+  margin: 4px 0 0;
+  max-width: 72ch;
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--gl-muted);
+}
+.gp-head-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ------------------------------------------------------------ phone bar */
+
+.gp-tabbar {
+  display: none;
+}
+
+@media (max-width: 47.99em) {
+  .gp-shell {
+    display: block;
+    height: 100dvh;
+  }
+  .gp-side,
+  .gp-top-rule,
+  .gp-top-powered,
+  .gp-trail-icon,
+  .gp-trail-link,
+  .gp-trail-chev {
+    display: none;
+  }
+  .gp-top {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 60px;
+    margin: 0;
+    gap: 10px;
+    padding: 0 8px 0 10px;
+    border-width: 0 0 1px;
+    border-radius: 0;
+    border-color: var(--gl-hair);
+    box-shadow: 0 8px 24px -18px var(--gl-shade-b);
+  }
+  .gp-brand .gp-wordmark {
+    font-size: 20px !important;
+  }
+  .gp-trail-here {
+    display: none;
+  }
+  .gp-key {
+    width: 42px;
+    height: 42px;
+  }
+  .gp-avatar {
+    width: 40px;
+    height: 40px;
+    margin-left: 2px;
+  }
+  .gp-main {
+    position: absolute;
+    inset: 60px 0 0;
+    padding: 12px 12px calc(96px + env(safe-area-inset-bottom, 0px));
+    scrollbar-gutter: auto;
+  }
+  .gp-head {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 6px 0 16px;
+  }
+  .gp-head-icon {
+    width: 40px;
+    height: 40px;
+  }
+  .gp-title {
+    font-size: 23px;
+  }
+  .gp-desc {
+    font-size: 14px;
+  }
+  .gp-head-actions {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+  }
+  .gp-head-actions > :last-child:is(.mantine-Button-root, a, button) {
+    flex: 1 1 auto;
+  }
+  .gp-tabbar {
+    position: fixed;
+    z-index: 40;
+    inset-inline: 8px;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+    height: 64px;
+    padding: 4px;
+    border-radius: 24px;
+    background: var(--gl-glass-strong);
+    border: 1px solid var(--gl-rim);
+    box-shadow: var(--gl-float-shadow);
+    -webkit-backdrop-filter: var(--gl-float-filter);
+    backdrop-filter: var(--gl-float-filter);
+  }
+  .gp-tabbar-key {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+    border-radius: 18px;
+    color: var(--gl-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: none;
+    outline: none;
+  }
+  .gp-tabbar-key span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .gp-tabbar-key:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--gl-ring);
+  }
+  .gp-tabbar-key[data-active] {
+    color: var(--gl-accent-fg);
+    background: var(--gl-accent-soft);
+  }
+}
+
+/* ============================================================ the content
+ *
+ * The listing and admin surfaces are Mantine; here they take the Glass card
+ * language: one radius, one hairline, one surface, one shadow, a 16px inner
+ * edge; outlined fields; icon keys in frosted trays; soft pills. */
+
+/* Cards and panels. */
+:root[data-chrome='glass'] .gp-main :is(.mantine-Paper-root[data-with-border], .mantine-Card-root, .dc-list-table) {
+  border: 1px solid var(--gl-rim) !important;
+  border-radius: var(--gp-radius) !important;
+  background: var(--gp-card-bg);
+  box-shadow: var(--gp-card-shadow);
+}
+:root[data-chrome='glass'] .gp-main .mantine-Card-root {
+  transition:
+    box-shadow 220ms ease,
+    translate 260ms var(--gl-spring);
+}
+:root[data-chrome='glass'] .gp-main .mantine-Card-root:hover {
+  box-shadow: var(--gp-card-shadow-hover);
+}
+/* Nested panels read as wells, not as cards on cards. */
+:root[data-chrome='glass'] .gp-main :is(.mantine-Paper-root[data-with-border], .mantine-Card-root, .dc-list-table) .mantine-Paper-root[data-with-border] {
+  border-color: var(--gl-hair) !important;
+  border-radius: 14px !important;
+  background: color-mix(in srgb, var(--gl-surface) 55%, transparent);
+  box-shadow: none;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Paper-root:not([data-with-border]) {
+  background-color: transparent;
+}
+
+/* Toolbars: the search and the pickers on one row, the keys in a tray. */
+:root[data-chrome='glass'] .gp-main .dc-list-toolbar {
+  gap: 8px !important;
+}
+:root[data-chrome='glass'] .gp-tray {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 14px;
+  background: var(--gl-glass-strong);
+  border: 1px solid var(--gl-rim);
+  box-shadow: 0 0 0 1px var(--gl-hair), 0 1px 2px var(--gl-shade-a);
+}
+:root[data-chrome='glass'] .gp-tray .mantine-ActionIcon-root {
+  --ai-size-lg: 34px;
+  border: 0;
+  border-radius: 11px;
+}
+:root[data-chrome='glass'] .gp-tray .mantine-ActionIcon-root[data-variant='default'] {
+  background: transparent;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-tray .mantine-ActionIcon-root[data-variant='default']:not(:disabled):hover {
+  background: var(--gl-well);
+  color: var(--gl-fg);
+}
+/* An engaged key (a filter on, a view picked): the lit accent well. */
+:root[data-chrome='glass'] .gp-tray .mantine-ActionIcon-root[data-variant='light'] {
+  background: var(--gl-on-bg);
+  color: var(--gl-on-fg);
+  box-shadow: var(--gl-on-ring);
+}
+:root[data-chrome='glass'] .gp-tray .mantine-ActionIcon-root:disabled,
+:root[data-chrome='glass'] .gp-tray .mantine-ActionIcon-root[data-disabled] {
+  background: transparent;
+  opacity: 0.45;
+}
+:root[data-chrome='glass'] .gp-tray .mantine-Indicator-indicator {
+  box-shadow: 0 0 0 2px var(--gl-badge-ring);
+}
+
+/* Keys outside a tray: quiet, a well on hover. */
+:root[data-chrome='glass'] .gp-main .mantine-ActionIcon-root[data-variant='default']:not(.gp-tray *) {
+  border-color: var(--gl-hair);
+  border-radius: var(--gl-key-radius);
+  background: var(--gp-card-bg);
+}
+:root[data-chrome='glass'] .gp-main .mantine-ActionIcon-root[data-variant='subtle'] {
+  border-radius: 10px;
+}
+
+/* Fields: outlined, on the surface, the accent ring on focus. */
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown, .mantine-Drawer-content) .mantine-Input-input {
+  min-height: 38px;
+  border: 1px solid var(--gp-input-line);
+  border-radius: var(--gp-radius-input);
+  background: var(--gp-input-bg);
+  color: var(--gl-fg);
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease;
+}
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown, .mantine-Drawer-content) .mantine-Input-input:hover:not(:focus, :focus-within, [data-disabled]) {
+  border-color: var(--gp-input-line-hover);
+}
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown, .mantine-Drawer-content) .mantine-Input-input:is(:focus, :focus-within) {
+  border-color: var(--gl-accent);
+  box-shadow: var(--gp-focus);
+  background: var(--gp-input-bg);
+}
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Input-input[data-error] {
+  border-color: var(--mantine-color-error);
+}
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-InputWrapper-label {
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-InputWrapper-description {
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .mantine-Input-section {
+  color: var(--gl-faint);
+}
+
+/* Buttons: pills; the primary in the accent, the rest on glass. */
+:root[data-chrome='glass'] .gp-shell .mantine-Button-root {
+  border-radius: 999px;
+  font-weight: 600;
+}
+:root[data-chrome='glass'] .gp-shell .mantine-Button-root:is([data-variant='default'], [data-variant='outline']) {
+  border-color: transparent;
+  background: var(--gl-glass-strong);
+  color: var(--gl-fg);
+  box-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair);
+}
+:root[data-chrome='glass'] .gp-shell .mantine-Button-root:is([data-variant='default'], [data-variant='outline']):not([data-disabled]):hover {
+  background: var(--gp-raised);
+}
+:root[data-chrome='glass'] .gp-shell .mantine-Button-root:is([data-variant='filled'], :not([data-variant])):not([data-disabled]) {
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--mantine-color-white) 30%, transparent),
+    0 8px 18px -8px color-mix(in srgb, var(--gl-accent) 80%, transparent);
+}
+:root[data-chrome='glass'] .gp-shell .mantine-Button-root[data-variant='light'] {
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+}
+:root[data-chrome='glass'] .gp-head-actions .mantine-Button-root {
+  height: 40px;
+  padding-inline: 16px;
+}
+
+/* Pills: soft, in sentence case. A filled badge keeps its hue as a wash and
+ * an ink; its icons follow the ink. */
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content) .mantine-Badge-root {
+  border-radius: 999px;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content) .mantine-Badge-root:is([data-variant='filled'], :not([data-variant])) {
+  background: color-mix(in srgb, var(--badge-bg) 14%, transparent);
+  color: light-dark(
+    color-mix(in oklab, var(--badge-bg) 72%, var(--mantine-color-black)),
+    color-mix(in oklab, var(--badge-bg) 52%, var(--mantine-color-white))
+  );
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--badge-bg) 22%, transparent);
+}
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content) .mantine-Badge-root:is([data-variant='filled'], :not([data-variant])) svg {
+  color: currentColor !important;
+}
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content) .mantine-Badge-root[data-variant='light'] {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 14%, transparent);
+}
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content) .mantine-Badge-root[data-variant='outline'] {
+  border-color: var(--gl-hair);
+}
+
+/* Tabs: one frosted strip, the open tab a raised pill. On a phone the strip
+ * scrolls inside itself. */
+:root[data-chrome='glass'] .gp-main .mantine-Tabs-list {
+  flex-wrap: nowrap;
+  gap: 2px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px;
+  border-radius: 15px;
+  background: var(--gl-well);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Tabs-list::-webkit-scrollbar {
+  display: none;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Tabs-list::before {
+  display: none;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Tabs-tab {
+  flex: none;
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 11px;
+  color: var(--gl-muted);
+  font-size: 13.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 200ms ease;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Tabs-tab:hover:not([data-active]) {
+  background: var(--gl-well);
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .gp-main .mantine-Tabs-tab[data-active] {
+  background: var(--gp-raised);
+  color: var(--gl-fg);
+  box-shadow:
+    inset 0 1px 0 var(--gl-rim),
+    0 0 0 1px var(--gl-hair),
+    0 4px 12px -6px var(--gl-shade-b);
+}
+:root[data-chrome='glass'] .gp-main .mantine-Tabs-tab[data-active] .mantine-Tabs-tabSection {
+  color: var(--gl-accent-fg);
+}
+:root[data-chrome='glass'] .gp-main .mantine-Tabs-panel {
+  padding-top: 20px;
+}
+
+/* Tables: rows on the card, the head a soft rounded well. */
+:root[data-chrome='glass'] .gp-main .mantine-Table-table {
+  --table-border-color: var(--gl-hair);
+  --table-hover-color: var(--gl-well);
+  border-collapse: separate;
+  border-spacing: 0;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Table-thead .mantine-Table-th {
+  border-bottom: 0;
+  background: var(--gl-well);
+  color: var(--gl-muted);
+  font-size: 12.5px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Table-thead .mantine-Table-th:first-child {
+  border-radius: 12px 0 0 12px;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Table-thead .mantine-Table-th:last-child {
+  border-radius: 0 12px 12px 0;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Table-thead .mantine-Table-th :is(button, .mantine-UnstyledButton-root, .mantine-Text-root) {
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Table-td {
+  font-variant-numeric: tabular-nums;
+}
+:root[data-chrome='glass'] .gp-main .dc-list-table {
+  padding: 8px;
+}
+:root[data-chrome='glass'] .gp-main .dc-list-table > .mantine-Group-root:first-child {
+  padding: 2px 2px 8px !important;
+}
+
+/* Accordions: groups on the canvas, no boxes; a contained accordion is a
+ * stack of cards. */
+:root[data-chrome='glass'] .gp-main .mantine-Accordion-item {
+  border-bottom-color: transparent;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Accordion-control {
+  border-radius: 14px;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Accordion-control:hover {
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .gp-main .mantine-Accordion-root[data-variant='contained'] .mantine-Accordion-item,
+:root[data-chrome='glass'] .gp-main .mantine-Accordion-root[data-variant='separated'] .mantine-Accordion-item {
+  border: 1px solid var(--gl-rim);
+  border-radius: var(--gp-radius);
+  background: var(--gp-card-bg);
+  box-shadow: var(--gp-card-shadow);
+}
+:root[data-chrome='glass'] .gp-main .mantine-Accordion-root[data-variant='contained'] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Accordion-root[data-variant='contained'] .mantine-Accordion-item + .mantine-Accordion-item {
+  border-top: 1px solid var(--gl-rim);
+}
+
+/* Code chips and dividers in the quiet palette. */
+:root[data-chrome='glass'] .gp-main .mantine-Code-root {
+  border-radius: 6px;
+  background: var(--gl-well);
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .mantine-Divider-root {
+  --divider-color: var(--gl-hair);
+}
+:root[data-chrome='glass'] .gp-main .mantine-ThemeIcon-root {
+  border-radius: 12px;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Alert-root {
+  border-radius: 14px;
+}
+
+/* -------------------------------------------------------- dashboard cards */
+
+:root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] {
+  padding: 12px !important;
+  border-radius: 20px !important;
+  container-type: inline-size;
+}
+:root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] > .mantine-Card-section {
+  margin: -12px -12px 0 !important;
+  padding: 6px 6px 0;
+}
+:root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] > .mantine-Card-section .mantine-AspectRatio-root {
+  overflow: hidden;
+  border-radius: 14px;
+  box-shadow: 0 0 0 1px var(--gl-hair);
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] > .mantine-Card-section .mantine-Center-root {
+  background: var(--gl-well) !important;
+}
+:root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] .mantine-Title-root {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 15.5px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--gl-fg);
+  overflow-wrap: anywhere;
+}
+:root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] .mantine-Title-root + * ,
+:root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] .mantine-Stack-root > .mantine-Text-root {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--gl-muted) !important;
+}
+:root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] .mantine-Group-root > .mantine-ActionIcon-root[aria-hidden] {
+  --ai-size-lg: 34px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--ai-bg, var(--mantine-color-gray-6)) 14%, transparent);
+  color: light-dark(
+    color-mix(in oklab, var(--ai-bg, var(--mantine-color-gray-6)) 80%, var(--mantine-color-black)),
+    color-mix(in oklab, var(--ai-bg, var(--mantine-color-gray-6)) 60%, var(--mantine-color-white))
+  );
+}
+:root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] .mantine-Group-root > .mantine-ActionIcon-root[aria-hidden] svg {
+  color: currentColor !important;
+}
+:root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] .mantine-Badge-root {
+  height: 22px;
+  padding-inline: 8px;
+  font-size: 11.5px;
+}
+/* The pin floats on the thumbnail as a small glass key. */
+:root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] > .mantine-ActionIcon-root:first-child {
+  top: 14px !important;
+  right: 14px !important;
+  border-radius: 10px;
+  background: var(--gl-glass-strong);
+  box-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  filter: none !important;
+}
+:root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] > .mantine-ActionIcon-root:first-child svg[style*='white'] {
+  color: var(--gl-muted) !important;
+}
+
+/* ============================================= portalled: modals and menus */
+
+:root[data-chrome='glass'][data-gp-page] .mantine-Modal-header {
+  min-height: var(--gp-head-h);
+  padding: 14px 18px 8px 22px;
+}
+:root[data-chrome='glass'][data-gp-page] .mantine-Modal-body {
+  padding: 8px 22px 22px;
+}
+:root[data-chrome='glass'][data-gp-page] .mantine-Modal-close {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'][data-gp-page] .mantine-Modal-close:hover {
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'][data-gp-page] :is(.mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Tabs-list::before {
+  display: none;
+}
+:root[data-chrome='glass'][data-gp-page] .mantine-Modal-content .mantine-Tabs-list {
+  gap: 2px;
+  padding: 4px;
+  border-radius: 15px;
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'][data-gp-page] .mantine-Modal-content .mantine-Tabs-tab {
+  flex: 1;
+  height: 36px;
+  border: 0;
+  border-radius: 11px;
+  color: var(--gl-muted);
+  font-weight: 600;
+}
+:root[data-chrome='glass'][data-gp-page] .mantine-Modal-content .mantine-Tabs-tab[data-active] {
+  background: var(--gp-raised);
+  color: var(--gl-fg);
+  box-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair), 0 4px 12px -6px var(--gl-shade-b);
+}
+:root[data-chrome='glass'][data-gp-page] .mantine-Modal-content .mantine-Title-root {
+  color: var(--gl-fg) !important;
+  letter-spacing: -0.015em;
+}
+:root[data-chrome='glass'][data-gp-page] .mantine-Popover-dropdown {
+  padding: 14px 16px 16px;
+}
+:root[data-chrome='glass'][data-gp-page] .mantine-Tooltip-tooltip {
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 550;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gp-shell,
+  .gp-row,
+  .gp-key,
+  .gp-fold,
+  .gp-brand,
+  :root[data-chrome='glass'] .gp-main .mantine-Card-root,
+  :root[data-chrome='glass'] .gp-main .mantine-Tabs-tab {
+    transition: none !important;
+  }
+}
+
+/* Phone: the toolbar wraps, search on its own row, the tray full width. */
+@media (max-width: 47.99em) {
+  :root[data-chrome='glass'] .gp-main .dc-list-toolbar {
+    flex-wrap: wrap !important;
+  }
+  :root[data-chrome='glass'] .gp-main .dc-list-toolbar > .mantine-TextInput-root {
+    flex: 1 1 100% !important;
+  }
+  :root[data-chrome='glass'] .gp-main .dc-list-toolbar > .mantine-Select-root {
+    flex: 1 1 0 !important;
+    width: auto !important;
+    min-width: 0;
+  }
+  :root[data-chrome='glass'] .gp-main .dc-list-toolbar > .gp-tray {
+    flex: 0 0 auto;
+  }
+  :root[data-chrome='glass'] .gp-tray .mantine-ActionIcon-root {
+    --ai-size-lg: 40px;
+  }
+  :root[data-chrome='glass'] .gp-main .mantine-Input-input {
+    min-height: 42px;
+  }
+}
+
+/* One ink for headings: the page is neutral, the accent is spent on what is
+ * on or open. Their icons keep their hue. */
+:root[data-chrome='glass'] .gp-main .mantine-Title-root {
+  color: var(--gl-fg) !important;
+  letter-spacing: -0.012em;
+}
+:root[data-chrome='glass'] .gp-main .mantine-Paper-root[data-with-border] > .mantine-Stack-root > .mantine-Group-root:first-child .mantine-Title-root[data-order='3'] {
+  font-size: 18px;
+  font-weight: 700 !important;
+}
+/* Section heads on the listing: a calm label, the count after it. */
+:root[data-chrome='glass'] .gp-main .mantine-Accordion-label .mantine-Text-root[data-size='lg'] {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--gl-fg);
+}
+/* A key that is on inside a key group (density, view): the lit accent well. */
+:root[data-chrome='glass'] .gp-main .mantine-ActionIconGroup-group {
+  gap: 2px;
+  padding: 3px;
+  border-radius: 13px;
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .gp-main .mantine-ActionIconGroup-group > .mantine-ActionIcon-root {
+  border-radius: 10px !important;
+  border: 0;
+}
+:root[data-chrome='glass'] .gp-main .mantine-ActionIconGroup-group > .mantine-ActionIcon-root:is([data-variant='filled'], :not([data-variant])) {
+  background: var(--gp-raised);
+  color: var(--gl-accent-fg);
+  box-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair);
+}
+
+/* Virgil is the wordmark's alone: the listing's older hand-lettered labels
+ * (modal titles, segment labels, empty states) take the body face. */
+:root[data-chrome='glass'][data-gp-page] [style*='Virgil'] {
+  font-family: var(--mantine-font-family) !important;
+  font-weight: 600 !important;
+}
+/* Menus over the listing's cards: frosted, but opaque enough to read. */
+:root[data-chrome='glass'][data-gp-page] .mantine-Menu-dropdown {
+  background: light-dark(
+    color-mix(in srgb, var(--mantine-color-white) 92%, transparent),
+    color-mix(in srgb, var(--mantine-color-dark-6) 94%, transparent)
+  );
+}
+
+/* Actions inside a panel are soft accent pills; the page's own primary (in
+ * the head) is the one filled button. */
+:root[data-chrome='glass'] .gp-main :is(.mantine-Paper-root, .mantine-Accordion-item, .mantine-Card-root) .mantine-Button-root:is([data-variant='filled'], :not([data-variant])):not([data-disabled]):not(:disabled) {
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 24%, transparent);
+}
+:root[data-chrome='glass'] .gp-main :is(.mantine-Paper-root, .mantine-Accordion-item, .mantine-Card-root) .mantine-Button-root:is([data-variant='filled'], :not([data-variant])):not([data-disabled]):not(:disabled):hover {
+  background: color-mix(in srgb, var(--gl-accent) 18%, transparent);
+}
+
+/* Small segmented switches (admin panes) get a readable, tappable size. */
+:root[data-chrome='glass'] .gp-main .mantine-SegmentedControl-label {
+  padding: 7px 14px;
+  font-size: 13px;
+}

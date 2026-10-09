@@ -30,6 +30,8 @@ import { ActiveHighlight } from '../highlight';
 import { asNumberArray, extractCustomdataIds } from '../plotlyData';
 import { adaptGlTraces, PlotlyTrace, useWebglSlot } from '../webglBudget';
 import { useUiScale } from '../uiScale';
+import { applyChromePlotly } from '../chrome/plotlyPatch';
+import { useChromeStyle } from '../chrome/chromeStyle';
 import { useContentDemand } from './autofit';
 import { usePlotlyFollowsBox } from './usePlotlyFollowsBox';
 import RefetchOverlay from './RefetchOverlay';
@@ -117,6 +119,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   // in-place edit) would keep showing the old chart until a page reload.
   const definitionKey = renderDefinitionKey(metadata, definitionVersionId);
   const theme: 'light' | 'dark' = colorScheme === 'dark' ? 'dark' : 'light';
+  const chromeStyle = useChromeStyle();
   const uiScale = useUiScale();
   // Per-figure font-size multiplier on top of the dashboard-wide preference.
   const componentFontScale =
@@ -436,15 +439,22 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   }, [figure, overlayTrace, glGranted]);
 
   const baseLayout = useMemo<Record<string, unknown>>(() => {
+    // The chrome style's Plotly patch (fonts, backgrounds, grid) lands over the
+    // server template, under everything this renderer decides below.
+    const srcLayout = applyChromePlotly(
+      (figure?.layout as Record<string, unknown>) || {},
+      theme,
+      chromeStyle,
+    );
     const base: Record<string, unknown> = {
-      ...((figure?.layout as Record<string, unknown>) || {}),
+      ...srcLayout,
       autosize: true,
       margin: {
         l: 50,
         r: 20,
         t: 30,
         b: 50,
-        ...((figure?.layout?.margin as Record<string, unknown>) || {}),
+        ...((srcLayout.margin as Record<string, unknown>) || {}),
       },
     };
     if (effectiveFontScale !== 1) {
@@ -453,7 +463,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       // preference times this figure's own `font_scale` (labels, ticks and
       // legend all inherit layout.font); per-figure size overrides (if any)
       // are preserved by scaling whatever base the server sent.
-      const serverFont = (figure?.layout?.font as Record<string, unknown>) || {};
+      const serverFont = (srcLayout.font as Record<string, unknown>) || {};
       const serverSize = typeof serverFont.size === 'number' ? serverFont.size : 12;
       base.font = { ...serverFont, size: serverSize * effectiveFontScale };
     }
@@ -473,7 +483,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     return base;
     // uirevision above stays tied to refreshTick only: entering or leaving
     // annotate mode, or adding an annotation, must not reset the user's zoom.
-  }, [figure, selectionEnabled, metadata.selection_mode, refreshTick, effectiveFontScale]);
+  }, [figure, selectionEnabled, metadata.selection_mode, refreshTick, effectiveFontScale, theme, chromeStyle]);
 
   // ── Annotation layer ──────────────────────────────────────────────────────
   // Datawrapper-style annotations (ranges, reference lines, marked points,
@@ -589,6 +599,8 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       p={showcase ? 'md' : 'sm'}
       withBorder={!showcase}
       radius="md"
+      className="dc-tile dc-tile--figure"
+      data-showcase={showcase || undefined}
       style={{
         flex: 1,
         minHeight: 0,

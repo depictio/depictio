@@ -2,6 +2,8 @@ import { Anchor, Button, Divider, Group, PasswordInput, Stack, Text, TextInput }
 import { useState } from 'react';
 import { loginUser, persistSession, startGoogleOAuth } from 'depictio-react-core';
 
+import { useGlassPages } from '../../chrome/variants/glass/pages';
+
 const EMAIL_RE = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/;
 
 interface Props {
@@ -27,6 +29,7 @@ export default function LoginForm({
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const glass = useGlassPages();
 
   const emailValid = EMAIL_RE.test(email);
   const canSubmit = emailValid && password.length > 0 && !submitting;
@@ -61,6 +64,86 @@ export default function LoginForm({
       setError('Failed to start Google sign-in.');
       console.error(err);
     }
+  }
+
+  const googleButton = (label: string, variant: 'outline' | 'default') => (
+    <Button
+      id="google-oauth-button"
+      variant={variant}
+      radius="md"
+      fullWidth
+      onClick={handleGoogleClick}
+      leftSection={
+        <img
+          src="https://www.google.com/favicon.ico"
+          alt=""
+          width={18}
+          height={18}
+          style={{ display: 'block' }}
+        />
+      }
+    >
+      {label}
+    </Button>
+  );
+
+  // Glass: one column, the commit full width, the register switch in the
+  // card's foot (AuthApp).
+  if (glass) {
+    return (
+      <>
+        {showCredentials && (
+          <>
+            <TextInput
+              label="Email"
+              placeholder="name@example.org"
+              value={email}
+              onChange={(e) => setEmail(e.currentTarget.value)}
+              error={email.length > 0 && !emailValid ? 'Enter a valid email address' : null}
+              autoComplete="email"
+              data-autofocus
+              data-testid="login-email"
+            />
+            <PasswordInput
+              label="Password"
+              placeholder="Your password"
+              value={password}
+              onChange={(e) => setPassword(e.currentTarget.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); }}
+              autoComplete="current-password"
+              data-testid="login-password"
+            />
+          </>
+        )}
+        {error && (
+          <p className="gp-auth-error" role="alert" data-testid="user-feedback-message-login">
+            {error}
+          </p>
+        )}
+        {showCredentials && (
+          <Button
+            fullWidth
+            mt={4}
+            loading={submitting}
+            disabled={!canSubmit}
+            onClick={handleSubmit}
+            data-testid="login-button"
+          >
+            Sign in
+          </Button>
+        )}
+        {googleEnabled && (
+          <>
+            {showCredentials ? (
+              <div className="gp-auth-or">or</div>
+            ) : (
+              <p className="gp-auth-note">This instance signs in with Google.</p>
+            )}
+            {googleButton('Sign in with Google', 'default')}
+          </>
+        )}
+      </>
+    );
   }
 
   return (

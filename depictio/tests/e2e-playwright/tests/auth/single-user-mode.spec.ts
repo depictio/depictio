@@ -103,8 +103,8 @@ test.describe("Single-User Mode", () => {
       await loginAsAdmin();
       await page.goto("/dashboards");
 
-      // App shell is visible (Mantine AppShell root)
-      await expect(page.locator(".mantine-AppShell-root")).toBeVisible();
+      // The app shell is up (either chrome style)
+      await expect(page.getByTestId("app-shell")).toBeVisible();
       // No error alert
       await expect(page.locator("[role=alert]").filter({ hasText: /error/i })).toHaveCount(0);
     });

@@ -33,6 +33,8 @@ import EditDashboardModal from './EditDashboardModal';
 import DeleteDashboardModal from './DeleteDashboardModal';
 import { recordOpen as recordDashboardOpen } from './lib/dashboardRecents';
 import { usePageTitle } from '../branding';
+import { GlassPage, useGlassPages } from '../chrome/variants/glass/pages';
+import { Plus } from 'lucide-react';
 
 /** Separate storage key from the in-dashboard tab sidebar
  *  (`tab-sidebar-collapsed:<familyId>`, see useSidebarOpen) so the management
@@ -99,6 +101,7 @@ const DashboardsApp: React.FC = () => {
   const importDisabled = authLoading || isPublicMode || isDemoMode;
 
   usePageTitle('Dashboards');
+  const glass = useGlassPages();
 
   useEffect(() => {
     setLoading(true);
@@ -260,8 +263,99 @@ const DashboardsApp: React.FC = () => {
     [],
   );
 
+  const body = (
+    <>
+    {loading ? (
+      <Center mih={200}>
+        <Loader />
+      </Center>
+    ) : loadError ? (
+      <Center mih={200}>
+        <Stack align="center" gap="xs">
+          <Icon
+            icon="mdi:alert-circle"
+            width={32}
+            color="var(--mantine-color-red-6)"
+          />
+          <Text c="red">{loadError}</Text>
+          <Button variant="light" onClick={refresh}>
+            Try again
+          </Button>
+        </Stack>
+      </Center>
+    ) : (
+      <DashboardsList
+        dashboards={dashboards}
+        projects={projects}
+        currentUserEmail={currentUserEmail}
+        defaultView={asViewMode(dashboardsDefaultView)}
+        onView={handleView}
+        onEdit={(d) => setEditTarget(d)}
+        onDelete={(d) => setDeleteTarget(d)}
+        onDuplicate={handleDuplicate}
+        onExport={handleExport}
+        onCreateClick={openCreate}
+        onBulkExport={handleBulkExport}
+        onBulkDelete={handleBulkDelete}
+      />
+    )}
+    </>
+  );
+
+  const modals = (
+    <>
+      <CreateDashboardModal
+        opened={createOpened}
+        projects={projects}
+        existingTitles={dashboards.map((d) => d.title || '').filter(Boolean)}
+        onClose={closeCreate}
+        onCreate={handleCreate}
+        onImport={handleImport}
+        disableImport={importDisabled}
+      />
+      <EditDashboardModal
+        opened={Boolean(editTarget)}
+        dashboard={editTarget}
+        onClose={() => setEditTarget(null)}
+        onSubmit={handleEdit}
+      />
+      <DeleteDashboardModal
+        opened={Boolean(deleteTarget)}
+        dashboard={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+      />
+    </>
+  );
+
+  if (glass) {
+    return (
+      <>
+        <GlassPage
+          section="dashboards"
+          title="Dashboards"
+          description="Open, pin and organise the dashboards you can access."
+          actions={
+            <Button
+              leftSection={<Plus size={17} strokeWidth={2} aria-hidden />}
+              onClick={openCreate}
+              data-testid="new-dashboard-btn"
+              data-tour-id="dashboards-create"
+            >
+              New dashboard
+            </Button>
+          }
+        >
+          {body}
+        </GlassPage>
+        {modals}
+      </>
+    );
+  }
+
   return (
     <AppShell
+      data-testid="app-shell"
       layout="alt"
       header={{ height: 64 }}
       navbar={{
@@ -323,64 +417,11 @@ const DashboardsApp: React.FC = () => {
 
       <AppShell.Main>
         <Box px="lg" py="md">
-          {loading ? (
-            <Center mih={200}>
-              <Loader />
-            </Center>
-          ) : loadError ? (
-            <Center mih={200}>
-              <Stack align="center" gap="xs">
-                <Icon
-                  icon="mdi:alert-circle"
-                  width={32}
-                  color="var(--mantine-color-red-6)"
-                />
-                <Text c="red">{loadError}</Text>
-                <Button variant="light" onClick={refresh}>
-                  Try again
-                </Button>
-              </Stack>
-            </Center>
-          ) : (
-            <DashboardsList
-              dashboards={dashboards}
-              projects={projects}
-              currentUserEmail={currentUserEmail}
-              defaultView={asViewMode(dashboardsDefaultView)}
-              onView={handleView}
-              onEdit={(d) => setEditTarget(d)}
-              onDelete={(d) => setDeleteTarget(d)}
-              onDuplicate={handleDuplicate}
-              onExport={handleExport}
-              onCreateClick={openCreate}
-              onBulkExport={handleBulkExport}
-              onBulkDelete={handleBulkDelete}
-            />
-          )}
+          {body}
         </Box>
       </AppShell.Main>
 
-      <CreateDashboardModal
-        opened={createOpened}
-        projects={projects}
-        existingTitles={dashboards.map((d) => d.title || '').filter(Boolean)}
-        onClose={closeCreate}
-        onCreate={handleCreate}
-        onImport={handleImport}
-        disableImport={importDisabled}
-      />
-      <EditDashboardModal
-        opened={Boolean(editTarget)}
-        dashboard={editTarget}
-        onClose={() => setEditTarget(null)}
-        onSubmit={handleEdit}
-      />
-      <DeleteDashboardModal
-        opened={Boolean(deleteTarget)}
-        dashboard={deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onConfirm={handleDelete}
-      />
+      {modals}
     </AppShell>
   );
 };

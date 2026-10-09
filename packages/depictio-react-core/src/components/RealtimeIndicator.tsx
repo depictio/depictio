@@ -21,6 +21,7 @@ import { Icon } from '@iconify/react';
 import type { RealtimeMode, RealtimeStatus } from '../realtime';
 import type { RealtimeJournalEntry } from '../hooks/useRealtimeJournal';
 import { batchIdsFromPayload } from '../highlight';
+import { useChromeStyle } from '../chrome/chromeStyle';
 
 interface RealtimeIndicatorProps {
   status: RealtimeStatus;
@@ -86,6 +87,7 @@ const RealtimeIndicator: React.FC<RealtimeIndicatorProps> = ({
   activeHighlightKey,
 }) => {
   const [opened, setOpened] = useState(false);
+  const chrome = useChromeStyle();
   // Newest first — most recent event is the most interesting.
   const journalNewestFirst = (journal ?? []).slice().reverse();
   const showJournal = journal !== undefined;
@@ -95,8 +97,12 @@ const RealtimeIndicator: React.FC<RealtimeIndicatorProps> = ({
       <Menu.Target>
         <Tooltip label={paused ? 'Live updates paused' : STATUS_LABELS[status]} withArrow>
           <ActionIcon
-            variant="subtle"
+            variant={chrome.roles.quiet.variant}
             color={paused ? 'gray' : STATUS_COLORS[status]}
+            size={`input-${chrome.controlSize}`}
+            radius={chrome.radius}
+            className="dc-action"
+            data-role="quiet"
             aria-label="Real-time updates"
           >
             <Indicator

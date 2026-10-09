@@ -26,6 +26,8 @@ import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import type { ColDef, ICellRendererParams, CellValueChangedEvent } from 'ag-grid-community';
+import { GlassPage, useGlassPages } from '../../chrome/variants/glass/pages';
+import { Database } from 'lucide-react';
 
 import { fetchProject, listAllUsers, toggleProjectVisibility, updateProjectPermissions, useBrandAccents } from 'depictio-react-core';
 import type { AdminUser, ProjectListEntry } from 'depictio-react-core';
@@ -167,6 +169,7 @@ const PermissionsApp: React.FC = () => {
   const [visibilityBusy, setVisibilityBusy] = useState(false);
 
   usePageTitle('Project Permissions');
+  const glass = useGlassPages();
 
   // Try to load the full user list once for the Autocomplete suggestions.
   // The endpoint is admin-only — for non-admins we silently fall back to
@@ -476,8 +479,261 @@ const PermissionsApp: React.FC = () => {
     [canManage, rows],
   );
 
+  const body = (
+    <>
+      {loading ? (
+        <Center mih={300}>
+          <Loader />
+        </Center>
+      ) : loadError ? (
+        <Center mih={300}>
+          <Stack align="center" gap="xs">
+            <Icon
+              icon="mdi:alert-circle"
+              width={32}
+              color="var(--mantine-color-red-6)"
+            />
+            <Text c="red">{loadError}</Text>
+            <Button component="a" href="/projects" variant="light">
+              Back to projects
+            </Button>
+          </Stack>
+        </Center>
+      ) : !project ? null : (
+        <Stack gap="lg">
+          <Paper withBorder radius="md" p="lg">
+            <Stack gap="xs">
+              <Group gap="sm" justify="space-between">
+                <Group gap="sm">
+                  <Icon
+                    icon="mdi:shield-account-outline"
+                    width={26}
+                    color="var(--mantine-color-blue-6)"
+                  />
+                  <Title order={3} c="blue" style={{ fontWeight: 600 }}>
+                    Roles & Permissions
+                  </Title>
+                </Group>
+                <Switch
+                  label={
+                    (pendingPublic !== null ? pendingPublic : project.is_public)
+                      ? 'Public'
+                      : 'Private'
+                  }
+                  checked={
+                    pendingPublic !== null
+                      ? pendingPublic
+                      : Boolean(project.is_public)
+                  }
+                  // Switch color reflects the *off* (private) state in
+                  // Mantine — Mantine swaps to `color` only when checked
+                  // (= public). For the unchecked private state we set
+                  // a violet thumb via styles to match the Dash badge.
+                  color={accent.secondary}
+                  styles={{
+                    track: !(pendingPublic !== null
+                      ? pendingPublic
+                      : project.is_public)
+                      ? {
+                          backgroundColor: 'var(--mantine-color-violet-6)',
+                          borderColor: 'var(--mantine-color-violet-6)',
+                        }
+                      : undefined,
+                  }}
+                  onChange={(e) => setPendingPublic(e.currentTarget.checked)}
+                  disabled={!canManage || visibilityBusy}
+                  data-testid="project-visibility-switch"
+                />
+              </Group>
+              <Text size="sm" c="dimmed">
+                {project.name}
+              </Text>
+            </Stack>
+          </Paper>
+
+          {!canManage && (
+            <Alert
+              color="yellow"
+              variant="light"
+              icon={<Icon icon="mdi:lock-outline" width={18} />}
+            >
+              Read-only mode. Only project owners (or admins) can modify
+              roles or visibility.
+            </Alert>
+          )}
+
+          <Card withBorder radius="md" p="md">
+            <Stack gap="sm">
+              <Group justify="space-between">
+                <Group gap="xs">
+                  <Icon
+                    icon="mdi:account-multiple-outline"
+                    width={22}
+                    color="var(--mantine-color-blue-6)"
+                  />
+                  <Title order={5}>Project Members</Title>
+                  <Badge color="blue" variant="light" radius="sm" size="sm">
+                    {rows.length}
+                  </Badge>
+                </Group>
+              </Group>
+              <Box
+                className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
+                style={{
+                  height: Math.max(160, 56 + rows.length * 36 + 4),
+                  width: '100%',
+                }}
+              >
+                <AgGridReact<UserRow>
+                  rowData={rows}
+                  columnDefs={colDefs}
+                  headerHeight={36}
+                  rowHeight={36}
+                  suppressCellFocus
+                  onCellValueChanged={handleCellChange}
+                  stopEditingWhenCellsLoseFocus
+                  overlayNoRowsTemplate={
+                    '<span style="color:var(--mantine-color-dimmed);font-size:12px">No users yet — add a teammate by email below.</span>'
+                  }
+                />
+              </Box>
+              {canManage && (
+                <Group gap="xs" align="flex-end">
+                  <Autocomplete
+                    flex={1}
+                    size="sm"
+                    label={undefined}
+                    placeholder={
+                      allUsers.length > 0
+                        ? 'Type to search users…  (or * for all signed-in users)'
+                        : 'user@example.com  (or * for all signed-in users)'
+                    }
+                    value={emailInput}
+                    onChange={setEmailInput}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !adding) handleAdd();
+                    }}
+                    disabled={adding}
+                    leftSection={<Icon icon="mdi:account-plus-outline" width={16} />}
+                    // Suggestions: every known user that isn't already a
+                    // project member, plus the wildcard. Mantine filters
+                    // by the current input value on its own.
+                    data={[
+                      '*',
+                      ...allUsers
+                        .map((u) => u.email)
+                        .filter(
+                          (e) => e && !rows.some((r) => r.email === e),
+                        ),
+                    ]}
+                    limit={20}
+                    comboboxProps={{ withinPortal: true }}
+                    data-testid="permissions-add-user-input"
+                  />
+                  <Button
+                    size="sm"
+                    color={accent.secondary}
+                    loading={adding}
+                    onClick={handleAdd}
+                    disabled={!emailInput.trim()}
+                    leftSection={<Icon icon="mdi:plus" width={14} />}
+                    data-testid="permissions-add-user-btn"
+                  >
+                    Add user
+                  </Button>
+                </Group>
+              )}
+            </Stack>
+          </Card>
+        </Stack>
+      )}
+    </>
+  );
+
+  const modals = (
+    <>
+      <Modal
+        opened={pendingPublic !== null}
+        onClose={() => {
+          if (!visibilityBusy) setPendingPublic(null);
+        }}
+        title={<Text fw={600}>Change Project Visibility</Text>}
+        centered
+        size="md"
+      >
+        <Stack gap="lg">
+          <Group justify="center" gap="md" wrap="nowrap">
+            <VisibilityCard kind={project?.is_public ? 'public' : 'private'} role="from" />
+            <Icon
+              icon="mdi:arrow-right-bold"
+              width={28}
+              color="var(--mantine-color-dimmed)"
+            />
+            <VisibilityCard kind={pendingPublic ? 'public' : 'private'} role="to" />
+          </Group>
+          <Text size="sm" ta="center" c="dimmed">
+            {pendingPublic
+              ? 'Anyone signed in will be able to view this project.'
+              : 'Only listed members will be able to view this project.'}
+          </Text>
+          <Group justify="flex-end" gap="xs">
+            <Button
+              variant="default"
+              onClick={() => setPendingPublic(null)}
+              disabled={visibilityBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              color={pendingPublic ? 'teal' : 'violet'}
+              leftSection={
+                <Icon
+                  icon={pendingPublic ? 'mdi:earth' : 'mdi:lock'}
+                  width={16}
+                />
+              }
+              onClick={confirmToggleVisibility}
+              loading={visibilityBusy}
+              data-testid="confirm-visibility-btn"
+            >
+              {pendingPublic ? 'Make Public' : 'Make Private'}
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+    </>
+  );
+
+  if (glass) {
+    const name = project?.name || 'Project';
+    return (
+      <>
+        <GlassPage
+          section="projects"
+          title="Permissions"
+          description={`Who can see, edit and own ${name}.`}
+          crumbs={[{ label: name, href: `/projects/${projectId}` }, { label: 'Permissions' }]}
+          actions={
+            <Button
+              component="a"
+              href={`/projects/${projectId}`}
+              variant="default"
+              leftSection={<Database size={17} strokeWidth={1.8} aria-hidden />}
+            >
+              Data collections
+            </Button>
+          }
+        >
+          {body}
+        </GlassPage>
+        {modals}
+      </>
+    );
+  }
+
   return (
     <AppShell
+      data-testid="app-shell"
       layout="alt"
       header={{ height: 64 }}
       navbar={{
@@ -548,224 +804,10 @@ const PermissionsApp: React.FC = () => {
 
       <AppShell.Main>
         <Box px="lg" py="md">
-          {loading ? (
-            <Center mih={300}>
-              <Loader />
-            </Center>
-          ) : loadError ? (
-            <Center mih={300}>
-              <Stack align="center" gap="xs">
-                <Icon
-                  icon="mdi:alert-circle"
-                  width={32}
-                  color="var(--mantine-color-red-6)"
-                />
-                <Text c="red">{loadError}</Text>
-                <Button component="a" href="/projects" variant="light">
-                  Back to projects
-                </Button>
-              </Stack>
-            </Center>
-          ) : !project ? null : (
-            <Stack gap="lg">
-              <Paper withBorder radius="md" p="lg">
-                <Stack gap="xs">
-                  <Group gap="sm" justify="space-between">
-                    <Group gap="sm">
-                      <Icon
-                        icon="mdi:shield-account-outline"
-                        width={26}
-                        color="var(--mantine-color-blue-6)"
-                      />
-                      <Title order={3} c="blue" style={{ fontWeight: 600 }}>
-                        Roles & Permissions
-                      </Title>
-                    </Group>
-                    <Switch
-                      label={
-                        (pendingPublic !== null ? pendingPublic : project.is_public)
-                          ? 'Public'
-                          : 'Private'
-                      }
-                      checked={
-                        pendingPublic !== null
-                          ? pendingPublic
-                          : Boolean(project.is_public)
-                      }
-                      // Switch color reflects the *off* (private) state in
-                      // Mantine — Mantine swaps to `color` only when checked
-                      // (= public). For the unchecked private state we set
-                      // a violet thumb via styles to match the Dash badge.
-                      color={accent.secondary}
-                      styles={{
-                        track: !(pendingPublic !== null
-                          ? pendingPublic
-                          : project.is_public)
-                          ? {
-                              backgroundColor: 'var(--mantine-color-violet-6)',
-                              borderColor: 'var(--mantine-color-violet-6)',
-                            }
-                          : undefined,
-                      }}
-                      onChange={(e) => setPendingPublic(e.currentTarget.checked)}
-                      disabled={!canManage || visibilityBusy}
-                      data-testid="project-visibility-switch"
-                    />
-                  </Group>
-                  <Text size="sm" c="dimmed">
-                    {project.name}
-                  </Text>
-                </Stack>
-              </Paper>
-
-              {!canManage && (
-                <Alert
-                  color="yellow"
-                  variant="light"
-                  icon={<Icon icon="mdi:lock-outline" width={18} />}
-                >
-                  Read-only mode. Only project owners (or admins) can modify
-                  roles or visibility.
-                </Alert>
-              )}
-
-              <Card withBorder radius="md" p="md">
-                <Stack gap="sm">
-                  <Group justify="space-between">
-                    <Group gap="xs">
-                      <Icon
-                        icon="mdi:account-multiple-outline"
-                        width={22}
-                        color="var(--mantine-color-blue-6)"
-                      />
-                      <Title order={5}>Project Members</Title>
-                      <Badge color="blue" variant="light" radius="sm" size="sm">
-                        {rows.length}
-                      </Badge>
-                    </Group>
-                  </Group>
-                  <Box
-                    className={isDark ? 'ag-theme-alpine-dark' : 'ag-theme-alpine'}
-                    style={{
-                      height: Math.max(160, 56 + rows.length * 36 + 4),
-                      width: '100%',
-                    }}
-                  >
-                    <AgGridReact<UserRow>
-                      rowData={rows}
-                      columnDefs={colDefs}
-                      headerHeight={36}
-                      rowHeight={36}
-                      suppressCellFocus
-                      onCellValueChanged={handleCellChange}
-                      stopEditingWhenCellsLoseFocus
-                      overlayNoRowsTemplate={
-                        '<span style="color:var(--mantine-color-dimmed);font-size:12px">No users yet — add a teammate by email below.</span>'
-                      }
-                    />
-                  </Box>
-                  {canManage && (
-                    <Group gap="xs" align="flex-end">
-                      <Autocomplete
-                        flex={1}
-                        size="sm"
-                        label={undefined}
-                        placeholder={
-                          allUsers.length > 0
-                            ? 'Type to search users…  (or * for all signed-in users)'
-                            : 'user@example.com  (or * for all signed-in users)'
-                        }
-                        value={emailInput}
-                        onChange={setEmailInput}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !adding) handleAdd();
-                        }}
-                        disabled={adding}
-                        leftSection={<Icon icon="mdi:account-plus-outline" width={16} />}
-                        // Suggestions: every known user that isn't already a
-                        // project member, plus the wildcard. Mantine filters
-                        // by the current input value on its own.
-                        data={[
-                          '*',
-                          ...allUsers
-                            .map((u) => u.email)
-                            .filter(
-                              (e) => e && !rows.some((r) => r.email === e),
-                            ),
-                        ]}
-                        limit={20}
-                        comboboxProps={{ withinPortal: true }}
-                        data-testid="permissions-add-user-input"
-                      />
-                      <Button
-                        size="sm"
-                        color={accent.secondary}
-                        loading={adding}
-                        onClick={handleAdd}
-                        disabled={!emailInput.trim()}
-                        leftSection={<Icon icon="mdi:plus" width={14} />}
-                        data-testid="permissions-add-user-btn"
-                      >
-                        Add user
-                      </Button>
-                    </Group>
-                  )}
-                </Stack>
-              </Card>
-            </Stack>
-          )}
+          {body}
         </Box>
       </AppShell.Main>
-
-      <Modal
-        opened={pendingPublic !== null}
-        onClose={() => {
-          if (!visibilityBusy) setPendingPublic(null);
-        }}
-        title={<Text fw={600}>Change Project Visibility</Text>}
-        centered
-        size="md"
-      >
-        <Stack gap="lg">
-          <Group justify="center" gap="md" wrap="nowrap">
-            <VisibilityCard kind={project?.is_public ? 'public' : 'private'} role="from" />
-            <Icon
-              icon="mdi:arrow-right-bold"
-              width={28}
-              color="var(--mantine-color-dimmed)"
-            />
-            <VisibilityCard kind={pendingPublic ? 'public' : 'private'} role="to" />
-          </Group>
-          <Text size="sm" ta="center" c="dimmed">
-            {pendingPublic
-              ? 'Anyone signed in will be able to view this project.'
-              : 'Only listed members will be able to view this project.'}
-          </Text>
-          <Group justify="flex-end" gap="xs">
-            <Button
-              variant="default"
-              onClick={() => setPendingPublic(null)}
-              disabled={visibilityBusy}
-            >
-              Cancel
-            </Button>
-            <Button
-              color={pendingPublic ? 'teal' : 'violet'}
-              leftSection={
-                <Icon
-                  icon={pendingPublic ? 'mdi:earth' : 'mdi:lock'}
-                  width={16}
-                />
-              }
-              onClick={confirmToggleVisibility}
-              loading={visibilityBusy}
-              data-testid="confirm-visibility-btn"
-            >
-              {pendingPublic ? 'Make Public' : 'Make Private'}
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+      {modals}
     </AppShell>
   );
 };

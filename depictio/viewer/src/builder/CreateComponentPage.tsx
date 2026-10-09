@@ -202,6 +202,7 @@ const CreateComponentPage: React.FC<CreateComponentPageProps> = ({
   return (
     <BrandScope theme={brandTheme}>
     <AppShell
+      data-testid="app-shell"
       padding="md"
       header={{ height: 50 }}
       footer={showStepper ? { height: 80 } : { height: 0 }}

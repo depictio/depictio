@@ -191,6 +191,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
       <Group gap={6} wrap="nowrap" align="flex-start" style={{ minWidth: 0 }}>
         {titleIcon}
         <Text
+          className="depictio-card-title"
           size={title_font_size}
           fw={700}
           c={title_color || undefined}
@@ -207,6 +208,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
       {/* The value is the number the card exists for: hero-sized even on the
           compact one-line header, only the title yields. */}
       <Text
+        className="depictio-card-value"
         fw={700}
         c={title_color || undefined}
         style={{
@@ -242,6 +244,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           />
         )}
         <Text
+          className="depictio-card-title"
           size={title_font_size === 'md' ? 'xs' : title_font_size}
           fw={600}
           c={title_color || undefined}
@@ -252,6 +255,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
         </Text>
       </Group>
       <Text
+        className="depictio-card-value"
         fw={800}
         c={title_color || undefined}
         style={{
@@ -280,6 +284,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
       )}
       <Stack gap={2} style={{ minWidth: 0 }}>
         <Text
+          className="depictio-card-title"
           size={title_font_size === 'md' ? 'sm' : title_font_size}
           fw={600}
           c={title_color || 'dimmed'}
@@ -289,6 +294,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
           {title}
         </Text>
         <Text
+          className="depictio-card-value"
           fw={800}
           c={title_color || undefined}
           style={{
@@ -308,6 +314,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
   ) : headline ? (
     <>
       <Text
+        className="depictio-card-title"
         size={title_font_size === 'md' ? 'sm' : title_font_size}
         fw={600}
         c={title_color || undefined}
@@ -316,6 +323,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
         {title}
       </Text>
       <Text
+        className="depictio-card-value"
         fw={800}
         c={title_color || undefined}
         style={{
@@ -339,6 +347,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
         <Group gap={10} wrap="nowrap" align="center" style={{ marginLeft: -2, minWidth: 0 }}>
           <IconBadge icon={icon_name as string} color={icon_color || title_color || undefined} />
           <Text
+            className="depictio-card-title"
             size={title_font_size}
             fw={700}
             c={title_color || undefined}
@@ -349,6 +358,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
         </Group>
       ) : (
         <Text
+          className="depictio-card-title"
           size={title_font_size}
           fw={700}
           c={title_color || undefined}
@@ -359,6 +369,7 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
       )}
 
       <Text
+        className="depictio-card-value"
         size={value_font_size}
         fw={700}
         c={title_color || undefined}
@@ -410,8 +421,10 @@ const DepictioCard: React.FC<DepictioCardProps> = ({
         // YAML-supplied colors still win.
         // A minimal card shows what it sits on — a tinted section, a page —
         // unless the author gave it a colour of its own.
+        // `--dc-card-bg`: a chrome style's card surface, under the author's.
         backgroundColor:
-          background_color || (minimal ? 'transparent' : 'var(--mantine-color-body)'),
+          background_color ||
+          (minimal ? 'transparent' : 'var(--dc-card-bg, var(--mantine-color-body))'),
       }}
     >
       {/* Icon overlay — top-right (narrow) or vertically-centred right

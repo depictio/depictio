@@ -7,7 +7,6 @@ import {
   ActionIcon,
   Badge,
   Box,
-  Button,
   Group,
   Menu,
   Paper,
@@ -15,13 +14,11 @@ import {
   Text,
   TextInput,
   Title,
-  Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import type { FilterSectionSpec, InteractiveFilter, StoredMetadata } from '../../api';
 import { countActiveFilters } from '../../activeFilters';
-import { useGroupingColor } from '../../selectionGroups';
 import { PANEL_RESIZE_END_EVENT, isPanelResizing } from '../../utils/panelToggle';
 import { useCollapseState } from '../../hooks/useCollapseState';
 import { useRevealComponent } from '../../reveal';
@@ -47,6 +44,7 @@ import {
 import ComponentRenderer from '../ComponentRenderer';
 import InteractiveGroupCard from '../InteractiveGroupCard';
 import ActiveFilterSummary, { type GroupSummaryRow } from './ActiveFilterSummary';
+import { ChromeButton } from '../../chrome/ChromeButton';
 
 /**
  * The dashboard's left filter panel, shared by the viewer and the editor.
@@ -195,7 +193,6 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
   funnel,
   groupSummaryRows,
 }) => {
-  const groupingColor = useGroupingColor();
   const [density, setDensity] = useState<FilterPanelDensity>(readDensity);
   const [search, setSearch] = useState('');
 
@@ -702,23 +699,17 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           overflow: 'hidden',
         }}
         data-tour-id="filter-panel"
+        className="dc-filter-rail"
       >
-        <Tooltip
-          label={activeCount > 0 ? `Show filters (${activeCount} active)` : 'Show filters'}
-          withArrow
-          position="right"
-        >
-          <ActionIcon
-            variant="subtle"
-            color="gray"
-            size="md"
-            aria-label="Show filters"
-            aria-expanded={false}
-            onClick={onToggleCollapsed}
-          >
-            <Icon icon="mdi:filter-variant" width={20} height={20} />
-          </ActionIcon>
-        </Tooltip>
+        <ChromeButton
+          role="quiet"
+          iconOnly
+          icon="filters"
+          label="Show filters"
+          tooltip={activeCount > 0 ? `Show filters (${activeCount} active)` : 'Show filters'}
+          aria-expanded={false}
+          onClick={onToggleCollapsed}
+        />
         {activeCount > 0 && (
           <Badge size="sm" variant="light" circle>
             {activeCount}
@@ -769,21 +760,17 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
       style={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
       data-tour-id="filter-panel"
     >
-      <Group justify="space-between" align="center" mb="xs" wrap="nowrap">
+      <Group justify="space-between" align="center" mb="xs" wrap="nowrap" className="dc-filter-panel-header">
         <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
           {onToggleCollapsed && (
-            <Tooltip label="Hide filters" withArrow openDelay={400}>
-              <ActionIcon
-                variant="subtle"
-                color="gray"
-                size="sm"
-                aria-label="Hide filters"
-                aria-expanded
-                onClick={onToggleCollapsed}
-              >
-                <Icon icon="mdi:chevron-left" width={16} height={16} />
-              </ActionIcon>
-            </Tooltip>
+            <ChromeButton
+              role="quiet"
+              iconOnly
+              icon="hide"
+              label="Hide filters"
+              aria-expanded
+              onClick={onToggleCollapsed}
+            />
           )}
           <Title order={5} style={{ whiteSpace: 'nowrap' }}>
             Filters
@@ -797,71 +784,54 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
         <Group gap={6} wrap="nowrap" style={{ flexShrink: 0 }}>
           {funnel && (
             <ActionIcon.Group>
-              <Tooltip
-                label={
+              {/* Not the `filters` icon: that is the panel's own icon on the
+                  collapsed rail, so reusing it here made the toggle read as a
+                  second "filters" button. */}
+              <ChromeButton
+                role="toggle"
+                iconOnly
+                active={funnel.enabled}
+                icon="funnel"
+                label="Toggle funnel filtering"
+                tooltip={
                   funnel.enabled
                     ? 'Funnel filtering on: values with no remaining results are greyed out'
                     : 'Enable funnel filtering'
                 }
-                withArrow
-                openDelay={400}
-              >
-                <ActionIcon
-                  variant={funnel.enabled ? 'filled' : 'default'}
-                  color={funnel.enabled ? groupingColor : 'gray'}
-                  size="sm"
-                  aria-label="Toggle funnel filtering"
-                  aria-pressed={funnel.enabled}
-                  onClick={funnel.onToggle}
-                  data-testid="funnel-toggle"
-                >
-                  {/* Not `mdi:filter-variant`: that is the panel's own icon on
-                      the collapsed rail, so reusing it here made the toggle
-                      read as a second "filters" button. */}
-                  <Icon icon="mdi:filter-check-outline" width={16} height={16} />
-                </ActionIcon>
-              </Tooltip>
+                aria-pressed={funnel.enabled}
+                onClick={funnel.onToggle}
+                data-testid="funnel-toggle"
+              />
               {/* Kept mounted while the funnel is off, disabled rather than
                   hidden: the overview is how you find out what the funnel does,
                   and a control that appears only once you already enabled the
                   feature cannot teach that. It also stops the header reflowing
                   on every toggle. */}
-              <Tooltip
-                label={
+              <ChromeButton
+                role="quiet"
+                iconOnly
+                icon="funnelView"
+                label="Show funnel overview"
+                tooltip={
                   funnel.enabled
                     ? 'Show the funnel overview'
                     : 'Enable funnel filtering to see the overview'
                 }
-                withArrow
-                openDelay={400}
-              >
-                <ActionIcon
-                  variant="default"
-                  color="gray"
-                  size="sm"
-                  aria-label="Show funnel overview"
-                  disabled={!funnel.enabled}
-                  onClick={funnel.onOpenView}
-                  data-testid="funnel-view-button"
-                >
-                  <Icon icon="mdi:chart-timeline-variant" width={16} height={16} />
-                </ActionIcon>
-              </Tooltip>
+                disabled={!funnel.enabled}
+                onClick={funnel.onOpenView}
+                data-testid="funnel-view-button"
+              />
             </ActionIcon.Group>
           )}
           <Menu shadow="md" position="bottom-end" withinPortal>
             <Menu.Target>
-              <Tooltip label="Panel options" withArrow openDelay={400}>
-                <ActionIcon
-                  variant="subtle"
-                  color="gray"
-                  size="sm"
-                  aria-label="Panel options"
-                  data-testid="filter-panel-options"
-                >
-                  <Icon icon="mdi:dots-vertical" width={16} height={16} />
-                </ActionIcon>
-              </Tooltip>
+              <ChromeButton
+                role="quiet"
+                iconOnly
+                icon="more"
+                label="Panel options"
+                data-testid="filter-panel-options"
+              />
             </Menu.Target>
             <Menu.Dropdown>
               {collapsibleKeys.length > 0 && (
@@ -894,20 +864,14 @@ const FilterPanel: React.FC<FilterPanelProps> = ({
           </Menu>
           {headerActions}
           {onResetAllFilters && (
-            <Button
-              leftSection={<Icon icon="bx:reset" width={12} />}
-              color="orange"
-              // Filled only while there is something to reset, mirroring the
-              // per-component ResetButton: a permanently filled orange button
-              // reads as an alert on a panel that is otherwise quiet, which is
-              // most of the time.
-              variant={activeCount > 0 ? 'filled' : 'light'}
-              size="compact-xs"
+            <ChromeButton
+              role="danger"
+              icon="reset"
+              label="Reset"
+              tooltip="Clear every filter on this tab"
               onClick={onResetAllFilters}
               disabled={activeCount === 0}
-            >
-              Reset
-            </Button>
+            />
           )}
         </Group>
       </Group>

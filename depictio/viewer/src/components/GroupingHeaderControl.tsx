@@ -1,8 +1,10 @@
 import React from 'react';
-import { Badge, Button, Drawer, Group, Text, Tooltip } from '@mantine/core';
+import { Badge, Drawer, Group, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import {
   ANALYSIS_PANEL_TOGGLE_EVENT,
+  ChromeButton,
+  getChromeStyle,
   dispatchPanelToggle,
   useGroupingColor,
   Z_LAYERS,
@@ -28,10 +30,10 @@ const PANEL_WIDTH = `min(${ANALYSIS_PANEL_WIDTH_PX}px, 92vw)`;
  *  Mantine's Drawer default. */
 const PANEL_TRANSITION_MS = 250;
 
-/** `header={{ height: 50 }}` in App.tsx and EditorApp.tsx. The panel starts
+/** The AppShell header height of the active chrome style. The panel starts
  *  below it so the header — including this button, the only way out of the
  *  mode — stays visible and clickable while the panel is docked. */
-const DASHBOARD_HEADER_HEIGHT = 50;
+const dashboardHeaderHeight = () => getChromeStyle().layout.headerHeight;
 
 /**
  * Header home of the Grouping panel (select & compare, issue #89).
@@ -129,35 +131,17 @@ const GroupingHeaderControl: React.FC<{
 
   return (
     <>
-      <Tooltip
-        label="Save selections as groups, color or split every figure, compare groups"
-        withArrow
-        openDelay={400}
-      >
-        <Button
-          // `xs` + a 14px icon, matching Edit / Save / Settings beside it —
-          // `compact-sm` set a larger font than its neighbours and made the
-          // cluster look ragged.
-          size="xs"
-          color={groupingColor}
-          // Filled while a Color-by mode is on OR analysis mode is armed:
-          // the button doubles as the always-visible indicator that a
-          // dashboard-wide override is repainting the figures, and as the
-          // one control that turns the mode back off.
-          variant={modeLabel || armed ? 'filled' : 'light'}
-          leftSection={<Icon icon="mdi:select-group" width={14} height={14} />}
-          rightSection={
-            groupCount > 0 ? (
-              <Badge size="xs" variant="white" circle>
-                {groupCount}
-              </Badge>
-            ) : undefined
-          }
-          onClick={onToggle}
-        >
-          {modeLabel ? `Analysis: ${modeLabel}` : 'Analysis'}
-        </Button>
-      </Tooltip>
+      <ChromeButton
+        role="toggle"
+        collapse
+        active={Boolean(modeLabel) || armed}
+        icon="analysis"
+        label={modeLabel ? `Analysis: ${modeLabel}` : 'Analysis'}
+        tooltip="Save selections as groups, color or split every figure, compare groups"
+        badge={groupCount}
+        aria-pressed={Boolean(modeLabel) || armed}
+        onClick={onToggle}
+      />
       <Drawer
         opened={opened}
         // The × closes the panel only; the mode (and with it every capability
@@ -165,6 +149,8 @@ const GroupingHeaderControl: React.FC<{
         onClose={() => onOpenedChange(false)}
         position="right"
         size={PANEL_WIDTH}
+        // A layout may float or re-anchor the panel through this class.
+        classNames={{ content: 'dc-analysis-panel', inner: 'dc-analysis-panel-inner' }}
         padding="md"
         // Above the floating map card, like the other dashboard drawers.
         zIndex={Z_LAYERS.overlay}
@@ -179,7 +165,7 @@ const GroupingHeaderControl: React.FC<{
         shadow="xl"
         // Docked below the app header, so the header stays reachable — the
         // Analysis button in it is the way out of the mode.
-        styles={{ inner: { top: DASHBOARD_HEADER_HEIGHT } }}
+        styles={{ inner: { top: dashboardHeaderHeight() } }}
         title={
           <Group gap="xs">
             <Icon icon="mdi:select-group" width={20} height={20} />

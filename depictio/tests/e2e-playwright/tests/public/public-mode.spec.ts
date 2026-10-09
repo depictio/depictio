@@ -85,7 +85,7 @@ test.describe("Public Mode", () => {
 
     test("public dashboards are listed and viewable", async ({ page }) => {
       await page.goto(DASHBOARDS_GRID_URL);
-      await expect(page.locator(".mantine-AppShell-root")).toBeVisible({
+      await expect(page.getByTestId("app-shell")).toBeVisible({
         timeout: 15_000,
       });
 

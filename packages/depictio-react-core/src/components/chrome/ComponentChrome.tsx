@@ -385,6 +385,8 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
       // a grid tile, the filter panel, a filter bar, a section pinned from
       // another tab. The dashboard search scrolls to and rings what this marks.
       data-component-index={metadata.index}
+      // What the tile holds, so a chrome style can frame each kind its own way.
+      data-component-type={componentType}
       className={
         'depictio-component-chrome' +
         (isFullscreenActive ? ' fullscreen-active' : '') +

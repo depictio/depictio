@@ -4,6 +4,8 @@ import BrandLogo from '../../chrome/BrandLogo';
 import PoweredBy from '../../chrome/PoweredBy';
 import { useBrandLogoMode } from '../../chrome/useBrandLogoMode';
 import { useBranding } from '../../branding';
+import { useGlassPages } from '../../chrome/variants/glass/pages';
+import { GlassAuthCard } from '../../chrome/variants/glass/pages/GlassAuth';
 
 interface Props {
   heading: string;
@@ -24,6 +26,7 @@ interface Props {
 export default function AuthCard({ heading, children }: Props) {
   const branding = useBranding();
   const logoMode = useBrandLogoMode();
+  const glass = useGlassPages();
   // The space before the colon is a normal break opportunity, so a heading long
   // enough to wrap (any instance name longer than "Depictio") leaves the colon
   // stranded alone on the second line. A non-breaking space keeps it welded to
@@ -31,6 +34,12 @@ export default function AuthCard({ heading, children }: Props) {
   const resolvedHeading = (
     branding?.app_name ? heading.replace('Depictio', branding.app_name) : heading
   ).replace(' :', '\u00A0:');
+
+  // Glass: the frosted card (the callbacks land here; AuthApp draws its own
+  // states with GlassAuthCard directly). Body type, no trailing colon.
+  if (glass) {
+    return <GlassAuthCard title={resolvedHeading.replace(/\u00A0:$/, '')}>{children}</GlassAuthCard>;
+  }
 
   return (
     <Paper

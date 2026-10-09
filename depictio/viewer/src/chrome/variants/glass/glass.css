@@ -1,0 +1,930 @@
+/* Glass, the default chrome: scoped to [data-chrome='glass'].
+ *
+ * Every floating surface (top bar, sidebar, drawers, dock, the side panels,
+ * dialogs, the phone bar and sheets) is frosted glass: a translucent fill, a
+ * backdrop blur, a hairline of light on its rim and a soft long shadow. Under
+ * it, a quiet, flat, faintly cool canvas. The palette stays neutral; the
+ * instance's primary is the only accent (a key that is engaged, the
+ * primary, an open drawer's tool). */
+
+:root[data-chrome='glass'] {
+  /* Geometry: the rail floats off the edge, drawers float beside it. */
+  --gl-rail-col: 76px;
+  --gl-rail-inset: 10px;
+  --gl-rail-radius: 22px;
+  --gl-pane-inset: 10px;
+  --gl-pane-radius: 20px;
+  --gl-drawer-gap: var(--gl-pane-inset);
+  --gl-drawer-radius: var(--gl-pane-radius);
+  --gl-gutter: 20px;
+  --gl-key-radius: 13px;
+  --gl-float-radius: 18px;
+  --gl-tile-radius: 18px;
+  --gl-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* Ink and accent. */
+  --gl-fg: light-dark(var(--mantine-color-gray-9), var(--mantine-color-dark-0));
+  --gl-muted: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-2));
+  --gl-faint: light-dark(var(--mantine-color-gray-5), var(--mantine-color-dark-3));
+  --gl-accent: var(--mantine-primary-color-filled);
+  --gl-accent-soft: light-dark(
+    color-mix(in srgb, var(--mantine-primary-color-filled) 12%, transparent),
+    color-mix(in srgb, var(--mantine-primary-color-filled) 22%, transparent)
+  );
+  --gl-accent-fg: light-dark(var(--mantine-primary-color-7), var(--mantine-primary-color-3));
+  --gl-ring: color-mix(in srgb, var(--mantine-primary-color-filled) 55%, transparent);
+  --gl-badge-bg: var(--mantine-primary-color-filled);
+  --gl-badge-fg: var(--mantine-color-white);
+  --gl-badge-ring: light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
+
+  /* The canvas: a flat cool paper, a deep slate in dark. */
+  --gl-paper: light-dark(
+    color-mix(in oklab, var(--mantine-color-gray-1) 78%, var(--mantine-color-indigo-0)),
+    color-mix(in oklab, var(--mantine-color-dark-8) 94%, var(--mantine-color-indigo-9))
+  );
+  --gl-canvas-bg: var(--gl-paper);
+  --gl-canvas-top: 12px;
+
+  /* Glass. */
+  --gl-glass: light-dark(
+    color-mix(in srgb, var(--mantine-color-white) 60%, transparent),
+    color-mix(in srgb, var(--mantine-color-dark-6) 58%, transparent)
+  );
+  --gl-glass-strong: light-dark(
+    color-mix(in srgb, var(--mantine-color-white) 78%, transparent),
+    color-mix(in srgb, var(--mantine-color-dark-6) 80%, transparent)
+  );
+  --gl-rim: light-dark(
+    color-mix(in srgb, var(--mantine-color-white) 90%, transparent),
+    color-mix(in srgb, var(--mantine-color-white) 9%, transparent)
+  );
+  --gl-hair: light-dark(
+    color-mix(in srgb, var(--mantine-color-gray-9) 8%, transparent),
+    color-mix(in srgb, var(--mantine-color-white) 8%, transparent)
+  );
+  --gl-well: light-dark(
+    color-mix(in srgb, var(--mantine-color-gray-9) 6%, transparent),
+    color-mix(in srgb, var(--mantine-color-white) 8%, transparent)
+  );
+  --gl-shade-a: light-dark(
+    color-mix(in srgb, var(--mantine-color-indigo-9) 6%, transparent),
+    color-mix(in srgb, var(--mantine-color-black) 30%, transparent)
+  );
+  --gl-shade-b: light-dark(
+    color-mix(in srgb, var(--mantine-color-indigo-9) 14%, transparent),
+    color-mix(in srgb, var(--mantine-color-black) 55%, transparent)
+  );
+  --gl-float-bg: var(--gl-glass);
+  --gl-float-line: var(--gl-rim);
+  --gl-float-filter: blur(22px) saturate(1.7);
+  --gl-float-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair), 0 1px 2px var(--gl-shade-a),
+    0 22px 48px -22px var(--gl-shade-b);
+  --gl-panel-bg: var(--gl-glass-strong);
+
+  --gl-surface: light-dark(
+    color-mix(in srgb, var(--mantine-color-white) 86%, transparent),
+    color-mix(in srgb, var(--mantine-color-dark-6) 72%, transparent)
+  );
+  --gl-raised: var(--gl-well);
+  --gl-line: var(--gl-hair);
+  --gl-line-soft: var(--gl-hair);
+  --gl-hover: var(--gl-well);
+
+  --gl-rail-bg: var(--gl-glass);
+  --gl-rail-fg: var(--gl-fg);
+  --gl-rail-muted: light-dark(var(--mantine-color-gray-6), var(--mantine-color-dark-1));
+  --gl-rail-hover: var(--gl-well);
+  --gl-rail-line: var(--gl-hair);
+  --gl-rail-shadow: var(--gl-float-shadow);
+  --gl-rail-filter: var(--gl-float-filter);
+  --gl-avatar-bg: var(--gl-accent-soft);
+  --gl-avatar-fg: var(--gl-accent-fg);
+
+  --gl-drawer-bg: var(--gl-glass-strong);
+  --gl-drawer-border: 1px solid var(--gl-rim);
+  --gl-drawer-shadow: var(--gl-float-shadow);
+
+  /* The top bar floats like the rest. */
+  --gl-top-inset: 8px 10px 0;
+  --gl-top-radius: 18px;
+  --gl-top-bg: var(--gl-glass-strong);
+  --gl-top-border: 1px solid var(--gl-rim);
+  --gl-top-shadow: var(--gl-float-shadow);
+  --gl-top-filter: var(--gl-float-filter);
+
+  --gl-rail-faint: var(--gl-faint);
+
+  /* An engaged key: a lit accent well. */
+  --gl-on-bg: radial-gradient(
+    120% 120% at 50% 0%,
+    color-mix(in srgb, var(--gl-accent) 26%, transparent),
+    color-mix(in srgb, var(--gl-accent) 12%, transparent)
+  );
+  --gl-on-fg: var(--gl-accent-fg);
+  --gl-on-ring: inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 30%, transparent),
+    0 6px 16px -8px color-mix(in srgb, var(--gl-accent) 70%, transparent);
+
+  --dc-card-bg: var(--gl-surface);
+}
+
+:root[data-chrome='glass'] body {
+  background: var(--gl-paper);
+}
+
+/* ------------------------------------------------------------- the rail */
+
+:root[data-chrome='glass'] .hy-side {
+  border: 1px solid var(--gl-rim);
+}
+/* The open tab: a raised white pill that springs up under the pointer. */
+:root[data-chrome='glass'] .hy-tab {
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 200ms ease,
+    translate 260ms var(--gl-spring);
+}
+:root[data-chrome='glass'] .hy-tab:hover {
+  translate: 0 -1px;
+}
+:root[data-chrome='glass'] :is(.hy-tab, .hy-side .hy-tablist-item)[data-active] {
+  --dc-tab-icon: var(--gl-tab-ink, var(--gl-accent-fg));
+  color: var(--gl-tab-ink, var(--gl-accent-fg));
+  background: light-dark(var(--mantine-color-white), color-mix(in srgb, var(--mantine-color-white) 13%, transparent));
+  box-shadow:
+    inset 0 1px 0 var(--gl-rim),
+    0 0 0 1px var(--gl-hair),
+    0 6px 16px -8px var(--gl-shade-b);
+}
+:root[data-chrome='glass'] .hy-side .hy-tablist-item[data-active]::after {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  width: 3px;
+  height: 16px;
+  margin-top: -8px;
+  border-radius: 3px;
+  background: var(--gl-tab-color, var(--gl-accent));
+}
+:root[data-chrome='glass'] .hy-tab[data-active]::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  width: 12px;
+  height: 3px;
+  margin-left: -6px;
+  border-radius: 3px;
+  background: var(--gl-tab-color, var(--gl-accent));
+}
+:root[data-chrome='glass'] .hy-side :is(.hy-key[data-hy-open], .hy-row[data-active]) {
+  color: var(--gl-accent-fg);
+  background: var(--gl-accent-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 25%, transparent);
+}
+:root[data-chrome='glass'] .hy-side .hy-key:not([data-hy-open]):not(:disabled):hover {
+  color: var(--gl-fg);
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .hy-drawer-head {
+  height: 58px;
+}
+
+/* ------------------------------------------------------------------ keys */
+
+:root[data-chrome='glass'] .hy-key {
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    box-shadow 200ms ease;
+}
+:root[data-chrome='glass'] :is(.hy-key--dock, .hy-key--bar, .hy-key--sheet) {
+  color: light-dark(var(--mantine-color-gray-7), var(--mantine-color-dark-1));
+}
+:root[data-chrome='glass'] .hy-key--sheet {
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] :is(.hy-key--dock, .hy-key--bar, .hy-key--sheet):not(.hy-key--primary):not(.hy-key--on):not(:disabled):hover {
+  color: var(--gl-fg);
+  background: var(--gl-well);
+}
+/* A mode that is on: a lit accent well grows in under the glyph. */
+:root[data-chrome='glass'] .hy-key--on {
+  color: var(--gl-accent-fg);
+}
+:root[data-chrome='glass'] .hy-key--on .hy-well {
+  background: radial-gradient(
+    120% 120% at 50% 0%,
+    color-mix(in srgb, var(--gl-tone) 26%, transparent),
+    color-mix(in srgb, var(--gl-tone) 12%, transparent)
+  );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--gl-tone) 28%, transparent),
+    0 6px 16px -8px color-mix(in srgb, var(--gl-tone) 70%, transparent);
+}
+:root[data-chrome='glass'] .hy-key--chip:not(.hy-key--on) {
+  background: var(--gl-glass-strong);
+  box-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair);
+}
+/* The primary (Edit, Save): a dock key like the others, its name out, in
+ * the accent's ink on a faint accent wash. No pill, no glow. */
+:root[data-chrome='glass'] .hy-key--primary {
+  color: var(--gl-accent-fg);
+  background: color-mix(in srgb, var(--gl-tone) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-tone) 24%, transparent);
+}
+:root[data-chrome='glass'] .hy-key--primary .hy-key-label {
+  font-weight: 650;
+}
+:root[data-chrome='glass'] .hy-key--primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--gl-tone) 16%, transparent);
+}
+:root[data-chrome='glass'] .hy-key--primary .hy-count {
+  background: var(--gl-tone);
+  color: var(--mantine-color-white);
+}
+:root[data-chrome='glass'] .hy-key--danger {
+  color: light-dark(var(--mantine-color-red-7), var(--mantine-color-red-4));
+}
+:root[data-chrome='glass'] .hy-key--dock.hy-key--square,
+:root[data-chrome='glass'] .hy-key--rail {
+  border-radius: 14px;
+}
+/* A tray of panel tools: loose pills on one frosted well. */
+:root[data-chrome='glass'] .hy-group--bar:has(> :nth-child(2)) {
+  gap: 3px;
+  padding: 3px;
+  border-radius: 14px;
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .hy-top .hy-group--bar:has(> :nth-child(2)) {
+  padding: 0;
+  gap: 4px;
+  background: transparent;
+}
+:root[data-chrome='glass'] .hy-dock-sep {
+  height: 22px;
+  background: var(--gl-hair);
+}
+
+/* ----------------------------------------------------------- the top bar */
+
+:root[data-chrome='glass'] .hy-top-icon {
+  background: var(--gl-glass-strong);
+  box-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair);
+}
+:root[data-chrome='glass'] .hy-top .hy-top-tab {
+  font-weight: 700;
+}
+/* The canvas carries the tab's heading, so the bar keeps a compact trail:
+ * dashboard, then tab, in body type and without the icon. */
+@media (min-width: 48em) {
+  :root[data-chrome='glass'] .hy-shell:has(.dc-tab-intro) .hy-top-icon {
+    display: none;
+  }
+  :root[data-chrome='glass'] .hy-shell:has(.dc-tab-intro) .hy-top .hy-top-tab {
+    font-size: 14px;
+    font-weight: 650;
+  }
+}
+
+/* The tab heading at the top of the canvas: the tab's icon on a tinted glass
+ * chip, its name large, its description under the name. */
+:root[data-chrome='glass'] .dc-tab-intro {
+  padding: 4px 0 22px !important;
+}
+:root[data-chrome='glass'] .dc-tab-intro > .mantine-Group-root {
+  gap: 14px !important;
+  align-items: center !important;
+}
+:root[data-chrome='glass'] .dc-tab-intro > .mantine-Group-root > :is(svg, img) {
+  box-sizing: content-box;
+  width: 24px;
+  height: 24px;
+  padding: 10px;
+  border-radius: 14px;
+  background: color-mix(in srgb, currentColor 13%, var(--gl-surface));
+  box-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair), 0 6px 16px -10px var(--gl-shade-b);
+}
+:root[data-chrome='glass'] .dc-tab-intro > .mantine-Group-root > img {
+  background: var(--gl-glass-strong);
+}
+:root[data-chrome='glass'] .dc-tab-intro .mantine-Title-root {
+  font-size: 30px !important;
+  font-weight: 750 !important;
+  letter-spacing: -0.022em;
+  line-height: 1.15 !important;
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .dc-tab-intro > .mantine-Text-root {
+  max-width: 76ch;
+  margin: 6px 0 0 58px !important;
+  font-size: 15px !important;
+  line-height: 1.5 !important;
+  color: var(--gl-muted) !important;
+}
+:root[data-chrome='glass'] .dc-tab-intro:not(:has(> .mantine-Group-root > :is(svg, img))) > .mantine-Text-root {
+  margin-left: 0 !important;
+}
+:root[data-chrome='glass'] .dc-tab-intro > .mantine-Divider-root {
+  display: none;
+}
+@media (max-width: 47.99em) {
+  :root[data-chrome='glass'] .dc-tab-intro .mantine-Title-root {
+    font-size: 24px !important;
+  }
+  :root[data-chrome='glass'] .dc-tab-intro > .mantine-Text-root {
+    margin-left: 0 !important;
+    font-size: 14px !important;
+  }
+}
+
+/* ----------------------------------------------------------------- phone */
+
+:root[data-chrome='glass'] .hy-tabbar {
+  inset-inline: 8px;
+  bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+  height: 64px;
+  padding: 4px;
+  border-radius: 24px;
+  background: var(--gl-glass-strong);
+  border: 1px solid var(--gl-rim);
+  box-shadow: var(--gl-float-shadow);
+  -webkit-backdrop-filter: var(--gl-float-filter);
+  backdrop-filter: var(--gl-float-filter);
+}
+:root[data-chrome='glass'] .hy-key--tabbar {
+  height: 54px;
+  border-radius: 18px;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .hy-key--tabbar[data-hy-open] {
+  color: var(--gl-accent-fg);
+  background: var(--gl-accent-soft);
+}
+:root[data-chrome='glass'] .hy-top--compact {
+  border-width: 0 0 1px;
+  border-color: var(--gl-hair);
+  box-shadow: 0 8px 24px -18px var(--gl-shade-b);
+}
+:root[data-chrome='glass'] .hy-sheet {
+  border-radius: 24px !important;
+  background: var(--gl-glass-strong) !important;
+  border: 1px solid var(--gl-rim);
+  box-shadow: var(--gl-float-shadow);
+  -webkit-backdrop-filter: blur(26px) saturate(1.7);
+  backdrop-filter: blur(26px) saturate(1.7);
+}
+:root[data-chrome='glass'] .hy-sheet .mantine-Drawer-body {
+  background: transparent;
+}
+
+/* The canvas runs on under the floating bar, so the glass has it to frost. */
+:root[data-chrome='glass'] .hy-shell--phone .hy-main {
+  bottom: 0;
+}
+
+:root[data-chrome='glass'] .hy-shell--phone .hy-stage > [data-testid='dashboard-content'] {
+  padding-bottom: calc(var(--dc-bottom-offset, 0px) + 12px) !important;
+}
+
+/* ============================================================ components */
+
+/* Tile frames: soft floating cards. Every framed tile wears the same one:
+   the figure, table and filter tiles, and the map and advanced figures,
+   whose own Paper would otherwise sit on the canvas as a plain white box. */
+:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root, .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) {
+  background: var(--gl-surface) !important;
+  border: 1px solid var(--gl-rim) !important;
+  border-radius: var(--gl-tile-radius) !important;
+  box-shadow: 0 0 0 1px var(--gl-hair), 0 1px 2px var(--gl-shade-a), 0 14px 32px -20px var(--gl-shade-b) !important;
+}
+/* One tile anatomy for figures, tables, maps, advanced figures and filters:
+   the same inner edge (16px), a header row of the same height and type
+   (title, an optional row count or subtitle under it; the actions float in
+   from the right on hover, so the title stops short of them), then the
+   content from the same edge. */
+:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) {
+  padding: 14px 16px 12px !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .dc-tile--table.mantine-Paper-root {
+  overflow: hidden;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > :is(.mantine-Group-root, .mantine-Stack-root):first-child:has(> .mantine-Text-root:first-child) {
+  min-height: 22px;
+  margin-bottom: 10px !important;
+  padding-right: 32px;
+  row-gap: 0 !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > :is(.mantine-Group-root, .mantine-Stack-root):first-child:has(> .mantine-Text-root:first-child) > .mantine-Text-root:first-child {
+  font-size: 14px !important;
+  font-weight: 650 !important;
+  line-height: 22px !important;
+  color: var(--gl-fg) !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root:not([data-showcase]), .depictio-component-chrome:is([data-component-type='map'], [data-component-type='advanced_viz']) > .mantine-Paper-root) > :is(.mantine-Group-root, .mantine-Stack-root):first-child:has(> .mantine-Text-root:first-child) > .mantine-Text-root + .mantine-Text-root {
+  font-size: 12px !important;
+  line-height: 16px !important;
+  color: var(--gl-faint) !important;
+}
+:root[data-chrome='glass'] .dc-tile--figure[data-showcase] > .mantine-Group-root:first-child > .mantine-Text-root {
+  font-weight: 650;
+  color: var(--gl-fg);
+}
+
+/* The tile's actions: one neutral row of glyphs, whatever each one does.
+   A control that is on (the advanced figure's controls) wears the accent,
+   as an engaged key does in the dock. */
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-component-actions .mantine-ActionIcon-root[data-variant='subtle'] {
+  color: var(--gl-muted) !important;
+  --ai-hover: var(--gl-well) !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-component-actions .mantine-ActionIcon-root[data-variant='subtle']:hover {
+  color: var(--gl-fg) !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-component-actions .mantine-ActionIcon-root[data-variant='filled'] {
+  background: var(--gl-accent-soft) !important;
+  color: var(--gl-accent-fg) !important;
+}
+
+/* Plotly's toolbar: no box, faint glyphs, shown while the tile is hovered. */
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .js-plotly-plot .modebar-group {
+  background-color: transparent !important;
+  padding: 0 !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .js-plotly-plot .modebar-btn path {
+  fill: var(--gl-faint) !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .js-plotly-plot .modebar-btn:hover path,
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .js-plotly-plot .modebar-btn.active path {
+  fill: var(--gl-fg) !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .js-plotly-plot .modebar {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-component-chrome:hover .js-plotly-plot .modebar {
+  opacity: 1;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-component-chrome:hover .js-plotly-plot .modebar--hover > :not(.watermark) {
+  opacity: 1 !important;
+}
+/* A figure with a header row carries the toolbar up into it, left of the
+   tile's actions, on the same frosted strip, so it never sits on the
+   plot's facet titles or legend. */
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .dc-tile--figure:not([data-showcase]):has(> .mantine-Group-root:first-child) .js-plotly-plot .modebar {
+  top: -34px !important;
+  right: 32px !important;
+  padding: 1px 4px;
+  border-radius: 10px;
+  background: var(--gl-glass-strong);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 var(--gl-rim), 0 6px 16px -8px var(--gl-shade-b);
+}
+/* The title keeps to one line and, while the toolbar shows, ends in an
+   ellipsis before it (the Shell gives each figure tile its toolbar's width
+   as --gl-modebar-w). Zoom in and out step aside: dragging zooms, and the
+   reset stays. */
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .dc-tile--figure:not([data-showcase]) > .mantine-Group-root:first-child {
+  flex-wrap: nowrap;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .dc-tile--figure:not([data-showcase]) > .mantine-Group-root:first-child > .mantine-Text-root:first-child {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-component-chrome:hover .dc-tile--figure:not([data-showcase]) > .mantine-Group-root:first-child > .mantine-Text-root:first-child {
+  max-width: calc(100% - var(--gl-modebar-w, 0px) - 8px);
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .dc-tile--figure:not([data-showcase]) .modebar-btn[data-attr='zoom']:is([data-val='in'], [data-val='out']) {
+  display: none;
+}
+/* The map's toolbar keeps to the left, clear of its legend. */
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-component-chrome[data-component-type='map'] .js-plotly-plot .modebar {
+  left: 8px !important;
+  right: auto !important;
+}
+
+/* The map's legend: a small Glass card over the map. */
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-component-chrome[data-component-type='map'] .legend .bg {
+  fill: var(--gl-surface) !important;
+  fill-opacity: 1 !important;
+  stroke: var(--gl-hair) !important;
+  stroke-width: 1px !important;
+  rx: 10px;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-component-chrome[data-component-type='map'] .legend text {
+  fill: var(--gl-fg) !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-component-chrome[data-component-type='map'] .js-plotly-plot {
+  border-radius: 12px;
+  overflow: hidden;
+}
+:root[data-chrome='glass'] .dc-tile .mantine-Badge-root {
+  background: var(--gl-well);
+  color: var(--gl-muted);
+  text-transform: none;
+  font-weight: 600;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-component-actions::before {
+  border-radius: 12px !important;
+  background: var(--gl-glass-strong) !important;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: inset 0 1px 0 var(--gl-rim), 0 6px 16px -8px var(--gl-shade-b) !important;
+}
+
+/* KPI cards: floating cards, a quiet label over a firm number. */
+:root[data-chrome='glass'] .depictio-card {
+  border: 1px solid var(--gl-rim) !important;
+  border-radius: var(--gl-tile-radius) !important;
+  box-shadow: 0 0 0 1px var(--gl-hair), 0 1px 2px var(--gl-shade-a), 0 14px 32px -20px var(--gl-shade-b) !important;
+}
+:root[data-chrome='glass'] .depictio-card.depictio-card--minimal {
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+:root[data-chrome='glass'] .depictio-card .depictio-card-title {
+  font-size: 12.5px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0;
+  opacity: 0.9;
+}
+:root[data-chrome='glass'] .depictio-card .depictio-card-value {
+  font-weight: 700 !important;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+:root[data-chrome='glass'] .depictio-card:not(.depictio-card--compact):not(.depictio-card--split) .depictio-card-value {
+  font-size: clamp(26px, 12cqw, 40px) !important;
+  line-height: 1.05;
+}
+:root[data-chrome='glass'] .depictio-card-icon {
+  opacity: 0.18;
+}
+/* The number reads from the top: label and value under the card's top
+   edge, level with the icon; a breakdown sits on the card's foot, clear of
+   the info key, so the card's spare height falls between the two rather
+   than in one band. Everything keeps the 16px inner edge of every tile.
+   The content box (which the grid measures to size the card) grows into
+   the card but stops short of its foot, so it never asks the grid for more
+   rows than the card has; content taller than that keeps its own height
+   and is measured as before. */
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-card:not(.depictio-card--split):not(.depictio-card--minimal) {
+  justify-content: flex-start !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-card:not(.depictio-card--split):not(.depictio-card--minimal) > div:not(.depictio-card-icon) {
+  justify-content: flex-start !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-card:not(.depictio-card--split):not(.depictio-card--minimal) > div:not(.depictio-card-icon):has(> div:last-child:not(.mantine-Card-section) > .mantine-Stack-root) {
+  flex: 1 1 auto !important;
+  margin-bottom: 30px;
+  justify-content: space-between !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-card:not(.depictio-card--split):not(.depictio-card--minimal) .mantine-Card-section {
+  padding-inline: 16px 52px !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-card:not(.depictio-card--split):not(.depictio-card--minimal) > div:not(.depictio-card-icon) > div:last-child:not(.mantine-Card-section) > .mantine-Stack-root {
+  padding-inline: 16px !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-card:not(.depictio-card--split) .depictio-card-icon {
+  top: 14px !important;
+  right: 14px !important;
+}
+:root[data-chrome='glass'] .depictio-card-split-icon {
+  border-radius: 14px;
+}
+
+/* Sections on the canvas: frosted groups with a soft accent edge. */
+:root[data-chrome='glass'] .depictio-section-accordion:not(.is-compact) .depictio-section-item:not(.is-plain) {
+  border: 1px solid var(--gl-rim);
+  border-radius: 24px;
+  background: light-dark(
+    color-mix(in srgb, var(--mantine-color-white) 42%, transparent),
+    color-mix(in srgb, var(--mantine-color-dark-7) 45%, transparent)
+  );
+  box-shadow: 0 0 0 1px var(--gl-hair), inset 3px 0 0 color-mix(in srgb, var(--section-accent) 75%, transparent);
+}
+:root[data-chrome='glass'] .depictio-section-accordion:not(.is-compact) .depictio-section-item + .depictio-section-item {
+  margin-top: 20px;
+}
+:root[data-chrome='glass'] .depictio-section-accordion:not(.is-compact) .depictio-section-item:not(.is-plain) .depictio-section-control {
+  padding: 14px 18px 12px 16px;
+  border-radius: 23px;
+}
+:root[data-chrome='glass'] .depictio-section-accordion:not(.is-compact) .depictio-section-item:not(.is-plain)[data-active] .depictio-section-control {
+  border-bottom: 0;
+  padding-block: 16px 6px;
+}
+:root[data-chrome='glass'] .depictio-section-accordion:not(.is-compact) .depictio-section-item:not(.is-plain) .depictio-section-content {
+  padding: 8px 14px 14px;
+}
+/* Hover on the canvas, one system:
+   - a section answers on its header row only, with the panels' row tint;
+     its body never reacts, and a tile's hover never reaches it;
+   - every framed tile (figure, table, map, filters, KPI card) answers the
+     same way: its rim one step firmer, and its action row fading in where it
+     already sits. No lift, no shadow change, no movement. Prose tiles have
+     no frame: only their action row appears. */
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-section-accordion:not(.is-compact) .depictio-section-item:not(.is-plain) .depictio-section-control {
+  transition: background-color 120ms ease !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-section-accordion:not(.is-compact) .depictio-section-item:not(.is-plain) .depictio-section-control:hover {
+  background-color: var(--gl-row-hover) !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-section-item.is-plain .depictio-section-control:hover {
+  background-color: transparent !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.dc-tile.mantine-Paper-root, .depictio-component-chrome > .mantine-Paper-root, .depictio-card:not(.depictio-card--minimal)) {
+  transition: border-color 120ms ease !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-component-chrome:hover > :is(.dc-tile.mantine-Paper-root, .mantine-Paper-root),
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-component-chrome:hover .depictio-card:not(.depictio-card--minimal) {
+  border-color: color-mix(in srgb, var(--gl-fg) 16%, transparent) !important;
+}
+:root[data-chrome='glass'] [data-testid='dashboard-content'] :is(.depictio-component-actions > *, .depictio-component-actions::before) {
+  transition: opacity 120ms ease !important;
+}
+
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-section-filter-bar {
+  border-radius: var(--gl-tile-radius) !important;
+  border: 1px solid var(--gl-rim) !important;
+  background: var(--gl-surface) !important;
+  box-shadow: 0 0 0 1px var(--gl-hair), 0 14px 32px -22px var(--gl-shade-b) !important;
+}
+
+/* Filter controls, everywhere: frosted wells, soft pills. */
+:root[data-chrome='glass'] :is(.hy-shell, .hy-sheet) :is(.mantine-MultiSelect-input, .mantine-Select-input, .mantine-TextInput-input, .mantine-NumberInput-input, .mantine-DatePickerInput-input) {
+  border-radius: 12px;
+  border-color: transparent;
+  background: var(--gl-well);
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease;
+}
+:root[data-chrome='glass'] :is(.hy-shell, .hy-sheet) :is(.mantine-MultiSelect-input, .mantine-Select-input, .mantine-TextInput-input):is(:focus, :focus-within) {
+  border-color: var(--gl-accent);
+  background: var(--gl-surface);
+}
+:root[data-chrome='glass'] .mantine-MultiSelect-pill {
+  border-radius: 999px;
+  background: var(--gl-glass-strong);
+  box-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair);
+  font-weight: 600;
+}
+:root[data-chrome='glass'] .mantine-SegmentedControl-root {
+  border-radius: 14px;
+  padding: 3px;
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .mantine-SegmentedControl-indicator {
+  border-radius: 11px;
+  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-4));
+  box-shadow: inset 0 1px 0 var(--gl-rim), 0 1px 2px var(--gl-shade-a), 0 4px 10px -4px var(--gl-shade-b);
+  transition-timing-function: var(--gl-spring) !important;
+}
+:root[data-chrome='glass'] .mantine-SegmentedControl-label {
+  font-weight: 600;
+}
+:root[data-chrome='glass'] .mantine-SegmentedControl-control::before {
+  display: none;
+}
+:root[data-chrome='glass'] .mantine-Slider-track::before {
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .mantine-Slider-thumb {
+  width: 18px;
+  height: 18px;
+  border-width: 0;
+  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-1));
+  box-shadow: 0 0 0 1px var(--gl-hair), 0 2px 6px var(--gl-shade-b);
+  transition: scale 200ms var(--gl-spring);
+}
+:root[data-chrome='glass'] .mantine-Slider-thumb:hover {
+  scale: 1.12;
+}
+
+/* The Tabs drawer: the open tab a raised white pill. */
+:root[data-chrome='glass'] .hy-tablist-item[data-active] {
+  background: light-dark(var(--mantine-color-white), color-mix(in srgb, var(--mantine-color-white) 12%, transparent));
+  box-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair), 0 6px 16px -10px var(--gl-shade-b);
+  font-weight: 650;
+}
+:root[data-chrome='glass'] .hy-tablist-item[data-active] .hy-tablist-icon {
+  color: var(--gl-tab-ink);
+}
+:root[data-chrome='glass'] .hy-side-editor .depictio-chrome-tabs .mantine-Tabs-tab[data-active],
+:root[data-chrome='glass'] .hy-side-editor .depictio-chrome-tabs .mantine-Tabs-tab[data-active]:hover {
+  background: light-dark(var(--mantine-color-white), color-mix(in srgb, var(--mantine-color-white) 12%, transparent)) !important;
+  color: var(--gl-fg) !important;
+  box-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair);
+  font-weight: 650;
+}
+
+/* ======================================================= editor surfaces */
+
+/* Dialogs: frosted cards over a softly blurred page, a pill for each action,
+ * the commit in the accent. */
+:root[data-chrome='glass'] .mantine-Modal-overlay {
+  background: light-dark(
+    color-mix(in srgb, var(--mantine-color-gray-6) 22%, transparent),
+    color-mix(in srgb, var(--mantine-color-black) 45%, transparent)
+  ) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  backdrop-filter: blur(4px) !important;
+}
+:root[data-chrome='glass'] .mantine-Modal-content {
+  border: 1px solid var(--gl-rim);
+  border-radius: 24px !important;
+  background: var(--gl-glass-strong);
+  box-shadow: var(--gl-float-shadow), 0 40px 80px -40px var(--gl-shade-b) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(1.7);
+  backdrop-filter: blur(28px) saturate(1.7);
+}
+:root[data-chrome='glass'] .mantine-Modal-header {
+  background: transparent;
+}
+:root[data-chrome='glass'] .mantine-Modal-title {
+  font-weight: 700;
+}
+:root[data-chrome='glass'] .mantine-Modal-body > .mantine-Stack-root > .mantine-Group-root:first-child .mantine-Title-root {
+  color: var(--gl-fg) !important;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+}
+:root[data-chrome='glass'] :is(.mantine-Modal-content, .mantine-Popover-dropdown) :is(.mantine-Input-input) {
+  border-radius: 12px;
+  border-color: transparent;
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] :is(.mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Input-input:is(:focus, :focus-within) {
+  border-color: var(--gl-accent);
+  background: var(--gl-surface);
+}
+:root[data-chrome='glass'] :is(.mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Button-root {
+  border-radius: 999px;
+  font-weight: 600;
+}
+:root[data-chrome='glass'] :is(.mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Button-root:is([data-variant='default'], [data-variant='outline']) {
+  border-color: transparent;
+  background: var(--gl-glass-strong);
+  box-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair);
+}
+:root[data-chrome='glass'] :is(.mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Button-root[data-variant='filled']:not([data-disabled]) {
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--mantine-color-white) 30%, transparent),
+    0 8px 18px -8px color-mix(in srgb, var(--gl-accent) 80%, transparent);
+}
+:root[data-chrome='glass'] .mantine-Modal-content .mantine-Accordion-item,
+:root[data-chrome='glass'] .mantine-Modal-content .mantine-Paper-root[data-with-border] {
+  border-color: var(--gl-hair);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--gl-surface) 70%, transparent);
+}
+
+/* Menus and popovers: frosted, rounded, rows on a soft well. */
+:root[data-chrome='glass'] :is(.mantine-Menu-dropdown, .mantine-Popover-dropdown) {
+  border: 1px solid var(--gl-rim);
+  border-radius: 16px;
+  background: var(--gl-glass-strong);
+  box-shadow: var(--gl-float-shadow);
+  -webkit-backdrop-filter: var(--gl-float-filter);
+  backdrop-filter: var(--gl-float-filter);
+}
+:root[data-chrome='glass'] .mantine-Menu-dropdown {
+  padding: 6px;
+}
+:root[data-chrome='glass'] .mantine-Menu-item {
+  min-height: 36px;
+  border-radius: 11px;
+  font-size: 13.5px;
+  font-weight: 550;
+}
+:root[data-chrome='glass'] .mantine-Menu-item:where(:not([data-disabled]))[data-hovered] {
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .mantine-Menu-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gl-faint);
+}
+:root[data-chrome='glass'] .mantine-Menu-divider {
+  border-color: var(--gl-hair);
+}
+
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip {
+  border: 1px solid var(--gl-rim) !important;
+  border-radius: var(--gl-tile-radius) !important;
+  background: var(--gl-surface) !important;
+  box-shadow: 0 0 0 1px var(--gl-hair), 0 1px 2px var(--gl-shade-a), 0 14px 32px -20px var(--gl-shade-b) !important;
+}
+
+/* A section's filter bar keeps to one row while the canvas has the room
+   (about 900px): the filters sit side by side at their own width, their
+   segments a little tighter, and More filters follows the last one instead
+   of dropping to a line of its own. Reset takes room only when it is
+   offered. Narrower, the bar stacks as everywhere else. The bar's wrapper
+   is the container measured: the bar cannot query its own width. */
+:root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-section-filter-bar {
+  container: hy-strip-bar / inline-size;
+}
+@container hy-strip-bar (min-width: 860px) {
+  :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip {
+    flex-wrap: nowrap;
+    column-gap: 16px;
+  }
+  :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__clip {
+    container-type: normal;
+    flex: 0 1 auto;
+  }
+  :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__grid {
+    display: flex;
+    flex-wrap: nowrap;
+    column-gap: 20px;
+  }
+  :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__item {
+    --strip-gap: 20px;
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-strip-segments {
+    width: auto;
+    grid-auto-columns: minmax(0, max-content);
+  }
+  :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-strip-segments .depictio-strip-chip {
+    min-width: 0;
+    padding-inline: 9px;
+    gap: 6px;
+  }
+  :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__aside {
+    margin-inline-start: 0;
+  }
+  :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__reset[data-hidden] {
+    display: none;
+  }
+}
+
+/* AG Grid: borderless rows on the card, a soft rounded header well. */
+:root[data-chrome='glass'] .ag-theme-alpine,
+:root[data-chrome='glass'] .ag-theme-alpine-dark {
+  --ag-background-color: transparent;
+  --ag-foreground-color: var(--gl-fg);
+  --ag-data-color: var(--gl-fg);
+  --ag-secondary-foreground-color: var(--gl-muted);
+  --ag-header-background-color: transparent;
+  --ag-header-foreground-color: var(--gl-muted);
+  --ag-odd-row-background-color: transparent;
+  --ag-row-hover-color: var(--gl-row-hover);
+  --ag-selected-row-background-color: var(--gl-accent-soft);
+  --ag-range-selection-border-color: var(--gl-accent);
+  --ag-border-color: transparent;
+  --ag-row-border-color: var(--gl-hair);
+  --ag-secondary-border-color: var(--gl-hair);
+  --ag-header-column-separator-display: none;
+  --ag-header-column-resize-handle-color: var(--gl-hair);
+  --ag-cell-horizontal-padding: 14px;
+  --ag-borders: none;
+  --ag-input-focus-border-color: var(--gl-accent);
+  --ag-checkbox-checked-color: var(--gl-accent);
+}
+:root[data-chrome='glass'] .ag-theme-alpine .ag-root-wrapper,
+:root[data-chrome='glass'] .ag-theme-alpine-dark .ag-root-wrapper {
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+}
+:root[data-chrome='glass'] .ag-theme-alpine .ag-header,
+:root[data-chrome='glass'] .ag-theme-alpine-dark .ag-header {
+  border-radius: 0;
+  border-bottom: 1px solid var(--gl-hair) !important;
+}
+:root[data-chrome='glass'] .ag-header-cell-text {
+  font-size: 12px;
+  font-weight: 600;
+}
+:root[data-chrome='glass'] :is(.ag-theme-alpine, .ag-theme-alpine-dark) .ag-header-icon {
+  color: var(--gl-faint);
+}
+:root[data-chrome='glass'] :is(.ag-theme-alpine, .ag-theme-alpine-dark) .ag-paging-panel {
+  border-top: 1px solid var(--gl-hair) !important;
+  color: var(--gl-muted);
+  font-size: 12px;
+}
+:root[data-chrome='glass'] .ag-cell {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root[data-chrome='glass'] .hy-tab,
+  :root[data-chrome='glass'] .mantine-Slider-thumb {
+    transition: none;
+  }
+  :root[data-chrome='glass'] .hy-tab:hover,
+  :root[data-chrome='glass'] .mantine-Slider-thumb:hover {
+    translate: none;
+    scale: none;
+  }
+}

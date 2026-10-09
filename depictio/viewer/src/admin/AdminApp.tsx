@@ -16,6 +16,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
 import { ADMIN_TABS, adminUrl, parseAdminUrl } from 'depictio-react-core';
 import type { AdminRoute, AdminTab } from 'depictio-react-core';
+import { GlassPage, useGlassPages } from '../chrome/variants/glass/pages';
 
 import { AppSidebar } from '../chrome';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -80,6 +81,7 @@ const AdminApp: React.FC = () => {
       : route.tab;
 
   usePageTitle('Administration');
+  const glass = useGlassPages();
 
   // Canonicalise the arrival URL (a bare `/admin` gains the remembered tab,
   // `/admin/monitoring` becomes `/admin/tasks`) and follow Back/Forward.
@@ -214,8 +216,27 @@ const AdminApp: React.FC = () => {
     );
   };
 
+  const body = (
+    <>
+      {renderBody()}
+    </>
+  );
+
+  if (glass) {
+    return (
+      <GlassPage
+        section="admin"
+        title="Administration"
+        description="Users, content, branding and the health of this instance."
+      >
+        {body}
+      </GlassPage>
+    );
+  }
+
   return (
     <AppShell
+      data-testid="app-shell"
       layout="alt"
       header={{ height: 64 }}
       navbar={{
@@ -266,7 +287,7 @@ const AdminApp: React.FC = () => {
 
       <AppShell.Main>
         <Box px="lg" py="md">
-          {renderBody()}
+          {body}
         </Box>
       </AppShell.Main>
     </AppShell>
