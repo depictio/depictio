@@ -13,11 +13,25 @@
  * - `Field` / `SwitchField` lay out one setting inside a section.
  * - `useOpenSections` keeps which sections are open, remembered in
  *   localStorage under a caller-chosen key.
+ * - `GatedButton` / `DisabledReason` show why an action is unavailable: on
+ *   hover, and in a dimmed line that stays readable without a pointer.
  */
 import React from 'react';
-import { Accordion, Group, Stack, Switch, Text, ThemeIcon } from '@mantine/core';
+import {
+  Accordion,
+  Button,
+  Group,
+  Stack,
+  Switch,
+  Text,
+  ThemeIcon,
+  Tooltip,
+  type ButtonProps,
+} from '@mantine/core';
 import type { MantineColor } from '@mantine/core';
 import { Icon } from '@iconify/react';
+
+import { Z_LAYERS } from 'depictio-react-core';
 
 // ---------------------------------------------------------------------------
 // Section header
@@ -134,6 +148,70 @@ export const SwitchField: React.FC<{
     </Field>
   );
 };
+
+// ---------------------------------------------------------------------------
+// Unavailable actions
+// ---------------------------------------------------------------------------
+
+export type GatedButtonProps = ButtonProps &
+  Omit<React.ComponentPropsWithoutRef<'button'>, keyof ButtonProps> & {
+    /** Why the action is unavailable; null or empty when it is available. */
+    reason?: string | null;
+  };
+
+/**
+ * A button that stays visible when the action is unavailable and says why on
+ * hover. A natively disabled button swallows the pointer events a tooltip
+ * needs, so this one is marked `data-disabled` and `aria-disabled` instead
+ * (Mantine's documented pattern) and ignores clicks while gated. Pair it with
+ * a `DisabledReason` line for readers without a pointer.
+ */
+export const GatedButton = React.forwardRef<HTMLButtonElement, GatedButtonProps>(
+  ({ reason, onClick, ...props }, ref) => {
+    const gated = Boolean(reason);
+    return (
+      <Tooltip
+        label={reason ?? ''}
+        disabled={!gated}
+        withArrow
+        multiline
+        maw={280}
+        zIndex={Z_LAYERS.tooltip}
+      >
+        <Button
+          ref={ref}
+          {...props}
+          data-disabled={gated || undefined}
+          aria-disabled={gated || undefined}
+          onClick={(event) => {
+            if (gated) {
+              event.preventDefault();
+              return;
+            }
+            onClick?.(event);
+          }}
+        />
+      </Tooltip>
+    );
+  },
+);
+GatedButton.displayName = 'GatedButton';
+
+/** The dimmed line under an unavailable action, saying why. Renders nothing
+ *  when there is no reason. */
+export const DisabledReason: React.FC<{
+  reason: string | null | undefined;
+  icon?: string;
+  testId?: string;
+}> = ({ reason, icon = 'mdi:lock-outline', testId }) =>
+  reason ? (
+    <Group gap={6} wrap="nowrap" align="flex-start" c="dimmed" data-testid={testId}>
+      <Icon icon={icon} width={14} style={{ flexShrink: 0, marginTop: 2 }} />
+      <Text size="xs" c="dimmed" lh={1.35}>
+        {reason}
+      </Text>
+    </Group>
+  ) : null;
 
 // ---------------------------------------------------------------------------
 // Accordion

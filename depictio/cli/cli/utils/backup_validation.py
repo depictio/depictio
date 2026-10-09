@@ -78,6 +78,26 @@ class DashboardVersionCounterBackupDoc(BaseModel):
     seq: int
 
 
+class ProjectStorageConfigBackupDoc(BaseModel):
+    """Per-project S3 read credentials, as written by
+    `projects_endpoints.storage_config._set_project_storage`.
+
+    The secret is stored Fernet-encrypted with the instance's key under
+    `DEPICTIO_AUTH_KEYS_DIR`; a backup restored on another instance keeps the
+    document but the owner has to re-enter the secret.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    project_id: Any
+    endpoint_url: str
+    bucket: str | None = None
+    region: str | None = None
+    access_key_id: str | None = None
+    secret_encrypted: str | None = None
+    updated_at: str | None = None
+
+
 def validate_backup_file(backup_path: str) -> Dict[str, Any]:
     """
     Validate a backup file against Pydantic models.
@@ -135,6 +155,7 @@ def validate_backup_file(backup_path: str) -> Dict[str, Any]:
             "comment_threads": CommentThreadBackupDoc,
             "dashboard_versions": DashboardVersionBackupDoc,
             "dashboard_version_counters": DashboardVersionCounterBackupDoc,
+            "project_storage_configs": ProjectStorageConfigBackupDoc,
         }
 
         # Validate each collection
@@ -256,6 +277,7 @@ EXPECTED_BACKUP_COLLECTIONS = [
     "comment_threads",
     "dashboard_versions",
     "dashboard_version_counters",
+    "project_storage_configs",
 ]
 
 
@@ -297,6 +319,7 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
             "comment_threads": CommentThreadBackupDoc,
             "dashboard_versions": DashboardVersionBackupDoc,
             "dashboard_version_counters": DashboardVersionCounterBackupDoc,
+            "project_storage_configs": ProjectStorageConfigBackupDoc,
         }
 
         # Check against expected collections

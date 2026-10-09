@@ -7640,100 +7640,27 @@ def _import_parent(
     )
 
 
-@dashboards_endpoint_router.post("/import/yaml")
-async def import_dashboard_from_yaml(
-    yaml_content: str = Body(..., media_type="text/plain"),
-    project_id: PyObjectId | None = None,
-    overwrite: bool = False,
+def import_dashboard_yaml_content(
+    yaml_content: str,
+    project_id: PyObjectId | None,
+    overwrite: bool,
+    current_user: User,
+    *,
     source_key: str | None = None,
     keep_titles: bool = False,
     main_title: str | None = None,
     parent_source_key: str | None = None,
     existing: Literal["keep", "replace"] | None = None,
-    current_user: User = Depends(get_current_user),
-):
+) -> dict:
+    """Parse and import dashboard YAML (single or multi-tab format).
+
+    The full import pipeline behind ``POST /dashboards/import/yaml``, minus the
+    route-level auth gates, shared so server-side orchestration (e.g.
+    ``POST /projects/from_manifest``) imports dashboards in-process instead of
+    HTTP-to-self. The keyword arguments mean what the route's query parameters
+    of the same names mean. Synchronous throughout (pymongo collections); raises
+    ``HTTPException`` on any failure.
     """
-    Import a dashboard from YAML content.
-
-    Supports both single dashboard and multi-tab dashboard formats:
-    - Single: Standard YAML with title, components, etc.
-    - Multi-tab: YAML with main_dashboard and tabs keys
-
-    A new dashboard_id will be generated, and the current user will be set as owner.
-
-    If `overwrite=True`, the dashboard imported earlier from the same `source_key`
-    is updated instead of creating a new one, whatever its title is now; without
-    one, a dashboard with the same title is, if it has no `source_key` yet (one
-    keyed to another source is left alone). A main dashboard is only matched
-    with a main one, and a tab with the tabs of its parent. Either kind of match
-    is a 409 without `overwrite`.
-
-    `existing` says what becomes of a dashboard so matched, over `overwrite`:
-    - `replace`: as `overwrite=True`;
-    - `keep`: it is left as it is, its layout and components as edited in the
-      viewer, and the response says `"status": "kept"` with its id. `main_title`
-      still renames a kept main dashboard, which changes nothing else. A kept
-      multi-tab main keeps the tabs it has as they are and gains those of the
-      YAML it lacks, after its last one; `tabs_added` says how many. A tab
-      removed in the viewer so comes back. A dashboard with no match is created
-      as usual.
-    Every response says what happened in `status`: `created`, `replaced` or `kept`.
-
-    Titles: a dashboard takes the title in the YAML, unless
-    - `keep_titles=True` and the import replaces an existing dashboard: that
-      dashboard keeps its current title, so a refresh does not undo a rename made
-      in the viewer. Applies to the main dashboard and to every tab;
-    - `main_title` is given: the main dashboard (the multi-tab `main_dashboard`,
-      or a single dashboard that is not a child tab) is titled that, over the YAML
-      and over `keep_titles`. The tabs are not affected. A 400 on a child tab.
-
-    A single-format child tab names its parent by title (`parent_dashboard_tag`).
-    `parent_source_key`, the `source_key` the parent was imported under, finds
-    the parent first, so a parent renamed in the viewer keeps its tabs. Without a
-    match by key or by title, the tab imported from the same `source_key` stays
-    under its current parent.
-
-    Project identification:
-    - If `project_id` is provided, uses that project directly (404 if it does not exist)
-    - If `project_id` is not provided, extracts `project_tag` from YAML and
-      looks up the project by name
-
-    Args:
-        yaml_content: The YAML content defining the dashboard(s)
-        project_id: Optional project ID (if not provided, uses project_tag from YAML)
-        overwrite: If True, update the dashboard this one replaces (default: False)
-        source_key: Optional stable origin of the YAML (e.g.
-            "nf-core/rnaseq:dashboards/base.yaml"), stored on the dashboard so a
-            later import of the same source finds it after a rename
-        keep_titles: If True, a dashboard this import replaces keeps its current
-            title (default: False, the YAML's title)
-        main_title: Optional title for the main dashboard, over the YAML's and
-            over keep_titles
-        parent_source_key: Optional source_key of a child tab's parent dashboard
-        existing: Optional "keep" or "replace", for a dashboard the project
-            already has; without it, `overwrite` decides
-        current_user: The authenticated user (will be set as owner)
-
-    Returns:
-        Created/updated dashboard information including dashboard_id
-    """
-    # Public/demo mode hard-blocks imports — visitors are auto-minted temp
-    # users that pass `get_current_user`, so the frontend disable on the
-    # Import tab is the only client-side gate. Mirror it here.
-    if settings.auth.is_public_mode:
-        raise HTTPException(
-            status_code=403,
-            detail="Dashboard import is disabled in public/demo mode",
-        )
-
-    # Allow anonymous users in single-user mode (they have admin privileges)
-    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
-        if not settings.auth.is_single_user_mode:
-            raise HTTPException(
-                status_code=403,
-                detail="Anonymous users cannot import dashboards. Please login to continue.",
-            )
-
     # The permission check below answers True for an admin without looking the
     # project up, so an unknown id used to import an orphan dashboard.
     if project_id is not None and not projects_collection.find_one(
@@ -7952,6 +7879,113 @@ async def import_dashboard_from_yaml(
     }
 
 
+@dashboards_endpoint_router.post("/import/yaml")
+async def import_dashboard_from_yaml(
+    yaml_content: str = Body(..., media_type="text/plain"),
+    project_id: PyObjectId | None = None,
+    overwrite: bool = False,
+    source_key: str | None = None,
+    keep_titles: bool = False,
+    main_title: str | None = None,
+    parent_source_key: str | None = None,
+    existing: Literal["keep", "replace"] | None = None,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Import a dashboard from YAML content.
+
+    Supports both single dashboard and multi-tab dashboard formats:
+    - Single: Standard YAML with title, components, etc.
+    - Multi-tab: YAML with main_dashboard and tabs keys
+
+    A new dashboard_id will be generated, and the current user will be set as owner.
+
+    If `overwrite=True`, the dashboard imported earlier from the same `source_key`
+    is updated instead of creating a new one, whatever its title is now; without
+    one, a dashboard with the same title is, if it has no `source_key` yet (one
+    keyed to another source is left alone). A main dashboard is only matched
+    with a main one, and a tab with the tabs of its parent. Either kind of match
+    is a 409 without `overwrite`.
+
+    `existing` says what becomes of a dashboard so matched, over `overwrite`:
+    - `replace`: as `overwrite=True`;
+    - `keep`: it is left as it is, its layout and components as edited in the
+      viewer, and the response says `"status": "kept"` with its id. `main_title`
+      still renames a kept main dashboard, which changes nothing else. A kept
+      multi-tab main keeps the tabs it has as they are and gains those of the
+      YAML it lacks, after its last one; `tabs_added` says how many. A tab
+      removed in the viewer so comes back. A dashboard with no match is created
+      as usual.
+    Every response says what happened in `status`: `created`, `replaced` or `kept`.
+
+    Titles: a dashboard takes the title in the YAML, unless
+    - `keep_titles=True` and the import replaces an existing dashboard: that
+      dashboard keeps its current title, so a refresh does not undo a rename made
+      in the viewer. Applies to the main dashboard and to every tab;
+    - `main_title` is given: the main dashboard (the multi-tab `main_dashboard`,
+      or a single dashboard that is not a child tab) is titled that, over the YAML
+      and over `keep_titles`. The tabs are not affected. A 400 on a child tab.
+
+    A single-format child tab names its parent by title (`parent_dashboard_tag`).
+    `parent_source_key`, the `source_key` the parent was imported under, finds
+    the parent first, so a parent renamed in the viewer keeps its tabs. Without a
+    match by key or by title, the tab imported from the same `source_key` stays
+    under its current parent.
+
+    Project identification:
+    - If `project_id` is provided, uses that project directly (404 if it does not exist)
+    - If `project_id` is not provided, extracts `project_tag` from YAML and
+      looks up the project by name
+
+    Args:
+        yaml_content: The YAML content defining the dashboard(s)
+        project_id: Optional project ID (if not provided, uses project_tag from YAML)
+        overwrite: If True, update the dashboard this one replaces (default: False)
+        source_key: Optional stable origin of the YAML (e.g.
+            "nf-core/rnaseq:dashboards/base.yaml"), stored on the dashboard so a
+            later import of the same source finds it after a rename
+        keep_titles: If True, a dashboard this import replaces keeps its current
+            title (default: False, the YAML's title)
+        main_title: Optional title for the main dashboard, over the YAML's and
+            over keep_titles
+        parent_source_key: Optional source_key of a child tab's parent dashboard
+        existing: Optional "keep" or "replace", for a dashboard the project
+            already has; without it, `overwrite` decides
+        current_user: The authenticated user (will be set as owner)
+
+    Returns:
+        Created/updated dashboard information including dashboard_id
+    """
+    # Public/demo mode hard-blocks imports — visitors are auto-minted temp
+    # users that pass `get_current_user`, so the frontend disable on the
+    # Import tab is the only client-side gate. Mirror it here.
+    if settings.auth.is_public_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="Dashboard import is disabled in public/demo mode",
+        )
+
+    # Allow anonymous users in single-user mode (they have admin privileges)
+    if hasattr(current_user, "is_anonymous") and current_user.is_anonymous:
+        if not settings.auth.is_single_user_mode:
+            raise HTTPException(
+                status_code=403,
+                detail="Anonymous users cannot import dashboards. Please login to continue.",
+            )
+
+    return import_dashboard_yaml_content(
+        yaml_content,
+        project_id,
+        overwrite,
+        current_user,
+        source_key=source_key,
+        keep_titles=keep_titles,
+        main_title=main_title,
+        parent_source_key=parent_source_key,
+        existing=existing,
+    )
+
+
 # ============================================================================
 # YAML Endpoints (Simple Pydantic-based validation)
 # These endpoints use DashboardDataLite for lightweight YAML validation
@@ -8022,8 +8056,27 @@ async def export_dashboard_as_yaml(
         )
         child_tabs = child_tabs_docs
 
+    yaml_content = dashboard_yaml_content(dashboard_doc, project_name, child_tabs)
+    return Response(
+        content=yaml_content,
+        media_type="application/x-yaml",
+        headers={
+            "Content-Disposition": f'attachment; filename="{dashboard_doc.get("title", "dashboard")}.yaml"'
+        },
+    )
+
+
+def dashboard_yaml_content(dashboard_doc: dict, project_name: str, child_tabs: list[dict]) -> str:
+    """Tag-based YAML export of a dashboard (single or multi-tab family).
+
+    The shared core of ``GET /dashboards/{id}/yaml``, also used by the
+    template exporter (``/projects/{id}/export_template``) so exported
+    bundles and one-off dashboard exports can never drift apart. Enrichment
+    converts wf/dc ObjectIds to portable tags — the exact inverse of what
+    ``_resolve_workflow_tags`` re-binds at import time.
+    """
     # Single dashboard export (no children or is a child tab itself)
-    if not child_tabs and is_main_tab:
+    if not child_tabs and dashboard_doc.get("is_main_tab", True):
         # Enrich dashboard with workflow and data collection tags from MongoDB
         from depictio.models.yaml_serialization.utils import enrich_dashboard_with_tags
 
@@ -8032,15 +8085,7 @@ async def export_dashboard_as_yaml(
         # Convert to DashboardDataLite for export
         lite = DashboardDataLite.from_full(enriched_dashboard)
         lite.project_tag = project_name
-        yaml_content = lite.to_yaml()
-
-        return Response(
-            content=yaml_content,
-            media_type="application/x-yaml",
-            headers={
-                "Content-Disposition": f'attachment; filename="{dashboard_doc.get("title", "dashboard")}.yaml"'
-            },
-        )
+        return lite.to_yaml()
 
     # Multi-tab export: main dashboard + child tabs in single YAML
     multi_tab_dict: dict[str, Any] = {}
@@ -8090,15 +8135,7 @@ async def export_dashboard_as_yaml(
     raw_yaml = yaml.dump(
         multi_tab_dict, default_flow_style=False, sort_keys=False, allow_unicode=True, indent=4
     )
-    yaml_content = DashboardDataLite._apply_section_comments(raw_yaml)
-
-    return Response(
-        content=yaml_content,
-        media_type="application/x-yaml",
-        headers={
-            "Content-Disposition": f'attachment; filename="{dashboard_doc.get("title", "dashboard")}.yaml"'
-        },
-    )
+    return DashboardDataLite._apply_section_comments(raw_yaml)
 
 
 @dashboards_endpoint_router.get("/{dashboard_id}/yaml/family", deprecated=True)

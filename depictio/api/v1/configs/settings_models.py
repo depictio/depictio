@@ -252,6 +252,7 @@ class MongoDBConfig(ServiceConfig):
         multiqc_prerender_collection: str = Field(default="multiqc_prerender")
         task_events_collection: str = Field(default="task_events")
         ingestion_runs_collection: str = Field(default="ingestion_runs")
+        project_storage_collection: str = Field(default="project_storage_configs")
         app_logs_collection: str = Field(default="app_logs")
         # Instance branding: the singleton overrides document and the uploaded
         # logo bytes. Named here so backup/restore can reach them like any other
@@ -850,6 +851,99 @@ class MultiQCPrerenderConfig(BaseSettings):
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MULTIQC_")
+
+
+class RemoteConfig(BaseSettings):
+    """Policy for fetching user-supplied remote URLs (scan modes url/manifest).
+
+    Source of truth for the SSRF gateway in ``depictio.api.v1.remote_fetch``.
+    The gateway instantiates this section on every call instead of reading the
+    ``settings`` singleton, so the CLI and the Celery worker apply the very same
+    policy without importing the full API configuration.
+
+    Environment variables: ``DEPICTIO_REMOTE_<FIELD>`` (upper-cased field name).
+    A malformed value fails validation at the first fetch instead of silently
+    falling back to a default.
+    """
+
+    allow_http: bool = Field(
+        default=False,
+        description=(
+            "Accept plain http:// URLs in addition to https:// and s3://. Off by "
+            "default: the gateway and the models reject http:// locations. Turn on "
+            "for local or airgapped deployments that serve data without TLS."
+        ),
+    )
+    url_allowlist: str = Field(
+        default="",
+        description=(
+            "Comma-separated host names the gateway may fetch from. Exclusive while "
+            "set: any host not listed is rejected, and a listed host skips the "
+            "private/loopback address rejection (this is how internal deployments "
+            "and tests opt a 127.0.0.1 or intranet host in). Empty accepts every "
+            "public host."
+        ),
+    )
+    url_denylist: str = Field(
+        default="",
+        description=(
+            "Comma-separated host names the gateway always rejects. Checked before "
+            "the allowlist, so a host present in both lists is denied."
+        ),
+    )
+    max_download_bytes: int = Field(
+        default=500 * 1024 * 1024,
+        ge=1,
+        description=(
+            "Size cap in bytes for a single remote download (data file or manifest). "
+            "Downloads stream and abort, removing the partial file, once the cap is "
+            "exceeded."
+        ),
+    )
+    public_s3_buckets: str = Field(
+        default="",
+        description=(
+            "Comma-separated S3 locations readable without credentials, each either "
+            "'bucket' or 'bucket/prefix'. Empty by default, so unsigned access is "
+            "opt-in. A bucket listed here is read with the signature disabled; every "
+            "other s3:// URL needs the project's storage settings (or, on the server, "
+            "an entry in credentialed_s3_buckets). The list is consulted before any "
+            "request goes out, so naming a bucket that is not on it never turns into "
+            "an existence or region oracle."
+        ),
+    )
+    credentialed_s3_buckets: str = Field(
+        default="",
+        description=(
+            "Comma-separated S3 locations the API and the Celery worker may read with "
+            "their own ambient credentials (the AWS default chain: environment, IAM "
+            "role, web identity), same 'bucket' or 'bucket/prefix' syntax as "
+            "public_s3_buckets. Empty by default. Without an entry here, a server-side "
+            "read of an s3:// location that is neither public nor covered by the "
+            "project's storage settings is refused, and the instance's own S3 "
+            "credentials are never used for a user-supplied location. Any user of "
+            "the instance can read what is listed here, so list only data every user "
+            "may see."
+        ),
+    )
+    timeout_s: float = Field(
+        default=30.0,
+        gt=0,
+        description=(
+            "httpx timeout in seconds applied to each connect/read/write operation "
+            "of a remote fetch (not a total download time)."
+        ),
+    )
+    max_redirects: int = Field(
+        default=3,
+        ge=0,
+        description=(
+            "Maximum redirect hops followed for a remote URL. The gateway re-validates "
+            "every Location against this policy before following it."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_REMOTE_")
 
 
 # ── Optional Features ─────────────────────────────────────────────────────────
@@ -1934,6 +2028,7 @@ class Settings(BaseSettings):
     celery: CeleryConfig = Field(default_factory=CeleryConfig)
     s3_cache: S3CacheConfig = Field(default_factory=S3CacheConfig)
     multiqc_prerender: MultiQCPrerenderConfig = Field(default_factory=MultiQCPrerenderConfig)
+    remote: RemoteConfig = Field(default_factory=RemoteConfig)
 
     # Optional features
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)

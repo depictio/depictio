@@ -3983,6 +3983,182 @@ export async function createProject(
   return { ...result, project_id: result.project_id ?? newId };
 }
 
+/** One data collection ingested (or planned, under dry_run) from a manifest. */
+export interface ManifestIngestDCResult {
+  data_collection_tag: string;
+  data_collection_id: string | null;
+  entries: number;
+  status: 'ingested' | 'failed' | 'planned';
+  message: string | null;
+}
+
+/** One template dashboard imported (or planned) for a from-manifest project. */
+export interface DashboardImportResult {
+  path: string;
+  success: boolean;
+  dashboard_id: string | null;
+  title: string | null;
+  error: string | null;
+}
+
+/** Inputs for POST /projects/from_manifest. The backend injects the
+ *  `MANIFEST_URL` template variable from `manifest_url`: never send it via
+ *  `variables`. With `dry_run` nothing is created and the report comes back
+ *  with `planned` statuses and null ids. */
+export interface FromManifestRequest {
+  manifest_url: string;
+  template_id: string;
+  project_name?: string | null;
+  variables?: Record<string, string>;
+  dry_run?: boolean;
+}
+
+/** Report returned by POST /projects/from_manifest, both for real creation
+ *  and for a dry-run plan. `success: false` means the project exists but some
+ *  collections/dashboards failed (per-row `message`/`error` says why). */
+export interface FromManifestReport {
+  project_id: string | null;
+  project_name: string;
+  template_id: string;
+  manifest_url: string;
+  manifest_entries: number;
+  ingestion: ManifestIngestDCResult[];
+  dashboards: DashboardImportResult[];
+  unmatched_manifest_types: string[];
+  pruned_optional_dcs: string[];
+  dry_run: boolean;
+  success: boolean;
+}
+
+/** Create (or, with `dry_run`, plan) a project from a Data Manifest URL.
+ *  Backend errors carry actionable `{detail}` strings (rejected URL, unknown
+ *  template, duplicate name, unparseable manifest), surfaced verbatim. */
+export async function createProjectFromManifest(
+  input: FromManifestRequest,
+): Promise<FromManifestReport> {
+  const res = await authFetch(`${API_BASE}/projects/from_manifest`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create project from manifest');
+  return (await res.json()) as FromManifestReport;
+}
+
+/** Per-DC status of a manifest refresh. A synchronous refresh reports
+ *  `ingested` / `failed` (or `planned` under `dry_run`); a polled async run
+ *  additionally passes through `dispatched` (queued for a worker) and
+ *  `running`. Mirrors `_REFRESH_STEP_TO_DC_STATUS` server-side. */
+export type ManifestRefreshStatus =
+  | 'ingested'
+  | 'failed'
+  | 'planned'
+  | 'dispatched'
+  | 'running';
+
+/** One data collection of a manifest refresh (`ManifestIngestDCResult`
+ *  server-side). `data_collection_id` is empty for a polled run whose project
+ *  has since been deleted. `message` explains a `failed` row, including the
+ *  pre-flight skips (manifest unreachable, type dropped from the manifest)
+ *  that never reach a worker. */
+export interface ManifestRefreshEntry {
+  data_collection_tag: string;
+  data_collection_id: string | null;
+  entries: number;
+  status: ManifestRefreshStatus;
+  message: string | null;
+}
+
+/** Report of POST /projects/refresh_manifest and of the poll endpoint
+ *  GET /projects/refresh_manifest/{run_id}. `run_id` is set when the refresh
+ *  was fanned out to workers (`async_run`); `success` flips once every row is
+ *  `ingested`. */
+export interface ManifestRefreshReport {
+  project_id: string;
+  refreshed: ManifestRefreshEntry[];
+  run_id: string | null;
+  dry_run: boolean;
+  success: boolean;
+}
+
+/** Inputs for POST /projects/refresh_manifest. `dataCollectionTag` restricts
+ *  the refresh to one re-readable collection (all of them otherwise);
+ *  `dryRun` only reports per-DC entry counts; `asyncRun` dispatches the
+ *  per-DC re-ingestion to workers and returns a `run_id` to poll with
+ *  `getManifestRefreshRun`. */
+export interface RefreshManifestInput {
+  projectId: string;
+  dataCollectionTag?: string | null;
+  dryRun?: boolean;
+  asyncRun?: boolean;
+}
+
+/** Re-read and re-ingest the data collections whose source this server can
+ *  still reach, whatever their scan mode (owners and editors; admins only in
+ *  public mode). Backend errors carry actionable `{detail}` strings (nothing
+ *  re-readable, unknown tag, no edit permission) and are surfaced verbatim. */
+export async function refreshManifest(
+  input: RefreshManifestInput,
+): Promise<ManifestRefreshReport> {
+  const res = await authFetch(`${API_BASE}/projects/refresh_manifest`, {
+    method: 'POST',
+    body: JSON.stringify({
+      project_id: input.projectId,
+      data_collection_tag: input.dataCollectionTag ?? null,
+      dry_run: Boolean(input.dryRun),
+      async_run: Boolean(input.asyncRun),
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to refresh data');
+  return (await res.json()) as ManifestRefreshReport;
+}
+
+/** Poll an async manifest refresh by the `run_id` that `refreshManifest`
+ *  returned. Only the user who started the run (or an admin) may read it. */
+export async function getManifestRefreshRun(
+  runId: string,
+): Promise<ManifestRefreshReport> {
+  const res = await authFetch(
+    `${API_BASE}/projects/refresh_manifest/${encodeURIComponent(runId)}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load manifest refresh status');
+  return (await res.json()) as ManifestRefreshReport;
+}
+
+/** A variable a project template accepts. `MANIFEST_URL` is special-cased by
+ *  the from-manifest endpoint and must not be collected from the user. */
+export interface TemplateVariable {
+  name: string;
+  description: string | null;
+  required: boolean;
+  default: string | null;
+}
+
+/** One entry from GET /projects/templates. Only templates with
+ *  `manifest_capable` can back the from-manifest flow. */
+export interface TemplateInfo {
+  template_id: string;
+  name: string;
+  description: string | null;
+  version: string | null;
+  manifest_capable: boolean;
+  variables: TemplateVariable[];
+  dashboards: string[];
+}
+
+/** Envelope returned by GET /projects/templates. */
+export interface TemplateListResponse {
+  templates: TemplateInfo[];
+}
+
+/** List the project templates known to the backend, unwrapping the
+ *  `{templates}` envelope. */
+export async function listProjectTemplates(): Promise<TemplateInfo[]> {
+  const res = await authFetch(`${API_BASE}/projects/templates`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list project templates');
+  const body = (await res.json()) as TemplateListResponse;
+  return body.templates ?? [];
+}
+
 /** Fields editable via the Edit modal. Update-project endpoint accepts a
  *  full Project, so the caller fetches the existing project, merges these
  *  fields, and PUTs the merged document. */
@@ -4047,6 +4223,95 @@ export async function updateProjectPermissions(
   if (!res.ok) await throwHttpError(res, 'Failed to update permissions');
 }
 
+/** Per-project S3-compatible storage configuration, as returned by the
+ *  backend. The secret is write-only: it is stored encrypted server-side and
+ *  never echoed back; responses only carry `has_secret`. `bucket` is null
+ *  only on a config saved before the bucket became required. */
+export interface ProjectStorageConfig {
+  endpoint_url: string;
+  bucket: string | null;
+  region: string;
+  access_key_id: string | null;
+  has_secret: boolean;
+  updated_at: string | null;
+}
+
+/** PUT body for the storage config. `bucket` is required (an empty one is
+ *  refused with a 422). `region` defaults to `us-east-1` server-side; the
+ *  connection test detects the bucket's real region and saves it. Omitting
+ *  (or nulling) `secret_access_key` KEEPS the previously stored secret, so
+ *  edits don't require retyping it; a non-empty string replaces it. */
+export interface ProjectStorageConfigInput {
+  endpoint_url: string;
+  bucket: string;
+  region?: string;
+  access_key_id?: string | null;
+  secret_access_key?: string | null;
+}
+
+/** Result of POST /projects/{id}/storage/test. A failed connection is NOT an
+ *  HTTP error: it comes back 200 with `success: false` and a sanitized
+ *  message. `detected_region` is set when the test found the bucket's region
+ *  (the server has then already saved it on the config); null otherwise,
+ *  and absent from servers older than the region detection. */
+export interface ProjectStorageTestResult {
+  success: boolean;
+  message: string;
+  detected_region?: string | null;
+}
+
+/** Fetch a project's storage config. Returns null when none is set (the
+ *  backend answers 404 for "not configured": that's a normal state, not an
+ *  error). Other failures (401/403, invalid project) throw with the backend's
+ *  `{detail}` string. */
+export async function getProjectStorage(
+  projectId: string,
+): Promise<ProjectStorageConfig | null> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage`);
+  if (res.status === 404) return null;
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load storage configuration');
+  return (await res.json()) as ProjectStorageConfig;
+}
+
+/** Create or update a project's storage config (owners only). Backend 400s
+ *  and 422s carry actionable `{detail}` strings (a rejected private endpoint
+ *  host, a missing bucket), surfaced verbatim. */
+export async function setProjectStorage(
+  projectId: string,
+  input: ProjectStorageConfigInput,
+): Promise<ProjectStorageConfig> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to save storage configuration');
+  return (await res.json()) as ProjectStorageConfig;
+}
+
+/** Remove a project's storage config, including the stored secret. */
+export async function deleteProjectStorage(projectId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to remove storage configuration');
+}
+
+/** Test the saved storage credentials against the configured bucket.
+ *  Connection failures come back as `{success: false, message}` rather than
+ *  throwing; only transport/authorization errors throw. S3 errors raised by
+ *  any route carry `{detail, code}` (`s3_refused`, `s3_access_denied`,
+ *  `s3_no_such_bucket`, `s3_wrong_region`, `s3_unreachable`, `s3_error`);
+ *  the thrown message is the `detail`. */
+export async function testProjectStorage(
+  projectId: string,
+): Promise<ProjectStorageTestResult> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage/test`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Storage connection test failed');
+  return (await res.json()) as ProjectStorageTestResult;
+}
+
 /** Upload a project .zip and create the project from its contents.
  *  Hits the migrate router's import-project-zip endpoint (the sibling of
  *  exportProjectZip's /migrate/export-project below). */
@@ -4107,6 +4372,35 @@ export async function exportProjectZip(projectId: string): Promise<void> {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+/** POST body for /projects/{id}/export_template. `template_id` is a
+ *  slash-separated path (e.g. `my-lab/rnaseq-qc/1`); each segment must match
+ *  `[A-Za-z0-9][A-Za-z0-9._-]*`. `data_root` re-parameterizes a local path
+ *  prefix as `{DATA_ROOT}` in the exported config; leave it unset for
+ *  manifest-driven projects. */
+export interface ExportTemplateRequest {
+  template_id: string;
+  description?: string | null;
+  version?: string;
+  data_root?: string | null;
+}
+
+/** Export a project as a reusable template bundle (owners/editors/admins).
+ *  Resolves to the zip Blob; the caller decides how to hand it to the user.
+ *  Backend 422s carry meaningful `{detail}` strings (bad template_id format,
+ *  or the exported config failing its round-trip self-check), surfaced
+ *  verbatim. */
+export async function exportProjectTemplate(
+  projectId: string,
+  payload: ExportTemplateRequest,
+): Promise<Blob> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/export_template`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to export template');
+  return res.blob();
 }
 
 /** MultiQC report list response shape — used to render the DC viewer panel
@@ -4238,6 +4532,51 @@ export async function createDataCollectionFromUpload(
     }
     throw new Error(detail || `Upload failed: ${res.status}`);
   }
+  return res.json();
+}
+
+export interface CreateDataCollectionUrlInput {
+  projectId: string;
+  name: string;
+  description?: string;
+  dataType?: string;
+  fileFormat: string;
+  separator: string;
+  customSeparator?: string | null;
+  compression: string;
+  hasHeader: boolean;
+  /** Absolute https:// or s3:// URL. Screened server-side by the SSRF gateway. */
+  url: string;
+  latColumn?: string | null;
+  lonColumn?: string | null;
+}
+
+/** Create a data collection from a remote URL: the no-upload twin of
+ *  `createDataCollectionFromUpload`. The file is fetched server-side, so this
+ *  works for data far too large to push through the browser, and for buckets
+ *  the browser cannot reach. */
+export async function createDataCollectionFromUrl(
+  input: CreateDataCollectionUrlInput,
+): Promise<CreateDataCollectionResult> {
+  const res = await authFetch(`${API_BASE}/datacollections/create_from_url`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      project_id: input.projectId,
+      name: input.name,
+      description: input.description ?? '',
+      data_type: input.dataType ?? 'table',
+      file_format: input.fileFormat,
+      separator: input.separator,
+      custom_separator: input.customSeparator ?? null,
+      compression: input.compression,
+      has_header: input.hasHeader,
+      url: input.url,
+      lat_column: input.latColumn ?? null,
+      lon_column: input.lonColumn ?? null,
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create data collection from URL');
   return res.json();
 }
 

@@ -183,8 +183,10 @@ class TestBackupEndpoints:
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.instance_settings_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.branding_assets_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.comment_threads_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.project_storage_collection")
     def test_create_backup_success(
         self,
+        mock_project_storage,
         mock_comment_threads,
         mock_branding_assets,
         mock_instance_settings,
@@ -228,6 +230,7 @@ class TestBackupEndpoints:
         mock_comment_threads.find.return_value = []
         mock_versions.find.return_value = []
         mock_version_counters.find.return_value = []
+        mock_project_storage.find.return_value = []
 
         try:
             response = client.post("/backup/create", json={"include_s3_data": False})
@@ -236,6 +239,8 @@ class TestBackupEndpoints:
             response_data = response.json()
             assert response_data["success"] is True
             assert "collections_backed_up" in response_data
+            # Per-project storage credentials travel with the project data.
+            assert "project_storage_configs" in response_data["collections_backed_up"]
             assert "backup_id" in response_data
             assert response_data["total_documents"] >= 0
 
@@ -259,8 +264,10 @@ class TestBackupEndpoints:
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.instance_settings_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.branding_assets_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.comment_threads_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.project_storage_collection")
     def test_create_backup_with_temporary_users_exclusion(
         self,
+        mock_project_storage,
         mock_comment_threads,
         mock_branding_assets,
         mock_instance_settings,
@@ -316,6 +323,8 @@ class TestBackupEndpoints:
         for mock_collection in (mock_versions, mock_version_counters):
             mock_collection.find.return_value = []
             mock_collection.count_documents.return_value = 0
+        mock_project_storage.find.return_value = []
+        mock_project_storage.count_documents.return_value = 0
 
         try:
             response = client.post("/backup/create", json={"include_s3_data": False})
@@ -346,8 +355,10 @@ class TestBackupEndpoints:
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.instance_settings_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.branding_assets_collection")
     @patch("depictio.api.v1.endpoints.backup_endpoints.routes.comment_threads_collection")
+    @patch("depictio.api.v1.endpoints.backup_endpoints.routes.project_storage_collection")
     async def test_backup_metadata_records_real_version(
         self,
+        mock_project_storage,
         mock_comment_threads,
         mock_branding_assets,
         mock_instance_settings,
@@ -387,6 +398,7 @@ class TestBackupEndpoints:
             mock_comment_threads,
             mock_versions,
             mock_version_counters,
+            mock_project_storage,
         ):
             mock_collection.find.return_value = []
             mock_collection.count_documents.return_value = 0
@@ -847,6 +859,7 @@ class TestBackupKeepsOnlyVersionsWorthKeeping:
         "comment_threads_collection",
         "dashboard_versions_collection",
         "dashboard_version_counters_collection",
+        "project_storage_collection",
     )
 
     @pytest.fixture()
