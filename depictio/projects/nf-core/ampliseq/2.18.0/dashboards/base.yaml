@@ -114,9 +114,10 @@ main_dashboard:
     layout: {x: 2, y: 0, w: 2, h: 1}
   - component_type: text
     title: nf-core/ampliseq
-    # The pipeline's wordmark, as in its docs: the light one bundled, the dark one
-    # read from its repository. Where a logo cannot load, the title is drawn as text.
-    logo: /assets/images/workflows/ampliseq.png
+    # The pipeline's logo, read from its repository like every nf-core template's:
+    # the bundled one-line wordmark would not match the two-line logo of the others,
+    # nor its own dark variant. Where a logo cannot load, the title is drawn as text.
+    logo: https://raw.githubusercontent.com/nf-core/ampliseq/master/docs/images/nf-core-ampliseq_logo_light.png
     logo_dark: https://raw.githubusercontent.com/nf-core/ampliseq/master/docs/images/nf-core-ampliseq_logo_dark.png
     order: 1
     body: >

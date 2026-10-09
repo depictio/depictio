@@ -131,7 +131,7 @@ main_dashboard:
       h: 1
   - component_type: text
     title: nf-core/ampliseq
-    logo: /assets/images/workflows/ampliseq.png
+    logo: https://raw.githubusercontent.com/nf-core/ampliseq/master/docs/images/nf-core-ampliseq_logo_light.png
     logo_dark: https://raw.githubusercontent.com/nf-core/ampliseq/master/docs/images/nf-core-ampliseq_logo_dark.png
     order: 1
     body: 'Amplicon reads turned into a census of each sample''s community: who is there, how diverse it is and what differs between groups. [Run parameters](params:)
