@@ -1,3 +1,4 @@
+import contextlib
 import os
 import re
 import tempfile
@@ -10,6 +11,7 @@ import polars as pl
 from pydantic import validate_call
 from rich.markup import escape
 
+from depictio.api.v1.configs.settings_models import local_data_policy
 from depictio.api.v1.remote_fetch import (
     RemoteURLRejected,
     bounded_download,
@@ -39,6 +41,7 @@ from depictio.cli.cli.utils.multiqc_processor import process_multiqc_data_collec
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli.utils.telemetry import cli_version
 from depictio.cli.cli_logging import logger
+from depictio.models.local_access import LocalPathRefused
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
@@ -144,8 +147,8 @@ def fetch_file_data(
 
     # Filter out stale file records whose paths no longer exist locally
     # (happens when re-running with a different template or data_root).
-    # Remote locations (scan mode "url") are never staleness-checked here —
-    # reachability surfaces at read time.
+    # Remote locations (url, s3_prefix and manifest scans) are never
+    # staleness-checked here: reachability surfaces at read time.
     valid_files_data = []
     for fd in files_data:
         loc = fd.get("file_location", "")
@@ -224,8 +227,24 @@ def _delimited_kwargs(file_path: str, file_format: str, polars_kwargs: dict) -> 
     return effective_kwargs
 
 
-def _lazy_scan_path(file_path: str, file_format: str, polars_kwargs: dict) -> pl.LazyFrame:
-    """Format dispatch shared by local paths and downloaded remote files."""
+def _lazy_scan_path(
+    file_path: str, file_format: str, polars_kwargs: dict, *, confine: bool = True
+) -> pl.LazyFrame:
+    """Format dispatch shared by local paths and downloaded remote files.
+
+    On a server reading its own disk (``depictio local``), a path the
+    local-data policy does not allow is refused here, at read time, whatever
+    registered it: a File record is only a path, and the scan that wrote it may
+    have run under another policy, or none. ``confine=False`` is for a file this
+    process just wrote itself (a remote download's temp file).
+    """
+    if confine:
+        policy = local_data_policy()
+        if policy is not None and not policy.allows_read(str(file_path)):
+            raise LocalPathRefused(
+                f"'{file_path}' is outside the folders this server may read.",
+                "local_path_outside",
+            )
     if file_format in ["csv", "tsv", "txt"]:
         return pl.scan_csv(file_path, **_delimited_kwargs(file_path, file_format, polars_kwargs))
     elif file_format == "parquet":
@@ -263,12 +282,15 @@ def _download_remote_to_temp(url: str) -> str:
         else:
             direct_download(url, temp_path)
     except Exception:
-        try:
-            os.unlink(temp_path)
-        except OSError:
-            pass
+        _remove_temp_file(temp_path)
         raise
     return temp_path
+
+
+def _remove_temp_file(path: str) -> None:
+    """Delete a temp file this module created; one already gone is fine."""
+    with contextlib.suppress(OSError):
+        os.unlink(path)
 
 
 def _read_remote_file_lazy(
@@ -277,7 +299,7 @@ def _read_remote_file_lazy(
     polars_kwargs: dict,
     CLI_config: CLIConfig | None = None,
 ) -> pl.LazyFrame:
-    """Read a remote file (scan mode "url") into a LazyFrame.
+    """Read a remote file (a url, s3_prefix or manifest location) into a LazyFrame.
 
     s3://: lazy scan straight through the object store, with the target
     ``s3_read_target`` resolves for this very URL from ``CLI_config``: a
@@ -321,14 +343,13 @@ def _read_remote_file_lazy(
 
     temp_path = _download_remote_to_temp(url)
     try:
-        # Eager read so the temp file can be deleted immediately — a lazy scan
+        # Eager read so the temp file can be deleted immediately: a lazy scan
         # would dangle on a path removed before collection.
-        return _lazy_scan_path(temp_path, file_format, polars_kwargs).collect().lazy()
+        return (
+            _lazy_scan_path(temp_path, file_format, polars_kwargs, confine=False).collect().lazy()
+        )
     finally:
-        try:
-            os.unlink(temp_path)
-        except OSError:
-            pass
+        _remove_temp_file(temp_path)
 
 
 # How object-store (under polars) reports an S3 answer. Its messages also carry
@@ -380,8 +401,8 @@ def read_single_file_lazy(
         file_info (File): A validated File object.
         file_format (str): The file format (e.g. csv, parquet).
         polars_kwargs (dict): Additional keyword arguments for the Polars scanner.
-        CLI_config (CLIConfig | None): Configuration the s3:// remote locations
-            (scan mode "url") resolve their read target from.
+        CLI_config (CLIConfig | None): Configuration s3:// remote locations
+            resolve their read target from.
 
     Returns:
         pl.LazyFrame: The lazy DataFrame representation of the file.
@@ -403,8 +424,9 @@ def read_single_file_lazy(
         # Optionally, add a column from file_info if available (e.g., run_id)
         if hasattr(file_info, "run_id"):
             lf = lf.with_columns(pl.lit(str(file_info.run_tag)).alias("depictio_run_id"))
-        # Manifest-built DCs carry the canonical entry ID as a column — the
-        # zero-config cross-DC join key (LinkConfig `direct` resolver).
+        # Manifest-built DCs (and s3_prefix scans with an id_regex) carry the
+        # canonical entry ID as a column: the zero-config cross-DC join key
+        # (LinkConfig `direct` resolver).
         if getattr(file_info, "manifest_id", None):
             lf = lf.with_columns(pl.lit(str(file_info.manifest_id)).alias("depictio_manifest_id"))
         return lf
@@ -1978,10 +2000,13 @@ def process_recipe_data_collection(
             for ref, so in transform_config.source_overrides.items()
         }
 
-    # Resolve data directory from workflow's data_location
-    # For sequencing-runs structure, collect all run directories
-    data_dir = "."
-    run_data_dirs: list[str] = []
+    from depictio.cli.cli.utils.data_root import DataRoot, data_root_for
+
+    # Resolve the data root from the workflow's data_location. It is a DataRoot
+    # rather than a path so the same recipe runs against a local directory or an
+    # s3:// prefix; for a sequencing-runs structure, one scoped root per run.
+    data_dir: str | DataRoot = "."
+    run_data_roots: list[DataRoot] = []
     if workflow is not None and hasattr(workflow, "data_location") and workflow.data_location:
         locations = getattr(workflow.data_location, "locations", None)
         structure = getattr(workflow.data_location, "structure", None)
@@ -1989,26 +2014,32 @@ def process_recipe_data_collection(
 
         if locations and len(locations) > 0:
             base_location = str(locations[0])
+            try:
+                base_root = data_root_for(base_location, CLI_config)
+            except ValueError as exc:
+                # An unlistable scheme, or an s3:// prefix that is neither
+                # allowlisted nor credentialed. A configuration problem, so it
+                # reads as one rather than as a traceback out of ingestion.
+                return {"result": "error", "message": f"Recipe data root unusable: {exc}"}
 
             if structure == "sequencing-runs" and runs_regex:
-                import re as _re
-
-                for entry in sorted(os.listdir(base_location)):
-                    entry_path = os.path.join(base_location, entry)
-                    if os.path.isdir(entry_path) and _re.match(runs_regex, entry):
-                        run_data_dirs.append(entry_path)
-                if run_data_dirs:
-                    data_dir = run_data_dirs[0]
+                # Same rule the listdir walk applied (``re.match`` on the
+                # directory name), asked of the root so it also answers on S3.
+                run_data_roots = [base_root.scoped(run) for run in base_root.runs(runs_regex)]
+                if run_data_roots:
+                    data_dir = run_data_roots[0]
                     rich_print_checked_statement(
-                        f"Recipe data dir: {escape(base_location)} ({len(run_data_dirs)} run(s))",
+                        f"Recipe data dir: {escape(base_location)} ({len(run_data_roots)} run(s))",
                         "info",
                     )
                 else:
-                    data_dir = base_location
-                    rich_print_checked_statement(f"Recipe data dir: {escape(data_dir)}", "info")
+                    data_dir = base_root
+                    rich_print_checked_statement(
+                        f"Recipe data dir: {escape(base_location)}", "info"
+                    )
             else:
-                data_dir = base_location
-                rich_print_checked_statement(f"Recipe data dir: {escape(data_dir)}", "info")
+                data_dir = base_root
+                rich_print_checked_statement(f"Recipe data dir: {escape(base_location)}", "info")
 
     # Resolve dc_ref sources: load referenced DCs from their Delta tables
     extra_sources: dict[str, pl.DataFrame] | None = None
@@ -2082,15 +2113,15 @@ def process_recipe_data_collection(
             return {"result": "error", "message": f"Recipe failed: {e}"}
 
     try:
-        if run_data_dirs and len(run_data_dirs) > 1:
+        if run_data_roots and len(run_data_roots) > 1:
             # Multi-run: execute recipe per run and concatenate
             all_dfs = []
-            for run_dir in run_data_dirs:
-                run_tag = os.path.basename(run_dir)
+            for run_root in run_data_roots:
+                run_tag = run_root.name
                 try:
                     run_df = execute_recipe(
                         recipe_name,
-                        run_dir,
+                        run_root,
                         overrides,
                         extra_sources=extra_sources,
                         pipeline_version=pipeline_version,

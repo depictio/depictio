@@ -29,7 +29,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 from typing import TextIO
@@ -317,6 +317,9 @@ class State:
     first_run: bool = False
     # Whether the server renders dashboard thumbnails; None in older files.
     screenshots: bool | None = None
+    # The folders the web UI may read run folders from (DEPICTIO_LOCAL_DATA_ROOTS);
+    # None in older files.
+    data_roots: list[str] | None = None
     pids: dict[str, int] = field(default_factory=dict)
     # Start time of each process, so a PID reused after a reboot is not taken for ours.
     start_times: dict[str, float | None] = field(default_factory=dict)
@@ -354,6 +357,11 @@ class State:
                 raise ValueError("start_times is not a map")
             if not isinstance(state.examples, str):
                 raise ValueError("examples is not text")
+            if state.data_roots is not None and not (
+                isinstance(state.data_roots, list)
+                and all(isinstance(root, str) for root in state.data_roots)
+            ):
+                raise ValueError("data_roots is not a list of paths")
         except (OSError, ValueError) as exc:
             raise StateUnreadable(
                 f"{paths.state} is unreadable ({_file_error(exc)}). depictio local down "
@@ -551,6 +559,40 @@ def parse_examples(value: str | None) -> str:
     return ",".join(dict.fromkeys(names))
 
 
+def local_data_roots(paths: Paths, allowed: Iterable[str | Path] = ()) -> list[str]:
+    """The folders the web UI may read run folders from, as DEPICTIO_LOCAL_DATA_ROOTS
+    lists them: the home folder, then each ``allowed`` one, resolved, without repeats.
+
+    An allowed folder is an absolute path to an existing folder outside the local
+    home, which holds the server's keys and database; the server denies the local
+    home itself (DEPICTIO_LOCAL_HOME). A comma would split the list, so none may
+    hold one.
+    """
+    local = paths.home.resolve()
+    roots: list[Path] = []
+    home = Path.home().resolve()
+    if "," in str(home):
+        logger.warning("%s holds a comma, so the web UI cannot read run folders under it", home)
+    else:
+        roots.append(home)
+    for raw in allowed:
+        path = Path(raw)
+        if not path.is_absolute():
+            raise LocalStackError(f"{raw} is not an absolute path")
+        resolved = path.resolve()
+        if not resolved.is_dir():
+            raise LocalStackError(f"{raw} is not an existing folder")
+        if resolved.is_relative_to(local):
+            raise LocalStackError(
+                f"{raw} is inside the local home {local}, which holds the server's keys "
+                "and database"
+            )
+        if "," in str(resolved):
+            raise LocalStackError(f"{raw} holds a comma, which DEPICTIO_LOCAL_DATA_ROOTS cannot")
+        roots.append(resolved)
+    return [str(root) for root in dict.fromkeys(roots)]
+
+
 # ---------------------------------------------------------------------------
 # Environment shared by the API and the worker
 # ---------------------------------------------------------------------------
@@ -570,16 +612,29 @@ def inherited_env() -> dict[str, str]:
     return {k: v for k, v in os.environ.items() if not k.startswith("AWS_")}
 
 
+# Inherited DEPICTIO_* settings that describe the user rather than an instance:
+# the telemetry opt-out (DEPICTIO_TELEMETRY_ENABLED=false), and the remote-data
+# policy, which says the public and credentialed buckets run folders may be read
+# from (DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS, DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS).
+INHERITED_SETTINGS = ("DEPICTIO_TELEMETRY_", "DEPICTIO_REMOTE_")
+
+
 def server_env(
-    paths: Paths, ports: dict[str, int], secret_values: dict, seed: str, screenshots: bool
+    paths: Paths,
+    ports: dict[str, int],
+    secret_values: dict,
+    seed: str,
+    screenshots: bool,
+    data_roots: Sequence[str] = (),
 ) -> dict:
+    """The environment of the API and the worker. ``data_roots`` are the folders the
+    web UI may read run folders from (see local_data_roots)."""
     host = "127.0.0.1"
-    # Inherited DEPICTIO_* settings target another instance, except the telemetry
-    # opt-out (DEPICTIO_TELEMETRY_ENABLED=false), which must reach this one too.
+    # Every other inherited DEPICTIO_* setting targets another instance.
     env = {
         k: v
         for k, v in inherited_env().items()
-        if not k.startswith("DEPICTIO_") or k.startswith("DEPICTIO_TELEMETRY_")
+        if not k.startswith("DEPICTIO_") or k.startswith(INHERITED_SETTINGS)
     }
     env.update(
         {
@@ -630,8 +685,12 @@ def server_env(
             # Backups go to <base dir>/backups, by default inside the installed package,
             # where every local home would share them and `wipe` would miss them.
             "DEPICTIO_BACKUP_BASE_DIR": str(paths.home),
+            # So the server never reads it as a run folder: it is under $HOME by default.
+            "DEPICTIO_LOCAL_HOME": str(paths.home),
         }
     )
+    if data_roots:
+        env["DEPICTIO_LOCAL_DATA_ROOTS"] = ",".join(data_roots)
     if seed == "none":
         env["DEPICTIO_DISABLE_EXAMPLE_DASHBOARDS"] = "true"
     else:
@@ -1937,18 +1996,21 @@ def start_stack(
     screenshots: bool,
     log=print,
     warn=None,
+    data_roots: list[str] | None = None,
 ) -> State:
     """Start every service and wait until the API answers; returns what was recorded.
 
     Leftovers of an earlier run are stopped first. On any error, Ctrl-C, SIGTERM
     and SIGHUP included, what this call started is stopped again before the error
     propagates, with those signals ignored meanwhile. Each PID is saved as soon as
-    its process starts.
+    its process starts. ``data_roots`` defaults to the home folder alone.
     """
     warn = warn or log
+    if data_roots is None:
+        data_roots = local_data_roots(paths)
     with _signals_interrupt():
         try:
-            return _start_stack(paths, port, seed, screenshots, log, warn)
+            return _start_stack(paths, port, seed, screenshots, log, warn, data_roots)
         except BaseException as exc:
             logger.debug("Startup failed (%s): stopping what this run started", type(exc).__name__)
             with _signals_ignored():
@@ -1956,7 +2018,15 @@ def start_stack(
             raise
 
 
-def _start_stack(paths: Paths, port: int | None, seed: str, screenshots: bool, log, warn) -> State:
+def _start_stack(
+    paths: Paths,
+    port: int | None,
+    seed: str,
+    screenshots: bool,
+    log,
+    warn,
+    data_roots: list[str],
+) -> State:
     stop_all(paths, log=log)
     ensure_binaries(paths, log=log)
     seed_screenshots(paths)
@@ -1972,13 +2042,14 @@ def _start_stack(paths: Paths, port: int | None, seed: str, screenshots: bool, l
         log("Installing Chromium for dashboard thumbnails")
         install_chromium()
     secret_values = load_secrets(paths)
-    env = server_env(paths, ports, secret_values, seed, screenshots)
+    env = server_env(paths, ports, secret_values, seed, screenshots, data_roots)
     state = State(
         ports=ports,
         home=str(paths.home),
         examples=seed,
         first_run=not any((paths.home / "mongo").glob("*")),
         screenshots=screenshots,
+        data_roots=list(data_roots),
     )
     logger.debug(
         "Examples to seed: %s; first run (empty database): %s; thumbnails: %s",

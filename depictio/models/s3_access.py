@@ -27,9 +27,15 @@ Server context (API process, Celery worker), in order:
 7. anything else is refused.
 
 The instance's credentials are never used for a user-supplied location in
-server context. CLI context keeps its order: the project's keys for this
-bucket, public, any other project settings, then the instance credentials of the CLI configuration (kind ``instance``), then the
-ambient chain when that configuration carries no keys.
+server context. CLI context skips steps 2 and 6 and keeps the order of the
+rest: the project's keys for this bucket, public, any other project
+settings, then the S3 credentials of the CLI configuration (kind
+``instance``), then the ambient chain when that configuration carries no
+keys.
+
+Storage settings typed in with a request, before the project they are for
+exists (``storage_only``), are the one source after step 2: the location is
+read with them (kind ``project``) or not at all, whatever the bucket lists say.
 
 This module sits under ``depictio.models`` so the CLI-only install can use
 it, which is why it never imports ``depictio.api``: the gateway policy and
@@ -287,8 +293,8 @@ def _credentials_phrase(target: S3Target) -> str:
         return "without credentials, as a public bucket"
     if target.kind == "project":
         if target.unsigned:
-            return "without credentials, as the project's storage settings carry no access key"
-        return "with the project's storage credentials"
+            return "without credentials, as the storage settings give no access key"
+        return "with the access key and secret given"
     if target.kind == "instance":
         return "with the S3 credentials of the Depictio configuration"
     return "with the server's own credentials"
@@ -301,10 +307,7 @@ def _access_denied_hint(target: S3Target) -> str:
             "project, or ask an administrator to take it off the public bucket list."
         )
     if target.kind == "project":
-        return (
-            "Check the access key and secret in the project's storage settings, and that "
-            "they may read this bucket."
-        )
+        return "Check the access key and secret, and that they may read this bucket."
     if target.kind == "instance":
         return "Check the S3 credentials in the Depictio CLI configuration."
     return "Ask an administrator to check the server's access to this bucket."
@@ -312,7 +315,7 @@ def _access_denied_hint(target: S3Target) -> str:
 
 def _store_phrase(target: S3Target) -> str:
     if target.kind == "project":
-        return "at the endpoint in the project's storage settings"
+        return "at the endpoint of the storage settings"
     if target.kind == "instance":
         return "in the configured S3 storage"
     return "on AWS S3"
@@ -320,20 +323,32 @@ def _store_phrase(target: S3Target) -> str:
 
 def _wrong_region_hint(target: S3Target) -> str:
     if target.kind == "project":
-        return (
-            "Set the bucket's region in the project's storage settings; testing the "
-            "storage settings detects it."
-        )
+        return "Set the bucket's region in the storage settings; a connection test detects it."
     return "The read could not follow it."
 
 
 def _unreachable_hint(target: S3Target) -> str:
     if target.kind == "project":
-        return "if it keeps failing, check the endpoint in the project's storage settings."
+        return "if it keeps failing, check the endpoint of the storage settings."
     return "if it keeps failing, ask an administrator to check the storage."
 
 
 # ── Locations and bucket lists ──────────────────────────────────────────────
+
+
+def is_s3_url(location: str) -> bool:
+    """Whether ``location`` is spelled as an ``s3://`` URL, in any letter case."""
+    return location[:5].lower() == "s3://"
+
+
+def folder_prefix(key: str) -> str:
+    """``key`` as a folder prefix: ``""`` for the bucket itself, else ending in one ``/``.
+
+    Without the trailing slash a listing would also return the keys of a
+    sibling prefix sharing the same leading characters.
+    """
+    key = key.strip("/")
+    return f"{key}/" if key else ""
 
 
 def split_s3_url(url: str) -> tuple[str, str]:
@@ -411,7 +426,7 @@ def is_instance_bucket(bucket: str, instance_s3: InstanceS3 | None) -> bool:
     list reliably. Refusing a same-named bucket on another store is the price,
     and the safe side to err on.
     """
-    instance_bucket = getattr(instance_s3, "bucket", "") if instance_s3 is not None else ""
+    instance_bucket = getattr(instance_s3, "bucket", "")
     return bool(instance_bucket) and bucket == instance_bucket
 
 
@@ -565,7 +580,7 @@ def project_target(
     secret = config.secret_access_key
     if bool(key_id) != bool(secret):
         raise S3AccessRefused(
-            "The project's storage settings have an access key without its secret, or a "
+            "The storage settings have an access key without its secret, or a "
             "secret without its key. Enter both, or clear both to read without credentials."
         )
     return S3Target(
@@ -603,9 +618,7 @@ def instance_target(
     )
 
 
-def _has_instance_keys(instance_s3: InstanceS3 | None) -> bool:
-    if instance_s3 is None:
-        return False
+def _has_instance_keys(instance_s3: InstanceS3) -> bool:
     return bool(instance_s3.aws_access_key_id) and bool(instance_s3.aws_secret_access_key)
 
 
@@ -627,12 +640,15 @@ def resolve_s3_target(
     project_storage: ProjectS3Config | None,
     instance_s3: InstanceS3 | None,
     policy: S3AccessPolicy,
+    storage_only: bool = False,
 ) -> S3Target:
     """Decide how ``url`` is read. Configuration only: no request goes out.
 
     Raises :class:`S3AccessRefused` when the configuration does not allow the
     read. The order is in the module docstring. ``instance_s3`` is the
     instance's (server) or the CLI configuration's (CLI) S3 settings.
+    ``storage_only`` reads with ``project_storage`` and nothing else, refused
+    without it.
     """
     bucket, key = split_s3_url(url)
     timeout_s = policy.timeout_s
@@ -643,6 +659,10 @@ def resolve_s3_target(
             f"{url} is in the bucket that holds this Depictio instance's own data, which "
             "cannot be read as a data source."
         )
+    if storage_only:
+        if project_storage is None:
+            raise S3AccessRefused(f"{url} cannot be read: no storage settings were given for it.")
+        return project_target(project_storage, bucket, key, timeout_s=timeout_s)
     if project_storage is not None and holds_keys_for(project_storage, bucket):
         return project_target(project_storage, bucket, key, timeout_s=timeout_s)
     if bucket_list_matches(policy.public_s3_buckets, bucket, key):
@@ -653,10 +673,10 @@ def resolve_s3_target(
         if bucket_list_matches(policy.credentialed_s3_buckets, bucket, key):
             return S3Target(kind="ambient", bucket=bucket, key=key, timeout_s=timeout_s)
         raise S3AccessRefused(
-            f"{url} cannot be read by the server: the project has no storage settings "
-            "and the bucket is not one this instance allows. Add the bucket's endpoint "
-            "and credentials in the project's storage settings, or ask an administrator "
-            "to allow it."
+            f"{url} cannot be read by the server: the bucket is not one this instance "
+            "allows, and no credentials were given for it. Give the bucket's endpoint "
+            "and credentials (a project's storage settings, or the private bucket of a "
+            "run folder), or ask an administrator to allow it."
         )
     if instance_s3 is not None and _has_instance_keys(instance_s3):
         return instance_target(instance_s3, bucket, key, timeout_s=timeout_s)
@@ -766,18 +786,31 @@ def is_missing_prefix(exc: Exception) -> bool:
     return code in _MISSING_PREFIX_CODES or (status == 404 and not code)
 
 
-def iter_object_pages(target: S3Target, prefix: str) -> Iterator[dict]:
+def is_missing_object(exc: Exception) -> bool:
+    """Whether a GetObject ``ClientError`` means the key is absent, not the bucket."""
+    code, status = client_error_code(exc)
+    return code == "NoSuchKey" or (status == 404 and code != "NoSuchBucket")
+
+
+def iter_object_pages(
+    target: S3Target, prefix: str, *, delimiter: str | None = None
+) -> Iterator[dict]:
     """ListObjectsV2 pages under ``prefix`` in ``target``'s bucket.
 
-    A 404 for a prefix that holds nothing is an empty listing; every other
-    failure raises :class:`S3AccessFailed`. Exceptions raised by the caller's
-    loop body are the caller's: only the paginator's own are mapped.
+    With ``delimiter="/"`` a page holds the direct children only: the keys
+    under ``Contents``, the sub-prefixes under ``CommonPrefixes``. A 404 for a
+    prefix that holds nothing is an empty listing; every other failure raises
+    :class:`S3AccessFailed`. Exceptions raised by the caller's loop body are
+    the caller's: only the paginator's own are mapped.
     """
     from botocore.exceptions import ClientError
 
+    params: dict[str, Any] = {"Bucket": target.bucket, "Prefix": prefix}
+    if delimiter:
+        params["Delimiter"] = delimiter
     try:
         paginator = target.client().get_paginator("list_objects_v2")
-        pages = iter(paginator.paginate(Bucket=target.bucket, Prefix=prefix))
+        pages = iter(paginator.paginate(**params))
     except Exception as exc:
         raise S3AccessFailed.from_exception(exc, target.with_key(prefix)) from exc
     while True:
@@ -794,7 +827,7 @@ def iter_object_pages(target: S3Target, prefix: str) -> Iterator[dict]:
         yield dict(page)
 
 
-# ── Public buckets (kept for the call sites that predate the targets) ───────
+# ── Public buckets (behind the public_s3_* wrappers of remote_fetch) ────────
 
 
 def public_s3_region(bucket: str, *, timeout_s: float = DEFAULT_TIMEOUT_S) -> str:

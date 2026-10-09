@@ -8,9 +8,9 @@ export its dashboards as tag-based YAML, and synthesize the ``template:`` block.
 ``dashboards/*.yaml`` bundle that drops into ``depictio/projects/<template_id>/``
 and is auto-discovered by the resolver and the picker.
 
-The round-trip is the contract: before returning, the bundle is self-checked —
-the ``template:`` block must validate as ``TemplateMetadata`` and the
-substituted config as ``Project`` — so a broken bundle is never emitted.
+The round-trip is the contract: before returning, the bundle is self-checked
+(the ``template:`` block must validate as ``TemplateMetadata`` and the
+substituted config as ``Project``), so a broken bundle is never emitted.
 
 Per-project storage credentials are deliberately NOT exported: they live in
 their own collection and never belong in a shareable file.
@@ -31,13 +31,17 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from depictio.api.v1.db import dashboards_collection, projects_collection
+from depictio.api.v1.endpoints.projects_endpoints.from_manifest import (
+    TEMPLATE_ID_PATTERN,
+    _manifest_dcs,
+)
 from depictio.models.logging import logger
 
 
 class ExportTemplateRequest(BaseModel):
     """Body of POST /projects/{project_id}/export_template."""
 
-    # e.g. "my-lab/rnaseq-qc/1" — becomes the bundle's directory layout.
+    # e.g. "my-lab/rnaseq-qc/1", which becomes the bundle's directory layout.
     template_id: str
     description: str | None = None
     version: str = "1.0.0"
@@ -98,7 +102,7 @@ def _strip_runtime(node: Any) -> Any:
     if isinstance(node, ObjectId):
         return str(node)
     # Mongo docs built via .mongo() may still carry Python-native leaves that
-    # yaml.dump would tag as !!python/object — coerce to plain YAML scalars.
+    # yaml.dump would tag as !!python/object: coerce to plain YAML scalars.
     if isinstance(node, Enum):
         return node.value
     if isinstance(node, datetime):
@@ -184,19 +188,14 @@ def _parameterize(config: dict, data_root: str | None) -> list[dict]:
 
     Returns the ``template.variables`` declarations for what was injected.
     A template binds ONE manifest: distinct stored manifest URLs all collapse
-    onto {MANIFEST_URL} (with a warning) — multi-manifest projects need manual
-    splitting before export.
+    onto {MANIFEST_URL} (with a warning), so multi-manifest projects need
+    manual splitting before export.
     """
     manifest_urls: set[str] = set()
-    for workflow in config.get("workflows", []) or []:
-        for dc in workflow.get("data_collections", []) or []:
-            scan = (dc.get("config") or {}).get("scan") or {}
-            if str(scan.get("mode", "")).lower() != "manifest":
-                continue
-            params = scan.get("scan_parameters") or {}
-            if params.get("manifest_url"):
-                manifest_urls.add(params["manifest_url"])
-                params["manifest_url"] = "{MANIFEST_URL}"
+    for _workflow, _dc, params in _manifest_dcs(config):
+        if params.get("manifest_url"):
+            manifest_urls.add(params["manifest_url"])
+            params["manifest_url"] = "{MANIFEST_URL}"
     if len(manifest_urls) > 1:
         logger.warning(
             f"Export collapses {len(manifest_urls)} distinct manifest URLs onto "
@@ -278,13 +277,13 @@ def build_template_bundle(
     version: str = "1.0.0",
     data_root: str | None = None,
 ) -> dict[str, str]:
-    """{relative_path: file_content} for the template bundle. Sync — to_thread."""
+    """{relative_path: file_content} for the template bundle. Sync: call via to_thread."""
     from depictio.api.v1.endpoints.dashboards_endpoints.routes import dashboard_yaml_content
     from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
         _user_can_edit_project,
     )
 
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*", template_id):
+    if not TEMPLATE_ID_PATTERN.fullmatch(template_id):
         raise HTTPException(
             status_code=422,
             detail="template_id must be slash-separated path segments, e.g. 'my-lab/rnaseq-qc/1'.",

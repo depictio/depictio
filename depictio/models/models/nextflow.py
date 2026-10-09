@@ -32,6 +32,11 @@ _VERSIONS_GLOBS: tuple[str, ...] = (
     "software_versions.yml",
 )
 
+# The DSL1 generation of nf-core templates (eager 2.4, atacseq 1.2, chipseq
+# 1.2) wrote no versions YAML but a two-column table, one `name<TAB>version`
+# line per tool, the pipeline's own line first: `nf-core/eager<TAB>v2.4.5`.
+_LEGACY_VERSIONS_TABLE = "software_versions.csv"
+
 # `-params-file` runs write nf-params.json; nf-core's own launcher writes
 # params_<timestamp>.json (one per resume, so the newest name wins).
 PARAMS_GLOBS: tuple[str, ...] = ("params*.json", "nf-params.json", "nf_params.json")
@@ -39,6 +44,10 @@ PARAMS_GLOBS: tuple[str, ...] = ("params*.json", "nf-params.json", "nf_params.js
 _REPORT_GLOB = "execution_report*.html"
 _TRACE_GLOB = "execution_trace*.txt"
 _DAG_GLOB = "pipeline_dag*"
+
+# Where `read` looks for pipeline_info: the root (a flat project), else one
+# level down (a sequencing-runs project).
+_PIPELINE_INFO_DIRS: tuple[str, ...] = ("pipeline_info", "*/pipeline_info")
 
 # The key inside the versions YAML that holds the run's identity rather than a
 # process's tool versions.
@@ -153,6 +162,55 @@ def _parse_versions_yaml(path: Path) -> tuple[dict[str, Any], set[str]]:
     return workflow, tools
 
 
+def _parse_versions_table(path: Path) -> tuple[dict[str, Any], set[str]]:
+    """Split a DSL1 ``software_versions.csv`` the way a versions YAML is split.
+
+    Its ``nf-core/<pipeline>`` and ``Nextflow`` lines become a ``Workflow:``
+    section, pipeline first, so :func:`_identity_from_workflow_section` reads
+    both alike; every other line names a tool. Tab-separated as nf-core wrote
+    it, comma-separated accepted.
+    """
+    try:
+        text = path.read_text()
+    except OSError as exc:
+        logger.warning(f"Nextflow run-info: could not read {path}: {exc}")
+        return {}, set()
+    pipeline: dict[str, Any] = {}
+    engine: dict[str, Any] = {}
+    tools: set[str] = set()
+    for line in text.splitlines():
+        name, separator, version = line.partition("\t")
+        if not separator:
+            name, separator, version = line.partition(",")
+        name, version = name.strip(), version.strip()
+        if not separator or not name or not version:
+            continue
+        if name.lower() == "nextflow":
+            # Written `v21.04.0` here, `21.04.0` in a versions YAML.
+            engine[name] = version.removeprefix("v")
+        elif name.lower().startswith("nf-core/") and not pipeline:
+            pipeline[name] = version
+        else:
+            tools.add(name.lower())
+    return {**pipeline, **engine}, tools
+
+
+def _read_versions(directory: Path) -> tuple[Path | None, dict[str, Any], set[str]]:
+    """The versions file of one ``pipeline_info``, its identity and its tools.
+
+    The versions YAML when there is one, else a DSL1 ``software_versions.csv``.
+    """
+    path = _newest_matching(directory, _VERSIONS_GLOBS)
+    if path is not None:
+        workflow, tools = _parse_versions_yaml(path)
+        return path, workflow, tools
+    legacy = directory / _LEGACY_VERSIONS_TABLE
+    if legacy.is_file():
+        workflow, tools = _parse_versions_table(legacy)
+        return legacy, workflow, tools
+    return None, {}, set()
+
+
 def _identity_from_workflow_section(
     workflow: dict[str, Any],
 ) -> tuple[str | None, str | None, str | None]:
@@ -219,6 +277,25 @@ class NextflowRunInfoReader:
     name = ENGINE
     priority = 100
 
+    # The versions YAML and params JSON of each pipeline_info, a checkout's
+    # manifest, and the legacy `software_versions.yml` that
+    # `read_software_versions` searches the whole tree for.
+    footprint: tuple[str, ...] = (
+        *(
+            f"{d}/{p}"
+            for d in _PIPELINE_INFO_DIRS
+            for p in (*_VERSIONS_GLOBS, _LEGACY_VERSIONS_TABLE, *PARAMS_GLOBS)
+        ),
+        "nextflow.config",
+        "**/software_versions.yml",
+    )
+    # Only their paths are reported: an execution report embeds megabytes of
+    # JavaScript that recognition never reads.
+    markers: tuple[str, ...] = (
+        *_PIPELINE_INFO_DIRS,
+        *(f"{d}/{p}" for d in _PIPELINE_INFO_DIRS for p in (_REPORT_GLOB, _TRACE_GLOB, _DAG_GLOB)),
+    )
+
     def read(self, run_dir: Path) -> WorkflowRunInfo | None:
         run_dir = Path(run_dir)
         if not run_dir.is_dir():
@@ -247,13 +324,11 @@ class NextflowRunInfoReader:
         tools: set[str] = set()
 
         if pipeline_info.is_dir():
-            versions_path = _newest_matching(pipeline_info, _VERSIONS_GLOBS)
+            versions_path, workflow, tools = _read_versions(pipeline_info)
             params_path = _newest_matching(pipeline_info, PARAMS_GLOBS)
             report_path = _newest(pipeline_info, _REPORT_GLOB)
             trace_path = _newest(pipeline_info, _TRACE_GLOB)
             dag_path = _newest(pipeline_info, _DAG_GLOB)
-            if versions_path is not None:
-                workflow, tools = _parse_versions_yaml(versions_path)
         elif subdirs:
             # Identity from the first run that carries one, deterministically:
             # the runs aggregated under one DATA_ROOT are the same pipeline, and
@@ -265,11 +340,7 @@ class NextflowRunInfoReader:
             # be wrong.
             seen: set[tuple[str | None, str | None]] = set()
             for candidate in subdirs:
-                candidate_versions = _newest_matching(candidate, _VERSIONS_GLOBS)
-                candidate_workflow: dict[str, Any] = {}
-                candidate_tools: set[str] = set()
-                if candidate_versions is not None:
-                    candidate_workflow, candidate_tools = _parse_versions_yaml(candidate_versions)
+                candidate_versions, candidate_workflow, candidate_tools = _read_versions(candidate)
                 tools.update(candidate_tools)
                 if candidate_workflow:
                     candidate_name, candidate_raw, _ = _identity_from_workflow_section(

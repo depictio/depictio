@@ -6,15 +6,17 @@ template server-side (``resolve_template`` with ``data_root=None``), check the
 manifest's ``type`` coverage against the template's DC tags, create the
 project, ingest each manifest-backed DC through the same CLI helpers as
 ``/projects/ingest_manifest``, and import the template's dashboards in-process
-(no HTTP-to-self). The result is one report the UI can act on — including the
+(no HTTP-to-self). The result is one report the UI can act on, including the
 dashboard ids to redirect to.
 
 Synchronous throughout (the CLI helpers use sync httpx back into this same
-FastAPI process) — the route dispatches via ``asyncio.to_thread``.
+FastAPI process): the route dispatches via ``asyncio.to_thread``.
 """
 
+import asyncio
 import copy
 import re
+from pathlib import Path
 from typing import Any
 
 from bson import ObjectId
@@ -25,15 +27,17 @@ from depictio.api.v1.db import projects_collection
 from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     ManifestEntriesRejected,
     ManifestIngestDCResult,
+    _dc_id,
     _fetch_and_parse_manifest,
     _manifest_field_map,
     _manifest_type_of,
     _run_dc_ingest,
+    _validate_manifest_url,
 )
-from depictio.api.v1.remote_fetch import RemoteURLRejected, validate_remote_url
+from depictio.api.v1.remote_fetch import RemoteURLRejected
 from depictio.models.logging import logger
 
-# Same rule as export_template's build_template_bundle: slash-separated
+# Also the rule of export_template's build_template_bundle: slash-separated
 # segments that start alphanumeric. Rules out "..", a leading "/" or "~", so
 # an id handed to resolve_template can never spell a path outside the
 # server's templates directory.
@@ -83,7 +87,7 @@ class FromManifestReport(BaseModel):
     manifest_entries: int
     ingestion: list[ManifestIngestDCResult] = Field(default_factory=list)
     dashboards: list[DashboardImportResult] = Field(default_factory=list)
-    # Manifest types no template DC consumes — data the template can't show.
+    # Manifest types no template DC consumes: data the template can't show.
     unmatched_manifest_types: list[str] = Field(default_factory=list)
     # Optional DCs pruned because the manifest has no rows of their type.
     pruned_optional_dcs: list[str] = Field(default_factory=list)
@@ -91,18 +95,20 @@ class FromManifestReport(BaseModel):
     success: bool = False
 
 
-def _manifest_dcs(config: dict[str, Any]) -> list[tuple[dict, dict]]:
-    """[(dc_dict, scan_parameters)] for every manifest-mode DC in the config."""
-    found: list[tuple[dict, dict]] = []
+def _manifest_dcs(config: dict[str, Any]) -> list[tuple[dict, dict, dict]]:
+    """[(workflow_dict, dc_dict, scan_parameters)] for every manifest-mode DC in the config."""
+    found: list[tuple[dict, dict, dict]] = []
     for workflow in config.get("workflows", []) or []:
         for dc in workflow.get("data_collections", []) or []:
             scan = (dc.get("config") or {}).get("scan") or {}
             if str(scan.get("mode", "")).lower() == "manifest":
-                found.append((dc, scan.get("scan_parameters") or {}))
+                found.append((workflow, dc, scan.get("scan_parameters") or {}))
     return found
 
 
-def _shared_field_map(template_id: str, manifest_dcs: list[tuple[dict, dict]]) -> dict[str, str]:
+def _shared_field_map(
+    template_id: str, manifest_dcs: list[tuple[dict, dict, dict]]
+) -> dict[str, str]:
     """The columns the template's manifest DCs read the one manifest with.
 
     The coverage check parses the manifest once, so it has to read the same
@@ -111,7 +117,7 @@ def _shared_field_map(template_id: str, manifest_dcs: list[tuple[dict, dict]]) -
     all be served by it: refused.
     """
     tags_by_map: dict[tuple[tuple[str, str], ...], list[str]] = {}
-    for dc, scan_params in manifest_dcs:
+    for _workflow, dc, scan_params in manifest_dcs:
         key = tuple(sorted(_manifest_field_map(scan_params).items()))
         tags_by_map.setdefault(key, []).append(str(dc.get("data_collection_tag", "")))
     if len(tags_by_map) > 1:
@@ -163,6 +169,153 @@ def _template_not_found_detail(template_id: str, exc: FileNotFoundError) -> str:
     return f"Template '{template_id}' not found.{hint}"
 
 
+def _refuse_a_taken_project_name(name: str, current_user) -> None:
+    """Refuse a name ``POST /projects/create`` refuses, with the error it gives.
+
+    The same check that route runs, ``_project_exists`` over the projects the
+    caller can see. The creation flows run synchronously in a worker thread,
+    which has no event loop of its own, so the coroutine is run to completion
+    here.
+    """
+    from depictio.api.v1.endpoints.projects_endpoints.routes import (
+        _project_exists,
+        _project_taken,
+        get_project_from_name,
+    )
+
+    lookup = get_project_from_name(project_name=name, current_user=current_user)
+    if asyncio.run(_project_exists(lookup)):
+        raise HTTPException(status_code=409, detail=_project_taken("name")["message"])
+
+
+def _new_project_document(resolved_config: dict[str, Any], current_user) -> dict[str, Any]:
+    """The document a resolved template is inserted as, owned by ``current_user``.
+
+    With the identity and uniqueness rules of ``POST /projects/create``: a
+    taken name is a 409 (:func:`_refuse_a_taken_project_name`), a config the
+    project model refuses a 422. The caller inserts it; its ``_id`` is the
+    new project's.
+    """
+    from depictio.api.v1.endpoints.projects_endpoints.utils import (
+        validate_workflow_uniqueness_in_project,
+    )
+    from depictio.models.models.links import resolve_link_tag_refs
+    from depictio.models.models.projects import Project
+    from depictio.models.timestamps import utc_now_str
+
+    _refuse_a_taken_project_name(resolved_config["name"], current_user)
+
+    project_config = copy.deepcopy(resolved_config)
+    project_config["permissions"] = {
+        "owners": [{"_id": ObjectId(current_user.id), "email": current_user.email}],
+        "editors": [],
+        "viewers": [],
+    }
+    try:
+        project = Project(**project_config)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"Resolved project config invalid: {exc}")
+    validate_workflow_uniqueness_in_project(project)
+
+    create_payload = project.mongo()
+    # Template links name their DCs by tag; store the new DCs' ids next to
+    # them, as the CLI's template sync does, so readers that do not resolve
+    # tags (link cleanup on DC deletion, for one) see real ids.
+    resolve_link_tag_refs(create_payload)
+    create_payload["registration_time"] = utc_now_str()
+    create_payload["last_modified"] = create_payload["registration_time"]
+    return create_payload
+
+
+def _import_template_dashboards(
+    dashboard_paths: list[Path],
+    *,
+    template_id: str,
+    project_id: ObjectId,
+    variables: dict[str, str],
+    current_user,
+) -> list[DashboardImportResult]:
+    """Import a template's dashboards into a new project, keyed as ``depictio ingest`` keys them.
+
+    Each dashboard is filed under the source key the CLI gives it
+    (``<template id without version>:<path in the template>``) and a child tab
+    names its parent by that key, with the CLI's own options: titles kept, a
+    dashboard the project already has kept. A later ``depictio ingest`` of the
+    same project with this template so finds these dashboards instead of adding
+    a second copy of each. In-process, through the shared import handler, which
+    binds DC tags to the ids just persisted and drops components whose optional
+    DC was pruned.
+    """
+    import yaml
+
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
+        import_dashboard_yaml_content,
+    )
+    from depictio.cli.cli.utils.templates import (
+        _main_dashboard_of,
+        dashboard_source_key,
+        locate_template,
+        substitute_template_variables,
+    )
+
+    try:
+        template_dir: Path | None = locate_template(template_id).parent
+    except FileNotFoundError:
+        template_dir = None
+    keys = [dashboard_source_key(path, template_id, template_dir) for path in dashboard_paths]
+
+    # Every file first: a child tab is sent with the key of the file that holds
+    # its parent, found by the parent's title.
+    loaded: list[tuple[str, Any] | Exception] = []
+    for path in dashboard_paths:
+        try:
+            text = path.read_text(encoding="utf-8")
+            parsed = yaml.safe_load(text)
+            if variables:
+                parsed = substitute_template_variables(parsed, variables)
+                # sort_keys=False: PyYAML sorts mapping keys by default, which
+                # re-orders every dict-shaped component config.
+                text = yaml.dump(
+                    parsed, default_flow_style=False, allow_unicode=True, sort_keys=False
+                )
+            loaded.append((text, parsed))
+        except Exception as exc:
+            loaded.append(exc)
+    main_keys: dict[str, str] = {}
+    for key, item in zip(keys, loaded, strict=True):
+        main = _main_dashboard_of(item[1]) if isinstance(item, tuple) else None
+        if main is not None and isinstance(main.get("title"), str):
+            main_keys.setdefault(main["title"], key)
+
+    results: list[DashboardImportResult] = []
+    for path, key, item in zip(dashboard_paths, keys, loaded, strict=True):
+        entry = DashboardImportResult(path=str(path), success=False)
+        try:
+            if isinstance(item, Exception):
+                raise item
+            text, parsed = item
+            parent_tag = parsed.get("parent_dashboard_tag") if isinstance(parsed, dict) else None
+            result = import_dashboard_yaml_content(
+                yaml_content=text,
+                project_id=project_id,
+                overwrite=False,
+                current_user=current_user,
+                source_key=key,
+                keep_titles=True,
+                parent_source_key=main_keys.get(parent_tag) if parent_tag else None,
+                existing="keep",
+            )
+            entry.success = bool(result.get("success"))
+            entry.dashboard_id = result.get("dashboard_id")
+            entry.title = result.get("title")
+        except HTTPException as exc:
+            entry.error = f"HTTP {exc.status_code}: {exc.detail}"
+        except Exception as exc:
+            entry.error = str(exc)
+        results.append(entry)
+    return results
+
+
 def _create_project_from_manifest(
     *,
     manifest_url: str,
@@ -172,17 +325,12 @@ def _create_project_from_manifest(
     variables: dict[str, str] | None = None,
     dry_run: bool = False,
 ) -> FromManifestReport:
-    """The full manifest → project + dashboards flow. Sync — call via to_thread."""
+    """The full manifest → project + dashboards flow. Sync: call via to_thread."""
     # Gateway rejection must precede any database access.
     try:
-        validate_remote_url(manifest_url)
+        _validate_manifest_url(manifest_url)
     except RemoteURLRejected as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    if manifest_url[:5].lower() == "s3://":
-        raise HTTPException(
-            status_code=400,
-            detail="s3:// manifest locations are not supported yet — serve the manifest over https.",
-        )
     # The request model already enforces this; re-checked here so direct
     # callers can't hand resolve_template a path either.
     try:
@@ -192,15 +340,17 @@ def _create_project_from_manifest(
 
     # Resolve the template server-side. resolve_template is import-light CLI
     # code (yaml + models); data_root=None skips every filesystem-local step.
-    from depictio.cli.cli.utils.templates import resolve_template, substitute_template_variables
+    from depictio.cli.cli.utils.templates import resolve_template
 
     extra_vars = {**(variables or {}), "MANIFEST_URL": manifest_url}
     try:
-        resolved_config, _meta, _origin, dashboard_paths, resolved_vars = resolve_template(
-            template_id=template_id,
-            data_root=None,
-            project_name=project_name,
-            extra_vars=extra_vars,
+        resolved_config, template_metadata, _origin, dashboard_paths, resolved_vars = (
+            resolve_template(
+                template_id=template_id,
+                data_root=None,
+                project_name=project_name,
+                extra_vars=extra_vars,
+            )
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=_template_not_found_detail(template_id, exc))
@@ -211,7 +361,7 @@ def _create_project_from_manifest(
     if not manifest_dcs:
         raise HTTPException(
             status_code=422,
-            detail=f"Template '{template_id}' has no manifest-mode data collection — "
+            detail=f"Template '{template_id}' has no manifest-mode data collection: "
             "it cannot be instantiated from a manifest.",
         )
 
@@ -229,11 +379,11 @@ def _create_project_from_manifest(
 
     # Coverage check: every required manifest DC needs ≥1 row of its type;
     # optional ones with no rows are pruned (same semantics as template
-    # conditionals — recorded so the report explains the gap).
+    # conditionals, recorded so the report explains the gap).
     consumed_types: set[str] = set()
     pruned: set[str] = set()
     planned: list[ManifestIngestDCResult] = []
-    for dc, scan_params in manifest_dcs:
+    for _workflow, dc, scan_params in manifest_dcs:
         tag = dc.get("data_collection_tag", "")
         manifest_type = _manifest_type_of(scan_params, tag)
         consumed_types.add(manifest_type)
@@ -273,41 +423,7 @@ def _create_project_from_manifest(
         report.success = True
         return report
 
-    # Create the project — same identity/uniqueness rules as POST /projects/create.
-    from depictio.api.v1.endpoints.projects_endpoints.utils import (
-        validate_workflow_uniqueness_in_project,
-    )
-    from depictio.models.models.projects import Project
-    from depictio.models.timestamps import utc_now_str
-
-    if projects_collection.find_one({"name": resolved_config["name"]}):
-        raise HTTPException(
-            status_code=409,
-            detail=f"A project named '{resolved_config['name']}' already exists — "
-            "pass a different project_name.",
-        )
-
-    project_config = copy.deepcopy(resolved_config)
-    project_config["permissions"] = {
-        "owners": [{"_id": ObjectId(current_user.id), "email": current_user.email}],
-        "editors": [],
-        "viewers": [],
-    }
-    try:
-        project = Project(**project_config)
-    except Exception as exc:
-        raise HTTPException(status_code=422, detail=f"Resolved project config invalid: {exc}")
-    validate_workflow_uniqueness_in_project(project)
-
-    create_payload = project.mongo()
-    # Template links name their DCs by tag; store the new DCs' ids next to
-    # them, as the CLI's template sync does, so readers that do not resolve
-    # tags (link cleanup on DC deletion, for one) see real ids.
-    from depictio.models.models.links import resolve_link_tag_refs
-
-    resolve_link_tag_refs(create_payload)
-    create_payload["registration_time"] = utc_now_str()
-    create_payload["last_modified"] = create_payload["registration_time"]
+    create_payload = _new_project_document(resolved_config, current_user)
     projects_collection.insert_one(create_payload)
     project_oid = create_payload["_id"]
     report.project_id = str(project_oid)
@@ -317,62 +433,38 @@ def _create_project_from_manifest(
     # the DC config from the project document, ids included).
     stored = projects_collection.find_one({"_id": project_oid}) or {}
     all_ok = True
-    for workflow_dict in stored.get("workflows", []) or []:
-        for dc_dict in workflow_dict.get("data_collections", []) or []:
-            scan = (dc_dict.get("config") or {}).get("scan") or {}
-            if str(scan.get("mode", "")).lower() != "manifest":
-                continue
-            tag = dc_dict.get("data_collection_tag", "")
-            dc_id = str(dc_dict.get("_id") or dc_dict.get("id") or "")
-            manifest_type = _manifest_type_of(scan.get("scan_parameters") or {}, tag)
-            entry_count = len(manifest.entries_for_type(manifest_type))
-            try:
-                ok, message = _run_dc_ingest(workflow_dict, dc_id, current_user)
-            except HTTPException:
-                raise
-            except Exception as exc:  # helper crash — treat as a per-DC failure
-                logger.error(f"from_manifest ingest crashed for DC '{tag}': {exc}")
-                ok, message = False, str(exc)
-            all_ok = all_ok and ok
-            report.ingestion.append(
-                ManifestIngestDCResult(
-                    data_collection_tag=tag,
-                    data_collection_id=dc_id,
-                    entries=entry_count,
-                    status="ingested" if ok else "failed",
-                    message=message,
-                )
+    for workflow_dict, dc_dict, scan_params in _manifest_dcs(stored):
+        tag = dc_dict.get("data_collection_tag", "")
+        dc_id = _dc_id(dc_dict)
+        manifest_type = _manifest_type_of(scan_params, tag)
+        entry_count = len(manifest.entries_for_type(manifest_type))
+        try:
+            ok, message = _run_dc_ingest(workflow_dict, dc_id, current_user)
+        except HTTPException:
+            raise
+        except Exception as exc:  # helper crash: treat as a per-DC failure
+            logger.error(f"from_manifest ingest crashed for DC '{tag}': {exc}")
+            ok, message = False, str(exc)
+        all_ok = all_ok and ok
+        report.ingestion.append(
+            ManifestIngestDCResult(
+                data_collection_tag=tag,
+                data_collection_id=dc_id,
+                entries=entry_count,
+                status="ingested" if ok else "failed",
+                message=message,
             )
+        )
 
-    # Import the template's dashboards in-process. The shared import handler
-    # does the tag → id binding and drops components whose optional DC ended
-    # up empty (self-adapting import).
-    from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
-        import_dashboard_yaml_content,
+    # The template's dashboards, after ingestion: components whose optional DC
+    # ended up empty are dropped (self-adapting import).
+    report.dashboards = _import_template_dashboards(
+        dashboard_paths,
+        template_id=template_metadata.template_id,
+        project_id=project_oid,
+        variables=resolved_vars,
+        current_user=current_user,
     )
 
-    for path in dashboard_paths:
-        entry = DashboardImportResult(path=str(path), success=False)
-        try:
-            yaml_text = path.read_text(encoding="utf-8")
-            if resolved_vars:
-                import yaml as _yaml
-
-                parsed = substitute_template_variables(_yaml.safe_load(yaml_text), resolved_vars)
-                yaml_text = _yaml.dump(parsed, default_flow_style=False, allow_unicode=True)
-            result = import_dashboard_yaml_content(
-                yaml_text, project_oid, overwrite=True, current_user=current_user
-            )
-            entry.success = bool(result.get("success"))
-            entry.dashboard_id = result.get("dashboard_id")
-            entry.title = result.get("title")
-        except HTTPException as exc:
-            entry.error = f"HTTP {exc.status_code}: {exc.detail}"
-            all_ok = False
-        except Exception as exc:
-            entry.error = str(exc)
-            all_ok = False
-        report.dashboards.append(entry)
-
-    report.success = all_ok
+    report.success = all_ok and all(entry.success for entry in report.dashboards)
     return report

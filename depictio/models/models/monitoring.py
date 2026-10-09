@@ -108,6 +108,13 @@ class IngestionStep(BaseModel):
     name: str = Field(..., description="Step name, e.g. 'sync', 'scan', 'process'")
     status: str = Field(default="running", description="Step status")
     detail: Optional[str] = Field(default=None, description="Optional human-readable detail")
+    scans: Optional[dict[str, Optional[str]]] = Field(
+        default=None,
+        description=(
+            "A refresh scan leader's scan outcomes, by data collection id: None for a "
+            "scan that succeeded, else its failure message"
+        ),
+    )
 
     # Live progress. All optional, because a step reported only at completion
     # (the historical behaviour) has none of it.

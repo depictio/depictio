@@ -3,7 +3,7 @@ from collections.abc import Awaitable
 
 import boto3
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import ValidationError
 from pymongo.errors import DuplicateKeyError
 
@@ -39,10 +39,20 @@ from depictio.api.v1.endpoints.projects_endpoints.from_manifest import (
     FromManifestRequest,
     _create_project_from_manifest,
 )
+from depictio.api.v1.endpoints.projects_endpoints.from_run import (
+    FromRunReport,
+    FromRunRequest,
+    _create_project_from_run,
+)
 from depictio.api.v1.endpoints.projects_endpoints.ingestion_report import (
     IngestionReport,
     IngestionSummary,
     build_ingestion_report,
+)
+from depictio.api.v1.endpoints.projects_endpoints.local_dirs import (
+    CodedHTTPException,
+    LocalDirListing,
+    list_local_dirs,
 )
 from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     IngestManifestRequest,
@@ -53,15 +63,33 @@ from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import (
     _ingest_manifest_into_project,
     _refresh_manifest_in_project,
 )
+from depictio.api.v1.endpoints.projects_endpoints.run_file_preview import (
+    RunFilePreview,
+    RunFilePreviewRequest,
+    preview_run_file,
+)
+from depictio.api.v1.endpoints.projects_endpoints.run_folders import (
+    FindRunsRequest,
+    FolderInspection,
+    FolderInspectRequest,
+    FoundRuns,
+    S3DirListing,
+    S3DirsRequest,
+    find_runs,
+    inspect_folder,
+    list_s3_dirs,
+)
 from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
     ProjectStorageConfigIn,
     ProjectStorageConfigOut,
     ProjectStorageUnusable,
+    RunStorageTestRequest,
     StorageTestResult,
     _delete_project_storage,
     _get_project_storage,
     _set_project_storage,
     _test_project_storage,
+    _test_run_storage,
 )
 from depictio.api.v1.endpoints.projects_endpoints.templates_catalog import (
     TemplateCatalog,
@@ -197,6 +225,30 @@ async def _run_ingest_off_loop(fn, **kwargs):
     except ProjectStorageUnusable as exc:
         logger.error(f"Project storage unusable during {fn.__name__}: {exc}")
         raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+
+
+async def _run_coded_off_loop(fn, *args, **kwargs):
+    """Run a sync helper via ``asyncio.to_thread``, answering a
+    ``CodedHTTPException`` it raises with its ``{detail, code}`` body."""
+    try:
+        return await asyncio.to_thread(fn, *args, **kwargs)
+    except CodedHTTPException as exc:
+        return exc.response()
+
+
+async def _ensure_cli_token_unless_dry_run(current_user, dry_run: bool) -> None:
+    """Mint the user's CLI token if missing, unless nothing is going to run.
+
+    The in-process CLI helpers call back into the API with the user's stored
+    token; a dry run only plans, so it needs none.
+    """
+    if dry_run:
+        return
+    from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
+        _ensure_user_cli_token,
+    )
+
+    await _ensure_user_cli_token(current_user)
 
 
 def _reject_non_admin_in_public_mode(current_user, action: str) -> None:
@@ -715,12 +767,7 @@ async def ingest_manifest(
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
     _reject_non_admin_in_public_mode(current_user, "Manifest ingestion")
-    if not payload.dry_run:
-        from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
-            _ensure_user_cli_token,
-        )
-
-        await _ensure_user_cli_token(current_user)
+    await _ensure_cli_token_unless_dry_run(current_user, payload.dry_run)
     return await _run_ingest_off_loop(
         _ingest_manifest_into_project,
         project_id=payload.project_id,
@@ -737,26 +784,25 @@ async def ingest_manifest(
 @projects_endpoint_router.post("/refresh_manifest", response_model=ManifestRefreshReport)
 async def refresh_manifest(
     payload: RefreshManifestRequest,
+    request: Request,
     current_user=Depends(get_user_or_anonymous),
 ):
-    """Re-fetch and re-ingest a project's manifest-backed data collections.
+    """Re-scan and re-ingest a project's data collections in place.
 
-    Overwrite-with-report semantics: File records sync to the manifest's
-    current entries (``sync_files`` beats the identity-hash skip) and each
-    Delta table is rebuilt from the resulting file set. A DC whose manifest
-    no longer lists its type is reported failed and left untouched.
-    ``dry_run=true`` reports what would refresh (per-DC entry counts) without
-    touching any data.
+    Covers every data collection the server can read again: any remote
+    source (manifest, url, s3_prefix), and, under ``depictio local`` only, a
+    local one below a root of the local-data policy (for a loopback caller
+    who is an admin, as every local read). Overwrite-with-report semantics: File records sync to
+    the source's current files (``sync_files`` beats the identity-hash skip)
+    and each Delta table is rebuilt from the resulting file set. A manifest
+    DC whose manifest no longer lists its type is reported failed and left
+    untouched. ``dry_run=true`` reports what would refresh (per-DC entry
+    counts for manifest DCs) without touching any data.
     """
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
     _reject_non_admin_in_public_mode(current_user, "Manifest refresh")
-    if not payload.dry_run:
-        from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
-            _ensure_user_cli_token,
-        )
-
-        await _ensure_user_cli_token(current_user)
+    await _ensure_cli_token_unless_dry_run(current_user, payload.dry_run)
     return await _run_ingest_off_loop(
         _refresh_manifest_in_project,
         project_id=payload.project_id,
@@ -764,6 +810,7 @@ async def refresh_manifest(
         data_collection_tag=payload.data_collection_tag,
         dry_run=payload.dry_run,
         async_run=payload.async_run,
+        request=request,
     )
 
 
@@ -821,7 +868,7 @@ async def export_project_template(
 
 @projects_endpoint_router.get("/{project_id}/storage", response_model=ProjectStorageConfigOut)
 async def get_project_storage(project_id: str, current_user=Depends(get_user_or_anonymous)):
-    """Storage config of a project (secret never returned — only ``has_secret``)."""
+    """Storage config of a project (the secret is never returned, only ``has_secret``)."""
     if not current_user:
         raise HTTPException(status_code=401, detail="User not found.")
     return await asyncio.to_thread(_get_project_storage, project_id, current_user)
@@ -860,11 +907,36 @@ async def test_project_storage(project_id: str, current_user=Depends(get_user_or
     return await asyncio.to_thread(_test_project_storage, project_id, current_user)
 
 
+# Storage settings typed in for a private bucket before the project exists: the
+# same callers as POST /projects/from_run, which stores them.
+PRIVATE_BUCKET_ACTION = "Reading a private bucket"
+
+
+@projects_endpoint_router.post("/storage_test", response_model=StorageTestResult)
+async def test_run_storage(
+    payload: RunStorageTestRequest,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Probe the bucket of ``location`` with storage settings that are not stored anywhere.
+
+    The probes of ``POST /projects/{project_id}/storage/test`` (HeadBucket,
+    region detection, one one-key listing under the location's prefix), for
+    the settings of a project not created yet. Settings without an access key
+    and its secret are a 422; other settings no read could use, and failed
+    probes, answer ``success: false``. The detected region is answered, not
+    saved.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    _reject_non_admin_in_public_mode(current_user, PRIVATE_BUCKET_ACTION)
+    return await asyncio.to_thread(_test_run_storage, payload.location, payload.storage)
+
+
 @projects_endpoint_router.get("/templates", response_model=TemplateCatalog)
 async def list_project_templates(current_user=Depends(get_user_or_anonymous)):
     """List the project templates shipped with this instance.
 
-    Backs the builder UI's template picker — the ``manifest_capable`` flag
+    Backs the builder UI's template picker: the ``manifest_capable`` flag
     marks templates usable with ``POST /projects/from_manifest``. Purely
     filesystem-derived; template YAMLs that fail to parse are skipped.
     """
@@ -891,12 +963,7 @@ async def create_project_from_manifest(
         raise HTTPException(status_code=401, detail="User not found.")
     # Mirror POST /projects/create's public/demo-mode gate.
     _reject_non_admin_in_public_mode(current_user, "Project creation")
-    if not payload.dry_run:
-        from depictio.api.v1.endpoints.datacollections_endpoints.utils import (
-            _ensure_user_cli_token,
-        )
-
-        await _ensure_user_cli_token(current_user)
+    await _ensure_cli_token_unless_dry_run(current_user, payload.dry_run)
     return await asyncio.to_thread(
         _create_project_from_manifest,
         manifest_url=payload.manifest_url,
@@ -905,6 +972,241 @@ async def create_project_from_manifest(
         project_name=payload.project_name,
         variables=payload.variables,
         dry_run=payload.dry_run,
+    )
+
+
+@projects_endpoint_router.post("/from_run", response_model=FromRunReport)
+async def create_project_from_run(
+    payload: FromRunRequest,
+    request: Request,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Create a project (and its dashboards) from a template + a run folder.
+
+    The browser twin of ``depictio ingest <run folder> --template <id>``:
+    resolve the template against the run folder, report per data collection
+    what it would find there, create the project, import its dashboards, and
+    hand the ingestion itself to Celery workers, since a real run folder is
+    minutes of work, far past a request. The response carries a ``run_id`` to
+    poll via ``GET /projects/refresh_manifest/{run_id}``. ``dry_run=true``
+    returns the same per-collection plan and creates nothing.
+
+    Either way the report also says what the run's own records say about it
+    (``run_info``, as ``GET /projects/folder_inspect`` shows it) and where
+    each file the template reads through a variable resolved
+    (``input_files``: found or not, and the collections that use it).
+
+    The run folder is an ``s3://`` prefix or, when local folders are on, a
+    folder on the server's disk. Without ``template_id`` the pipeline is
+    recognised from the folder (``detected_template`` in the report).
+
+    A run folder in a private bucket comes with ``storage``: it is read with
+    those settings alone, and they are stored on the created project before
+    its ingestion starts (``storage_saved``); a failure to store them removes
+    the project. A dry run stores nothing.
+
+    A taken project name is a 409, as on ``POST /projects/create``. A run
+    folder the server may not read, or whose read fails, and a pipeline that
+    is not recognised answer ``{detail, code}``.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    # Mirror POST /projects/create's public/demo-mode gate.
+    _reject_non_admin_in_public_mode(current_user, "Project creation")
+    await _ensure_cli_token_unless_dry_run(current_user, payload.dry_run)
+    return await _run_coded_off_loop(
+        _create_project_from_run,
+        data_root=payload.data_root,
+        template_id=payload.template_id,
+        current_user=current_user,
+        project_name=payload.project_name,
+        variables=payload.variables,
+        dry_run=payload.dry_run,
+        request=request,
+        storage=payload.storage,
+    )
+
+
+@projects_endpoint_router.post("/run_file_preview", response_model=RunFilePreview)
+async def post_run_file_preview(
+    payload: RunFilePreviewRequest,
+    request: Request,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Show the start of one file of a run folder, before a project is made from it.
+
+    For the run-folder dialog of ``POST /projects/from_run``: the first rows of
+    a table (CSV, TSV, a plain text table, gzipped or not, parquet), the first
+    lines of a text, or in plain words why a file is not shown (an HTML
+    report, an image, an archive). ``data_root`` and ``storage`` are read
+    exactly as ``from_run`` reads them, with its refusals and its public-mode
+    gate; ``location`` must be a file below ``data_root``.
+
+    Bounded: at most 64 KB of the file is read (256 KB once a gzip file is
+    decompressed), and a parquet file of at most 512 MB shows its first rows
+    and its row count, read from its metadata. Refusals answer
+    ``{detail, code}``.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    # The from_run gate: the preview is a step of creating a project.
+    _reject_non_admin_in_public_mode(current_user, "Project creation")
+    return await _run_coded_off_loop(
+        preview_run_file, payload, request=request, current_user=current_user
+    )
+
+
+@projects_endpoint_router.get("/local_dirs", response_model=LocalDirListing)
+async def get_local_dirs(
+    request: Request,
+    path: str | None = Query(default=None),
+    current_user=Depends(get_user_or_anonymous),
+):
+    """List the sub-folders of ``path`` on the server's own disk, or the allowed roots.
+
+    For ``depictio local``, where the server is the user's computer: backs the
+    folder picker of ``POST /projects/from_run``. Sub-directories only, sorted,
+    hidden folders and symlinks that leave the allowed roots left out, at most
+    500 (``truncated`` says when there were more). 404 when local folders are
+    off or the path is outside the allowed roots, refused or missing; 403 for a
+    non-administrator or a request whose ``Host`` is not this machine.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await _run_coded_off_loop(
+        list_local_dirs, path, request=request, current_user=current_user
+    )
+
+
+@projects_endpoint_router.get("/s3_dirs", response_model=S3DirListing)
+async def get_s3_dirs(
+    url: str | None = Query(default=None),
+    current_user=Depends(get_user_or_anonymous),
+):
+    """List the sub-folders of ``url``, or the S3 locations an administrator listed.
+
+    The S3 twin of ``GET /projects/local_dirs``, for any signed-in user: the
+    locations are the public and credentialed bucket lists, the instance's own
+    bucket never among them. One listing page per call, at most 500 folders
+    (``truncated`` says when there were more). A location outside the lists,
+    and a read the store refuses or fails, answer ``{detail, code}``.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await asyncio.to_thread(list_s3_dirs, url)
+
+
+@projects_endpoint_router.post("/s3_dirs", response_model=S3DirListing)
+async def post_s3_dirs(
+    payload: S3DirsRequest,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """``GET /projects/s3_dirs``, with storage settings for a private bucket in the body.
+
+    With ``storage``, ``url`` is read with those settings alone: the bucket
+    lists do not apply and the bucket itself is the root. The settings are not
+    stored. Without ``storage``, the GET route's answer.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    if payload.storage is not None:
+        _reject_non_admin_in_public_mode(current_user, PRIVATE_BUCKET_ACTION)
+    return await asyncio.to_thread(list_s3_dirs, payload.url, payload.storage)
+
+
+@projects_endpoint_router.get("/folder_inspect", response_model=FolderInspection)
+async def get_folder_inspect(
+    request: Request,
+    location: str = Query(...),
+    detect: bool = Query(default=True),
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Describe one folder: its direct sub-folders and files, whether it looks
+    like a run, and (``detect``, the default) the template its run fits, with
+    what the run's own records say about it (``run_info``): its engine,
+    parameters, tools and reports, how many runs it holds and of which
+    pipelines when it holds several, and how its tasks ended, counted from
+    the first 8 MB of its execution trace (``run_info.tasks``, ``partial``
+    when the trace is larger).
+
+    ``location`` is a folder on this computer (``depictio local``, with the
+    guards of ``GET /projects/local_dirs``) or an ``s3://`` location (with
+    those of ``GET /projects/s3_dirs``). Refusals answer ``{detail, code}``.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await _run_coded_off_loop(
+        inspect_folder, location, detect=detect, request=request, current_user=current_user
+    )
+
+
+@projects_endpoint_router.post("/folder_inspect", response_model=FolderInspection)
+async def post_folder_inspect(
+    payload: FolderInspectRequest,
+    request: Request,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """``GET /projects/folder_inspect``, with storage settings for a private bucket.
+
+    An ``s3://`` location is read, and its run detected, with ``storage``
+    alone when given. The settings are not stored.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    if payload.storage is not None:
+        _reject_non_admin_in_public_mode(current_user, PRIVATE_BUCKET_ACTION)
+    return await _run_coded_off_loop(
+        inspect_folder,
+        payload.location,
+        detect=payload.detect,
+        storage=payload.storage,
+        request=request,
+        current_user=current_user,
+    )
+
+
+@projects_endpoint_router.get("/find_runs", response_model=FoundRuns)
+async def get_find_runs(
+    request: Request,
+    location: str = Query(...),
+    current_user=Depends(get_user_or_anonymous),
+):
+    """Find the run folders (holding ``pipeline_info/`` or ``multiqc/``) below ``location``.
+
+    Bounded: six levels and 5,000 folders below a local folder, 20,000 keys
+    below an ``s3://`` prefix, 100 runs; ``truncated`` says when a bound
+    stopped the search. Below a local folder the first 50 runs carry their
+    detected template. Same locations and refusals as
+    ``GET /projects/folder_inspect``.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    return await _run_coded_off_loop(
+        find_runs, location, request=request, current_user=current_user
+    )
+
+
+@projects_endpoint_router.post("/find_runs", response_model=FoundRuns)
+async def post_find_runs(
+    payload: FindRunsRequest,
+    request: Request,
+    current_user=Depends(get_user_or_anonymous),
+):
+    """``GET /projects/find_runs``, with storage settings for a private bucket.
+
+    An ``s3://`` location is listed with ``storage`` alone when given. The
+    settings are not stored.
+    """
+    if not current_user:
+        raise HTTPException(status_code=401, detail="User not found.")
+    if payload.storage is not None:
+        _reject_non_admin_in_public_mode(current_user, PRIVATE_BUCKET_ACTION)
+    return await _run_coded_off_loop(
+        find_runs,
+        payload.location,
+        storage=payload.storage,
+        request=request,
+        current_user=current_user,
     )
 
 

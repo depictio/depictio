@@ -518,6 +518,15 @@ export {
   fetchDataCollectionFiles,
   createProject,
   createProjectFromManifest,
+  createProjectFromRun,
+  listLocalDirs,
+  listS3Dirs,
+  inspectFolder,
+  previewRunFile,
+  findRunFolders,
+  testRunStorage,
+  ApiDetailError,
+  apiErrorCode,
   refreshManifest,
   getManifestRefreshRun,
   listProjectTemplates,
@@ -917,6 +926,27 @@ export type {
   CreateProjectResult,
   FromManifestRequest,
   FromManifestReport,
+  FromRunRequest,
+  FromRunReport,
+  FromRunDCPreview,
+  FromRunRecipePreview,
+  FromRunRecipeSource,
+  DetectedTemplate,
+  TemplateMatch,
+  LocalDirEntry,
+  LocalDirListing,
+  S3DirListing,
+  FolderRequestOptions,
+  RunStorageIn,
+  FolderContents,
+  FolderInspection,
+  RunInfoSummary,
+  RunReportFile,
+  RunTaskSummary,
+  RunInputFile,
+  RunFilePreview,
+  FoundRunFolder,
+  FindRunsResult,
   ManifestIngestDCResult,
   ManifestRefreshStatus,
   ManifestRefreshEntry,
@@ -1036,6 +1066,70 @@ export {
   templateFilterValues,
 } from './templateFilter';
 export type { ParsedTemplate } from './templateFilter';
+// "From a run folder": locations, the template catalog per pipeline, and the
+// reading of a run-folder plan.
+export {
+  folderAncestors,
+  folderName,
+  folderSource,
+  isLocalFolderPath,
+  isS3Location,
+  middleEllipsis,
+  normalizeFolder,
+  parentFolder,
+  pathBarQuery,
+  relativeToFolder,
+  relativeToRunFolder,
+  shortenFolder,
+  shortenHome,
+} from './runFolderPaths';
+export type { FolderSource } from './runFolderPaths';
+export {
+  compareVersions,
+  defaultVersionFor,
+  findRunPipeline,
+  formatVersion,
+  groupRunTemplates,
+  isRunFolderCapable,
+  runTemplateMatch,
+  runTemplateMatchText,
+  sameVersion,
+  sourceLabel,
+  splitTemplateId,
+} from './runFolderTemplates';
+export type {
+  RunPipeline,
+  RunPipelineGroup,
+  RunTemplateEntry,
+  RunTemplateMatch,
+  RunTemplateMatchInput,
+  RunTemplateVersion,
+  TemplateIdParts,
+} from './runFolderTemplates';
+export {
+  groupRunCollections,
+  isCollectionReady,
+  runCollectionSection,
+  runCollectionTotals,
+  runFoundNothing,
+} from './runFolderReport';
+export type { RunCollectionEntry, RunCollectionSection } from './runFolderReport';
+export { humanizeVariableName, templateSettingValue } from './runFolderVariables';
+export type { TemplateSettingValue } from './runFolderVariables';
+export {
+  EMPTY_RUN_STORAGE_FIELDS,
+  isPrivateBucketRefusal,
+  runStorageFieldErrors,
+  runStorageFieldsBlank,
+  runStorageFromFields,
+  s3BucketOf,
+  storageForLocation,
+} from './runFolderStorage';
+export type {
+  RunStorageBinding,
+  RunStorageFieldErrors,
+  RunStorageFields,
+} from './runFolderStorage';
 export {
   asEnum,
   asList,

@@ -141,7 +141,9 @@ def s3_read_target(url: str, CLI_config=None) -> S3Target:
     the same way wherever a read starts (preview, API ingest, worker, CLI):
 
     * the context from ``DEPICTIO_CONTEXT`` (unset or unknown means server);
-    * the project's storage settings from ``CLI_config.remote_storage_options``;
+    * the project's storage settings from ``CLI_config.remote_storage_options``,
+      the only source when ``CLI_config.storage_only`` is set (settings typed
+      in with a request, before their project exists);
     * the instance S3 settings from ``CLI_config.s3_storage``, or from the
       environment (``S3DepictioCLIConfig()``) when there is no configuration,
       so a read without one still knows which bucket is the instance's;
@@ -159,6 +161,8 @@ def s3_read_target(url: str, CLI_config=None) -> S3Target:
         project_storage=project_storage,
         instance_s3=instance_s3,
         policy=remote_policy(),
+        # ``is True``: a stand-in configuration (a mock) answers any attribute.
+        storage_only=getattr(CLI_config, "storage_only", False) is True,
     )
 
 
@@ -198,8 +202,8 @@ def validate_remote_url(url: str, policy: RemoteConfig | None = None) -> None:
 
     ``s3://`` URLs skip the DNS/IP checks: they are read through the object
     store client, with the credentials :func:`s3_read_target` resolves for
-    them, not fetched over arbitrary HTTP. ``policy`` lets the redirect loop reuse one policy read
-    across hops; callers normally leave it unset.
+    them, not fetched over arbitrary HTTP. ``policy`` lets the redirect loop
+    reuse one policy read across hops; callers normally leave it unset.
     """
     policy = policy if policy is not None else remote_policy()
     parsed = urlparse(url)

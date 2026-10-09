@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Badge,
@@ -34,6 +34,8 @@ import type {
   CreateProjectResult,
   FromManifestReport,
   FromManifestRequest,
+  FromRunReport,
+  FromRunRequest,
   TemplateInfo,
   TemplateVariable,
 } from 'depictio-react-core';
@@ -41,13 +43,23 @@ import type {
 import IngestionResultTable from './IngestionResultTable';
 import { useStepSettling } from './hooks/useStepSettling';
 import { DisabledReason, GatedButton } from '../components/settings/SettingsSections';
+import { RunFolderTab } from './fromRun';
+import type { RunCreatedContext } from './fromRun';
 
-type Tab = 'create' | 'import' | 'manifest';
+type Tab = 'create' | 'import' | 'manifest' | 'run';
 type ProjectType = 'basic' | 'advanced';
 
 /** A required template variable with a declared default is filled in
  *  server-side, so only the ones without a default must be typed here. */
 const mustBeTyped = (v: TemplateVariable): boolean => v.required && !v.default;
+
+/** Stack id of the create dialog: the run tab's folder browser opens above
+ *  it, in the same `Modal.Stack`. */
+const CREATE_STACK_ID = 'create-project';
+
+/** "1 dashboard", "2 dashboards". */
+const plural = (n: number, one: string, many = `${one}s`): string =>
+  `${n} ${n === 1 ? one : many}`;
 
 interface CreateProjectModalProps {
   opened: boolean;
@@ -56,9 +68,17 @@ interface CreateProjectModalProps {
   onCreate: (input: CreateProjectInput) => Promise<CreateProjectResult>;
   onImport: (file: File, overwrite: boolean) => Promise<void>;
   onCreateFromManifest: (input: FromManifestRequest) => Promise<FromManifestReport>;
+  onCreateFromRun: (input: FromRunRequest, context: RunCreatedContext) => Promise<FromRunReport>;
+  /** The server reads run folders from its own disk (`depictio local`): the
+   *  run tab then takes a local path and offers a folder browser. */
+  localDataRootsEnabled?: boolean;
+  /** The server may browse allowed S3 locations: the folder browser then
+   *  offers an S3 side. */
+  remoteBrowseEnabled?: boolean;
+  /** Why the run tab may not take a private bucket's connection details
+   *  (public mode, non-admin); null when it may. */
+  privateBucketDisabledReason?: string | null;
 }
-
-
 
 const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   opened,
@@ -67,6 +87,10 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   onCreate,
   onImport,
   onCreateFromManifest,
+  onCreateFromRun,
+  localDataRootsEnabled = false,
+  remoteBrowseEnabled = false,
+  privateBucketDisabledReason = null,
 }) => {
   const accent = useBrandAccents();
   const [tab, setTab] = useState<Tab>('create');
@@ -118,15 +142,17 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     importResetRef.current?.();
   }, [opened]);
 
-  // Manifest-capable templates for the From Manifest tab, fetched fresh per
-  // open so a newly registered template shows up without a page reload.
+  // Every template the backend knows, fetched fresh per open so a newly
+  // registered template shows up without a page reload. The From Manifest tab
+  // narrows this to the manifest-capable ones, the From a run folder tab to
+  // the run-folder-capable ones (grouped per pipeline).
   useEffect(() => {
     if (!opened) return;
     let cancelled = false;
     setTemplatesError(null);
     listProjectTemplates()
       .then((all) => {
-        if (!cancelled) setTemplates(all.filter((t) => t.manifest_capable));
+        if (!cancelled) setTemplates(all);
       })
       .catch((err: Error) => {
         if (!cancelled) setTemplatesError(err.message || 'Failed to load templates.');
@@ -136,6 +162,11 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     };
   }, [opened]);
 
+  const manifestTemplates = useMemo(
+    () => templates.filter((t) => t.manifest_capable),
+    [templates],
+  );
+
   // Step-1 card click also auto-advances (matches Dash UX).
   const handleSelectType = (type: ProjectType) => {
     if (type === 'advanced') return; // disabled card
@@ -143,10 +174,11 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     setActiveStep(1);
   };
 
+  const isNameTaken = (candidate: string) =>
+    existingNames.some((n) => n.toLowerCase() === candidate.toLowerCase());
+
   const trimmedName = name.trim();
-  const nameAlreadyUsed = existingNames.some(
-    (n) => n.toLowerCase() === trimmedName.toLowerCase(),
-  );
+  const nameAlreadyUsed = isNameTaken(trimmedName);
   const canSubmit =
     !!projectType && trimmedName.length > 0 && !nameAlreadyUsed && !submitting;
 
@@ -182,7 +214,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   };
 
   const selectedTemplate =
-    templates.find((t) => t.template_id === manifestTemplateId) ?? null;
+    manifestTemplates.find((t) => t.template_id === manifestTemplateId) ?? null;
   // MANIFEST_URL is injected server-side from the URL field: never render a
   // form input for it.
   const extraVariables = (selectedTemplate?.variables ?? []).filter(
@@ -198,9 +230,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
 
   const trimmedManifestUrl = manifestUrl.trim();
   const trimmedManifestName = manifestProjectName.trim();
-  const manifestNameUsed =
-    trimmedManifestName.length > 0 &&
-    existingNames.some((n) => n.toLowerCase() === trimmedManifestName.toLowerCase());
+  const manifestNameUsed = trimmedManifestName.length > 0 && isNameTaken(trimmedManifestName);
   const manifestSourceReady =
     trimmedManifestUrl.length > 0 &&
     !!manifestTemplateId &&
@@ -278,12 +308,21 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   const manifestDisplayName =
     preview?.project_name || trimmedManifestName || selectedTemplate?.name || 'project';
 
-  return (
+  // Escape and the close button both land here; neither may drop a request
+  // that is still being sent.
+  const handleModalClose = () => {
+    if (!submitting) onClose();
+  };
+
+  const createDialog = (
     <Modal
+      stackId={CREATE_STACK_ID}
       opened={opened}
-      onClose={onClose}
+      onClose={handleModalClose}
       centered
-      size="lg"
+      // The run tab shows a detection card, a two-column summary and the
+      // grouped plan, which the other tabs' width would wrap into noise.
+      size={tab === 'run' ? 'xl' : 'lg'}
       withCloseButton
       closeOnClickOutside={false}
       closeOnEscape={!submitting}
@@ -292,7 +331,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
       padding="lg"
     >
       <Stack gap="md">
-        {/* Title row — folder+ icon + Virgil "Projects" */}
+        {/* Title row: folder+ icon + Virgil "Projects" */}
         <Center>
           <Group gap="xs">
             <Icon
@@ -310,7 +349,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           </Group>
         </Center>
 
-        {/* Pill-style tabs (Create New / Import) */}
+        {/* Pill-style tabs (Create New / Import / From Manifest) */}
         <Tabs
           value={tab}
           onChange={(v) => setTab((v as Tab) || 'create')}
@@ -336,6 +375,12 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
             >
               From Manifest
             </Tabs.Tab>
+            <Tabs.Tab
+              value="run"
+              leftSection={<Icon icon="mdi:folder-search-outline" width={16} />}
+            >
+              From a run folder
+            </Tabs.Tab>
           </Tabs.List>
 
           <Tabs.Panel value="create" pt="md">
@@ -360,7 +405,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                         active={projectType === 'basic'}
                         type="basic"
                         title="Basic Project"
-                        description="Perfect for simple data visualization and exploration. No workflows required — upload data collections directly through the UI. Best for individual datasets and quick analysis."
+                        description="Perfect for simple data visualization and exploration. No workflows required: upload data collections directly through the UI. Best for individual datasets and quick analysis."
                         icon="mdi:view-dashboard-outline"
                         tag="UI Creation Only"
                         tagColor="cyan"
@@ -564,7 +609,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       }
                       required
                       placeholder="Select a template"
-                      data={templates.map((t) => ({
+                      data={manifestTemplates.map((t) => ({
                         value: t.template_id,
                         label: t.name,
                       }))}
@@ -662,14 +707,9 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                         </Text>
                         <Text size="xs" c="dimmed" ta="center">
                           {preview
-                            ? `${preview.manifest_entries} manifest entr${
-                                preview.manifest_entries === 1 ? 'y' : 'ies'
-                              } → ` +
-                              `${preview.ingestion.length} data collection${
-                                preview.ingestion.length === 1 ? '' : 's'
-                              }, ${preview.dashboards.length} dashboard${
-                                preview.dashboards.length === 1 ? '' : 's'
-                              }.`
+                            ? `${plural(preview.manifest_entries, 'manifest entry', 'manifest entries')} → ` +
+                              `${plural(preview.ingestion.length, 'data collection')}, ` +
+                              `${plural(preview.dashboards.length, 'dashboard')}.`
                             : 'The manifest will be ingested and the template dashboards imported.'}
                         </Text>
                       </Stack>
@@ -710,10 +750,29 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               {manifestStep === 0 && <DisabledReason reason={missingVariablesReason} />}
             </Stack>
           </Tabs.Panel>
+
+          <Tabs.Panel value="run" pt="md">
+            <RunFolderTab
+              opened={opened}
+              existingNames={existingNames}
+              templates={templates}
+              templatesError={templatesError}
+              localDataRootsEnabled={localDataRootsEnabled}
+              remoteBrowseEnabled={remoteBrowseEnabled}
+              privateBucketDisabledReason={privateBucketDisabledReason}
+              onCreateFromRun={onCreateFromRun}
+              submitting={submitting}
+              setSubmitting={setSubmitting}
+            />
+          </Tabs.Panel>
         </Tabs>
       </Stack>
     </Modal>
   );
+
+  // One stack, so the run tab's folder browser gets the higher layer and
+  // Escape closes only the top one.
+  return <Modal.Stack>{createDialog}</Modal.Stack>;
 };
 
 /** True when a real (non dry-run) from-manifest report carries something the
@@ -730,6 +789,21 @@ export function manifestReportNeedsReview(report: FromManifestReport): boolean {
   );
 }
 
+/** A dimmed label followed by one grey badge per tag; nothing when empty. */
+const TagList: React.FC<{ label: string; tags: string[] }> = ({ label, tags }) =>
+  tags.length > 0 ? (
+    <Group gap="xs" wrap="wrap">
+      <Text size="xs" c="dimmed">
+        {label}
+      </Text>
+      {tags.map((t) => (
+        <Badge key={t} variant="light" color="gray" size="sm" radius="sm">
+          {t}
+        </Badge>
+      ))}
+    </Group>
+  ) : null;
+
 /** Per-DC rows plus the manifest types the template didn't match and the
  *  optional collections it pruned. Renders the dry-run plan on the Preview
  *  step and, unchanged, the real report after creation (where dashboards
@@ -745,12 +819,12 @@ export const ManifestPreviewReport: React.FC<{ report: FromManifestReport }> = (
         </Badge>
         {report.manifest_entries > 0 && (
           <Badge variant="light" color="gray" radius="sm">
-            {report.manifest_entries} manifest entr{report.manifest_entries === 1 ? 'y' : 'ies'}
+            {plural(report.manifest_entries, 'manifest entry', 'manifest entries')}
           </Badge>
         )}
         {report.dashboards.length > 0 && (
           <Badge variant="light" color="gray" radius="sm">
-            {report.dashboards.length} dashboard{report.dashboards.length === 1 ? '' : 's'}
+            {plural(report.dashboards.length, 'dashboard')}
           </Badge>
         )}
       </Group>
@@ -765,30 +839,8 @@ export const ManifestPreviewReport: React.FC<{ report: FromManifestReport }> = (
         rowTestIdPrefix="manifest-preview"
         emptyText="The template matched no data collection in this manifest."
       />
-      {report.unmatched_manifest_types.length > 0 && (
-        <Group gap="xs" wrap="wrap">
-          <Text size="xs" c="dimmed">
-            Unmatched manifest types:
-          </Text>
-          {report.unmatched_manifest_types.map((t) => (
-            <Badge key={t} variant="light" color="gray" size="sm" radius="sm">
-              {t}
-            </Badge>
-          ))}
-        </Group>
-      )}
-      {report.pruned_optional_dcs.length > 0 && (
-        <Group gap="xs" wrap="wrap">
-          <Text size="xs" c="dimmed">
-            Skipped optional collections:
-          </Text>
-          {report.pruned_optional_dcs.map((t) => (
-            <Badge key={t} variant="light" color="gray" size="sm" radius="sm">
-              {t}
-            </Badge>
-          ))}
-        </Group>
-      )}
+      <TagList label="Unmatched manifest types:" tags={report.unmatched_manifest_types} />
+      <TagList label="Skipped optional collections:" tags={report.pruned_optional_dcs} />
       {failedDashboards.length > 0 && (
         <Stack gap={4}>
           <Text size="xs" c="dimmed">
@@ -812,6 +864,30 @@ export const ManifestPreviewReport: React.FC<{ report: FromManifestReport }> = (
   );
 };
 
+/** "3 of 4 collections ingested, 1 failed; 2 manifest types without a matching
+ *  collection", one clause per kind of note the report carries. */
+function summarizeCreated(report: FromManifestReport): string {
+  const ingested = report.ingestion.filter((dc) => dc.status === 'ingested').length;
+  const failed = report.ingestion.filter((dc) => dc.status === 'failed').length;
+  const failedDashboards = report.dashboards.filter((d) => !d.success).length;
+  const clauses = [
+    `${ingested} of ${plural(report.ingestion.length, 'collection')} ingested` +
+      (failed > 0 ? `, ${failed} failed` : ''),
+  ];
+  if (report.unmatched_manifest_types.length > 0) {
+    clauses.push(
+      `${plural(report.unmatched_manifest_types.length, 'manifest type')} without a matching collection`,
+    );
+  }
+  if (report.pruned_optional_dcs.length > 0) {
+    clauses.push(`${plural(report.pruned_optional_dcs.length, 'optional collection')} skipped`);
+  }
+  if (failedDashboards > 0) {
+    clauses.push(`${plural(failedDashboards, 'dashboard')} failed to import`);
+  }
+  return clauses.join('; ');
+}
+
 /** Post-creation report for a from-manifest project that needs a look before
  *  the user lands on its dashboard (see `manifestReportNeedsReview`). The
  *  project already exists and the list behind the modal is refreshed; the
@@ -824,37 +900,6 @@ export const ManifestCreatedModal: React.FC<{
   const dashboardId =
     report?.dashboards.find((d) => d.success && d.dashboard_id)?.dashboard_id ?? null;
   const openDashboardReason = dashboardId ? null : 'No dashboard was imported for this project.';
-
-  const summary: string[] = [];
-  if (report) {
-    const ingested = report.ingestion.filter((dc) => dc.status === 'ingested').length;
-    const failed = report.ingestion.filter((dc) => dc.status === 'failed').length;
-    summary.push(
-      `${ingested} of ${report.ingestion.length} collection${
-        report.ingestion.length === 1 ? '' : 's'
-      } ingested${failed > 0 ? `, ${failed} failed` : ''}`,
-    );
-    if (report.unmatched_manifest_types.length > 0) {
-      summary.push(
-        `${report.unmatched_manifest_types.length} manifest type${
-          report.unmatched_manifest_types.length === 1 ? '' : 's'
-        } without a matching collection`,
-      );
-    }
-    if (report.pruned_optional_dcs.length > 0) {
-      summary.push(
-        `${report.pruned_optional_dcs.length} optional collection${
-          report.pruned_optional_dcs.length === 1 ? '' : 's'
-        } skipped`,
-      );
-    }
-    const failedDashboards = report.dashboards.filter((d) => !d.success).length;
-    if (failedDashboards > 0) {
-      summary.push(
-        `${failedDashboards} dashboard${failedDashboards === 1 ? '' : 's'} failed to import`,
-      );
-    }
-  }
 
   return (
     <Modal
@@ -881,7 +926,7 @@ export const ManifestCreatedModal: React.FC<{
             icon={<Icon icon="mdi:information-outline" width={16} />}
           >
             <Text size="sm">
-              &ldquo;{report.project_name}&rdquo; was created: {summary.join('; ')}.
+              &ldquo;{report.project_name}&rdquo; was created: {summarizeCreated(report)}.
             </Text>
           </Alert>
           <ManifestPreviewReport report={report} />

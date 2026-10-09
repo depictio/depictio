@@ -4,7 +4,11 @@ import { Icon } from '@iconify/react';
 
 import { exportProjectTemplate } from 'depictio-react-core';
 
-import { DisabledReason, GatedButton } from '../../components/settings/SettingsSections';
+import {
+  DisabledReason,
+  ErrorAlert,
+  GatedButton,
+} from '../../components/settings/SettingsSections';
 
 /** Mirrors the backend's template_id validation: slash-separated path
  *  segments, each `[A-Za-z0-9][A-Za-z0-9._-]*` (e.g. `my-lab/rnaseq-qc/1`). */
@@ -138,15 +142,9 @@ const ExportTemplatePanel: React.FC<ExportTemplatePanelProps> = ({
         disabled={locked}
       />
       {error && (
-        <Alert
-          color="red"
-          variant="light"
-          icon={<Icon icon="mdi:alert-circle-outline" width={18} />}
-          title="The template was not exported"
-          data-testid="export-template-error"
-        >
+        <ErrorAlert title="The template was not exported" data-testid="export-template-error">
           {error}
-        </Alert>
+        </ErrorAlert>
       )}
       {downloaded && (
         <Alert

@@ -195,6 +195,15 @@ if not _cors_origins:
         "Set DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS to allow specific origins."
     )
 
+# Local folders are a single-user feature: on a shared server, reading the
+# server's own disk for whoever asks is never right, so the roots are ignored.
+if settings.local_data.root_list and not settings.auth.is_single_user_mode:
+    _logger.warning(
+        "DEPICTIO_LOCAL_DATA_ROOTS is set but single-user mode is off, so local folders "
+        "stay disabled. Set DEPICTIO_AUTH_SINGLE_USER_MODE=true (as `depictio local` "
+        "does) or unset DEPICTIO_LOCAL_DATA_ROOTS."
+    )
+
 # Add analytics middleware if enabled
 if settings.analytics.enabled:
     app.add_middleware(cast(Any, AnalyticsMiddleware), enabled=settings.analytics.enabled)
@@ -419,8 +428,20 @@ async def health_check() -> dict[str, str]:
 async def validation_exception_handler(
     _request: object, exc: RequestValidationError
 ) -> JSONResponse:
-    """Handle request validation errors with formatted error details."""
-    return JSONResponse(status_code=422, content={"detail": [str(error) for error in exc.errors()]})
+    """Handle request validation errors with formatted error details.
+
+    The rejected input is left out of each error: for a missing field it is
+    the whole body, storage secrets included, and the caller sent it anyway.
+    """
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": [
+                str({key: value for key, value in error.items() if key != "input"})
+                for error in exc.errors()
+            ]
+        },
+    )
 
 
 @app.exception_handler(S3AccessError)

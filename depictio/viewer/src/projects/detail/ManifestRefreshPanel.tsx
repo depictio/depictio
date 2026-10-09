@@ -12,11 +12,20 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { getManifestRefreshRun, refreshManifest, Z_LAYERS } from 'depictio-react-core';
-import type { ManifestRefreshReport, ManifestRefreshStatus } from 'depictio-react-core';
+import { refreshManifest, Z_LAYERS } from 'depictio-react-core';
+import type { ManifestRefreshReport } from 'depictio-react-core';
 
 import { DisabledReason, Field, GatedButton } from '../../components/settings/SettingsSections';
-import IngestionResultTable, { INGESTION_STATUS_META } from '../IngestionResultTable';
+import IngestionResultTable from '../IngestionResultTable';
+import {
+  formatElapsed,
+  isManifestRunTerminal,
+  manifestRunOutcome,
+  summarizeManifestRun,
+  useElapsedMs,
+  useManifestRunPoll,
+} from '../manifestRun';
+import type { ManifestRunOutcome } from '../manifestRun';
 
 /** The slice of a project data collection this panel reads: its tag and the
  *  raw `config` bag, whose `scan.mode` says whether the server can re-read the
@@ -25,21 +34,6 @@ export interface ManifestRefreshDc {
   data_collection_tag?: string;
   config?: Record<string, unknown>;
 }
-
-const POLL_INTERVAL_MS = 2_000;
-/** Give up polling after this long; the run keeps going server-side. */
-const MAX_POLL_MS = 30 * 60 * 1_000;
-/** Transient poll failures tolerated before the panel stops and reports. */
-const MAX_CONSECUTIVE_POLL_ERRORS = 3;
-
-/** Order of the statuses in the "3 ingested, 1 failed" summary. */
-const SUMMARY_ORDER: ManifestRefreshStatus[] = [
-  'ingested',
-  'planned',
-  'dispatched',
-  'running',
-  'failed',
-];
 
 const EDITORS_ONLY = 'Only project owners and editors can refresh the data.';
 
@@ -61,48 +55,8 @@ function refreshableTagsOf(dcs: ReadonlyArray<ManifestRefreshDc>): string[] {
   return tags;
 }
 
-/** A report is final once no row is still queued for, or running on, a
- *  worker. The poll endpoint has no run-level status field, so this is the
- *  only terminal signal a client gets. */
-function isTerminal(report: ManifestRefreshReport): boolean {
-  return report.refreshed.every(
-    (entry) => entry.status !== 'dispatched' && entry.status !== 'running',
-  );
-}
-
-/** Outcome of a terminal report, read from its rows rather than from
- *  `report.success`: a poll that lands between the worker's last step write
- *  and the run's finalization sees every row final while `success` is still
- *  false. */
-function hasFailedRow(report: ManifestRefreshReport): boolean {
-  return report.refreshed.some((entry) => entry.status === 'failed');
-}
-
-function formatElapsed(ms: number): string {
-  const total = Math.max(0, Math.floor(ms / 1_000));
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  return `${minutes}:${String(seconds).padStart(2, '0')}`;
-}
-
-/** "3 ingested, 1 failed" style summary of the per-collection statuses. */
-export function summarizeRefresh(report: ManifestRefreshReport): string {
-  const counts = new Map<ManifestRefreshStatus, number>();
-  for (const entry of report.refreshed) {
-    counts.set(entry.status, (counts.get(entry.status) ?? 0) + 1);
-  }
-  const parts: string[] = [];
-  for (const status of SUMMARY_ORDER) {
-    const n = counts.get(status);
-    if (n) parts.push(`${n} ${INGESTION_STATUS_META[status].label.toLowerCase()}`);
-  }
-  return parts.length > 0 ? parts.join(', ') : 'no collections refreshed';
-}
-
-/** `stopped` is neither an outcome nor a failure: the page stopped polling
- *  (the poll kept failing, or the run outlasted MAX_POLL_MS) while rows were
- *  still queued or running, and the run may well go on server-side. */
-export type RefreshState = 'idle' | 'starting' | 'running' | 'success' | 'failed' | 'stopped';
+/** A watched run's states, its ending ones from `manifestRunOutcome`. */
+export type RefreshState = 'idle' | 'starting' | 'running' | ManifestRunOutcome;
 
 /** States in which a run has ended, as far as this page knows. */
 export function isRefreshEnded(state: RefreshState): boolean {
@@ -145,59 +99,24 @@ export function useManifestRefresh(
   const [finishedAt, setFinishedAt] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Poll the run every POLL_INTERVAL_MS until it is terminal, the deadline
-  // passes, or the poll itself keeps failing. Cleanup cancels the pending
-  // timer and drops any response that lands after unmount or a new run.
-  useEffect(() => {
-    if (!runId || startedAt == null) return;
-    let cancelled = false;
-    let timer: number | undefined;
-    let consecutiveErrors = 0;
-    const stop = () => {
+  // Follow the run until it is terminal, the deadline passes, or the poll
+  // itself keeps failing: the same watcher as the "From a run folder" flow.
+  useManifestRunPoll({
+    runId,
+    startedAt,
+    onReport: setReport,
+    onStop: (pollError) => {
+      if (pollError) setError(pollError);
       setRunId(null);
       setFinishedAt(Date.now());
-    };
-    const tick = async () => {
-      let next: ManifestRefreshReport | null = null;
-      try {
-        next = await getManifestRefreshRun(runId);
-        consecutiveErrors = 0;
-      } catch (err) {
-        if (cancelled) return;
-        consecutiveErrors += 1;
-        if (consecutiveErrors >= MAX_CONSECUTIVE_POLL_ERRORS) {
-          setError(
-            `Lost track of the refresh run: ${(err as Error).message}. ` +
-              'The workers keep going; the Ingestion tab shows the outcome.',
-          );
-          stop();
-          return;
-        }
-      }
-      if (cancelled) return;
-      if (next) {
-        setReport(next);
-        if (isTerminal(next)) {
-          stop();
-          return;
-        }
-      }
-      if (Date.now() - startedAt >= MAX_POLL_MS) {
-        setError(
-          'Stopped following the refresh after 30 minutes. It may still be running; ' +
-            'the Ingestion tab shows the outcome.',
-        );
-        stop();
-        return;
-      }
-      timer = window.setTimeout(tick, POLL_INTERVAL_MS);
-    };
-    timer = window.setTimeout(tick, POLL_INTERVAL_MS);
-    return () => {
-      cancelled = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-    };
-  }, [runId, startedAt]);
+    },
+    pollErrorMessage: (err) =>
+      `Lost track of the refresh run: ${err.message}. ` +
+      'The workers keep going; the Ingestion tab shows the outcome.',
+    timeoutMessage:
+      'Stopped following the refresh after 30 minutes. It may still be running; ' +
+      'the Ingestion tab shows the outcome.',
+  });
 
   // Drop a selection that no longer matches a refreshable collection (the DC
   // may have been renamed or deleted since it was picked).
@@ -223,7 +142,7 @@ export function useManifestRefresh(
       // No run_id means the backend answered synchronously, and a run whose
       // rows are all final already (every collection failed pre-flight) has
       // nothing left to poll.
-      if (first.run_id && !isTerminal(first)) {
+      if (first.run_id && !isManifestRunTerminal(first)) {
         setRunId(first.run_id);
       } else {
         setFinishedAt(Date.now());
@@ -243,11 +162,7 @@ export function useManifestRefresh(
     : runId
       ? 'running'
       : report && finishedAt != null
-        ? !isTerminal(report)
-          ? 'stopped'
-          : hasFailedRow(report)
-            ? 'failed'
-            : 'success'
+        ? manifestRunOutcome(report)
         : error
           ? 'failed'
           : 'idle';
@@ -296,7 +211,7 @@ function announceRefresh(
   const elapsed = formatElapsed(
     startedAt == null || finishedAt == null ? 0 : finishedAt - startedAt,
   );
-  return describeEndedRefresh(state, report ? summarizeRefresh(report) : null, elapsed);
+  return describeEndedRefresh(state, report ? summarizeManifestRun(report) : null, elapsed);
 }
 
 /** Icon per ended state. `stopped` reads as a caution, not as a failure. */
@@ -316,17 +231,11 @@ const RefreshStatusLine: React.FC<{
   finishedAt: number | null;
 }> = ({ state, report, startedAt, finishedAt }) => {
   const live = state === 'starting' || state === 'running';
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!live) return;
-    setNow(Date.now());
-    const id = window.setInterval(() => setNow(Date.now()), 1_000);
-    return () => window.clearInterval(id);
-  }, [live]);
+  const elapsedMs = useElapsedMs(live, startedAt, finishedAt);
 
   if (state === 'idle') return null;
-  const elapsed = formatElapsed(startedAt == null ? 0 : (finishedAt ?? now) - startedAt);
-  const summary = report ? summarizeRefresh(report) : null;
+  const elapsed = formatElapsed(elapsedMs);
+  const summary = report ? summarizeManifestRun(report) : null;
   let text: string;
   if (state === 'starting') text = 'Starting the refresh...';
   else if (state === 'running') {

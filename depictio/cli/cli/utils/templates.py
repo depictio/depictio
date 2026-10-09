@@ -6,7 +6,16 @@ and producing resolved config dicts ready for Project model validation.
 
 Usage:
     resolved = resolve_template("nf-core/ampliseq/2.16.0", "/path/to/data")
+    resolved = resolve_template("nf-core/ampliseq/2.16.0", "s3://bucket/run42")
+
+The data root is a :class:`~depictio.cli.cli.utils.data_root.DataRoot`, not a
+path: every question resolution asks of it (does this file exist, which files
+match this glob, what are the run directories, give me these bytes) is answered
+the same way by a local directory and by an ``s3://`` prefix. The listing of
+objects under the prefix simply replaces the filesystem.
 """
+
+from __future__ import annotations
 
 import copy
 import json
@@ -18,6 +27,7 @@ from typing import Any
 import httpx
 import yaml
 
+from depictio.cli.cli.utils.data_root import DataRoot, as_data_root
 from depictio.cli.cli_logging import logger
 from depictio.models.models.nextflow import PARAMS_GLOBS
 from depictio.models.models.templates import (
@@ -33,6 +43,12 @@ from depictio.models.models.templates import (
 )
 
 _TEMPLATE_VAR_RE = re.compile(r"\{([A-Z0-9_]+)\}")
+
+# Recorded on the expected-DC manifest for a DC dropped by
+# `_prune_missing_optional_single_file_dcs`, and read back by
+# `template_preview` to tell that pruning apart from conditional gating.
+OPTIONAL_SOURCE_MISSING_REASON = "optional source file not found"
+
 
 # A template version directory: purely numeric dotted segments (e.g. "2.16.0").
 _VERSION_DIR_RE = re.compile(r"^\d+(\.\d+)*$")
@@ -132,6 +148,28 @@ def _is_cli_context() -> bool:
     return get_depictio_context().lower() == "cli"
 
 
+def _local_fallback_allowed(root: DataRoot | None, location: str) -> bool:
+    """Whether ``location``, which the data root cannot see, may be looked up on this disk.
+
+    The CLI always may: there ``--data-root s3://... --var
+    METADATA_FILE=/local/meta.tsv`` is the user reading their own disk. A server
+    resolving a template for a browser must never probe its own disk on a
+    caller's behalf, whatever the root, local or remote or none. Even the bare
+    existence answer is an oracle, since an optional collection pruned or kept
+    says whether a path exists in the container. The one exception is a server
+    that is the user's own computer (``depictio local``), and only for a
+    location its local-data policy allows.
+
+    ``root`` is not consulted: whatever it is, the location is outside it.
+    """
+    if _is_cli_context():
+        return True
+    from depictio.api.v1.configs.settings_models import local_data_policy
+
+    policy = local_data_policy()
+    return policy is not None and policy.allows(location)
+
+
 def _locate_template_path(template_id: str) -> Path | None:
     """The path form: ``template_id`` names an existing directory or YAML file.
 
@@ -204,6 +242,30 @@ def locate_template(template_id: str) -> Path:
         FileNotFoundError: If no template YAML exists (``TemplateNotFoundError``
             for an unknown or out-of-tree id).
     """
+    located = _find_template(template_id)
+    if located is not None:
+        return located
+
+    roots = _projects_roots()
+    available = _list_available_templates(roots[0])
+    available_str = ", ".join(available) if available else "none found"
+    raise TemplateNotFoundError(
+        f"Template '{template_id}' not found under {roots[0]}. "
+        f"Available templates: {available_str}",
+        template_id=template_id,
+        available_templates=available,
+    )
+
+
+def _find_template(template_id: str) -> Path | None:
+    """:func:`locate_template` without its error: the YAML, or None when there is none.
+
+    A miss costs no more than a hit. Building ``locate_template``'s error
+    parses every shipped template YAML to list the catalogue, which is right
+    for a message shown once and far too slow for a question asked of each
+    candidate id of each detected run. A directory given by path that holds
+    no template YAML still raises ``FileNotFoundError``.
+    """
     # Path form first: an existing directory or YAML file wins over id lookup, so
     # a local bundle is never shadowed by an installed template of the same name.
     if _is_cli_context():
@@ -215,8 +277,7 @@ def locate_template(template_id: str) -> Path:
     # package layout), each confined so an id can never leave its root.
     # template.yaml (dedicated template file) is preferred over project.yaml
     # (fixture) in each.
-    roots = _projects_roots()
-    for root in roots:
+    for root in _projects_roots():
         template_dir = _template_dir_within(root, template_id)
         if template_dir is None:
             continue
@@ -224,15 +285,7 @@ def locate_template(template_id: str) -> Path:
             candidate = template_dir / filename
             if candidate.is_file():
                 return candidate
-
-    available = _list_available_templates(roots[0])
-    available_str = ", ".join(available) if available else "none found"
-    raise TemplateNotFoundError(
-        f"Template '{template_id}' not found under {roots[0]}. "
-        f"Available templates: {available_str}",
-        template_id=template_id,
-        available_templates=available,
-    )
+    return None
 
 
 def detect_template_from_run_dir(run_dir: str | Path) -> tuple[str | None, Any]:
@@ -290,7 +343,8 @@ def select_template_for_run(info: Any) -> str | None:
 
     for template_id in info.template_ids():
         try:
-            locate_template(template_id)
+            if _find_template(template_id) is None:
+                continue
         except FileNotFoundError:
             continue
         logger.info(f"Detected template '{template_id}' from run provenance")
@@ -472,8 +526,30 @@ def apply_variable_defaults(
     return variables
 
 
+def _single_file_location_exists(location: str, root: DataRoot | None) -> bool:
+    """Whether a single-file DC's (already-substituted) location is there.
+
+    Resolved through the data root when the file lives under it, which is what
+    lets the same check answer for an ``s3://`` key. A local absolute path
+    outside the root - a ``--var METADATA_FILE=/elsewhere/meta.tsv`` - is still
+    a legitimate single-file source, so the filesystem stays the fallback.
+    """
+    if root is not None:
+        relative = root.relative_of(location)
+        if relative is not None:
+            return root.exists(relative)
+    if "://" in location:
+        # A URL outside the root: we cannot see it from here, so we must not
+        # claim it is absent. Only locations we can actually check are pruned.
+        return True
+    if not _local_fallback_allowed(root, location):
+        return False
+    return Path(location).is_file()
+
+
 def _prune_missing_optional_single_file_dcs(
     config: dict[str, Any],
+    root: DataRoot | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """Drop optional single-file DCs whose (already-substituted) file is absent.
 
@@ -487,6 +563,10 @@ def _prune_missing_optional_single_file_dcs(
     Scoped deliberately: only DCs that are BOTH ``optional`` AND single-file scans
     are considered. Required DCs and recipe/glob DCs are left untouched so genuine
     gaps still raise.
+
+    Against a remote root this runs *after* the single-mode DCs have been
+    rewritten to ``url`` mode, so both modes are considered: the ``url`` DC is
+    the same one file, checked against the root's listing rather than the disk.
     """
     removed: set[str] = set()
     for workflow in config.get("workflows", []):
@@ -494,10 +574,12 @@ def _prune_missing_optional_single_file_dcs(
             if not dc.get("optional"):
                 continue
             scan = dc.get("config", {}).get("scan", {})
-            if scan.get("mode") != "single":
+            mode = str(scan.get("mode") or "").lower()
+            if mode not in ("single", "url"):
                 continue
-            filename = scan.get("scan_parameters", {}).get("filename")
-            if filename and not Path(filename).is_file():
+            parameters = scan.get("scan_parameters", {})
+            location = parameters.get("filename") if mode == "single" else parameters.get("url")
+            if location and not _single_file_location_exists(location, root):
                 removed.add(dc["data_collection_tag"])
 
     if removed:
@@ -533,7 +615,7 @@ def prune_links_for_tags(config: dict[str, Any], tags: set[str]) -> None:
 
 def materialize_recipe_seeds(
     config: dict[str, Any],
-    data_root: str,
+    data_root: str | Path | DataRoot,
     *,
     drop_missing: bool,
 ) -> tuple[list[str], list[str]]:
@@ -552,7 +634,9 @@ def materialize_recipe_seeds(
 
     Args:
         config: Resolved project config dict. Modified in place.
-        data_root: Absolute path the seed convention is resolved against.
+        data_root: The data root the seed convention is resolved against: a
+            path, or a ``DataRoot`` (which is how a remote root reaches here -
+            an ``s3://`` prefix can ship its seeds too).
         drop_missing: What to do with a recipe DC that has no seed. ``True``
             removes it (and its links) — the init behaviour, where one missing
             seed would otherwise abort the whole workflow scan. ``False`` leaves
@@ -563,6 +647,7 @@ def materialize_recipe_seeds(
     """
     materialized: list[str] = []
     missing: set[str] = set()
+    root = as_data_root(data_root)
 
     for workflow in config.get("workflows", []):
         surviving = []
@@ -576,8 +661,9 @@ def materialize_recipe_seeds(
 
             dc_tag = dc["data_collection_tag"]
             # Convention: pre-computed files are named {dc_tag}.tsv
-            seed_path = str(Path(data_root) / f"{dc_tag}.tsv")
-            if not Path(seed_path).exists():
+            seed_rel = f"{dc_tag}.tsv"
+            seed_path = root.url(seed_rel)
+            if not root.exists(seed_rel):
                 if drop_missing:
                     missing.add(dc_tag)
                     logger.warning(
@@ -601,10 +687,14 @@ def materialize_recipe_seeds(
             # output on ``transform.recipe``, so dropping the block here would
             # make every seeded recipe DC invisible to the catalog picker.
             dc_config["transform"]["materialized"] = True
-            dc_config["scan"] = {
-                "mode": "single",
-                "scan_parameters": {"filename": seed_path},
-            }
+            # A seed under a remote root is one known object, so it takes the
+            # remote spelling of "one known file": ScanSingle would reject an
+            # s3:// filename outright (it stats the path in CLI context).
+            dc_config["scan"] = (
+                {"mode": "url", "scan_parameters": {"url": seed_path}}
+                if root.is_remote
+                else {"mode": "single", "scan_parameters": {"filename": seed_path}}
+            )
             # Bundled recipe seeds are tab-separated by convention
             # ({data_root}/{dc_tag}.tsv). The template's original
             # `dc_specific_properties.format` describes the recipe's *input*
@@ -834,169 +924,54 @@ def _apply_conditionals(
     return config, active_dashboards, removal_reasons
 
 
-def _file_exists_any(filepath: str, data_root: str) -> bool:
-    """Check if a file exists, trying multiple resolution strategies.
+def _placeholders_in(node: Any) -> set[str]:
+    """The ``{NAME}`` placeholders anywhere in a YAML node, keys and values alike."""
+    if isinstance(node, str):
+        return set(_TEMPLATE_VAR_RE.findall(node))
+    if isinstance(node, dict):
+        return set().union(*(_placeholders_in(k) | _placeholders_in(v) for k, v in node.items()))
+    if isinstance(node, list):
+        return set().union(*(_placeholders_in(item) for item in node))
+    return set()
 
-    Tries: absolute path, relative to data_root, relative to CWD.
+
+def variable_users(template_id: str, names: list[str]) -> dict[str, list[str]]:
+    """The data collections of template ``template_id`` each variable of ``names`` reaches.
+
+    A collection reaches ``NAME`` when its definition holds the placeholder
+    ``{NAME}`` (a file it scans, a path a recipe source is pointed at), or when
+    a conditional on ``NAME`` (``if_var_present`` / ``if_var_absent``) removes
+    or repoints it. Read from the template as written, before any
+    substitution: a resolved configuration holds no placeholder any more, nor
+    a collection a conditional removed, so it could not say either.
+
+    Tags in the order the template declares its collections; one that only a
+    conditional names, and the template does not declare, comes after them.
     """
-    p = Path(filepath)
-    if p.is_absolute():
-        return p.exists()
-    # Relative: try data_root first, then CWD
-    return (Path(data_root) / p).exists() or p.exists()
-
-
-def _check_dc_source_files(
-    dc: dict[str, Any],
-    data_root: str,
-) -> str | None:
-    """Check if a DC's source files exist. Return missing path or None if all OK.
-
-    Unused: recipe DCs are handled by `materialize_recipe_seeds`, which
-    short-circuits the recipe when a seed is present and otherwise leaves it to
-    fail loudly at processing time. Kept — with `_remove_dcs_with_missing_files`
-    and `_log_removal_report` — pending a decision on whether to wire up
-    source-existence pruning or delete the three of them.
-    """
-    config = dc.get("config", {})
-    source = config.get("source")
-
-    if source == "transformed":
-        # Recipe DC: load recipe, check SOURCES paths (with source_overrides)
-        transform = config.get("transform", {})
-        recipe_name = transform.get("recipe")
-        if not recipe_name:
-            return None
-        try:
-            from depictio.recipes import load_recipe
-
-            module = load_recipe(recipe_name)
-            overrides = {}
-            if transform.get("source_overrides"):
-                overrides = {
-                    ref: so.get("path", "") if isinstance(so, dict) else so
-                    for ref, so in transform["source_overrides"].items()
-                }
-            for src in module.SOURCES:
-                if src.dc_ref is not None:
-                    continue  # dc_ref sources checked via cascade
-                if src.optional:
-                    continue
-                rel_path = overrides.get(src.ref, src.path)
-                if rel_path and not _file_exists_any(rel_path, data_root):
-                    return rel_path
-        except Exception as exc:
-            logger.warning(f"Could not validate recipe '{recipe_name}': {exc}")
-            return None  # Don't remove on recipe load failure
-    else:
-        # Scan-based DC: check filename or regex pattern
-        scan = config.get("scan", {})
-        params = scan.get("scan_parameters", {})
-        filename = params.get("filename")
-        if filename:
-            if not _file_exists_any(filename, data_root):
-                return str(filename)
-        regex = params.get("regex_config", {}).get("pattern")
-        if regex and not any(c in regex for c in r".*+?[](){}|^$\\"):
-            # Literal path (no regex metacharacters)
-            if not _file_exists_any(regex, data_root):
-                return regex
-
-    return None
-
-
-def _remove_dcs_with_missing_files(
-    config: dict[str, Any],
-    data_root: str,
-) -> tuple[dict[str, Any], list[dict[str, str]]]:
-    """Scan DCs for missing source files and auto-remove them.
-
-    Also cascades removal for DCs whose dc_ref dependencies were removed.
-
-    Args:
-        config: Resolved project config dict (modified in place).
-        data_root: Absolute path to data root directory.
-
-    Returns:
-        Tuple of (modified_config, removal_report).
-    """
-    removal_report: list[dict[str, str]] = []
-    removed_tags: set[str] = set()
-
-    # Pass 1: Check file existence for each DC
-    for workflow in config.get("workflows", []):
-        for dc in workflow.get("data_collections", []):
-            tag = dc.get("data_collection_tag", "")
-            missing = _check_dc_source_files(dc, data_root)
-            if missing:
-                removed_tags.add(tag)
-                removal_report.append(
-                    {
-                        "tag": tag,
-                        "reason": "source file not found",
-                        "missing_path": missing,
-                    }
-                )
-
-    # Pass 2: Cascade dc_ref removals (iterate until stable)
-    changed = True
-    while changed:
-        changed = False
-        for workflow in config.get("workflows", []):
-            for dc in workflow.get("data_collections", []):
-                tag = dc.get("data_collection_tag", "")
-                if tag in removed_tags:
-                    continue
-                transform = dc.get("config", {}).get("transform", {})
-                recipe_name = transform.get("recipe")
-                if not recipe_name:
-                    continue
-                try:
-                    from depictio.recipes import load_recipe
-
-                    module = load_recipe(recipe_name)
-                    for src in module.SOURCES:
-                        if src.dc_ref and not src.optional and src.dc_ref in removed_tags:
-                            removed_tags.add(tag)
-                            removal_report.append(
-                                {
-                                    "tag": tag,
-                                    "reason": f"depends on removed DC '{src.dc_ref}'",
-                                    "missing_path": f"dc_ref:{src.dc_ref}",
-                                }
-                            )
-                            changed = True
-                            break
-                except Exception:
-                    pass
-
-    # Remove DCs and prune links (same pattern as _apply_conditionals)
-    if removed_tags:
-        for workflow in config.get("workflows", []):
-            dcs = workflow.get("data_collections", [])
-            workflow["data_collections"] = [
-                dc for dc in dcs if dc.get("data_collection_tag") not in removed_tags
+    raw_config = _load_yaml(str(locate_template(template_id)))
+    section = raw_config.pop("template", None) or {}
+    switched: dict[str, list[str]] = {name: [] for name in names}
+    for rule in section.get("conditional") or []:
+        conditional = TemplateConditional(**rule)
+        for name in {conditional.if_var_present, conditional.if_var_absent} & set(names):
+            switched[name] += conditional.remove_dc_tags
+            switched[name] += [
+                override.data_collection_tag for override in conditional.override_dcs
             ]
 
-        surviving_links = []
-        for link in config.get("links", []):
-            src = link.get("source_dc_tag", "")
-            tgt = link.get("target_dc_tag", "")
-            if src not in removed_tags and tgt not in removed_tags:
-                surviving_links.append(link)
-        config["links"] = surviving_links
-
-    return config, removal_report
-
-
-def _log_removal_report(report: list[dict[str, str]]) -> None:
-    """Log a summary of auto-removed DCs with actionable messages."""
-    if not report:
-        return
-    logger.warning(f"{len(report)} data collection(s) auto-removed (source files not found):")
-    for entry in report:
-        logger.warning(f"  • {entry['tag']}: {entry['missing_path']} ({entry['reason']})")
-    logger.warning("Dashboard components referencing these will be excluded.")
+    users: dict[str, list[str]] = {name: [] for name in names}
+    for workflow in raw_config.get("workflows") or []:
+        for dc in workflow.get("data_collections") or []:
+            tag = dc.get("data_collection_tag")
+            if not tag:
+                continue
+            mentioned = _placeholders_in(dc)
+            for name in names:
+                if (name in mentioned or tag in switched[name]) and tag not in users[name]:
+                    users[name].append(tag)
+    for name in names:
+        users[name] += [tag for tag in dict.fromkeys(switched[name]) if tag not in users[name]]
+    return users
 
 
 # ---------------------------------------------------------------------------
@@ -1053,24 +1028,26 @@ def _flatten_provenance(obj: Any, prefix: str = "") -> dict[str, Any]:
     return flat
 
 
-def _parse_provenance_file(path: Path, fmt: str) -> dict[str, Any]:
+def _parse_provenance_bytes(raw: bytes, fmt: str) -> dict[str, Any]:
+    """Parse one provenance file's contents. Bytes, so it reads the same
+    whether they came off a disk or out of an S3 object."""
     if fmt == "json":
-        with open(path) as fh:
-            return _flatten_provenance(json.load(fh))
+        return _flatten_provenance(json.loads(raw))
     if fmt == "yaml":
-        with open(path) as fh:
-            return _flatten_provenance(yaml.safe_load(fh) or {})
+        return _flatten_provenance(yaml.safe_load(raw) or {})
     # tsv: two-column key<TAB>value (extra columns ignored); '#' comments skipped
     flat: dict[str, Any] = {}
-    with open(path) as fh:
-        for line in fh:
-            line = line.rstrip("\n")
-            if not line or line.startswith("#"):
-                continue
-            parts = line.split("\t") if "\t" in line else line.split(",")
-            if len(parts) >= 2:
-                flat[parts[0].strip()] = parts[1].strip()
+    for line in raw.decode("utf-8", errors="replace").splitlines():
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split("\t") if "\t" in line else line.split(",")
+        if len(parts) >= 2:
+            flat[parts[0].strip()] = parts[1].strip()
     return flat
+
+
+def _parse_provenance_file(path: Path, fmt: str) -> dict[str, Any]:
+    return _parse_provenance_bytes(path.read_bytes(), fmt)
 
 
 def _stringify_provenance_value(v: Any) -> str:
@@ -1089,7 +1066,7 @@ def _stringify_provenance_value(v: Any) -> str:
 
 
 def collect_run_provenance(
-    data_root: str | None,
+    data_root: str | Path | DataRoot | None,
     spec: ProvenanceSpec | None,
     extra_files: list[str] | None = None,
 ) -> tuple[list[ProvenanceEntry], list[str]]:
@@ -1102,15 +1079,19 @@ def collect_run_provenance(
     an entry unless an explicit ``exclude_keys`` glob drops it — keys no group
     rule matches land in 'Other', never on the floor.
 
-    Returns (entries ordered by group appearance, list of files read).
-    Best-effort: unreadable files are logged and skipped.
+    ``data_root`` may be a path (the boot-time reference seeding passes one) or
+    an already-built ``DataRoot``, which is how a remote run's ``pipeline_info/``
+    is read out of the prefix listing rather than off a disk.
+
+    Returns (entries ordered by group appearance, list of files read, relative
+    to the data root). Best-effort: unreadable files are logged and skipped.
     """
     from fnmatch import fnmatch
 
     spec = spec or _DEFAULT_PROVENANCE_SPEC
-    # Manifest-driven templates have no local run directory: only the explicit
+    # Manifest-driven templates have no run directory at all: only the explicit
     # --provenance-file entries can be collected, the spec's globs have no root.
-    root = Path(data_root) if data_root is not None else None
+    root = as_data_root(data_root)
 
     def assign_group(key: str, source: ProvenanceSource | None) -> str:
         if source is not None and source.group:
@@ -1125,7 +1106,7 @@ def collect_run_provenance(
     files_read: list[str] = []
 
     for source in spec.sources if root is not None else []:
-        matches = sorted(root.glob(source.glob))
+        matches = root.glob(source.glob)
         if not matches:
             # sequencing-runs layouts keep pipeline_info one level down. Keep to
             # ONE run directory: globbing across all of them sorts the run name
@@ -1134,10 +1115,10 @@ def collect_run_provenance(
             # the FIRST. The report then married one run's pipeline version to
             # another run's parameters. Same run for both, and the reader
             # records which one in extra["identity_from_run"].
-            nested = sorted(root.glob(f"*/{source.glob}"))
+            nested = root.glob(f"*/{source.glob}")
             if nested:
-                first_run = nested[0].relative_to(root).parts[0]
-                matches = [m for m in nested if m.relative_to(root).parts[0] == first_run]
+                first_run = nested[0].split("/", 1)[0]
+                matches = [m for m in nested if m.split("/", 1)[0] == first_run]
         if not matches:
             logger.info(f"Provenance source '{source.name}': no file matches {source.glob!r}")
             continue
@@ -1146,17 +1127,19 @@ def collect_run_provenance(
         elif source.pick == "first":
             matches = matches[:1]
         merged: dict[str, Any] = {}
-        for path in matches:
+        for relative in matches:
             try:
                 merged.update(
-                    _parse_provenance_file(path, _provenance_format_for(path, source.format))
+                    _parse_provenance_bytes(
+                        root.read_bytes(relative),
+                        _provenance_format_for(Path(relative), source.format),
+                    )
                 )
-                try:
-                    files_read.append(str(path.relative_to(root)))
-                except ValueError:
-                    files_read.append(str(path))
+                files_read.append(relative)
             except (OSError, ValueError, yaml.YAMLError) as e:
-                logger.warning(f"Provenance source '{source.name}': failed to parse {path}: {e}")
+                logger.warning(
+                    f"Provenance source '{source.name}': failed to parse {root.url(relative)}: {e}"
+                )
         for key, value in merged.items():
             if any(fnmatch(key, pat) for pat in source.exclude_keys):
                 continue
@@ -1204,7 +1187,18 @@ def collect_run_provenance(
     return entries, files_read
 
 
-def _infer_phylum_level(data_root: str, params: dict) -> int | None:
+def _params_newest_first(root: DataRoot, directory: str) -> list[str]:
+    """``params_files_newest_first`` over a data root: root-relative paths, newest first."""
+    from depictio.models.models.nextflow import PARAMS_GLOBS
+
+    for pattern in PARAMS_GLOBS:
+        matches = root.glob(f"{directory}/{pattern}")
+        if matches:
+            return list(reversed(matches))
+    return []
+
+
+def _infer_phylum_level(root: DataRoot, params: dict) -> int | None:
     """Depth at which an ampliseq run's QIIME2 collapsed taxonomy ends in the Phylum.
 
     QIIME2 names ``barplot/level-N.csv`` and ``rel-table-N.tsv`` by depth, and a
@@ -1214,19 +1208,18 @@ def _infer_phylum_level(data_root: str, params: dict) -> int | None:
     the rank columns of the DADA2 taxonomy table; the DADA2 database's taxlevels
     from params. Capped at ``tax_agglom_max``. None when nothing names a Phylum.
     """
-    qiime2 = Path(data_root) / "qiime2"
 
-    def header(path: Path, sep: str) -> list[str]:
+    def header(relative: str, sep: str) -> list[str]:
         try:
-            with open(path) as fh:
-                return [cell.strip().strip('"') for cell in fh.readline().split(sep)]
-        except OSError:
+            first = root.read_bytes(relative).split(b"\n", 1)[0].decode("utf-8", errors="replace")
+        except (OSError, ValueError):
             return []
+        return [cell.strip().strip('"') for cell in first.split(sep)]
 
     level: int | None = None
     for depth in range(1, 16):
-        barplot = qiime2 / "barplot" / f"level-{depth}.csv"
-        if not barplot.is_file():
+        barplot = f"qiime2/barplot/level-{depth}.csv"
+        if not root.exists(barplot):
             break
         if any(cell.rsplit(";", 1)[-1].strip().startswith("p__") for cell in header(barplot, ",")):
             level = depth
@@ -1244,7 +1237,7 @@ def _infer_phylum_level(data_root: str, params: dict) -> int | None:
         and not (params.get("pplace_tree") and params.get("pplace_taxonomy"))
     )
     if level is None and dada2_collapsed:
-        tax_table = qiime2 / "rel_abundance_tables" / "rel-table-ASV_with-DADA2-tax.tsv"
+        tax_table = "qiime2/rel_abundance_tables/rel-table-ASV_with-DADA2-tax.tsv"
         ranks = header(tax_table, "\t")[1:]
         if not ranks and params:
             # ampliseq's precedence: --dada_assign_taxlevels, the database's
@@ -1264,7 +1257,28 @@ def _infer_phylum_level(data_root: str, params: dict) -> int | None:
     return level
 
 
-def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> None:
+def _pick_input_file(root: DataRoot, keyword: str, suffixes: tuple[str, ...]) -> str | None:
+    """The run's ``input/*<keyword>*`` file of one of ``suffixes``, as a location.
+
+    nf-core pipelines copy the samplesheet and the metadata into ``<run>/input/``
+    under a pipeline- or user-dependent name ("Samplesheet.tsv",
+    "samplesheet.csv", "Metadata_full.tsv"), so they are located
+    case-insensitively rather than by an exact name.
+
+    The listing of ``input/`` is what stands in for ``iterdir`` here, and a
+    listing has no file/directory distinction of its own, so the suffix is what
+    separates a data file from a sub-prefix.
+    """
+    candidates = sorted(
+        relative
+        for relative in root.glob("input/*")
+        if keyword in relative.rsplit("/", 1)[-1].lower()
+        and Path(relative).suffix.lower() in suffixes
+    )
+    return root.url(candidates[0]) if candidates else None
+
+
+def _introspect_pipeline_params(root: DataRoot | str, variables: dict[str, str]) -> None:
     """Read the run's nf-core ``params.json`` and set synthesized template flags.
 
     nf-core pipelines write ``pipeline_info/params*.json``. We translate a few fields
@@ -1299,37 +1313,36 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
     # all runs of a project share a platform/protocol, so the first run's params is
     # representative for these route flags.
     #
-    # Newest first, and shared with the run-info connector rather than re-globbed
-    # here: a resumed run leaves one params file per attempt, and only the last
-    # describes the run that produced the outputs. Reading the first one meant a
-    # pipeline re-run with a different --skip_* flag kept routing on the abandoned
-    # attempt's value.
-    from depictio.models.models.nextflow import params_files_newest_first
-
-    candidates = params_files_newest_first(Path(data_root) / "pipeline_info")
+    # Newest first: a resumed run leaves one params file per attempt, and only the
+    # last describes the run that produced the outputs. Reading the first one meant
+    # a pipeline re-run with a different --skip_* flag kept routing on the
+    # abandoned attempt's value. Same ordering as the run-info connector
+    # (params_files_newest_first), expressed through the data root so it holds
+    # for a remote prefix too.
+    root = as_data_root(root)
+    candidates = _params_newest_first(root, "pipeline_info")
     if not candidates:
-        for subdir in sorted(Path(data_root).glob("*/pipeline_info")):
-            candidates = params_files_newest_first(subdir)
+        for run in sorted({m.split("/", 1)[0] for m in root.glob("*/pipeline_info/*.json")}):
+            candidates = _params_newest_first(root, f"{run}/pipeline_info")
             if candidates:
                 logger.warning(
                     f"params.json not found at DATA_ROOT; using a run subdir's params "
-                    f"({subdir.parent.name}) for route flags. If this DATA_ROOT "
+                    f"({run}) for route flags. If this DATA_ROOT "
                     f"mixes platforms (e.g. nanopore + illumina runs), pass the route flag "
                     f"explicitly via --var."
                 )
                 break
     params: dict = {}
-    for c in candidates:
+    for candidate in candidates:
         try:
-            with open(c) as fh:
-                params = json.load(fh)
+            params = json.loads(root.read_bytes(candidate))
             break
         except (OSError, ValueError):
             continue
 
     # Ahead of the no-params return: the outputs alone can name the Phylum depth.
     # The deeper ranks follow whichever value wins, an explicit --var included.
-    phylum_level = str(variables.get("PHYLUM_LEVEL") or _infer_phylum_level(data_root, params))
+    phylum_level = str(variables.get("PHYLUM_LEVEL") or _infer_phylum_level(root, params))
     if phylum_level.isdigit():
         variables.setdefault("PHYLUM_LEVEL", phylum_level)
         for offset, name in enumerate(
@@ -1375,28 +1388,58 @@ def _introspect_pipeline_params(data_root: str, variables: dict[str, str]) -> No
     # because run_pplace stays false on runs that pass the pplace_* inputs directly.
     # Top level of pplace/ only: gappa/ keeps a copy that must not be picked.
     if params.get("pplace_tree"):
-        grafts = sorted((Path(data_root) / "pplace").glob("*.graft.*.epa_result.newick"))
+        grafts = root.glob("pplace/*.graft.*.epa_result.newick")
         if grafts:
-            variables.setdefault("PPLACE_TREE_FILE", str(grafts[0]))
+            variables.setdefault("PPLACE_TREE_FILE", root.url(grafts[0]))
 
     # Auto-fill METADATA_FILE from the run's input/ when the run used metadata
-    # (params 'metadata' is the source URL; the local copy lands in input/).
+    # (params 'metadata' is the source URL; the copy lands in input/).
     if "METADATA_FILE" not in variables and params.get("metadata"):
-        input_dir = Path(data_root) / "input"
-        if input_dir.is_dir():
-            metas = sorted(
-                p
-                for p in input_dir.iterdir()
-                if p.is_file()
-                and "metadata" in p.name.lower()
-                and p.suffix.lower() in (".tsv", ".csv", ".txt")
-            )
-            if metas:
-                variables["METADATA_FILE"] = str(metas[0])
-                logger.info(f"METADATA_FILE auto-detected from params + input/: {metas[0]}")
+        metadata_file = _pick_input_file(root, "metadata", (".tsv", ".csv", ".txt"))
+        if metadata_file:
+            variables["METADATA_FILE"] = metadata_file
+            logger.info(f"METADATA_FILE auto-detected from params + input/: {metadata_file}")
 
 
-def _auto_detect_metadata_columns(metadata_path: Path, variables: dict[str, str]) -> None:
+def _read_header_line(location: str, root: DataRoot | None) -> str | None:
+    """First line of ``location``, read through the data root when it lives there.
+
+    A METADATA_FILE may legitimately sit outside the root (an absolute path
+    passed with ``--var``), and a manifest-driven template has no root at all,
+    so the local filesystem stays the fallback. Only a remote root's own objects
+    are read remotely.
+    """
+    if root is not None:
+        relative = root.relative_of(location)
+        if relative is not None and root.exists(relative):
+            try:
+                raw = root.read_bytes(relative)
+            except (OSError, ValueError) as exc:
+                logger.warning(f"Could not read metadata file for column detection: {exc}")
+                return None
+            return raw.split(b"\n", 1)[0].decode("utf-8", errors="replace").strip()
+
+    if "://" in location:
+        # A URL outside the root: we cannot read it from here. Falling through
+        # to the filesystem would only mis-report it as absent.
+        return None
+    if not _local_fallback_allowed(root, location):
+        return None
+
+    path = Path(location)
+    if not path.is_file():
+        return None
+    try:
+        with open(path) as fh:
+            return fh.readline().strip()
+    except OSError as exc:
+        logger.warning(f"Could not read metadata file for column detection: {exc}")
+        return None
+
+
+def _auto_detect_metadata_columns(
+    metadata_location: str, variables: dict[str, str], root: DataRoot | None = None
+) -> None:
     """Read metadata file headers and auto-populate GROUP_COL and ANNOTATION_COLS.
 
     The first column is assumed to be the sample ID.  All subsequent columns are
@@ -1404,36 +1447,31 @@ def _auto_detect_metadata_columns(metadata_path: Path, variables: dict[str, str]
     the user, it defaults to the first annotation column.
 
     Args:
-        metadata_path: Absolute path to the metadata file (TSV or CSV).
+        metadata_location: Path or URL of the metadata file (TSV or CSV).
         variables: Variables dict to update in place.
+        root: Data root the location is read through when it lives under it.
     """
-    try:
-        with open(metadata_path) as f:
-            header_line = f.readline().strip()
-        if not header_line:
-            return
-        sep = "\t" if "\t" in header_line else ","
-        cols = [c.strip() for c in header_line.split(sep)]
-        if len(cols) < 2:
-            return
-        # First column is always the sample ID; the rest are annotations.
-        # The ID column name is pipeline/user dependent (nf-core test data uses
-        # "ID", the megatest metadata uses "sample"), so expose it as a variable
-        # that the metadata→* link source columns substitute against.
-        variables.setdefault("METADATA_ID_COL", cols[0])
-        annotation_cols = [c for c in cols[1:] if c]
-        if annotation_cols:
-            variables.setdefault("GROUP_COL", annotation_cols[0])
-            variables.setdefault(
-                "GROUP_COL_DISPLAY", variables["GROUP_COL"].replace("_", " ").title()
-            )
-            variables["ANNOTATION_COLS"] = ",".join(annotation_cols)
-            logger.info(
-                f"Metadata auto-detect: {len(annotation_cols)} annotation columns "
-                f"({', '.join(annotation_cols)}), GROUP_COL={variables['GROUP_COL']}"
-            )
-    except OSError as exc:
-        logger.warning(f"Could not read metadata file for column detection: {exc}")
+    header_line = _read_header_line(metadata_location, root)
+    if not header_line:
+        return
+    sep = "\t" if "\t" in header_line else ","
+    cols = [c.strip() for c in header_line.split(sep)]
+    if len(cols) < 2:
+        return
+    # First column is always the sample ID; the rest are annotations.
+    # The ID column name is pipeline/user dependent (nf-core test data uses
+    # "ID", the megatest metadata uses "sample"), so expose it as a variable
+    # that the metadata→* link source columns substitute against.
+    variables.setdefault("METADATA_ID_COL", cols[0])
+    annotation_cols = [c for c in cols[1:] if c]
+    if annotation_cols:
+        variables.setdefault("GROUP_COL", annotation_cols[0])
+        variables.setdefault("GROUP_COL_DISPLAY", variables["GROUP_COL"].replace("_", " ").title())
+        variables["ANNOTATION_COLS"] = ",".join(annotation_cols)
+        logger.info(
+            f"Metadata auto-detect: {len(annotation_cols)} annotation columns "
+            f"({', '.join(annotation_cols)}), GROUP_COL={variables['GROUP_COL']}"
+        )
 
 
 UNBOUND_VAR_SENTINEL = "__DEPICTIO_UNBOUND_{name}__"
@@ -1441,11 +1479,12 @@ UNBOUND_VAR_SENTINEL = "__DEPICTIO_UNBOUND_{name}__"
 
 def resolve_template(
     template_id: str,
-    data_root: str | None,
+    data_root: str | Path | DataRoot | None,
     project_name: str | None = None,
     extra_vars: dict[str, str] | None = None,
     provenance_files: list[str] | None = None,
     allow_missing_vars: bool = False,
+    CLI_config=None,
 ) -> tuple[dict[str, Any], TemplateMetadata, TemplateOrigin, list[Path], dict[str, str]]:
     """Load template YAML, substitute variables, apply conditionals, return resolved config.
 
@@ -1456,6 +1495,8 @@ def resolve_template(
     4. Validates required variables; skips optional vars gracefully if absent
     5. Substitutes template variables in all paths
     6. Applies conditional rules (remove DCs, prune links, select dashboards)
+    6a. Repoints every DC at a remote root, when the root is one
+    6b. Prunes optional single-file DCs whose source is absent
     6c. Materializes recipe DCs that ship a pre-computed seed
     7. Strips hardcoded IDs
     8. Sets project name
@@ -1464,12 +1505,20 @@ def resolve_template(
 
     Args:
         template_id: Template identifier (e.g., 'nf-core/ampliseq/2.16.0').
-        data_root: Absolute path to user's data root directory, or None for
-            manifest-driven templates whose sources are remote (every
-            filesystem-local step — params introspection, samplesheet/metadata
-            auto-detection — is skipped in that case).
+        data_root: The user's data root: a directory path, an ``s3://`` prefix,
+            an already-built ``DataRoot``, or None for manifest-driven templates
+            whose sources are named by the manifest instead (every root-derived
+            step, i.e. params introspection, samplesheet/metadata
+            auto-detection, is skipped in that case).
         project_name: Custom project name. If None, auto-generated from template.
         extra_vars: Additional variables from --var KEY=VALUE flags (e.g., METADATA_FILE).
+        provenance_files: Extra recap files from --provenance-file, collected
+            on top of the template's provenance spec.
+        allow_missing_vars: Fill missing required variables with
+            ``UNBOUND_VAR_SENTINEL`` instead of raising (for --bind); the
+            caller must then check none survives (``assert_no_unbound_vars``).
+        CLI_config: Used to build a remote root's S3 client (credentials and
+            endpoint). Ignored for a local root or an already-built one.
 
     Returns:
         Tuple of (resolved_config_dict, template_metadata, template_origin,
@@ -1495,61 +1544,46 @@ def resolve_template(
     template_metadata = TemplateMetadata(**template_section)
     logger.info(f"Template: {template_metadata.template_id} v{template_metadata.version}")
 
-    # 3. Build variables dict: DATA_ROOT when a local data root is given (None
-    # for manifest-driven templates); extra_vars adds --var values
-    data_root_abs: str | None = None
+    # 3. Build variables dict: DATA_ROOT when a data root is given (None for
+    # manifest-driven templates); extra_vars adds --var values.
+    # The root is built once here and threaded through every step below, so a
+    # remote root costs one listing rather than one per question. DATA_ROOT is
+    # the root's own location: absolute for a directory, verbatim for a URL
+    # (`Path("s3://b/k").absolute()` would yield `<cwd>/s3:/b/k`).
+    root = as_data_root(data_root, CLI_config)
+    data_root_abs: str | None = root.location if root is not None else None
     variables: dict[str, str] = {}
-    if data_root is not None:
-        data_root_abs = str(Path(data_root).absolute())
+    if data_root_abs is not None:
         variables["DATA_ROOT"] = data_root_abs
     if extra_vars:
         variables.update(extra_vars)
 
     # 3a. Introspect the run's params.json to set protocol/skip flags + auto-fill
-    # METADATA_FILE (does not override explicit --var values). Local runs only.
-    if data_root_abs is not None:
-        _introspect_pipeline_params(data_root_abs, variables)
+    # METADATA_FILE (does not override explicit --var values).
+    if root is not None:
+        _introspect_pipeline_params(root, variables)
 
     # 3b. Collect the run's provenance (parameters, thresholds, tool versions)
     # per the template's spec — persisted on TemplateOrigin for the ingestion
     # report and the dashboard Settings drawer.
     run_provenance, run_provenance_files = collect_run_provenance(
-        data_root_abs, template_metadata.provenance, provenance_files
+        root, template_metadata.provenance, provenance_files
     )
 
     # 3b. Auto-detect metadata annotation columns when METADATA_FILE is provided.
-    # CLI only: there it is the user reading their own disk. A server resolving
-    # a template for a browser (POST /projects/from_manifest) never opens a path
-    # a request names, or its first line would land in the project's variables.
-    if "METADATA_FILE" in variables and _is_cli_context():
-        metadata_path = Path(variables["METADATA_FILE"])
-        if not metadata_path.is_absolute() and data_root_abs is not None:
-            # Try relative to data_root first, then CWD
-            candidate = Path(data_root_abs) / metadata_path
-            if candidate.is_file():
-                metadata_path = candidate
-            # else keep as-is (relative to CWD)
-        if metadata_path.is_file():
-            _auto_detect_metadata_columns(metadata_path, variables)
+    # A relative METADATA_FILE resolves against the root first, then the CWD;
+    # an absolute one outside the root is read where it is (CLI only, see
+    # ``_read_header_line``).
+    if "METADATA_FILE" in variables:
+        _auto_detect_metadata_columns(variables["METADATA_FILE"], variables, root)
 
     # 3c. Auto-resolve SAMPLESHEET_FILE from the run's input/ directory when not
-    # supplied. nf-core/ampliseq copies the input samplesheet into <run>/input/
-    # under a pipeline/user dependent name (e.g. "Samplesheet.tsv",
-    # "samplesheet.csv"), so locate it case-insensitively rather than forcing the
-    # caller to pass an explicit path. Local runs only.
-    if "SAMPLESHEET_FILE" not in variables and data_root_abs is not None:
-        input_dir = Path(data_root_abs) / "input"
-        if input_dir.is_dir():
-            candidates = sorted(
-                p
-                for p in input_dir.iterdir()
-                if p.is_file()
-                and "samplesheet" in p.name.lower()
-                and p.suffix.lower() in (".csv", ".tsv", ".tab", ".txt")
-            )
-            if candidates:
-                variables["SAMPLESHEET_FILE"] = str(candidates[0])
-                logger.info(f"Samplesheet auto-detected: {candidates[0]}")
+    # supplied, so the caller does not have to pass an explicit path.
+    if "SAMPLESHEET_FILE" not in variables and root is not None:
+        samplesheet = _pick_input_file(root, "samplesheet", (".csv", ".tsv", ".tab", ".txt"))
+        if samplesheet:
+            variables["SAMPLESHEET_FILE"] = samplesheet
+            logger.info(f"Samplesheet auto-detected: {samplesheet}")
 
     # 3d. Declared defaults (e.g. GENOME: hg38, GROUP_COL: Condition) fill whatever
     # the run left unset. They run BEFORE the generic sentinels below so a template's
@@ -1623,20 +1657,35 @@ def resolve_template(
     )
     removal_reasons.update(conditional_reasons)
 
+    # 6a. A remote data root is a --bind for every data collection: the paths the
+    # template declares are now s3:// URLs, so each DC's scan mode is rewritten to
+    # its remote counterpart (single -> url, recursive -> s3_prefix). Placed after
+    # substitution and the conditionals - a gated-out DC is never rewritten - and
+    # before the prune below, so the prune sees `url` DCs rather than `single` ones
+    # holding a filename ScanSingle would reject outright.
+    # An explicit --bind still runs after resolution (in run.py) and still wins.
+    if root is not None and root.is_remote:
+        from depictio.cli.cli.utils.bindings import apply_remote_data_root
+
+        for note in apply_remote_data_root(resolved_config, root):
+            logger.info(f"Remote data root: {note}")
+
     # 6b. Prune optional single-file DCs whose file is absent. Scoped strictly to
-    # DCs flagged optional with a `single` scan (e.g. the phylogenetic tree, only
-    # produced by some ampliseq sub-workflows) so a legitimate run that simply
+    # DCs flagged optional with a single-file scan (e.g. the phylogenetic tree,
+    # only produced by some ampliseq sub-workflows) so a legitimate run that simply
     # lacks that output ingests the rest instead of failing the Project model's
     # ScanSingle existence check. Required DCs and recipe/glob DCs are untouched —
     # their absence still surfaces as a loud error.
-    resolved_config, pruned_optional = _prune_missing_optional_single_file_dcs(resolved_config)
+    resolved_config, pruned_optional = _prune_missing_optional_single_file_dcs(
+        resolved_config, root
+    )
     if pruned_optional:
         logger.info(
             f"Pruned {len(pruned_optional)} optional DC(s) with missing source files: "
             f"{', '.join(pruned_optional)}"
         )
         for tag in pruned_optional:
-            removal_reasons.setdefault(tag, "optional source file not found")
+            removal_reasons.setdefault(tag, OPTIONAL_SOURCE_MISSING_REASON)
 
     # 6c. Materialize recipe DCs that ship a pre-computed seed
     #     ({data_root}/{dc_tag}.tsv). Parity with the boot-time reference
@@ -1649,13 +1698,11 @@ def resolve_template(
     #     gated-out DC stays gated out even when a seed sits next to it, and
     #     before `_strip_ids` / `_build_expected_dcs` so tags and links are still
     #     intact and the manifest reflects the final config.
-    #     Seeds live under DATA_ROOT, so manifest-driven templates (no local
-    #     root) have nothing to materialize.
+    #     Seeds live under DATA_ROOT, so manifest-driven templates (no root at
+    #     all) have nothing to materialize.
     materialized_seeds: list[str] = []
-    if data_root_abs is not None:
-        materialized_seeds, _ = materialize_recipe_seeds(
-            resolved_config, data_root_abs, drop_missing=False
-        )
+    if root is not None:
+        materialized_seeds, _ = materialize_recipe_seeds(resolved_config, root, drop_missing=False)
     if materialized_seeds:
         logger.info(
             f"Materialized {len(materialized_seeds)} recipe DC(s) from pre-computed seeds: "
@@ -1672,8 +1719,8 @@ def resolve_template(
         # template_metadata.template_id (resolved), not the raw template_id param —
         # otherwise "nf-core/ampliseq/latest" runs all name-collide under one
         # generic project name instead of the concrete version actually ingested.
-        if data_root is not None:
-            suffix = Path(data_root).name
+        if root is not None:
+            suffix = root.name
         else:
             # Manifest-driven: derive the suffix from the manifest filename.
             manifest_url = variables.get("MANIFEST_URL", "")

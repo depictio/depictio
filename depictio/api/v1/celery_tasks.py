@@ -19,6 +19,7 @@ import time
 from typing import Any, Sequence
 
 from bson import ObjectId
+from celery.exceptions import SoftTimeLimitExceeded
 
 from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.config import settings
@@ -3089,8 +3090,40 @@ def compute_contact_map(payload: dict) -> dict:
     }
 
 
+# A step in any of these statuses will never change again on its own, so the
+# finalizer can close the run around it and a dependent DC can stop waiting on
+# it: "skipped" joined "success"/"failed" once an optional pre-flight miss
+# started seeding steps that way (see ``_dispatch_refresh_tasks``).
+_TERMINAL_STEP_STATUSES = frozenset({"success", "failed", "skipped"})
+
+# How long a dependent DC's task waits between checks on its dc_ref(s), and how
+# many times before it gives up: 180 * 10s = 30 minutes, the same order of
+# magnitude as this task's own ``soft_time_limit`` below.
+_DEPENDENCY_WAIT_SECONDS = 10
+_DEPENDENCY_MAX_WAITS = 180
+
+
+def _leader_scanned(steps: list[dict], scan_leader: str, dc_id: str) -> bool:
+    """Whether the step of ``scan_leader`` records the scan of collection ``dc_id``."""
+    leader = next((s for s in steps if s.get("name") == scan_leader), {})
+    return dc_id in (leader.get("scans") or {})
+
+
+def _unfinished_dependencies(steps: list[dict], depends_on: list[str]) -> list[str]:
+    """The names in ``depends_on`` whose step hasn't reached a terminal status.
+
+    A name in ``depends_on`` with no step in ``steps`` at all (pruned at
+    resolution, or simply not part of this run) is not waited for: only a
+    step actually seeded here can ever go terminal.
+    """
+    by_name = {s.get("name"): s.get("status") for s in steps}
+    return [
+        dep for dep in depends_on if dep in by_name and by_name[dep] not in _TERMINAL_STEP_STATUSES
+    ]
+
+
 def _finalize_manifest_refresh_run(run_id: str) -> None:
-    """Close the run once every seeded step is terminal. Idempotent —
+    """Close the run once every seeded step is terminal. Idempotent:
     concurrent finalizers both compute the same $set."""
     from depictio.api.v1.monitoring import store
 
@@ -3098,10 +3131,17 @@ def _finalize_manifest_refresh_run(run_id: str) -> None:
     if not doc or doc.get("status") != "running":
         return
     steps = doc.get("steps") or []
-    if not steps or any(s.get("status") not in ("success", "failed") for s in steps):
+    if not steps or any(s.get("status") not in _TERMINAL_STEP_STATUSES for s in steps):
         return
     failed = [s for s in steps if s.get("status") == "failed"]
-    status = "success" if not failed else ("failed" if len(failed) == len(steps) else "partial")
+    if not failed:
+        status = "success"
+    else:
+        # A skipped step is a nominal absence, not a failure: it must never
+        # make an otherwise-clean run read as "failed", so it drops out of
+        # both sides of the "every step failed" comparison.
+        non_skipped = [s for s in steps if s.get("status") != "skipped"]
+        status = "failed" if non_skipped and len(failed) == len(non_skipped) else "partial"
     store.finish_ingestion_run(
         run_id,
         status=status,
@@ -3110,25 +3150,57 @@ def _finalize_manifest_refresh_run(run_id: str) -> None:
     )
 
 
-@celery_app.task(name="depictio.manifest.refresh_dc", soft_time_limit=1800, time_limit=2100)
-def manifest_refresh_dc_task(payload: dict) -> dict:
-    """Re-ingest one manifest-backed DC — the async unit of a manifest refresh.
+@celery_app.task(
+    bind=True,
+    name="depictio.manifest.refresh_dc",
+    soft_time_limit=1800,
+    time_limit=2100,
+    max_retries=_DEPENDENCY_MAX_WAITS,
+)
+def manifest_refresh_dc_task(self, payload: dict) -> dict:
+    """Re-ingest one data collection: the async unit of a refresh.
 
-    Input shape (built by ``_refresh_manifest_in_project``):
+    Despite the task and command names, any refreshable scan mode lands here
+    (see ``_refreshable_dc_index``), not only manifest mode.
+
+    Input shape (built by ``_refresh_manifest_in_project`` / ``_dispatch_refresh_tasks``):
         {
           "run_id":     ingestion-run id (steps pre-seeded, one per DC tag),
           "project_id", "wf_index", "dc_id", "dc_tag",
           "sync_files": bool,
           "user": {"id", "email", "is_admin"},
+          "depends_on": [dc_tag, ...] (optional; recipe DCs, see
+                         ``manifest_ingest._recipe_dependencies``, and scan
+                         followers),
+          "scan_dc_ids": [dc_id, ...] (optional; the scan leader of the DCs
+                         of a workflow that register its runs, see
+                         ``manifest_ingest._scan_leaders``),
+          "scan_leader": dc_tag (optional; a DC another task scans for,
+                         which it waits for and then only processes),
         }
+
+    A scan leader records the outcome of each scan it runs on its own step,
+    under ``scans`` (``{dc_id: None, or the failure message}``), apart from
+    its processing outcome, which is the step's status. A follower is failed
+    by its own entry there only: a leader whose processing failed after its
+    scans succeeded leaves its followers to be processed.
 
     The project document is re-read here (nothing rich crosses the broker) and
     is never written: refresh has no scan-config changes to persist or revert,
     which is what makes per-DC parallelism safe.
 
-    Never retried: every failure, an S3 read the configuration refuses
-    included, is written as the DC's failed step and ends the task. A refusal
-    would only be refused again.
+    An ingestion failure is never retried: every failure, an S3 read the
+    configuration refuses included, is written as the DC's failed step and
+    ends the task. A refusal would only be refused again.
+
+    ``depends_on`` is checked before the step is even marked "running", and
+    outside the ``try/except`` below: ``self.retry()`` raises Celery's own
+    ``Retry`` exception to unwind out of this call, and a blanket
+    ``except Exception`` would catch that as if it were an ingestion failure.
+    An unfinished dependency reschedules this same task after a short wait
+    rather than occupying a worker slot for up to 30 minutes; giving up after
+    ``_DEPENDENCY_MAX_WAITS`` retries fails the step by name instead of
+    retrying forever against a dependency that will never finish.
     """
     from depictio.api.v1.db import projects_collection
     from depictio.api.v1.endpoints.projects_endpoints.manifest_ingest import _run_dc_ingest
@@ -3142,6 +3214,81 @@ def manifest_refresh_dc_task(payload: dict) -> dict:
 
     run_id = payload["run_id"]
     tag = payload["dc_tag"]
+    # A scan leader's scan outcomes, kept on every write of its step.
+    scans: dict[str, str | None] = {}
+
+    def _step(status: str, detail: str | None = None) -> dict:
+        step: dict = {"name": tag, "status": status, "detail": detail}
+        if scans:
+            step["scans"] = dict(scans)
+        return step
+
+    def _close_step(ok: bool, message: str | None) -> dict:
+        """Write this DC's terminal step, close the run if it was the last one,
+        and answer the task's result."""
+        store.set_ingestion_step(
+            run_id, step=_step("success" if ok else "failed", message), current_step=None
+        )
+        _finalize_manifest_refresh_run(run_id)
+        return {"tag": tag, "ok": ok, "message": message}
+
+    def _record_scan(dc_id: str, error: str | None) -> None:
+        """Write one scan outcome as soon as it is known, before any processing."""
+        scans[dc_id] = error
+        store.set_ingestion_step(run_id, step=_step("running"), current_step=tag)
+
+    depends_on = payload.get("depends_on") or []
+    scan_leader = payload.get("scan_leader")
+    if depends_on:
+        doc = store.get_ingestion_run(run_id) or {}
+        steps = doc.get("steps") or []
+        waiting_on = depends_on
+        if scan_leader and _leader_scanned(steps, scan_leader, payload["dc_id"]):
+            # The leader is depended on for its scan alone (a run-registering
+            # collection reads no other collection's table): once this DC's
+            # scan is recorded, its processing does not wait for the leader's
+            # own, nor for the leader's scans of the others.
+            waiting_on = [dep for dep in depends_on if dep != scan_leader]
+        unfinished = _unfinished_dependencies(steps, waiting_on)
+        if unfinished:
+            names = ", ".join(unfinished)
+            if self.request.retries >= _DEPENDENCY_MAX_WAITS:
+                return _close_step(False, f"Gave up waiting for {names} to finish.")
+            if self.request.retries == 0:
+                # Stays "pending": this DC hasn't started, it's queued behind
+                # another one, but the detail tells a polling UI why.
+                store.set_ingestion_step(
+                    run_id,
+                    step={"name": tag, "status": "pending", "detail": f"Waiting for {names}."},
+                    current_step=None,
+                )
+            raise self.retry(countdown=_DEPENDENCY_WAIT_SECONDS)
+
+    if scan_leader:
+        # The leader's scan registered this DC's files too. If that scan failed
+        # there is nothing to process, and saying so beats an empty-table
+        # error. Its own processing failing says nothing about this DC.
+        doc = store.get_ingestion_run(run_id) or {}
+        leader = next((s for s in doc.get("steps") or [] if s.get("name") == scan_leader), {})
+        leader_scans = leader.get("scans") or {}
+        if payload["dc_id"] in leader_scans:
+            scan_error = leader_scans[payload["dc_id"]]
+            if scan_error is not None:
+                return _close_step(False, f"{scan_error} (scanned by '{scan_leader}')")
+        elif leader.get("status") == "failed":
+            # Failed before it got to this DC's scan (or before recording it).
+            return _close_step(
+                False,
+                f"Not ingested: the scan of the run folder, done with '{scan_leader}', failed.",
+            )
+    # Only a run-registering DC carries either key; the others keep the default scan.
+    scan_kwargs: dict = {}
+    if scan_leader:
+        scan_kwargs["scan"] = False
+    if payload.get("scan_dc_ids"):
+        scan_kwargs["scan_dc_ids"] = list(payload["scan_dc_ids"])
+        scan_kwargs["on_scanned"] = _record_scan
+
     store.set_ingestion_step(run_id, step={"name": tag, "status": "running"}, current_step=tag)
     try:
         project = projects_collection.find_one({"_id": ObjectId(payload["project_id"])})
@@ -3160,6 +3307,7 @@ def manifest_refresh_dc_task(payload: dict) -> dict:
             sync_files=bool(payload.get("sync_files", True)),
             # Resolved worker-side so credentials never cross the broker.
             remote_storage_options=project_storage_for(payload["project_id"]),
+            **scan_kwargs,
         )
     except ProjectStorageUnusable as exc:
         # The project's stored storage config cannot be used from this worker
@@ -3174,17 +3322,16 @@ def manifest_refresh_dc_task(payload: dict) -> dict:
         # detail is the step's message, the code goes to the worker log.
         logger.error(f"Manifest refresh for DC '{tag}' failed on S3 ({exc.code}): {exc.detail}")
         ok, message = False, exc.detail
-    except Exception as exc:  # noqa: BLE001 — any crash is a per-DC failure
+    except SoftTimeLimitExceeded:
+        # Closed while there is time left, rather than cut off by the hard
+        # limit with the step still "running".
+        logger.error(f"Manifest refresh for DC '{tag}' ran past its time limit.")
+        ok, message = False, "Stopped: this collection's refresh ran past its time limit."
+    except Exception as exc:  # noqa: BLE001 - any crash is a per-DC failure
         logger.error(f"Manifest refresh task crashed for DC '{tag}': {exc}")
         ok, message = False, str(exc)
 
-    store.set_ingestion_step(
-        run_id,
-        step={"name": tag, "status": "success" if ok else "failed", "detail": message},
-        current_step=None,
-    )
-    _finalize_manifest_refresh_run(run_id)
-    return {"tag": tag, "ok": ok, "message": message}
+    return _close_step(ok, message)
 
 
 __all__: list[str] = [

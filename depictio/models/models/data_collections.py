@@ -1,6 +1,7 @@
 import re
 from enum import Enum
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -116,7 +117,7 @@ class ScanSingle(BaseModel):
 class ScanURL(BaseModel):
     """Remote single-file acquisition: the DC's data lives at an absolute
     s3:// or https:// URL instead of a scanned local path. Validation is
-    syntactic only — reachability/SSRF checks happen at the API fetch gateway.
+    syntactic only: reachability/SSRF checks happen at the API fetch gateway.
     """
 
     url: str
@@ -135,7 +136,7 @@ class ScanS3Prefix(BaseModel):
 
     The remote counterpart of ``recursive``. It is S3-only by construction:
     plain HTTPS exposes no listing operation, so a bare https:// prefix cannot
-    be enumerated — use ``url`` for one known file, or ``manifest`` to list
+    be enumerated; use ``url`` for one known file, or ``manifest`` to list
     several explicitly.
 
     ``id_regex`` optionally captures an entity id from the object key. It lands
@@ -148,6 +149,15 @@ class ScanS3Prefix(BaseModel):
     # Glob (fnmatch) applied to the key *relative to* the prefix, so callers can
     # write "*.csv" rather than repeating the prefix path.
     pattern: str = "*"
+    pattern_syntax: Literal["glob", "regex"] = "glob"
+    """How ``pattern`` is read: an fnmatch glob (the default) or a regex.
+
+    An ``s3_prefix`` scan synthesised from a template's ``recursive`` data
+    collection has to keep that template's regex verbatim: translating a regex
+    into a glob is lossy, so the synthesised scan would silently mean something
+    other than the local one it was derived from. The default stays ``"glob"``
+    so every configuration written before this field keeps its exact meaning.
+    """
     id_regex: str | None = None
     # Backstop against pointing a DC at a bucket root holding millions of keys.
     # The ceiling matches what one list_s3_prefix pass is expected to page through.
@@ -185,10 +195,25 @@ class ScanS3Prefix(BaseModel):
             raise ValueError(f"Invalid id_regex: {exc}")
         if compiled.groups != 1:
             raise ValueError(
-                f"id_regex must have exactly one capture group (found {compiled.groups}) — "
+                f"id_regex must have exactly one capture group (found {compiled.groups}): "
                 "it captures the entity id used as the cross-DC join key"
             )
         return v
+
+    @model_validator(mode="after")
+    def validate_regex_pattern(self):
+        """A ``pattern_syntax="regex"`` pattern has to compile, like ``id_regex``.
+
+        Checked here rather than in the ``pattern`` field validator because it
+        depends on another field. A pattern that is only ever a glob ("*(" for
+        instance) has to fail at configuration time rather than mid-listing.
+        """
+        if self.pattern_syntax == "regex":
+            try:
+                re.compile(self.pattern)
+            except re.error as exc:
+                raise ValueError(f"Invalid regex pattern '{self.pattern}': {exc}")
+        return self
 
 
 class ScanManifest(BaseModel):

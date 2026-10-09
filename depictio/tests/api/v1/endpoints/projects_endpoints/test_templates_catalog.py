@@ -87,3 +87,35 @@ def test_catalog_walks_only_the_bundled_roots_and_is_reused_until_a_template_cha
 
     template_file.write_text(template_file.read_text().replace('"First"', '"Second one"'))
     assert list_templates_catalog().templates[0].name == "Second one"
+
+
+def test_run_folder_templates_say_so_and_name_their_pipeline():
+    by_id = {t.template_id: t for t in list_templates_catalog().templates}
+    ampliseq = by_id["nf-core/ampliseq/2.16.0"]
+    assert ampliseq.run_folder_capable is True
+    assert (ampliseq.source, ampliseq.pipeline, ampliseq.engine) == (
+        "nf-core",
+        "nf-core/ampliseq",
+        "nextflow",
+    )
+    # Every shipped nf-core template reads a run folder.
+    assert all(t.run_folder_capable for tid, t in by_id.items() if tid.startswith("nf-core/"))
+
+
+def test_manifest_and_init_templates_do_not_read_a_run_folder():
+    by_id = {t.template_id: t for t in list_templates_catalog().templates}
+    manifest = by_id["generic/manifest-tables/1"]
+    assert manifest.run_folder_capable is False
+    assert (manifest.source, manifest.pipeline) == ("generic", "generic/manifest-tables")
+    init = [t for tid, t in by_id.items() if tid.startswith("init/")]
+    assert init
+    for info in init:
+        assert info.run_folder_capable is False
+        assert info.source == "init"
+        assert info.pipeline == info.template_id
+
+
+def test_a_category_template_keeps_its_pipeline():
+    by_id = {t.template_id: t for t in list_templates_catalog().templates}
+    category = by_id["nf-core/variantbenchmarking/1.4.0/categories/small"]
+    assert category.pipeline == "nf-core/variantbenchmarking"

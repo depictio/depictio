@@ -5,19 +5,28 @@
  *
  * Shared by every flow that ingests or re-ingests collections and reports
  * back (the manifest tab of the create-project dialog, its post-create
- * review, and the project's Data refresh settings), so a status reads the
- * same wherever it shows up.
+ * review, the project's Data refresh settings, and the run a project created
+ * from a run folder starts), so a status reads the same wherever it shows up.
  */
 import React from 'react';
 import { Badge, Group, Table, Text, ThemeIcon } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-/** Every status a row can carry. `planned` is a dry run; `dispatched` and
- *  `running` only show up while a worker run is being polled. */
-export type IngestionRowStatus = 'ingested' | 'planned' | 'dispatched' | 'running' | 'failed';
+import type { ManifestRefreshStatus } from 'depictio-react-core';
+
+/** Every status a row can carry (`ManifestRefreshStatus`). An ingestion done
+ *  in the request answers `ingested` or `failed`, and `planned` on a dry run.
+ *  One handed to workers answers `dispatched` at once, then its poll moves
+ *  each row through `running` to `ingested` or `failed`; such a run also
+ *  lists `skipped` rows from the start: collections left out on purpose, an
+ *  optional one whose source is absent from the run folder or one that only
+ *  reads such a collection. */
+export type IngestionRowStatus = ManifestRefreshStatus;
 
 /** Visual treatment per status: an icon and a label beside the colour, so the
- *  status never rests on colour alone. Colours are Mantine palette names. */
+ *  status never rests on colour alone. Colours are Mantine palette names. The
+ *  one source for every ingestion status, and the order `summarizeManifestRun`
+ *  lists its counts in. */
 export const INGESTION_STATUS_META: Record<
   IngestionRowStatus,
   { color: string; icon: string; label: string }
@@ -27,9 +36,10 @@ export const INGESTION_STATUS_META: Record<
   dispatched: { color: 'blue', icon: 'mdi:tray-arrow-down', label: 'Queued' },
   running: { color: 'blue', icon: 'mdi:progress-clock', label: 'Running' },
   failed: { color: 'red', icon: 'mdi:alert-circle', label: 'Failed' },
+  skipped: { color: 'gray', icon: 'mdi:minus-circle-outline', label: 'Skipped' },
 };
 
-/** The fields a row needs; the manifest create and refresh reports both
+/** The fields a row needs; the manifest create, refresh and run reports all
  *  carry them. */
 export interface IngestionResultRow {
   data_collection_tag: string;
