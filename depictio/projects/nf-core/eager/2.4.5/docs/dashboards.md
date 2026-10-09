@@ -167,9 +167,9 @@ multiallelic sites. The VCF record count is not a card: a VCF that emits referen
 counts them as records too. Then SNPs and the Ts to Tv ratio per sample, one bar per
 caller. Collapsed: the bcftools summary and TSTV tables. Filter: variant caller.
 
-The locus navigator sets no `default_region`: it opens on the whole reference, since no
-contig name holds across references. A non-model reference has no GenomeSpy built-in assembly, so the
-contig list comes from the data and there is no gene lane.
+The locus navigator sets `default_region: first`: it opens on the whole first contig of the
+data, since no contig name holds across references. A non-model reference has no GenomeSpy
+built-in assembly, so the contig list comes from the data and there is no gene lane.
 
 ## Routes and pruning
 

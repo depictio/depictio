@@ -2299,8 +2299,9 @@ tabs:
   # the MAPQ track under it reads a second collection, reached by the region
   # link in template.yaml. A non-model reference has no GenomeSpy built-in
   # assembly, so `assembly` stays null and the contig list comes from the data.
-  # No default region: the navigator opens on the whole reference, whatever
-  # it is, and a typed or brushed region narrows the tab.
+  # default_region: first opens the navigator on the whole first contig of
+  # the data, whatever the reference names it; a typed or brushed region
+  # narrows the tab.
   - component_type: advanced_viz
     workflow_tag: eager
     data_collection_tag: qualimap_coverage_across_reference
@@ -2311,6 +2312,7 @@ tabs:
       point_size: 4
       facet_by_sample: true
       region_filter_enabled: true
+      default_region: first
     section: Depth along the reference
     tag: ea-cov-av-genomeview
     index: locus-genome-view
