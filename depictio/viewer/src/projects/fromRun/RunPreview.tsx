@@ -12,227 +12,28 @@
  */
 import React from 'react';
 import {
-  Accordion,
   Alert,
   Code,
   Divider,
   Group,
   Paper,
   RingProgress,
-  SimpleGrid,
   Stack,
   Text,
   ThemeIcon,
-  Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import {
-  groupRunCollections,
-  relativeToRunFolder,
-  runCollectionTotals,
-  runTemplateMatch,
-  splitTemplateId,
-  Z_LAYERS,
-} from 'depictio-react-core';
-import type {
-  DetectedTemplate,
-  FromRunDCPreview,
-  FromRunReport,
-  RunCollectionSection,
-  RunTemplateMatch,
-} from 'depictio-react-core';
+import { runCollectionTotals, runTemplateMatch, splitTemplateId } from 'depictio-react-core';
+import type { DetectedTemplate, FromRunReport, RunTemplateMatch } from 'depictio-react-core';
 
 import { TemplateSourceLogo } from '../template';
-import { CollectionKindIcon, collectionKindMeta } from './CollectionKindIcon';
-import { FlowBadge } from './FlowBadge';
-import type { FlowStatus } from './FlowBadge';
+import { CollectionPlan } from './CollectionPlan';
 import { FolderPath } from './FolderPath';
 import { plural } from './plural';
-import { RunMadeBy, TemplateUsed } from './RunIdentity';
+import { RunTemplateTable } from './RunIdentity';
 import type { RunInfo } from './RunIdentity';
-import { SectionHeader } from './SectionHeader';
 import { ResolvedSettings } from './TemplateSettings';
-
-const SECTIONS: Record<
-  RunCollectionSection,
-  { title: string; icon: string; color: string; description: string }
-> = {
-  missing: {
-    title: 'Not found',
-    icon: 'mdi:alert-circle-outline',
-    color: 'red',
-    description:
-      'These collections found nothing in this folder. You can still create the project: they stay empty until their files exist.',
-  },
-  ready: {
-    title: 'Ready to ingest',
-    icon: 'mdi:check-circle-outline',
-    color: 'green',
-    description: 'Found in the run folder and ingested when the project is created.',
-  },
-  optional: {
-    title: 'Optional, not found',
-    icon: 'mdi:minus-circle-outline',
-    color: 'gray',
-    description: 'The template can do without these. They are skipped when their files are absent.',
-  },
-};
-
-const SECTION_ORDER: RunCollectionSection[] = ['missing', 'ready', 'optional'];
-
-function rowStatus(dc: FromRunDCPreview, section: RunCollectionSection): FlowStatus {
-  if (section === 'ready') return 'ready';
-  if (section === 'optional') return dc.status === 'pruned' ? 'skipped' : 'optional';
-  return dc.status === 'empty' ? 'no-files' : 'not-found';
-}
-
-function countText(dc: FromRunDCPreview, unit: 'file' | 'input'): string {
-  if (dc.status === 'pruned') return '';
-  if (dc.matched > 0) return plural(dc.matched, unit);
-  if (dc.status === 'ok') return 'Counted at ingestion';
-  return `No ${unit}s`;
-}
-
-/** Where a collection looks, relative to the run folder. */
-const LocationLine: React.FC<{ dc: FromRunDCPreview; dataRoot: string }> = ({ dc, dataRoot }) => {
-  if (dc.status === 'pruned') {
-    return (
-      <Text size="xs" c="dimmed">
-        Left out by the template for this run.
-      </Text>
-    );
-  }
-  if (!dc.location) return null;
-  const relative = relativeToRunFolder(dataRoot, dc.location);
-  if (relative === '') {
-    return (
-      <Text size="xs" c="dimmed">
-        {dc.kind === 'recipe'
-          ? 'Built from files across the run folder'
-          : 'Looks through the whole run folder'}
-      </Text>
-    );
-  }
-  if (relative === null) {
-    return <FolderPath location={dc.location} withCopy={false} maxLength={64} />;
-  }
-  return (
-    <Tooltip label={dc.location} withArrow multiline maw={480} zIndex={Z_LAYERS.tooltip}>
-      <Code
-        data-testid={`run-preview-path-${dc.data_collection_tag}`}
-        style={{ alignSelf: 'flex-start', wordBreak: 'break-all' }}
-      >
-        {relative}
-      </Code>
-    </Tooltip>
-  );
-};
-
-const CollectionRow: React.FC<{
-  dc: FromRunDCPreview;
-  dataRoot: string;
-  section: RunCollectionSection;
-}> = ({ dc, dataRoot, section }) => {
-  const meta = collectionKindMeta(dc);
-  const status = rowStatus(dc, section);
-  const count = countText(dc, meta.unit);
-  return (
-    <Group
-      wrap="nowrap"
-      align="flex-start"
-      gap="sm"
-      py="xs"
-      data-testid={`run-preview-row-${dc.data_collection_tag}`}
-      data-status={dc.status}
-      data-section={section}
-    >
-      <CollectionKindIcon dc={dc} />
-      <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
-        <Group gap={8} wrap="wrap">
-          <Text size="sm" fw={600} style={{ wordBreak: 'break-word' }}>
-            {dc.data_collection_tag}
-          </Text>
-          {dc.optional && (
-            <Text span size="xs" c="dimmed" fs="italic">
-              optional
-            </Text>
-          )}
-        </Group>
-        <LocationLine dc={dc} dataRoot={dataRoot} />
-        {dc.missing_sources.length > 0 && (
-          <Stack gap={2} data-testid={`run-missing-sources-${dc.data_collection_tag}`}>
-            <Text size="xs" c="dimmed">
-              Looked for, not found:
-            </Text>
-            {dc.missing_sources.map((source) => {
-              const relative = relativeToRunFolder(dataRoot, source);
-              return (
-                <Text
-                  key={source}
-                  size="xs"
-                  ff="monospace"
-                  c="red"
-                  title={source}
-                  style={{ wordBreak: 'break-all' }}
-                >
-                  {relative === '' ? '(the run folder itself)' : relative ?? source}
-                </Text>
-              );
-            })}
-          </Stack>
-        )}
-      </Stack>
-      <Stack gap={4} align="flex-end" style={{ flexShrink: 0 }}>
-        <FlowBadge
-          status={status}
-          tooltip={
-            status === 'skipped'
-              ? 'One of the template settings turns this collection off for this run.'
-              : undefined
-          }
-        />
-        {count && (
-          <Text size="xs" c="dimmed" data-testid={`run-preview-count-${dc.data_collection_tag}`}>
-            {count}
-          </Text>
-        )}
-      </Stack>
-    </Group>
-  );
-};
-
-/** One section of the plan: its header, then its collections in plan order. */
-const CollectionSection: React.FC<{
-  section: RunCollectionSection;
-  rows: FromRunDCPreview[];
-  dataRoot: string;
-}> = ({ section, rows, dataRoot }) => {
-  const meta = SECTIONS[section];
-  return (
-    <Accordion.Item value={section} data-testid={`run-section-${section}`}>
-      <Accordion.Control>
-        <SectionHeader
-          icon={meta.icon}
-          color={meta.color}
-          title={meta.title}
-          count={rows.length}
-          description={meta.description}
-        />
-      </Accordion.Control>
-      <Accordion.Panel>
-        <Stack gap={0}>
-          {rows.map((dc, index) => (
-            <React.Fragment key={dc.data_collection_tag}>
-              {index > 0 && <Divider />}
-              <CollectionRow dc={dc} dataRoot={dataRoot} section={section} />
-            </React.Fragment>
-          ))}
-        </Stack>
-      </Accordion.Panel>
-    </Accordion.Item>
-  );
-};
 
 /** Red when nothing is ready, yellow when some is, green when all is. */
 function readyColor(ready: number, considered: number): string {
@@ -299,6 +100,8 @@ interface RunSummaryCardProps {
   report: FromRunReport;
   /** The template's name; the id is shown when it is not known. */
   templateTitle: string | null;
+  /** The engine the template was written for, when the catalog says. */
+  templateEngine?: string | null;
   /** What was read in the folder before the preview, used when the report
    *  carries no detection of its own (a template was chosen). */
   detection: DetectedTemplate | null;
@@ -309,6 +112,7 @@ interface RunSummaryCardProps {
 export const RunSummaryCard: React.FC<RunSummaryCardProps> = ({
   report,
   templateTitle,
+  templateEngine = null,
   detection,
 }) => {
   const run = reportRunInfo(report, detection);
@@ -332,17 +136,15 @@ export const RunSummaryCard: React.FC<RunSummaryCardProps> = ({
         <ReadyRing ready={ready} considered={considered} />
       </Group>
       <Divider my="sm" />
-      <SimpleGrid cols={{ base: 1, sm: run ? 2 : 1 }} spacing="md" verticalSpacing="sm">
-        {run && <RunMadeBy run={run} testIdPrefix="run-summary" />}
-        <TemplateUsed
-          templateId={report.template_id}
-          title={templateTitle}
-          match={match}
-          runVersion={run?.version ?? null}
-          testIdPrefix="run-summary"
-          heading="Template used"
-        />
-      </SimpleGrid>
+      <RunTemplateTable
+        run={run}
+        templateId={report.template_id}
+        templateName={templateTitle}
+        templateEngine={templateEngine}
+        match={match}
+        testIdPrefix="run-summary"
+        templateHeading="Template used"
+      />
       <Group gap="xs" mt="sm" wrap="nowrap" style={{ minWidth: 0 }}>
         <Text size="xs" fw={700} c="dimmed" tt="uppercase" style={{ flexShrink: 0 }}>
           Run folder
@@ -356,10 +158,9 @@ export const RunSummaryCard: React.FC<RunSummaryCardProps> = ({
 export const RunPreview: React.FC<RunSummaryCardProps> = ({
   report,
   templateTitle,
+  templateEngine = null,
   detection,
 }) => {
-  const groups = groupRunCollections(report.data_collections);
-  const present = SECTION_ORDER.filter((s) => groups[s].length > 0);
   const failedDashboards = report.dashboards.filter((d) => !d.success);
   const settings = Object.entries(report.resolved_variables ?? {}).filter(
     ([key]) => key !== 'DATA_ROOT',
@@ -367,7 +168,12 @@ export const RunPreview: React.FC<RunSummaryCardProps> = ({
 
   return (
     <Stack gap="md" data-testid="run-preview-report">
-      <RunSummaryCard report={report} templateTitle={templateTitle} detection={detection} />
+      <RunSummaryCard
+        report={report}
+        templateTitle={templateTitle}
+        templateEngine={templateEngine}
+        detection={detection}
+      />
 
       {report.truncated && (
         <Alert
@@ -393,24 +199,7 @@ export const RunPreview: React.FC<RunSummaryCardProps> = ({
           </Text>
         </Group>
       ) : (
-        <Accordion
-          multiple
-          variant="separated"
-          radius="md"
-          // What needs a look, and what is ready, start open; the optional
-          // collections that found nothing start folded.
-          defaultValue={present.filter((s) => s !== 'optional')}
-          chevronPosition="right"
-        >
-          {present.map((section) => (
-            <CollectionSection
-              key={section}
-              section={section}
-              rows={groups[section]}
-              dataRoot={report.data_root}
-            />
-          ))}
-        </Accordion>
+        <CollectionPlan rows={report.data_collections} dataRoot={report.data_root} />
       )}
 
       {settings.length > 0 && <ResolvedSettings settings={settings} dataRoot={report.data_root} />}

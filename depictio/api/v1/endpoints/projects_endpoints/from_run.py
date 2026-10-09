@@ -175,12 +175,42 @@ def describe_detection(template_id: str | None, info) -> DetectedTemplate | None
     )
 
 
+class FromRunRecipeSource(BaseModel):
+    """What one source of a recipe found under the data root.
+
+    The wire shape of ``template_preview.RecipeSourcePreview``: ``kind`` is
+    ``collection`` for a source read from another data collection, ``file``
+    for a glob or a path, and ``url`` for a URL outside the data root, which
+    is read at ingest and so is neither found nor missing here (``found`` is
+    None).
+    """
+
+    ref: str
+    kind: Literal["file", "collection", "url"]
+    pattern: str | None = None
+    dc_ref: str | None = None
+    optional: bool = False
+    matched: int = 0
+    samples: list[str] = Field(default_factory=list)
+    found: bool | None = None
+
+
+class FromRunRecipePreview(BaseModel):
+    """The recipe a data collection is built with, and what each of its sources found."""
+
+    name: str
+    summary: str | None = None
+    sources: list[FromRunRecipeSource] = Field(default_factory=list)
+
+
 class FromRunDCPreview(BaseModel):
     """What one data collection would find under the data root.
 
     The wire shape of ``template_preview.DataCollectionPreview``: ``status`` is
     one of ``ok`` / ``empty`` / ``missing`` / ``pruned`` and ``kind`` is
-    ``scan`` or ``recipe``.
+    ``scan`` or ``recipe``. ``rule`` is what a scanning collection looks for,
+    as the template wrote it, ``samples`` the first few locations it matched,
+    and ``recipe`` is set for a recipe collection.
     """
 
     data_collection_tag: str
@@ -191,6 +221,32 @@ class FromRunDCPreview(BaseModel):
     missing_sources: list[str] = Field(default_factory=list)
     optional: bool = False
     status: str = "ok"
+    rule: str | None = None
+    samples: list[str] = Field(default_factory=list)
+    recipe: FromRunRecipePreview | None = None
+
+
+def _report_recipe(recipe) -> FromRunRecipePreview | None:
+    """A ``template_preview.RecipePreview`` in the report's shape, None for none."""
+    if recipe is None:
+        return None
+    return FromRunRecipePreview(
+        name=recipe.name,
+        summary=recipe.summary,
+        sources=[
+            FromRunRecipeSource(
+                ref=source.ref,
+                kind=source.kind,
+                pattern=source.pattern,
+                dc_ref=source.dc_ref,
+                optional=source.optional,
+                matched=source.matched,
+                samples=list(source.samples),
+                found=source.found,
+            )
+            for source in recipe.sources
+        ],
+    )
 
 
 def _report_rows(preview_rows) -> list[FromRunDCPreview]:
@@ -205,6 +261,9 @@ def _report_rows(preview_rows) -> list[FromRunDCPreview]:
             missing_sources=list(row.missing_sources),
             optional=row.optional,
             status=row.status,
+            rule=row.rule,
+            samples=list(row.samples),
+            recipe=_report_recipe(row.recipe),
         )
         for row in preview_rows
     }

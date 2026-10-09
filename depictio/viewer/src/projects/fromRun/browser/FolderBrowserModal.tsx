@@ -16,6 +16,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActionIcon,
   Button,
   Grid,
   Group,
@@ -47,7 +48,6 @@ import type {
 } from 'depictio-react-core';
 
 import { DisabledReason, GatedButton } from '../../../components/settings/SettingsSections';
-import { FolderPath } from '../FolderPath';
 import { readRecentRunFolders, rememberRunFolder } from '../recentFolders';
 import type { RecentRunFolders } from '../recentFolders';
 import { FolderDetailPane } from './FolderDetailPane';
@@ -146,10 +146,12 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
    *  after a newer one is dropped, so the latest selection wins. */
   const selectionRun = useRef(0);
 
-  const templateTitles = useMemo(
-    () => Object.fromEntries(templates.map((t) => [t.template_id, t.name])),
+  const templatesById = useMemo(
+    () => Object.fromEntries(templates.map((t) => [t.template_id, t])),
     [templates],
   );
+  /** The dialog fills the window; remembered while it stays mounted. */
+  const [expanded, setExpanded] = useState(false);
 
   const selectFolder = useCallback(
     (path: string) => {
@@ -276,6 +278,16 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
     ...recentS3.map((path) => ({ path, source: 's3' as const })),
   ];
 
+  // Both panes take the window's height, less the title, the hint, the path
+  // bar, the footer and their padding (1rem more around the detail pane);
+  // full screen gives them all of it.
+  const paneHeight = expanded
+    ? { tree: 'calc(100dvh - 17rem)', detail: 'calc(100dvh - 18rem)' }
+    : {
+        tree: { base: 260, md: 'calc(min(62dvh, 40rem) + 1rem)' },
+        detail: { base: 360, md: 'min(62dvh, 40rem)' },
+      };
+
   const renderNode = (payload: RenderTreeNodePayload) => (
     <FolderTreeNode
       payload={payload}
@@ -291,13 +303,29 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
       opened={opened}
       onClose={onClose}
       centered
-      size="75rem"
+      size="min(96vw, 92rem)"
+      fullScreen={expanded}
       zIndex={stackId ? undefined : Z_LAYERS.nestedOverlay}
       overlayProps={{ blur: 3, backgroundOpacity: 0.55 }}
+      styles={{ title: { flex: 1 } }}
       title={
-        <Group gap="xs" wrap="nowrap">
-          <Icon icon="mdi:folder-open-outline" width={20} />
-          <Text fw={600}>Choose the run folder</Text>
+        <Group gap="xs" wrap="nowrap" justify="space-between">
+          <Group gap="xs" wrap="nowrap">
+            <Icon icon="mdi:folder-open-outline" width={20} />
+            <Text fw={600}>Choose the run folder</Text>
+          </Group>
+          <Tooltip label={expanded ? 'Restore the size' : 'Fill the window'} withArrow zIndex={Z_LAYERS.tooltip}>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => setExpanded((e) => !e)}
+              aria-label={expanded ? 'Restore the size' : 'Fill the window'}
+              aria-pressed={expanded}
+              data-testid="browse-expand"
+            >
+              <Icon icon={expanded ? 'mdi:arrow-collapse' : 'mdi:arrow-expand'} width={18} />
+            </ActionIcon>
+          </Tooltip>
         </Group>
       }
     >
@@ -321,9 +349,9 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
         />
 
         <Grid gutter="md">
-          <Grid.Col span={{ base: 12, md: 5 }}>
+          <Grid.Col span={{ base: 12, md: 4 }}>
             <Paper withBorder radius="md" p="xs">
-              <ScrollArea h={{ base: 260, md: 440 }} type="auto" offsetScrollbars>
+              <ScrollArea h={paneHeight.tree} type="auto" offsetScrollbars>
                 <Stack gap="xs">
                   <RecentFolders entries={recentEntries} onOpen={(path) => void goTo(path)} />
                   <Tree
@@ -350,12 +378,12 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
               </ScrollArea>
             </Paper>
           </Grid.Col>
-          <Grid.Col span={{ base: 12, md: 7 }}>
+          <Grid.Col span={{ base: 12, md: 8 }}>
             <Paper withBorder radius="md" p="md">
-              <ScrollArea h={{ base: 320, md: 440 }} type="auto" offsetScrollbars>
+              <ScrollArea h={paneHeight.detail} type="auto" offsetScrollbars>
                 <FolderDetailPane
                   location={selected}
-                  templateTitles={templateTitles}
+                  templatesById={templatesById}
                   onReveal={(location) => void goTo(location)}
                   onInspected={handleInspected}
                   storageFor={(location) => storageForLocation(location, privateBucket)}
@@ -367,7 +395,6 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
 
         <Group justify="space-between" align="flex-start" wrap="wrap" gap="sm" pt="xs">
           <Stack gap={4} style={{ minWidth: 0, flex: 1 }}>
-            {selected && <FolderPath location={selected} testId="browse-selected" />}
             {selected && selectedInspected && !selectedLooksLikeRun && (
               <Group gap={6} wrap="nowrap" align="flex-start" data-testid="browse-not-run-hint">
                 <Icon icon="mdi:information-outline" width={14} style={{ flexShrink: 0, marginTop: 2 }} />

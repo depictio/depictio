@@ -72,6 +72,7 @@ const LOCAL: Record<string, StubAnswer> = {
     ],
     { looks_like_run: true },
   ),
+  [`${RUN42}/multiqc`]: listing(`${RUN42}/multiqc`, ROOT, []),
   [BATCH]: listing(BATCH, ROOT, [entry(YEAR)]),
   // More than the server lists: the tree says so.
   [YEAR]: listing(YEAR, ROOT, [entry(RUN77, { looks_like_run: true })], { truncated: true }),
@@ -100,6 +101,88 @@ const RNASEQ = detected({
   version: "3.26.0",
 });
 
+/** What run42's pipeline_info says about the run. */
+const RUN_INFO = {
+  engine: "nextflow",
+  engine_version: "25.04.6",
+  run_name: "tender_curie",
+  homepage: "https://nf-co.re/ampliseq",
+  params: { outdir: "results", input: "samplesheet.tsv", skip_qiime: false },
+  params_total: 3,
+  tools_executed: ["cutadapt", "dada2", "fastqc"],
+  reports: [
+    {
+      kind: "execution_report",
+      location: `${RUN42}/pipeline_info/execution_report.html`,
+      name: "execution_report.html",
+      size: 2_400_000,
+    },
+  ],
+  extra: {},
+};
+
+/** The dry run behind "What this template finds here". */
+function findingsReport(dataRoot: string) {
+  return {
+    project_id: null,
+    project_name: "run42",
+    template_id: "nf-core/ampliseq/2.16.0",
+    detected_template: null,
+    data_root: dataRoot,
+    detected_runs: [],
+    resolved_variables: {},
+    data_collections: [
+      {
+        data_collection_tag: "multiqc_data",
+        kind: "scan",
+        mode: "recursive",
+        location: dataRoot,
+        matched: 7,
+        missing_sources: [],
+        optional: false,
+        status: "ok",
+        rule: "multiqc_data\\.json",
+        samples: [`${dataRoot}/multiqc/multiqc_data/multiqc_data.json`],
+        recipe: null,
+      },
+      {
+        data_collection_tag: "alpha_diversity",
+        kind: "recipe",
+        mode: null,
+        location: dataRoot,
+        matched: 1,
+        missing_sources: [],
+        optional: false,
+        status: "ok",
+        rule: null,
+        samples: [],
+        recipe: {
+          name: "nf-core/ampliseq/alpha_diversity.py",
+          summary: "Alpha diversity per sample.",
+          sources: [
+            {
+              ref: "alpha_vectors",
+              kind: "file",
+              pattern: "qiime2/diversity/alpha_diversity/*/metadata.tsv",
+              dc_ref: null,
+              optional: false,
+              matched: 1,
+              samples: [`${dataRoot}/qiime2/diversity/alpha_diversity/shannon/metadata.tsv`],
+              found: true,
+            },
+          ],
+        },
+      },
+    ],
+    dashboards: [],
+    pruned_optional_dcs: [],
+    truncated: false,
+    run_id: null,
+    dry_run: true,
+    success: true,
+  };
+}
+
 /** `folder_inspect` per `?location=`; any other folder holds nothing. */
 function inspections(delays: Record<string, number> = {}): Record<string, StubAnswer> {
   const runRecords = {
@@ -109,7 +192,7 @@ function inspections(delays: Record<string, number> = {}): Record<string, StubAn
     files: { count: 3, names: ["samplesheet.csv", "nextflow.log", "params.json"] },
   };
   const answers: Record<string, StubAnswer> = {
-    [RUN42]: { json: inspection(RUN42, { ...runRecords, detected: detected() }) },
+    [RUN42]: { json: inspection(RUN42, { ...runRecords, detected: detected(), run_info: RUN_INFO }) },
     [RUN77]: { json: inspection(RUN77, { ...runRecords, detected: RNASEQ }) },
     [S3_RUN]: { json: inspection(S3_RUN, { ...runRecords, detected: detected() }) },
   };
@@ -380,6 +463,107 @@ test.describe("Browse for a run folder", () => {
     await expect(page.locator("[data-testid='browse-modal']")).toContainText(
       "Type a full path (starting with / or ~/) or an s3:// location.",
     );
+  });
+
+  test("the detail pane compares the run with its template, previews pipeline_info, lists what the template finds, and opens a sub-folder", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    await setRunFolderFlags(page, { local: true, remote: false });
+    await stubFolders(page);
+    const dryRuns: Array<Record<string, unknown>> = [];
+    await page.route("**/api/v1/projects/from_run", (route: Route) => {
+      const body = (route.request().postDataJSON() ?? {}) as Record<string, unknown>;
+      dryRuns.push(body);
+      return route.fulfill({ json: findingsReport(String(body.data_root)) });
+    });
+
+    await loginAsAdmin();
+    await openBrowser(page);
+    await goTo(page, RUN42);
+    const detail = page.locator("[data-testid='browse-detail']");
+
+    // The run and the template side by side, every row agreeing.
+    await expect(detail.locator("[data-testid='browse-detail-comparison']")).toContainText("This run");
+    for (const row of ["pipeline", "version", "engine"]) {
+      await expect(detail.locator(`[data-testid='browse-detail-${row}-agreement']`)).toHaveAttribute(
+        "data-agreement",
+        "same",
+      );
+    }
+
+    // What the template finds is asked for only when unfolded, as a dry run.
+    expect(dryRuns).toHaveLength(0);
+    await detail.locator("[data-testid='browse-detail-findings-toggle']").click();
+    await expect(detail.locator("[data-testid='browse-detail-findings-summary']")).toHaveText(
+      "2 of 2 collections found",
+    );
+    expect(dryRuns).toHaveLength(1);
+    expect(dryRuns[0]).toMatchObject({ data_root: RUN42, template_id: "nf-core/ampliseq/2.16.0", dry_run: true });
+    // A file index shows its rule and the real path of what it matched.
+    await detail.locator("[data-testid='run-preview-details-toggle-multiqc_data']").click();
+    const samples = detail.locator("[data-testid='run-preview-samples-multiqc_data']");
+    await expect(samples).toContainText("multiqc/multiqc_data/multiqc_data.json");
+    await expect(samples.locator("[data-full-path]").first()).toHaveAttribute(
+      "data-full-path",
+      `${RUN42}/multiqc/multiqc_data/multiqc_data.json`,
+    );
+    await expect(samples).toContainText("and 6 more files");
+    // A table shows the recipe applied and what each input found.
+    await detail.locator("[data-testid='run-preview-details-toggle-alpha_diversity']").click();
+    const recipe = detail.locator("[data-testid='run-preview-details-alpha_diversity']");
+    await expect(recipe.locator("[data-testid='recipe-name']")).toHaveText(
+      "nf-core/ampliseq/alpha_diversity.py",
+    );
+    await expect(recipe.locator("[data-testid='recipe-source-alpha_vectors']")).toHaveAttribute(
+      "data-found",
+      "true",
+    );
+
+    // pipeline_info opens onto what the engine wrote about the run.
+    await detail.locator("[data-testid='browse-detail-pipeline-info-toggle']").click();
+    const info = detail.locator("[data-testid='pipeline-info-preview']");
+    await expect(info.locator("[data-testid='pipeline-info-engine']")).toContainText("Nextflow 25.04.6");
+    await expect(info.locator("[data-testid='pipeline-info-run-name']")).toContainText("tender_curie");
+    await info.getByRole("tab", { name: "Parameters (3)" }).click();
+    // The parameters that place the run come first.
+    await expect(info.locator("[data-testid='pipeline-info-params'] tr").first()).toContainText("input");
+    await info.getByRole("tab", { name: "Tools (3)" }).click();
+    await expect(info.locator("[data-testid='pipeline-info-tools']")).toContainText("dada2");
+    await info.getByRole("tab", { name: "Files (1)" }).click();
+    await expect(info.locator("[data-testid='pipeline-info-reports']")).toContainText("2.3 MB");
+
+    // The contents are one list; a folder in it opens in the tree.
+    await detail.locator("[data-testid='browse-detail-folder'][data-name='multiqc']").click();
+    await expect(detail).toHaveAttribute("data-path", `${RUN42}/multiqc`);
+    await expect(treeNode(page, `${RUN42}/multiqc`)).toHaveAttribute("data-selected", "true");
+  });
+
+  test("the dialog fills the window on demand and gives the path once", async ({ loginAsAdmin, page }) => {
+    await setRunFolderFlags(page, { local: true, remote: false });
+    await stubFolders(page);
+
+    await loginAsAdmin();
+    await openBrowser(page);
+    await goTo(page, RUN42);
+
+    // The selected folder's path is written once, at the top of the detail pane.
+    await expect(page.locator("[data-testid='browse-selected']")).toHaveCount(1);
+    await expect(page.locator("[data-testid='browse-detail'] [data-testid='browse-selected']")).toHaveAttribute(
+      "data-full-path",
+      RUN42,
+    );
+
+    const expand = page.locator("[data-testid='browse-expand']");
+    const dialog = page.getByRole("dialog", { name: "Choose the run folder" });
+    const before = (await dialog.boundingBox())?.width ?? 0;
+    await expand.click();
+    await expect(expand).toHaveAttribute("aria-pressed", "true");
+    const viewport = page.viewportSize()?.width ?? 0;
+    await expect.poll(async () => (await dialog.boundingBox())?.width ?? 0).toBeGreaterThanOrEqual(viewport - 1);
+    expect(before).toBeLessThan(viewport);
+    await expand.click();
+    await expect(expand).toHaveAttribute("aria-pressed", "false");
   });
 
   test("finds the run folders below a folder, and a hit opens the tree on it", async ({

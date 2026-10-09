@@ -55,6 +55,46 @@ _PREVIEW_VARIABLE_NAMES = (
 )
 _PREVIEW_FLAG_PREFIXES = ("SKIP_", "IS_")
 
+# How many of the files a collection or a recipe source matched a row names.
+# The counts always cover every match; only the names are capped.
+PREVIEW_SAMPLES = 5
+
+
+@dataclass
+class RecipeSourcePreview:
+    """What one entry of a recipe's ``SOURCES`` found under the data root.
+
+    ``kind`` is ``collection`` for a ``dc_ref`` source (found when that
+    collection settled), ``file`` for a glob or a path, and ``url`` for a URL
+    outside the root, which is read at ingest and cannot be counted from here
+    (``found`` is None). ``pattern`` is the glob or path the source is looked
+    up with once the template's ``source_overrides`` apply, and ``samples``
+    the first :data:`PREVIEW_SAMPLES` locations it found.
+    """
+
+    ref: str
+    kind: Literal["file", "collection", "url"]
+    pattern: str | None = None
+    dc_ref: str | None = None
+    optional: bool = False
+    matched: int = 0
+    samples: list[str] = field(default_factory=list)
+    found: bool | None = None
+
+
+@dataclass
+class RecipePreview:
+    """The recipe a ``source: transformed`` collection is built with.
+
+    ``name`` is the recipe as the template names it, ``summary`` the first
+    line of its module docstring. ``sources`` is empty when the recipe names
+    no module or its module fails to load.
+    """
+
+    name: str
+    summary: str | None = None
+    sources: list[RecipeSourcePreview] = field(default_factory=list)
+
 
 @dataclass
 class DataCollectionPreview:
@@ -65,6 +105,10 @@ class DataCollectionPreview:
     preview looked somewhere else. Where nothing can be counted from the root -
     a manifest that is fetched at ingest, a URL on another host - the row is
     ``ok`` with ``matched`` 0 and ``location`` says where it points.
+
+    ``rule`` is what a scanning collection looks for, as the template wrote it,
+    and ``samples`` the first :data:`PREVIEW_SAMPLES` locations it matched. A
+    recipe collection has no rule: ``recipe`` says what it is built from.
     """
 
     tag: str
@@ -78,6 +122,9 @@ class DataCollectionPreview:
     missing_collections: list[str] = field(default_factory=list)
     optional: bool = False
     status: PreviewStatus = "ok"
+    rule: str | None = None
+    samples: list[str] = field(default_factory=list)
+    recipe: RecipePreview | None = None
 
 
 @dataclass
@@ -136,7 +183,13 @@ def _preview_scan_dc(
             # Not under this root (a foreign https:// URL, or a path elsewhere
             # on disk). We cannot count it, and must not report it missing.
             return DataCollectionPreview(
-                tag=tag, kind="scan", mode=mode, location=location, matched=0, optional=optional
+                tag=tag,
+                kind="scan",
+                mode=mode,
+                location=location,
+                matched=0,
+                optional=optional,
+                rule=location or None,
             )
         found = root.exists(relative)
         return DataCollectionPreview(
@@ -147,22 +200,30 @@ def _preview_scan_dc(
             matched=1 if found else 0,
             optional=optional,
             status="ok" if found else "missing",
+            rule=location,
+            samples=[root.url(relative)] if found else [],
         )
 
     if mode == "manifest":
         # The manifest is fetched at ingest, not here: its entries are not
         # visible from the data root's listing.
+        manifest_url = parameters.get("manifest_url") or ""
         return DataCollectionPreview(
             tag=tag,
             kind="scan",
             mode=mode,
-            location=parameters.get("manifest_url") or "",
+            location=manifest_url,
             matched=0,
             optional=optional,
+            rule=manifest_url or None,
         )
 
     if mode in ("recursive", "s3_prefix"):
         regex = _scan_match_regex(mode, parameters)
+        if mode == "recursive":
+            rule = (parameters.get("regex_config") or {}).get("pattern")
+        else:
+            rule = parameters.get("pattern")
         within = ""
         location = root.url("")
         if mode == "s3_prefix":
@@ -178,12 +239,18 @@ def _preview_scan_dc(
                     location=prefix,
                     matched=0,
                     optional=optional,
+                    rule=rule,
                 )
             within = relative
         # One pass per run directory when the workflow has them, the way the
         # scan itself scopes its walk; otherwise a single pass over the root.
         scopes = [f"{run}/{within}".strip("/") for run in runs] if runs else [within]
-        matched = sum(len(root.match(regex, within=scope)) for scope in scopes)
+        matched = 0
+        samples: list[str] = []
+        for scope in scopes:
+            hits = root.match(regex, within=scope)
+            matched += len(hits)
+            samples.extend(root.url(rel) for rel in hits[: PREVIEW_SAMPLES - len(samples)])
         return DataCollectionPreview(
             tag=tag,
             kind="scan",
@@ -192,6 +259,8 @@ def _preview_scan_dc(
             matched=matched,
             optional=optional,
             status="ok" if matched else "empty",
+            rule=rule,
+            samples=samples,
         )
 
     return DataCollectionPreview(
@@ -207,6 +276,14 @@ def _override_binding(override: Any, attribute: str) -> str | None:
     if isinstance(override, dict):
         return override.get(attribute)
     return getattr(override, attribute, None)
+
+
+def _docstring_summary(module: Any) -> str | None:
+    """The first non-empty line of ``module``'s docstring, or None without one."""
+    doc = getattr(module, "__doc__", None)
+    if not isinstance(doc, str):
+        return None
+    return next((line.strip() for line in doc.splitlines() if line.strip()), None)
 
 
 def _preview_recipe_dc(
@@ -226,6 +303,9 @@ def _preview_recipe_dc(
     counting a mere presence in the project would make a prefix at the wrong
     level look partly matched through collections that will never be written.
     A required ``dc_ref`` that is not settled is reported missing by name.
+
+    ``recipe`` describes each source as it was looked up (see
+    :class:`RecipeSourcePreview`).
     """
     transform = dc_config.get("transform") or {}
     recipe_name = transform.get("recipe") or ""
@@ -239,6 +319,7 @@ def _preview_recipe_dc(
         matched=0,
         optional=optional,
         status="empty",
+        recipe=RecipePreview(name=recipe_name),
     )
     if not recipe_name:
         return row
@@ -251,17 +332,30 @@ def _preview_recipe_dc(
         logger.warning(f"Preview: could not load recipe '{recipe_name}' for '{tag}': {exc}")
         return row
 
+    recipe = RecipePreview(name=recipe_name, summary=_docstring_summary(module))
+    row.recipe = recipe
     overrides = transform.get("source_overrides") or {}
     # A URL outside the root is read as it is at ingest, so it cannot be
     # counted from here, and must not be reported missing either.
     uncounted = False
     for source in module.SOURCES:
         if source.dc_ref is not None:
-            if source.dc_ref in settled_tags:
+            settled = source.dc_ref in settled_tags
+            if settled:
                 row.matched += 1
             elif not source.optional:
                 row.missing_sources.append(f"collection '{source.dc_ref}'")
                 row.missing_collections.append(source.dc_ref)
+            recipe.sources.append(
+                RecipeSourcePreview(
+                    ref=source.ref,
+                    kind="collection",
+                    dc_ref=source.dc_ref,
+                    optional=source.optional,
+                    matched=1 if settled else 0,
+                    found=settled,
+                )
+            )
             continue
         override = overrides.get(source.ref)
         glob_pattern = _override_binding(override, "glob_pattern")
@@ -269,25 +363,46 @@ def _preview_recipe_dc(
         if glob_pattern is None and path is None:
             glob_pattern, path = source.glob_pattern, source.path
 
+        samples: list[str] = []
         if glob_pattern:
-            hits = len(root.glob(glob_pattern))
+            globbed = root.glob(glob_pattern)
+            hits = len(globbed)
+            samples = [root.url(rel) for rel in globbed[:PREVIEW_SAMPLES]]
         elif path:
             # The recipe layer's own rule (``resolve_sources``): a location
             # under the root is looked up in it, one outside it as it is.
             relative = relative_to_root(root, path)
             if relative is not None:
                 hits = 1 if root.exists(relative) else 0
+                samples = [root.url(relative)] if hits else []
             elif "://" in path:
                 uncounted = True
+                recipe.sources.append(
+                    RecipeSourcePreview(
+                        ref=source.ref, kind="url", pattern=path, optional=source.optional
+                    )
+                )
                 continue
             else:
                 found = _local_fallback_allowed(root, path) and Path(path).is_file()
                 hits = 1 if found else 0
+                samples = [path] if found else []
         else:
             continue
         row.matched += hits
         if not hits and not source.optional:
             row.missing_sources.append(glob_pattern or path or source.ref)
+        recipe.sources.append(
+            RecipeSourcePreview(
+                ref=source.ref,
+                kind="file",
+                pattern=glob_pattern or path,
+                optional=source.optional,
+                matched=hits,
+                samples=samples,
+                found=hits > 0,
+            )
+        )
 
     if row.missing_sources:
         row.status = "missing"

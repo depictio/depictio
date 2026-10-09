@@ -1,23 +1,32 @@
 /**
  * The right-hand side of the folder browser: what the selected folder holds
  * and what Depictio recognises in it, read with `inspectFolder` on selection
- * (a newer selection cancels the request still in flight). From here the
- * reader can also look for run folders below the selected one: once a search
- * ran, its hits (`RunSearchResults`) come first and the folder's contents
- * fold under a toggle. A folder in a private bucket is read, and searched,
- * with its connection details.
+ * (a newer selection cancels the request still in flight).
+ *
+ * Top down: the folder and its path; the run next to the template Depictio
+ * would read it with, compared row by row, with what that template finds in
+ * the folder one click away; the run records that make it a run folder (its
+ * `pipeline_info`, previewable, and its MultiQC report); the search for run
+ * folders below it; and its contents, one list, folders first, each folder
+ * one click from opening. Once a search ran, its hits (`RunSearchResults`)
+ * come before the contents, which fold under a toggle. A folder in a private
+ * bucket is read, and searched, with its connection details.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
+  Badge,
   Button,
   Collapse,
   Divider,
   Group,
-  SimpleGrid,
+  NavLink,
+  Paper,
+  ScrollArea,
   Skeleton,
   Stack,
   Text,
+  TextInput,
   ThemeIcon,
   UnstyledButton,
 } from '@mantine/core';
@@ -32,17 +41,20 @@ import {
   relativeToFolder,
   runTemplateMatch,
 } from 'depictio-react-core';
-import type { FolderInspection, RunStorageIn } from 'depictio-react-core';
+import type { FolderInspection, RunStorageIn, TemplateInfo } from 'depictio-react-core';
 
 import { FlowBadge } from '../FlowBadge';
 import { FolderPath } from '../FolderPath';
 import { plural } from '../plural';
-import { RunMadeBy, TemplateUsed } from '../RunIdentity';
-import { RunMarkers } from '../RunMarkers';
+import { RunTemplateTable } from '../RunIdentity';
+import { MARKER_META, MarkerIcon } from '../RunMarkers';
+import { TemplateFindings } from '../TemplateFindings';
+import { PipelineInfoPreview } from './PipelineInfoPreview';
 import { RunSearchResults } from './RunSearchResults';
 import type { FindState } from './RunSearchResults';
 
-const NAMES_SHOWN = 12;
+/** More entries than this get a filter above the contents. */
+const FILTER_FROM = 12;
 
 type InspectState =
   | { status: 'loading' }
@@ -52,9 +64,9 @@ type InspectState =
 interface FolderDetailPaneProps {
   /** The selected folder; null shows a hint. */
   location: string | null;
-  /** Template names by id, for the template recognised in the folder. */
-  templateTitles: Record<string, string>;
-  /** Open the tree on a run folder found below the selected one. */
+  /** The catalog's templates by id, for the template recognised in the folder. */
+  templatesById: Record<string, TemplateInfo>;
+  /** Open the tree on a folder below the selected one. */
   onReveal: (location: string) => void;
   /** Called with each finished inspection (to badge the tree, and to word
    *  the footer). */
@@ -64,38 +76,124 @@ interface FolderDetailPaneProps {
   storageFor?: (location: string) => RunStorageIn | null;
 }
 
-const Section: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
+const Section: React.FC<{ title: string; description?: string; children: React.ReactNode }> = ({
+  title,
+  description,
+  children,
+}) => (
   <Stack gap={6}>
-    <Text size="xs" fw={700} c="dimmed" tt="uppercase">
-      {title}
-    </Text>
+    <Stack gap={0}>
+      <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+        {title}
+      </Text>
+      {description && (
+        <Text size="xs" c="dimmed">
+          {description}
+        </Text>
+      )}
+    </Stack>
     {children}
   </Stack>
 );
 
-const NameList: React.FC<{ names: string[]; count: number; icon: string; testId: string }> = ({
-  names,
-  count,
-  icon,
-  testId,
-}) => {
-  const shown = names.slice(0, NAMES_SHOWN);
-  const more = count - shown.length;
+/** A folder's child, spelled the way the tree spells folders. */
+function childLocation(location: string, name: string): string {
+  return normalizeFolder(`${location}/${name}`);
+}
+
+const FILE_ICON: Array<[RegExp, string]> = [
+  [/\.html?$/i, 'mdi:language-html5'],
+  [/\.(tsv|csv|txt|tab)(\.gz)?$/i, 'mdi:file-delimited-outline'],
+  [/\.(json|ya?ml|toml)$/i, 'mdi:code-json'],
+  [/\.(png|jpe?g|svg|gif|tiff?)$/i, 'mdi:file-image-outline'],
+  [/\.pdf$/i, 'mdi:file-pdf-box'],
+  [/\.(gz|zip|tar|bz2|xz)$/i, 'mdi:folder-zip-outline'],
+  [/\.(log|out|err)$/i, 'mdi:text-box-outline'],
+  [/\.(bam|cram|sam|bai|vcf|bcf|fa|fasta|fq|fastq|bed|gtf|gff3?)(\.gz)?$/i, 'mdi:dna'],
+];
+
+function fileIcon(name: string): string {
+  for (const [pattern, icon] of FILE_ICON) if (pattern.test(name)) return icon;
+  return 'mdi:file-outline';
+}
+
+/** The run records of the folder, each said in words; `pipeline_info` opens
+ *  onto what the engine wrote about the run. */
+const RunRecords: React.FC<{
+  result: FolderInspection;
+  onOpen: (name: string) => void;
+}> = ({ result, onOpen }) => {
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewId = useId();
+  if (result.markers.length === 0) {
+    return (
+      <Text size="sm" c="dimmed" data-testid="browse-detail-markers">
+        No pipeline_info folder and no MultiQC report here, so this does not look like the
+        output of a pipeline run.
+      </Text>
+    );
+  }
+  const runInfo = result.run_info ?? null;
   return (
-    <Stack gap={2} data-testid={testId}>
-      {shown.map((name) => (
-        <Group key={name} gap={6} wrap="nowrap">
-          <Icon icon={icon} width={14} style={{ flexShrink: 0 }} />
-          <Text size="xs" ff="monospace" truncate>
-            {name}
-          </Text>
-        </Group>
-      ))}
-      {more > 0 && (
-        <Text size="xs" c="dimmed">
-          and {more} more
-        </Text>
-      )}
+    <Stack gap="xs" data-testid="browse-detail-markers">
+      {result.markers.map((marker) => {
+        const meta = MARKER_META[marker];
+        const isInfo = marker === 'pipeline_info';
+        return (
+          <Paper key={marker} withBorder radius="md" p="sm" data-marker={marker}>
+            <Stack gap="xs">
+              <Group gap="sm" wrap="nowrap" align="flex-start">
+                <ThemeIcon variant="default" size="lg" radius="md">
+                  <MarkerIcon marker={marker} size={18} />
+                </ThemeIcon>
+                <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
+                  <Text size="sm" fw={600} ff={isInfo ? 'monospace' : undefined}>
+                    {meta?.label ?? marker}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {meta?.description ?? 'A record of the run.'}
+                  </Text>
+                </Stack>
+                <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+                  {isInfo && runInfo && (
+                    <Button
+                      size="compact-xs"
+                      variant="light"
+                      leftSection={<Icon icon={previewOpen ? 'mdi:eye-off-outline' : 'mdi:eye-outline'} width={14} />}
+                      onClick={() => setPreviewOpen((o) => !o)}
+                      aria-expanded={previewOpen}
+                      aria-controls={previewId}
+                      data-testid="browse-detail-pipeline-info-toggle"
+                    >
+                      {previewOpen ? 'Hide' : 'Preview'}
+                    </Button>
+                  )}
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    color="gray"
+                    rightSection={<Icon icon="mdi:chevron-right" width={14} />}
+                    onClick={() => onOpen(marker)}
+                    data-testid={`browse-detail-open-${marker}`}
+                  >
+                    Open
+                  </Button>
+                </Group>
+              </Group>
+              {isInfo && !runInfo && (
+                <Text size="xs" c="dimmed">
+                  Depictio could not read the run from it.
+                </Text>
+              )}
+              {isInfo && runInfo && (
+                <Collapse in={previewOpen} id={previewId}>
+                  <PipelineInfoPreview info={runInfo} folder={result.location} />
+                </Collapse>
+              )}
+            </Stack>
+          </Paper>
+        );
+      })}
     </Stack>
   );
 };
@@ -109,46 +207,139 @@ function contentCounts(result: FolderInspection): string {
   );
 }
 
-/** The folder's sub-folders and files: their counts, then the first names.
- *  Folded under a toggle while a search's hits are listed above it. */
+const RECORD_FOLDERS = new Set(['pipeline_info', 'multiqc']);
+
+/** The folder's sub-folders, then its files, in one list: a folder opens on
+ *  a click, a filter appears past a dozen entries. */
+const ContentsList: React.FC<{ result: FolderInspection; onOpen: (name: string) => void }> = ({
+  result,
+  onOpen,
+}) => {
+  const [query, setQuery] = useState('');
+  const { folders, files } = result;
+  const total = folders.names.length + files.names.length;
+  const q = query.trim().toLowerCase();
+  const keep = (name: string) => !q || name.toLowerCase().includes(q);
+  const shownFolders = folders.names.filter(keep);
+  const shownFiles = files.names.filter(keep);
+  const listed = folders.count + files.count;
+
+  if (total === 0) {
+    return (
+      <Text size="sm" c="dimmed">
+        This folder is empty.
+      </Text>
+    );
+  }
+  return (
+    <Stack gap="xs">
+      {total > FILTER_FROM && (
+        <TextInput
+          size="xs"
+          placeholder="Filter by name"
+          leftSection={<Icon icon="mdi:magnify" width={14} />}
+          value={query}
+          onChange={(e) => setQuery(e.currentTarget.value)}
+          data-testid="browse-detail-contents-filter"
+        />
+      )}
+      <Paper withBorder radius="md">
+        <ScrollArea.Autosize mah={300} type="auto" offsetScrollbars>
+          <Stack gap={0} py={4}>
+            {shownFolders.length > 0 && (
+              <Stack gap={0} data-testid="browse-detail-folders">
+                {shownFolders.map((name) => (
+                  <NavLink
+                    key={name}
+                    component="button"
+                    type="button"
+                    onClick={() => onOpen(name)}
+                    py={4}
+                    label={
+                      <Text size="sm" ff="monospace" truncate>
+                        {name}
+                      </Text>
+                    }
+                    leftSection={<Icon icon="mdi:folder-outline" width={16} />}
+                    rightSection={
+                      <Group gap={6} wrap="nowrap">
+                        {RECORD_FOLDERS.has(name) && (
+                          <Badge
+                            size="xs"
+                            variant="light"
+                            color="green"
+                            radius="sm"
+                            tt="none"
+                            leftSection={<MarkerIcon marker={name} size={10} />}
+                          >
+                            run record
+                          </Badge>
+                        )}
+                        <Icon icon="mdi:chevron-right" width={14} />
+                      </Group>
+                    }
+                    aria-label={`Open ${name}`}
+                    data-testid="browse-detail-folder"
+                    data-name={name}
+                  />
+                ))}
+              </Stack>
+            )}
+            {shownFolders.length > 0 && shownFiles.length > 0 && <Divider my={4} />}
+            {shownFiles.length > 0 && (
+              <Stack gap={0} data-testid="browse-detail-files">
+                {shownFiles.map((name) => (
+                  <Group key={name} gap="xs" wrap="nowrap" px="sm" py={4}>
+                    <Icon icon={fileIcon(name)} width={16} style={{ flexShrink: 0 }} />
+                    <Text size="sm" ff="monospace" truncate>
+                      {name}
+                    </Text>
+                  </Group>
+                ))}
+              </Stack>
+            )}
+            {shownFolders.length + shownFiles.length === 0 && (
+              <Text size="sm" c="dimmed" px="sm" py={4}>
+                Nothing here matches &ldquo;{query.trim()}&rdquo;.
+              </Text>
+            )}
+          </Stack>
+        </ScrollArea.Autosize>
+      </Paper>
+      {listed > total && (
+        <Text size="xs" c="dimmed">
+          The first {total} of {plural(listed, 'entry', 'entries')}.
+        </Text>
+      )}
+    </Stack>
+  );
+};
+
+/** The folder's contents. Folded under a toggle while a search's hits are
+ *  listed above it. */
 const ContentsSection: React.FC<{
   result: FolderInspection;
   foldable: boolean;
   open: boolean;
   onToggle: () => void;
-}> = ({ result, foldable, open, onToggle }) => {
+  onOpen: (name: string) => void;
+}> = ({ result, foldable, open, onToggle, onOpen }) => {
   const contentsId = useId();
-  const { folders, files } = result;
-  const lists =
-    folders.names.length > 0 || files.names.length > 0 ? (
-      <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
-        {folders.names.length > 0 && (
-          <NameList
-            names={folders.names}
-            count={folders.count}
-            icon="mdi:folder-outline"
-            testId="browse-detail-folders"
-          />
-        )}
-        {files.names.length > 0 && (
-          <NameList
-            names={files.names}
-            count={files.count}
-            icon="mdi:file-outline"
-            testId="browse-detail-files"
-          />
-        )}
-      </SimpleGrid>
-    ) : null;
+  const list = <ContentsList result={result} onOpen={onOpen} />;
 
   if (!foldable) {
     return (
-      <Section title="Contents">
-        <Text size="sm" data-testid="browse-detail-counts">
-          {contentCounts(result)}
-        </Text>
-        {lists}
-      </Section>
+      <Stack gap={6}>
+        <Group gap={6} wrap="nowrap">
+          <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+            Contents
+          </Text>
+          <Text size="xs" c="dimmed" data-testid="browse-detail-counts">
+            {contentCounts(result)}
+          </Text>
+        </Group>
+        {list}
+      </Stack>
     );
   }
   return (
@@ -170,7 +361,7 @@ const ContentsSection: React.FC<{
         </Group>
       </UnstyledButton>
       <Collapse in={open} id={contentsId} data-testid="browse-detail-contents">
-        {lists}
+        {list}
       </Collapse>
     </Stack>
   );
@@ -178,7 +369,7 @@ const ContentsSection: React.FC<{
 
 export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
   location,
-  templateTitles,
+  templatesById,
   onReveal,
   onInspected,
   storageFor,
@@ -251,6 +442,8 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
 
   const result = inspect.status === 'ready' ? inspect.result : null;
   const detected = result?.detected ?? null;
+  const template = detected?.template_id ? templatesById[detected.template_id] ?? null : null;
+  const openChild = (name: string) => onReveal(childLocation(result?.location ?? location, name));
 
   return (
     <Stack gap="md" data-testid="browse-detail" data-path={location}>
@@ -266,7 +459,7 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
           </Group>
           {result?.looks_like_run && <FlowBadge status="run-folder" testId="browse-detail-run-badge" />}
         </Group>
-        <FolderPath location={result?.location ?? location} maxLength={72} testId="browse-detail-path" />
+        <FolderPath location={result?.location ?? location} maxLength={96} testId="browse-selected" />
       </Stack>
 
       {inspect.status === 'loading' && (
@@ -292,11 +485,15 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
       {result && (
         <>
           {detected?.pipeline ? (
-            <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" data-testid="browse-detail-detected">
-              <RunMadeBy run={detected} testIdPrefix="browse-detail" />
-              <TemplateUsed
+            <Section
+              title="The run and its template"
+              description="What the pipeline wrote about this run, next to the template Depictio would read it with."
+            >
+              <RunTemplateTable
+                run={detected}
                 templateId={detected.template_id}
-                title={detected.template_id ? templateTitles[detected.template_id] ?? null : null}
+                templateName={template?.name ?? null}
+                templateEngine={template?.engine}
                 match={runTemplateMatch({
                   runPipeline: detected.pipeline,
                   runVersion: detected.version,
@@ -304,26 +501,32 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
                   detectedTemplateId: detected.template_id,
                   detectedMatch: detected.match ?? null,
                 })}
-                runVersion={detected.version}
                 testIdPrefix="browse-detail"
+                footer={
+                  detected.template_id ? (
+                    <TemplateFindings
+                      location={result.location}
+                      templateId={detected.template_id}
+                      storage={storageFor?.(result.location) ?? null}
+                      testIdPrefix="browse-detail"
+                    />
+                  ) : null
+                }
               />
-            </SimpleGrid>
+            </Section>
           ) : (
             <Text size="sm" c="dimmed" data-testid="browse-detail-not-recognised">
               {result.looks_like_run
-                ? 'This folder holds run records, but none of them names a pipeline Depictio knows.'
-                : 'No run records here: a run folder holds a pipeline_info folder or a MultiQC report.'}
+                ? 'This folder has a pipeline_info folder or a MultiQC report, but neither names a pipeline Depictio has a template for.'
+                : 'Depictio recognises no pipeline run here.'}
             </Text>
           )}
 
-          <Section title="Run records">
-            {result.markers.length > 0 ? (
-              <RunMarkers markers={result.markers} testId="browse-detail-markers" />
-            ) : (
-              <Text size="xs" c="dimmed">
-                None found.
-              </Text>
-            )}
+          <Section
+            title="Why this is a run folder"
+            description="A pipeline run leaves records beside its results; Depictio looks for these two."
+          >
+            <RunRecords result={result} onOpen={openChild} />
           </Section>
         </>
       )}
@@ -359,6 +562,7 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
           foldable={activeFind !== null}
           open={contentsOpen}
           onToggle={() => setContentsOpen((open) => !open)}
+          onOpen={openChild}
         />
       )}
     </Stack>

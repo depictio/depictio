@@ -4113,6 +4113,41 @@ export interface FromRunDCPreview {
   missing_sources: string[];
   optional: boolean;
   status: 'ok' | 'empty' | 'missing' | 'pruned';
+  /** What a scan looks for, as the template wrote it (a pattern, a file
+   *  name, a manifest URL); null for a recipe. Older backends omit it. */
+  rule?: string | null;
+  /** The first files matched, as real paths or `s3://` URLs; `matched`
+   *  counts them all. Older backends omit it. */
+  samples?: string[];
+  /** For a recipe: the recipe applied and what each of its inputs found.
+   *  Older backends omit it. */
+  recipe?: FromRunRecipePreview | null;
+}
+
+/** One input a recipe reads: files found by a pattern or a path, another
+ *  collection's table, or a URL read at ingestion. `found` is null when it
+ *  cannot be told before ingestion (a URL). */
+export interface FromRunRecipeSource {
+  ref: string;
+  kind: 'file' | 'collection' | 'url';
+  /** The glob or path looked up (after the template's overrides). */
+  pattern: string | null;
+  /** The collection whose table is read, for `kind: 'collection'`. */
+  dc_ref: string | null;
+  optional: boolean;
+  matched: number;
+  /** The first files matched, as real paths or `s3://` URLs. */
+  samples: string[];
+  found: boolean | null;
+}
+
+/** The recipe that builds a table, as the template names it. */
+export interface FromRunRecipePreview {
+  /** e.g. `nf-core/ampliseq/alpha_diversity.py`. */
+  name: string;
+  /** First line of the recipe's own description. */
+  summary: string | null;
+  sources: FromRunRecipeSource[];
 }
 
 /** Inputs for POST /projects/from_run. The backend injects the `DATA_ROOT`
@@ -4334,8 +4369,34 @@ export async function listS3Dirs(
 export interface FolderContents {
   /** Everything visible, not only the names below. */
   count: number;
-  /** The first 20, sorted. */
+  /** The first 200 (20 on older backends), sorted. */
   names: string[];
+}
+
+/** One file of a run's `pipeline_info` that Depictio recognised. */
+export interface RunReportFile {
+  kind: 'software_versions' | 'params' | 'execution_report' | 'execution_trace' | 'pipeline_dag';
+  /** A real path, or an `s3://` URL. */
+  location: string;
+  name: string;
+  /** Bytes; null when unknown. */
+  size: number | null;
+}
+
+/** What a run folder's `pipeline_info` says about the run. */
+export interface RunInfoSummary {
+  engine: string | null;
+  engine_version: string | null;
+  run_name: string | null;
+  homepage: string | null;
+  /** The run's parameters, long values clipped, at most 200 of them. */
+  params: Record<string, string | number | boolean | null>;
+  /** How many parameters the run has in all. */
+  params_total: number;
+  tools_executed: string[];
+  reports: RunReportFile[];
+  /** Other details the engine's reader kept, as text. */
+  extra: Record<string, string>;
 }
 
 /** Response of GET /projects/folder_inspect: what one folder holds, and the
@@ -4354,6 +4415,9 @@ export interface FolderInspection {
   truncated: boolean;
   /** Null when no engine recognised the folder (or detection was off). */
   detected: DetectedTemplate | null;
+  /** The run's own records, read with the detection. Null when no engine
+   *  recognised the folder; older backends omit it. */
+  run_info?: RunInfoSummary | null;
 }
 
 /** Inspect one folder: its direct contents, its run markers and, unless
