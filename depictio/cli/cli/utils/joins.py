@@ -14,8 +14,14 @@ from datetime import datetime
 import polars as pl
 from rich.markup import escape
 
+from depictio.cli.cli.utils.delta_versioning import (
+    build_commit_metadata,
+    frame_run_tags,
+    read_delta_commit_info,
+)
 from depictio.cli.cli.utils.deltatables import (
     calculate_dataframe_size_bytes,
+    commit_provenance,
     read_delta_table,
     write_delta_table,
 )
@@ -23,6 +29,7 @@ from depictio.cli.cli.utils.rich_utils import (
     console,
     rich_print_checked_statement,
 )
+from depictio.cli.cli.utils.telemetry import cli_version
 from depictio.cli.cli_logging import logger
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection, DataCollectionSource
@@ -35,6 +42,10 @@ from depictio.models.models.joins import (
 )
 from depictio.models.models.projects import Project
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
+
+#: When the join ran, stamped on every row of a persisted join. Bookkeeping, not
+#: data: two runs over the same inputs differ in this column and in nothing else.
+JOIN_TIMESTAMP_COLUMN = "join_timestamp"
 
 
 def find_data_collection_by_tag(
@@ -575,6 +586,39 @@ def preview_join(
     )
 
 
+def _holds_same_rows(stored: pl.DataFrame, joined: pl.DataFrame) -> bool:
+    """Whether a persisted join already holds exactly the rows of ``joined``.
+
+    ``join_timestamp`` is left out and row order is ignored, since a join keeps
+    none. Any schema difference counts as a change: a false "changed" costs one
+    commit, a false "unchanged" would hide a real one.
+    """
+    stored = stored.drop(JOIN_TIMESTAMP_COLUMN, strict=False)
+    if stored.schema != joined.schema or stored.height != joined.height:
+        return False
+    return stored.hash_rows().sort().equals(joined.hash_rows().sort())
+
+
+def _server_records_version(dc_id: str, delta_version: int, CLI_config: CLIConfig) -> bool:
+    """Whether the server's latest aggregation of ``dc_id`` is ``delta_version``.
+
+    An unchanged join is only left alone when this holds. Without that record (a
+    fresh database over an object store that kept the table, say) the join is
+    written and registered again, so the collection never ends up unregistered.
+    """
+    from depictio.cli.cli.utils.api_calls import api_get_deltatable_by_dc_id
+
+    try:
+        response = api_get_deltatable_by_dc_id(dc_id, CLI_config)
+    except Exception as exc:  # noqa: BLE001 - unknown means "write it", never "skip"
+        logger.debug(f"Could not read the aggregation record of {dc_id}: {exc}")
+        return False
+    if response.status_code != 200:
+        return False
+    aggregations = response.json().get("aggregation") or []
+    return bool(aggregations) and aggregations[-1].get("delta_version") == delta_version
+
+
 def persist_joined_table(
     join_def: JoinDefinition,
     joined_df: pl.DataFrame,
@@ -588,10 +632,19 @@ def persist_joined_table(
 
     This function:
     1. Generates a DataCollection ID for the joined table
-    2. Writes the Delta table to S3
+    2. Writes the Delta table to S3, unless it already holds exactly these rows
     3. Updates the join_def with result metadata
     4. Syncs the updated project to MongoDB
-    5. Registers the Delta table location in MongoDB
+    5. Registers the Delta table location in MongoDB, with the commit's provenance
+
+    The registration carries the Delta version written, its timestamp and its
+    row count, as a table ingest does. Without them the aggregation has no
+    ``delta_version``, every dashboard version stamps the join ``none``, and a
+    dashboard built on it time-travels its layout over today's data.
+
+    A join depends on both inputs, so it is rebuilt whenever either moves. When
+    neither did, the rows come out the same and nothing is written: a new commit
+    would record a change that did not happen.
 
     Args:
         join_def: The join definition (modified in-place with results)
@@ -640,31 +693,61 @@ def persist_joined_table(
 
     # Step 2: Check if exists
     existing_result = read_delta_table(destination_prefix, storage_options)
-    if existing_result["result"] == "success" and not overwrite:
+    table_exists = existing_result["result"] == "success"
+    if table_exists and not overwrite:
         return {
             "result": "error",
             "message": f"Joined table already exists at {destination_prefix}. Use --overwrite to replace.",
         }
 
+    # Step 2b: Leave the table alone when neither input moved the rows
+    unchanged_at: int | None = None
+    stored_df = existing_result.get("data")
+    if isinstance(stored_df, pl.DataFrame) and _holds_same_rows(stored_df, joined_df):
+        head = read_delta_commit_info(destination_prefix, storage_options)
+        if head is not None and _server_records_version(str(dc_id), head.version, CLI_config):
+            unchanged_at = head.version
+
+    run_tags = sorted(frame_run_tags(joined_df))
+
     # Step 3: Add join timestamp
     execution_timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    joined_df = joined_df.with_columns(pl.lit(execution_timestamp).alias("join_timestamp"))
+    joined_df = joined_df.with_columns(pl.lit(execution_timestamp).alias(JOIN_TIMESTAMP_COLUMN))
 
     # Step 4: Calculate size
     size_bytes = calculate_dataframe_size_bytes(joined_df)
 
     # Step 5: Write Delta table to ID-based path
-    console.print(f"  [cyan]→ Writing Delta table to: {destination_prefix}[/cyan]")
-    write_result = write_delta_table(
-        aggregated_df=joined_df,
-        destination_file=destination_prefix,
-        storage_options=storage_options,
-    )
+    write_result: dict | None = None
+    if unchanged_at is not None:
+        console.print(
+            f"  [cyan]→ Joined rows unchanged, Delta table left at version {unchanged_at}[/cyan]"
+        )
+        logger.info(f"Join '{join_def.name}' unchanged; Delta table left at version {unchanged_at}")
+    else:
+        console.print(f"  [cyan]→ Writing Delta table to: {destination_prefix}[/cyan]")
+        write_result = write_delta_table(
+            aggregated_df=joined_df,
+            destination_file=destination_prefix,
+            storage_options=storage_options,
+            commit_metadata=build_commit_metadata(
+                data_collection_id=str(dc_id),
+                data_collection_tag=dc_tag,
+                write_mode="overwrite",
+                run_tags=run_tags,
+                row_count=joined_df.height,
+                cli_version=cli_version(),
+                user_email=getattr(CLI_config.user, "email", None),
+            ),
+        )
 
-    if write_result["result"] != "success":
-        return write_result
+        if write_result["result"] != "success":
+            return write_result
 
-    logger.info(f"Successfully persisted joined table with {joined_df.height} rows")
+        logger.info(
+            f"Successfully persisted joined table with {joined_df.height} rows "
+            f"(Delta version {write_result.get('delta_version')})"
+        )
 
     # Step 6: Update join_def with result metadata
     join_def.result_dc_id = dc_id
@@ -738,31 +821,45 @@ def persist_joined_table(
         logger.warning(f"Failed to sync project to MongoDB: {e}")
         console.print(f"  [yellow]⚠ Project sync failed: {e}[/yellow]")
 
-    # Step 8: Register Delta location in MongoDB
-    try:
-        console.print("  [cyan]→ Registering Delta table location in MongoDB[/cyan]")
-        api_upsert_deltatable(
-            data_collection_id=str(dc_id),
-            delta_table_location=destination_prefix,
-            CLI_config=CLI_config,
-            update=True,
-            deltatable_size_bytes=size_bytes,
-        )
-        console.print("  [green]✓ Delta table location registered in MongoDB[/green]")
-        logger.info(f"Successfully registered Delta location for join '{join_def.name}'")
-    except Exception as e:
-        logger.warning(f"Failed to register Delta location in MongoDB: {e}")
-        console.print(f"  [yellow]⚠ Delta location registration failed: {e}[/yellow]")
+    # Step 8: Register Delta location in MongoDB, with the commit's provenance. An
+    # unchanged join has nothing new to register: the server already records the
+    # version it is at (checked above).
+    if write_result is not None:
+        try:
+            console.print("  [cyan]→ Registering Delta table location in MongoDB[/cyan]")
+            response = api_upsert_deltatable(
+                data_collection_id=str(dc_id),
+                delta_table_location=destination_prefix,
+                CLI_config=CLI_config,
+                update=True,
+                deltatable_size_bytes=size_bytes,
+                delta_provenance=commit_provenance(write_result, run_tags=run_tags),
+            )
+            if response.status_code != 200:
+                raise RuntimeError(f"HTTP {response.status_code}: {response.text[:300]}")
+            console.print("  [green]✓ Delta table location registered in MongoDB[/green]")
+            logger.info(f"Successfully registered Delta location for join '{join_def.name}'")
+        except Exception as e:
+            logger.warning(f"Failed to register Delta location in MongoDB: {e}")
+            console.print(f"  [yellow]⚠ Delta location registration failed: {e}[/yellow]")
 
+    if unchanged_at is not None:
+        message = f"Joined table unchanged at {destination_prefix} (Delta version {unchanged_at})"
+    else:
+        message = f"Joined table persisted to {destination_prefix}"
     return {
         "result": "success",
-        "message": f"Joined table persisted to {destination_prefix}",
+        "message": message,
         "location": destination_prefix,
         "rows": joined_df.height,
         "columns": len(joined_df.columns),
         "size_bytes": size_bytes,
         "dc_tag": dc_tag,
         "dc_id": str(dc_id),
+        "unchanged": unchanged_at is not None,
+        "delta_version": (
+            unchanged_at if write_result is None else write_result.get("delta_version")
+        ),
     }
 
 
@@ -909,10 +1006,7 @@ def process_project_joins(
                     )
 
                     if persist_result["result"] == "success":
-                        rich_print_checked_statement(
-                            f"Joined table persisted: {persist_result.get('location', 'unknown')}",
-                            "success",
-                        )
+                        rich_print_checked_statement(persist_result["message"], "success")
                         results["processed"].append(
                             {
                                 "join": join_def.name,

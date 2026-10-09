@@ -14,9 +14,10 @@ from depictio.cli.cli.utils.api_calls import (
 )
 from depictio.cli.cli.utils.delta_versioning import (
     MAX_RUN_TAGS_IN_METADATA,
-    RUN_ID_COLUMN,
     ScopedWritePlan,
     build_commit_metadata,
+    commit_write_options,
+    frame_run_tags,
     plan_partitioning,
     plan_scoped_write,
     probe_delta_table,
@@ -555,20 +556,10 @@ def sink_delta_table(
     sink_delta = getattr(concatenated_lf, "sink_delta", None)
     if sink_delta is None:
         raise AttributeError("This polars build has no LazyFrame.sink_delta")
-    delta_write_options: dict = {"schema_mode": "overwrite"}
-    if commit_metadata:
-        try:
-            from deltalake import CommitProperties
-
-            delta_write_options["commit_properties"] = CommitProperties(
-                custom_metadata=commit_metadata
-            )
-        except ImportError:
-            logger.warning("deltalake has no CommitProperties; writing without commit metadata.")
     sink_delta(
         destination_file,
         storage_options=delta_storage_options(storage_options),
-        delta_write_options=delta_write_options,
+        delta_write_options={"schema_mode": "overwrite", **commit_write_options(commit_metadata)},
         mode="overwrite",
     )
     logger.info(f"Aggregated Delta table streamed to {destination_file}.")
@@ -606,7 +597,7 @@ def write_delta_table(
     Args:
         aggregated_df (pl.DataFrame): The aggregated DataFrame.
         destination_file (str): The destination path for the Delta table.
-        write_mode: overwrite | append | replace-runs.
+        write_mode: overwrite | replace-runs.
         commit_metadata: depictio provenance to stamp into the Delta commit.
         partition: Whether to partition by ``depictio_run_id``.
         replace_run_tags: Runs the overwrite is scoped to, for ``replace-runs``.
@@ -643,6 +634,48 @@ def write_delta_table(
         "rows_added": outcome.rows_written if scoped else None,
         "partitioned": outcome.partitioned,
     }
+
+
+def commit_provenance(write_result: dict, *, run_tags: list[str], **extra: Any) -> dict[str, Any]:
+    """What a write observed about its own Delta commit, shaped for the
+    ``delta_provenance`` of :func:`api_upsert_deltatable`.
+
+    Every writer that registers an aggregation sends it: table ingest, recipes and
+    persisted joins. An aggregation recorded without a ``delta_version`` can only be
+    stamped ``none`` by a dashboard version, so time travel has nothing to pin it to.
+    ``run_tags`` are the runs the commit touched, capped as the commit metadata caps
+    them; ``extra`` carries the writer's other facts (ingestion run, trigger).
+    """
+    timestamp = write_result.get("delta_commit_timestamp")
+    return {
+        "delta_version": write_result.get("delta_version"),
+        "delta_commit_timestamp": timestamp.isoformat() if timestamp else None,
+        "write_mode": write_result.get("write_mode"),
+        "rows_total": write_result.get("rows_total"),
+        "rows_added": write_result.get("rows_added"),
+        "run_tags": run_tags[:MAX_RUN_TAGS_IN_METADATA] or None,
+        **extra,
+    }
+
+
+def _ingest_commit_metadata(
+    data_collection: DataCollection,
+    CLI_config: CLIConfig,
+    command_parameters: dict,
+    **facts: Any,
+) -> dict[str, str]:
+    """:func:`build_commit_metadata` for a table ingest or a recipe: the write's own
+    ``facts`` plus the ingestion context every one of their commits carries."""
+    return build_commit_metadata(
+        data_collection_id=str(data_collection.id),
+        data_collection_tag=data_collection.data_collection_tag,
+        ingestion_run_id=command_parameters.get("ingestion_run_id"),
+        project_id=command_parameters.get("project_id"),
+        trigger=command_parameters.get("trigger"),
+        cli_version=cli_version(),
+        user_email=getattr(CLI_config.user, "email", None),
+        **facts,
+    )
 
 
 def read_delta_table(
@@ -768,16 +801,10 @@ def client_aggregate_data(
     """
 
     command_parameters = command_parameters or {}
-    if command_parameters:
-        overwrite = command_parameters.get("overwrite", False)
-        rich_tables = command_parameters.get("rich_tables", False)
-        preview_recipes = command_parameters.get("preview_recipes", False)
-        write_mode = command_parameters.get("write_mode", "overwrite")
-    else:
-        overwrite = False
-        rich_tables = False
-        write_mode = "overwrite"
-        preview_recipes = False
+    overwrite = command_parameters.get("overwrite", False)
+    rich_tables = command_parameters.get("rich_tables", False)
+    preview_recipes = command_parameters.get("preview_recipes", False)
+    write_mode = command_parameters.get("write_mode", "overwrite")
 
     # Handle MultiQC data collections specially - copy parquet files to S3 and extract metadata
     if data_collection.config.type.lower() == "multiqc":
@@ -894,7 +921,7 @@ def client_aggregate_data(
         signal_complete=bool(signal.get("complete")),
         covered=str(data_collection.id) in set(signal.get("covered_dcs") or []),
     )
-    if plan.declined and command_parameters.get("incremental_write"):
+    if plan.declined:
         logger.info(f"Rebuilding {data_collection.data_collection_tag} in full: {plan.declined}")
 
     # 2. Read the files this write covers, and aggregate them
@@ -930,7 +957,6 @@ def client_aggregate_data(
                 f"{data_collection.data_collection_tag}: {exc}. Rebuilding every run instead."
             )
             plan = ScopedWritePlan(scoped=False, declined=str(exc))
-            aggregated_df = None
             files, lazy_frames = _read(None)
     else:
         files, lazy_frames = _read(None)
@@ -969,16 +995,12 @@ def client_aggregate_data(
         # keep unselective row-group statistics and read back slower under a
         # filter — the trade is memory for filtered-read speed, and it is why
         # this path stays opt-in.
-        commit_metadata = build_commit_metadata(
-            data_collection_id=str(dc_id),
-            data_collection_tag=data_collection.data_collection_tag,
+        commit_metadata = _ingest_commit_metadata(
+            data_collection,
+            CLI_config,
+            command_parameters,
             write_mode="overwrite",
             file_count=len(files) if files else None,
-            ingestion_run_id=command_parameters.get("ingestion_run_id"),
-            project_id=command_parameters.get("project_id"),
-            trigger=command_parameters.get("trigger"),
-            cli_version=cli_version(),
-            user_email=getattr(CLI_config.user, "email", None),
         )
         try:
             with timed("write"):
@@ -1007,11 +1029,7 @@ def client_aggregate_data(
         logger.debug(f"Aggregated DataFrame schema: {aggregated_df.schema}")
         logger.info(f"Aggregated DataFrame head: {aggregated_df.head(5)}")
 
-        run_tags = (
-            [str(tag) for tag in aggregated_df[RUN_ID_COLUMN].unique().to_list() if tag is not None]
-            if RUN_ID_COLUMN in aggregated_df.columns
-            else []
-        )
+        run_tags = frame_run_tags(aggregated_df)
 
         if plan.scoped:
             # Already decided, and not up for renegotiation: plan_partitioning's
@@ -1086,19 +1104,15 @@ def client_aggregate_data(
                     "DataFrame size calculated as 0 bytes - this indicates an empty DataFrame"
                 )
 
-        commit_metadata = build_commit_metadata(
-            data_collection_id=str(dc_id),
-            data_collection_tag=data_collection.data_collection_tag,
+        commit_metadata = _ingest_commit_metadata(
+            data_collection,
+            CLI_config,
+            command_parameters,
             write_mode=write_mode if partition else "overwrite",
             run_tags=run_tags,
             file_count=len(files) if files else None,
             # A partial frame's height is not the table's row count.
             row_count=None if plan.scoped else aggregated_df.height,
-            ingestion_run_id=command_parameters.get("ingestion_run_id"),
-            project_id=command_parameters.get("project_id"),
-            trigger=command_parameters.get("trigger"),
-            cli_version=cli_version(),
-            user_email=getattr(CLI_config.user, "email", None),
         )
 
         # A dry run stops here, at the last point before anything leaves the client.
@@ -1165,24 +1179,14 @@ def client_aggregate_data(
             delta_table_location=destination_prefix,
             update=overwrite,
             deltatable_size_bytes=deltatable_size_bytes,
-            delta_provenance={
-                "delta_version": result.get("delta_version"),
-                "delta_commit_timestamp": (
-                    result["delta_commit_timestamp"].isoformat()
-                    if result.get("delta_commit_timestamp")
-                    else None
-                ),
-                "write_mode": result.get("write_mode"),
-                "rows_total": result.get("rows_total"),
-                "rows_added": result.get("rows_added"),
+            delta_provenance=commit_provenance(
+                result,
                 # The runs this commit actually touched, which for a scoped write is
                 # the changed ones rather than everything in the table.
-                "run_tags": (
-                    (plan.run_tags if plan.scoped else run_tags)[:MAX_RUN_TAGS_IN_METADATA] or None
-                ),
-                "ingestion_run_id": command_parameters.get("ingestion_run_id"),
-                "trigger": command_parameters.get("trigger"),
-            },
+                run_tags=plan.run_tags if plan.scoped else run_tags,
+                ingestion_run_id=command_parameters.get("ingestion_run_id"),
+                trigger=command_parameters.get("trigger"),
+            ),
             async_mode=bool(command_parameters.get("async_upsert")),
         )
     logger.debug(f"API upsert response status: {api_upsert_result.status_code}")
@@ -1907,28 +1911,19 @@ def process_recipe_data_collection(
     # and their aggregations land with delta_version=None, which drops them out
     # of the joined view in /history and leaves a recipe-derived table looking
     # like it was never ingested by anyone.
-    run_tags = (
-        [str(tag) for tag in result_df[RUN_ID_COLUMN].unique().to_list() if tag is not None]
-        if RUN_ID_COLUMN in result_df.columns
-        else []
-    )
-    commit_metadata = build_commit_metadata(
-        data_collection_id=str(data_collection.id),
-        data_collection_tag=data_collection.data_collection_tag,
-        write_mode="overwrite",
-        run_tags=run_tags,
-        row_count=result_df.height,
-        ingestion_run_id=command_parameters.get("ingestion_run_id"),
-        project_id=command_parameters.get("project_id"),
-        trigger=command_parameters.get("trigger"),
-        cli_version=cli_version(),
-        user_email=getattr(CLI_config.user, "email", None),
-    )
+    run_tags = frame_run_tags(result_df)
     write_result = write_delta_table(
         aggregated_df=result_df,
         destination_file=destination_prefix,
         storage_options=storage_options,
-        commit_metadata=commit_metadata,
+        commit_metadata=_ingest_commit_metadata(
+            data_collection,
+            CLI_config,
+            command_parameters,
+            write_mode="overwrite",
+            run_tags=run_tags,
+            row_count=result_df.height,
+        ),
     )
 
     if write_result.get("result") == "error":
@@ -1941,19 +1936,12 @@ def process_recipe_data_collection(
         delta_table_location=destination_prefix,
         update=overwrite,
         deltatable_size_bytes=deltatable_size_bytes,
-        delta_provenance={
-            "delta_version": write_result.get("delta_version"),
-            "delta_commit_timestamp": (
-                write_result["delta_commit_timestamp"].isoformat()
-                if write_result.get("delta_commit_timestamp")
-                else None
-            ),
-            "write_mode": write_result.get("write_mode"),
-            "rows_total": write_result.get("rows_total"),
-            "run_tags": run_tags[:MAX_RUN_TAGS_IN_METADATA] or None,
-            "ingestion_run_id": command_parameters.get("ingestion_run_id"),
-            "trigger": command_parameters.get("trigger"),
-        },
+        delta_provenance=commit_provenance(
+            write_result,
+            run_tags=run_tags,
+            ingestion_run_id=command_parameters.get("ingestion_run_id"),
+            trigger=command_parameters.get("trigger"),
+        ),
     )
     if api_upsert_result.status_code != 200:
         return {"result": "error", "message": f"API upsert failed: {api_upsert_result.text}"}

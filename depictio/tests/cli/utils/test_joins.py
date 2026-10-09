@@ -7,19 +7,24 @@ Coverage:
 - Edge cases (empty DataFrames, nulls, type mismatches)
 - DC resolution and validation
 - Granularity aggregation
+- Persisting: Delta provenance in the registration, no commit when nothing moved
 """
 
-from unittest.mock import patch
+from datetime import datetime
+from unittest.mock import MagicMock, patch
 
 import polars as pl
 import pytest
 from bson import ObjectId
 
+from depictio.cli.cli.utils.delta_versioning import list_delta_versions, read_delta_commit_info
+from depictio.cli.cli.utils.deltatables import read_delta_table, write_delta_table
 from depictio.cli.cli.utils.joins import (
     apply_aggregation,
     execute_join,
     find_data_collection_by_tag,
     normalize_join_column_types,
+    persist_joined_table,
     validate_join_definition,
 )
 from depictio.models.models.cli import CLIConfig
@@ -32,6 +37,7 @@ from depictio.models.models.joins import (
 )
 from depictio.models.models.projects import Project
 from depictio.models.models.workflows import Workflow
+from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
 # ---------------------------------------------------------------------------
 # Helper functions
@@ -821,3 +827,164 @@ class TestExecuteJoinGranularity:
         assert metadata["aggregated_side"] == "left"
         assert result_df.shape[0] == 2
         assert result_df.filter(pl.col("id") == 2)["value"][0] == 30
+
+
+# ---------------------------------------------------------------------------
+# Persisting: the commit's provenance, and no commit when nothing moved
+# ---------------------------------------------------------------------------
+
+
+class _FakeServer:
+    """The two API calls a persist makes about the joined table, kept in memory.
+
+    ``upserts`` records every registration; ``get_deltatable`` answers from
+    them, as the server answers from the aggregations the upserts appended.
+    """
+
+    def __init__(self, knows_the_table: bool = True):
+        self.upserts: list[dict] = []
+        self.knows_the_table = knows_the_table
+
+    def upsert(self, **kwargs):
+        self.upserts.append(kwargs)
+        return MagicMock(status_code=200)
+
+    def get_deltatable(self, dc_id, CLI_config):
+        aggregations = [
+            {"delta_version": (u.get("delta_provenance") or {}).get("delta_version")}
+            for u in self.upserts
+        ]
+        if not self.knows_the_table or not aggregations:
+            return MagicMock(status_code=404)
+        return MagicMock(status_code=200, json=lambda: {"aggregation": aggregations})
+
+
+class TestPersistJoinedTable:
+    """Against a real Delta table in tmp_path: the history the stamp reads back
+    is delta-rs's own output, whose shape differs between deltalake versions."""
+
+    JOIN_ID = str(ObjectId())
+
+    @pytest.fixture
+    def setup(self, tmp_path, mock_cli_config):
+        workflow = make_workflow("wf", [make_dc("left_table"), make_dc("right_table")])
+        project = make_project(workflows=[workflow])
+        join_def = JoinDefinition(
+            id=ObjectId(self.JOIN_ID),
+            name="complete",
+            left_dc="left_table",
+            right_dc="right_table",
+            on_columns=["id"],
+            how="inner",
+            persist=True,
+            workflow_name="wf",
+        )
+        return tmp_path, project, join_def, mock_cli_config
+
+    def persist(self, setup, joined_df: pl.DataFrame, server: _FakeServer) -> dict:
+        tmp_path, project, join_def, cli_config = setup
+
+        def local(path: str) -> str:
+            # s3://<bucket>/<dc_id> -> a directory of the test's own
+            return str(tmp_path / path.rsplit("/", 1)[-1])
+
+        with (
+            patch(
+                "depictio.cli.cli.utils.joins.read_delta_table",
+                side_effect=lambda path, opts: read_delta_table(local(path), opts),
+            ),
+            patch(
+                "depictio.cli.cli.utils.joins.write_delta_table",
+                side_effect=lambda destination_file, **kw: write_delta_table(
+                    destination_file=local(destination_file), **kw
+                ),
+            ),
+            patch(
+                "depictio.cli.cli.utils.joins.read_delta_commit_info",
+                side_effect=lambda path, opts: read_delta_commit_info(local(path), opts),
+            ),
+            patch("depictio.cli.cli.utils.api_calls.api_sync_project_config_to_server"),
+            patch(
+                "depictio.cli.cli.utils.api_calls.api_upsert_deltatable",
+                side_effect=server.upsert,
+            ),
+            patch(
+                "depictio.cli.cli.utils.api_calls.api_get_deltatable_by_dc_id",
+                side_effect=server.get_deltatable,
+            ),
+        ):
+            return persist_joined_table(
+                join_def, joined_df, project, cli_config, metadata={}, overwrite=True
+            )
+
+    @staticmethod
+    def joined(values: list[int]) -> pl.DataFrame:
+        return pl.DataFrame(
+            {
+                "id": list(range(len(values))),
+                "value": values,
+                "depictio_run_id": [f"run{1 + i % 2}" for i in range(len(values))],
+            }
+        )
+
+    def commits(self, setup) -> list:
+        tmp_path, _, _, cli_config = setup
+        options = turn_S3_config_into_polars_storage_options(cli_config.s3_storage)
+        return list_delta_versions(str(tmp_path / self.JOIN_ID), options)
+
+    def history(self, setup) -> list[int]:
+        return sorted(commit.version for commit in self.commits(setup))
+
+    def test_registers_the_version_it_wrote(self, setup):
+        server = _FakeServer()
+        result = self.persist(setup, self.joined([10, 20, 30]), server)
+
+        assert result["result"] == "success"
+        (upsert,) = server.upserts
+        provenance = upsert["delta_provenance"]
+        assert provenance["delta_version"] == 0
+        assert provenance["rows_total"] == 3
+        assert provenance["write_mode"] == "overwrite"
+        assert provenance["run_tags"] == ["run1", "run2"]
+        # Sent as ISO text, which the upsert payload parses back into a datetime.
+        assert datetime.fromisoformat(provenance["delta_commit_timestamp"])
+
+    def test_each_change_is_a_new_registered_version(self, setup):
+        server = _FakeServer()
+        self.persist(setup, self.joined([10, 20, 30]), server)
+        # Same row count, one value moved: the case a row count cannot tell apart.
+        result = self.persist(setup, self.joined([10, 20, 31]), server)
+
+        assert result["unchanged"] is False
+        assert [u["delta_provenance"]["delta_version"] for u in server.upserts] == [0, 1]
+        assert [u["delta_provenance"]["rows_total"] for u in server.upserts] == [3, 3]
+        assert self.history(setup) == [0, 1]
+
+    def test_the_commit_carries_depictio_metadata(self, setup):
+        self.persist(setup, self.joined([10, 20]), _FakeServer())
+        (commit,) = self.commits(setup)
+        assert commit.custom_metadata["depictio.data_collection_tag"] == "joined_complete"
+        assert commit.custom_metadata["depictio.row_count"] == "2"
+
+    def test_unchanged_rows_write_nothing(self, setup):
+        server = _FakeServer()
+        first = self.joined([10, 20, 30])
+        self.persist(setup, first, server)
+        # Same rows in another order: a join keeps no order, so this is no change.
+        result = self.persist(setup, first.reverse(), server)
+
+        assert result["result"] == "success"
+        assert result["unchanged"] is True
+        assert result["delta_version"] == 0
+        assert self.history(setup) == [0]
+        assert len(server.upserts) == 1
+
+    def test_unchanged_rows_are_registered_again_when_the_server_lost_them(self, setup):
+        server = _FakeServer()
+        rows = self.joined([10, 20, 30])
+        self.persist(setup, rows, server)
+        server.knows_the_table = False  # a fresh database over the same object store
+        result = self.persist(setup, rows, server)
+
+        assert result["unchanged"] is False
+        assert [u["delta_provenance"]["delta_version"] for u in server.upserts] == [0, 1]
