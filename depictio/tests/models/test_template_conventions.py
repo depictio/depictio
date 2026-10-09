@@ -268,6 +268,28 @@ def check_forbidden_terms(template_id: str) -> list[Violation]:
     ]
 
 
+def check_group_col_in_filter_expr(template_id: str) -> list[Violation]:
+    """No ``filter_expr`` names ``{GROUP_COL}`` (RULES.md, Conditional routes and pruning).
+
+    Without metadata the variable resolves to the ``__no_group__`` sentinel, which
+    the filter guard rejects as a dunder, so the import fails before any pruning.
+    """
+    out: list[Violation] = []
+    for label, tab in _iter_tabs(template_id):
+        for c in _components(tab):
+            exprs = [("filter_expr", c.get("filter_expr"))] + [
+                (f"values.{name}", spec.get("filter_expr"))
+                for name, spec in (c.get("values") or {}).items()
+                if isinstance(spec, dict)
+            ]
+            out += [
+                f"{label} {_label(c)}.{where}: {expr}"
+                for where, expr in exprs
+                if expr and "{GROUP_COL}" in str(expr)
+            ]
+    return out
+
+
 PERCENT_COLUMN_RE = re.compile(r"(_pct|percent|_frac)$", re.IGNORECASE)
 MEAN_AGGREGATIONS = frozenset({"average", "mean", "median"})
 
@@ -317,6 +339,7 @@ RULES: dict[str, Callable[[str], list[Violation]]] = {
     "threshold_warn_side": check_threshold_warn_side,
     "text_intro_length": check_text_intro_length,
     "forbidden_terms": check_forbidden_terms,
+    "group_col_in_filter_expr": check_group_col_in_filter_expr,
     "no_mean_of_percentages": check_no_mean_of_percentages,
     "record_card_linked_source": check_record_card_linked_source,
     "record_card_linked": check_record_card_linked,
@@ -361,6 +384,11 @@ def test_text_intro_at_most_three_sentences(template_id: str) -> None:
 @pytest.mark.parametrize("template_id", TEMPLATE_IDS)
 def test_no_forbidden_terms_in_dashboard_text(template_id: str) -> None:
     _assert_clean(check_forbidden_terms(template_id))
+
+
+@pytest.mark.parametrize("template_id", TEMPLATE_IDS)
+def test_no_group_col_in_filter_expr(template_id: str) -> None:
+    _assert_clean(check_group_col_in_filter_expr(template_id))
 
 
 @pytest.mark.parametrize("template_id", [pytest.param(t, id=t) for t in _template_ids()])
@@ -493,6 +521,13 @@ def test_rules_catch_synthetic_violations(tmp_path: Path, monkeypatch: pytest.Mo
                         "column_name": "cpg_percent",
                         "filter_expr": "col('context') == 'CpG'",
                     },
+                    {
+                        "component_type": "card",
+                        "tag": "bygroup",
+                        "aggregation": "max",
+                        "column_name": "r2",
+                        "filter_expr": "col('term') == '{GROUP_COL}'",
+                    },
                 ],
             },
         ],
@@ -510,6 +545,8 @@ def test_rules_catch_synthetic_violations(tmp_path: Path, monkeypatch: pytest.Mo
     # Word boundary: "TP53x" is not "TP53"; case-insensitive: "na12878." is.
     assert check_forbidden_terms(tid) == ["base.yaml:Demo tab.subtitle: 'NA12878'"]
     assert len(check_no_mean_of_percentages(tid)) == 1
+    [by_group] = check_group_col_in_filter_expr(tid)
+    assert " bygroup.filter_expr: " in by_group
 
 
 def test_record_card_rules_catch_synthetic_violations(

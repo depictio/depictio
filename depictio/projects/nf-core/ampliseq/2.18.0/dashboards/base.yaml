@@ -375,8 +375,7 @@ main_dashboard:
       sd_top: {dc: sidle_reconstructed, column: Phylum, aggregation: top, weight: count}
       sd_share: {dc: sidle_reconstructed, column: Phylum, aggregation: top_share, weight: count, format: percent}
       shannon: {dc: alpha_diversity_multi_canonical, column: shannon, aggregation: median, format: 'decimals:2'}
-      r2: {dc: beta_adonis, column: r2, aggregation: max, filter_expr: "(col('metric') == 'bray_curtis') & (col('term') == '{GROUP_COL}')",
-        format: percent}
+      r2: {dc: beta_adonis, column: r2, aggregation: max, filter_expr: "col('metric') == 'bray_curtis'", format: percent}
       n_sig: {dc: ancombc_results, column: id, aggregation: nunique, filter_expr: "col('q_val') < 0.05",
         format: integer}
       n_tested: {dc: ancombc_results, column: id, aggregation: nunique, format: integer}
@@ -983,7 +982,7 @@ tabs:
     aggregation: max
     column_name: r2
     column_type: float64
-    filter_expr: (col('metric') == 'bray_curtis') & (col('term') == '{GROUP_COL}')
+    filter_expr: col('metric') == 'bray_curtis'
     secondary_layout: gauge
     coverage_max: 1
     display:

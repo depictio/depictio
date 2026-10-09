@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from depictio.recipes import execute_recipe
+from depictio.recipes import RecipeError, execute_recipe
 
 READ_TRACKING = "nf-core/ampliseq/read_tracking.py"
 BETA_ADONIS = "nf-core/ampliseq/beta_adonis.py"
@@ -102,3 +102,22 @@ def test_adonis_keeps_the_term_rows_with_metric_and_formula(tmp_path: Path) -> N
     assert habitat["p_value"] == pytest.approx(0.001)
     assert habitat["df"] == 3
     assert set(out.filter(out["metric"] == "jaccard")["formula"]) == {"site+season"}
+
+
+def test_adonis_with_a_group_col_keeps_that_term_only(tmp_path: Path) -> None:
+    _write(
+        tmp_path,
+        "qiime2/diversity/beta_diversity/adonis/bray_curtis_distance_matrix-site+season/adonis.tsv",
+        _ADONIS_HEADER + "site\t1\t1.0\t0.5\t10\t0.01\nseason\t1\t0.2\t0.1\t2\t0.2\n"
+        "Residual\t8\t0.8\t0.4\tNA\tNA\nTotal\t10\t2.0\t1\tNA\tNA\n",
+    )
+    out = execute_recipe(BETA_ADONIS, tmp_path, params={"group_col": "season"})
+    assert out["term"].to_list() == ["season"]
+    assert out["r2"].to_list() == [pytest.approx(0.1)]
+
+    # The no-metadata sentinel names no term, so the optional DC is skipped.
+    with pytest.raises(RecipeError, match="empty"):
+        execute_recipe(BETA_ADONIS, tmp_path, params={"group_col": "__no_group__"})
+    # An unset variable keeps every term.
+    unset = execute_recipe(BETA_ADONIS, tmp_path, params={"group_col": "{GROUP_COL}"})
+    assert unset.height == 2

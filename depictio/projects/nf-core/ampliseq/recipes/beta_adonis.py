@@ -12,6 +12,12 @@ metric and formula from the folder name, and keeps the term rows: ``r2`` is the
 share of between-sample variation the term explains, ``p_value`` its permutation
 p-value. Residual and Total carry no test and are dropped.
 
+With a ``group_col`` param only that term's rows are kept, so a dashboard can
+read the grouping factor's R² without naming the column in a ``filter_expr``:
+without metadata ``GROUP_COL`` resolves to the ``__no_group__`` sentinel, which
+the filter guard rejects. The sentinel matches no term, so the optional DC is
+skipped.
+
 Output columns:
     metric, formula, term, df, sum_of_squares, r2, f_stat, p_value
 """
@@ -57,10 +63,14 @@ OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
 OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
-def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
-    """One row per distance metric and formula term."""
+def transform(
+    sources: dict[str, pl.DataFrame], params: dict[str, str] | None = None
+) -> pl.DataFrame:
+    """One row per distance metric and formula term (only ``group_col``'s when set)."""
     df = sources["adonis"]
     df = df.filter(~pl.col("term").is_in(["Residual", "Total"]))
+    if group_col := (params or {}).get("group_col"):
+        df = df.filter(pl.col("term") == group_col)
     return df.select(
         pl.col(_SOURCE_PATH).str.extract(_FOLDER, 1).alias("metric"),
         pl.col(_SOURCE_PATH).str.extract(_FOLDER, 2).alias("formula"),

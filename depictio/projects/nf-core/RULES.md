@@ -390,6 +390,10 @@ step). Text, highlights and links bind no data of their own, so:
 - unprunable text (hero, steps, how to read) names no `{VARIABLE}`: an unresolved one would
   print its braces;
 - `values` lines are pruned one by one, with their data collection.
+- no `filter_expr` (card or value) names `{GROUP_COL}`: without metadata it resolves to the
+  `__no_group__` sentinel, which the filter guard rejects, and the import fails before any
+  pruning. Narrow to the grouping column in the recipe (`params: {group_col: "{GROUP_COL}"}`),
+  as `beta_adonis` does (lint rule `group_col_in_filter_expr`).
 - a step that leads to a route's tab cites a value from that route's collection
   (`{{n_callsets}} callsets scored by hap.py`): the import prunes the line with its data, so a
   run shows only the routes it took. A `tab:` link alone stays and prints a bare label once its

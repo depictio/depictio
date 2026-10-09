@@ -715,15 +715,18 @@ workflows:
 
       # PERMANOVA per distance metric, written only when the run set
       # --qiime_adonis_formula. Optional: absent tables skip the DC, and the
-      # dashboard tiles bound to it are pruned at import.
+      # dashboard tiles bound to it are pruned at import. The recipe keeps the
+      # GROUP_COL term only, so no filter_expr has to name the column.
       - data_collection_tag: "beta_adonis"
         optional: true
-        description: "PERMANOVA (adonis) per beta-diversity metric and formula term"
+        description: "PERMANOVA (adonis) of the grouping column per beta-diversity metric"
         config:
           type: "Table"
           source: "transformed"
           transform:
             recipe: "nf-core/ampliseq/beta_adonis.py"
+            params:
+              group_col: "{GROUP_COL}"
           dc_specific_properties:
             format: "TSV"
             columns_description:
