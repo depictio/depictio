@@ -33,6 +33,7 @@ import {
   fetchCardHeroValue,
   fetchCardMetric,
   compactKeepsStrip,
+  formatTextValue,
   isBreakdownLayout,
   isNumericLayout,
   resolveCardVariant,
@@ -296,6 +297,7 @@ const CardPreview: React.FC = () => {
     variant?: string | null;
     caption?: string | null;
     decimals?: number | null;
+    format?: string | null;
     link?: string | null;
     description?: string | null;
   };
@@ -376,8 +378,11 @@ const CardPreview: React.FC = () => {
     previewFilters.length > 0 && filteredHero !== undefined && filteredHero !== null
       ? filteredHero
       : staticValue;
-  const decimals = typeof config.decimals === 'number' ? config.decimals : undefined;
-  const value = formatValue(rawValue, decimals);
+  // `format` wins over `decimals`, as on the saved card (`cardNumberFormat`).
+  const format = config.format?.trim() || undefined;
+  const decimals = !format && typeof config.decimals === 'number' ? config.decimals : undefined;
+  const valueFormat = format ?? (decimals !== undefined ? `decimals:${decimals}` : undefined);
+  const value = formatValue(rawValue, valueFormat);
   const variant = resolveCardVariant(config.variant, sectionVariant);
   // Same header text as the saved card (ComponentRenderer): a caption takes
   // the aggregation label's line, and the label moves to the header tooltip
@@ -503,6 +508,7 @@ const CardPreview: React.FC = () => {
                   coverageMax={coverageMax}
                   minimal={stripIsMinimal(variant)}
                   decimals={decimals}
+                  format={format}
                   heroColumn={config.column_name}
                 />
               ) : undefined
@@ -531,18 +537,11 @@ const CardPreview: React.FC = () => {
   );
 };
 
-function formatValue(v: unknown, decimals?: number): string {
-  if (v == null) return '—';
-  if (typeof v === 'number') {
-    if (!Number.isFinite(v)) return '—';
-    if (Number.isInteger(v)) return v.toLocaleString('en-US');
-    // The author's `decimals`, kept as written (7.10, not 7.1) the way the
-    // saved card keeps it.
-    if (decimals !== undefined) return v.toFixed(decimals);
-    return v.toLocaleString('en-US', { maximumFractionDigits: 2 });
-  }
-  if (typeof v === 'boolean') return v ? 'true' : 'false';
-  return String(v);
+/** The value as the saved card prints it: the same shared formatter (a text
+ *  tile's live values go through it too), in the card's `format`. */
+function formatValue(v: unknown, format?: string): string {
+  if (v == null || (typeof v === 'number' && !Number.isFinite(v))) return '—';
+  return formatTextValue(v, format);
 }
 
 export default CardPreview;

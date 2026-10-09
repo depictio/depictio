@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Group, Stack, Text } from '@mantine/core';
 
-import { formatSecondary, hexWithAlpha } from './format';
+import { cardNumberFormat, formatCount, formatSecondary, hexWithAlpha } from './format';
 import { METRIC, MetricCaption, MetricStrip, TooltipDivider, TooltipStat } from './tokens';
 import StatList from './StatList';
 import type { MetricRow } from './types';
@@ -56,7 +56,12 @@ const BoxPlotMetric: React.FC<{
   color?: string | null;
   /** The card's `decimals`, for the numbers under the box. */
   decimals?: number;
-}> = ({ rows, color, decimals }) => {
+  /** The card's `format`, for every number of the column (the three under
+   *  the box and the tooltip's); the outlier count stays a count. */
+  format?: string;
+}> = ({ rows, color, decimals, format }) => {
+  // `format` wins over `decimals`, as on the value above the strip.
+  const captionFormat = cardNumberFormat({ format, decimals });
   const statsRow = rows.find(
     (r) => r.name.toLowerCase() === 'box_plot_stats' && isBoxPlotStats(r.value),
   );
@@ -65,6 +70,7 @@ const BoxPlotMetric: React.FC<{
     return (
       <StatList
         variant="vertical"
+        format={format}
         rows={rows.map((r) => ({
           ...r,
           value: typeof r.value === 'object' ? '—' : r.value,
@@ -82,7 +88,7 @@ const BoxPlotMetric: React.FC<{
       <MetricStrip>
         <Stack gap={0} align="center">
           <Text size="sm" fw={600} lh={1.2}>
-            {formatSecondary(s.median)}
+            {formatSecondary(s.median, captionFormat)}
           </Text>
           <MetricCaption>(constant)</MetricCaption>
         </Stack>
@@ -121,17 +127,17 @@ const BoxPlotMetric: React.FC<{
   // chart above it.
   const tooltip = (
     <Stack gap={2}>
-      <TooltipStat label="min" value={formatSecondary(s.min)} />
-      <TooltipStat label="lower whisker" value={formatSecondary(s.lower_whisker)} />
-      <TooltipStat label="Q1" value={formatSecondary(s.q1)} />
-      <TooltipStat label="median" value={formatSecondary(s.median)} strong />
-      <TooltipStat label="mean ▲" value={formatSecondary(s.mean)} />
-      <TooltipStat label="Q3" value={formatSecondary(s.q3)} />
-      <TooltipStat label="upper whisker" value={formatSecondary(s.upper_whisker)} />
-      <TooltipStat label="max" value={formatSecondary(s.max)} />
+      <TooltipStat label="min" value={formatSecondary(s.min, format)} />
+      <TooltipStat label="lower whisker" value={formatSecondary(s.lower_whisker, format)} />
+      <TooltipStat label="Q1" value={formatSecondary(s.q1, format)} />
+      <TooltipStat label="median" value={formatSecondary(s.median, format)} strong />
+      <TooltipStat label="mean ▲" value={formatSecondary(s.mean, format)} />
+      <TooltipStat label="Q3" value={formatSecondary(s.q3, format)} />
+      <TooltipStat label="upper whisker" value={formatSecondary(s.upper_whisker, format)} />
+      <TooltipStat label="max" value={formatSecondary(s.max, format)} />
       <TooltipDivider />
-      <TooltipStat label="IQR" value={formatSecondary(iqr)} />
-      <TooltipStat label="outliers" value={s.outlier_count.toLocaleString()} />
+      <TooltipStat label="IQR" value={formatSecondary(iqr, format)} />
+      <TooltipStat label="outliers" value={formatCount(s.outlier_count, format)} />
       <TooltipStat label="shape" value={skewHint} />
     </Stack>
   );
@@ -231,9 +237,9 @@ const BoxPlotMetric: React.FC<{
       {/* Axis ends + median, so the plot is readable at a narrow card width
           without opening the tooltip. */}
       <Group justify="space-between" gap={4} wrap="nowrap" style={{ minWidth: 0 }}>
-        <MetricCaption>{formatSecondary(s.min, decimals)}</MetricCaption>
-        <MetricCaption strong>{formatSecondary(s.median, decimals)}</MetricCaption>
-        <MetricCaption>{formatSecondary(s.max, decimals)}</MetricCaption>
+        <MetricCaption>{formatSecondary(s.min, captionFormat)}</MetricCaption>
+        <MetricCaption strong>{formatSecondary(s.median, captionFormat)}</MetricCaption>
+        <MetricCaption>{formatSecondary(s.max, captionFormat)}</MetricCaption>
       </Group>
     </MetricStrip>
   );

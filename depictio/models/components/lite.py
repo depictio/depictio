@@ -218,6 +218,17 @@ class FigureLiteComponent(BaseLiteComponent):
         return self
 
 
+# The number formats a card's `format` and a text tile's live value share. The
+# viewer prints both with one function (`formatNumber`, card/metrics/format.ts).
+VALUE_FORMAT = re.compile(r"^(percent|integer|si|decimals:[0-6])$")
+
+
+def validate_value_format(value: object) -> None:
+    """Refuse a `format` outside the shared vocabulary (unset passes)."""
+    if value is not None and not (isinstance(value, str) and VALUE_FORMAT.match(value)):
+        raise ValueError(f"format '{value}' is not one of: percent, integer, si, decimals:N (0-6)")
+
+
 class CardLiteComponent(BaseLiteComponent):
     """Lite card component for user definition.
 
@@ -316,7 +327,18 @@ class CardLiteComponent(BaseLiteComponent):
         ge=0,
         le=6,
         description="Decimal places for a fractional value (default: up to 4, trailing "
-        "zeros dropped). `2` shows a median Shannon of 7.0831 as 7.08.",
+        "zeros dropped). `2` shows a median Shannon of 7.0831 as 7.08. For a percentage "
+        "or an SI suffix, use `format` instead.",
+    )
+    format: str | None = Field(
+        default=None,
+        description="How the value prints. `percent` for a 0-1 fraction (0.41 shows as "
+        "41%, 0.047 as 4.7%), `integer` (12,346), `si` (214k, 3.7M) or `decimals:N` "
+        "(N from 0 to 6). The strip below follows it for numbers of the same column: box "
+        "plot labels, threshold cut-off, histogram axis, trend buckets, a median or max in "
+        "a stat list. Counts (rows passing, `count`, `nunique`) stay whole numbers, with an "
+        "SI suffix under `si`. Set either `format` or `decimals`, not both. Unset: as "
+        "`decimals` says, else magnitude-aware rounding.",
     )
     link: str | None = Field(
         default=None,
@@ -568,6 +590,31 @@ class CardLiteComponent(BaseLiteComponent):
                 f"({self.threshold_value}) when threshold_direction is 'max' (lower is "
                 "better): the warn band lies on the failing side of the cut-off. Use "
                 "threshold_direction: min if higher values pass."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_format(self) -> "CardLiteComponent":
+        """Check `format` against the shared vocabulary, and against `decimals`.
+
+        Both are read where a template writes them too, inside the `display`
+        block, which the model otherwise keeps as an unvalidated extra.
+        """
+        display = (self.model_extra or {}).get("display")
+        nested: dict[str, Any] = display if isinstance(display, dict) else {}
+        fmt = self.format if self.format is not None else nested.get("format")
+        decimals = self.decimals if self.decimals is not None else nested.get("decimals")
+        validate_value_format(fmt)
+        if fmt is not None and decimals is not None:
+            raise ValueError(
+                f"set either format ('{fmt}') or decimals ({decimals}), not both: "
+                "`format: decimals:N` is the same as `decimals: N`, and the other formats "
+                "set their own precision"
+            )
+        if fmt == "percent" and self.aggregation in ("count", "nunique"):
+            raise ValueError(
+                f"format 'percent' reads a 0-1 fraction, and a '{self.aggregation}' card "
+                "counts rows; use `integer` or `si`"
             )
         return self
 
@@ -859,7 +906,6 @@ TEXT_VALUE_AGGREGATIONS: tuple[str, ...] = (
 # content between `{{` and `}}`, with no space anywhere.
 TEXT_VALUE_NAME = re.compile(r"^[a-z][a-z0-9_]{0,11}$")
 TEXT_PARAM_PLACEHOLDER = re.compile(r"^param:[A-Za-z0-9_.-]+$")
-TEXT_VALUE_FORMAT = re.compile(r"^(percent|integer|si|decimals:[0-6])$")
 # Anything between double braces is meant as a placeholder. The viewer prints
 # one of neither form as is, braces included, so validation refuses it.
 TEXT_PLACEHOLDER = re.compile(r"\{\{([^{}]*)\}\}")
@@ -913,10 +959,7 @@ class TextValueSpec(BaseModel):
                 f"`weight` only applies to {' / '.join(TEXT_ONLY_AGGREGATIONS)}, "
                 f"not to '{self.aggregation}'"
             )
-        if self.format is not None and not TEXT_VALUE_FORMAT.match(self.format):
-            raise ValueError(
-                f"format '{self.format}' is not one of: percent, integer, si, decimals:N (0-6)"
-            )
+        validate_value_format(self.format)
         if self.filter_expr is not None:
             from depictio.models.components.filter_expr import validate_filter_expr
 

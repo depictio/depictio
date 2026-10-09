@@ -62,8 +62,13 @@ interface SecondaryMetricsProps {
   /** For a headline card: a composition strip keeps its bar and legend line;
    *  the rest stays in the tooltip. */
   minimal?: boolean;
-  /** The card's `decimals`, so numbers in the strip match its value. */
+  /** The card's `decimals`, so the numbers under a box plot match its value. */
   decimals?: number;
+  /** The card's `format` (`percent`, `integer`, `si`, `decimals:N`), which
+   *  wins over `decimals`. Every number of the card's column in the strip
+   *  takes it (box plot, histogram axis, threshold cut-off, trend buckets,
+   *  stat-list median or max); counts stay counts. */
+  format?: string;
   /** The card's own column: tells a breakdown by that same column (row counts,
    *  so shares) from a per-group value breakdown. */
   heroColumn?: string | null;
@@ -96,6 +101,7 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
   coverageMax,
   minimal = false,
   decimals,
+  format,
   heroColumn,
 }) => {
   // Categorical layouts — all four read the same ``__breakdown__`` payload and
@@ -108,7 +114,7 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
     // Per-group values (max, average, ...) are not parts of a whole: only the
     // ranked list can show them honestly, whatever share layout was asked for.
     if (!breakdownHasShares(breakdown, heroColumn)) {
-      return <TopNMetric payload={breakdown} color={color} shares={false} />;
+      return <TopNMetric payload={breakdown} color={color} shares={false} format={format} />;
     }
     if (layout === 'top_n') return <TopNMetric payload={breakdown} color={color} />;
     if (layout === 'concentration') {
@@ -126,15 +132,17 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
     if (!payload || typeof payload !== 'object') return null;
     switch (layout) {
       case 'histogram':
-        return <HistogramMetric payload={payload as HistogramPayload} color={color} />;
+        return (
+          <HistogramMetric payload={payload as HistogramPayload} color={color} format={format} />
+        );
       case 'threshold':
-        return <ThresholdMetric payload={payload as ThresholdPayload} />;
+        return <ThresholdMetric payload={payload as ThresholdPayload} format={format} />;
       case 'completeness':
         return <CompletenessMetric payload={payload as CompletenessPayload} color={color} />;
       case 'uniqueness':
         return <UniquenessMetric payload={payload as UniquenessPayload} color={color} />;
       case 'trend':
-        return <TrendMetric payload={payload as TrendPayload} color={color} />;
+        return <TrendMetric payload={payload as TrendPayload} color={color} format={format} />;
       default:
         return <AttritionMetric payload={payload as AttritionPayload} color={color} />;
     }
@@ -149,10 +157,12 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
       coverageMax > 0;
     if (usable) {
       if (layout === 'gauge') {
-        return <GaugeMetric value={coverageValue} max={coverageMax} color={color} />;
+        return (
+          <GaugeMetric value={coverageValue} max={coverageMax} color={color} format={format} />
+        );
       }
       return (
-        <CoverageMetric value={coverageValue} max={coverageMax} color={color} />
+        <CoverageMetric value={coverageValue} max={coverageMax} color={color} format={format} />
       );
     }
     // Fall through to the stat list rather than draw an always-zero bar.
@@ -160,7 +170,7 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
 
   if (layout === 'box_plot') {
     if (!rows.length) return null;
-    return <BoxPlotMetric rows={rows} color={color} decimals={decimals} />;
+    return <BoxPlotMetric rows={rows} color={color} decimals={decimals} format={format} />;
   }
 
   // ``box_plot_stats`` is the one compound aggregation — only BoxPlotMetric
@@ -172,7 +182,7 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
   // is dropped from the list instead of stringified.
   const scalarRows = rows.filter((r) => r.name !== 'box_plot_stats');
   if (scalarRows.length === 0 && rows.length > 0) {
-    return <BoxPlotMetric rows={rows} color={color} />;
+    return <BoxPlotMetric rows={rows} color={color} format={format} />;
   }
 
   if (!scalarRows.length) return null;
@@ -180,6 +190,7 @@ const SecondaryMetrics: React.FC<SecondaryMetricsProps> = ({
     <StatList
       rows={scalarRows}
       variant={layout === 'compact' || layout === 'grid' ? layout : 'vertical'}
+      format={format}
     />
   );
 };

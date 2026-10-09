@@ -1,7 +1,7 @@
 import React from 'react';
 import { Stack } from '@mantine/core';
 
-import { axisNumber } from './format';
+import { axisNumber, formatCount, formatNumber } from './format';
 import {
   Meter,
   MetricCaption,
@@ -12,6 +12,25 @@ import {
   VERDICT,
 } from './tokens';
 import type { ThresholdPayload } from './types';
+
+/** A cut-off, a value of the card's column: in the card's `format` when it has
+ *  one (≥ 41%), else in axis precision. */
+function cutOff(v: number, format?: string): string {
+  return format ? formatNumber(v, format) : axisNumber(v);
+}
+
+/** The line under the meter: "37/40 pass ≥ 30 · 2 warn · 1 fail". The cut-off
+ *  takes the card's `format`, the figures before it stay counts. */
+export function thresholdCaption(payload: ThresholdPayload, format?: string): string {
+  const count = (n: number) => formatCount(n, format);
+  const comparator = payload.direction === 'max' ? '≤' : '≥';
+  return (
+    `${count(payload.passing)}/${count(payload.measured || 0)} pass ${comparator} ` +
+    `${cutOff(payload.threshold, format)}` +
+    (payload.warning > 0 ? ` · ${count(payload.warning)} warn` : '') +
+    (payload.failing > 0 ? ` · ${count(payload.failing)} fail` : '')
+  );
+}
 
 /**
  * ``threshold`` — how many rows clear a QC cut-off.
@@ -28,7 +47,12 @@ import type { ThresholdPayload } from './types';
  */
 const ThresholdMetric: React.FC<{
   payload: ThresholdPayload;
-}> = ({ payload }) => {
+  /** The card's `format`: the cut-offs are values of its column (≥ 41%), the
+   *  pass / warn / fail figures stay counts. */
+  format?: string;
+}> = ({ payload, format }) => {
+  const cut = (v: number) => cutOff(v, format);
+  const count = (n: number) => formatCount(n, format);
   const measured = payload.measured || 0;
   if (measured <= 0) return null;
   const passShare = payload.passing / measured;
@@ -48,7 +72,7 @@ const ThresholdMetric: React.FC<{
     <Stack gap={2}>
       <TooltipStat
         label="criterion"
-        value={`${payload.column} ${comparator} ${axisNumber(payload.threshold)}`}
+        value={`${payload.column} ${comparator} ${cut(payload.threshold)}`}
       />
       <TooltipDivider />
       {bands.map((b) => (
@@ -56,19 +80,19 @@ const ThresholdMetric: React.FC<{
           key={b.key}
           label={b.label}
           swatch={b.color}
-          value={`${b.count.toLocaleString()} (${Math.round((b.count / measured) * 100)}%)`}
+          value={`${count(b.count)} (${Math.round((b.count / measured) * 100)}%)`}
         />
       ))}
       {payload.warn_threshold !== null ? (
         <TooltipNote>
-          warn band: {comparator} {axisNumber(payload.warn_threshold)} but not {comparator}{' '}
-          {axisNumber(payload.threshold)}
+          warn band: {comparator} {cut(payload.warn_threshold)} but not {comparator}{' '}
+          {cut(payload.threshold)}
         </TooltipNote>
       ) : null}
       {payload.nulls > 0 ? (
         <>
           <TooltipDivider />
-          <TooltipStat label="not measured" value={payload.nulls.toLocaleString()} />
+          <TooltipStat label="not measured" value={count(payload.nulls)} />
           <TooltipNote>Missing values are neither passed nor failed.</TooltipNote>
         </>
       ) : null}
@@ -76,7 +100,7 @@ const ThresholdMetric: React.FC<{
   );
 
   return (
-    <MetricStrip tooltip={tooltip} ariaLabel={`Pass rate against ${payload.threshold}`}>
+    <MetricStrip tooltip={tooltip} ariaLabel={`Pass rate against ${cut(payload.threshold)}`}>
       <Meter
         segments={[
           { key: 'pass', share: passShare, color: VERDICT.pass },
@@ -84,12 +108,7 @@ const ThresholdMetric: React.FC<{
           { key: 'fail', share: failShare, color: VERDICT.fail },
         ]}
       />
-      <MetricCaption strong>
-        {payload.passing.toLocaleString()}/{measured.toLocaleString()} pass {comparator}{' '}
-        {axisNumber(payload.threshold)}
-        {payload.warning > 0 ? ` · ${payload.warning.toLocaleString()} warn` : ''}
-        {payload.failing > 0 ? ` · ${payload.failing.toLocaleString()} fail` : ''}
-      </MetricCaption>
+      <MetricCaption strong>{thresholdCaption(payload, format)}</MetricCaption>
     </MetricStrip>
   );
 };

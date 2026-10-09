@@ -86,6 +86,7 @@ CARD_STYLING_FIELDS = (
     "variant",
     "link",
     "decimals",
+    "format",
     "metric_theme",
     "background_color",
 )

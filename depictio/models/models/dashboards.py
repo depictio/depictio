@@ -1399,8 +1399,12 @@ class DashboardDataLite(BaseModel):
                         "variant",
                         "link",
                         "decimals",
+                        "format",
                     ],
                 )
+                # `decimals: 0` is a real setting, not an empty one.
+                if comp.get("decimals") == 0:
+                    display["decimals"] = 0
                 if display:
                     lite_comp["display"] = display
 
@@ -1827,6 +1831,7 @@ class DashboardDataLite(BaseModel):
                     "variant",
                     "link",
                     "decimals",
+                    "format",
                 ]:
                     # `decimals: 0` is a real setting, not an empty one.
                     if comp_dict.get(f) or (f == "decimals" and comp_dict.get(f) == 0):

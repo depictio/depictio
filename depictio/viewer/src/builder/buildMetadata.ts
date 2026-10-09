@@ -120,9 +120,13 @@ function buildCard(
     variant?: string | null;
     caption?: string | null;
     decimals?: number | null;
+    format?: string | null;
     link?: string | null;
     description?: string | null;
   }>(state.config);
+  // `format` wins over `decimals` (and YAML validation refuses the pair), so a
+  // card with a format saves no `decimals`.
+  const format = c.format?.trim() || undefined;
   const title =
     (c.title && c.title.trim()) ||
     autoCardTitle(c.aggregation, c.column_name, c.column_type);
@@ -164,7 +168,8 @@ function buildCard(
     // rather than saved as a style no renderer draws.
     variant: normalizeCardVariant(c.variant) ?? undefined,
     caption: c.caption?.trim() || undefined,
-    decimals: typeof c.decimals === 'number' ? c.decimals : undefined,
+    format,
+    decimals: !format && typeof c.decimals === 'number' ? c.decimals : undefined,
     link: c.link?.trim() || undefined,
     description: c.description?.trim() || undefined,
   };

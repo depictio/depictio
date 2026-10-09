@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Group, Stack } from '@mantine/core';
 
-import { axisNumber, hexWithAlpha } from './format';
+import { axisNumber, formatCount, formatNumber, hexWithAlpha } from './format';
 import { METRIC, MetricCaption, MetricStrip, TooltipStat } from './tokens';
 import type { HistogramPayload } from './types';
 
@@ -24,7 +24,10 @@ import type { HistogramPayload } from './types';
 const HistogramMetric: React.FC<{
   payload: HistogramPayload;
   color?: string | null;
-}> = ({ payload, color }) => {
+  /** The card's `format`, for the axis values; the bin counts stay counts. */
+  format?: string;
+}> = ({ payload, color, format }) => {
+  const axis = (v: number) => (format ? formatNumber(v, format) : axisNumber(v));
   const bins = payload.bins || [];
   if (!bins.length) return null;
   const peak = Math.max(...bins);
@@ -36,19 +39,19 @@ const HistogramMetric: React.FC<{
     <Stack gap={2}>
       <TooltipStat
         label="range"
-        value={`${axisNumber(payload.min)} — ${axisNumber(payload.max)}`}
+        value={`${axis(payload.min)} — ${axis(payload.max)}`}
       />
       {payload.median !== null ? (
-        <TooltipStat label="median" value={axisNumber(payload.median)} strong />
+        <TooltipStat label="median" value={axis(payload.median)} strong />
       ) : null}
       <TooltipStat
         label="values"
-        value={(payload.total - payload.nulls).toLocaleString()}
+        value={formatCount(payload.total - payload.nulls, format)}
       />
       {payload.nulls > 0 ? (
-        <TooltipStat label="missing" value={payload.nulls.toLocaleString()} />
+        <TooltipStat label="missing" value={formatCount(payload.nulls, format)} />
       ) : null}
-      <TooltipStat label="tallest bin" value={peak.toLocaleString()} />
+      <TooltipStat label="tallest bin" value={formatCount(peak, format)} />
     </Stack>
   );
 
@@ -71,11 +74,11 @@ const HistogramMetric: React.FC<{
         ))}
       </Group>
       <Group gap={4} wrap="nowrap" justify="space-between">
-        <MetricCaption>{axisNumber(payload.min)}</MetricCaption>
+        <MetricCaption>{axis(payload.min)}</MetricCaption>
         {payload.median !== null ? (
-          <MetricCaption>med {axisNumber(payload.median)}</MetricCaption>
+          <MetricCaption>med {axis(payload.median)}</MetricCaption>
         ) : null}
-        <MetricCaption>{axisNumber(payload.max)}</MetricCaption>
+        <MetricCaption>{axis(payload.max)}</MetricCaption>
       </Group>
     </MetricStrip>
   );

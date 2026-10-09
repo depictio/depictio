@@ -1,7 +1,7 @@
 import React from 'react';
 import { Group, Stack } from '@mantine/core';
 
-import { hexWithAlpha, percent } from './format';
+import { formatNumber, hexWithAlpha, percent } from './format';
 import { METRIC, MetricCaption, MetricStrip, TooltipDivider, TooltipStat } from './tokens';
 import { coverageStatus } from './Coverage';
 
@@ -34,16 +34,19 @@ const GaugeMetric: React.FC<{
   value: number;
   max: number;
   color?: string | null;
-}> = ({ value, max, color }) => {
+  /** The card's `format`: the value and the maximum are both in its unit. */
+  format?: string;
+}> = ({ value, max, color, format }) => {
+  const num = (v: number) => (format ? formatNumber(v, format) : v.toLocaleString());
   const share = Math.max(0, Math.min(1, value / max));
   const status = coverageStatus(share);
   const fill = status === 'complete' ? hexWithAlpha(color, 0.9) : 'rgba(250,176,5,0.85)';
 
   const tooltip = (
     <Stack gap={2}>
-      <TooltipStat label="value" value={value.toLocaleString()} />
-      <TooltipStat label="maximum" value={max.toLocaleString()} />
-      <TooltipStat label="remaining" value={Math.max(0, max - value).toLocaleString()} />
+      <TooltipStat label="value" value={num(value)} />
+      <TooltipStat label="maximum" value={num(max)} />
+      <TooltipStat label="remaining" value={num(Math.max(0, max - value))} />
       <TooltipDivider />
       <TooltipStat label="filled" value={percent(share, share === 1 ? 0 : 1)} strong />
       <TooltipStat label="status" value={status} />
@@ -81,7 +84,7 @@ const GaugeMetric: React.FC<{
           </text>
         </svg>
         <MetricCaption strong>
-          {value.toLocaleString()} of {max.toLocaleString()}
+          {num(value)} of {num(max)}
         </MetricCaption>
       </Group>
     </MetricStrip>

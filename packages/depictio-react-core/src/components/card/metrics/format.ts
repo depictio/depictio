@@ -57,14 +57,114 @@ export function formatDecimals(v: number, decimals: number): string {
   return f.format(v);
 }
 
-/** Rendering for a stat list or an axis anchor. */
-export function formatSecondary(v: unknown, decimals?: number): string {
-  if (v === null || v === undefined) return '—';
-  if (typeof v === 'number') {
-    // The card's own `decimals`, so the strip agrees with the value above it.
-    if (typeof decimals === 'number') return formatDecimals(v, decimals);
-    return formatCardNumber(v);
+const INTEGER = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
+const ONE_DECIMAL = new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 });
+const SI_UNITS: [number, string][] = [
+  [1e12, 'T'],
+  [1e9, 'G'],
+  [1e6, 'M'],
+  [1e3, 'k'],
+];
+
+/** 1.2k, 3.4M, 5.6G; below a thousand, as a card prints it. */
+function si(v: number): string {
+  const abs = Math.abs(v);
+  for (let i = 0; i < SI_UNITS.length; i++) {
+    const [unit, suffix] = SI_UNITS[i];
+    if (abs < unit) continue;
+    const scaled = Math.round((v / unit) * 10) / 10;
+    // 999,960 rounds to 1000.0k: the next unit up reads it.
+    if (Math.abs(scaled) >= 1000 && i > 0) {
+      const [up, upSuffix] = SI_UNITS[i - 1];
+      return `${ONE_DECIMAL.format(v / up)}${upSuffix}`;
+    }
+    return `${ONE_DECIMAL.format(scaled)}${suffix}`;
   }
+  return formatCardNumber(v);
+}
+
+/**
+ * A number in one of the formats a card's `format` and a text tile's live
+ * value share: `percent` (a 0-1 fraction times 100: 41%, but 4.7% under ten,
+ * so a small share keeps the digit that tells it from 4%), `integer`, `si`
+ * (214k, 3.7M) or `decimals:N`. Anything else, or no format, prints as
+ * `formatCardNumber` does.
+ */
+export function formatNumber(v: number, format?: string | null): string {
+  if (!Number.isFinite(v)) return '—';
+  const f = typeof format === 'string' ? format.trim() : '';
+  if (f === 'percent') {
+    const pct = v * 100;
+    return `${Math.abs(pct) < 10 ? ONE_DECIMAL.format(pct) : INTEGER.format(pct)}%`;
+  }
+  // `|| 0`: -0.4 rounds to -0, which prints as "-0".
+  if (f === 'integer') return INTEGER.format(Math.round(v) || 0);
+  if (f === 'si') return si(v);
+  const decimals = /^decimals:([0-6])$/.exec(f);
+  if (decimals) return formatDecimals(v, Number(decimals[1]));
+  return formatCardNumber(v);
+}
+
+/**
+ * The format a card's value takes: its `format`, else its `decimals` as
+ * `decimals:N`. `format` wins when both are set (validation refuses the pair
+ * in YAML, but a stored card is not re-validated on read).
+ */
+export function cardNumberFormat(m: { format?: unknown; decimals?: unknown }): string | undefined {
+  if (typeof m.format === 'string' && m.format.trim()) return m.format.trim();
+  if (typeof m.decimals === 'number' && Number.isFinite(m.decimals)) {
+    return `decimals:${Math.min(6, Math.max(0, Math.round(m.decimals)))}`;
+  }
+  return undefined;
+}
+
+/**
+ * A count (rows passing a threshold, outliers, a `count` or `nunique`) on a
+ * card whose `format` is for its column, not for counts: it stays whole, and
+ * takes the SI suffix only when that format is `si`.
+ */
+export function formatCount(n: number, format?: string | null): string {
+  if (!Number.isFinite(n)) return '—';
+  return typeof format === 'string' && format.trim() === 'si' ? si(n) : n.toLocaleString();
+}
+
+/** Aggregations that count rows or values, whatever the column holds. */
+const COUNT_AGGREGATIONS = new Set(['count', 'nunique']);
+
+/** Aggregations in the column's own unit, so in the card's `format`. The
+ *  rest (variance, skewness, kurtosis) are not, and print as they always did. */
+const UNIT_AGGREGATIONS = new Set([
+  'sum',
+  'average',
+  'median',
+  'min',
+  'max',
+  'range',
+  'std_dev',
+  'percentile',
+  'q1',
+  'q3',
+  'mode',
+]);
+
+/**
+ * One secondary aggregation of the card's column. Under the card's `format`
+ * a median or a max reads like the value above it (41%) and a count stays a
+ * count; without a format, as `formatSecondary`.
+ */
+export function formatAggregate(aggregation: string, v: unknown, format?: string | null): string {
+  if (format && typeof v === 'number') {
+    if (COUNT_AGGREGATIONS.has(aggregation)) return formatCount(v, format);
+    if (UNIT_AGGREGATIONS.has(aggregation)) return formatNumber(v, format);
+  }
+  return formatSecondary(v);
+}
+
+/** Rendering for a stat list or an axis anchor, in `format` when one is given
+ *  (the card's own, so the strip agrees with the value above it). */
+export function formatSecondary(v: unknown, format?: string | null): string {
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'number') return formatNumber(v, format);
   return String(v);
 }
 
