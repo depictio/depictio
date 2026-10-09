@@ -29,11 +29,25 @@ export function relTime(iso?: string | null): string {
   return `${Math.round(hrs / 24)}d ago`;
 }
 
-/** Exact local clock time (with seconds) from an ISO timestamp. */
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** Local date and time, to the second. Runs and commits are often days old,
+ *  and a clock time alone reads as today's. */
 export function absTime(iso?: string | null): string {
-  const ms = parseTs(iso);
-  if (Number.isNaN(ms)) return '—';
-  return new Date(ms).toLocaleTimeString(undefined, { hour12: false });
+  const d = parseServerTimestamp(iso);
+  if (!d) return '—';
+  return (
+    `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ` +
+    `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`
+  );
+}
+
+/** Local clock time only, for a dense list of recent rows (logs) whose
+ *  tooltip carries the full timestamp. */
+export function clockTime(iso?: string | null): string {
+  const d = parseServerTimestamp(iso);
+  if (!d) return '—';
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
 }
 
 export function formatDuration(ms?: number | null): string {

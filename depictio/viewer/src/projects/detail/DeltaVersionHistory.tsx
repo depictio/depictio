@@ -28,8 +28,16 @@ import {
 import { Icon } from '@iconify/react';
 import { fetchDeltaHistory, type DeltaHistoryResponse, type DeltaVersionEntry } from 'depictio-react-core';
 
-import { absTime, compactCount, parseTs, relTime } from '../../monitoring/format';
+import { formatDateTimeVerbose } from '../../lib/datetime';
+import { compactCount, relTime } from '../../monitoring/format';
 import { TriggerBadge } from '../../monitoring/TriggerBadge';
+import {
+  HISTORY_LIMIT,
+  isUnmatchedRecord,
+  orderHistory,
+  summarizeHistory,
+  timestampOf,
+} from './deltaHistory';
 
 /** Delta operation names are verbose ("WRITE", "DELETE", "OPTIMIZE"); show them
  *  as a compact chip with a per-operation colour so a vacuum or an optimize
@@ -52,10 +60,6 @@ const WRITE_MODE_LABEL: Record<string, string> = {
   'replace-runs': 'runs replaced',
 };
 
-function timestampOf(entry: DeltaVersionEntry): string | null | undefined {
-  return entry.timestamp ?? entry.aggregation_time;
-}
-
 const VersionRow: React.FC<{ entry: DeltaVersionEntry; isCurrent: boolean }> = ({
   entry,
   isCurrent,
@@ -71,22 +75,22 @@ const VersionRow: React.FC<{ entry: DeltaVersionEntry; isCurrent: boolean }> = (
     <Table.Tr>
       <Table.Td>
         <Group gap={6} wrap="nowrap">
-          {entry.version != null ? (
-            <Badge size="sm" variant={isCurrent ? 'filled' : 'light'} color="green">
-              v{entry.version}
-            </Badge>
-          ) : (
+          {isUnmatchedRecord(entry) ? (
             <Tooltip
-              label="Recorded by depictio before Delta versions were captured, so it cannot be matched to a commit."
+              label="Known from depictio's record of this write, not from the Delta log: no commit listed here matches it. Either its commit was not among those read, or the write predates depictio recording commit versions."
               multiline
-              w={260}
+              w={300}
               withArrow
               withinPortal
             >
               <Badge size="sm" variant="outline" color="gray">
-                —
+                unmatched
               </Badge>
             </Tooltip>
+          ) : (
+            <Badge size="sm" variant={isCurrent ? 'filled' : 'light'} color="green">
+              v{entry.version}
+            </Badge>
           )}
           {isCurrent && (
             <Text size="xs" c="dimmed">
@@ -97,7 +101,7 @@ const VersionRow: React.FC<{ entry: DeltaVersionEntry; isCurrent: boolean }> = (
       </Table.Td>
       <Table.Td>
         {ts ? (
-          <Tooltip label={absTime(ts)} withArrow withinPortal>
+          <Tooltip label={formatDateTimeVerbose(ts)} withArrow withinPortal>
             <Text size="xs">{relTime(ts)}</Text>
           </Tooltip>
         ) : (
@@ -173,7 +177,7 @@ export const DeltaVersionHistory: React.FC<{ dcId: string }> = ({ dcId }) => {
     setLoading(true);
     setError(null);
     try {
-      setHistory(await fetchDeltaHistory(dcId, 20));
+      setHistory(await fetchDeltaHistory(dcId, HISTORY_LIMIT));
     } catch (err) {
       setError((err as Error).message || 'Failed to load Delta history.');
     } finally {
@@ -182,16 +186,8 @@ export const DeltaVersionHistory: React.FC<{ dcId: string }> = ({ dcId }) => {
   }, [dcId, history, loading]);
 
   const versions = history?.versions ?? [];
-  // Sort defensively: the merged response appends Mongo-only rows after the
-  // Delta ones, so it is not globally ordered by time.
-  const ordered = [...versions].sort((a, b) => {
-    const ta = parseTs(timestampOf(a));
-    const tb = parseTs(timestampOf(b));
-    if (Number.isNaN(ta) && Number.isNaN(tb)) return (b.version ?? -1) - (a.version ?? -1);
-    if (Number.isNaN(ta)) return 1;
-    if (Number.isNaN(tb)) return -1;
-    return tb - ta;
-  });
+  const summary = summarizeHistory(versions, HISTORY_LIMIT, history?.truncated);
+  const ordered = orderHistory(versions);
 
   return (
     <Accordion variant="separated" radius="md" onChange={(v) => v === 'history' && load()}>
@@ -203,7 +199,9 @@ export const DeltaVersionHistory: React.FC<{ dcId: string }> = ({ dcId }) => {
             <Text fw={600}>Version history</Text>
             {history && (
               <Text size="xs" c="dimmed">
-                {versions.length} commit{versions.length === 1 ? '' : 's'}
+                {summary.commits} commit{summary.commits === 1 ? '' : 's'}
+                {summary.unmatched > 0 &&
+                  ` · ${summary.unmatched} unmatched record${summary.unmatched === 1 ? '' : 's'}`}
               </Text>
             )}
           </Group>
@@ -228,7 +226,7 @@ export const DeltaVersionHistory: React.FC<{ dcId: string }> = ({ dcId }) => {
                   icon={<Icon icon="mdi:cloud-off-outline" width={16} />}
                 >
                   The object store could not be reached, so this shows only what depictio
-                  recorded — commits written outside depictio are missing.
+                  recorded: commits written outside depictio are missing.
                 </Alert>
               )}
               {ordered.length === 0 ? (
@@ -251,7 +249,9 @@ export const DeltaVersionHistory: React.FC<{ dcId: string }> = ({ dcId }) => {
                     <Table.Tbody>
                       {ordered.map((entry, index) => (
                         <VersionRow
-                          key={`${entry.version ?? 'mongo'}-${entry.aggregation_version ?? index}`}
+                          // Unmatched rows share a null version, and nothing
+                          // guarantees their aggregation versions differ.
+                          key={`${entry.version ?? 'unmatched'}-${entry.aggregation_version ?? ''}-${index}`}
                           entry={entry}
                           isCurrent={
                             entry.version != null && entry.version === history.current_version
@@ -261,6 +261,11 @@ export const DeltaVersionHistory: React.FC<{ dcId: string }> = ({ dcId }) => {
                     </Table.Tbody>
                   </Table>
                 </Table.ScrollContainer>
+              )}
+              {summary.mayBeTruncated && (
+                <Text size="xs" c="dimmed">
+                  Showing the first {HISTORY_LIMIT} entries: the history may be longer.
+                </Text>
               )}
               <Code style={{ fontSize: 11, overflowWrap: 'anywhere' }}>
                 {history.delta_table_location}

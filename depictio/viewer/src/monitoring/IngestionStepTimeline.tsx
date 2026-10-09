@@ -13,6 +13,7 @@ import { Icon } from '@iconify/react';
 import type { MonitoringIngestionStep } from 'depictio-react-core';
 
 import { compactCount, formatDuration } from './format';
+import { activeStepIndex, orderSteps } from './runs';
 import { statusColor } from './tokens';
 
 /** Human labels for the counter keys the CLI emits. Unknown keys fall back to
@@ -51,6 +52,8 @@ function stepIcon(status: string): string {
       return 'mdi:minus-circle';
     case 'partial':
       return 'mdi:alert';
+    case 'interrupted':
+      return 'mdi:stop-circle';
     default:
       return 'mdi:circle-outline';
   }
@@ -88,19 +91,8 @@ export const IngestionStepTimeline: React.FC<{
     );
   }
 
-  // Steps arrive keyed by name and may be upserted out of order; sort by the
-  // explicit index when the CLI supplies one, else keep arrival order.
-  const ordered = [...steps].sort((a, b) => {
-    if (a.index != null && b.index != null) return a.index - b.index;
-    return 0;
-  });
-
-  const activeIndex = currentStep
-    ? ordered.findIndex((s) => s.name === currentStep)
-    : ordered.reduce(
-        (last, s, i) => (['success', 'failed', 'skipped', 'partial'].includes(s.status) ? i : last),
-        -1,
-      );
+  const ordered = orderSteps(steps);
+  const activeIndex = activeStepIndex(ordered, currentStep);
 
   return (
     <Timeline active={activeIndex} bulletSize={18} lineWidth={2}>

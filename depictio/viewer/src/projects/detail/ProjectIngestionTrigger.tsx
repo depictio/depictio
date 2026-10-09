@@ -12,7 +12,7 @@
  * on is noise rather than an affordance.
  */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Button, Group, Modal, Progress, Stack, Switch, Text, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 import { notifications } from '@mantine/notifications';
@@ -24,13 +24,24 @@ import {
   type JobStatusResponse,
 } from 'depictio-react-core';
 
-const TERMINAL = new Set(['success', 'failed', 'cancelled']);
+import { TERMINAL_JOB_STATUSES, followJob, type JobFollowEnd } from './followJob';
+
+/** What to tell the user when the server stops reporting the job. The run is
+ *  not known to have failed, so neither message says it did. */
+function refusedMessage(status: number, detail: string): string {
+  const where = 'The ingestion may still be running: its outcome will appear in the history.';
+  if (status === 404) {
+    return `The server no longer reports this job to you. It may have been started by another user, or have expired. ${where}`;
+  }
+  return `The server refused to report this job (${status}: ${detail}). ${where}`;
+}
 
 export const ProjectIngestionTrigger: React.FC<{
   projectId: string;
   /** Called once a run has been started, so the parent can switch to History. */
   onStarted?: (runId: string | null) => void;
-  /** Called when the job reaches a terminal state, to refresh the panel. */
+  /** Called when the button stops following the job: a terminal status, or
+   *  `'refused'` when the server would not report it. Refreshes the panel. */
   onFinished?: (status: string) => void;
 }> = ({ projectId, onStarted, onFinished }) => {
   const [status, setStatus] = useState<IngestionTriggerStatus | null>(null);
@@ -38,7 +49,21 @@ export const ProjectIngestionTrigger: React.FC<{
   const [overwrite, setOverwrite] = useState(false);
   const [starting, setStarting] = useState(false);
   const [job, setJob] = useState<JobStatusResponse | null>(null);
-  const pollRef = useRef<number | null>(null);
+  // Every await below can resolve after the component is gone. The run
+  // carries on server-side regardless; this only stops the bookkeeping.
+  const mountedRef = useRef(false);
+  const stopFollowingRef = useRef<(() => void) | null>(null);
+  const onFinishedRef = useRef(onFinished);
+  onFinishedRef.current = onFinished;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      stopFollowingRef.current?.();
+      stopFollowingRef.current = null;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,54 +77,49 @@ export const ProjectIngestionTrigger: React.FC<{
     };
   }, [projectId]);
 
-  const stopPolling = useCallback(() => {
-    if (pollRef.current != null) {
-      window.clearTimeout(pollRef.current);
-      pollRef.current = null;
+  const onFollowEnd = (end: JobFollowEnd) => {
+    stopFollowingRef.current = null;
+    if (end.kind === 'refused') {
+      // Free the button: nothing here can learn more about this job.
+      setJob(null);
+      onFinishedRef.current?.('refused');
+      notifications.show({
+        color: 'yellow',
+        title: 'Stopped following the ingestion',
+        message: refusedMessage(end.status, end.message),
+      });
+      return;
     }
-  }, []);
+    const next = end.job;
+    onFinishedRef.current?.(next.status);
+    // A run where some collections or joins failed still ends `success`, with
+    // the failures summarised in `error`.
+    const partial = next.status === 'success' && Boolean(next.error);
+    notifications.show({
+      color: partial ? 'yellow' : next.status === 'success' ? 'green' : 'red',
+      title: partial
+        ? 'Ingestion finished with errors'
+        : next.status === 'success'
+          ? 'Ingestion finished'
+          : 'Ingestion failed',
+      message: next.error || next.detail || `Job ${next.status}.`,
+    });
+  };
 
-  // Unmounting mid-ingestion must not leave a timer firing into a dead
-  // component — the run carries on server-side regardless.
-  useEffect(() => stopPolling, [stopPolling]);
-
-  const poll = useCallback(
-    (jobId: string) => {
-      const tick = async () => {
-        // Next delay comes from the response itself rather than from state:
-        // reading it from `job` would capture whatever was set when this
-        // callback was created, which is null on the first tick and stale
-        // after.
-        let delaySeconds = 3;
-        try {
-          const next = await fetchJob(jobId);
-          setJob(next);
-          if (TERMINAL.has(next.status)) {
-            onFinished?.(next.status);
-            notifications.show({
-              color: next.status === 'success' ? 'green' : 'red',
-              title: next.status === 'success' ? 'Ingestion finished' : 'Ingestion failed',
-              message: next.error || next.detail || `Job ${next.status}.`,
-            });
-            return;
-          }
-          delaySeconds = Math.max(1, next.poll_after_seconds ?? 3);
-        } catch {
-          // A transient poll failure is not a failed ingestion — back off a
-          // little and keep asking rather than declaring the run lost.
-          delaySeconds = 10;
-        }
-        pollRef.current = window.setTimeout(tick, delaySeconds * 1000);
-      };
-      pollRef.current = window.setTimeout(tick, 1500);
-    },
-    [onFinished],
-  );
+  const follow = (jobId: string) => {
+    stopFollowingRef.current?.();
+    stopFollowingRef.current = followJob(jobId, {
+      fetchJob,
+      onUpdate: setJob,
+      onEnd: onFollowEnd,
+    });
+  };
 
   const start = async () => {
     setStarting(true);
     try {
       const result = await triggerProjectIngestion(projectId, { overwrite });
+      if (!mountedRef.current) return;
       setConfirmOpen(false);
       onStarted?.(result.run_id);
       if (result.already_running) {
@@ -110,21 +130,22 @@ export const ProjectIngestionTrigger: React.FC<{
         });
       }
       setJob({ job_id: result.job_id, kind: 'project.ingest', status: 'pending' });
-      poll(result.job_id);
+      follow(result.job_id);
     } catch (err) {
+      if (!mountedRef.current) return;
       notifications.show({
         color: 'red',
         title: 'Could not start ingestion',
         message: (err as Error).message,
       });
     } finally {
-      setStarting(false);
+      if (mountedRef.current) setStarting(false);
     }
   };
 
   if (!status?.enabled) return null;
 
-  const running = job != null && !TERMINAL.has(job.status);
+  const running = job != null && !TERMINAL_JOB_STATUSES.has(job.status);
   const button = (
     <Button
       size="xs"

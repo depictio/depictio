@@ -33,6 +33,7 @@ import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { fetchCliAgents, triggerCliAgentRun, type MonitoringCliAgent } from 'depictio-react-core';
 
+import { formatDateTimeVerbose } from '../lib/datetime';
 import { matchesQuery, parseTs, relTime } from './format';
 import { Field, IdRow, PaneHeader, PathTip, SearchInput } from './primitives';
 import { ACCORDION_CLASSNAMES, ACCORDION_STYLES, PANE_SCROLL_H } from './tokens';
@@ -62,9 +63,9 @@ function isStale(agent: MonitoringCliAgent): boolean {
  *  reason rather than a bare disabled control, because "why can't I press
  *  this?" is otherwise unanswerable from the card. */
 function runNowBlockedReason(stale: boolean, active: boolean, pending: boolean): string | null {
-  if (stale) return 'No recent heartbeat — this watcher may never pick the request up';
+  if (stale) return 'No recent heartbeat: this watcher may never pick the request up';
   if (active) return 'A cycle is already running';
-  if (pending) return 'Already requested — the watcher claims it within a few seconds';
+  if (pending) return 'Already requested: the watcher claims it within a few seconds';
   return null;
 }
 
@@ -131,7 +132,7 @@ const AgentRow: React.FC<{ agent: MonitoringCliAgent; onTriggered: () => void }>
             <Tooltip
               label={
                 agent.backend === 'polling'
-                  ? 'Polling only — filesystem events are not reliable here (network mount)'
+                  ? 'Polling only: filesystem events are not reliable here (network mount)'
                   : `Change detection: ${agent.backend}`
               }
               withArrow
@@ -147,7 +148,7 @@ const AgentRow: React.FC<{ agent: MonitoringCliAgent; onTriggered: () => void }>
                 {agent.runs_total} runs
               </Text>
             )}
-            <Tooltip label={agent.heartbeat_at || 'never'} withArrow>
+            <Tooltip label={formatDateTimeVerbose(agent.heartbeat_at, 'never')} withArrow>
               <Text size="10px" c={stale ? 'red' : 'dimmed'} fw={stale ? 700 : 400}>
                 {relTime(agent.heartbeat_at)}
               </Text>

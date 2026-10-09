@@ -34,15 +34,16 @@ import {
   type MonitoringAppLog,
   type MonitoringHealth,
   type MonitoringIngestionRun,
-  type MonitoringIngestionStep,
   type MonitoringLiveEvent,
   type MonitoringPane,
   type MonitoringTaskEvent,
 } from 'depictio-react-core';
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { formatDateTimeVerbose } from '../lib/datetime';
 import {
   absTime,
+  clockTime,
   formatDuration,
   matchesQuery,
   spanMs,
@@ -65,7 +66,13 @@ import {
   PANE_SCROLL_H,
   statusColor,
 } from '../monitoring/tokens';
-import { usePolling, useLivePolling } from '../monitoring/usePolling';
+import {
+  createLiveFeed,
+  usePolling,
+  useLivePolling,
+  type LiveFeed,
+} from '../monitoring/usePolling';
+import { applyIngestionEvent, routeMonitoringEvent, runOrigin } from '../monitoring/runs';
 import { AgentsPane } from '../monitoring/AgentsPane';
 import { IngestionStepTimeline } from '../monitoring/IngestionStepTimeline';
 import { TriggerBadge } from '../monitoring/TriggerBadge';
@@ -346,63 +353,11 @@ function projectSelectData(
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
-/**
- * Apply a live ingestion event to the cached run list.
- *
- * Returns `null` to mean "I can't apply this" — no data yet, a different event
- * kind, or a run we've never seen (one that started after our last fetch).
- * `useLivePolling` turns that into a refetch, so an unknown run appears
- * promptly instead of being dropped.
- */
-function applyIngestionEvent(
-  current: MonitoringIngestionRun[] | null,
-  event: MonitoringLiveEvent,
-): MonitoringIngestionRun[] | null {
-  if (event.event_type !== 'ingestion_event' || !current) return null;
-  const payload = (event.payload ?? {}) as {
-    run_id?: string;
-    status?: string;
-    current_step?: string | null;
-    step?: MonitoringIngestionStep;
-    progress?: MonitoringIngestionRun['progress'];
-    counters?: Record<string, number>;
-  };
-  const runId = payload.run_id;
-  if (!runId) return null;
-
-  const index = current.findIndex((r) => r.run_id === runId);
-  if (index === -1) return null;
-
-  const run = current[index];
-  // Upsert the step by name — the server keys them the same way, so a step
-  // reported twice (start then finish) updates rather than duplicates.
-  let steps = run.steps ?? [];
-  if (payload.step) {
-    const stepIndex = steps.findIndex((s) => s.name === payload.step!.name);
-    steps =
-      stepIndex === -1
-        ? [...steps, payload.step]
-        : steps.map((s, i) => (i === stepIndex ? payload.step! : s));
-  }
-
-  const updated: MonitoringIngestionRun = {
-    ...run,
-    steps,
-    status: (payload.status as MonitoringIngestionRun['status']) ?? run.status,
-    current_step: payload.current_step !== undefined ? payload.current_step : run.current_step,
-    progress: payload.progress ?? run.progress,
-    counters: payload.counters ?? run.counters,
-  };
-  const next = [...current];
-  next[index] = updated;
-  return next;
-}
-
 const IngestionPane: React.FC<{
-  lastEvent: MonitoringLiveEvent | null;
+  feed: LiveFeed<MonitoringLiveEvent>;
   filters: IngestionFilters;
   onFiltersChange: (next: IngestionFilters) => void;
-}> = ({ lastEvent, filters, onFiltersChange }) => {
+}> = ({ feed, filters, onFiltersChange }) => {
   const { status, instance, projectId, q } = filters;
   const [auto, setAuto] = useState(true);
   // Controlled open rows: only the expanded run mounts its field grid + steps
@@ -451,7 +406,7 @@ const IngestionPane: React.FC<{
   const { data, loading, error, refresh } = useLivePolling<
     MonitoringIngestionRun[],
     MonitoringLiveEvent
-  >(load, auto, lastEvent, { patch: patchRuns });
+  >(load, auto, feed, { patch: patchRuns });
 
   // Select options accumulate over every response, seeded by one unfiltered
   // fetch, so narrowing to one instance doesn't shrink the list to that one.
@@ -573,14 +528,10 @@ const IngestionPane: React.FC<{
                       {r.status}
                     </Badge>
                   </Box>
-                  <Box w={44} style={{ flexShrink: 0 }}>
-                    <Badge
-                      size="xs"
-                      fullWidth
-                      color={r.source === 'ui' ? 'grape' : 'cyan'}
-                      variant="light"
-                    >
-                      {r.source === 'ui' ? 'UI' : 'CLI'}
+                  {/* Fits "upload" and "server"; the full label is in the details. */}
+                  <Box w={56} style={{ flexShrink: 0 }}>
+                    <Badge size="xs" fullWidth color={runOrigin(r).color} variant="light">
+                      {runOrigin(r).badge}
                     </Badge>
                   </Box>
                   {/* Sized for a typical hostname and not uppercased, which
@@ -614,7 +565,7 @@ const IngestionPane: React.FC<{
                   <SimpleGrid cols={{ base: 2, xs: 3, sm: 4 }} spacing="md" verticalSpacing="xs">
                     <Field label="Project">{r.project_name || '—'}</Field>
                     <Field label="User">{r.email || '—'}</Field>
-                    <Field label="Source">{r.source === 'ui' ? 'UI upload' : 'CLI'}</Field>
+                    <Field label="Source">{runOrigin(r).label}</Field>
                     <Field label="Command">{r.command || '—'}</Field>
                     <Field label="Instance">{r.cli_instance_label || '—'}</Field>
                     <Field label="Host">{r.cli_hostname || '—'}</Field>
@@ -893,14 +844,14 @@ const LogsPane: React.FC = () => {
                         {l.source}
                       </Badge>
                     </Box>
-                    <Tooltip label={l.ts} withArrow>
+                    <Tooltip label={formatDateTimeVerbose(l.ts)} withArrow>
                       <Text
                         size="xs"
                         c="dimmed"
                         w={72}
                         style={{ fontFamily: 'monospace', flexShrink: 0 }}
                       >
-                        {absTime(l.ts)}
+                        {clockTime(l.ts)}
                       </Text>
                     </Tooltip>
                     <Text size="xs" truncate style={{ fontFamily: 'monospace', flex: 1, minWidth: 0 }}>
@@ -1030,8 +981,9 @@ const AdminMonitoringPanel: React.FC<AdminMonitoringPanelProps> = ({
   onIngestionFiltersChange,
 }) => {
   const { isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
-  const [liveSignal, setLiveSignal] = useState(0);
-  const [lastEvent, setLastEvent] = useState<MonitoringLiveEvent | null>(null);
+  const [taskSignal, setTaskSignal] = useState(0);
+  const [watcherSignal, setWatcherSignal] = useState(0);
+  const [ingestionFeed] = useState(() => createLiveFeed<MonitoringLiveEvent>());
 
   // Match AdminApp's gate: single-user always allowed; only pure public/demo hides.
   const visible = isSingleUserMode || (!isPublicMode && !isDemoMode);
@@ -1058,16 +1010,21 @@ const AdminMonitoringPanel: React.FC<AdminMonitoringPanelProps> = ({
 
   // Live push, only connected when events are enabled server-side; otherwise
   // the panes keep working off their polling baseline. Two shapes on purpose:
-  // panes that refetch wholesale use the counter, while the ingestion pane
-  // takes the event itself so it can patch one run in place. Ingestion is the
-  // only pane whose event rate scales with the work being done; the others
-  // fire a handful of times per run.
+  // panes that refetch wholesale get a counter, bumped only for the events
+  // they show, while the ingestion pane subscribes to the events themselves
+  // so it can patch one run in place. Ingestion is the only pane whose event
+  // rate scales with the work being done: one event per step.
   const { status: liveStatus } = useMonitoringEvents({
     enabled: visible && eventsEnabled,
-    onEvent: useCallback((event: MonitoringLiveEvent) => {
-      setLastEvent(event);
-      setLiveSignal((n) => n + 1);
-    }, []),
+    onEvent: useCallback(
+      (event: MonitoringLiveEvent) => {
+        const route = routeMonitoringEvent(event);
+        if (route.tasks) setTaskSignal((n) => n + 1);
+        if (route.watchers) setWatcherSignal((n) => n + 1);
+        if (route.ingestion) ingestionFeed.publish(event);
+      },
+      [ingestionFeed],
+    ),
   });
 
   const body = useMemo(() => {
@@ -1075,21 +1032,21 @@ const AdminMonitoringPanel: React.FC<AdminMonitoringPanelProps> = ({
       case 'ingestion':
         return (
           <IngestionPane
-            lastEvent={lastEvent}
+            feed={ingestionFeed}
             filters={ingestionFilters}
             onFiltersChange={onIngestionFiltersChange}
           />
         );
       case 'watchers':
-        return <AgentsPane liveSignal={liveSignal} />;
+        return <AgentsPane liveSignal={watcherSignal} />;
       case 'logs':
         return <LogsPane />;
       case 'health':
         return <HealthPane />;
       default:
-        return <TasksPane liveSignal={liveSignal} />;
+        return <TasksPane liveSignal={taskSignal} />;
     }
-  }, [pane, liveSignal, lastEvent, ingestionFilters, onIngestionFiltersChange]);
+  }, [pane, taskSignal, watcherSignal, ingestionFeed, ingestionFilters, onIngestionFiltersChange]);
 
   if (!visible) {
     return (

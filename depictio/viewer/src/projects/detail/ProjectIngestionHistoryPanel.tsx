@@ -92,26 +92,35 @@ const ProjectIngestionHistoryPanel: React.FC<{
       {redacted && (
         <Text size="xs" c="dimmed">
           <Icon icon="mdi:eye-off-outline" width={12} style={{ verticalAlign: -2 }} /> Local paths
-          and host details are hidden — they describe the machine that ran the ingestion, not this
+          and host details are hidden: they describe the machine that ran the ingestion, not this
           project.
         </Text>
       )}
 
-      {!loading && filtered.length === 0 && (
+      {!loading && !error && runs.length > 0 && filtered.length === 0 && (
+        <Text size="xs" c="dimmed">
+          No ingestion runs match this search.
+        </Text>
+      )}
+
+      {!loading && !error && runs.length === 0 && (
         <Alert color="blue" variant="light" icon={<Icon icon="mdi:information-outline" />}>
           <Stack gap={4}>
             <Text size="xs">No ingestion runs recorded for this project yet.</Text>
             <Code block fz="10px">
-              depictio run --CLI-config-path ~/.depictio/CLI.yaml \{'\n'}
-              {'  '}--project-config-path ./project.yaml
+              depictio ingest results/ --server ~/.depictio/CLI.yaml
             </Code>
             <Text size="xs" c="dimmed">
               To keep it up to date automatically as new files land:
             </Text>
             <Code block fz="10px">
-              depictio watch --CLI-config-path ~/.depictio/CLI.yaml \{'\n'}
-              {'  '}--project-config-path ./project.yaml --write-mode replace-runs
+              depictio watch results/ --server ~/.depictio/CLI.yaml \{'\n'}
+              {'  '}--write-mode replace-runs
             </Code>
+            <Text size="xs" c="dimmed">
+              A project defined by its own YAML rather than a template is selected with
+              --project-config-path ./project.yaml.
+            </Text>
           </Stack>
         </Alert>
       )}

@@ -275,7 +275,7 @@ const ChangeChips: React.FC<{ dc: IngestionDataCollection }> = ({ dc }) => {
   }
   return (
     <Tooltip
-      label="Counted from the latest scan of each run — what the most recent ingestion changed, not an all-time total."
+      label="Counted from the latest scan of each run: what the most recent ingestion changed, not an all-time total."
       multiline
       w={280}
       withArrow

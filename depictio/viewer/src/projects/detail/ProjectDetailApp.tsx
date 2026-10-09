@@ -3575,7 +3575,7 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
           icon={<Icon icon="mdi:history" width={16} />}
           py={6}
         >
-          Viewing v{selectedVersion} — this is not the current data.
+          Viewing v{selectedVersion}: this is not the current data.
         </Alert>
       )}
       {error && (

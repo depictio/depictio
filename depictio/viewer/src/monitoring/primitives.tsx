@@ -22,6 +22,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { formatDateTimeVerbose } from '../lib/datetime';
 import { relTime, shortenPath } from './format';
 
 /** Small search box used in each pane header. */
@@ -119,8 +120,10 @@ export const IdRow: React.FC<{ label: string; value?: string | null }> = ({ labe
   </Group>
 );
 
+/** Relative age, with the full local and UTC timestamp on hover. The raw value
+ *  is naive UTC, so showing it as is would read as local time. */
 export const TimeText: React.FC<{ iso?: string | null }> = ({ iso }) => (
-  <Tooltip label={iso || 'n/a'} disabled={!iso} withArrow>
+  <Tooltip label={formatDateTimeVerbose(iso)} disabled={!iso} withArrow>
     <Text component="span" size="xs" c="dimmed">
       {relTime(iso)}
     </Text>

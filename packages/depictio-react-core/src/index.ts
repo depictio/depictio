@@ -34,6 +34,9 @@ export {
   gridBoxHeight,
   defaultLayoutForType,
 } from './api';
+// Thrown by the fetch helpers on a non-2xx response; `status` lets a poller
+// stop on a refusal instead of retrying it forever.
+export { HttpStatusError } from './api';
 export { default as ComponentRenderer } from './components/ComponentRenderer';
 export { default as ErrorBoundary } from './components/ErrorBoundary';
 export { default as ComponentSkeleton } from './components/ComponentSkeleton';

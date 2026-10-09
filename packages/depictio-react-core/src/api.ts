@@ -219,11 +219,24 @@ async function authFetch(url: string, init: RequestInit = {}): Promise<Response>
   return fetch(url, { ...init, headers: retryHeaders });
 }
 
+/** An HTTP failure that keeps its status code, so a caller can tell "the
+ *  server refused this" (asking again will not help) from a failure worth
+ *  retrying. The message is the one a plain `Error` carried before. */
+export class HttpStatusError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'HttpStatusError';
+    this.status = status;
+  }
+}
+
 /** Throw `Error("<prefix>: <status> <body-text>")` after reading the body as
  *  text. Used for the bulk of endpoints whose error envelope is irrelevant. */
 async function throwHttpError(res: Response, prefix: string): Promise<never> {
   const text = await res.text().catch(() => '');
-  throw new Error(`${prefix}: ${res.status} ${text}`.trimEnd());
+  throw new HttpStatusError(`${prefix}: ${res.status} ${text}`.trimEnd(), res.status);
 }
 
 /** Throw using FastAPI's `{detail}` envelope when present, otherwise fall back
@@ -243,7 +256,7 @@ async function throwHttpDetailError(
   } catch {
     // ignore non-JSON error bodies
   }
-  throw new Error(message);
+  throw new HttpStatusError(message, res.status);
 }
 
 /** 24-char hex id matching MongoDB ObjectId shape. Mirrors the format used by
@@ -2521,6 +2534,8 @@ export interface DeltaVersionEntry {
   metadata?: Record<string, string>;
   aggregation_version?: number | null;
   aggregation_time?: string | null;
+  /** The Delta commit a depictio record was written at, when it recorded one. */
+  delta_version?: number | null;
   by_email?: string | null;
   run_id?: string | null;
   trigger?: string | null;
@@ -2536,6 +2551,8 @@ export interface DeltaHistoryResponse {
    *  present — the UI says so rather than implying the table has no history. */
   degraded: boolean;
   versions: DeltaVersionEntry[];
+  /** True when the history holds more entries than `limit` returned. */
+  truncated?: boolean;
 }
 
 /** Commit history of a data collection's Delta table, newest first. */
@@ -4807,7 +4824,11 @@ export interface IngestionTriggerStatus {
   enabled: boolean;
   available: boolean;
   reason: string | null;
+  /** Counts for everyone; the paths themselves are sent to admins only. */
+  unreachable_count?: number;
   unreachable_locations?: string[];
+  outside_roots_count?: number;
+  outside_roots?: string[];
 }
 
 export async function fetchIngestionTriggerStatus(
