@@ -383,6 +383,34 @@ const EditorApp: React.FC = () => {
     setDashboard(d);
   }, []);
 
+  // Has the user done anything since the document last came from the server?
+  // react-grid-layout reports the layout it settles on as soon as it mounts:
+  // a stored layout compacted, `box-` ids bared, filter heights normalised.
+  // Saving that would write a change nobody made, and every write records a
+  // dashboard version, so opening an imported dashboard (or restoring one)
+  // would add a version by itself. Layout reports persist only once this is set.
+  const userActedRef = useRef(false);
+  useEffect(() => {
+    const arm = () => {
+      userActedRef.current = true;
+    };
+    window.addEventListener('pointerdown', arm, true);
+    window.addEventListener('keydown', arm, true);
+    return () => {
+      window.removeEventListener('pointerdown', arm, true);
+      window.removeEventListener('keydown', arm, true);
+    };
+  }, []);
+  /** Replace the document with the server's copy: the settled-layout report
+   *  that follows describes no edit, so it must not be saved. */
+  const applyServerDashboard = useCallback(
+    (d: DashboardData) => {
+      userActedRef.current = false;
+      applyDashboard(d);
+    },
+    [applyDashboard],
+  );
+
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
 
   // Editor route is owner-only. Visitors who land here without permission
@@ -410,7 +438,7 @@ const EditorApp: React.FC = () => {
     }
     Promise.all([fetchDashboard(dashboardId), fetchAllDashboards()])
       .then(([dash, all]) => {
-        applyDashboard(dash);
+        applyServerDashboard(dash);
         setAllDashboards(all);
         // Drop seeded filters whose emitting component no longer exists (it
         // was deleted while the user was in the builder) — a ghost filter
@@ -810,6 +838,8 @@ const EditorApp: React.FC = () => {
     (newLayout: Layout[]) => {
       const cur = dashboardRef.current;
       if (!cur) return;
+      // Not before the user has acted: see `userActedRef`.
+      if (!userActedRef.current) return;
       const next = ownLayoutOnly(newLayout, cur);
       // Skip no-op writes during the initial mount where react-grid-layout
       // emits the layout it was just given.
@@ -824,6 +854,7 @@ const EditorApp: React.FC = () => {
     (newLayout: Layout[]) => {
       const cur = dashboardRef.current;
       if (!cur) return;
+      if (!userActedRef.current) return;
       const next = ownLayoutOnly(newLayout, cur);
       const prev = cur.right_panel_layout_data;
       if (layoutsEqual(prev, next)) return;
@@ -2721,7 +2752,7 @@ const EditorApp: React.FC = () => {
         canDelete={isOwner}
         onRestored={() => {
           if (!dashboardId) return;
-          void fetchDashboard(dashboardId).then(applyDashboard).catch(() => undefined);
+          void fetchDashboard(dashboardId).then(applyServerDashboard).catch(() => undefined);
         }}
       />
 

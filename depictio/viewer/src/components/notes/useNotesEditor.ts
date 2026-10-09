@@ -88,7 +88,10 @@ export function useNotesEditor(
     editable: canEdit,
     onUpdate: ({ editor: ed }) => {
       if (!canEditRef.current) return;
-      const html = ed.getHTML();
+      // An empty document serialises as "<p></p>", not the "" it was loaded
+      // from. Saving that difference would write a change nobody made, and
+      // every write records a dashboard version.
+      const html = ed.isEmpty ? '' : ed.getHTML();
       if (html === lastSavedRef.current) return;
       scheduleSave(html);
     },
@@ -99,7 +102,9 @@ export function useNotesEditor(
   // they can actually type. Same the other way round, for safety.
   useEffect(() => {
     if (!editor) return;
-    if (editor.isEditable !== canEdit) editor.setEditable(canEdit);
+    // No update event: TipTap emits one by default, and `onUpdate` would save
+    // the notes back on every open, as re-serialised HTML nobody edited.
+    if (editor.isEditable !== canEdit) editor.setEditable(canEdit, false);
   }, [editor, canEdit]);
 
   // When the parent re-fetches the dashboard and feeds in different content
