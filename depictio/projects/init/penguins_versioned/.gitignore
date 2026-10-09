@@ -1,0 +1,9 @@
+# `data/` is the staging area: stage_batch.py copies one batch in at a time, and
+# it is the directory the project's `locations` point at. Its contents are a copy
+# of whichever batch is staged, so committing them would only duplicate
+# `batches/`.
+#
+# The directory itself is kept (via .gitkeep) because `depictio ingest` validates
+# the configured location as an existing directory before scanning.
+data/*
+!data/.gitkeep

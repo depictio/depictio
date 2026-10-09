@@ -1,0 +1,105 @@
+# Penguins (versioned): a demo project for multi-dataset, multi-version history.
+#
+# A companion to the plain `penguins` project, built from the same observations
+# but re-cut by field season so the data has an arrival order. Two collections
+# (physical_features and demographic_data) are ingested on different schedules,
+# so their Delta histories diverge, and one dashboard family is saved once per
+# batch. See README.md for the story and rebuild_demo.py to build it.
+#
+# Not seeded automatically: nothing in db_init, .db_seeds or STATIC_IDS points
+# here.
+#
+# `locations` is the container path, like every other init project. On a host,
+# rebuild_demo.py writes a temporary copy of this file with the host path in
+# its place (--data-root) and never edits this one.
+#
+# One persisted join, `penguins_complete` (both tables on individual_id), like
+# `penguins`. `depictio ingest` rebuilds it after every batch, whichever
+# collection the batch wrote, and registers each commit with its Delta version,
+# so every dashboard version stamps it like the two tables it reads. It moves
+# whenever either input moves, and writes nothing when neither did.
+#
+# Both tables also carry species, island and year, which is what lets one filter
+# narrow all three collections (filters match by column name). No link: link
+# resolution reads the source table live, which a pinned view must not do.
+#
+# Fixed ids, unique in this repository (prefix 56284517418915ace150), the join's
+# included: persist_joined_table uses the `id` below as the joined collection's.
+id: "56284517418915ace150a001"
+name: "Penguins Versioned Demo"
+project_type: "basic"
+is_public: true
+workflows:
+  - id: "56284517418915ace150a002"
+    name: "penguins_versioned_workflow"
+    engine:
+      name: "python"
+    description: "Palmer penguins, ingested season by season: two datasets on two schedules."
+    data_location:
+      structure: "sequencing-runs"
+      locations:
+        - /app/depictio/projects/init/penguins_versioned/data
+      # One run per field season. Anchored so nothing else under data/ is
+      # mistaken for a run.
+      runs_regex: "^season_\\d{4}$"
+    data_collections:
+      - id: "56284517418915ace150a003"
+        data_collection_tag: "physical_features"
+        description: "Morphometric measurements, one row per bird"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: recursive
+            scan_parameters:
+              regex_config:
+                pattern: "physical_features.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              individual_id: "Bird identifier, unique across species and seasons"
+              species: "Species name"
+              island: "Island the bird was sampled on"
+              year: "Field season"
+              bill_length_mm: "Bill length in millimeters"
+              bill_depth_mm: "Bill depth in millimeters"
+              flipper_length_mm: "Flipper length in millimeters"
+              body_mass_g: "Body mass in grams (2007 values recalibrated in batch 3, synthetic)"
+
+      - id: "56284517418915ace150a004"
+        data_collection_tag: "demographic_data"
+        description: "Census record: who, where, when, and sex"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          scan:
+            mode: recursive
+            scan_parameters:
+              regex_config:
+                pattern: "demographic_data.csv"
+          dc_specific_properties:
+            format: "CSV"
+            polars_kwargs:
+              separator: ","
+            columns_description:
+              individual_id: "Bird identifier, unique across species and seasons"
+              species: "Species name"
+              island: "Island the bird was sampled on"
+              year: "Field season"
+              sex: "Sex (9 missing values imputed in batch 5, synthetic)"
+
+joins:
+  # Measurements and census on one row per bird. depictio_run_id (the season) is
+  # added to the keys automatically, since both tables have it.
+  - id: "56284517418915ace150a005"
+    name: "penguins_complete"
+    description: "physical_features joined with demographic_data: body mass and sex on one row"
+    left_dc: "physical_features"
+    right_dc: "demographic_data"
+    on_columns:
+      - "individual_id"
+    how: "inner"
+    persist: true
+    workflow_name: "penguins_versioned_workflow"
