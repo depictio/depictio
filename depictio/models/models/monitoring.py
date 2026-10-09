@@ -22,6 +22,8 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from depictio.models.timestamps import utc_now_naive
+
 # Pseudo "dashboard id" used as the admin monitoring pub/sub channel. Reuses the
 # existing dashboard-scoped events plumbing (Redis channel
 # ``depictio:events:dashboard:__admin_monitoring__``) without a real dashboard;
@@ -68,8 +70,8 @@ class TaskEvent(BaseModel):
     args_repr: str = Field(default="", description="Truncated repr of task args/kwargs")
     dashboard_id: Optional[str] = Field(default=None, description="Dashboard id if applicable")
     dc_id: Optional[str] = Field(default=None, description="Data collection id if applicable")
-    #: Same correlation as AppLogRecord.run_id: lets a run's offloaded work be
-    #: listed alongside its steps instead of hunting through every task.
+    #: Lets a run's offloaded work be listed alongside its steps instead of
+    #: hunting through every task.
     run_id: Optional[str] = Field(default=None, description="Ingestion run this task belongs to")
     project_id: Optional[str] = Field(default=None, description="Project id if applicable")
     queue: Optional[str] = Field(default=None, description="Queue the task ran on")
@@ -328,21 +330,21 @@ class CliAgent(BaseModel):
     #: landing between the request and the claim would drop the request.
     run_requested_at: Optional[datetime] = Field(default=None)
     run_requested_by: Optional[str] = Field(default=None)
-    started_at: datetime = Field(default_factory=datetime.now)
-    heartbeat_at: datetime = Field(default_factory=datetime.now)
+    # Naive UTC, like every BSON date: ``expires_at`` drives a TTL index, which
+    # Mongo evaluates in UTC, so a local clock would evict agents early or late
+    # by the server's UTC offset.
+    started_at: datetime = Field(default_factory=utc_now_naive)
+    heartbeat_at: datetime = Field(default_factory=utc_now_naive)
     #: TTL anchor. Set to a few heartbeat intervals ahead so a missed beat does
     #: not evict a healthy agent, but a dead one clears quickly.
-    expires_at: datetime = Field(default_factory=datetime.now)
+    expires_at: datetime = Field(default_factory=utc_now_naive)
 
     model_config = ConfigDict(extra="forbid")
 
 
 # ── Application log ledger ──────────────────────────────────────────────────
 
-#: "cli" covers log lines shipped from a CLI run. A run that fails on an HPC
-#: login node otherwise leaves nothing server-side but a one-line error, and the
-#: operator has to ask the user for their terminal scrollback.
-LogSource = Literal["api", "celery", "cli"]
+LogSource = Literal["api", "celery"]
 
 
 class AppLogRecord(BaseModel):
@@ -355,9 +357,5 @@ class AppLogRecord(BaseModel):
     message: str = Field(default="", description="Formatted log message")
     pathname: Optional[str] = Field(default=None, description="Source file path")
     lineno: Optional[int] = Field(default=None, description="Source line number")
-    #: Correlates a log line with the ingestion run that produced it, so the
-    #: admin UI can show a run's logs rather than making the operator grep a
-    #: shared stream by timestamp.
-    run_id: Optional[str] = Field(default=None, description="Ingestion run this line belongs to")
 
     model_config = ConfigDict(extra="forbid")

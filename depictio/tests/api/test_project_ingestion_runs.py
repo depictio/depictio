@@ -27,7 +27,15 @@ def _run() -> dict:
         "email": "alice@example.org",
         "user_id": "u-alice",
         "trigger": "watch",
-        "steps": [{"name": "scan", "status": "success", "counters": {"files_new": 3}}],
+        "steps": [
+            {"name": "scan", "status": "success", "counters": {"files_new": 3}},
+            {
+                "name": "provisioning",
+                "status": "failed",
+                "detail": "Created account for alice@example.org",
+                "error": "The directory '/home/alice/runs' does not exist.",
+            },
+        ],
         "counters": {"files_new": 3},
         "data_collections": [
             {
@@ -107,3 +115,29 @@ class TestRedaction:
         redacted = _redact_run(weird, full=False)
         assert redacted["data_collections"] == ["not-a-dict"]
         assert redacted["errors"] == [None]
+
+    def test_step_free_text_is_removed_but_the_tally_kept(self):
+        """The CLI writes what it was doing into a step's detail and error.
+
+        That is how a scan failure carried a home directory and the
+        provisioning step an email, to every viewer of a public project.
+        """
+        redacted = _redact_run(_run(), full=False)
+
+        for step in redacted["steps"]:
+            assert "detail" not in step
+            assert "error" not in step
+        assert redacted["steps"][0]["counters"] == {"files_new": 3}
+        assert redacted["steps"][1]["status"] == "failed"
+        assert "alice" not in str(redacted["steps"])
+
+    def test_step_free_text_is_kept_for_full_access(self):
+        full = _redact_run(_run(), full=True)
+
+        assert full["steps"][1]["detail"] == "Created account for alice@example.org"
+
+    def test_step_redaction_does_not_mutate_the_input(self):
+        original = _run()
+        _redact_run(original, full=False)
+
+        assert original["steps"][1]["detail"] == "Created account for alice@example.org"

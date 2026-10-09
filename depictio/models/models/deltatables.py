@@ -79,6 +79,27 @@ class Aggregation(MongoModel):
         return value
 
 
+def latest_complete_aggregation(aggregations: list[dict] | None) -> dict | None:
+    """The newest stored aggregation whose column specs describe the table.
+
+    ``aggregation[-1]`` is the wrong answer for anything reading the schema: an
+    offloaded upsert appends its entry as ``pending`` with no specs while a job
+    computes them, and a row edit from the table-management endpoints records
+    none at all. Read naively, either one makes every column look removed.
+    Returns None when no entry qualifies (MultiQC never records specs).
+
+    Works on raw Mongo documents, since every reader holds one.
+    """
+    for aggregation in reversed(aggregations or []):
+        if not isinstance(aggregation, dict):
+            continue
+        if aggregation.get("aggregation_status", "complete") != "complete":
+            continue
+        if aggregation.get("aggregation_columns_specs"):
+            return aggregation
+    return None
+
+
 class FilterCondition(BaseModel):
     class Config:
         extra = "forbid"  # Reject unexpected fields

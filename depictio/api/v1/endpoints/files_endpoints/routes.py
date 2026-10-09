@@ -34,6 +34,11 @@ files_collection = db[settings.mongodb.collections.files_collection]
 #: a client can size its chunks instead of discovering the ceiling by failing.
 MAX_FILES_PER_BATCH = 5000
 
+#: Upper bound on one delete_batch request, files and runs alike. The request
+#: models enforce this constant and /utils/capabilities reports it, so the two
+#: cannot disagree.
+MAX_IDS_PER_DELETE_BATCH = MAX_FILES_PER_BATCH
+
 
 class UpsertFilesBatchRequest(BaseModel):
     files: list[File] = Field(..., max_length=MAX_FILES_PER_BATCH)
@@ -193,7 +198,7 @@ def _can_read_data_collection(data_collection_id: ObjectId, user_oid: ObjectId) 
 
 
 class DeleteFilesBatchRequest(BaseModel):
-    file_ids: list[str] = Field(..., min_length=1, max_length=5000)
+    file_ids: list[str] = Field(..., min_length=1, max_length=MAX_IDS_PER_DELETE_BATCH)
 
 
 @files_endpoint_router.post("/delete_batch")

@@ -41,6 +41,7 @@ from depictio.api.v1.endpoints.projects_endpoints.utils import (
     validate_workflow_uniqueness_in_project,
 )
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user, get_user_or_anonymous
+from depictio.api.v1.ingestion_roots import roots_refusal
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.projects import Project, ProjectPermissionRequest, ProjectResponse
 from depictio.models.models.users import Permission, UserBase
@@ -322,6 +323,9 @@ _OPERATOR_FIELDS = (
 # sample_rejected, which holds real paths the scan saw but did not match.
 _DC_PATH_FIELDS = ("locations", "scan_pattern", "sample_rejected")
 
+# A step's free text, written by the CLI from whatever it was doing.
+_STEP_TEXT_FIELDS = ("detail", "error")
+
 
 def _redact_run(run: dict, *, full: bool) -> dict:
     """Strip operator-machine details from a run unless the caller may see them.
@@ -331,10 +335,15 @@ def _redact_run(run: dict, *, full: bool) -> dict:
     anonymous one. Without redaction, publishing a project would also publish
     `/home/alice/...` and `hpc-login1` to strangers.
 
-    Kept for everyone: status, steps and their counters, progress, per-DC
-    tallies, error messages, timings, instance label, trigger. That is what
-    makes the pane useful to a viewer trying to understand whether the data
-    they are looking at is current.
+    Kept for everyone: status, steps with their counters and timings,
+    progress, per-DC tallies, run error messages, timings, instance label,
+    trigger. That is what makes the pane useful to a viewer trying to
+    understand whether the data they are looking at is current.
+
+    A step's free text is not kept: the CLI writes whatever it was doing into
+    ``detail`` and ``error``, which is how a scan failure ends up carrying
+    "The directory '/home/...' does not exist" and the provisioning step an
+    email address.
     """
     if full:
         return run
@@ -342,6 +351,14 @@ def _redact_run(run: dict, *, full: bool) -> dict:
     # Emails of other users are a directory leak in a public project.
     redacted.pop("email", None)
     redacted.pop("user_id", None)
+    steps = redacted.get("steps")
+    if isinstance(steps, list):
+        redacted["steps"] = [
+            {k: v for k, v in step.items() if k not in _STEP_TEXT_FIELDS}
+            if isinstance(step, dict)
+            else step
+            for step in steps
+        ]
     collections = redacted.get("data_collections")
     if isinstance(collections, list):
         redacted["data_collections"] = [
@@ -469,17 +486,39 @@ async def get_ingestion_trigger_status(
             "reason": "You need editor access to run an ingestion.",
         }
 
+    # Server paths go to admins only, here and in every refusal below: whether
+    # a path exists on this server is exactly what someone pointing a project
+    # at arbitrary paths wants to learn. Everyone else gets a count.
+    is_admin = bool(getattr(current_user, "is_admin", False))
+
+    # The allowlist first, so the existence check below only ever runs on
+    # paths inside it.
+    refusal, outside = await asyncio.to_thread(roots_refusal, project)
+    if refusal:
+        status = {
+            "enabled": True,
+            "available": False,
+            "reason": refusal,
+            "outside_roots_count": len(outside),
+        }
+        if is_admin and outside:
+            status["outside_roots"] = outside[:5]
+        return status
+
     unreachable = await asyncio.to_thread(_unreachable_data_locations, project)
     if unreachable:
-        return {
+        status = {
             "enabled": True,
             "available": False,
             "reason": (
                 "This server cannot read the project's data. Run the ingestion from a "
                 "machine that can see it."
             ),
-            "unreachable_locations": unreachable[:5],
+            "unreachable_count": len(unreachable),
         }
+        if is_admin:
+            status["unreachable_locations"] = unreachable[:5]
+        return status
     return {"enabled": True, "available": True, "reason": None}
 
 
@@ -493,7 +532,9 @@ async def trigger_project_ingestion(
 
     Off by default (``DEPICTIO_INGESTION_BROWSER_TRIGGER``) and useless where
     the API cannot see the data, so every precondition is checked here rather
-    than discovered by a task that fails ten minutes later.
+    than discovered by a task that fails ten minutes later. Every path the
+    project names must also sit inside ``DEPICTIO_INGESTION_ALLOWED_DATA_ROOTS``
+    (see ``ingestion_roots``); the task checks that again before it reads.
     """
     if not settings.ingestion.browser_trigger:
         raise HTTPException(status_code=404, detail="Browser-triggered ingestion is disabled.")
@@ -507,13 +548,21 @@ async def trigger_project_ingestion(
     if not _may_trigger_ingestion(project, current_user):
         raise HTTPException(status_code=403, detail="Editor access is required to run ingestion.")
 
+    is_admin = bool(getattr(current_user, "is_admin", False))
+    refusal, outside = await asyncio.to_thread(roots_refusal, project)
+    if refusal:
+        if is_admin and outside:
+            refusal += f" Outside: {', '.join(outside[:3])}"
+        raise HTTPException(status_code=403, detail=refusal)
+
     unreachable = await asyncio.to_thread(_unreachable_data_locations, project)
     if unreachable:
+        where = f": {', '.join(unreachable[:3])}" if is_admin else f" ({len(unreachable)})"
         raise HTTPException(
             status_code=409,
             detail=(
-                "This server cannot read the project's data locations: "
-                f"{', '.join(unreachable[:3])}. Run the ingestion from a machine that can."
+                f"This server cannot read the project's data locations{where}. "
+                "Run the ingestion from a machine that can."
             ),
         )
 
@@ -547,17 +596,36 @@ async def trigger_project_ingestion(
         ),
     )
 
-    async_result = run_project_ingestion.apply_async(
-        args=[
-            {
-                "job_id": job.job_id,
-                "run_id": run_id,
-                "project_id": str(project_id),
-                "user_id": str(current_user.id),
-                "overwrite": overwrite,
-            }
-        ]
-    )
+    try:
+        # Off the event loop: with the broker down, apply_async blocks on its
+        # connection retries before it raises.
+        async_result = await asyncio.to_thread(
+            run_project_ingestion.apply_async,
+            args=[
+                {
+                    "job_id": job.job_id,
+                    "run_id": run_id,
+                    "project_id": str(project_id),
+                    "user_id": str(current_user.id),
+                    "overwrite": overwrite,
+                }
+            ],
+        )
+    except Exception as exc:  # noqa: BLE001 - kombu raises several types for a dead broker
+        logger.error(f"Browser-triggered ingestion for project {project_id} not queued: {exc}")
+        # Fail the job, or find_active_job would answer "already running" for
+        # this project until the job's retention expires.
+        await asyncio.to_thread(
+            jobs_store.finish_job,
+            job.job_id,
+            status="failed",
+            error=f"The ingestion could not be queued: {exc}",
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="The ingestion could not be queued: the task broker is unreachable. "
+            "Try again once the worker queue is back.",
+        ) from exc
     await asyncio.to_thread(jobs_store.attach_task, job.job_id, async_result.id)
     logger.info(f"Browser-triggered ingestion for project {project_id}: job {job.job_id}")
     return {"job_id": job.job_id, "run_id": run_id, "already_running": False}

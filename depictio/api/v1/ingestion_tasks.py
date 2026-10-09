@@ -12,7 +12,9 @@ specs. That scan is the whole reason the endpoint used to time out.
 
 ``run_project`` runs a whole project ingestion — scan, process, joins — on the
 server, for the browser-triggered path. It only works where the API can see the
-same filesystem the data sits on, which the endpoint checks before dispatching.
+same filesystem the data sits on, which the endpoint checks before dispatching,
+and it reads nothing outside ``DEPICTIO_INGESTION_ALLOWED_DATA_ROOTS``, which
+both the endpoint and the task check (see ``ingestion_roots``).
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from datetime import datetime
 from typing import Any
 
 from bson import ObjectId
+from celery.exceptions import SoftTimeLimitExceeded
 
 from depictio.api.celery_app import celery_app
 from depictio.api.v1.configs.logging_init import logger
@@ -74,7 +77,10 @@ def finalize_deltatable_upsert(self, payload: dict[str, Any]) -> dict[str, Any]:
     dc_oid = ObjectId(dc_id)
 
     try:
-        jobs_store.mark_job_running(job_id, step="read_delta", detail=f"Reading {location}")
+        if not jobs_store.mark_job_running(job_id, step="read_delta", detail=f"Reading {location}"):
+            # Cancelled while still queued: the revoke missed this worker.
+            logger.info(f"finalize_upsert: job {job_id} is already terminal, not running it")
+            return {"job_id": job_id, "skipped": "job already terminal"}
 
         project = projects_collection.find_one({"workflows.data_collections._id": dc_oid}) or {}
         dc_data = next(
@@ -254,6 +260,7 @@ def run_project_ingestion(self, payload: dict[str, Any]) -> dict[str, Any]:
     as every other run.
     """
     from depictio.api.v1.db import projects_collection
+    from depictio.api.v1.ingestion_roots import allowed_roots, roots_refusal
     from depictio.api.v1.jobs import store as jobs_store
     from depictio.api.v1.monitoring import store as monitoring_store
     from depictio.models.models.monitoring import IngestionRun
@@ -267,11 +274,25 @@ def run_project_ingestion(self, payload: dict[str, Any]) -> dict[str, Any]:
 
     run_opened = False
     try:
-        jobs_store.mark_job_running(job_id, step="prepare", detail="Loading project")
+        if not jobs_store.mark_job_running(job_id, step="prepare", detail="Loading project"):
+            # Cancelled while still queued: the revoke missed this worker.
+            logger.info(f"run_project: job {job_id} is already terminal, not running it")
+            return {"job_id": job_id, "skipped": "job already terminal"}
 
         project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
         if not project_doc:
             raise ValueError(f"Project {project_id} no longer exists")
+        # Checked again here, not only at trigger time: the project or the
+        # setting may have changed while the job sat in the queue, and this is
+        # the last point before anything is read.
+        refusal, outside = roots_refusal(project_doc)
+        if refusal:
+            if outside:
+                logger.warning(
+                    f"run_project: {project_id} names paths outside the roots: {outside}"
+                )
+            raise PermissionError(refusal)
+        roots = allowed_roots()
         project = Project.model_validate(ProjectBeanie.from_mongo(project_doc).model_dump())
 
         cli_config = build_server_cli_config(user_id)
@@ -319,6 +340,7 @@ def run_project_ingestion(self, payload: dict[str, Any]) -> dict[str, Any]:
 
         processed = 0
         failed: list[str] = []
+        refused: list[dict[str, Any]] = []
         total_dcs = sum(len(wf.data_collections) for wf in project.workflows)
         for workflow in project.workflows:
             for dc in workflow.data_collections:
@@ -331,6 +353,15 @@ def run_project_ingestion(self, payload: dict[str, Any]) -> dict[str, Any]:
                     progress={"current": processed + len(failed), "total": total_dcs},
                 )
                 try:
+                    # After the scan, before the first read of any content: a
+                    # symlink inside an allowed root can still point out of it,
+                    # and so can a file registered by an earlier CLI run.
+                    escaped = _registered_files_outside_roots(getattr(dc, "id", None), roots)
+                    if escaped:
+                        raise _OutsideRoots(
+                            f"{escaped} registered file(s) resolve outside the "
+                            "directories this server may ingest from"
+                        )
                     process_result = process_project_helper(
                         CLI_config=cli_config,
                         project_config=project,
@@ -361,8 +392,25 @@ def run_project_ingestion(self, payload: dict[str, Any]) -> dict[str, Any]:
                         workflow_name=workflow.workflow_tag,
                         data_collection_tag=tag,
                     ):
+                        _refuse_images_outside_roots(image_dc, roots)
                         upload_collection_images(image_dc, cli_config, overwrite=overwrite)
                     processed += 1
+                except SoftTimeLimitExceeded:
+                    # A cancel (SIGUSR1) or the soft time limit: stop the run
+                    # here rather than count one failed collection and go on
+                    # to the next.
+                    raise
+                except _OutsideRoots as exc:
+                    logger.error(f"run_project: DC {tag} refused: {exc}")
+                    failed.append(tag)
+                    refused.append(
+                        {
+                            "stage": "process",
+                            "kind": "outside_data_roots",
+                            "message": str(exc),
+                            "dc_tag": tag,
+                        }
+                    )
                 except Exception as exc:  # noqa: BLE001 - one bad DC must not sink the run
                     logger.error(f"run_project: DC {tag} failed: {exc}")
                     failed.append(tag)
@@ -381,6 +429,7 @@ def run_project_ingestion(self, payload: dict[str, Any]) -> dict[str, Any]:
         )
 
         joins_detail = "no joins defined"
+        failed_joins: list[str] = []
         if getattr(project, "joins", None):
             _step(run_id, "joins", "running", "Executing joins")
             from depictio.cli.cli.utils.joins import process_project_joins
@@ -394,11 +443,25 @@ def run_project_ingestion(self, payload: dict[str, Any]) -> dict[str, Any]:
                 auto_process_dependencies=True,
             )
             n_ok = len(join_result.get("processed") or [])
-            n_err = len(join_result.get("errors") or [])
-            joins_detail = f"{n_ok} processed / {n_err} failed"
-            _step(run_id, "joins", "success" if not n_err else "partial", joins_detail)
+            failed_joins = [
+                str(err.get("join")) if isinstance(err, dict) else str(err)
+                for err in join_result.get("errors") or []
+            ]
+            joins_detail = f"{n_ok} processed / {len(failed_joins)} failed"
+            _step(run_id, "joins", "partial" if failed_joins else "success", joins_detail)
         else:
             _step(run_id, "joins", "skipped", joins_detail)
+
+        # A failed join leaves its joined table stale, so a run whose every
+        # collection succeeded is still only partial when a join did not.
+        if failed_joins and status == "success":
+            status = "partial"
+        problems = []
+        if failed:
+            problems.append(f"{len(failed)} data collection(s) failed: {', '.join(failed)}")
+        if failed_joins:
+            problems.append(f"{len(failed_joins)} join(s) failed: {', '.join(failed_joins)}")
+        summary = "; ".join(problems) or None
 
         outcome = {
             "project_id": project_id,
@@ -406,22 +469,22 @@ def run_project_ingestion(self, payload: dict[str, Any]) -> dict[str, Any]:
             "data_collections_processed": processed,
             "data_collections_failed": failed,
             "joins": joins_detail,
+            "joins_failed": failed_joins,
         }
-        monitoring_store.finish_ingestion_run(
-            run_id,
-            status=status,
-            error=f"{len(failed)} data collection(s) failed: {', '.join(failed)}"
-            if failed
-            else None,
-        )
+        run_fields: dict[str, Any] = {"status": status, "error": summary}
+        if refused:
+            run_fields["errors"] = refused
+        monitoring_store.finish_ingestion_run(run_id, **run_fields)
         # A partial run is a successful job: the job tracks whether the work ran,
-        # the run ledger above carries the per-DC outcome.
+        # the run ledger above carries the per-DC outcome. The job's error still
+        # says what went wrong, so the caller polling it is not told only
+        # "success".
         all_failed = status == "failed"
         jobs_store.finish_job(
             job_id,
             status="failed" if all_failed else "success",
             result=outcome,
-            error=f"All {len(failed)} data collections failed" if all_failed else None,
+            error=summary,
         )
         logger.info(f"run_project: {project_id} finished {status} ({processed} DCs)")
         return outcome
@@ -429,8 +492,15 @@ def run_project_ingestion(self, payload: dict[str, Any]) -> dict[str, Any]:
     except Exception as exc:
         logger.exception(f"run_project failed for job {job_id}: {exc}")
         if run_opened:
+            # A cancel reaches a prefork worker as SoftTimeLimitExceeded, which
+            # lands here: record it as the interruption it is, not a failure.
             try:
-                monitoring_store.finish_ingestion_run(run_id, status="failed", error=str(exc))
+                cancelled = (jobs_store.get_job(job_id) or {}).get("status") == "cancelled"
+                monitoring_store.finish_ingestion_run(
+                    run_id,
+                    status="interrupted" if cancelled else "failed",
+                    error="Cancelled" if cancelled else str(exc),
+                )
             except Exception as inner:  # pragma: no cover - defensive
                 logger.error(f"run_project: could not close run {run_id}: {inner}")
         try:
@@ -438,6 +508,57 @@ def run_project_ingestion(self, payload: dict[str, Any]) -> dict[str, Any]:
         except Exception as inner:  # pragma: no cover - defensive
             logger.error(f"run_project: could not record failure for {job_id}: {inner}")
         raise
+
+
+class _OutsideRoots(Exception):
+    """A data collection reads a file outside the allowed data roots."""
+
+
+def _registered_files_outside_roots(dc_id: Any, roots: list[str]) -> int:
+    """How many of a data collection's registered files resolve outside ``roots``.
+
+    Read from the files collection, which is what the process step reads from,
+    so it covers whatever the scan just registered and whatever an earlier run
+    left there.
+    """
+    from depictio.api.v1.db import files_collection
+    from depictio.api.v1.ingestion_roots import is_within_roots
+
+    if dc_id is None:
+        return 0
+    cursor = files_collection.find(
+        {"data_collection_id": ObjectId(str(dc_id))}, {"file_location": 1, "_id": 0}
+    )
+    return sum(
+        1
+        for doc in cursor
+        if doc.get("file_location") and not is_within_roots(str(doc["file_location"]), roots)
+    )
+
+
+def _refuse_images_outside_roots(image_dc: Any, roots: list[str]) -> None:
+    """Raise when an image the upload would read resolves outside ``roots``.
+
+    The image directory itself was checked before the run started; this
+    catches a symlinked image file inside it.
+    """
+    from depictio.api.v1.ingestion_roots import is_within_roots
+    from depictio.cli.cli.utils.image_upload import (
+        resolve_local_images_path,
+        scan_directory_for_images,
+    )
+
+    props = image_dc.config.dc_specific_properties
+    source = resolve_local_images_path(props.local_images_path)
+    if not source.is_dir():
+        return  # the upload reports a missing directory itself
+    escaped = sum(
+        1 for img in scan_directory_for_images(source) if not is_within_roots(str(img), roots)
+    )
+    if escaped:
+        raise _OutsideRoots(
+            f"{escaped} image file(s) resolve outside the directories this server may ingest from"
+        )
 
 
 def _merge_scan_signals(accumulated: dict, result: Any) -> dict:

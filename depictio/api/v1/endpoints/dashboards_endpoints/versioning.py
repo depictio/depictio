@@ -51,6 +51,7 @@ from depictio.models.models.dashboard_versions import (
     VersionKind,
 )
 from depictio.models.models.dashboards import DashboardData
+from depictio.models.models.deltatables import latest_complete_aggregation
 from depictio.models.timestamps import utc_now_naive
 
 #: Fields never carried into a snapshot.
@@ -357,6 +358,13 @@ def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
 
         aggregations = (dt_doc or {}).get("aggregation") or []
         latest = aggregations[-1] if aggregations else None
+        # Data and schema are read from different entries on purpose. The
+        # newest entry names the Delta commit the table is at, even while an
+        # offload is still computing its column specs, so it is what a later
+        # time-travel read must pin. Its specs may not exist yet (a pending
+        # offload, a row edit), so the schema comes from the newest entry that
+        # has them, or the stamp would record an empty schema.
+        described = latest_complete_aggregation(aggregations) or {}
 
         # Every stamp starts at ``version_kind="none"``; only a Delta
         # aggregation with a recorded commit moves it.
@@ -365,7 +373,7 @@ def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
             stamp.delta_version = latest.get("delta_version")
             stamp.delta_commit_timestamp = latest.get("delta_commit_timestamp")
             stamp.row_count = latest.get("rows_total")
-            stamp.columns = schema_integrity.columns_from_aggregation(latest)
+            stamp.columns = schema_integrity.columns_from_aggregation(described)
             stamp.schema_hash = schema_integrity.generate_schema_hash(stamp.columns)
             if stamp.delta_version is None:
                 # Pre-provenance aggregations, and every UI upload, land here.
@@ -377,7 +385,7 @@ def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
             # the instant so a later backfill has an anchor.
             stamp.reason = "manifest_versioning_not_enabled"
             if latest:
-                stamp.columns = schema_integrity.columns_from_aggregation(latest)
+                stamp.columns = schema_integrity.columns_from_aggregation(described)
                 stamp.schema_hash = schema_integrity.generate_schema_hash(stamp.columns)
         elif kind == "asset":
             stamp.reason = "asset_versioning_not_enabled"

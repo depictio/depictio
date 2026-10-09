@@ -91,3 +91,43 @@ class TestAppLogRecord:
 def test_admin_channel_constant():
     # The frontend hook hardcodes the same sentinel; keep them in sync.
     assert ADMIN_MONITORING_CHANNEL == "__admin_monitoring__"
+
+
+@pytest.fixture
+def far_from_utc(monkeypatch: pytest.MonkeyPatch):
+    """Run with a local clock 14 hours ahead of UTC."""
+    import time
+
+    monkeypatch.setenv("TZ", "Pacific/Kiritimati")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+def test_agent_and_job_default_times_are_naive_utc(far_from_utc):
+    """BSON dates are UTC: a TTL index and the viewer both read them that way.
+
+    A local default put a watcher's ``expires_at`` 14 hours late here, and
+    evicted it about a minute after each heartbeat west of UTC.
+    """
+    from datetime import datetime, timezone
+
+    from depictio.models.models.jobs import Job
+    from depictio.models.models.monitoring import CliAgent
+
+    before = datetime.now(timezone.utc).replace(tzinfo=None)
+    agent = CliAgent(agent_id="a1")
+    job = Job(job_id="j1", kind="project.ingest")
+
+    for value in (agent.started_at, agent.heartbeat_at, agent.expires_at, job.submitted_at):
+        assert value.tzinfo is None
+        assert abs((value - before).total_seconds()) < 60
+
+
+def test_log_records_have_no_cli_source():
+    """Nothing ships CLI log lines, so the ledger does not pretend to accept them."""
+    with pytest.raises(ValidationError):
+        AppLogRecord(message="hello", source="cli")
+    with pytest.raises(ValidationError):
+        AppLogRecord(message="hello", run_id="r1")

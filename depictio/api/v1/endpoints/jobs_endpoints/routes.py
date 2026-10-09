@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -29,6 +28,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.api.v1.jobs import store
 from depictio.models.models.jobs import TERMINAL_JOB_STATES, JobStatus
 from depictio.models.models.users import User
+from depictio.models.timestamps import utc_now_naive
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ def _poll_hint(doc: dict[str, Any]) -> Optional[float]:
     started = doc.get("started_at") or doc.get("submitted_at")
     if started is None:
         return _POLL_FAST_SECONDS
-    elapsed = (datetime.now() - started).total_seconds()
+    elapsed = (utc_now_naive() - started).total_seconds()
     return _POLL_SLOW_SECONDS if elapsed > _POLL_SLOW_AFTER_SECONDS else _POLL_FAST_SECONDS
 
 
@@ -114,11 +114,13 @@ async def cancel_job(
     the document is what every reader trusts, and a revoke that succeeds while
     the document still says ``running`` would leave a job that never resolves.
 
-    ``terminate=True`` only works on a prefork pool — the ingestion worker runs
-    prefork for exactly this reason. On a threads/solo pool the revoke is a
-    no-op for an already-started task and the job will finish anyway; the
-    document still reads ``cancelled``, and the task's own terminal write is
-    suppressed because ``finish_job`` is not reached on a revoked task.
+    ``terminate=True`` only works on a prefork pool, which is why the
+    ingestion worker runs prefork. There the task receives SIGUSR1, which
+    billiard raises inside it as ``SoftTimeLimitExceeded``, so its failure
+    handler still runs. On a threads/solo pool the revoke is a no-op for an
+    already-started task, which finishes anyway. Either way the document keeps
+    reading ``cancelled``: ``finish_job`` and ``mark_job_running`` only write
+    over a non-terminal status, so the task's own late writes are dropped.
     """
     doc = _owned_or_404(await asyncio.to_thread(store.get_job, job_id), current_user)
     if doc.get("status") in TERMINAL_JOB_STATES:

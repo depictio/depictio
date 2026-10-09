@@ -396,7 +396,10 @@ async def capabilities(current_user=Depends(get_current_user)):
     Authenticated rather than public: the limits and feature set are
     operational detail, and /status already covers liveness.
     """
-    from depictio.api.v1.endpoints.files_endpoints.routes import MAX_FILES_PER_BATCH
+    from depictio.api.v1.endpoints.files_endpoints.routes import (
+        MAX_FILES_PER_BATCH,
+        MAX_IDS_PER_DELETE_BATCH,
+    )
 
     features = [
         "files.delete_batch",
@@ -419,9 +422,11 @@ async def capabilities(current_user=Depends(get_current_user)):
     return {
         "api_version": get_version(),
         "features": features,
+        # The constants the request models enforce, never a setting: a limit
+        # reported here that the endpoint does not apply sizes clients wrong.
         "limits": {
             "max_files_per_batch": MAX_FILES_PER_BATCH,
-            "max_ids_per_delete_batch": settings.ingestion.max_ids_per_delete_batch,
+            "max_ids_per_delete_batch": MAX_IDS_PER_DELETE_BATCH,
         },
     }
 

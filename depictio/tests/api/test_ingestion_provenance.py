@@ -57,6 +57,27 @@ class TestDeltaIdentityHash:
 
         assert delta_identity_hash(location, {}) != before
 
+    def test_reads_the_add_actions_without_a_future_warning(self, tmp_path, monkeypatch):
+        """deltalake 1.x hands back an arro3 table, which ``pl.from_arrow`` flags.
+
+        In polars 2.0 that call returns a Series, and the hash would silently
+        drop to the file-list fallback; the warning is the early signal.
+        """
+        import warnings
+
+        from depictio.api.v1.endpoints.deltatables_endpoints import utils
+
+        location = str(tmp_path / "dc")
+        pl.DataFrame({"a": [1, 2, 3]}).write_delta(location)
+        fallbacks: list[str] = []
+        monkeypatch.setattr(utils.logger, "warning", fallbacks.append)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", FutureWarning)
+            delta_identity_hash(location, {})
+
+        assert fallbacks == [], "fell back to hashing the file list"
+
 
 def _aggregation(version: int, specs: list[dict]) -> dict:
     return {"aggregation_version": version, "aggregation_columns_specs": specs}

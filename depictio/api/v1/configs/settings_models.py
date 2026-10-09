@@ -739,19 +739,6 @@ class CeleryConfig(BaseSettings):
         description="Queue for offloaded ingestion tasks, consumed by the dedicated "
         "ingestion worker so a 20-minute table read cannot starve dashboard callbacks.",
     )
-    ingestion_worker_concurrency: int = Field(
-        default=2,
-        description="Prefork processes on the ingestion worker. Low on purpose: profiling "
-        "a table's columns holds whole columns in memory (order statistics, distinct "
-        "counts), so memory, not CPU, is the binding constraint, and Polars is already "
-        "multi-threaded.",
-    )
-    ingestion_task_soft_time_limit: int = Field(
-        default=1800, description="Soft time limit for ingestion tasks (30min)"
-    )
-    ingestion_task_time_limit: int = Field(
-        default=2100, description="Hard time limit for ingestion tasks (35min)"
-    )
 
     # Monitoring settings
     worker_send_task_events: bool = Field(default=True, description="Enable task event monitoring")
@@ -1066,11 +1053,6 @@ class MonitoringConfig(BaseSettings):
         description="How long a CLI agent's heartbeat stays valid. Several beats "
         "long, so one missed heartbeat does not evict a healthy watcher.",
     )
-    cli_log_shipping: bool = Field(
-        default=True,
-        description="Accept log lines shipped from CLI runs into the app_logs ledger. "
-        "Telemetry only — it can never affect an ingestion's outcome.",
-    )
     live_updates: bool = Field(
         default=True,
         description="Push live task/ingestion status changes over the events WebSocket "
@@ -1129,24 +1111,15 @@ class IngestionConfig(BaseSettings):
     """Server-side limits and opt-ins for the data-ingestion path.
 
     Everything that changes *behaviour* defaults to off, so an existing
-    deployment upgrades without any change in what it does. Only the limits —
-    which merely make an existing implicit ceiling explicit — are active by
+    deployment upgrades without any change in what it does. Only the step
+    throttle, which merely makes an implicit ceiling explicit, is active by
     default.
     """
 
-    max_files_per_batch: int = Field(
-        default=5000, description="Largest accepted /files/upsert_batch payload"
-    )
-    max_ids_per_delete_batch: int = Field(
-        default=5000, description="Largest accepted delete_batch payload"
-    )
     step_updates_per_minute: int = Field(
         default=60,
         description="Non-terminal ingestion-step updates accepted per run per minute. "
         "Terminal steps always pass, so a run's final tally is never throttled away.",
-    )
-    delta_history_timeout_seconds: float = Field(
-        default=20.0, description="Deadline for reading a Delta table's commit history"
     )
     async_deltatable_upsert: bool = Field(
         default=False,
@@ -1164,11 +1137,37 @@ class IngestionConfig(BaseSettings):
             "project page. Only meaningful where the API can read the same "
             "filesystem the data sits on (a shared PVC, a mounted export) — on a "
             "deployment whose data lives on an HPC node the API cannot see, the "
-            "endpoint rejects the request. Requires DEPICTIO_JOBS_ENABLED=true."
+            "endpoint rejects the request. Requires DEPICTIO_JOBS_ENABLED=true and "
+            "DEPICTIO_INGESTION_ALLOWED_DATA_ROOTS."
+        ),
+    )
+    allowed_data_roots: list[str] | str = Field(
+        default_factory=list,
+        description=(
+            "Server directories a browser-triggered ingestion may read. Set via "
+            "DEPICTIO_INGESTION_ALLOWED_DATA_ROOTS as a comma-separated list or a JSON "
+            "list (e.g. '/data/runs,/mnt/shared'). Any authenticated user can create a "
+            "project and name any path as its data location, so this is what stops a "
+            "trigger from reading another group's runs or the server's own files. Every "
+            "data location, single-file scan path and image directory of the project must "
+            "resolve (symlinks followed) inside one of these roots, and so must every file "
+            "the scan registers. Empty by default, which refuses every trigger."
         ),
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_INGESTION_")
+
+    @model_validator(mode="after")
+    def _normalise_allowed_data_roots(self) -> "IngestionConfig":
+        # Accept the comma-separated form as well as pydantic-settings' JSON list,
+        # mirroring cors_allowed_origins.
+        if isinstance(self.allowed_data_roots, str):
+            object.__setattr__(
+                self,
+                "allowed_data_roots",
+                [r.strip() for r in self.allowed_data_roots.split(",") if r.strip()],
+            )
+        return self
 
 
 class JobsConfig(BaseSettings):

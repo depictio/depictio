@@ -33,6 +33,8 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from depictio.models.timestamps import utc_now_naive
+
 # ``pending`` covers both "queued" and "not yet picked up"; the distinction is
 # only visible in TaskEvent and is not part of the client contract.
 JobState = Literal["pending", "running", "success", "failed", "cancelled"]
@@ -80,9 +82,9 @@ class Job(BaseModel):
     data_collection_id: Optional[str] = None
     ingestion_run_id: Optional[str] = None
 
-    # Unique per (user_id, kind, idempotency_key) via a sparse index. A client
-    # that resubmits after a network drop re-attaches to the in-flight job
-    # instead of enqueuing a duplicate.
+    # Unique per (user_id, kind, idempotency_key), for keyed jobs only: the
+    # index is partial on a string key. A client that resubmits after a network
+    # drop re-attaches to the in-flight job instead of enqueuing a duplicate.
     idempotency_key: Optional[str] = None
 
     celery_task_id: Optional[str] = None
@@ -98,7 +100,9 @@ class Job(BaseModel):
     result_truncated: bool = False
     error: Optional[str] = None
 
-    submitted_at: datetime = Field(default_factory=datetime.now)
+    # Naive UTC, like every BSON date: the TTL index on ``expires_at`` is
+    # evaluated in UTC, and the viewer reads naive timestamps as UTC.
+    submitted_at: datetime = Field(default_factory=utc_now_naive)
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     expires_at: Optional[datetime] = None

@@ -10,7 +10,7 @@ three independent ways, each on its own enough to make them return nothing:
   never written to anywhere in the codebase — collections live embedded at
   ``projects.workflows[].data_collections[]``;
 * they read column specs from ``config.columns_specs``, which does not exist;
-  the schema lives at ``deltatables.aggregation[-1].aggregation_columns_specs``.
+  the schema lives on the aggregation, in ``aggregation_columns_specs``.
 
 Because both the producing and the checking side were broken symmetrically,
 the check compared one empty column list against another and reported
@@ -31,6 +31,7 @@ from bson import ObjectId
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import deltatables_collection, projects_collection
+from depictio.models.models.deltatables import latest_complete_aggregation
 
 #: Component fields that name a column. Surveyed across every seeded dashboard;
 #: the map/table entries are why a card-and-figure-only check would miss most
@@ -151,7 +152,9 @@ def read_dc_schema(dc_id: str) -> Optional[dict[str, Any]]:
     if not aggregations:
         return None
 
-    latest = aggregations[-1] or {}
+    # The newest entry that knows its columns: a pending offload or a row edit
+    # records none, and reading one would report every column as removed.
+    latest = latest_complete_aggregation(aggregations) or {}
     columns = columns_from_aggregation(latest)
     return {
         "columns": columns,

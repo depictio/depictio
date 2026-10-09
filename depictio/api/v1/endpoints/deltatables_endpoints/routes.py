@@ -7,7 +7,7 @@ upsert, fetch, batch existence checks, and shape queries.
 
 import asyncio
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 
 import boto3
 import polars as pl
@@ -36,6 +36,7 @@ from depictio.models.models.deltatables import (
     Aggregation,
     DeltaTableAggregated,
     UpsertDeltaTableAggregated,
+    latest_complete_aggregation,
 )
 from depictio.models.models.users import User
 
@@ -127,10 +128,12 @@ def _dispatch_finalize(
 ) -> str | None:
     """Create the job record and enqueue its task. Returns the job_id.
 
-    Returns ``None`` if the job could not be created, which the caller must
-    treat as "this upsert is now incomplete" — the aggregation entry is already
-    stored with ``aggregation_status="pending"`` and nothing else will finish
-    it.
+    Returns ``None`` when the job could not be created or its task could not be
+    queued (the broker is down, say), which the caller must treat as "this
+    upsert is now incomplete": the aggregation entry is already stored with
+    ``aggregation_status="pending"``, nothing else will finish it, so the caller
+    finalizes synchronously. A job created before the queueing failed is marked
+    ``failed`` first, or it would sit ``pending`` with no task behind it.
     """
     import uuid
 
@@ -150,7 +153,11 @@ def _dispatch_finalize(
         ingestion_run_id=ingestion_run_id,
         idempotency_key=idempotency_key,
     )
-    stored, created = jobs_store.create_job(job)
+    try:
+        stored, created = jobs_store.create_job(job)
+    except Exception as exc:  # noqa: BLE001 - the caller has a synchronous fallback
+        logger.warning(f"upsert_deltatable: could not create a job for dc={dc_id}: {exc}")
+        return None
     if not created:
         # An identical submission is already in flight (CLI retry after a
         # dropped response, or two watchers racing). Hand back the existing
@@ -161,18 +168,32 @@ def _dispatch_finalize(
         )
         return stored.job_id
 
-    task = finalize_deltatable_upsert.apply_async(
-        args=[
-            {
-                "job_id": stored.job_id,
-                "data_collection_id": dc_id,
-                "delta_table_location": delta_table_location,
-                "aggregation_version": version,
-                "ingestion_run_id": ingestion_run_id,
-            }
-        ],
-        queue=settings.celery.ingestion_queue,
-    )
+    try:
+        task = finalize_deltatable_upsert.apply_async(
+            args=[
+                {
+                    "job_id": stored.job_id,
+                    "data_collection_id": dc_id,
+                    "delta_table_location": delta_table_location,
+                    "aggregation_version": version,
+                    "ingestion_run_id": ingestion_run_id,
+                }
+            ],
+            queue=settings.celery.ingestion_queue,
+        )
+    except Exception as exc:  # noqa: BLE001 - kombu raises several types for a dead broker
+        logger.warning(
+            f"upsert_deltatable: could not queue the finalize task for dc={dc_id}: {exc}"
+        )
+        try:
+            jobs_store.finish_job(
+                stored.job_id,
+                status="failed",
+                error=f"Could not queue the task; finalized synchronously instead ({exc})",
+            )
+        except Exception as inner:  # pragma: no cover - defensive
+            logger.error(f"upsert_deltatable: could not fail job {stored.job_id}: {inner}")
+        return None
     jobs_store.attach_task(stored.job_id, task.id)
     return stored.job_id
 
@@ -428,11 +449,11 @@ async def upsert_deltatable(
                 "job_id": job_id,
                 "aggregation_version": version,
             }
-        # Job creation failed, so nothing will ever compute the column specs.
-        # Fall through to the synchronous path rather than leave the
-        # aggregation stuck at "pending" forever.
+        # The job could not be created or queued, so nothing will ever compute
+        # the column specs. Fall through to the synchronous path rather than
+        # leave the aggregation stuck at "pending" forever.
         logger.warning(
-            "upsert_deltatable: could not create a job — finalizing synchronously instead"
+            "upsert_deltatable: could not offload finalization, finalizing synchronously instead"
         )
         # The hash recorded above is already final, so only the specs change.
         _, results = await asyncio.to_thread(
@@ -466,8 +487,6 @@ async def upsert_deltatable(
 
 async def _broadcast_dc_update(dc_id: str) -> None:
     """Invalidate the DC cache and broadcast a data-collection-updated event to all subscribers."""
-    from datetime import timezone
-
     from depictio.api.v1.deltatables_utils import invalidate_data_collection_cache
     from depictio.api.v1.endpoints.events_endpoints.routes import _build_event_payload
     from depictio.api.v1.services.events import connection_manager
@@ -672,8 +691,12 @@ def _read_delta_history(delta_location: str, limit: int) -> list[dict]:
         entries.append(
             {
                 "version": entry.get("version"),
+                # Naive UTC like every other API timestamp: a bare
+                # fromtimestamp() is the server's local clock.
                 "timestamp": (
-                    datetime.fromtimestamp(raw_timestamp / 1000).isoformat()
+                    datetime.fromtimestamp(raw_timestamp / 1000, tz=timezone.utc)
+                    .replace(tzinfo=None)
+                    .isoformat()
                     if isinstance(raw_timestamp, (int, float))
                     else None
                 ),
@@ -732,6 +755,9 @@ async def get_delta_history(
 
     Who ran an ingestion is shown to owners, editors and admins only — see
     ``_caller_is_project_operator``.
+
+    ``truncated`` says whether rows exist beyond ``limit``, so a client can
+    tell a short history from a cut one.
     """
     limit = max(1, min(limit, 200))
 
@@ -769,6 +795,9 @@ async def get_delta_history(
             "trigger": aggregation.get("trigger"),
             "write_mode": aggregation.get("write_mode"),
             "rows_total": aggregation.get("rows_total"),
+            # Kept on the row itself: a Mongo-only row (outside the Delta
+            # window, or every row when degraded) has no ``version`` to pin.
+            "delta_version": aggregation.get("delta_version"),
         }
         delta_version = aggregation.get("delta_version")
         if delta_version is None:
@@ -779,7 +808,9 @@ async def get_delta_history(
     degraded = False
     delta_entries: list[dict] = []
     try:
-        delta_entries = await asyncio.to_thread(_read_delta_history, delta_location, limit)
+        # One commit past the window, so a table with more commits than
+        # ``limit`` reports itself truncated even when Mongo holds fewer rows.
+        delta_entries = await asyncio.to_thread(_read_delta_history, delta_location, limit + 1)
     except Exception as exc:  # noqa: BLE001 - a missing object store is not a 500
         logger.warning(f"Delta history unavailable for {delta_location}: {exc}")
         degraded = True
@@ -804,11 +835,17 @@ async def get_delta_history(
     # anything written before delta_version was recorded.
     merged.extend(mongo_only)
     merged.extend({**entry, "origin": "mongo"} for entry in by_version.values())
+    # Newest first before cutting: Mongo rows are stored oldest first, so a
+    # degraded response cut unsorted kept the oldest aggregations.
+    merged.sort(
+        key=lambda e: str(e.get("timestamp") or e.get("aggregation_time") or ""), reverse=True
+    )
 
     return {
         "delta_table_location": delta_location,
         "current_version": delta_entries[0]["version"] if delta_entries else None,
         "degraded": degraded,
+        "truncated": len(merged) > limit,
         "versions": merged[:limit],
     }
 
@@ -832,7 +869,9 @@ async def specs(
         HTTPException: If data collection not found or access denied.
 
     Note:
-        Currently returns the last aggregation; versioning support planned.
+        Returns the newest aggregation that has its specs (see
+        ``latest_complete_aggregation``), so an offload still computing them
+        serves the previous schema rather than an empty one.
     """
     pipeline = _build_permission_pipeline(data_collection_id, current_user)
     project_result = list(projects_collection.aggregate(pipeline))
@@ -856,7 +895,8 @@ async def specs(
             detail=f"No aggregation data found for data collection {data_collection_id}",
         )
 
-    return convert_objectid_to_str(aggregation[-1]["aggregation_columns_specs"])
+    latest = latest_complete_aggregation(aggregation) or {}
+    return convert_objectid_to_str(latest.get("aggregation_columns_specs") or [])
 
 
 @deltatables_endpoint_router.get("/unique_values/{data_collection_id}")

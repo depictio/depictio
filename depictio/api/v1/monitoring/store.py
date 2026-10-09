@@ -30,6 +30,7 @@ from depictio.models.models.monitoring import (
     IngestionRun,
     derive_task_kind,
 )
+from depictio.models.timestamps import utc_now_naive
 
 
 def ensure_monitoring_storage() -> None:
@@ -338,7 +339,7 @@ def request_cli_agent_run(agent_id: str, *, requested_by: Optional[str] = None) 
     """
     result = cli_agents_collection.update_one(
         {"agent_id": agent_id},
-        {"$set": {"run_requested_at": datetime.now(), "run_requested_by": requested_by}},
+        {"$set": {"run_requested_at": utc_now_naive(), "run_requested_by": requested_by}},
     )
     return result.matched_count > 0
 

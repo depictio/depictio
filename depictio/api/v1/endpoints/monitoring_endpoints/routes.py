@@ -34,6 +34,7 @@ from depictio.models.models.monitoring import (
     IngestionTrigger,
 )
 from depictio.models.models.users import User
+from depictio.models.timestamps import utc_now_naive
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +149,39 @@ class IngestionStepRequest(BaseModel):
     progress: Optional[dict] = None
 
 
+def _may_write_project(project_id: str, current_user: User) -> bool:
+    """Owners, editors and admins may record runs against a project.
+
+    A run shows up in the project's ingestion history, so writing one is
+    writing to the project; reading it is not enough.
+    """
+    from bson import ObjectId
+    from bson.errors import InvalidId
+
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+
+    try:
+        ObjectId(project_id)
+    except (InvalidId, TypeError):
+        return False
+    return check_project_permission(project_id, current_user, "editor")
+
+
+def _owned_run_or_raise(run_id: str, current_user: User) -> dict:
+    """The run, if the caller opened it or is an admin; 404 or 403 otherwise.
+
+    Run ids are not secret: the project's ingestion history lists them to every
+    viewer, anonymous ones included on a public project. Without this, any
+    signed-in user could rewrite another user's run.
+    """
+    run = store.get_ingestion_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Ingestion run not found.")
+    if run.get("user_id") != str(current_user.id) and not getattr(current_user, "is_admin", False):
+        raise HTTPException(status_code=403, detail="This ingestion run belongs to another user.")
+    return run
+
+
 @monitoring_endpoint_router.post("/ingestion/start")
 def start_ingestion(
     body: IngestionStartRequest,
@@ -159,9 +193,23 @@ def start_ingestion(
 
     Best-effort from the CLI's perspective — failures here must never abort a
     real ingestion, so the CLI calls this in a try/except.
+
+    The record is upserted by ``run_id``, which the client may supply, so an
+    existing run of another user is refused rather than overwritten, and a
+    ``project_id`` needs write access to that project.
     """
     if not settings.monitoring.enabled:
         raise HTTPException(status_code=404, detail="Monitoring is disabled.")
+    if body.run_id:
+        existing = store.get_ingestion_run(body.run_id)
+        if existing and existing.get("user_id") != str(current_user.id):
+            raise HTTPException(
+                status_code=403, detail="This ingestion run belongs to another user."
+            )
+    if body.project_id and not _may_write_project(body.project_id, current_user):
+        raise HTTPException(
+            status_code=403, detail="Editor access to the project is required to record a run."
+        )
     run_id = body.run_id or str(uuid.uuid4())
     run = IngestionRun(
         run_id=run_id,
@@ -195,12 +243,24 @@ def finish_ingestion(
     body: IngestionFinishRequest,
     current_user: User = Depends(get_current_user),
 ):
-    """Close an ingestion-run record with the final status + per-step tally."""
+    """Close an ingestion-run record with the final status + per-step tally.
+
+    Only the user who opened the run, or an admin, may close it. A
+    ``project_id`` the caller may not write is dropped rather than refused:
+    the run still closes, but it cannot be filed under someone else's project.
+    """
     if not settings.monitoring.enabled:
         raise HTTPException(status_code=404, detail="Monitoring is disabled.")
+    _owned_run_or_raise(run_id, current_user)
     extra: dict = {}
     if body.project_id:
-        extra["project_id"] = body.project_id
+        if _may_write_project(body.project_id, current_user):
+            extra["project_id"] = body.project_id
+        else:
+            logger.warning(
+                f"Ingestion run {run_id}: not filing it under project {body.project_id}, "
+                f"which {current_user.id} may not write"
+            )
     if body.data_collections:
         extra["data_collections"] = [dc.model_dump() for dc in body.data_collections]
     matched = store.finish_ingestion_run(
@@ -236,9 +296,13 @@ def update_ingestion_step(
     response says so, rather than returning 429. A dropped progress ping is not
     an error and must not make the client retry — but a *terminal* step always
     goes through, so a run's final tally is never lost to throttling.
+
+    Only the user who opened the run, or an admin, may update it. Checked before
+    the throttle, or anyone could spend the owner's update budget.
     """
     if not settings.monitoring.enabled:
         raise HTTPException(status_code=404, detail="Monitoring is disabled.")
+    _owned_run_or_raise(run_id, current_user)
 
     terminal = body.step.status in ("success", "failed", "skipped")
     if not terminal and not allow_step_update(run_id):
@@ -284,7 +348,9 @@ def agent_heartbeat(body: CliAgent, current_user: User = Depends(get_current_use
         raise HTTPException(status_code=404, detail="Monitoring is disabled.")
 
     ttl = max(60, settings.monitoring.agent_ttl_seconds)
-    now = datetime.now()
+    # Naive UTC: Mongo evaluates the TTL index in UTC, so a local clock would
+    # evict agents early or late by the server's UTC offset.
+    now = utc_now_naive()
     agent = body.model_copy(
         update={
             # Namespace the id by owner. agent_id is derived client-side from

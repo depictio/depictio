@@ -14,6 +14,7 @@ from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import files_collection
 from depictio.api.v1.s3 import s3_client
 from depictio.api.v1.utils import numpy_to_python
+from depictio.models.models.deltatables import latest_complete_aggregation
 
 # Cap on how many distinct categorical values we sample into ``specs`` for the
 # card-builder preview. Kept small so specs stay compact in Mongo.
@@ -38,11 +39,10 @@ def delta_identity_hash(delta_table_location: str, storage_options: dict) -> str
     dt = DeltaTable(delta_table_location, storage_options=storage_options)
     parts = [str(dt.version())]
     try:
-        actions = pl.from_arrow(dt.get_add_actions(flatten=True))
-        if not isinstance(actions, pl.DataFrame):
-            # A single-column result comes back as a Series; the fallback below
-            # handles it rather than this branch guessing at its shape.
-            raise TypeError(f"get_add_actions yielded {type(actions).__name__}, not a table")
+        # pl.DataFrame, not pl.from_arrow: deltalake 1.x returns an arro3 table,
+        # which from_arrow flags with a FutureWarning and will turn into a Series
+        # in polars 2.0, silently dropping this hash to the file-list fallback.
+        actions = pl.DataFrame(dt.get_add_actions(flatten=True))
         wanted = [c for c in ("path", "size_bytes", "modification_time") if c in actions.columns]
         parts += ["|".join(str(v) for v in row) for row in sorted(actions.select(wanted).rows())]
     except Exception as e:
@@ -85,11 +85,8 @@ def previous_column_types(
         aggregations = [
             a for a in aggregations if (a.get("aggregation_version") or 0) < before_version
         ]
-    for aggregation in reversed(aggregations):
-        specs = aggregation.get("aggregation_columns_specs") or []
-        if specs:
-            return {s["name"]: s["type"] for s in specs if s.get("name") and s.get("type")}
-    return {}
+    specs = (latest_complete_aggregation(aggregations) or {}).get("aggregation_columns_specs")
+    return {s["name"]: s["type"] for s in specs or [] if s.get("name") and s.get("type")}
 
 
 def get_s3_folder_size(bucket_name, prefix):

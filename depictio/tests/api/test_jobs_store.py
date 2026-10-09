@@ -289,3 +289,186 @@ class TestFindActiveJob:
         self._store(store, job_id="upsert", kind="deltatable.upsert", status="running")
 
         assert store.find_active_job(kind="project.ingest", project_id="p1") is None
+
+
+class TestTerminalStatesStick:
+    """A cancelled job stays cancelled whatever the task does afterwards.
+
+    A cancel reaches a prefork worker as SIGUSR1, which billiard raises inside
+    the task as ``SoftTimeLimitExceeded``, so its failure handler calls
+    ``finish_job("failed")`` straight after; on a threads or solo pool the task
+    simply runs on and reports success. Revoked ids also live in worker memory
+    only, so a job cancelled while queued can still be picked up.
+    """
+
+    def test_finish_job_does_not_overwrite_a_cancelled_job(self, store):
+        store.create_job(_job())
+        store.mark_job_running("j1")
+        assert store.cancel_job("j1") is True
+
+        assert store.finish_job("j1", status="success", result={"rows": 10}) is False
+
+        doc = store._fake.docs["j1"]
+        assert doc["status"] == "cancelled"
+        assert doc.get("result") is None
+
+    def test_the_failure_handler_after_a_cancel_does_not_win_either(self, store):
+        store.create_job(_job())
+        store.mark_job_running("j1")
+        store.cancel_job("j1")
+
+        store.finish_job("j1", status="failed", error="SoftTimeLimitExceeded()")
+
+        assert store._fake.docs["j1"]["status"] == "cancelled"
+        assert store._fake.docs["j1"].get("error") is None
+
+    def test_a_cancelled_job_is_not_brought_back_to_running(self, store):
+        store.create_job(_job())
+        store.cancel_job("j1")
+
+        assert store.mark_job_running("j1", step="read_delta") is False
+
+        doc = store._fake.docs["j1"]
+        assert doc["status"] == "cancelled"
+        assert doc.get("started_at") is None
+
+    def test_mark_running_reports_success_on_a_live_job(self, store):
+        store.create_job(_job())
+
+        assert store.mark_job_running("j1") is True
+        assert store._fake.docs["j1"]["status"] == "running"
+
+    def test_finish_job_reports_success_on_a_live_job(self, store):
+        store.create_job(_job())
+
+        assert store.finish_job("j1", status="success") is True
+
+
+class TestIdempotencyIndex:
+    """Against mongomock, which enforces unique, sparse and partial indexes.
+
+    The sparse index this replaces collided every keyless job of one user and
+    kind on null: the second browser-triggered ingestion of any project then
+    failed with a 500 for the whole retention window.
+    """
+
+    @pytest.fixture
+    def collection(self, monkeypatch):
+        import mongomock
+
+        from depictio.api.v1.jobs import store as jobs_store
+
+        jobs = mongomock.MongoClient().db.jobs
+        monkeypatch.setattr(jobs_store, "jobs_collection", jobs)
+        return jobs
+
+    def test_the_index_is_partial_on_a_string_key(self, collection):
+        from depictio.api.v1.jobs import store as jobs_store
+
+        jobs_store.ensure_jobs_storage()
+
+        spec = collection.index_information()[jobs_store.IDEMPOTENCY_INDEX_NAME]
+        assert spec["unique"] is True
+        assert spec["partialFilterExpression"] == {"idempotency_key": {"$type": "string"}}
+        assert not spec.get("sparse")
+
+    def test_two_keyless_jobs_of_one_user_and_kind_are_both_created(self, collection):
+        from depictio.api.v1.jobs import store as jobs_store
+
+        jobs_store.ensure_jobs_storage()
+
+        first, first_created = jobs_store.create_job(_job(job_id="a", kind="project.ingest"))
+        second, second_created = jobs_store.create_job(_job(job_id="b", kind="project.ingest"))
+
+        assert first_created and second_created
+        assert {first.job_id, second.job_id} == {"a", "b"}
+        assert collection.count_documents({"user_id": "u1", "kind": "project.ingest"}) == 2
+
+    def test_a_keyed_resubmission_still_attaches_to_the_first_job(self, collection):
+        from depictio.api.v1.jobs import store as jobs_store
+
+        jobs_store.ensure_jobs_storage()
+        jobs_store.create_job(_job(job_id="first", idempotency_key="k"))
+
+        job, created = jobs_store.create_job(_job(job_id="retry", idempotency_key="k"))
+
+        assert created is False
+        assert job.job_id == "first"
+
+    def test_an_existing_sparse_index_is_replaced(self, collection):
+        """Recreating an index under the same name with other options raises.
+
+        Swallowed by ``ensure_jobs_storage``, so a deployment that already held
+        the sparse index would have kept it, and its collisions, for good.
+        """
+        from depictio.api.v1.jobs import store as jobs_store
+
+        collection.create_index(
+            jobs_store.IDEMPOTENCY_INDEX_KEYS,
+            unique=True,
+            sparse=True,
+            name=jobs_store.IDEMPOTENCY_INDEX_NAME,
+        )
+
+        jobs_store.ensure_jobs_storage()
+
+        spec = collection.index_information()[jobs_store.IDEMPOTENCY_INDEX_NAME]
+        assert "partialFilterExpression" in spec
+        assert not spec.get("sparse")
+        jobs_store.create_job(_job(job_id="a"))
+        _, created = jobs_store.create_job(_job(job_id="b"))
+        assert created is True
+
+    def test_ensuring_twice_keeps_the_index(self, collection):
+        from depictio.api.v1.jobs import store as jobs_store
+
+        jobs_store.ensure_jobs_storage()
+        jobs_store.ensure_jobs_storage()
+
+        assert jobs_store.IDEMPOTENCY_INDEX_NAME in collection.index_information()
+
+
+@pytest.fixture
+def far_from_utc(monkeypatch: pytest.MonkeyPatch):
+    """Run with a local clock 14 hours ahead of UTC."""
+    import time
+
+    monkeypatch.setenv("TZ", "Pacific/Kiritimati")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+class TestNaiveUtc:
+    """Job times are naive UTC, like every BSON date.
+
+    The TTL index on ``expires_at`` is evaluated in UTC, so a local clock kept
+    jobs for 14 extra hours east of UTC and evicted them early west of it.
+    """
+
+    def test_job_times_are_utc_under_a_far_from_utc_clock(self, store, far_from_utc):
+        from datetime import timezone
+
+        from depictio.api.v1.configs.config import settings
+
+        before = datetime.now(timezone.utc).replace(tzinfo=None)
+        job, _ = store.create_job(_job())
+        store.mark_job_running("j1")
+        store.finish_job("j1", status="success")
+
+        doc = store._fake.docs["j1"]
+        assert abs((job.submitted_at - before).total_seconds()) < 60
+        assert abs((doc["started_at"] - before).total_seconds()) < 60
+        assert abs((doc["finished_at"] - before).total_seconds()) < 60
+        retention = timedelta(hours=settings.jobs.retention_hours)
+        assert abs((doc["expires_at"] - (before + retention)).total_seconds()) < 60
+
+    def test_cancel_time_is_utc(self, store, far_from_utc):
+        from datetime import timezone
+
+        before = datetime.now(timezone.utc).replace(tzinfo=None)
+        store.create_job(_job())
+        store.cancel_job("j1")
+
+        assert abs((store._fake.docs["j1"]["finished_at"] - before).total_seconds()) < 60

@@ -8,6 +8,7 @@ from pymongo.errors import BulkWriteError
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import projects_collection, runs_collection
+from depictio.api.v1.endpoints.files_endpoints.routes import MAX_IDS_PER_DELETE_BATCH
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.users import User
@@ -75,7 +76,7 @@ async def get_run(run_id: PyObjectId, current_user: User = Depends(get_current_u
 
 
 class DeleteRunsBatchRequest(BaseModel):
-    run_ids: list[str] = Field(..., min_length=1, max_length=5000)
+    run_ids: list[str] = Field(..., min_length=1, max_length=MAX_IDS_PER_DELETE_BATCH)
 
 
 @runs_endpoint_router.post("/delete_batch")

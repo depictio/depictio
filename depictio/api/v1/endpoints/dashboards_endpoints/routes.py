@@ -85,6 +85,7 @@ from depictio.models.models.dashboards import (
     DashboardDataLite,
     parse_auto_category_spec,
 )
+from depictio.models.models.deltatables import latest_complete_aggregation
 from depictio.models.models.multiqc_reports import general_stats_available
 from depictio.models.models.users import User
 from depictio.models.timestamps import preserved_creation_time, utc_now_str
@@ -2311,7 +2312,7 @@ def _dc_column_names(dc_id: str) -> set[str] | None:
         logger.warning(f"group-resolve: deltatable lookup failed for {dc_id}: {exc}")
         return None
     aggregations = (dt or {}).get("aggregation") or []
-    raw = (aggregations[-1] or {}).get("aggregation_columns_specs") if aggregations else None
+    raw = (latest_complete_aggregation(aggregations) or {}).get("aggregation_columns_specs")
     if isinstance(raw, list):
         names = {e["name"] for e in raw if isinstance(e, dict) and e.get("name")}
         return names or None
@@ -2758,7 +2759,7 @@ def bulk_compute_cards(
 
         dt = _dt_coll.find_one({"data_collection_id": ObjectId(dc_id_str)})
         agg_list = (dt or {}).get("aggregation") or []
-        raw = (agg_list[-1] or {}).get("aggregation_columns_specs") if agg_list else None
+        raw = (latest_complete_aggregation(agg_list) or {}).get("aggregation_columns_specs")
 
         flat: dict[str, dict] = {}
         if isinstance(raw, list):

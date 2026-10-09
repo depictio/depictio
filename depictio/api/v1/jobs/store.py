@@ -24,6 +24,41 @@ from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import jobs_collection
 from depictio.models.models.jobs import TERMINAL_JOB_STATES, Job, JobStatus
+from depictio.models.timestamps import utc_now_naive
+
+#: Unique per (user_id, kind, idempotency_key), over keyed jobs only.
+#:
+#: Partial, not sparse. Most jobs carry no key, and ``Job.model_dump()`` writes
+#: ``idempotency_key: None`` explicitly; a sparse compound index still indexes
+#: any document holding one of its fields, and ``user_id`` and ``kind`` always
+#: are, so every keyless job of the same user and kind collided on null.
+IDEMPOTENCY_INDEX_NAME = "jobs_idempotency"
+IDEMPOTENCY_INDEX_KEYS = [("user_id", 1), ("kind", 1), ("idempotency_key", 1)]
+IDEMPOTENCY_INDEX_OPTIONS: dict[str, Any] = {
+    "unique": True,
+    "partialFilterExpression": {"idempotency_key": {"$type": "string"}},
+}
+
+
+def _ensure_idempotency_index() -> None:
+    """Create the idempotency index, replacing an older definition of it.
+
+    Mongo refuses to recreate an index under an existing name with different
+    options, so a deployment that already holds the sparse version would keep
+    it, and its null collisions, for good. The stale one is dropped first.
+    """
+    existing = (jobs_collection.index_information() or {}).get(IDEMPOTENCY_INDEX_NAME)
+    if existing is not None and (
+        existing.get("partialFilterExpression")
+        != IDEMPOTENCY_INDEX_OPTIONS["partialFilterExpression"]
+        or existing.get("sparse")
+        or not existing.get("unique")
+    ):
+        logger.info(f"jobs: replacing the outdated {IDEMPOTENCY_INDEX_NAME} index")
+        jobs_collection.drop_index(IDEMPOTENCY_INDEX_NAME)
+    jobs_collection.create_index(
+        IDEMPOTENCY_INDEX_KEYS, name=IDEMPOTENCY_INDEX_NAME, **IDEMPOTENCY_INDEX_OPTIONS
+    )
 
 
 def ensure_jobs_storage() -> None:
@@ -35,14 +70,7 @@ def ensure_jobs_storage() -> None:
         # failure needs it to still be there tomorrow), which a
         # created_at + N index cannot express.
         jobs_collection.create_index("expires_at", expireAfterSeconds=0, name="jobs_ttl")
-        # Sparse: the overwhelming majority of jobs carry no idempotency key,
-        # and a non-sparse unique index would collide all of them on null.
-        jobs_collection.create_index(
-            [("user_id", 1), ("kind", 1), ("idempotency_key", 1)],
-            unique=True,
-            sparse=True,
-            name="jobs_idempotency",
-        )
+        _ensure_idempotency_index()
         jobs_collection.create_index([("submitted_at", DESCENDING)])
         jobs_collection.create_index("celery_task_id")
     except Exception as exc:  # pragma: no cover - defensive
@@ -67,7 +95,7 @@ def _expiry(status: str) -> datetime:
         if status in {"failed", "cancelled"}
         else settings.jobs.retention_hours
     )
-    return datetime.now() + timedelta(hours=max(1, hours))
+    return utc_now_naive() + timedelta(hours=max(1, hours))
 
 
 def create_job(job: Job) -> tuple[Job, bool]:
@@ -142,8 +170,13 @@ def attach_task(job_id: str, celery_task_id: str) -> None:
 
 def mark_job_running(
     job_id: str, *, step: Optional[str] = None, detail: Optional[str] = None
-) -> None:
+) -> bool:
     """Move a job to ``running``. Called by the task itself, first thing.
+
+    Guarded on a non-terminal status, like every other transition here: a job
+    cancelled while still queued must stay cancelled when a worker picks it up
+    anyway (revoked ids live in worker memory only, so a revoke can miss).
+    Returns False in that case, and the task should stop.
 
     ``started_at`` uses ``$setOnInsert``-like semantics via a filter on the
     current status so a retried task (``acks_late`` redelivery) does not reset
@@ -154,10 +187,15 @@ def mark_job_running(
         fields["step"] = step
     if detail is not None:
         fields["detail"] = detail
-    jobs_collection.update_one({"job_id": job_id}, {"$set": fields})
-    jobs_collection.update_one(
-        {"job_id": job_id, "started_at": None}, {"$set": {"started_at": datetime.now()}}
+    result = jobs_collection.update_one(
+        {"job_id": job_id, "status": {"$nin": list(TERMINAL_JOB_STATES)}}, {"$set": fields}
     )
+    if not result.matched_count:
+        return False
+    jobs_collection.update_one(
+        {"job_id": job_id, "started_at": None}, {"$set": {"started_at": utc_now_naive()}}
+    )
+    return True
 
 
 def update_job_progress(
@@ -192,8 +230,15 @@ def finish_job(
     status: str,
     result: Optional[dict[str, Any]] = None,
     error: Optional[str] = None,
-) -> None:
+) -> bool:
     """Write a job's terminal state. The task owns this call.
+
+    Guarded on a non-terminal status: the first terminal write wins. A cancel
+    reaches a prefork worker as SIGUSR1, which billiard raises inside the task
+    as ``SoftTimeLimitExceeded``, so the task's own failure handler lands here
+    right after the cancel; and on a threads or solo pool the task simply
+    finishes. Either way the job must stay ``cancelled``. Returns False when
+    the job was already terminal.
 
     Oversized results are dropped rather than stored: a 16 MB Mongo document
     limit is a hard wall, and a result that big is a symptom that the client
@@ -201,7 +246,7 @@ def finish_job(
     """
     fields: dict[str, Any] = {
         "status": status,
-        "finished_at": datetime.now(),
+        "finished_at": utc_now_naive(),
         "expires_at": _expiry(status),
     }
     if error is not None:
@@ -217,7 +262,10 @@ def finish_job(
             )
         else:
             fields["result"] = result
-    jobs_collection.update_one({"job_id": job_id}, {"$set": fields})
+    written = jobs_collection.update_one(
+        {"job_id": job_id, "status": {"$nin": list(TERMINAL_JOB_STATES)}}, {"$set": fields}
+    )
+    return written.matched_count > 0
 
 
 def get_job(job_id: str) -> Optional[dict[str, Any]]:
@@ -262,7 +310,7 @@ def cancel_job(job_id: str) -> bool:
         {
             "$set": {
                 "status": "cancelled",
-                "finished_at": datetime.now(),
+                "finished_at": utc_now_naive(),
                 "expires_at": _expiry("cancelled"),
             }
         },

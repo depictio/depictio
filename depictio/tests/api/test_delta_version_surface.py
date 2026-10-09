@@ -200,3 +200,137 @@ class TestOperatorVisibility:
 
         self.set_project(None)
         assert self.routes._caller_is_project_operator(ObjectId(), _User("u-owner")) is False
+
+
+@pytest.fixture
+def far_from_utc(monkeypatch: pytest.MonkeyPatch):
+    """Run with a local clock 14 hours ahead of UTC."""
+    import time
+
+    monkeypatch.setenv("TZ", "Pacific/Kiritimati")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+def test_delta_history_timestamps_are_naive_utc(tmp_path, far_from_utc):
+    """A commit time is naive UTC like every other API timestamp.
+
+    A bare ``fromtimestamp`` is the server's local clock, which the viewer then
+    reads as UTC: 14 hours off here, and hours off under ``depictio local up``.
+    """
+    from datetime import datetime, timezone
+
+    import polars as pl
+
+    from depictio.api.v1.endpoints.deltatables_endpoints.routes import _read_delta_history
+
+    location = str(tmp_path / "dc")
+    before = datetime.now(timezone.utc).replace(tzinfo=None)
+    pl.DataFrame({"a": [1, 2, 3]}).write_delta(location)
+
+    (entry,) = _read_delta_history(location, limit=5)
+
+    recorded = datetime.fromisoformat(entry["timestamp"])
+    assert recorded.tzinfo is None
+    assert abs((recorded - before).total_seconds()) < 60
+
+
+class TestHistoryWindow:
+    """What ``/history`` keeps when it cuts to ``limit``, and whether it says so."""
+
+    @pytest.fixture
+    def history(self, monkeypatch):
+        """Five aggregations, delta versions 0..4, stored oldest first."""
+        import asyncio
+        from datetime import datetime
+        from types import SimpleNamespace
+
+        from bson import ObjectId
+
+        import depictio.api.v1.endpoints.deltatables_endpoints.routes as routes
+
+        dc_id = ObjectId()
+        record = {
+            "data_collection_id": dc_id,
+            "delta_table_location": "s3://bucket/dc",
+            "aggregation": [
+                {
+                    "aggregation_version": n + 1,
+                    "aggregation_time": datetime(2026, 7, 1 + n, 12),
+                    "delta_version": n,
+                    "rows_total": 50 * (n + 1),
+                }
+                for n in range(5)
+            ],
+        }
+
+        class _Projects:
+            def aggregate(self, _pipeline):
+                return iter([{"_id": "p"}])
+
+            def find_one(self, *_args, **_kwargs):
+                return _project_with()
+
+        monkeypatch.setattr(routes, "_build_permission_pipeline", lambda *_a: [])
+        monkeypatch.setattr(routes, "projects_collection", _Projects())
+        monkeypatch.setattr(
+            routes, "deltatables_collection", SimpleNamespace(find_one=lambda *_a, **_k: record)
+        )
+        reads: list[int] = []
+
+        def call(*, limit, delta=None):
+            def read(_location, window):
+                reads.append(window)
+                if delta is None:
+                    raise OSError("object store unreachable")
+                return delta[:window]
+
+            monkeypatch.setattr(routes, "_read_delta_history", read)
+            return asyncio.run(
+                routes.get_delta_history(dc_id, limit=limit, current_user=_User("u-owner"))
+            )
+
+        return SimpleNamespace(call=call, reads=reads)
+
+    @staticmethod
+    def _commits(versions):
+        return [
+            {"version": v, "timestamp": f"2026-07-{v + 1:02d}T12:00:00", "metadata": {}}
+            for v in sorted(versions, reverse=True)
+        ]
+
+    def test_a_degraded_cut_keeps_the_newest_rows(self, history):
+        response = history.call(limit=2)
+
+        assert response["degraded"] is True
+        assert [row["aggregation_version"] for row in response["versions"]] == [5, 4]
+        assert response["truncated"] is True
+
+    def test_a_degraded_row_keeps_its_delta_version(self, history):
+        response = history.call(limit=2)
+
+        assert [row["delta_version"] for row in response["versions"]] == [4, 3]
+
+    def test_a_row_outside_the_delta_window_keeps_its_delta_version(self, history):
+        response = history.call(limit=10, delta=self._commits([4, 3]))
+
+        mongo_rows = [row for row in response["versions"] if row["origin"] == "mongo"]
+        assert [row["delta_version"] for row in mongo_rows] == [2, 1, 0]
+        assert [row["origin"] for row in response["versions"][:2]] == ["both", "both"]
+        assert response["truncated"] is False
+
+    def test_a_table_with_more_commits_than_the_window_says_so(self, history):
+        # Mongo knows none of these commits; Delta alone has more than ``limit``.
+        response = history.call(limit=2, delta=self._commits([9, 8, 7]))
+
+        assert history.reads == [3]
+        assert [row["version"] for row in response["versions"]] == [9, 8]
+        assert response["truncated"] is True
+
+    def test_a_history_that_fits_is_not_truncated(self, history):
+        response = history.call(limit=5, delta=self._commits(range(5)))
+
+        assert len(response["versions"]) == 5
+        assert response["truncated"] is False
