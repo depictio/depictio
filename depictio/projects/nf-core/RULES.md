@@ -305,6 +305,10 @@ A KPI strip is four different readings, not four numbers in one style:
 - A locus navigator never names a contig in `default_region` (`NC_044048.1` holds for one
   reference only): write `default_region: first`, which opens the first contig the data
   carries, or leave it unset on a model genome where a gene or band says more.
+- A `source: file` genome_view reads its files only under `file_window_size` (1 Mb for VCF by
+  default), and a view of exactly 1 Mb is not under it. When the tab opens on a region, keep
+  that region inside the window or raise `file_window_size`, or the lanes open empty.
+- A sashimi offers `views: [plotly]` for now: its GenomeSpy view leaves the first lane empty.
 - Count axes in code figures take `dtick=1`, so they print no 0.5 ticks.
 - A single-panel code figure keeps the tile's narrow margins, so long category labels are
   cut: call `fig.update_yaxes(automargin=True)` (or `update_xaxes`) on it.
