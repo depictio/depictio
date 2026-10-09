@@ -920,7 +920,9 @@ def test_a_failed_dc_scan_names_its_reason(monkeypatch):
         config=SimpleNamespace(type="table", scan=SimpleNamespace(mode="manifest")),
     )
     project = SimpleNamespace(
-        name="p", workflows=[SimpleNamespace(workflow_tag="wf", data_collections=[dc])]
+        id=PyObjectId(),
+        name="p",
+        workflows=[SimpleNamespace(workflow_tag="wf", data_collections=[dc])],
     )
     monkeypatch.setattr(
         scan_mod,

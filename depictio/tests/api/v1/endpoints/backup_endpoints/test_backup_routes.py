@@ -859,6 +859,7 @@ class TestBackupKeepsOnlyVersionsWorthKeeping:
         "comment_threads_collection",
         "dashboard_versions_collection",
         "dashboard_version_counters_collection",
+        "project_storage_collection",
     )
 
     @pytest.fixture()
