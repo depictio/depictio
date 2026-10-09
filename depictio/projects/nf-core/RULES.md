@@ -47,7 +47,7 @@ At most **24 grid rows** at compact width, in this order:
 | About | none | two `surface: card` texts side by side: `### About this dashboard` (what it shows, how to use it) and `### The run` (an icon list of run facts from `{{param:…}}` and `values:`) | w5 h3 + w3 h3 |
 | Pipeline | none | a `surface: card` text with `accent: <colour>`: a `###` heading, one intro line, then a `::: steps` flow of 4 to 6 icon-led steps, each with `params:` and `tab:` links | w8 h3 |
 | Key figures | `appearance: plain`, `card_variant: headline`, `filter_bar: true`, `visible_filters: 2` | at least 2 filters (the group, then the sample), then 4 cards, each with `caption`, `link: tab:<Tab>` and a `description` | 4 × w2 h2 |
-| Findings | `appearance: plain`, `figure_style: minimal`, `filter_bar: true`, `visible_filters: 2` | a findings text with live `values:` (w8 h2, `surface: card`), then 4 figures, one per analysis tab, in 2 rows that each fill the width | text w8, then w5 + w3 and w3 + w5 |
+| Findings | `appearance: plain`, `figure_style: minimal`, `filter_bar: true`, `visible_filters: 2` | a findings text with live `values:` (w8 h2, `surface: card`), then 4 figures, one per analysis tab, in 2 rows that each fill the width | text w8, then w4 + w4 twice |
 | How to read | `appearance: plain` | one text: a `###` heading per tab group, then a `-` list of tab tiles `[Tab](tab:Tab): question` | w8 h2 |
 
 ```yaml
@@ -100,15 +100,15 @@ main_dashboard:
     source_tab: Ordination & Clustering
     source_component: ord-embedding
     caption: One point per sample; the closer two points, the more alike their communities.
-    layout: {x: 0, y: 7, w: 3, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   ```
   A highlight cannot show a MultiQC panel, a card or a table.
-- **A highlight draws an advanced viz exactly as its tab does**, in a w3 or w5 tile. Pick
+- **A highlight draws an advanced viz exactly as its tab does**, in a w4 tile. Pick
   sources that read at that width, and set them up on their tab so they do:
   - Point labels only where the label says something, a gene or a taxon name. Peak, interval
     or feature ids (`..._peak_75035`, `Interval_64490`) pile up over the points: set
     `show_labels: false` (volcano) or `top_n_labels: 0` (manhattan) on the source.
-  - A legend listing samples or libraries takes half a w3 tile: set `hide_legend: true` on the
+  - A legend listing samples or libraries takes half a w4 tile: set `hide_legend: true` on the
     highlight and let its caption say what the colour is.
   - An UpSet of more than 4 sets draws dozens of intersections a highlight cannot show: pick
     another figure of that tab, or a simplified one.
@@ -121,10 +121,10 @@ main_dashboard:
   card already shows (the Shannon card, then a Shannon box) repeats it; prefer the tab's
   result (the volcano, the ordination). Figures share one header style: title, the linked
   tab's icon, no icon badge of their own.
-- **Findings rows fill the width.** Two rows of 8 columns, a wide and a narrow tile in each,
-  swapped on the second row (w5 + w3, then w3 + w5) so the eye zigzags. The tiles of one row
-  share a stored `h`: give both the height the taller one autofits to (an advanced viz
-  summary grows to its rows), or the next row starts ragged.
+- **Findings rows fill the width.** Two rows of 8 columns, two w4 tiles in each, so every
+  figure gets the same room and none reads as secondary. The tiles of one row share a stored
+  `h`: give both the height the taller one autofits to (an advanced viz summary grows to its
+  rows), or the next row starts ragged.
 
 ## 4. Child tabs
 

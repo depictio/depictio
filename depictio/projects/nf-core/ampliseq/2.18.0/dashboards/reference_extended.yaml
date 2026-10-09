@@ -487,7 +487,7 @@ main_dashboard:
     layout:
       x: 0
       y: 2
-      w: 5
+      w: 4
       h: 5
   - component_type: highlight
     section: Findings
@@ -499,7 +499,7 @@ main_dashboard:
     layout:
       x: 0
       y: 2
-      w: 5
+      w: 4
       h: 5
   - component_type: highlight
     section: Findings
@@ -511,7 +511,7 @@ main_dashboard:
     layout:
       x: 0
       y: 2
-      w: 5
+      w: 4
       h: 5
   - component_type: advanced_viz
     workflow_tag: ampliseq
@@ -543,9 +543,9 @@ main_dashboard:
     tag: am-ov-tree
     index: ov-tree
     layout:
-      x: 3
+      x: 4
       y: 7
-      w: 5
+      w: 4
       h: 5
   - component_type: highlight
     section: Findings
@@ -555,9 +555,9 @@ main_dashboard:
     tag: am-ov-hl-volcano
     index: ov-hl-volcano
     layout:
-      x: 5
+      x: 4
       y: 2
-      w: 3
+      w: 4
       h: 5
   - component_type: highlight
     section: Findings
@@ -570,7 +570,7 @@ main_dashboard:
     layout:
       x: 0
       y: 7
-      w: 3
+      w: 4
       h: 5
   - component_type: text
     body: '### Data & QC

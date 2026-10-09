@@ -354,7 +354,7 @@ main_dashboard:
     caption: Hits by tool, then drug class, then gene; each tool keeps its own class names. The ARG tool filter redraws it.
     tag: fs-ov-hl-resistome
     index: ov-hl-resistome
-    layout: {x: 0, y: 2, w: 5, h: 4}
+    layout: {x: 0, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: AMPs
@@ -362,7 +362,7 @@ main_dashboard:
     caption: One point per peptide candidate, coloured by charge; above the line at pI 7, the peptide is cationic.
     tag: fs-ov-hl-amps
     index: ov-hl-amps
-    layout: {x: 5, y: 2, w: 3, h: 4}
+    layout: {x: 4, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: BGCs
@@ -370,7 +370,7 @@ main_dashboard:
     caption: BGC regions by caller, then by the product class it predicted.
     tag: fs-ov-hl-bgcs
     index: ov-hl-bgcs
-    layout: {x: 0, y: 6, w: 3, h: 4}
+    layout: {x: 0, y: 6, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: CAZymes
@@ -378,7 +378,7 @@ main_dashboard:
     caption: CAZyme genes per assembly, stacked by CAZy class.
     tag: fs-ov-hl-cazymes
     index: ov-hl-cazymes
-    layout: {x: 3, y: 6, w: 5, h: 4}
+    layout: {x: 4, y: 6, w: 4, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out.
   - component_type: text

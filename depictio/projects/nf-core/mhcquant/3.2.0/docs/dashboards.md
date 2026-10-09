@@ -77,7 +77,7 @@ The landing page, at compact width with the filter panel collapsed:
   the length profile beside the source proteins. The FDR curves, the length profile and the
   protein scatter draw one series or colour per raw file or sample, so their highlights hide
   the legend; the protein scatter labels only the three proteins that give the most
-  peptides, so the labels stay apart at w5. The bar of this section filters by condition and peptide length.
+  peptides, so the labels stay apart at half width. The bar of this section filters by condition and peptide length.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
 The persistent `Sample filters` (condition, sample, raw file) sit in the collapsed left

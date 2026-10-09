@@ -1438,7 +1438,7 @@
       "i": "box-ov-hl-composition",
       "x": 0,
       "y": 11,
-      "w": 5,
+      "w": 4,
       "h": 5,
       "static": false,
       "resizeHandles": [
@@ -1451,9 +1451,9 @@
     },
     {
       "i": "box-ov-hl-volcano",
-      "x": 5,
+      "x": 4,
       "y": 11,
-      "w": 3,
+      "w": 4,
       "h": 5,
       "static": false,
       "resizeHandles": [
@@ -1468,7 +1468,7 @@
       "i": "box-ov-hl-ordination",
       "x": 0,
       "y": 16,
-      "w": 3,
+      "w": 4,
       "h": 5,
       "static": false,
       "resizeHandles": [
@@ -1481,9 +1481,9 @@
     },
     {
       "i": "box-ov-tree",
-      "x": 3,
+      "x": 4,
       "y": 16,
-      "w": 5,
+      "w": 4,
       "h": 5,
       "static": false,
       "resizeHandles": [

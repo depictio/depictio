@@ -335,7 +335,7 @@ main_dashboard:
     caption: The twelve most expressed miRNAs, one box per group when the run has a design; every library is a dot.
     tag: sr-ov-hl-expression
     index: ov-hl-expression
-    layout: {x: 0, y: 2, w: 5, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Group Comparison
@@ -343,9 +343,8 @@ main_dashboard:
     caption: One point per library on miRNA expression; libraries of one group should sit together.
     tag: sr-ov-hl-pca
     index: ov-hl-pca
-    layout: {x: 5, y: 2, w: 3, h: 5}
-  # The plane reads at w3; the per-library bars and their legend need the
-  # wide slot, so the second row puts the novel plane first.
+    layout: {x: 4, y: 2, w: 4, h: 5}
+  # The second row puts the novel plane first, then the per-library bars.
   - component_type: highlight
     section: Findings
     source_tab: Novel miRNAs
@@ -353,7 +352,7 @@ main_dashboard:
     caption: One point per novel hairpin; right, found in more libraries; higher, more likely real. Colour marks star-arm reads.
     tag: sr-ov-hl-novel
     index: ov-hl-novel
-    layout: {x: 0, y: 7, w: 3, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: isomiRs
@@ -361,7 +360,7 @@ main_dashboard:
     caption: Each library's miRNA reads by 3' end; a library unlike the others is worth a look.
     tag: sr-ov-hl-isomirs
     index: ov-hl-isomirs
-    layout: {x: 3, y: 7, w: 5, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out, and a heading whose
   # tabs are all missing is hidden.
@@ -1375,7 +1374,7 @@ tabs:
       axis_prefix: PC
       point_size: 12
       show_density: false
-      # The Overview highlight draws this at w3, where the centroid labels
+      # The Overview highlight draws this at half width, where the centroid labels
       # pile on the points; the colours already say the group.
       show_centroids: false
       hover_cols: [mirna_reads, mirnas_detected]

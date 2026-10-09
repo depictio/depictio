@@ -45,8 +45,7 @@ The landing page, at compact width with the filter panel collapsed:
   takes, the share of miRNA reads trimmed short of the reference 3' end, and the novel
   precursors with star-arm reads. Below them, four figures in two rows, each linking its tab:
   the top miRNAs by group beside the library PCA, then the novel precursor plane beside the
-  isomiR composition, which takes the wide tile for its per-library bars and legend. The bar
-  of this section filters by group and sample.
+  isomiR composition. The bar of this section filters by group and sample.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
 The persistent `Sample filters` (the design group, then the sample) sit in the collapsed left

@@ -625,7 +625,7 @@ main_dashboard:
     caption: One point per callset, coloured by caller; top right is best, the curves are F1 contours.
     tag: vb-ov-hl-germline-pr
     index: ov-hl-germline-pr
-    layout: {x: 0, y: 2, w: 5, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Germline
@@ -633,7 +633,7 @@ main_dashboard:
     caption: hap.py F1 for SNPs and indels, all calls against PASS calls only.
     tag: vb-ov-hl-germline-happy
     index: ov-hl-germline-happy
-    layout: {x: 5, y: 2, w: 3, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Germline
@@ -641,7 +641,7 @@ main_dashboard:
     caption: Precision against recall as the quality cut-off rises (SNP, PASS).
     tag: vb-ov-hl-germline-roc
     index: ov-hl-germline-roc
-    layout: {x: 0, y: 7, w: 3, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Germline
@@ -649,7 +649,7 @@ main_dashboard:
     caption: True positives, false positives and misses per callset; the shade is the share of its calls.
     tag: vb-ov-hl-germline-confusion
     index: ov-hl-germline-confusion
-    layout: {x: 3, y: 7, w: 5, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
   # -------------------------------------------------------------- somatic
   - component_type: highlight
     section: Findings
@@ -658,7 +658,7 @@ main_dashboard:
     caption: One point per callset, coloured by caller; top right is best, the curves are F1 contours.
     tag: vb-ov-hl-somatic-pr
     index: ov-hl-somatic-pr
-    layout: {x: 0, y: 12, w: 5, h: 5}
+    layout: {x: 0, y: 12, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Somatic
@@ -666,7 +666,7 @@ main_dashboard:
     caption: Recall per caller with its binomial 95% interval; overlapping whiskers cannot be told apart.
     tag: vb-ov-hl-somatic-ci
     index: ov-hl-somatic-ci
-    layout: {x: 5, y: 12, w: 3, h: 5}
+    layout: {x: 4, y: 12, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Somatic
@@ -674,7 +674,7 @@ main_dashboard:
     caption: True positives, false positives and misses per caller; an over-calling caller fills the FP row.
     tag: vb-ov-hl-somatic-confusion
     index: ov-hl-somatic-confusion
-    layout: {x: 0, y: 17, w: 3, h: 5}
+    layout: {x: 0, y: 17, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Somatic
@@ -682,7 +682,7 @@ main_dashboard:
     caption: Precision per caller with its binomial 95% interval; a wide whisker rests on few calls.
     tag: vb-ov-hl-somatic-precision
     index: ov-hl-somatic-precision
-    layout: {x: 3, y: 17, w: 5, h: 5}
+    layout: {x: 4, y: 17, w: 4, h: 5}
   # ----------------------------------------------------------- structural
   - component_type: highlight
     section: Findings
@@ -691,7 +691,7 @@ main_dashboard:
     caption: One point per callset, coloured by caller; top right is best, the curves are F1 contours.
     tag: vb-ov-hl-sv-pr
     index: ov-hl-sv-pr
-    layout: {x: 0, y: 22, w: 5, h: 5}
+    layout: {x: 0, y: 22, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Structural & CNV
@@ -700,7 +700,7 @@ main_dashboard:
     caption: SVanalyzer F1 per callset, the bar coloured by its caller.
     tag: vb-ov-hl-sv-svbench
     index: ov-hl-sv-svbench
-    layout: {x: 5, y: 22, w: 3, h: 5}
+    layout: {x: 4, y: 22, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Structural & CNV
@@ -708,7 +708,7 @@ main_dashboard:
     caption: Truvari true positives, false positives and misses per callset.
     tag: vb-ov-hl-sv-confusion
     index: ov-hl-sv-confusion
-    layout: {x: 0, y: 27, w: 3, h: 5}
+    layout: {x: 0, y: 27, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Structural & CNV
@@ -716,7 +716,7 @@ main_dashboard:
     caption: Wittyer F1 per callset, scored per event and per base; a gap means misplaced breakpoints.
     tag: vb-ov-hl-sv-wittyer
     index: ov-hl-sv-wittyer
-    layout: {x: 3, y: 27, w: 5, h: 5}
+    layout: {x: 4, y: 27, w: 4, h: 5}
   # Link-only tab tiles: a tab the run does not have is left out, and a
   # heading whose tabs are all missing is hidden.
   - component_type: text

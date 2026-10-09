@@ -58,7 +58,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "d63a87e1-b527-40d5-b7b8-04fc218efdd3",
+      "index": "f14d6191-118f-44a4-9f2a-1acbb9260525",
       "component_type": "interactive",
       "title": "Genome at 10x (%)",
       "workflow_tag": "viralrecon",
@@ -1113,7 +1113,7 @@
       "static": false
     },
     {
-      "i": "box-d63a87e1-b527-40d5-b7b8-04fc218efdd3",
+      "i": "box-f14d6191-118f-44a4-9f2a-1acbb9260525",
       "x": 2,
       "y": 0,
       "w": 2,
@@ -1297,7 +1297,7 @@
       "i": "box-ov-hl-depth-breadth",
       "x": 0,
       "y": 2,
-      "w": 5,
+      "w": 4,
       "h": 5,
       "static": false,
       "resizeHandles": [
@@ -1310,9 +1310,9 @@
     },
     {
       "i": "box-ov-amplicon-depth",
-      "x": 5,
+      "x": 4,
       "y": 2,
-      "w": 3,
+      "w": 4,
       "h": 5,
       "static": false,
       "resizeHandles": [
@@ -1327,7 +1327,7 @@
       "i": "box-ov-hl-manhattan",
       "x": 0,
       "y": 7,
-      "w": 3,
+      "w": 4,
       "h": 5,
       "static": false,
       "resizeHandles": [
@@ -1340,9 +1340,9 @@
     },
     {
       "i": "box-ov-hl-sankey",
-      "x": 3,
+      "x": 4,
       "y": 7,
-      "w": 5,
+      "w": 4,
       "h": 5,
       "static": false,
       "resizeHandles": [

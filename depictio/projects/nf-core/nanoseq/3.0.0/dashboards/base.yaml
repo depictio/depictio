@@ -340,8 +340,8 @@ main_dashboard:
     hide_legend: true
     tag: ns-ov-hl-length-quality
     index: ov-hl-length-quality
-    layout: {x: 0, y: 2, w: 5, h: 5}
-  # The w3 highlights take a short title: the source's is cut at that width.
+    layout: {x: 0, y: 2, w: 4, h: 5}
+  # The highlights take a short title: the source's is cut at half width.
   - component_type: highlight
     section: Findings
     title: Libraries (PCA)
@@ -350,7 +350,7 @@ main_dashboard:
     caption: One point per library on the first two components of log CPM, coloured by condition; replicates should sit together.
     tag: ns-ov-hl-pca
     index: ov-hl-pca
-    layout: {x: 5, y: 2, w: 3, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   # show_labels is off on both volcano sources: Ensembl and transcript ids pile
   # up over the points.
   - component_type: highlight
@@ -361,7 +361,7 @@ main_dashboard:
     caption: One point per tested gene, effect against significance; the coloured calls clear a 5% FDR and a two-fold change.
     tag: ns-ov-hl-de-volcano
     index: ov-hl-de-volcano
-    layout: {x: 0, y: 7, w: 3, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Isoform usage
@@ -369,7 +369,7 @@ main_dashboard:
     caption: One point per transcript, its change in usage against the gene-level q-value; the coloured ones shift their share of the gene.
     tag: ns-ov-hl-iso-volcano
     index: ov-hl-iso-volcano
-    layout: {x: 3, y: 7, w: 5, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers.
   - component_type: text

@@ -420,7 +420,7 @@ main_dashboard:
     caption: Each sample's sequences by V family, the eight largest coloured; the strip below names the subject.
     tag: airr-ov-hl-vgene
     index: ov-hl-vgene
-    layout: {x: 0, y: 2, w: 5, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Clonal Diversity
@@ -429,7 +429,7 @@ main_dashboard:
     caption: One curve per sample; diversity falls as the order q weighs the largest clones more.
     tag: airr-ov-hl-profile
     index: ov-hl-profile
-    layout: {x: 5, y: 2, w: 3, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Clone Sharing
@@ -437,7 +437,7 @@ main_dashboard:
     caption: Clones by how many samples hold them; the first bar is the private clones. Log scale.
     tag: airr-ov-hl-sharing
     index: ov-hl-sharing
-    layout: {x: 0, y: 7, w: 3, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Clonal Expansion
@@ -445,7 +445,7 @@ main_dashboard:
     caption: Sequences by subject, sample and clone size class, from rare to hyperexpanded clones.
     tag: airr-ov-hl-homeostasis
     index: ov-hl-homeostasis
-    layout: {x: 3, y: 7, w: 5, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out, and a heading whose
   # tabs are all missing is hidden.

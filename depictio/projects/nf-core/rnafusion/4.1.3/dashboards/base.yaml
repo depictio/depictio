@@ -352,7 +352,7 @@ main_dashboard:
     caption: Each bar counts the fusions found by exactly that combination of callers; the darker, the more callers agree.
     tag: rf-ov-hl-upset
     index: ov-hl-upset
-    layout: {x: 0, y: 2, w: 5, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Breakpoints
@@ -360,7 +360,7 @@ main_dashboard:
     caption: Each chord joins the two breakpoints of an Arriba call, coloured by event class.
     tag: rf-ov-hl-chord
     index: ov-hl-chord
-    layout: {x: 5, y: 2, w: 3, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Validation
@@ -368,7 +368,7 @@ main_dashboard:
     caption: One point per validated breakpoint; high on both axes, little wild-type competition on either side.
     tag: rf-ov-hl-far
     index: ov-hl-far
-    layout: {x: 0, y: 7, w: 3, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Protein Domains
@@ -376,7 +376,7 @@ main_dashboard:
     caption: The fusions with the most Pfam domains, each drawn as its two partners end to end.
     tag: rf-ov-hl-structure
     index: ov-hl-structure
-    layout: {x: 3, y: 7, w: 5, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out, and a heading whose
   # tabs are all missing is hidden.

@@ -352,7 +352,7 @@ main_dashboard:
     caption: One curve per Ribo-seq library; a phased library peaks at the start codon, then every three nucleotides.
     tag: rb-ov-hl-start-profile
     index: ov-hl-start-profile
-    layout: {x: 0, y: 2, w: 5, h: 4}
+    layout: {x: 0, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Translational efficiency
@@ -360,7 +360,7 @@ main_dashboard:
     caption: One point per gene; above the diagonal, more footprints than its mRNA level predicts.
     tag: rb-ov-hl-te-plane
     index: ov-hl-te-plane
-    layout: {x: 5, y: 2, w: 3, h: 4}
+    layout: {x: 4, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Translational regulation
@@ -368,7 +368,7 @@ main_dashboard:
     caption: One point per gene and contrast, coloured by mode; off the diagonal, translation changes on its own.
     tag: rb-ov-hl-fold-change
     index: ov-hl-fold-change
-    layout: {x: 0, y: 6, w: 3, h: 4}
+    layout: {x: 0, y: 6, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: ORF discovery
@@ -376,7 +376,7 @@ main_dashboard:
     caption: ORFs per combination of callers and annotation; the bars without the annotated CDS are new ORFs.
     tag: rb-ov-hl-orf-upset
     index: ov-hl-orf-upset
-    layout: {x: 3, y: 6, w: 5, h: 4}
+    layout: {x: 4, y: 6, w: 4, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out, and a heading whose
   # tabs are all missing is hidden.

@@ -347,7 +347,7 @@ main_dashboard:
     caption: One point per cell, coloured by graph-based cluster; nearby cells have similar expression.
     tag: sc-ov-hl-umap
     index: ov-hl-umap
-    layout: {x: 0, y: 2, w: 5, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Cell Calling
@@ -356,7 +356,7 @@ main_dashboard:
     caption: UMIs per barcode against its rank, one curve per sample; the cliff is where cells end.
     tag: sc-ov-hl-knee
     index: ov-hl-knee
-    layout: {x: 5, y: 2, w: 3, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Clusters
@@ -364,7 +364,7 @@ main_dashboard:
     caption: Cells per graph-based cluster, the flagged ones stacked on top in red.
     tag: sc-ov-hl-sizes
     index: ov-hl-sizes
-    layout: {x: 0, y: 7, w: 3, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Markers
@@ -372,7 +372,7 @@ main_dashboard:
     caption: The strongest up-regulated marker of each graph-based cluster, named on its bar.
     tag: sc-ov-hl-markers
     index: ov-hl-markers
-    layout: {x: 3, y: 7, w: 5, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out.
   - component_type: text

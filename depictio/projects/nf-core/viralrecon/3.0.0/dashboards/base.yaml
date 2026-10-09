@@ -377,7 +377,7 @@ main_dashboard:
     hide_legend: true
     tag: vr-ov-hl-depth-breadth
     index: ov-hl-depth-breadth
-    layout: {x: 0, y: 2, w: 5, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   # A summary of the Coverage tab's amplicon track: one line for the samples in
   # view rather than one lane per sample.
   - component_type: figure
@@ -403,7 +403,7 @@ main_dashboard:
     section: Findings
     tag: vr-ov-amplicon-depth
     index: ov-amplicon-depth
-    layout: {x: 5, y: 2, w: 3, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   # top_n_labels is 0 on the source: mutation labels pile up over the points.
   - component_type: highlight
     section: Findings
@@ -413,7 +413,7 @@ main_dashboard:
     hide_legend: true
     tag: vr-ov-hl-manhattan
     index: ov-hl-manhattan
-    layout: {x: 0, y: 7, w: 3, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Lineage & Clustering
@@ -421,7 +421,7 @@ main_dashboard:
     caption: Each sample from its Pangolin QC verdict to its lineage and its Nextclade clade; a thin ribbon is a rare or mismatched call.
     tag: vr-ov-hl-sankey
     index: ov-hl-sankey
-    layout: {x: 3, y: 7, w: 5, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out, and a heading whose
   # tabs are all missing is hidden.

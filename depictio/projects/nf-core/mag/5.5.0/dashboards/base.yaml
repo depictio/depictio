@@ -370,7 +370,7 @@ main_dashboard:
     caption: One point per bin, coloured by binner; bottom right, at least 90% complete and under 5% contaminated, are the bins worth naming.
     tag: mg-ov-hl-mimag
     index: ov-hl-mimag
-    layout: {x: 0, y: 2, w: 5, h: 4}
+    layout: {x: 0, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Assembly
@@ -380,7 +380,7 @@ main_dashboard:
     caption: One point per assembly, coloured by assembler; up and to the right is a long assembly in long pieces.
     tag: mg-ov-hl-assembly
     index: ov-hl-assembly
-    layout: {x: 5, y: 2, w: 3, h: 4}
+    layout: {x: 4, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Taxonomy
@@ -388,7 +388,7 @@ main_dashboard:
     caption: Every named bin from domain outwards; the wider an arc, the more bins it holds.
     tag: mg-ov-hl-lineage
     index: ov-hl-lineage
-    layout: {x: 0, y: 6, w: 3, h: 4}
+    layout: {x: 0, y: 6, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Annotation
@@ -396,7 +396,7 @@ main_dashboard:
     caption: One point per bin; right of the line, at least the 18 transfer RNAs a high-quality draft needs.
     tag: mg-ov-hl-rna
     index: ov-hl-rna
-    layout: {x: 3, y: 6, w: 5, h: 4}
+    layout: {x: 4, y: 6, w: 4, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out, and a heading whose
   # tabs are all missing is hidden.

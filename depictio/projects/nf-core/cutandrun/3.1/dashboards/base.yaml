@@ -345,7 +345,7 @@ main_dashboard:
     caption: One curve per sample, coloured by target; the shaded bands are the sub-nucleosomal (sub) and mononucleosomal (mono) windows.
     tag: cr-ov-hl-fragments
     index: ov-hl-fragments
-    layout: {x: 0, y: 2, w: 5, h: 4}
+    layout: {x: 0, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Peaks
@@ -354,7 +354,7 @@ main_dashboard:
     caption: Mean fragments per million around the summits of each sample's strongest SEACR peaks; a sharp mark peaks at 0.
     tag: cr-ov-hl-pileup
     index: ov-hl-pileup
-    layout: {x: 5, y: 2, w: 3, h: 4}
+    layout: {x: 4, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Caller agreement
@@ -362,7 +362,7 @@ main_dashboard:
     caption: One point per sample; off the dotted line, the two callers disagree on how many peaks there are.
     tag: cr-ov-hl-callers
     index: ov-hl-callers
-    layout: {x: 0, y: 6, w: 3, h: 4}
+    layout: {x: 0, y: 6, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Consensus
@@ -370,7 +370,7 @@ main_dashboard:
     caption: Each target's consensus intervals, split by how many replicates called them; the labels are interval counts.
     tag: cr-ov-hl-consensus
     index: ov-hl-consensus
-    layout: {x: 3, y: 6, w: 5, h: 4}
+    layout: {x: 4, y: 6, w: 4, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out.
   - component_type: text

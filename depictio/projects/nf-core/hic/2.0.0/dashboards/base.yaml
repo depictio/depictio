@@ -347,7 +347,7 @@ main_dashboard:
     caption: Every read pair followed through mapping, the ligation filter and the contact class; losses peel off into the Lost lane.
     tag: hc-ov-hl-pairs
     index: ov-hl-pairs
-    layout: {x: 0, y: 2, w: 5, h: 4}
+    layout: {x: 0, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Distance decay
@@ -356,7 +356,7 @@ main_dashboard:
     caption: Contact probability against distance on log-log axes; one colour per chromosome, plus the pooled curve.
     tag: hc-ov-hl-decay
     index: ov-hl-decay
-    layout: {x: 5, y: 2, w: 3, h: 4}
+    layout: {x: 4, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Domains
@@ -364,7 +364,7 @@ main_dashboard:
     caption: Domain size per insulation window; a wider window calls fewer, larger domains.
     tag: hc-ov-hl-domains
     index: ov-hl-domains
-    layout: {x: 0, y: 6, w: 3, h: 4}
+    layout: {x: 0, y: 6, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Compartments
@@ -372,7 +372,7 @@ main_dashboard:
     caption: Bins called A and B on every chromosome; a chromosome with no bar has no E1 sign.
     tag: hc-ov-hl-compartments
     index: ov-hl-compartments
-    layout: {x: 3, y: 6, w: 5, h: 4}
+    layout: {x: 4, y: 6, w: 4, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers.
   - component_type: text

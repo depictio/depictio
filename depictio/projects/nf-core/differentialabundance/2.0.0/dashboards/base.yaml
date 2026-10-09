@@ -341,7 +341,7 @@ main_dashboard:
     caption: One point per gene and contrast; the corners past the dashed lines hold the calls.
     tag: da-ov-hl-volcano
     index: ov-hl-volcano
-    layout: {x: 0, y: 2, w: 5, h: 4}
+    layout: {x: 0, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Samples
@@ -349,7 +349,7 @@ main_dashboard:
     caption: One point per sample; replicates should sit together, groups apart.
     tag: da-ov-hl-pca
     index: ov-hl-pca
-    layout: {x: 5, y: 2, w: 3, h: 4}
+    layout: {x: 4, y: 2, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Genome view
@@ -357,7 +357,7 @@ main_dashboard:
     caption: Every annotated gene at its coordinate; peaks above the line are the calls.
     tag: da-ov-hl-manhattan
     index: ov-hl-manhattan
-    layout: {x: 0, y: 6, w: 3, h: 4}
+    layout: {x: 0, y: 6, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Enrichment
@@ -365,7 +365,7 @@ main_dashboard:
     caption: One dot per gene set, on its normalised enrichment score, sized by the genes found.
     tag: da-ov-hl-dotplot
     index: ov-hl-dotplot
-    layout: {x: 3, y: 6, w: 5, h: 4}
+    layout: {x: 4, y: 6, w: 4, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out, and a heading whose
   # tabs are all missing is hidden.

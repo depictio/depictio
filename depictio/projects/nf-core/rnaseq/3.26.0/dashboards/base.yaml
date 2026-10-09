@@ -322,7 +322,7 @@ main_dashboard:
     caption: The most variable genes in view, one box per condition, one point per library.
     tag: rna-ov-hl-box
     index: ov-hl-box
-    layout: {x: 0, y: 2, w: 5, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Sample Space
@@ -330,7 +330,7 @@ main_dashboard:
     caption: Distances between libraries, clustered; replicates of one condition form a dark block.
     tag: rna-ov-hl-distances
     index: ov-hl-distances
-    layout: {x: 5, y: 2, w: 3, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Gene Explorer
@@ -338,7 +338,7 @@ main_dashboard:
     caption: One point per gene, mean against spread, coloured by the condition it peaks in.
     tag: rna-ov-hl-plane
     index: ov-hl-plane
-    layout: {x: 0, y: 7, w: 3, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Library QC
@@ -346,7 +346,7 @@ main_dashboard:
     caption: Where each library's tags landed on the annotation, by RSeQC region class.
     tag: rna-ov-hl-distribution
     index: ov-hl-distribution
-    layout: {x: 3, y: 7, w: 5, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle. A tab the run does
   # not have is left out, and a heading whose tabs are all missing is hidden.
   - component_type: text

@@ -343,7 +343,7 @@ main_dashboard:
     index: ov-findings
     layout: {x: 0, y: 0, w: 8, h: 2}
   # One highlight per analysis tab, in the order of the rows above. A legend
-  # of callsets or FILTER reasons would fill a narrow tile: the captions say
+  # of callsets or FILTER reasons would fill a half-width tile: the captions say
   # what the colour is instead.
   - component_type: highlight
     section: Findings
@@ -353,7 +353,7 @@ main_dashboard:
     caption: One bar per caller, its SNVs over the six substitution classes averaged over the samples; C>T and T>C are the transitions.
     tag: sk-ov-hl-spectrum
     index: ov-hl-spectrum
-    layout: {x: 0, y: 2, w: 5, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Call quality
@@ -362,7 +362,7 @@ main_dashboard:
     caption: Calls per caller by FILTER value; the green slice is PASS, the rest is what the caller set aside.
     tag: sk-ov-hl-filter
     index: ov-hl-filter
-    layout: {x: 5, y: 2, w: 3, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Caller concordance
@@ -370,7 +370,7 @@ main_dashboard:
     caption: Calls binned on depth and allele fraction; a clean diploid callset forms ridges at 0.5 and 1.
     tag: sk-ov-hl-vaf
     index: ov-hl-vaf
-    layout: {x: 0, y: 7, w: 3, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Consequences
@@ -379,7 +379,7 @@ main_dashboard:
     caption: Each caller's coding calls by impact class (red HIGH, orange MODERATE, blue LOW), as shares.
     tag: sk-ov-hl-impact
     index: ov-hl-impact
-    layout: {x: 3, y: 7, w: 5, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
   # Link-only tab tiles: each prints its tab's subtitle. A tab the run does not
   # have is left out, and a heading whose tabs are all missing is hidden.
   - component_type: text

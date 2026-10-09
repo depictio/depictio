@@ -370,7 +370,7 @@ main_dashboard:
     caption: One bar per classifier and database, the eight most abundant species, the rest folded into Other.
     tag: tp-ov-hl-composition
     index: ov-hl-composition
-    layout: {x: 0, y: 2, w: 5, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Diversity
@@ -379,7 +379,7 @@ main_dashboard:
     caption: One point per sample and classifier, coloured by classifier; a long tail moves a run right without moving it up.
     tag: tp-ov-hl-diversity
     index: ov-hl-diversity
-    layout: {x: 5, y: 2, w: 3, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Concordance
@@ -389,7 +389,7 @@ main_dashboard:
     caption: One point per sample and classifier, coloured by classifier; runs of one sample land together when they agree.
     tag: tp-ov-hl-pcoa
     index: ov-hl-pcoa
-    layout: {x: 0, y: 7, w: 3, h: 4}
+    layout: {x: 0, y: 7, w: 4, h: 4}
   - component_type: highlight
     section: Findings
     source_tab: Confidence
@@ -398,7 +398,7 @@ main_dashboard:
     caption: One point per genome and sample, coloured by sample; bottom right, an abundant genome matched at low identity.
     tag: tp-ov-hl-ani
     index: ov-hl-ani
-    layout: {x: 3, y: 7, w: 5, h: 4}
+    layout: {x: 4, y: 7, w: 4, h: 4}
   # Link-only tab tiles: each tile prints its tab's subtitle, the question the
   # tab answers. A tab the run does not have is left out, and a heading whose
   # tabs are all missing is hidden.
