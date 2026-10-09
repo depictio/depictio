@@ -2508,7 +2508,9 @@ class GenomeViewConfig(_BaseVizConfig):
             "``region_filter_enabled``. Coordinates may carry thousands "
             "separators and a kb / Mb / Gb suffix, ``..`` works as the "
             "separator, one coordinate opens a 10 kb window around it, and a "
-            "bare contig name opens the whole contig."
+            "bare contig name opens the whole contig. ``first`` opens the whole "
+            "first contig the data carries, for a template that serves any "
+            "reference and so cannot name one."
         ),
     )
 

@@ -90,6 +90,15 @@ describe('defaultRegionFilters', () => {
     expect(defaultRegionFilters(input({ defaultRegion: 'chr22:1-1000' }))).toBeNull();
   });
 
+  it('opens `first` on the whole first contig the data carries', () => {
+    const emitted = defaultRegionFilters(input({ defaultRegion: 'First', contigs: ['NC_1.1', 'NC_2.1'] }));
+    expect(regionFromFilters(emitted ?? [], 'chr', 'pos')).toEqual({
+      chrom: 'NC_1.1',
+      start: 0,
+      end: Infinity,
+    });
+  });
+
   it('never moves a reader who is already somewhere', () => {
     const elsewhere = genomeRegionFilters(
       { ...meta, index: 'gv-2' } as StoredMetadata,

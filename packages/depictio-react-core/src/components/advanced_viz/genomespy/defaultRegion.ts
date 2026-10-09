@@ -44,6 +44,9 @@ export interface DefaultRegionInput {
   filters: readonly InteractiveFilter[] | null | undefined;
 }
 
+/** `default_region` keyword for the first contig the data carries. */
+export const FIRST_CONTIG = 'first';
+
 function hasValue(value: unknown): boolean {
   if (Array.isArray(value)) return value.length > 0;
   if (value === null || value === undefined) return false;
@@ -90,7 +93,12 @@ export function defaultRegionFilters(input: DefaultRegionInput): InteractiveFilt
 
   const contigs = input.contigs ?? [];
   if (!contigs.length) return null;
-  const resolved = resolveLocus(text, contigs, input.genes ?? null);
+  // `first` opens on the first contig the data carries, whole: a template
+  // that serves any reference cannot name a contig that holds across them.
+  const resolved =
+    text.toLowerCase() === FIRST_CONTIG
+      ? { chrom: contigs[0], start: null, end: null }
+      : resolveLocus(text, contigs, input.genes ?? null);
   // A default region naming a contig this collection does not carry is an
   // authoring mistake, and emitting it would filter every tile down to zero
   // rows. Drawing the overview is the better failure.
