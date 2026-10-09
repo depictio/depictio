@@ -24,6 +24,7 @@ from depictio.api.v1.db import (
     dashboard_version_counters_collection,
     dashboard_versions_collection,
 )
+from depictio.models.timestamps import utc_now_naive
 
 
 def ensure_dashboard_version_storage() -> None:
@@ -90,6 +91,23 @@ def touch_version(version_id: str, now: datetime) -> None:
         {"version_id": version_id},
         {"$set": {"updated_at": now}, "$inc": {"save_count": 1}},
     )
+
+
+def seal_version(
+    record: dict[str, Any], updates: dict[str, Any] | None = None
+) -> Optional[dict[str, Any]]:
+    """Make a version ``explicit`` and close its coalescing window.
+
+    For a state the user deliberately kept (a Save click, a name) that an
+    autosave had already recorded: no later autosave may fold into it, and the
+    timeline shows it as saved rather than autosaved.
+    """
+    fields: dict[str, Any] = {
+        "kind": "explicit",
+        "coalesce_until": record.get("created_at") or utc_now_naive(),
+        **(updates or {}),
+    }
+    return set_version_fields(record["version_id"], fields)
 
 
 def get_version(version_id: str) -> Optional[dict[str, Any]]:
@@ -190,7 +208,7 @@ def prune_family(family_id: str, *, now: datetime | None = None) -> int:
     5. anything older than ``retention_days`` goes.
     """
     cfg = settings.dashboard_versions
-    now = now or datetime.now()
+    now = now or utc_now_naive()
 
     records = list(
         dashboard_versions_collection.find({"family_id": family_id}).sort("seq", DESCENDING)

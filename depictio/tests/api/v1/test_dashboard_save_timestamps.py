@@ -23,6 +23,19 @@ from depictio.models.models.users import Permission, UserBase
 TS_FMT = "%Y-%m-%d %H:%M:%S"
 
 
+@pytest.fixture(autouse=True)
+def _no_version_capture():
+    """Keep the save route's version capture off the real Mongo.
+
+    These tests are not about versioning; without this, every save waits out
+    the server-selection timeout of a Mongo that is not there.
+    """
+    from depictio.api.v1.endpoints.dashboards_endpoints import versioning
+
+    with patch.object(versioning, "capture_quietly", return_value=None):
+        yield
+
+
 @pytest.fixture
 def db():
     client = mongomock.MongoClient()

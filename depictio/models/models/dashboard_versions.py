@@ -35,6 +35,8 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from depictio.models.timestamps import utc_now_naive
+
 #: How a version came to exist. ``auto`` is an autosave (subject to
 #: coalescing); ``explicit`` is a deliberate Save click or a named snapshot;
 #: ``restore`` marks the state captured immediately after a restore;
@@ -238,12 +240,12 @@ class DashboardVersion(BaseModel):
     author_id: Optional[str] = None
     author_email: Optional[str] = None
 
-    created_at: datetime = Field(default_factory=datetime.now)
-    updated_at: datetime = Field(default_factory=datetime.now)
+    created_at: datetime = Field(default_factory=utc_now_naive)
+    updated_at: datetime = Field(default_factory=utc_now_naive)
     #: End of this version's coalescing window, fixed when the version is
     #: created. Anchored rather than sliding: a sliding window would let one
     #: long editing session collapse into a single unreviewable entry.
-    coalesce_until: datetime = Field(default_factory=datetime.now)
+    coalesce_until: datetime = Field(default_factory=utc_now_naive)
     #: How many saves folded into this version. Rendered as "12 saves over 4 min".
     save_count: int = 1
 

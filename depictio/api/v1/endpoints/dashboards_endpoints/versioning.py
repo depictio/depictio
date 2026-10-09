@@ -41,7 +41,7 @@ from pymongo import ASCENDING
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection, deltatables_collection
-from depictio.api.v1.endpoints.dashboards_endpoints import version_store
+from depictio.api.v1.endpoints.dashboards_endpoints import schema_integrity, version_store
 from depictio.models.models.dashboard_versions import (
     RECORD_SCHEMA_VERSION,
     TAB_SCHEMA_1_FIELDS,
@@ -51,6 +51,7 @@ from depictio.models.models.dashboard_versions import (
     VersionKind,
 )
 from depictio.models.models.dashboards import DashboardData
+from depictio.models.timestamps import utc_now_naive
 
 #: Fields never carried into a snapshot.
 #:
@@ -151,15 +152,20 @@ def resolve_family_id(dashboard_doc: dict[str, Any]) -> Optional[ObjectId]:
         return None
 
 
+def _find_dashboard(oid: ObjectId) -> Optional[dict[str, Any]]:
+    """A dashboard document by its ``dashboard_id``, falling back to ``_id``."""
+    return dashboards_collection.find_one({"dashboard_id": oid}) or (
+        dashboards_collection.find_one({"_id": oid})
+    )
+
+
 def load_family_docs(family_id: ObjectId) -> list[dict[str, Any]]:
     """Full documents for the main tab and every child, in tab order.
 
     Deliberately not ``get_child_tabs()``: that helper projects away
     ``stored_metadata``, which is the entire point of a snapshot.
     """
-    main = dashboards_collection.find_one({"dashboard_id": family_id})
-    if not main:
-        main = dashboards_collection.find_one({"_id": family_id})
+    main = _find_dashboard(family_id)
     if not main:
         return []
 
@@ -343,29 +349,28 @@ def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
         aggregations = (dt_doc or {}).get("aggregation") or []
         latest = aggregations[-1] if aggregations else None
 
+        # Every stamp starts at ``version_kind="none"``; only a Delta
+        # aggregation with a recorded commit moves it.
         if kind == "delta" and latest:
             stamp.aggregation_version = latest.get("aggregation_version")
             stamp.delta_version = latest.get("delta_version")
             stamp.delta_commit_timestamp = latest.get("delta_commit_timestamp")
             stamp.row_count = latest.get("rows_total")
-            stamp.columns = _columns_from_aggregation(latest)
-            stamp.schema_hash = generate_schema_hash(stamp.columns)
+            stamp.columns = schema_integrity.columns_from_aggregation(latest)
+            stamp.schema_hash = schema_integrity.generate_schema_hash(stamp.columns)
             if stamp.delta_version is None:
                 # Pre-provenance aggregations, and every UI upload, land here.
-                stamp.version_kind = "none"
                 stamp.reason = "no_delta_version_recorded"
             else:
                 stamp.version_kind = "delta"
         elif kind == "manifest":
             # Populated in the manifest stage; the stamp records the intent and
             # the instant so a later backfill has an anchor.
-            stamp.version_kind = "none"
             stamp.reason = "manifest_versioning_not_enabled"
             if latest:
-                stamp.columns = _columns_from_aggregation(latest)
-                stamp.schema_hash = generate_schema_hash(stamp.columns)
+                stamp.columns = schema_integrity.columns_from_aggregation(latest)
+                stamp.schema_hash = schema_integrity.generate_schema_hash(stamp.columns)
         elif kind == "asset":
-            stamp.version_kind = "none"
             stamp.reason = "asset_versioning_not_enabled"
         else:
             stamp.reason = (
@@ -377,39 +382,12 @@ def build_dc_stamps(tabs: list[TabSnapshot]) -> list[DataCollectionStamp]:
     return stamps
 
 
-def _columns_from_aggregation(aggregation: dict[str, Any]) -> list[dict[str, str]]:
-    """Column specs live on the aggregation, not on the data collection config."""
-    raw = aggregation.get("aggregation_columns_specs")
-    columns: list[dict[str, str]] = []
-    if isinstance(raw, list):
-        for entry in raw:
-            if isinstance(entry, dict) and entry.get("name"):
-                columns.append(
-                    {"name": str(entry["name"]), "type": str(entry.get("type", "") or "")}
-                )
-    elif isinstance(raw, dict):  # legacy shape
-        for name, spec in raw.items():
-            columns.append({"name": str(name), "type": str((spec or {}).get("type", "") or "")})
-    return columns
-
-
-def generate_schema_hash(columns: list[dict[str, str]]) -> str:
-    """Stable digest of a column set, order-independent."""
-    ordered = sorted(columns, key=lambda c: c.get("name", ""))
-    payload = "|".join(f"{c.get('name', '')}:{c.get('type', '')}" for c in ordered)
-    return f"sha256:{hashlib.sha256(payload.encode()).hexdigest()[:16]}"
-
-
-def _schema_2_defaults() -> dict[str, Any]:
-    """JSON defaults of every ``TabSnapshot`` field added after record schema 1."""
-    return {
-        name: TabSnapshot.model_fields[name].get_default(call_default_factory=True)
-        for name in TabSnapshot.model_fields
-        if name not in TAB_SCHEMA_1_FIELDS
-    }
-
-
-_LATER_FIELD_DEFAULTS: dict[str, Any] = _schema_2_defaults()
+#: JSON defaults of every ``TabSnapshot`` field added after record schema 1.
+_LATER_FIELD_DEFAULTS: dict[str, Any] = {
+    name: field.get_default(call_default_factory=True)
+    for name, field in TabSnapshot.model_fields.items()
+    if name not in TAB_SCHEMA_1_FIELDS
+}
 
 
 def _canonical_tab(tab: TabSnapshot) -> dict[str, Any]:
@@ -478,6 +456,7 @@ def capture_dashboard_version(
     author: Any = None,
     label: str | None = None,
     parent_version_id: str | None = None,
+    seal: bool = False,
     now: datetime | None = None,
     only_if_changed: bool = False,
 ) -> Optional[DashboardVersion]:
@@ -491,12 +470,16 @@ def capture_dashboard_version(
     version, whatever ``kind`` is. For recording "the state before" ahead of a
     restore or an import: that state is usually the newest version already,
     and an explicit capture would otherwise write a duplicate of it every time.
+
+    ``seal`` is for a user's explicit Save: when the content is unchanged and
+    the newest version is an autosave, that autosave becomes ``explicit``
+    instead, so the Save is visible and nothing folds into it afterwards.
     """
     cfg = settings.dashboard_versions
     if not cfg.enabled:
         return None
 
-    now = now or datetime.now()
+    now = now or utc_now_naive()
 
     try:
         dashboard_oid = ObjectId(str(dashboard_id))
@@ -504,9 +487,7 @@ def capture_dashboard_version(
         logger.warning(f"versioning: not a valid dashboard id: {dashboard_id!r}")
         return None
 
-    anchor = dashboards_collection.find_one({"dashboard_id": dashboard_oid}) or (
-        dashboards_collection.find_one({"_id": dashboard_oid})
-    )
+    anchor = _find_dashboard(dashboard_oid)
     if not anchor:
         logger.debug(f"versioning: dashboard {dashboard_id} not found; nothing to capture")
         return None
@@ -533,11 +514,18 @@ def capture_dashboard_version(
     # Nothing changed. An explicit save still deserves a marker, so it falls
     # through to the normal path; an autosave leaves no trace at all, and
     # neither does a "state before" capture.
+    #
+    # A Save click (`seal`) marks the autosave that already holds this content
+    # instead: the debounced autosave has nearly always written it, and a
+    # second entry with the same content would say nothing.
     if latest and latest.get("content_hash") == content_hash:
         if only_if_changed:
             return None
         if kind == "auto":
             version_store.touch_version(latest["version_id"], now)
+            return None
+        if seal and latest.get("kind") == "auto":
+            version_store.seal_version(latest, {"updated_at": now})
             return None
 
     stamps = build_dc_stamps(tabs)

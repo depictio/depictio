@@ -926,7 +926,13 @@ async def save_dashboard(
         #
         # `force_screenshot` is only ever set by the editor's explicit Save
         # button — autosaves omit it — so it doubles as a free "the user meant
-        # this one" signal, marking a version that never coalesces away.
+        # this one" signal, marking a version that never coalesces away. The
+        # autosave has usually written the same content already; the click
+        # then seals that version (see `seal` in capture_dashboard_version).
+        #
+        # A dashboard's creation is explicit too. As an autosave it would be
+        # the window the creator's first edits fold into, overwriting the
+        # created state (a seeded example, an import, a duplicate) for good.
         #
         # capture_quietly swallows everything: a missing version is a lost
         # undo step, a failed save is lost work.
@@ -934,7 +940,8 @@ async def save_dashboard(
 
         capture_quietly(
             dashboard_id,
-            kind="explicit" if force_screenshot else "auto",
+            kind="explicit" if force_screenshot or not existing_dashboard else "auto",
+            seal=force_screenshot,
             author=current_user,
         )
 

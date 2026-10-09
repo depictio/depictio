@@ -21,6 +21,16 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def utc_now_naive() -> datetime:
+    """Current UTC time without tzinfo, for values stored as BSON dates.
+
+    PyMongo reads BSON dates back as naive UTC, so this is what compares
+    against them: an aware value raises ``TypeError`` on comparison, and a
+    local ``datetime.now()`` is off by the server's UTC offset.
+    """
+    return utc_now().replace(tzinfo=None)
+
+
 def utc_now_str() -> str:
     """Current UTC time as a naive ``"%Y-%m-%d %H:%M:%S"`` string."""
     return utc_now().strftime(TIMESTAMP_FORMAT)

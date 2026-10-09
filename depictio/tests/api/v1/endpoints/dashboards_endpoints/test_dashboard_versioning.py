@@ -631,3 +631,79 @@ def test_a_fold_upgrades_the_record_schema_version(store) -> None:
 
     assert store["versions"].count_documents({}) == 1, "precondition: the saves coalesced"
     assert store["versions"].find_one({})["record_schema_version"] == 2
+
+
+# ── Save click on an already-autosaved state ────────────────────────────────
+#
+# The editor autosaves 500 ms after each change, so by the time the user
+# clicks Save the autosave has nearly always recorded that content. The click
+# must still show: it seals that autosave rather than writing nothing.
+
+
+def test_a_save_click_seals_the_autosave_that_holds_its_content(store) -> None:
+    did = _make_dashboard(store, components=[{"index": "a"}])
+    _capture(did, author=ALICE, now=BASE)
+
+    result = _capture(
+        did, kind="explicit", seal=True, author=ALICE, now=BASE + timedelta(seconds=30)
+    )
+
+    assert result is None, "no second copy of the same content"
+    assert store["versions"].count_documents({}) == 1
+    sealed = store["versions"].find_one({})
+    assert sealed["kind"] == "explicit"
+    assert sealed["coalesce_until"] == sealed["created_at"], "its window must be closed"
+
+
+def test_an_edit_after_a_save_click_opens_a_new_version(store) -> None:
+    did = _make_dashboard(store, components=[{"index": "a"}])
+    _capture(did, author=ALICE, now=BASE)
+    _capture(did, kind="explicit", seal=True, author=ALICE, now=BASE + timedelta(seconds=30))
+
+    _set_components(store, did, [{"index": "b"}])
+    _capture(did, author=ALICE, now=BASE + timedelta(seconds=60))
+
+    assert store["versions"].count_documents({}) == 2, "the saved state must not be folded into"
+    saved = store["versions"].find_one({"kind": "explicit"})
+    assert saved["tabs"][0]["stored_metadata"] == [{"index": "a"}]
+
+
+def test_a_state_before_capture_does_not_seal(store) -> None:
+    """Only a Save click seals: the capture ahead of a restore is not one."""
+    did = _make_dashboard(store, components=[{"index": "a"}])
+    _capture(did, author=ALICE, now=BASE)
+
+    _capture(did, kind="explicit", author=ALICE, now=BASE + timedelta(seconds=30))
+
+    assert store["versions"].find_one({})["kind"] == "auto"
+
+
+@pytest.fixture()
+def far_from_utc(monkeypatch: pytest.MonkeyPatch):
+    """Run with a local clock 5h30 away from UTC, as on a developer laptop."""
+    import time
+
+    monkeypatch.setenv("TZ", "Asia/Kolkata")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+def test_versions_are_stamped_in_utc(store, far_from_utc) -> None:
+    """Version times are naive UTC like every other API timestamp.
+
+    Stamped with the server's local clock, a laptop running `depictio local
+    up` showed every version hours away from when it was saved, since the
+    viewer reads naive timestamps as UTC.
+    """
+    from datetime import timezone
+
+    did = _make_dashboard(store, components=[{"index": "a"}])
+    before = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    _capture(did, author=ALICE)
+
+    created = store["versions"].find_one({})["created_at"]
+    assert abs((created - before).total_seconds()) < 60
+

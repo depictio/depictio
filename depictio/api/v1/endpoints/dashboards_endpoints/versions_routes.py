@@ -16,7 +16,6 @@ undone by restoring the version before it), but erasing history is not.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any, Optional
 
 from bson import ObjectId
@@ -25,7 +24,11 @@ from pydantic import BaseModel, Field
 
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.db import dashboards_collection
-from depictio.api.v1.endpoints.dashboards_endpoints import version_store, versioning
+from depictio.api.v1.endpoints.dashboards_endpoints import (
+    schema_integrity,
+    version_store,
+    versioning,
+)
 from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
     sync_tab_family_permissions,
 )
@@ -33,7 +36,7 @@ from depictio.api.v1.endpoints.user_endpoints.routes import get_user_or_anonymou
 from depictio.models.models.base import PyObjectId, convert_objectid_to_str
 from depictio.models.models.dashboard_versions import TAB_IDENTITY_FIELDS, TabSnapshot
 from depictio.models.models.users import User
-from depictio.models.timestamps import preserved_creation_time, utc_now_str
+from depictio.models.timestamps import preserved_creation_time, utc_now_naive, utc_now_str
 
 dashboard_versions_endpoint_router = APIRouter()
 
@@ -224,11 +227,14 @@ async def current_dashboard_version(
     _require(main, current_user, "viewer")
 
     live_hash = _live_content_hash(family_id)
-    match = None
-    for record in version_store.list_versions(str(family_id), limit=200):
-        if record.get("content_hash") == live_hash:
-            match = record
-            break
+    match = next(
+        (
+            record
+            for record in version_store.list_versions(str(family_id), limit=200)
+            if record.get("content_hash") == live_hash
+        ),
+        None,
+    )
 
     return {
         "version_id": match["version_id"] if match else None,
@@ -248,8 +254,6 @@ async def dashboard_version_compatibility(
     components that reference them — a pair of schema hashes can only say
     "different", which is not something anyone can act on.
     """
-    from depictio.api.v1.endpoints.dashboards_endpoints import schema_integrity
-
     record = _guarded_version(version_id, current_user, "viewer")
 
     components = [
@@ -320,7 +324,7 @@ async def pin_dashboard_version(
 
     updates: dict[str, Any] = {
         "pinned": True,
-        "coalesce_until": record.get("created_at") or datetime.now(),
+        "coalesce_until": record.get("created_at") or utc_now_naive(),
     }
     if payload.label is not None:
         updates["label"] = payload.label
