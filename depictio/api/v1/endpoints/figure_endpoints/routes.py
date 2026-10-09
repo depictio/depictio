@@ -33,6 +33,42 @@ logger = logging.getLogger(__name__)
 figure_endpoint_router = APIRouter()
 
 
+def _authorize_preview_dc(wf_id, dc_id, current_user: User) -> None:
+    """Require read permission on the project that owns ``wf_id``/``dc_id``.
+
+    The preview endpoint takes an in-flight ``metadata`` dict straight from the
+    client, so unlike ``/dashboards/render_figure`` there is no stored component
+    to trust. Resolve the owning project from Mongo, requiring the DC to live
+    under the given workflow (so a caller cannot pair a workflow they may read
+    with a DC id from a private project), then gate it through the very helper
+    the dashboard render endpoints use for viewers — which already allows
+    anonymous access only on public projects.
+
+    Raises 404 when the workflow/DC pair resolves to no project (don't leak the
+    existence of collections the caller can't see) and 403 when the caller has
+    no read access to the project that owns it.
+    """
+    from bson import ObjectId
+
+    from depictio.api.v1.db import projects_collection
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import check_project_permission
+
+    try:
+        wf_oid = ObjectId(str(wf_id))
+        dc_oid = ObjectId(str(dc_id))
+    except Exception:
+        raise HTTPException(status_code=400, detail="metadata has an invalid wf_id/dc_id.")
+
+    project = projects_collection.find_one(
+        {"workflows": {"$elemMatch": {"_id": wf_oid, "data_collections._id": dc_oid}}},
+        {"_id": 1},
+    )
+    if not project:
+        raise HTTPException(status_code=404, detail="Data collection not found or access denied.")
+    if not check_project_permission(project["_id"], current_user, "viewer"):
+        raise HTTPException(status_code=403, detail="Permission denied.")
+
+
 @figure_endpoint_router.get("/visualizations")
 def list_visualizations(
     current_user: User = Depends(get_user_or_anonymous),
@@ -138,6 +174,24 @@ async def preview_figure(
     if not metadata or metadata.get("component_type") != "figure":
         raise HTTPException(status_code=400, detail="metadata must be a figure component.")
 
+    wf_id = metadata.get("wf_id")
+    dc_id = metadata.get("dc_id")
+    if not wf_id or not dc_id:
+        raise HTTPException(status_code=400, detail="metadata missing wf_id/dc_id.")
+
+    # Permission gate — before any data is loaded or any user code runs. The
+    # caller must have read access to the project that owns this workflow/DC.
+    _authorize_preview_dc(wf_id, dc_id, current_user)
+
+    # The DC's Delta location is authoritative in Mongo (resolved by the worker
+    # from dc_id). A client-supplied ``dc_config.delta_location`` would let an
+    # authorized caller point the read at an arbitrary table, so drop it here at
+    # the trust boundary and let the worker look it up.
+    dc_config = metadata.get("dc_config")
+    if isinstance(dc_config, dict) and "delta_location" in dc_config:
+        dc_config = {k: v for k, v in dc_config.items() if k != "delta_location"}
+        metadata = {**metadata, "dc_config": dc_config}
+
     dashboard_doc = None
     category_colors = None
     if preview_dashboard_id:
@@ -147,6 +201,9 @@ async def preview_figure(
         from depictio.api.v1.endpoints.dashboards_endpoints.core_functions import (
             effective_category_colors,
             family_brand_theme,
+        )
+        from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
+            check_project_permission,
         )
         from depictio.api.v1.services.figure.figure_builder import (
             merge_category_colors,
@@ -159,6 +216,12 @@ async def preview_figure(
             )
         except Exception:
             dashboard_doc = None
+        # Applying a dashboard's brand theme reads that dashboard — gate it on
+        # read permission, the same as fetching the dashboard itself would.
+        if dashboard_doc is not None:
+            project_id = dashboard_doc.get("project_id")
+            if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+                raise HTTPException(status_code=403, detail="Permission denied.")
         brand_theme = family_brand_theme(dashboard_doc) if dashboard_doc else None
         category_colors = effective_category_colors(dashboard_doc) if dashboard_doc else None
         if brand_theme or category_colors:
@@ -169,11 +232,6 @@ async def preview_figure(
                     merge_dashboard_brand_theme(brand_theme, metadata.get("dict_kwargs") or {}),
                 ),
             }
-
-    wf_id = metadata.get("wf_id")
-    dc_id = metadata.get("dc_id")
-    if not wf_id or not dc_id:
-        raise HTTPException(status_code=400, detail="metadata missing wf_id/dc_id.")
 
     filter_metadata = [
         {
