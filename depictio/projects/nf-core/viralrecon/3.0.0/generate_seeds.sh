@@ -56,14 +56,15 @@ mkdir -p "$SEEDS_DIR"
 #    `python -m depictio.cli` so the rich-display / polars monkey-patch is
 #    applied; see CLAUDE.md note on cli_rich_info_monkeypatch).
 cd "$REPO_ROOT"
-# `--overwrite` is required on any re-run: without it the dashboard import
-# hits `_import_multi_tab_dashboard`'s existing-family guard and returns 409.
+# `--reset-dashboards` is required on any re-run: without it the ingest keeps
+# the family the project already has, and step 2 exports yesterday's dashboards.
 python -m depictio.cli ingest \
     --server "$CLI_CONFIG" \
     --template "nf-core/viralrecon/3.0.0" \
     --data-root "$DATA_ROOT" \
     --update-config \
-    --overwrite
+    --overwrite \
+    --reset-dashboards
 
 # 2. Export the 6 viralrecon dashboards from Mongo into .db_seeds/. The
 #    dashboard_ids below come from db_init_reference_datasets.STATIC_IDS

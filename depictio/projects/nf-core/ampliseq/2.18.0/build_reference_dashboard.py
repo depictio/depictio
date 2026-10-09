@@ -798,6 +798,30 @@ def add_tree_group_colour(dashboard: dict[str, Any]) -> None:
                 print(f"  dominant_habitat colour on {comp.get('index', comp.get('tag'))}")
 
 
+# Collections base.yaml binds for routes the reference run does not take: its
+# taxonomy comes from QIIME2, so the SINTAX alternates have nothing to read.
+ABSENT_ROUTE_DCS = {"sintax_rel_abundance"}
+
+
+def drop_absent_routes(dashboard: dict[str, Any]) -> None:
+    """Drop the route alternates whose collection the reference project lacks.
+
+    `depictio ingest` prunes them from base.yaml by itself; `dashboard import`,
+    which lays this layer over the family, refuses a component whose collection
+    the project does not have. Their QIIME2 twins keep the shared grid slots.
+    """
+    for tab in [dashboard["main_dashboard"], *dashboard.get("tabs", [])]:
+        kept = [
+            c
+            for c in tab.get("components", [])
+            if c.get("data_collection_tag") not in ABSENT_ROUTE_DCS
+        ]
+        dropped = len(tab.get("components", [])) - len(kept)
+        if dropped:
+            tab["components"] = kept
+            print(f"  {dropped} SINTAX alternate(s) dropped from {tab.get('title')}")
+
+
 def list_demo_tabs(main: dict[str, Any], titles: list[str]) -> None:
     """Name the demo tabs in the Overview's tab tiles, under "Data & QC".
 
@@ -897,6 +921,7 @@ def build() -> dict[str, Any]:
     group_display = variables["GROUP_COL_DISPLAY"]
     id_col = variables["METADATA_ID_COL"]
 
+    drop_absent_routes(dashboard)
     annotate_heatmap_columns(dashboard, group_col, id_col)
     add_tree_group_colour(dashboard)
 

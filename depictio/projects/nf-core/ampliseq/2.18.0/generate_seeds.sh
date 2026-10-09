@@ -68,8 +68,8 @@ mkdir -p "$SEEDS_DIR"
 #    is what flips the template to the full 6-dashboard variant (the
 #    `if_var_present: METADATA_FILE` conditional in template.yaml).
 cd "$REPO_ROOT"
-# `--overwrite` is required on any re-run: without it the dashboard import hits
-# `_import_multi_tab_dashboard`'s existing-family guard and returns 409.
+# `--reset-dashboards` is required on any re-run: without it the ingest keeps
+# the family the project already has, and step 2 exports yesterday's dashboards.
 python -m depictio.cli ingest \
     --server "$CLI_CONFIG" \
     --template "nf-core/ampliseq/2.18.0" \
@@ -77,7 +77,8 @@ python -m depictio.cli ingest \
     --var SAMPLESHEET_FILE="$DATA_ROOT/input/samplesheet.csv" \
     --var METADATA_FILE="$DATA_ROOT/input/Metadata_full.tsv" \
     --update-config \
-    --overwrite
+    --overwrite \
+    --reset-dashboards
 
 # 1b. Layer the reference-only demo dashboard on top of the family the template
 #     just imported. `reference_extended.yaml` is generated from base.yaml by

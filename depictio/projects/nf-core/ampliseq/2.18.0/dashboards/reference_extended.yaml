@@ -132,6 +132,7 @@ main_dashboard:
   - component_type: text
     title: nf-core/ampliseq
     logo: /assets/images/workflows/ampliseq.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/ampliseq/master/docs/images/nf-core-ampliseq_logo_dark.png
     order: 1
     body: 'Amplicon reads turned into a census of each sample''s community: who is there, how diverse it is and what differs between groups. [Run parameters](params:)
 
@@ -267,30 +268,6 @@ main_dashboard:
       h: 2
   - component_type: card
     workflow_tag: ampliseq
-    data_collection_tag: sintax_rel_abundance
-    use: vsearch/sintax_abundance
-    aggregation: nunique
-    column_name: Phylum
-    column_type: object
-    secondary_layout: composition
-    breakdown_col: Kingdom
-    display:
-      icon_name: mdi:bacteria-outline
-      icon_color: teal
-      caption: distinct phyla, by kingdom
-      link: tab:Community & Diversity
-    section: Key figures
-    tag: am-ov-kf-phyla-sintax
-    index: ov-kf-phyla-sintax
-    title: Phyla
-    description: Distinct phyla SINTAX assigned. The bar splits them by kingdom.
-    layout:
-      x: 2
-      y: 0
-      w: 2
-      h: 2
-  - component_type: card
-    workflow_tag: ampliseq
     data_collection_tag: sidle_reconstructed
     use: sidle/reconstructed
     aggregation: nunique
@@ -396,25 +373,6 @@ main_dashboard:
     section: Findings
     tag: am-ov-findings-kingdom
     index: ov-findings-kingdom
-    title: Kingdom
-    layout:
-      x: 2
-      y: 0
-      w: 2
-      h: 1
-  - component_type: interactive
-    workflow_tag: ampliseq
-    data_collection_tag: sintax_rel_abundance
-    interactive_component_type: MultiSelect
-    column_name: Kingdom
-    column_type: object
-    display:
-      icon_name: mdi:bacteria
-      custom_color: grape
-      strip_label: Kingdom
-    section: Findings
-    tag: am-ov-findings-kingdom-sintax
-    index: ov-findings-kingdom-sintax
     title: Kingdom
     layout:
       x: 2
@@ -1387,7 +1345,7 @@ tabs:
       icon_name: mdi:sigma
       icon_color: pink
       caption: share of the Bray-Curtis variation
-      decimals: 2
+      format: percent
     section: Ordination at a glance
     tag: am-ord-card-permanova
     index: ord-card-permanova
@@ -1588,44 +1546,6 @@ tabs:
       y: 2
       w: 1
       h: 3
-  - component_type: interactive
-    workflow_tag: ampliseq
-    data_collection_tag: sintax_rel_abundance
-    interactive_component_type: MultiSelect
-    column_name: Kingdom
-    column_type: object
-    display:
-      icon_name: mdi:bacteria
-      custom_color: grape
-    section: Community filters
-    group: Taxonomy
-    tag: am-comm-filter-kingdom-sintax
-    index: sintax-kingdom-filter
-    title: Kingdom
-    layout:
-      x: 0
-      y: 0
-      w: 1
-      h: 2
-  - component_type: interactive
-    workflow_tag: ampliseq
-    data_collection_tag: sintax_rel_abundance
-    interactive_component_type: MultiSelect
-    column_name: Phylum
-    column_type: object
-    display:
-      icon_name: mdi:bacteria-outline
-      custom_color: grape
-    section: Community filters
-    group: Taxonomy
-    tag: am-comm-filter-phylum-sintax
-    index: sintax-phylum-filter
-    title: Phylum
-    layout:
-      x: 0
-      y: 2
-      w: 1
-      h: 3
   - component_type: card
     workflow_tag: ampliseq
     data_collection_tag: taxonomy_rel_abundance
@@ -1644,29 +1564,6 @@ tabs:
     index: community-phyla
     title: Phyla
     description: Distinct phyla, split by kingdom.
-    layout:
-      x: 0
-      y: 0
-      w: 2
-      h: 2
-  - component_type: card
-    workflow_tag: ampliseq
-    data_collection_tag: sintax_rel_abundance
-    use: vsearch/sintax_abundance
-    aggregation: nunique
-    column_name: Phylum
-    column_type: object
-    secondary_layout: donut
-    breakdown_col: Kingdom
-    display:
-      icon_name: mdi:bacteria-outline
-      icon_color: teal
-      caption: split by kingdom
-    section: Community at a glance
-    tag: am-comm-card-phyla-sintax
-    index: community-phyla-sintax
-    title: Phyla
-    description: Distinct phyla SINTAX assigned, split by kingdom.
     layout:
       x: 0
       y: 0
@@ -1779,44 +1676,6 @@ tabs:
       w: 8
       h: 4
       fit: auto
-  - component_type: figure
-    workflow_tag: ampliseq
-    data_collection_tag: sintax_rel_abundance
-    use: vsearch/sintax_abundance
-    visu_type: bar
-    mode: code
-    code_content: '# One 100% bar per group: the eight most abundant phyla of the samples in view,
-
-      # the rest folded into Other. The groups are Analysis mode''s when it has some.
-
-      grp = depictio_group_by[0] if depictio_group_by else ''habitat''
-
-      d = df if grp in df.columns else df.with_columns(pl.lit(''All samples'').alias(grp))
-
-      top = d.group_by(''Phylum'').agg(pl.col(''rel_abundance'').sum().alias(''n'')).sort(''n'', descending=True).head(8)[''Phylum''].to_list()
-
-      d = d.filter(pl.col(grp).is_not_null()).with_columns(pl.when(pl.col(''Phylum'').is_in(top)).then(pl.col(''Phylum'')).otherwise(pl.lit(''Other'')).alias(''Phylum''))
-
-      shares = d.group_by([grp, ''Phylum'']).agg(pl.col(''rel_abundance'').sum().alias(''n'')).with_columns((pl.col(''n'') / pl.col(''n'').sum().over(grp) * 100).alias(''share'')).sort(grp)
-
-      orders = dict(depictio_group_kwargs.get(''category_orders'') or {}, Phylum=top + [''Other''])
-
-      fig = px.bar(shares.to_pandas(), x=''share'', y=grp, color=''Phylum'', orientation=''h'', category_orders=orders, color_discrete_map=depictio_category_colors.get(''Phylum'') or {}, labels={grp: '''', ''share'': ''Share of the community (%)''})
-
-      fig.update_layout(barmode=''stack'', xaxis_range=[0, 100], margin=dict(t=10))
-
-      fig.update_yaxes(automargin=True)'
-    section: Composition
-    tag: am-comm-sintax-composition
-    index: comm-sintax-composition
-    title: Phylum composition per group (SINTAX)
-    description: The eight most abundant SINTAX phyla of each group, the rest folded into Other.
-    layout:
-      x: 0
-      y: 0
-      w: 8
-      h: 4
-      fit: auto
   - component_type: advanced_viz
     workflow_tag: ampliseq
     use: qiime2/stacked_taxonomy
@@ -1894,21 +1753,6 @@ tabs:
     tag: am-comm-table
     index: comm-table-rel-abundance
     title: Relative abundance per sample and phylum
-    layout:
-      x: 0
-      y: 0
-      w: 8
-      h: 6
-  - component_type: table
-    workflow_tag: ampliseq
-    data_collection_tag: sintax_rel_abundance
-    use: vsearch/sintax_abundance
-    row_selection_enabled: true
-    row_selection_column: taxonomy
-    section: Tables
-    tag: am-comm-table-sintax
-    index: sintax-taxonomy-table
-    title: Relative abundance per sample and phylum (SINTAX)
     layout:
       x: 0
       y: 0
