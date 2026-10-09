@@ -232,6 +232,10 @@ A KPI strip is four different readings, not four numbers in one style:
   id and the design columns from `METADATA_FILE`), plus at least one open, tab-local
   `filter_sections` entry on a column of the tab's own data collections. A tab without a
   filter is a defect. Each persistent filter must reach the tab's data through a link.
+- A link whose target spells the sample with a stage suffix (Picard's `WT_REP1.mLb.mkD.sorted`
+  against the sheet's `WT_REP1`) takes `resolver: pattern` with `pattern:
+  "{sample}.mLb.mkD.sorted"` (the placeholder is always `{sample}`). A `direct` link there
+  matches no row, and the filter silently stops reaching the tile.
 - A left-panel filter narrows every tile on the tab whose data has its column, the KPI strip
   included. Cards that each pin one value of that column (`filter_expr: col('context') ==
   'CHG'`) print "–" once the filter picks another value, and on load when it has a
@@ -282,6 +286,10 @@ A KPI strip is four different readings, not four numbers in one style:
   composition per sample and the tree summary all draw the 8 largest taxa and Other
   (`top_n: 8`, `.head(8)` in code), the 8 that `auto:<column>` coloured, so a taxon keeps its
   colour and the legend repeats.
+- A sample-space embedding (a PCA, an MDS) colours its points by the group: `color_col` and
+  `default_color_by` on the column `category_colors` keys. When the collection lacks that
+  column, the recipe adds it (a version recipe joins the sample sheet, or derives the group
+  from a sample id the pipeline builds as `<group>_REP<n>`); the tile never draws one colour.
 
 ## 8. Viz controls
 
@@ -303,8 +311,10 @@ A KPI strip is four different readings, not four numbers in one style:
 - `genome_view` and `coverage_track` draw one tick per contig. On a draft assembly with
   hundreds of contigs, show the regions grouped by contig instead.
 - A locus navigator never names a contig in `default_region` (`NC_044048.1` holds for one
-  reference only): write `default_region: first`, which opens the first contig the data
-  carries, or leave it unset on a model genome where a gene or band says more.
+  reference only, and a curated `chr9:…` window opens empty on a run aligned to part of the
+  genome): write `default_region: first`, which opens the first contig the data carries (in
+  the assembly's order when the tile names one), or leave it unset on a model genome where a
+  gene or band says more.
 - A `source: file` genome_view reads its files only under `file_window_size` (1 Mb for VCF by
   default), and a view of exactly 1 Mb is not under it. When the tab opens on a region, keep
   that region inside the window or raise `file_window_size`, or the lanes open empty.
@@ -418,4 +428,6 @@ On a running stack, with the template ingested from its megatest data:
 - every child tab opens on its intro; every KPI card draws its secondary and its caption, no
   bar reads about 1%, and each icon shows in its own colour;
 - the Guide's demos are not empty;
-- each conditional route still renders without a broken highlight or a stray `{VAR}`.
+- each conditional route still renders without a broken highlight or a stray `{VAR}`;
+- a sample picked in the left panel moves every card of a child tab, and the Locus tab opens
+  on data (non-zero region cards) on every scenario, a partial-genome run included.
