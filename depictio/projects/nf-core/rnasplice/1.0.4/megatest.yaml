@@ -52,6 +52,8 @@ keys:
   - "*/suppa/diffsplice/per_local_event/*_local_diffsplice.dpsi"
   # rMATS post tables, junction plus exon-body counts.
   - star_salmon/rmats/*/rmats_post/*.MATS.JCEC.txt
+  # STAR splice junctions per sample, for the sashimi of the rMATS calls.
+  - star_salmon/log/*.SJ.out.tab
 prefix_keys: []
 renames: {}
 post_fetch_help: |

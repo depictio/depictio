@@ -42,11 +42,13 @@ The landing page, at compact width with the filter panel collapsed:
 - **Findings**: result rows whose values are computed under the filters, each with a link
   to its tab: genes called by two tests or more out of those called by any, genes with an
   exon usage call (DEXSeq), genes with a transcript switch (DEXSeq DTU) and the event type
-  most rMATS calls fall in, with its share. Below them, four figures in two rows, each
-  linking its tab: each tool's calls by how many tools agree beside the DEXSeq exon volcano,
-  then the DTU volcano beside the called rMATS events per type. The volcanoes carry no
-  labels there or on their tabs, since their points are gene ids. The bar of this section filters by
-  contrast and rMATS event type.
+  most rMATS calls fall in, with its share. Below them, four figures in two rows of two
+  even halves, each linking its tab: each tool's calls by how many tools agree beside the
+  exon usage volcano (DEXSeq), then the transcript usage volcano (DEXSeq DTU) beside the
+  called rMATS events per type. The two volcanoes answer different questions, one point per
+  gene at its most significant exonic bin against one point per transcript, and their short
+  titles name the level. They carry no labels there or on their tabs, since their points
+  are gene ids. The bar of this section filters by contrast and rMATS event type.
 - **How to read this dashboard**: one tile per tab, by group, each showing its question.
 
 Two persistent filter sections sit in the collapsed left panel. `Sample filters` (group,
@@ -90,9 +92,10 @@ gene, which reaches the per-tool tabs through the gene links.
 
 **Exon Usage.** Strip: DEXSeq calls (split by the direction of the gene's top bin), their
 absolute fold change (a box plot), edgeR calls (a ring by direction) and their absolute
-fold change (a distribution). Then the DEXSeq and edgeR gene volcanoes, one point per gene
-at its most significant bin or exon, unlabelled since both name genes by id. Collapsed: the
-two per-gene tables. Filters: call direction and absolute fold change, each narrowing both
+fold change (a distribution). Then the DEXSeq and edgeR gene volcanoes side by side in one
+section, one point per gene at its most significant bin or exon, unlabelled since both name
+genes by id: two tests of the same question, so a gene far out on both is the robust call.
+Collapsed: the two per-gene tables. Filters: call direction and absolute fold change, each narrowing both
 tools, since a filter reaches every collection with its column.
 
 **Transcript Usage.** Strip: called transcripts (split by direction), genes with a switch
@@ -104,8 +107,13 @@ transcript table. Filters: call direction and usage fold change.
 **Splicing Events.** Strip: rMATS events tested (a ring by type), rMATS calls (split by
 direction of inclusion), their absolute PSI change (a distribution) and SUPPA2 calls (a
 ring by type). Then the called events per type and direction for each tool, and the rMATS
-and SUPPA2 volcanoes (each with a QQ view); only the rMATS one is labelled, with the
-symbols of its top genes. Collapsed: the rMATS event table with the event record card
+and SUPPA2 volcanoes side by side (each with a QQ view): the same question by two methods,
+junction reads against transcript abundances. Only the rMATS one is labelled, with the
+symbols of its top genes. Then a sashimi of the junctions around the called rMATS events:
+one lane per condition, one arc per junction labelled with its mean reads per replicate. A
+gene picked in the left panel draws that gene's locus; without a pick the tile opens on
+the busiest cluster of junctions, the others in its locus menu, and its View switch redraws
+the junctions in GenomeSpy. Collapsed: the rMATS event table with the event record card
 beside it (inclusion and junction reads per condition, the locus linked to the UCSC browser
 on `GENOME`), and the SUPPA2 event table. Filters: event type, call and absolute PSI
 change, each narrowing both tools.
@@ -123,6 +131,7 @@ the agreement key figure and the agreement row survive any combination of tools.
 | DEXSeq exon usage and edgeR both skipped | No Exon Usage tab, DEXSeq row or exon volcano highlight. |
 | DEXSeq DTU skipped | No Transcript Usage tab, DTU row or DTU highlight. |
 | rMATS and SUPPA2 both skipped | No Splicing Events tab, rMATS key figure, event row or event-type highlight. |
+| rMATS skipped, or no STAR junction tables | No sashimi section on Splicing Events. |
 | Pseudo-alignment only (`QUANT_ROUTE=salmon`) | The PCA, the heatmap, DTU and SUPPA2 read the `salmon/` copy; STAR-based panels and tools have nothing to show. |
 
 The import re-packs the Overview grid after a drop, so a lone highlight takes the full row.
@@ -135,7 +144,9 @@ colour-blind-safe colour at import, kept on a re-import). The seven event types 
 three call directions (up red, down blue, not significant grey) are written out, so the
 volcanoes and the event-type bars draw a type or a direction in one colour. The two
 event-type figures are code figures: they read the same map. The per-tool agreement bars
-shade from light (one tool alone) to dark (all five).
+shade from light (one tool alone) to dark (all five). The sashimi colours its arcs by lane
+(condition) from the theme palette: the known or novel split is left out, since STAR's
+two-pass mode marks the junctions of its first pass as annotated.
 
 ## Cross-selection
 
@@ -145,7 +156,9 @@ collections downstream of it. Row selection is on `sample` and `contrast` in the
 sheet, `sample_id` in the sample summary (shared with the PCA), `gene_id` in the gene,
 exon and transcript tables and `event_id` in the event tables. The three record cards wait
 for a pick: the sample record reads the PCA, the gene record the cross-tool table, the
-event record the rMATS table.
+event record the rMATS table. The sashimi follows the Gene filter of the left panel through the
+gene links; an event picked in the rMATS table does not narrow it, since its rows are per
+gene.
 
 ## Controls
 
@@ -165,6 +178,7 @@ of a narrower one. Nothing is set per tab or per tile.
 | edger_genes (optional) | `**/contrast_*.usage.{gene,simes,exon}.csv` | `edger/diffsplice_genes` |
 | dexseq_dtu (optional) | `{QUANT_ROUTE}/**/DEXSeqResults.*.tsv`, `perGeneQValue.*.tsv` | `dexseq/dtu` |
 | rmats_events (optional) | `**/*.MATS.JCEC.txt` | `rmats/events` |
+| event_junctions (optional) | `**/*.SJ.out.tab` (STAR), `pipeline_info/samplesheet.valid.csv`, `rmats_events`, `contrasts` | `recipes/event_junctions.py` |
 | suppa_events (optional) | `{QUANT_ROUTE}/**/*_local_diffsplice.dpsi` | `suppa/local_events` |
 | splicing_genes | the five tool DCs | `recipes/splicing_genes.py` |
 
@@ -199,6 +213,15 @@ of a narrower one. Nothing is set per tab or per tile.
   Ensembl id as name.
 - **Coordinates.** rMATS uses `chr`-prefixed chromosome names, the other tools the bare
   names of the annotation; the UCSC link uses the rMATS locus.
+- **Sashimi.** rnasplice's own sashimi plots (`--sashimi_plot`, drawn by MISO) are PDFs,
+  so the dashboard builds its own from STAR's per-sample junction tables. A junction is
+  kept when its intron overlaps or abuts the alternative region of a called rMATS event
+  (every inclusion and skipping junction, plus longer ones spanning the region) and lies
+  on the gene's strand. Its uniquely mapped reads are averaged over the replicates of each
+  condition a calling contrast compares. Rows are per gene, not per event, so two events
+  sharing a junction draw it once. Coverage is not drawn: the run publishes no bigWig in
+  the tables-only subset, and the exon support under the arcs is inferred from the
+  junctions.
 
 ## Running it
 

@@ -133,6 +133,8 @@ main_dashboard:
     layout: {x: 2, y: 0, w: 2, h: 1}
   - component_type: text
     title: nf-core/rnasplice
+    logo: https://raw.githubusercontent.com/nf-core/rnasplice/master/docs/images/nf-core-rnasplice_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/rnasplice/master/docs/images/nf-core-rnasplice_logo_dark.png
     order: 1
     body: >
       Bulk RNA-seq libraries aligned, quantified and tested for differential splicing by four
@@ -323,39 +325,47 @@ main_dashboard:
     tag: rs-ov-findings
     index: ov-findings
     layout: {x: 0, y: 0, w: 8, h: 2}
-  # One figure per analysis tab, in the order of the rows above.
+  # One figure per analysis tab, in the order of the rows above, two even
+  # halves per row (a volcano reads poorly at a third of the row). The two
+  # volcanoes answer different questions, so their titles name the level:
+  # exon bins per gene, then transcripts. Their source titles are too long
+  # for a half-row header, hence the short titles here.
   - component_type: highlight
     section: Findings
     source_tab: Tool Agreement
     source_component: rs-agree-per-tool
+    title: Calls per tool, by agreement
     caption: Genes each tool calls, darker where more tools agree; the lightest segment is the calls a tool makes alone.
     tag: rs-ov-hl-tools
     index: ov-hl-tools
-    layout: {x: 0, y: 2, w: 5, h: 5}
+    layout: {x: 0, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Exon Usage
     source_component: rs-exon-dexseq-volcano
-    caption: DEXSeq, one point per gene at its most significant exonic bin.
+    title: Exon usage (DEXSeq)
+    caption: One point per gene, at its most significant exonic bin; right of the line, the bin gains usage in the treatment.
     tag: rs-ov-hl-dexseq
     index: ov-hl-dexseq
-    layout: {x: 5, y: 2, w: 3, h: 5}
+    layout: {x: 4, y: 2, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Transcript Usage
     source_component: rs-tx-volcano
-    caption: DEXSeq DTU, one point per transcript, coloured by the direction of its usage change.
+    title: Transcript usage (DEXSeq DTU)
+    caption: One point per transcript; right of the line, the transcript takes a larger share of its gene in the treatment.
     tag: rs-ov-hl-dtu
     index: ov-hl-dtu
-    layout: {x: 0, y: 7, w: 3, h: 5}
+    layout: {x: 0, y: 7, w: 4, h: 5}
   - component_type: highlight
     section: Findings
     source_tab: Splicing Events
     source_component: rs-ev-rmats-types
+    title: rMATS calls per event type
     caption: Called rMATS events per type, split by whether inclusion rises or falls in the treatment.
     tag: rs-ov-hl-event-types
     index: ov-hl-event-types
-    layout: {x: 3, y: 7, w: 5, h: 5}
+    layout: {x: 4, y: 7, w: 4, h: 5}
   # Link-only tab tiles: each tile prints its tab's subtitle. A tab the run does
   # not have is left out, and a heading whose tabs are all missing is hidden.
   - component_type: text
@@ -1106,14 +1116,12 @@ tabs:
     icon: mdi:counter
     color: indigo
     description: Genes each exon-level tool calls, and how large the changes are
-  - name: DEXSeq exon usage
+  # Two tests of one question, side by side so a gene far out on both reads at
+  # a glance: DEXSeq on exonic bins, edgeR on exons.
+  - name: DEXSeq and edgeR
     icon: mdi:chart-scatter-plot
     color: indigo
-    description: Gene q-value against the most significant bin's fold change
-  - name: edgeR diffSpliceDGE
-    icon: mdi:chart-scatter-plot
-    color: blue
-    description: Gene F-test FDR against the most significant exon's fold change
+    description: One question, two tests; a gene far out on both is a robust exon-level call
   - name: Exon gene rows
     icon: mdi:table
     color: gray
@@ -1127,8 +1135,9 @@ tabs:
       [DEXSeq](https://bioconductor.org/packages/DEXSeq) and
       [edgeR](https://bioconductor.org/packages/edgeR) diffSpliceDGE ask whether an exon changes
       its share of the gene's reads, and a positive fold change means more usage in the
-      treatment. Each volcano places a gene at its most significant exon; genes far out on
-      both are the robust exon-level calls. Pick a contrast first in the left panel.
+      treatment. The two volcanoes sit side by side, each placing a gene at its most
+      significant exon; genes far out on both are the robust exon-level calls. Pick a contrast
+      first in the left panel.
     tag: rs-exon-intro
     index: exon-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1257,11 +1266,11 @@ tabs:
       effect_label: Log2 fold change, top bin
       significance_label: -log10 gene q-value
       view: volcano
-    section: DEXSeq exon usage
+    section: DEXSeq and edgeR
     tag: rs-exon-dexseq-volcano
     index: rs-exon-dexseq-volcano
-    title: DEXSeq gene q-value against bin fold change
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    title: 'DEXSeq: q-value against bin fold change'
+    layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnasplice
     data_collection_tag: edger_genes
@@ -1274,11 +1283,11 @@ tabs:
       effect_label: Log2 fold change, top exon
       significance_label: -log10 gene FDR
       view: volcano
-    section: edgeR diffSpliceDGE
+    section: DEXSeq and edgeR
     tag: rs-exon-edger-volcano
     index: rs-exon-edger-volcano
-    title: edgeR gene FDR against exon fold change
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    title: 'edgeR: FDR against exon fold change'
+    layout: {x: 4, y: 0, w: 4, h: 6}
   - component_type: table
     workflow_tag: rnasplice
     data_collection_tag: dexseq_exon_genes
@@ -1504,14 +1513,18 @@ tabs:
     icon: mdi:chart-bar
     color: grape
     description: Called events per type and direction, per tool
-  - name: rMATS
+  # Two methods on one question, side by side like the event types above:
+  # rMATS from junction reads, SUPPA2 from transcript abundances.
+  - name: rMATS and SUPPA2
     icon: mdi:chart-scatter-plot
     color: grape
-    description: rMATS FDR against the inclusion difference, per event
-  - name: SUPPA2
-    icon: mdi:chart-scatter-plot
-    color: pink
-    description: SUPPA2 p-value against the delta PSI, per event
+    description: One question, two methods; an event far out on both is a robust call
+  # The junctions behind the rMATS calls, drawn per condition. Open, since it
+  # is the only view of the reads themselves; a gene pick narrows it to one locus.
+  - name: Event junctions
+    icon: mdi:dna
+    color: grape
+    description: Junction reads per condition around the called rMATS events; pick a gene first
   - name: Event detail
     icon: mdi:information-outline
     color: gray
@@ -1530,9 +1543,10 @@ tabs:
       [rMATS](https://rnaseq-mats.sourceforge.io) and
       [SUPPA2](https://github.com/comprehensive-genomics/SUPPA) score local events such as
       skipped exons and retained introns by the change in percent spliced-in (PSI), treatment
-      minus control. rMATS counts junction reads, while SUPPA2 derives PSI from transcript
-      abundances. Read the event types first, then each volcano; an rMATS event picked in the
-      table below opens its locus.
+      minus control: rMATS from junction reads, SUPPA2 from transcript abundances. Read the
+      event types, then the two volcanoes side by side, where an event far out on both is the
+      robust call. Pick a gene in the left panel to draw its junction reads per condition in
+      the sashimi below.
     tag: rs-ev-intro
     index: ev-intro
     layout: {x: 0, y: 0, w: 8, h: 2}
@@ -1700,19 +1714,20 @@ tabs:
     config:
       significance_threshold: 0.05
       effect_threshold: 0.1
-      # Gene symbols; one gene can carry several top events, so keep few labels.
-      top_n_labels: 8
+      # Gene symbols; one gene can carry several top events, so keep few
+      # labels on a half-row tile.
+      top_n_labels: 6
       show_labels: true
       effect_label: PSI change, treatment minus control
       significance_label: -log10 FDR
       p_value_col: pvalue
       view: volcano
       views: [volcano, qq]
-    section: rMATS
+    section: rMATS and SUPPA2
     tag: rs-ev-rmats-volcano
     index: rs-ev-rmats-volcano
-    title: rMATS FDR against inclusion difference
-    layout: {x: 0, y: 0, w: 8, h: 6}
+    title: 'rMATS: FDR against inclusion difference'
+    layout: {x: 0, y: 0, w: 4, h: 6}
   - component_type: advanced_viz
     workflow_tag: rnasplice
     data_collection_tag: suppa_events
@@ -1727,10 +1742,39 @@ tabs:
       p_value_col: pvalue
       view: volcano
       views: [volcano, qq]
-    section: SUPPA2
+    section: rMATS and SUPPA2
     tag: rs-ev-suppa-volcano
     index: rs-ev-suppa-volcano
-    title: SUPPA2 p-value against delta PSI
+    title: 'SUPPA2: p-value against delta PSI'
+    layout: {x: 4, y: 0, w: 4, h: 6}
+  # Sashimi of the called rMATS events: STAR's junction reads (SJ.out.tab),
+  # averaged over the replicates of each condition, one lane per condition and
+  # one arc per junction, labelled with its reads. Rows are per gene, so the
+  # Gene filter of the left panel draws one locus; without a pick the tile
+  # opens on the busiest cluster, others a pick away in its locus menu. The
+  # arcs take their lane's colour: rnasplice runs STAR in two-pass mode, whose
+  # annotated flag no longer separates known from novel junctions.
+  - component_type: advanced_viz
+    workflow_tag: rnasplice
+    data_collection_tag: event_junctions
+    viz_kind: sashimi
+    config:
+      viz_kind: sashimi
+      chr_col: chrom
+      start_col: start
+      end_col: end
+      count_col: reads
+      sample_col: condition
+      color_by: sample
+      min_count: 2
+      top_n: 25
+      view: plotly
+      views: [plotly, genomespy]
+    section: Event junctions
+    tag: rs-ev-sashimi
+    index: rs-ev-sashimi
+    title: Junction reads around the called rMATS events
+    description: Mean reads per replicate on each junction that touches or spans a called event's region, one lane per condition.
     layout: {x: 0, y: 0, w: 8, h: 6}
   - component_type: table
     workflow_tag: rnasplice

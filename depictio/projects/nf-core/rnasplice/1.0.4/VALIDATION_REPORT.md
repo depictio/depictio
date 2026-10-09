@@ -29,6 +29,7 @@ Galore reports, STAR logs, samtools stats, featureCounts summaries and Salmon fo
 | rmats/events | 324,702 | JCEC, events with 10 or more mean junction reads per replicate in both conditions |
 | suppa/local_events | 225,674 | star_salmon route, NaN dPSI dropped |
 | recipes/splicing_genes | 57,092 | on one contrast: 7,875 DEXSeq exon, 3,812 DTU, 6,387 edgeR, 921 rMATS, 1,578 SUPPA2 genes called; 246 genes called by all five |
+| recipes/event_junctions | 27,995 | added 2026-10-09, offline run on the same data: 1,447 genes with a called rMATS event, two condition lanes, junctions with a mean of 1 or more unique reads per replicate |
 
 Effect orientation was checked on the mirrored contrasts: after the recipes' sign handling,
 every tool gives opposite effects for the two mirrors (treatment minus control throughout).
