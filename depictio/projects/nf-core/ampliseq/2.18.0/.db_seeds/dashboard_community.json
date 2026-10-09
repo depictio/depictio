@@ -642,7 +642,7 @@
     {
       "i": "box-community-phyla",
       "x": 0,
-      "y": 2,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
@@ -650,7 +650,7 @@
     {
       "i": "box-community-classes",
       "x": 2,
-      "y": 2,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
@@ -658,7 +658,7 @@
     {
       "i": "box-community-orders",
       "x": 4,
-      "y": 2,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
@@ -666,7 +666,7 @@
     {
       "i": "box-community-families",
       "x": 6,
-      "y": 2,
+      "y": 0,
       "w": 2,
       "h": 2,
       "static": true
@@ -674,7 +674,7 @@
     {
       "i": "box-comm-composition-by-group",
       "x": 0,
-      "y": 4,
+      "y": 0,
       "w": 8,
       "h": 4,
       "static": false,
@@ -689,7 +689,7 @@
     {
       "i": "box-adv-stacked-taxonomy",
       "x": 0,
-      "y": 8,
+      "y": 4,
       "w": 8,
       "h": 5,
       "static": false,
@@ -704,7 +704,7 @@
     {
       "i": "box-adv-sunburst",
       "x": 0,
-      "y": 13,
+      "y": 0,
       "w": 8,
       "h": 6,
       "static": false,
@@ -719,7 +719,7 @@
     {
       "i": "box-adv-upset",
       "x": 0,
-      "y": 19,
+      "y": 0,
       "w": 8,
       "h": 5,
       "static": false,
@@ -734,7 +734,7 @@
     {
       "i": "box-comm-table-rel-abundance",
       "x": 0,
-      "y": 24,
+      "y": 0,
       "w": 8,
       "h": 6,
       "static": false,
@@ -872,7 +872,7 @@
   "icon_color": "green",
   "icon_variant": "filled",
   "workflow_system": "nf-core",
-  "notes_content": "<p></p>",
+  "notes_content": "",
   "permissions": {
     "owners": [
       {
@@ -908,11 +908,8 @@
   "tab_icon": "mdi:bacteria-outline",
   "tab_icon_color": "teal",
   "tab_group": "Taxa",
-  "parent_dashboard_title": "nf-core/ampliseq",
-  "project_realtime": {
-    "enabled": false,
-    "debounce_ms": 1000
-  },
+  "parent_dashboard_title": null,
+  "project_realtime": null,
   "inherited_brand_theme": null,
   "inherited_category_colors": null,
   "source_key": "nf-core/ampliseq:dashboards/base.yaml#Community & Diversity"

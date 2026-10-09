@@ -80,7 +80,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "6a2f5803-971a-44b0-ad55-05d32d297284",
+      "index": "1bba76a2-2824-46b9-bad2-0add3f6fc001",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -120,7 +120,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "e0029b01-ddbb-4351-bd64-032f44fec2a6",
+      "index": "af0f58f4-221d-46a3-90c2-0cfa254324ee",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -160,7 +160,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "76106c7d-a068-43d0-a805-6fd617c5a7c7",
+      "index": "f52d9b80-0052-4eee-97a7-47941169dbcb",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -200,7 +200,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "06d748ed-b42c-41e7-b11b-8e401023e8cc",
+      "index": "1418b6f2-5b6f-4795-98a1-1b7d468791b2",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -240,7 +240,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "d5ebb444-be91-4e2e-a594-351cd6f37252",
+      "index": "6d8586f7-3e71-4ad7-a5e9-d96f6c708f12",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -280,7 +280,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "3d9d59d5-6c4d-4ce1-8dba-4ca707247813",
+      "index": "8b70142a-7652-4abb-b9a5-38b477bfcdb1",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -320,7 +320,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "224c48ee-9c3b-42a1-beb9-9bae7e23cde9",
+      "index": "c342a038-5db7-4df3-8ec2-52d11d8a0ae4",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -360,7 +360,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "8ffdd2eb-e93f-42ca-b6c7-d56a93094d56",
+      "index": "ff3633c4-b4ff-4caa-9146-cea9ee5b1d95",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -400,7 +400,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "7a2f1f2f-1f1e-4f08-abca-69ccfe847937",
+      "index": "bb5e3ae9-7937-4652-9200-04018de20139",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -440,7 +440,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "996d88a6-5714-48d8-b2c8-87914743505a",
+      "index": "b7e84c41-21cf-4fcd-a5f5-2e313be4a1cb",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -480,7 +480,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "a4eb71eb-fada-4ac4-b48e-8b386e2de874",
+      "index": "7b49f0d5-6370-40c9-b77e-0e04957f26a6",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -520,7 +520,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "7596a646-235b-4ec1-87eb-1999ec8013f7",
+      "index": "5cc209a9-2719-4542-be82-503782f647fa",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -560,7 +560,7 @@
       "wf_tag": "nextflow/ampliseq"
     },
     {
-      "index": "73cb0972-fa61-42dd-97b5-1d0269a8744a",
+      "index": "9e128a7e-ae71-4f9b-8dc4-fefee8023b68",
       "component_type": "multiqc",
       "title": "",
       "workflow_tag": "ampliseq",
@@ -628,7 +628,7 @@
       ]
     },
     {
-      "i": "box-6a2f5803-971a-44b0-ad55-05d32d297284",
+      "i": "box-1bba76a2-2824-46b9-bad2-0add3f6fc001",
       "x": 0,
       "y": 0,
       "w": 8,
@@ -643,7 +643,7 @@
       ]
     },
     {
-      "i": "box-e0029b01-ddbb-4351-bd64-032f44fec2a6",
+      "i": "box-af0f58f4-221d-46a3-90c2-0cfa254324ee",
       "x": 0,
       "y": 4,
       "w": 8,
@@ -658,7 +658,7 @@
       ]
     },
     {
-      "i": "box-76106c7d-a068-43d0-a805-6fd617c5a7c7",
+      "i": "box-f52d9b80-0052-4eee-97a7-47941169dbcb",
       "x": 0,
       "y": 8,
       "w": 4,
@@ -673,7 +673,7 @@
       ]
     },
     {
-      "i": "box-06d748ed-b42c-41e7-b11b-8e401023e8cc",
+      "i": "box-1418b6f2-5b6f-4795-98a1-1b7d468791b2",
       "x": 4,
       "y": 8,
       "w": 4,
@@ -688,7 +688,7 @@
       ]
     },
     {
-      "i": "box-d5ebb444-be91-4e2e-a594-351cd6f37252",
+      "i": "box-6d8586f7-3e71-4ad7-a5e9-d96f6c708f12",
       "x": 0,
       "y": 0,
       "w": 4,
@@ -703,7 +703,7 @@
       ]
     },
     {
-      "i": "box-3d9d59d5-6c4d-4ce1-8dba-4ca707247813",
+      "i": "box-8b70142a-7652-4abb-b9a5-38b477bfcdb1",
       "x": 4,
       "y": 0,
       "w": 4,
@@ -718,7 +718,7 @@
       ]
     },
     {
-      "i": "box-224c48ee-9c3b-42a1-beb9-9bae7e23cde9",
+      "i": "box-c342a038-5db7-4df3-8ec2-52d11d8a0ae4",
       "x": 0,
       "y": 4,
       "w": 4,
@@ -733,7 +733,7 @@
       ]
     },
     {
-      "i": "box-8ffdd2eb-e93f-42ca-b6c7-d56a93094d56",
+      "i": "box-ff3633c4-b4ff-4caa-9146-cea9ee5b1d95",
       "x": 4,
       "y": 4,
       "w": 4,
@@ -748,7 +748,7 @@
       ]
     },
     {
-      "i": "box-7a2f1f2f-1f1e-4f08-abca-69ccfe847937",
+      "i": "box-bb5e3ae9-7937-4652-9200-04018de20139",
       "x": 0,
       "y": 8,
       "w": 4,
@@ -763,7 +763,7 @@
       ]
     },
     {
-      "i": "box-996d88a6-5714-48d8-b2c8-87914743505a",
+      "i": "box-b7e84c41-21cf-4fcd-a5f5-2e313be4a1cb",
       "x": 4,
       "y": 8,
       "w": 4,
@@ -778,7 +778,7 @@
       ]
     },
     {
-      "i": "box-a4eb71eb-fada-4ac4-b48e-8b386e2de874",
+      "i": "box-7b49f0d5-6370-40c9-b77e-0e04957f26a6",
       "x": 0,
       "y": 12,
       "w": 4,
@@ -793,7 +793,7 @@
       ]
     },
     {
-      "i": "box-7596a646-235b-4ec1-87eb-1999ec8013f7",
+      "i": "box-5cc209a9-2719-4542-be82-503782f647fa",
       "x": 4,
       "y": 12,
       "w": 4,
@@ -808,7 +808,7 @@
       ]
     },
     {
-      "i": "box-73cb0972-fa61-42dd-97b5-1d0269a8744a",
+      "i": "box-9e128a7e-ae71-4f9b-8dc4-fefee8023b68",
       "x": 0,
       "y": 16,
       "w": 8,

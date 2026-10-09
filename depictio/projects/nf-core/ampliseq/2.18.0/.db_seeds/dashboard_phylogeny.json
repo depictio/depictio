@@ -677,7 +677,7 @@
   "icon_color": "green",
   "icon_variant": "filled",
   "workflow_system": "nf-core",
-  "notes_content": "<p></p>",
+  "notes_content": "",
   "permissions": {
     "owners": [
       {
@@ -713,11 +713,8 @@
   "tab_icon": "mdi:family-tree",
   "tab_icon_color": "lime",
   "tab_group": "Taxa",
-  "parent_dashboard_title": "nf-core/ampliseq",
-  "project_realtime": {
-    "enabled": false,
-    "debounce_ms": 1000
-  },
+  "parent_dashboard_title": null,
+  "project_realtime": null,
   "inherited_brand_theme": null,
   "inherited_category_colors": null,
   "source_key": "nf-core/ampliseq:dashboards/base.yaml#Phylogeny"

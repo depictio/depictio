@@ -177,7 +177,7 @@
       "icon_name": "mdi:sigma",
       "icon_color": "pink",
       "caption": "share of the Bray-Curtis variation",
-      "decimals": 2,
+      "format": "percent",
       "wf_tag": "nextflow/ampliseq"
     },
     {

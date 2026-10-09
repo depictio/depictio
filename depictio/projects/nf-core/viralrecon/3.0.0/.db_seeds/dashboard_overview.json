@@ -58,7 +58,7 @@
       "wf_tag": "nextflow/viralrecon"
     },
     {
-      "index": "4f1fc19d-9b2c-4b7f-a00c-1b213ade89b1",
+      "index": "d63a87e1-b527-40d5-b7b8-04fc218efdd3",
       "component_type": "interactive",
       "title": "Genome at 10x (%)",
       "workflow_tag": "viralrecon",
@@ -121,8 +121,8 @@
       "body": "Viral genomes from amplicon or metagenomic reads: how well each sample was covered, which variants it carries and which lineage it belongs to. [Run parameters](params:)\n",
       "surface": "none",
       "accent": null,
-      "logo": null,
-      "logo_dark": null
+      "logo": "https://raw.githubusercontent.com/nf-core/viralrecon/master/docs/images/nf-core-viralrecon_logo_light.png",
+      "logo_dark": "https://raw.githubusercontent.com/nf-core/viralrecon/master/docs/images/nf-core-viralrecon_logo_dark.png"
     },
     {
       "index": "ov-about",
@@ -1113,7 +1113,7 @@
       "static": false
     },
     {
-      "i": "box-4f1fc19d-9b2c-4b7f-a00c-1b213ade89b1",
+      "i": "box-d63a87e1-b527-40d5-b7b8-04fc218efdd3",
       "x": 2,
       "y": 0,
       "w": 2,

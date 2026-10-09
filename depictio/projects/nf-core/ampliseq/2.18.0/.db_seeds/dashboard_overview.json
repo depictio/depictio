@@ -122,7 +122,7 @@
       "surface": "none",
       "accent": null,
       "logo": "/assets/images/workflows/ampliseq.png",
-      "logo_dark": null
+      "logo_dark": "https://raw.githubusercontent.com/nf-core/ampliseq/master/docs/images/nf-core-ampliseq_logo_dark.png"
     },
     {
       "index": "ov-about",
