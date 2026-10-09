@@ -5,7 +5,12 @@ This replaces the complex custom security implementation with RestrictedPython,
 which is battle-tested and maintained by the Zope Foundation.
 """
 
+import contextvars
+import os
+import site
+import sys
 import traceback
+import types
 from typing import Any, Dict, Tuple
 
 import numpy as np
@@ -15,9 +20,134 @@ import plotly.graph_objects as go
 import polars as pl
 from plotly.basedatatypes import BaseFigure, BasePlotlyType
 from RestrictedPython import compile_restricted
-from RestrictedPython.Guards import safe_builtins, safe_globals
+from RestrictedPython.Guards import safe_builtins, safe_globals, safer_getattr
 
 from depictio.api.v1.configs.logging_init import logger
+
+
+def _allowed_module_ids() -> frozenset[int]:
+    """Identity set of the modules a code figure may reach through an attribute.
+
+    The module globals (`px`, `pl`, `pd`, `np`, `go`) are whole libraries, so a
+    bare attribute walk (`pd.io.common.os`, no underscore in the chain) reaches
+    the filesystem and arbitrary code. The guard below denies any attribute that
+    *is* a module unless it is one of these — the submodules the repo's own code
+    figures, templates and docs legitimately use:
+
+    * ``px.colors`` and its submodules (``qualitative``, ``sequential``,
+      ``diverging``, ``cyclical`` and the rest) — palettes;
+    * ``np.random`` — ``np.random.default_rng`` and friends.
+
+    Nothing else: no deep chain off a module global appears in any code figure
+    in the tree, so allowing more would only widen the reach for no caller.
+    """
+    allowed: set[int] = set()
+
+    def _add_tree(mod: types.ModuleType) -> None:
+        if id(mod) in allowed:
+            return
+        allowed.add(id(mod))
+        for attr in dir(mod):
+            try:
+                child = getattr(mod, attr)
+            except Exception:
+                continue
+            if isinstance(child, types.ModuleType):
+                _add_tree(child)
+
+    # px.colors is a small, self-contained palette package — safe to walk whole.
+    _add_tree(px.colors)
+    # np.random is allowed as a leaf: default_rng etc. are functions, not modules.
+    allowed.add(id(np.random))
+    return frozenset(allowed)
+
+
+# Built once at import; the module objects are process-stable.
+_ALLOWED_MODULE_IDS = _allowed_module_ids()
+
+# I/O and escape names denied on ANY object. This is the FIRST of two layers:
+# it is the only one that reaches polars/numpy I/O, whose work happens in Rust/C
+# and never raises a Python ``sys.audit`` event the hook below could see. The
+# prefixes cover the polars/pandas reader/writer families (`read_csv`,
+# `scan_parquet`, `write_delta`, `sink_ipc`); the explicit set covers the pandas
+# `to_*` serializers, numpy load/save/dump, the (de)serialize + Config file I/O,
+# the Excel/HDF writer classes, the pandas-expression RCE surfaces (`eval` /
+# `query`), the polars SQL surfaces, the dynamic-execution builtins and the
+# Plotly figure writers. `to_dict` / `to_list` / `to_numpy` / `to_pandas` are
+# deliberately NOT here — code figures rely on them to hand a frame to Plotly
+# Express. None of the names below appears in any code figure in the repo.
+_DENY_NAME_PREFIXES = ("read_", "scan_", "write_", "sink_")
+_DENY_NAMES = frozenset(
+    {
+        # pandas / polars serializers
+        "to_csv",
+        "to_parquet",
+        "to_pickle",
+        "to_json",
+        "to_excel",
+        "to_hdf",
+        "to_sql",
+        "to_feather",
+        "to_stata",
+        "to_clipboard",
+        "to_orc",
+        "to_xml",
+        "to_html",
+        "to_latex",
+        "to_markdown",
+        "to_ipc",
+        "to_avro",
+        "to_delta",
+        "to_string",  # pandas: to_string(buf=path) writes a file
+        # polars frame (de)serialization (Rust I/O) and Config file I/O
+        "serialize",
+        "deserialize",
+        "save_to_file",
+        "load_from_file",
+        # pandas file-handle classes (open a writable/readable path on construct)
+        "ExcelWriter",
+        "ExcelFile",
+        "HDFStore",
+        # pandas global IO config / expression evaluation (RCE via @-locals)
+        "set_option",
+        "eval",
+        "query",
+        # polars SQL (register_globals exposes the sandbox namespace)
+        "sql",
+        "SQLContext",
+        "register_globals",
+        # numpy persistence
+        "load",
+        "loads",
+        "save",
+        "savez",
+        "savez_compressed",
+        "savetxt",
+        "loadtxt",
+        "genfromtxt",
+        "fromfile",
+        "tofile",
+        "memmap",
+        "fromregex",
+        "dump",  # ndarray.dump(path)
+        "dumps",  # ndarray.dumps()
+        "DataSource",  # numpy: opens paths / URLs
+        # process / dynamic execution / import
+        "open",
+        "system",
+        "popen",
+        "import_module",
+        "exec",
+        "compile",
+        # Plotly writers / renderers (also caught by the write_ prefix, pinned
+        # here so the intent is explicit); to_image spawns a kaleido process
+        "show",
+        "write_image",
+        "write_html",
+        "write_json",
+        "to_image",
+    }
+)
 
 
 def safe_getitem(obj, key):
@@ -26,8 +156,29 @@ def safe_getitem(obj, key):
 
 
 def safe_getattr(obj, name, default=None, getattr=getattr):
-    """Safe getattr that allows pandas operations."""
-    return getattr(obj, name, default)
+    """Guarded getattr for code figures.
+
+    Built on RestrictedPython's ``safer_getattr`` — which keeps the underscore
+    rule, the ``str.format`` / ``string.Formatter`` escape block and the frame
+    introspection block — then adds two Depictio rules so a figure that only
+    needs to read ``df`` and build a Plotly chart cannot read or write server
+    files or reach arbitrary code:
+
+    * **name rule** — an I/O or dynamic-execution name (``read_*`` / ``scan_*`` /
+      ``write_*`` / ``sink_*`` prefixes, or one of ``_DENY_NAMES``) is refused on
+      any object, before the attribute is even fetched;
+    * **module rule** — an attribute whose value is a module is refused unless it
+      is on ``_ALLOWED_MODULE_IDS``, which stops ``pd.io.common.os`` and every
+      other walk off a module global.
+    """
+    if isinstance(name, str):
+        if name in _DENY_NAMES or name.startswith(_DENY_NAME_PREFIXES):
+            raise AttributeError(f'access to "{name}" is not allowed in a code figure')
+    value = safer_getattr(obj, name, default)
+    if isinstance(value, types.ModuleType) and id(value) not in _ALLOWED_MODULE_IDS:
+        mod_name = getattr(value, "__name__", name)
+        raise AttributeError(f'access to module "{mod_name}" is not allowed in a code figure')
+    return value
 
 
 _EMPTY_FRAME = pd.DataFrame()
@@ -90,6 +241,180 @@ def safe_unpack_sequence(seq, expected, *args):
 def safe_getiter(obj):
     """Safe implementation of _getiter_ for RestrictedPython."""
     return iter(obj)
+
+
+# ---------------------------------------------------------------------------
+# Second layer: a process-wide ``sys.audit`` hook.
+#
+# The name denylist above is the first layer, but a denylist alone leaks: a new
+# writer/reader name, a file-handle class, or an expression surface that resolves
+# a payload from the sandbox namespace all slip past it. This hook is the
+# backstop. It is installed once at import and does nothing unless the
+# ``_IN_CODE_FIGURE`` context flag is set — which only ``execute_code`` sets,
+# around the ``exec`` of user code. So it costs one flag read per audit event in
+# normal operation and enforces only while a figure's code is running.
+#
+# It cannot see polars/numpy Rust/C I/O (that work never raises a Python audit
+# event), which is exactly why the name denylist stays the first line of
+# defence. What it does catch is every Python-level attempt to open a file for
+# writing, read a file outside the Python install, start a process, open a
+# socket, load a shared library, mutate the filesystem, or import a package that
+# was not already loaded.
+# ---------------------------------------------------------------------------
+
+_IN_CODE_FIGURE: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "depictio_in_code_figure", default=False
+)
+
+
+def _read_ok_prefixes() -> tuple[str, ...]:
+    """Directories a code figure may read from: the Python installation only.
+
+    Plotly and pandas lazily read their own package data (templates, colour
+    scales, timezone tables) from site-packages and the stdlib on first use, so
+    those reads must keep working. Everything else — the server's data files,
+    the user's home, ``/etc`` — is off limits. Paths are normalised absolute
+    (not realpath: resolving symlinks would itself hit the filesystem and could
+    raise audit events inside the hook).
+    """
+    prefixes: set[str] = set()
+    for base in (sys.prefix, sys.base_prefix, sys.exec_prefix, sys.base_exec_prefix):
+        if base:
+            prefixes.add(os.path.normpath(os.path.abspath(base)))
+    for getter in (
+        getattr(site, "getsitepackages", None),
+        getattr(site, "getusersitepackages", None),
+    ):
+        if getter is None:
+            continue
+        try:
+            result = getter()
+        except Exception:
+            continue
+        paths = result if isinstance(result, (list, tuple)) else [result]
+        for p in paths:
+            if p:
+                prefixes.add(os.path.normpath(os.path.abspath(p)))
+    return tuple(prefixes)
+
+
+_READ_OK_PREFIXES = _read_ok_prefixes()
+
+# Write-access bits for the ``os.open`` form of the ``open`` audit event, where
+# ``mode`` is None and the integer ``flags`` carry the intent.
+_WRITE_OPEN_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
+
+# Audit events refused outright while a code figure runs.
+_BLOCKED_AUDIT_EVENTS = frozenset(
+    {
+        # process creation
+        "os.system",
+        "os.exec",
+        "os.spawn",
+        "os.posix_spawn",
+        "os.startfile",
+        "os.fork",
+        "os.forkpty",
+        "pty.spawn",
+        "subprocess.Popen",
+        # network
+        "socket.connect",
+        "socket.getaddrinfo",
+        "socket.gethostbyname",
+        "socket.sethostname",
+        "urllib.Request",
+        # shared libraries
+        "ctypes.dlopen",
+        "ctypes.LoadLibrary",
+        # filesystem mutation (shutil routes through these os.* events)
+        "os.remove",
+        "os.rename",
+        "os.replace",
+        "os.unlink",
+        "os.mkdir",
+        "os.rmdir",
+        "os.chmod",
+        "os.chown",
+        "os.symlink",
+        "os.link",
+        "os.truncate",
+        "shutil.copyfile",
+        "shutil.copymode",
+        "shutil.copystat",
+        "shutil.rmtree",
+        "shutil.move",
+    }
+)
+
+
+def _audit_open(path, mode, flags) -> None:
+    """Allow a read inside the Python install; refuse writes and outside reads."""
+    # A bare file-descriptor target is an already-open handle — nothing to vet.
+    if isinstance(path, int) or path is None:
+        return
+    if isinstance(path, bytes):
+        try:
+            path = path.decode()
+        except Exception:
+            raise PermissionError("opening this path is not allowed in a code figure")
+    if not isinstance(path, str):
+        return
+
+    if isinstance(mode, str):
+        is_write = any(c in mode for c in "waxWAX+")
+    elif isinstance(flags, int):
+        is_write = bool(flags & _WRITE_OPEN_FLAGS)
+    else:
+        # Unknown shape — fail closed.
+        is_write = True
+    if is_write:
+        raise PermissionError("writing files is not allowed in a code figure")
+
+    resolved = os.path.normpath(os.path.abspath(path))
+    if not any(resolved == pre or resolved.startswith(pre + os.sep) for pre in _READ_OK_PREFIXES):
+        raise PermissionError(
+            "reading files outside the Python installation is not allowed in a code figure"
+        )
+
+
+def _code_figure_audit_hook(event: str, args) -> None:
+    """Enforce the sandbox boundary while — and only while — a figure runs."""
+    if not _IN_CODE_FIGURE.get():
+        return
+    if event == "open":
+        _audit_open(
+            args[0] if args else None,
+            args[1] if len(args) > 1 else None,
+            args[2] if len(args) > 2 else None,
+        )
+        return
+    if event in _BLOCKED_AUDIT_EVENTS:
+        raise PermissionError(f"operation '{event}' is not allowed in a code figure")
+    if event == "import":
+        name = args[0] if args else ""
+        top = (name or "").split(".")[0]
+        # The plotting stack is fully imported at module load, so every lazy
+        # import it makes resolves to a top-level already in ``sys.modules`` and
+        # is allowed. A top-level that is NOT yet loaded is a package the figure
+        # is trying to pull in fresh (e.g. ``pty``, ``ctypes.util``) — refused.
+        # (User code cannot ``import`` at all: RestrictedPython has no
+        # ``__import__``. This guards a library being coaxed into a new import.)
+        if top and top not in sys.modules:
+            raise PermissionError(f"importing '{name}' is not allowed in a code figure")
+
+
+_AUDIT_HOOK_INSTALLED = False
+
+
+def _install_audit_hook_once() -> None:
+    """Install the audit hook a single time per process (hooks can't be removed)."""
+    global _AUDIT_HOOK_INSTALLED
+    if not _AUDIT_HOOK_INSTALLED:
+        sys.addaudithook(_code_figure_audit_hook)
+        _AUDIT_HOOK_INSTALLED = True
+
+
+_install_audit_hook_once()
 
 
 class SimpleCodeExecutor:
@@ -237,8 +562,15 @@ class SimpleCodeExecutor:
                         "❌ Preprocessing compilation failed - likely contains restricted operations",
                     )
 
-                # Execute preprocessing
-                exec(preprocessing_bytecode, execution_globals, execution_locals)
+                # Execute preprocessing — the audit hook is armed only for the
+                # duration of this exec, then disarmed in the finally (so the
+                # except handler's traceback formatting, which reads source
+                # files, is never caught by it).
+                _token = _IN_CODE_FIGURE.set(True)
+                try:
+                    exec(preprocessing_bytecode, execution_globals, execution_locals)
+                finally:
+                    _IN_CODE_FIGURE.reset(_token)
 
                 # Verify the preprocessing actually produced something. The
                 # check used to demand a name starting with "df", which is a
@@ -262,8 +594,13 @@ class SimpleCodeExecutor:
                     "❌ Figure code compilation failed - likely contains restricted operations",
                 )
 
-            # Execute figure generation (execution_locals already contains df_modified if created)
-            exec(figure_bytecode, execution_globals, execution_locals)
+            # Execute figure generation (execution_locals already contains
+            # df_modified if created). Audit hook armed for this exec only.
+            _token = _IN_CODE_FIGURE.set(True)
+            try:
+                exec(figure_bytecode, execution_globals, execution_locals)
+            finally:
+                _IN_CODE_FIGURE.reset(_token)
 
             # Look for the figure result
             fig = execution_locals.get("fig")
@@ -338,8 +675,12 @@ class SimpleCodeExecutor:
                     "❌ Preprocessing compilation failed - likely contains restricted operations",
                 )
 
-            # Execute preprocessing
-            exec(preprocessing_bytecode, execution_globals, execution_locals)
+            # Execute preprocessing — audit hook armed for this exec only.
+            _token = _IN_CODE_FIGURE.set(True)
+            try:
+                exec(preprocessing_bytecode, execution_globals, execution_locals)
+            finally:
+                _IN_CODE_FIGURE.reset(_token)
 
             # Verify df_modified was created
             if "df_modified" not in execution_locals:

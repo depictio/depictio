@@ -7539,14 +7539,17 @@ async def export_dashboard_as_json(
     if not dashboard_doc:
         raise HTTPException(status_code=404, detail="Dashboard not found")
 
-    # Get project info
+    # Same gate as GET /get/{id}: the export holds every component and the data
+    # collections it reads. Single-user mode resolves to the admin and public
+    # mode passes a public project at viewer level, so both keep working.
     project_id = dashboard_doc.get("project_id")
-    project_doc = None
-    project_tag = ""
-    if project_id:
-        project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
-        if project_doc:
-            project_tag = project_doc.get("name", "")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to access this dashboard."
+        )
+
+    project_doc = projects_collection.find_one({"_id": ObjectId(project_id)})
+    project_tag = project_doc.get("name", "") if project_doc else ""
 
     # Extract data integrity metadata
     data_integrity = _extract_data_integrity_metadata(dashboard_doc, project_doc)
