@@ -194,6 +194,7 @@ class FromRunRecipeSource(BaseModel):
     matched: int = 0
     samples: list[str] = Field(default_factory=list)
     found: bool | None = None
+    found_in: str | None = None
 
 
 class FromRunRecipePreview(BaseModel):
@@ -211,7 +212,8 @@ class FromRunDCPreview(BaseModel):
     one of ``ok`` / ``empty`` / ``missing`` / ``pruned`` and ``kind`` is
     ``scan`` or ``recipe``. ``rule`` is what a scanning collection looks for,
     as the template wrote it, ``samples`` the first few locations it matched,
-    and ``recipe`` is set for a recipe collection.
+    ``found_in`` the deepest folder (relative to the data root) holding every
+    location it matched, and ``recipe`` is set for a recipe collection.
     """
 
     data_collection_tag: str
@@ -224,6 +226,7 @@ class FromRunDCPreview(BaseModel):
     status: str = "ok"
     rule: str | None = None
     samples: list[str] = Field(default_factory=list)
+    found_in: str | None = None
     recipe: FromRunRecipePreview | None = None
 
 
@@ -244,6 +247,7 @@ def _report_recipe(recipe) -> FromRunRecipePreview | None:
                 matched=source.matched,
                 samples=list(source.samples),
                 found=source.found,
+                found_in=source.found_in,
             )
             for source in recipe.sources
         ],
@@ -264,6 +268,7 @@ def _report_rows(preview_rows) -> list[FromRunDCPreview]:
             status=row.status,
             rule=row.rule,
             samples=list(row.samples),
+            found_in=row.found_in,
             recipe=_report_recipe(row.recipe),
         )
         for row in preview_rows
@@ -444,33 +449,36 @@ def _holds_more_files_than(folder: str, limit: int) -> bool:
     return False
 
 
-def _build_local_data_root(data_root: str, *, request, current_user):
+def _build_local_data_root(data_root: str, *, request, current_user, count_files: bool = True):
     """A :class:`LocalDataRoot` on the real path of ``data_root``, once allowed.
 
     Refused, in this order: local folders off (422), a request not from this
     machine or not from an administrator (403, see ``require_local_caller``),
     a path the policy refuses (422, the policy's own message and code), a
-    folder holding more than :data:`MAX_LOCAL_RUN_FILES` files (422).
+    folder holding more than :data:`MAX_LOCAL_RUN_FILES` files (422, unless
+    ``count_files`` is off).
     """
     policy = local_data_policy()
     if policy is None:
         raise CodedHTTPException(422, LOCAL_FOLDERS_OFF, "local_folders_off")
     require_local_caller(request, current_user)
-    return _confined_local_root(policy, data_root)
+    return _confined_local_root(policy, data_root, count_files=count_files)
 
 
-def _confined_local_root(policy, data_root: str):
+def _confined_local_root(policy, data_root: str, *, count_files: bool = True):
     """A :class:`LocalDataRoot` on the real path of ``data_root`` under ``policy``.
 
     The checks on the folder itself, whoever asks: a path the policy refuses
     (422, the policy's own message and code), a folder holding more than
-    :data:`MAX_LOCAL_RUN_FILES` files (422).
+    :data:`MAX_LOCAL_RUN_FILES` files (422). The count guards the reads that
+    walk the folder; ``count_files=False`` skips it for a caller that reads
+    one bounded file of it (``run_file_preview``).
     """
     try:
         real = policy.confine(data_root, want="dir")
     except LocalPathRefused as exc:
         raise CodedHTTPException(422, exc.detail, exc.code) from exc
-    if _holds_more_files_than(real, MAX_LOCAL_RUN_FILES):
+    if count_files and _holds_more_files_than(real, MAX_LOCAL_RUN_FILES):
         raise CodedHTTPException(
             422,
             f"'{data_root}' holds more than {MAX_LOCAL_RUN_FILES:,} files, far more than "
@@ -484,7 +492,12 @@ def _confined_local_root(policy, data_root: str):
 
 
 def _build_data_root(
-    data_root: str, read_config: _RunFolderReads, *, request=None, current_user=None
+    data_root: str,
+    read_config: _RunFolderReads,
+    *,
+    request=None,
+    current_user=None,
+    count_files: bool = True,
 ):
     """The one :class:`DataRoot` this request answers every question from.
 
@@ -493,10 +506,12 @@ def _build_data_root(
     (``S3AccessRefused``, see :func:`_run_folder_read_config`), so a bucket
     name never becomes an existence-and-region oracle. A local path goes
     through :func:`_build_local_data_root`, which needs the request (for its
-    ``Host``) and the caller.
+    ``Host``) and the caller; ``count_files`` is passed on to it.
     """
     if _is_local_path(data_root):
-        return _build_local_data_root(data_root, request=request, current_user=current_user)
+        return _build_local_data_root(
+            data_root, request=request, current_user=current_user, count_files=count_files
+        )
     if not is_s3_url(data_root):
         rule = DATA_ROOT_RULE_LOCAL if local_data_policy() is not None else DATA_ROOT_RULE
         raise CodedHTTPException(422, rule, "data_root_unsupported")

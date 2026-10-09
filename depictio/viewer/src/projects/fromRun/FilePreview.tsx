@@ -185,13 +185,30 @@ const PreviewBody: React.FC<{ preview: RunFilePreview }> = ({ preview }) => {
   );
 };
 
+/** The first rows of `location`, read below the folder of the `RunFileScope`
+ *  around it; nothing without one. */
+export const FilePreviewPanel: React.FC<{ location: string }> = ({ location }) => {
+  const scope = useRunFileScope();
+  return scope ? <PreviewPanel scope={scope} location={location} /> : null;
+};
+
 const PreviewPanel: React.FC<{ scope: RunFileScopeValue; location: string }> = ({
   scope,
   location,
 }) => {
   const state = usePreview(scope, location);
   return (
-    <Stack gap={4} py={4} data-testid="file-preview" data-state={state.status} aria-live="polite">
+    <Stack
+      gap={4}
+      py={4}
+      // The panel is as wide as where it is shown, whatever the width of the
+      // table in it: a wide table scrolls inside it instead of widening the
+      // list or the plan around it.
+      style={{ contain: 'inline-size', minWidth: 0 }}
+      data-testid="file-preview"
+      data-state={state.status}
+      aria-live="polite"
+    >
       {state.status === 'loading' && (
         <Group gap="xs" wrap="nowrap">
           <Loader size="xs" />
@@ -216,6 +233,36 @@ const PreviewPanel: React.FC<{ scope: RunFileScopeValue; location: string }> = (
   );
 };
 
+/** The eye that opens a file onto its first rows, and closes it again. */
+export const FilePreviewToggle: React.FC<{
+  open: boolean;
+  onToggle: () => void;
+  /** What is previewed, when the file is not named beside the eye. */
+  label?: string;
+  testId?: string;
+}> = ({ open, onToggle, label, testId = 'file-preview-toggle' }) => {
+  const words = open ? 'Hide the preview' : label ?? 'Preview the first rows';
+  return (
+    <Tooltip label={words} withArrow multiline maw={320} zIndex={Z_LAYERS.tooltip}>
+      <ActionIcon
+        size="sm"
+        variant={open ? 'light' : 'subtle'}
+        color={open ? undefined : 'gray'}
+        onClick={(event) => {
+          // A row that opens on a click of its own keeps still.
+          event.stopPropagation();
+          onToggle();
+        }}
+        aria-expanded={open}
+        aria-label={words}
+        data-testid={testId}
+      >
+        <Icon icon={open ? 'mdi:eye-off-outline' : 'mdi:eye-outline'} width={14} />
+      </ActionIcon>
+    </Tooltip>
+  );
+};
+
 interface RunFilePathProps {
   location: string;
   /** Longest shortened form, in characters. */
@@ -235,25 +282,7 @@ export const RunFilePath: React.FC<RunFilePathProps> = ({ location, maxLength = 
     <Stack gap={0} style={{ minWidth: 0 }} data-testid={testId} data-location={location}>
       <Group gap={2} wrap="nowrap" style={{ minWidth: 0 }}>
         <FolderPath location={location} label={label} maxLength={maxLength} />
-        {scope && (
-          <Tooltip
-            label={open ? 'Hide the preview' : 'Preview the first rows'}
-            withArrow
-            zIndex={Z_LAYERS.tooltip}
-          >
-            <ActionIcon
-              size="sm"
-              variant={open ? 'light' : 'subtle'}
-              color="gray"
-              onClick={() => setOpen((o) => !o)}
-              aria-expanded={open}
-              aria-label={open ? 'Hide the preview' : 'Preview the first rows'}
-              data-testid="file-preview-toggle"
-            >
-              <Icon icon={open ? 'mdi:eye-off-outline' : 'mdi:eye-outline'} width={14} />
-            </ActionIcon>
-          </Tooltip>
-        )}
+        {scope && <FilePreviewToggle open={open} onToggle={() => setOpen((o) => !o)} />}
       </Group>
       {scope && (
         <Collapse in={open}>

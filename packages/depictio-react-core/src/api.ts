@@ -4119,6 +4119,9 @@ export interface FromRunDCPreview {
   /** The first files matched, as real paths or `s3://` URLs; `matched`
    *  counts them all. Older backends omit it. */
   samples?: string[];
+  /** The deepest folder holding every file matched, relative to the run
+   *  folder (`''` at its top); null when none was. Older backends omit it. */
+  found_in?: string | null;
   /** For a recipe: the recipe applied and what each of its inputs found.
    *  Older backends omit it. */
   recipe?: FromRunRecipePreview | null;
@@ -4139,6 +4142,9 @@ export interface FromRunRecipeSource {
   /** The first files matched, as real paths or `s3://` URLs. */
   samples: string[];
   found: boolean | null;
+  /** The deepest folder holding every file matched, relative to the run
+   *  folder (`''` at its top); null when none was. */
+  found_in?: string | null;
 }
 
 /** The recipe that builds a table, as the template names it. */

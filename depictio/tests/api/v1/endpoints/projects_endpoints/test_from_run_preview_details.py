@@ -56,6 +56,7 @@ def test_a_scan_row_carries_its_rule_and_the_files_it_matched(report_json):
     assert (row["kind"], row["status"], row["matched"]) == ("scan", "ok", 1)
     assert row["rule"]
     assert row["samples"] == [f"{S3_ROOT}/multiqc/multiqc_data/multiqc.parquet"]
+    assert row["found_in"] == "multiqc/multiqc_data"
     assert row["recipe"] is None
 
 
@@ -77,7 +78,9 @@ def test_a_recipe_row_carries_its_recipe_and_each_source(report_json):
         "matched",
         "samples",
         "found",
+        "found_in",
     }
+    assert found[0]["found_in"] == "qiime2/barplot"
 
 
 def test_a_missing_file_source_is_named_with_its_pattern(report_json):

@@ -155,6 +155,8 @@ function findingsReport(dataRoot: string) {
         status: "ok",
         rule: "multiqc_data\\.json",
         samples: [`${dataRoot}/multiqc/multiqc_data/multiqc_data.json`],
+        // Said of all seven matches, not only of the one sample shown.
+        found_in: "multiqc",
         recipe: null,
       },
       {
@@ -515,7 +517,7 @@ test.describe("Browse for a run folder", () => {
     );
   });
 
-  test("the detail pane checks the run against its template, previews pipeline_info and the files found, and opens a sub-folder", async ({
+  test("the detail pane checks the run against its template, previews pipeline_info, the files found and the files listed, and opens a sub-folder", async ({
     loginAsAdmin,
     page,
   }) => {
@@ -592,6 +594,17 @@ test.describe("Browse for a run folder", () => {
         max_rows: 20,
       },
     ]);
+    // A search of the whole run folder says where every file it found is,
+    // and the line itself opens its first file, read once for the page.
+    await expect(detail.locator("[data-testid='run-preview-found-in-multiqc_data']")).toHaveText(
+      "multiqc/",
+    );
+    await detail.locator("[data-testid='run-preview-file-toggle-multiqc_data']").click();
+    const rowPreview = detail.locator("[data-testid='run-preview-file-multiqc_data']");
+    await expect(rowPreview.locator("[data-testid='file-preview-footer']")).toHaveText(
+      "First 2 rows of 1,240 · 12 KB",
+    );
+    expect(previews).toHaveLength(1);
     // A table shows the recipe applied and what each input found.
     await detail.locator("[data-testid='run-preview-details-toggle-alpha_diversity']").click();
     const recipe = detail.locator("[data-testid='run-preview-details-alpha_diversity']");
@@ -615,6 +628,17 @@ test.describe("Browse for a run folder", () => {
     await expect(info.locator("[data-testid='pipeline-info-tools']")).toContainText("dada2");
     await info.getByRole("tab", { name: "Files (1)" }).click();
     await expect(info.locator("[data-testid='pipeline-info-reports']")).toContainText("2.3 MB");
+
+    // A file of the contents opens onto its first rows below it, read below
+    // the folder it is listed in.
+    const sheet = detail.locator("[data-testid='browse-detail-file'][data-name='samplesheet.csv']");
+    await sheet.locator("[data-testid='browse-detail-file-preview-toggle']").click();
+    await expect(sheet.locator("[data-testid='file-preview-table'] th")).toHaveText(["Sample", "reads", "gc_pct"]);
+    expect(previews.at(-1)).toEqual({
+      data_root: RUN42,
+      location: `${RUN42}/samplesheet.csv`,
+      max_rows: 20,
+    });
 
     // The contents are one list; a folder in it opens in the tree.
     await detail.locator("[data-testid='browse-detail-folder'][data-name='multiqc']").click();

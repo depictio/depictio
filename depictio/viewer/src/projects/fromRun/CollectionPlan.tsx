@@ -4,10 +4,12 @@
  * folded (it informs, it is not a problem).
  *
  * A line says what the collection is, where it looks (relative to the run
- * folder, the real path on hover) and how much it found; a click opens what
- * it looked for and found: the rule of a scan and the first files it matched,
- * or, for a table, the recipe that builds it and what each of its inputs
- * found. Every file found opens onto its first rows.
+ * folder, the real path on hover; for a search of the whole folder, the
+ * folder holding every file it found) and how much it found, with an eye
+ * that opens its first file onto its first rows below the line. A click
+ * opens what it looked for and found: the rule of a scan and the first files
+ * it matched, or, for a table, the recipe that builds it and what each of
+ * its inputs found, every file previewable the same way.
  *
  * Shared by the checks of a folder ("Collections"), the Preview step and the
  * report after creation.
@@ -35,7 +37,8 @@ import type {
 } from 'depictio-react-core';
 
 import { CollectionKindIcon, collectionKindMeta } from './CollectionKindIcon';
-import { RunFilePath, RunFileScope } from './FilePreview';
+import { FilePreviewPanel, FilePreviewToggle, RunFilePath, RunFileScope } from './FilePreview';
+import { FolderPath } from './FolderPath';
 import { plural } from './plural';
 
 const SECTIONS: Record<
@@ -291,6 +294,45 @@ const CollectionDetails: React.FC<{ dc: FromRunDCPreview; dataRoot: string }> = 
   );
 };
 
+/** The files a collection found: its own, or for a recipe those of its
+ *  inputs, an input that reads another collection's table through that
+ *  collection's files. */
+function foundFiles(dc: FromRunDCPreview, byTag: Map<string, FromRunDCPreview>): string[] {
+  if (dc.status === 'pruned') return [];
+  if (dc.kind !== 'recipe' || !dc.recipe) return dc.samples ?? [];
+  return dc.recipe.sources.flatMap((source) => {
+    if (source.samples.length > 0) return source.samples;
+    if (source.kind === 'collection' && source.dc_ref) return byTag.get(source.dc_ref)?.samples ?? [];
+    return [];
+  });
+}
+
+/** The deepest folder two folders share (`''` when only the run folder). */
+function sharedFolder(a: string, b: string): string {
+  const left = a.split('/').filter(Boolean);
+  const right = b.split('/').filter(Boolean);
+  let depth = 0;
+  while (depth < Math.min(left.length, right.length) && left[depth] === right[depth]) depth += 1;
+  return left.slice(0, depth).join('/');
+}
+
+/** Where a collection found its files, relative to the run folder, said of
+ *  every file found (the server's `found_in`): for a recipe, the folder its
+ *  inputs share, an input that reads another collection's table through that
+ *  collection. Null when nothing was found, or the server does not say. */
+function foundIn(dc: FromRunDCPreview, byTag: Map<string, FromRunDCPreview>): string | null {
+  if (dc.kind !== 'recipe' || !dc.recipe) return dc.found_in ?? null;
+  const folders = dc.recipe.sources
+    .map((source) =>
+      source.kind === 'collection' && source.dc_ref
+        ? byTag.get(source.dc_ref)?.found_in
+        : source.found_in,
+    )
+    .filter((folder): folder is string => folder !== null && folder !== undefined);
+  if (folders.length === 0) return null;
+  return folders.reduce(sharedFolder);
+}
+
 function hasDetails(dc: FromRunDCPreview): boolean {
   if (dc.status === 'pruned') return false;
   return Boolean(
@@ -298,15 +340,48 @@ function hasDetails(dc: FromRunDCPreview): boolean {
   );
 }
 
-/** Where a collection looks, relative to the run folder, on one line. */
-const WhereCell: React.FC<{ dc: FromRunDCPreview; dataRoot: string }> = ({ dc, dataRoot }) => {
+/** Where a collection looks, relative to the run folder, on one line. A
+ *  search of the whole folder says where it found its files instead. */
+const WhereCell: React.FC<{ dc: FromRunDCPreview; dataRoot: string; foundIn: string | null }> = ({
+  dc,
+  dataRoot,
+  foundIn,
+}) => {
   if (dc.status === 'pruned' || !dc.location) return null;
   const relative = relativeToRunFolder(dataRoot, dc.location);
   if (relative === '') {
+    if (!foundIn) {
+      return (
+        <Text size="xs" c="dimmed" truncate>
+          {foundIn === ''
+            ? 'the run folder'
+            : dc.kind === 'recipe'
+              ? 'files across the run folder'
+              : 'the whole run folder'}
+        </Text>
+      );
+    }
     return (
-      <Text size="xs" c="dimmed" truncate>
-        {dc.kind === 'recipe' ? 'files across the run folder' : 'the whole run folder'}
-      </Text>
+      <Tooltip
+        label={`It searches the whole run folder; every file it found is in ${foundIn}/`}
+        withArrow
+        multiline
+        maw={360}
+        zIndex={Z_LAYERS.tooltip}
+      >
+        <Code
+          fz="xs"
+          data-testid={`run-preview-found-in-${dc.data_collection_tag}`}
+          style={{
+            display: 'block',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {foundIn}/
+        </Code>
+      </Tooltip>
     );
   }
   return (
@@ -331,12 +406,17 @@ const CollectionRow: React.FC<{
   dc: FromRunDCPreview;
   dataRoot: string;
   section: RunCollectionSection;
-}> = ({ dc, dataRoot, section }) => {
+  byTag: Map<string, FromRunDCPreview>;
+}> = ({ dc, dataRoot, section, byTag }) => {
   const [open, setOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const tag = dc.data_collection_tag;
   const meta = collectionKindMeta(dc);
   const details = hasDetails(dc);
   const toggle = () => setOpen((o) => !o);
+  const files = foundFiles(dc, byTag);
+  const first = files[0] ?? null;
+  const firstName = first ? relativeToRunFolder(dataRoot, first) || first : '';
   return (
     <>
       <Table.Tr
@@ -363,12 +443,22 @@ const CollectionRow: React.FC<{
           </Group>
         </Table.Td>
         <Table.Td>
-          <WhereCell dc={dc} dataRoot={dataRoot} />
+          <WhereCell dc={dc} dataRoot={dataRoot} foundIn={foundIn(dc, byTag)} />
         </Table.Td>
-        <Table.Td ta="right">
-          <Text size="xs" c="dimmed" data-testid={`run-preview-count-${tag}`}>
-            {countText(dc, meta.unit)}
-          </Text>
+        <Table.Td>
+          <Group gap={2} justify="flex-end" wrap="nowrap">
+            <Text size="xs" c="dimmed" truncate data-testid={`run-preview-count-${tag}`}>
+              {countText(dc, meta.unit)}
+            </Text>
+            {first && (
+              <FilePreviewToggle
+                open={previewOpen}
+                onToggle={() => setPreviewOpen((o) => !o)}
+                label={`Preview ${firstName}${files.length > 1 || dc.matched > 1 ? ', the first file found' : ''}`}
+                testId={`run-preview-file-toggle-${tag}`}
+              />
+            )}
+          </Group>
         </Table.Td>
         <Table.Td>
           {details && (
@@ -389,6 +479,17 @@ const CollectionRow: React.FC<{
           )}
         </Table.Td>
       </Table.Tr>
+      {previewOpen && first && (
+        <Table.Tr data-testid={`run-preview-file-${tag}`}>
+          <Table.Td />
+          <Table.Td colSpan={4} pb="xs">
+            <Stack gap={2}>
+              <FolderPath location={first} label={firstName} maxLength={88} />
+              <FilePreviewPanel location={first} />
+            </Stack>
+          </Table.Td>
+        </Table.Tr>
+      )}
       {details && (
         // Kept in the page while folded, so what was not found can be read
         // (and searched) without opening every line.
@@ -408,7 +509,8 @@ const CollectionSection: React.FC<{
   section: RunCollectionSection;
   rows: FromRunDCPreview[];
   dataRoot: string;
-}> = ({ section, rows, dataRoot }) => {
+  byTag: Map<string, FromRunDCPreview>;
+}> = ({ section, rows, dataRoot, byTag }) => {
   const meta = SECTIONS[section];
   return (
     <Accordion.Item value={section} data-testid={`run-section-${section}`}>
@@ -449,7 +551,7 @@ const CollectionSection: React.FC<{
                     Looks in
                   </Text>
                 </Table.Th>
-                <Table.Th w={88} ta="right">
+                <Table.Th w={112} ta="right">
                   <Text size="xs" c="dimmed" fw={600}>
                     Found
                   </Text>
@@ -459,7 +561,13 @@ const CollectionSection: React.FC<{
             </Table.Thead>
             <Table.Tbody>
               {rows.map((dc) => (
-                <CollectionRow key={dc.data_collection_tag} dc={dc} dataRoot={dataRoot} section={section} />
+                <CollectionRow
+                  key={dc.data_collection_tag}
+                  dc={dc}
+                  dataRoot={dataRoot}
+                  section={section}
+                  byTag={byTag}
+                />
               ))}
             </Table.Tbody>
           </Table>
@@ -477,6 +585,7 @@ export const CollectionPlan: React.FC<{
 }> = ({ rows, dataRoot, storage = null }) => {
   const groups = groupRunCollections(rows);
   const present = SECTION_ORDER.filter((s) => groups[s].length > 0);
+  const byTag = new Map(rows.map((dc) => [dc.data_collection_tag, dc]));
   return (
     <RunFileScope dataRoot={dataRoot} storage={storage}>
       <Accordion
@@ -494,7 +603,13 @@ export const CollectionPlan: React.FC<{
         }}
       >
         {present.map((section) => (
-          <CollectionSection key={section} section={section} rows={groups[section]} dataRoot={dataRoot} />
+          <CollectionSection
+            key={section}
+            section={section}
+            rows={groups[section]}
+            dataRoot={dataRoot}
+            byTag={byTag}
+          />
         ))}
       </Accordion>
     </RunFileScope>
