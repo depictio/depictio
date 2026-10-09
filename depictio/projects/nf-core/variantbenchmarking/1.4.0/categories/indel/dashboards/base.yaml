@@ -47,7 +47,7 @@ main_dashboard:
   - name: Allele-fraction strata
     icon: mdi:chart-bell-curve
     color: grape
-    description: Accuracy per allele-fraction bin, where low-AF variants are the hardest
+    description: False positives per allele-fraction bin, where low-AF calls are the hardest
   - name: Confidence intervals
     icon: mdi:scale-balance
     color: pink
@@ -247,40 +247,41 @@ main_dashboard:
   - component_type: text
     tag: indel-af-intro
     section: Allele-fraction strata
-    title: Accuracy across allele-fraction bins
+    title: False positives across allele-fraction bins
     title_size: sm
     title_align: left
     order: 2
     alignment: left
     body: >
-      som.py re-scores each caller inside allele-fraction bins. Low-AF somatic
-      variants are the hardest to recover, so recall usually climbs from left to
-      right; a caller that stays flat is missing the subclonal fraction.
+      som.py bins each caller's false positives by the caller's allele fraction,
+      but a true positive or a miss by the truth set's: a truth set without
+      allele fractions leaves recall and F1 per bin empty. A caller whose false
+      positives pile up in the lowest bin is calling into the noise floor.
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_regions
     layout: {x: 0, y: 0, w: 8, h: 1}
   - component_type: figure
-    tag: indel-fig-afbars-f1
+    tag: indel-fig-afbars-fp
     section: Allele-fraction strata
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_regions
     use: sompy/regions
     visu_type: bar
-    dict_kwargs: {x: af_bin, y: f1, color: caller, barmode: group}
-    title: F1 across allele-fraction bins
-    description: F1 per bin, one bar per caller.
+    dict_kwargs: {x: af_bin, y: fp, color: caller, barmode: group, labels: {af_bin: Allele-fraction bin, fp: False positives, caller: Caller}}
+    title: False positives across allele-fraction bins
+    description: False positives per bin, one bar per caller.
     title_size: h3
     layout: {x: 0, y: 1, w: 4, h: 5}
   - component_type: figure
-    tag: indel-fig-afbars
+    tag: indel-fig-afbars-caller
     section: Allele-fraction strata
     workflow_tag: variantbenchmarking
     data_collection_tag: sompy_regions
     use: sompy/regions
     visu_type: bar
-    dict_kwargs: {x: af_bin, y: recall, color: caller, barmode: group}
-    title: Recall across allele-fraction bins
-    description: Recall per bin, one bar per caller.
+    dict_kwargs: {x: caller, y: fp, color: af_bin, labels: {caller: Caller, fp: False positives, af_bin: Allele-fraction bin}}
+    title: False positives of each caller, by bin
+    description: Where each caller's false positives fall across the allele-fraction bins.
     title_size: h3
     layout: {x: 4, y: 1, w: 4, h: 5}
 

@@ -58,13 +58,16 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .rename({"Type": "variant_type", "Filter": "filter"})
     )
 
+    # A ratio whose denominator is 0 is undefined, so null rather than polars' NaN: recall
+    # without truth variants, precision without calls, and F1 when either is. F1 is written
+    # 2·TP / (2·TP + FP + FN), which is 0 (not 0/0) when no call is a true positive.
+    tp, fn, fp = pl.col("truth_tp"), pl.col("truth_fn"), pl.col("query_fp")
+    no_truth, no_calls = (tp + fn) == 0, (tp + fp) == 0
+    null = pl.lit(None, dtype=pl.Float64)
     pooled = pooled.with_columns(
-        (pl.col("truth_tp") / (pl.col("truth_tp") + pl.col("truth_fn"))).alias("recall"),
-        (pl.col("truth_tp") / (pl.col("truth_tp") + pl.col("query_fp"))).alias("precision"),
-    ).with_columns(
-        (
-            2 * pl.col("precision") * pl.col("recall") / (pl.col("precision") + pl.col("recall"))
-        ).alias("f1")
+        pl.when(no_truth).then(null).otherwise(tp / (tp + fn)).alias("recall"),
+        pl.when(no_calls).then(null).otherwise(tp / (tp + fp)).alias("precision"),
+        pl.when(no_truth | no_calls).then(null).otherwise(2 * tp / (2 * tp + fp + fn)).alias("f1"),
     )
 
     return pooled.select(

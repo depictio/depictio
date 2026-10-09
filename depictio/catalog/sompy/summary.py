@@ -2,7 +2,8 @@
 
 Consumes the pipeline-aggregated ``indel/summary/tables/sompy/sompy.summary.csv``
 (``HAPPY_SOMPY`` collated across callers). One row per somatic callset × variant type, with
-precision/recall/F1 and the binomial confidence intervals som.py reports. ``caller`` is the
+precision/recall/F1 and the binomial confidence intervals som.py reports. A precision without
+calls and a recall without truth variants are null, not som.py's 0.0. ``caller`` is the
 tool that made the calls, ``label`` the callset's samplesheet id and ``truth_set`` the truth
 set it was compared against, read off the ``<id>.<truth set>.<caller>`` file name.
 """
@@ -42,6 +43,24 @@ def truth_set_expr(file_col: str = "File", tool_col: str = "Tool") -> pl.Expr:
         .str.strip_prefix(pl.col(tool_col).cast(pl.Utf8) + pl.lit("."))
         .str.split(".")
         .list.first()
+    )
+
+
+def null_undefined_metrics(df: pl.DataFrame) -> pl.DataFrame:
+    """Null each ratio whose denominator is 0 instead of keeping som.py's 0.0.
+
+    som.py prints 0.0 for a precision without calls (``tp + fp == 0``) and for a
+    recall without truth variants (``tp + fn == 0``). Both are undefined, and a 0.0
+    reads as a measured failure; F1 is undefined as soon as either one is. Rows whose
+    counts are missing keep the tool's values.
+    """
+    no_calls = (pl.col("tp") + pl.col("fp")) == 0
+    no_truth = (pl.col("tp") + pl.col("fn")) == 0
+    null = pl.lit(None, dtype=pl.Float64)
+    return df.with_columns(
+        pl.when(no_calls).then(null).otherwise(pl.col("precision")).alias("precision"),
+        pl.when(no_truth).then(null).otherwise(pl.col("recall")).alias("recall"),
+        pl.when(no_calls | no_truth).then(null).otherwise(pl.col("f1")).alias("f1"),
     )
 
 
@@ -93,6 +112,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         df = df.with_columns(pl.col("TP_base").cast(pl.Int64, strict=False).alias("tp_base"))
     for out, src in (("recall", "Recall"), ("precision", "Precision"), ("f1", "F1")):
         df = df.with_columns(pl.col(src).cast(pl.Float64, strict=False).alias(out))
+    df = null_undefined_metrics(df)
     for col_name in ("recall_lower", "recall_upper", "precision_lower", "precision_upper"):
         if col_name in df.columns:
             df = df.with_columns(pl.col(col_name).cast(pl.Float64, strict=False))

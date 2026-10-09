@@ -158,6 +158,8 @@ main_dashboard:
     layout: {x: 2, y: 2, w: 2, h: 1}
   - component_type: text
     title: nf-core/variantbenchmarking
+    logo: https://raw.githubusercontent.com/nf-core/variantbenchmarking/master/docs/images/nf-core-variantbenchmarking_logo_light.png
+    logo_dark: https://raw.githubusercontent.com/nf-core/variantbenchmarking/master/docs/images/nf-core-variantbenchmarking_logo_dark.png
     order: 1
     body: >
       Variant callers scored against a truth set: precision, recall and F1 for every callset,
@@ -343,12 +345,11 @@ main_dashboard:
       icon_color: grape
       caption: median per callset, with its spread
       link: tab:Somatic
-      decimals: 3
     section: Key figures
     tag: vb-ov-kf-somatic-f1
     index: ov-kf-somatic-f1
     title: F1
-    description: Median F1 of the somatic callsets (som.py). The box shows how it spreads.
+    description: Median F1 of the somatic callsets (som.py); a callset without calls has none and is left out. The box shows how it spreads.
     layout: {x: 2, y: 2, w: 2, h: 2}
   - component_type: card
     workflow_tag: variantbenchmarking
@@ -364,7 +365,6 @@ main_dashboard:
       icon_color: orange
       caption: median per callset, with its spread
       link: tab:Somatic
-      decimals: 3
     section: Key figures
     tag: vb-ov-kf-somatic-recall
     index: ov-kf-somatic-recall
@@ -387,12 +387,11 @@ main_dashboard:
       icon_color: teal
       caption: median per callset, floor 0.5
       link: tab:Somatic
-      decimals: 3
     section: Key figures
     tag: vb-ov-kf-somatic-precision
     index: ov-kf-somatic-precision
     title: Precision
-    description: Median share of a somatic callset's calls that are in the truth set. It passes at 0.5 and warns below 0.25.
+    description: Median share of a somatic callset's calls that are in the truth set, over the callsets that made calls. It passes at 0.5 and warns below 0.25.
     layout: {x: 6, y: 2, w: 2, h: 2}
   # ---------------------------------------------------------- structural row
   - component_type: card
@@ -435,7 +434,7 @@ main_dashboard:
     tag: vb-ov-kf-sv-f1
     index: ov-kf-sv-f1
     title: F1
-    description: Median Truvari F1 of the structural-variant callsets. The box shows how it spreads.
+    description: Median Truvari F1 of the structural-variant callsets; a callset without calls has none and is left out. The box shows how it spreads.
     layout: {x: 2, y: 4, w: 2, h: 2}
   - component_type: card
     workflow_tag: variantbenchmarking
@@ -479,7 +478,7 @@ main_dashboard:
     tag: vb-ov-kf-sv-precision
     index: ov-kf-sv-precision
     title: Precision
-    description: Median share of a structural callset's calls that are in the truth set.
+    description: Median share of a structural callset's calls that are in the truth set, over the callsets that made calls.
     layout: {x: 6, y: 4, w: 2, h: 2}
   # Findings bar: caller, then callset, once per route.
   - component_type: interactive
@@ -585,11 +584,13 @@ main_dashboard:
         format: 'decimals:3'}
       h_indel: {dc: germline_happy_summary, column: f1, aggregation: max, filter_expr: "(col('variant_type') == 'INDEL') & (col('filter') == 'PASS')",
         format: 'decimals:3'}
-      s_best: {dc: somatic_sompy_summary, column: f1, aggregation: max, format: 'decimals:3'}
+      s_tp: {dc: somatic_sompy_summary, column: tp, aggregation: max, format: integer}
+      s_truth: {dc: somatic_sompy_summary, column: tp_base, aggregation: max, format: integer}
+      s_best: {dc: somatic_sompy_summary, column: f1, aggregation: max}
       s_top: {dc: somatic_sompy_summary, column: caller, aggregation: top, weight: f1}
       s_fp_share: {dc: somatic_sompy_summary, column: caller, aggregation: top_share, weight: fp, format: percent}
       s_fp_top: {dc: somatic_sompy_summary, column: caller, aggregation: top, weight: fp}
-      r_best: {dc: somatic_vcfeval_summary, column: f1, aggregation: max, format: 'decimals:3'}
+      r_best: {dc: somatic_vcfeval_summary, column: f1, aggregation: max}
       r_top: {dc: somatic_vcfeval_summary, column: caller, aggregation: top, weight: f1}
       t_best: {dc: sv_truvari_summary, column: f1, aggregation: max, format: 'decimals:3'}
       t_top: {dc: sv_truvari_summary, column: caller, aggregation: top, weight: f1}
@@ -603,6 +604,7 @@ main_dashboard:
       - **{{g_best}}** best germline F1, from {{g_top}} – rtg-tools vcfeval, one value per callset [Germline](tab:Germline)
       - **{{h_snp}}** SNP F1 of the PASS calls, {{h_indel}} for indels – hap.py, pooled over samples [Germline](tab:Germline)
       - **{{g_fp_share}}** of the false positives come from {{g_fp_top}} – rtg-tools vcfeval, summed per caller [Germline](tab:Germline)
+      - **{{s_tp}}** of {{s_truth}} truth variants found, the most of any callset – som.py true positives [Somatic](tab:Somatic)
       - **{{s_best}}** best somatic F1, from {{s_top}} – som.py, one value per callset [Somatic](tab:Somatic)
       - **{{s_fp_share}}** of the false positives come from {{s_fp_top}} – som.py, summed per caller [Somatic](tab:Somatic)
       - **{{r_best}}** best F1 on haplotypes, from {{r_top}} – rtg-tools vcfeval, the cross-check [Somatic](tab:Somatic)
@@ -1035,7 +1037,7 @@ tabs:
   - name: Allele-fraction strata
     icon: mdi:chart-bell-curve
     color: pink
-    description: F1 and recall per allele-fraction bin, where low fractions are hardest
+    description: False positives per allele-fraction bin, where low fractions are hardest
   - name: rtg-tools cross-check
     icon: mdi:check-decagram
     color: gray
@@ -1051,10 +1053,10 @@ tabs:
     order: 1
     body: >
       [som.py](https://github.com/Illumina/hap.py) scores each somatic caller against the
-      truth set, with binomial 95% intervals and per allele-fraction bin;
+      truth set, with binomial 95% intervals, and bins its false positives by allele fraction;
       [rtg-tools vcfeval](https://github.com/RealTimeGenomics/rtg-tools) cross-checks it on
-      haplotypes. Low-fraction variants are the hardest: a caller whose recall stays flat
-      across the bins misses the subclonal ones.
+      haplotypes. A caller whose false positives pile up in the lowest bin is calling into the
+      noise floor.
     tag: vb-so-intro
     index: so-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
@@ -1099,12 +1101,11 @@ tabs:
       icon_name: mdi:trophy
       icon_color: grape
       caption: median per callset, with its spread
-      decimals: 3
     section: Somatic at a glance
     tag: vb-so-card-f1
     index: so-card-f1
     title: F1
-    description: Median F1 of the somatic callsets in view.
+    description: Median F1 of the somatic callsets in view; a callset without calls has none and is left out.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: variantbenchmarking
@@ -1121,12 +1122,11 @@ tabs:
       icon_name: mdi:bullseye-arrow
       icon_color: teal
       caption: median per callset, floor 0.5
-      decimals: 3
     section: Somatic at a glance
     tag: vb-so-card-precision
     index: so-card-precision
     title: Precision
-    description: Median share of a callset's calls in the truth set. It passes at 0.5 and warns below 0.25.
+    description: Median share of a callset's calls in the truth set, over the callsets that made calls. It passes at 0.5 and warns below 0.25.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: variantbenchmarking
@@ -1224,15 +1224,15 @@ tabs:
     visu_type: bar
     dict_kwargs:
       x: af_bin
-      y: f1
+      y: fp
       color: caller
       barmode: group
-      labels: {af_bin: Allele-fraction bin, f1: F1, caller: Caller}
+      labels: {af_bin: Allele-fraction bin, fp: False positives, caller: Caller}
     section: Allele-fraction strata
-    tag: vb-so-fig-af-f1
-    index: so-af-f1
-    title: F1 per allele-fraction bin
-    description: One bar per caller and bin.
+    tag: vb-so-fig-af-fp
+    index: so-af-fp
+    title: False positives per allele-fraction bin
+    description: One bar per caller and bin, the bin read off the caller's allele fraction.
     layout: {x: 0, y: 0, w: 4, h: 4}
   - component_type: figure
     workflow_tag: variantbenchmarking
@@ -1240,16 +1240,15 @@ tabs:
     use: sompy/regions
     visu_type: bar
     dict_kwargs:
-      x: af_bin
-      y: recall
-      color: caller
-      barmode: group
-      labels: {af_bin: Allele-fraction bin, recall: Recall, caller: Caller}
+      x: caller
+      y: fp
+      color: af_bin
+      labels: {caller: Caller, fp: False positives, af_bin: Allele-fraction bin}
     section: Allele-fraction strata
-    tag: vb-so-fig-af-recall
-    index: so-af-recall
-    title: Recall per allele-fraction bin
-    description: One bar per caller and bin; recall usually climbs with the allele fraction.
+    tag: vb-so-fig-af-fp-caller
+    index: so-af-fp-caller
+    title: False positives of each caller, by bin
+    description: Where each caller's false positives fall. som.py bins a true positive or a miss by the truth set's allele fraction, so without one only false positives are binned.
     layout: {x: 4, y: 0, w: 4, h: 4}
   - component_type: advanced_viz
     workflow_tag: variantbenchmarking
@@ -1299,7 +1298,7 @@ tabs:
     tag: vb-so-table-regions
     index: so-table-regions
     title: som.py allele-fraction strata
-    description: One row per caller and allele-fraction bin, with TP, FP and FN per bin.
+    description: One row per caller and allele-fraction bin; recall and F1 are empty where no truth variant is binned.
     layout: {x: 0, y: 6, w: 8, h: 6}
 # ============================================================================
 # Structural
@@ -1428,7 +1427,7 @@ tabs:
     tag: vb-sv-card-f1
     index: sv-card-f1
     title: F1
-    description: Median Truvari F1 of the callsets in view.
+    description: Median Truvari F1 of the callsets in view; a callset without calls has none and is left out.
     layout: {x: 2, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: variantbenchmarking
@@ -1469,7 +1468,7 @@ tabs:
     tag: vb-sv-card-precision
     index: sv-card-precision
     title: Precision
-    description: Median share of a callset's calls that are in the truth set.
+    description: Median share of a callset's calls that are in the truth set, over the callsets that made calls.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: variantbenchmarking

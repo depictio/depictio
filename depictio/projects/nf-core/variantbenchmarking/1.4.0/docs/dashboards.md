@@ -34,12 +34,15 @@ The landing page, at compact width with the filter panel collapsed:
 - **Key figures**: per route, four headline cards opening its tab: the true positives (split by
   caller), the median F1 (with its spread), the median recall and the median precision. The
   germline recall passes at 0.9 (warns below 0.8), the somatic precision at 0.5 (warns below
-  0.25), the structural recall at 0.8 (warns below 0.6). A caller and a callset filter above
-  them narrow these four only.
-- **Findings**: three result rows per route, computed under the filters, each linking its
-  tab. Germline: the best vcfeval F1 and its caller, the hap.py SNP and indel F1 of the PASS
-  calls, and the caller with most false positives. Somatic: the best som.py F1 and its caller,
-  the caller with most false positives, and the best rtg-tools vcfeval F1. Structural: the
+  0.25), the structural recall at 0.8 (warns below 0.6). The cards print as many digits as a
+  value needs, so a near-empty benchmark (a test profile scoring a few calls against a whole
+  truth set) reads 3.39e-4 rather than 0.000. A caller and a callset filter above them narrow
+  these four only.
+- **Findings**: three or four result rows per route, computed under the filters, each linking
+  its tab. Germline: the best vcfeval F1 and its caller, the hap.py SNP and indel F1 of the PASS
+  calls, and the caller with most false positives. Somatic: the most true positives any callset
+  reaches out of the truth variants (the scale of the benchmark), the best som.py F1 and its
+  caller, the caller with most false positives, and the best rtg-tools vcfeval F1. Structural: the
   best Truvari F1 and its caller, the best SVanalyzer F1, and the Wittyer F1 per event against
   per base. Below them, four figures per route in two rows: germline, the precision-recall
   scatter and hap.py F1 by variant type, then the quality-threshold sweep and the error counts;
@@ -67,15 +70,25 @@ Filters: caller, callset, hap.py variant type and hap.py calls (ALL or PASS).
 **Somatic.** Strip: F1 (box plot), precision against a 0.5 floor, false positives (the callers
 with most) and true positives (split by caller). Then the som.py precision-recall
 scatter beside the error counts, the precision and recall with their binomial 95% intervals,
-and F1 and recall per allele-fraction bin. Collapsed: the rtg-tools vcfeval cross-check
-(scatter and table) and the som.py summary and strata tables. Filters: caller and
-allele-fraction bin; the caller reaches the strata and the cross-check through the links.
+and the false positives per allele-fraction bin, by bin and by caller. som.py bins a false
+positive by the caller's allele fraction but a true positive or a miss by the truth set's, so
+with a truth set that carries none, recall and F1 per bin stay empty and only the false
+positives are defined per bin. Collapsed: the rtg-tools vcfeval cross-check (scatter and
+table) and the som.py summary and strata tables. Filters: caller and allele-fraction bin; the
+caller reaches the strata and the cross-check through the links.
 
 **Structural & CNV.** Strip: true positives (split by caller), F1 (box plot), recall against a
 0.8 floor and precision (distribution), all from Truvari. Then the Truvari precision-recall
 scatter beside its error counts, and the SVanalyzer F1 per callset beside the Wittyer F1 per
 event and per base. Collapsed: the Truvari, SVanalyzer and Wittyer tables. Filters: callset,
 caller and Wittyer level; the callset reaches SVanalyzer and Wittyer through the links.
+
+## Undefined metrics
+
+A ratio with nothing to divide is left empty, not printed as 0: the precision of a callset that
+made no calls (som.py and Truvari write 0.0, rtg-tools leaves it blank), the recall of a
+stratum without truth variants, and the F1 of either. Such a callset drops out of the medians
+and maxima instead of pinning them to 0, and its recall stays a measured 0 of the truth set.
 
 ## Routes and pruning
 
