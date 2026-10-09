@@ -1253,6 +1253,23 @@ def register_run_command(app: typer.Typer):
                     f"Auto-selected template: {escape(template)}", "success"
                 )
 
+        # Whichever path chose the template, say so when the run is another major
+        # release of the pipeline: the import then prunes what the run lacks
+        # without a word on why a tab is gone.
+        if detected_info is not None and template:
+            from depictio.cli.cli.utils.templates import major_release_gap
+
+            template_release = major_release_gap(detected_info, template)
+            if template_release:
+                rich_print_checked_statement(
+                    f"{escape(str(detected_info.pipeline_name))} "
+                    f"{escape(str(detected_info.pipeline_version))} is not the major release "
+                    f"the template was built for ({template_release}). Outputs move between "
+                    "major releases: data collections that find no files are skipped, and "
+                    "the tabs built on them are dropped.",
+                    "warning",
+                )
+
         # Validate template/project-config-path mutual exclusivity
         if template and project_config_path:
             rich_print_checked_statement(

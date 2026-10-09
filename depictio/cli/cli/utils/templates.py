@@ -240,6 +240,42 @@ def select_template_for_run(info: Any) -> str | None:
     return f"{info.pipeline_name}/{chosen}"
 
 
+def template_pipeline_version(template_id: str) -> str | None:
+    """The pipeline release a template id stands for, ``latest`` resolved.
+
+    ``nf-core/atacseq/latest`` gives ``1.2.2`` while that is the highest version
+    shipped; None when no projects root resolves the id to a version directory.
+    """
+    for projects_dir in _projects_roots():
+        resolved = _resolve_template_id_in(projects_dir, template_id)
+        for part in resolved.split("/"):
+            if _VERSION_DIR_RE.match(part):
+                return part
+    return None
+
+
+def major_release_gap(info: Any, template_id: str) -> str | None:
+    """The template's pipeline release when the run is another major release.
+
+    nf-core moves, renames and drops outputs between major releases, so a
+    template built for one major describes files a run of another may not have.
+    None when both share a major, when either version is unknown, or when the
+    template is not one of the run's pipeline.
+    """
+    name = info.pipeline_name
+    run_version = info.pipeline_version
+    if not name or not run_version or not _VERSION_DIR_RE.match(run_version):
+        return None
+    if not template_id.startswith(f"{name}/"):
+        return None
+    template_version = template_pipeline_version(template_id)
+    if template_version is None:
+        return None
+    if _version_key(template_version)[0] == _version_key(run_version)[0]:
+        return None
+    return template_version
+
+
 def _list_available_templates(projects_dir: Path) -> list[str]:
     """List available template IDs by scanning a projects directory.
 
