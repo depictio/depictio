@@ -212,6 +212,7 @@ main_dashboard:
       icon_color: indigo
       caption: summed, with the spread per sample
       link: tab:Sequence Processing
+      format: si
     section: Key figures
     tag: airr-ov-kf-reads
     index: ov-kf-reads
@@ -233,6 +234,7 @@ main_dashboard:
       icon_color: indigo
       caption: summed, with the spread per sample
       link: tab:V Gene Usage
+      format: si
     section: Key figures
     tag: airr-ov-kf-input-assembled
     index: ov-kf-input-assembled
@@ -255,6 +257,7 @@ main_dashboard:
       icon_color: indigo
       caption: summed, with the spread per sample
       link: tab:Clonal Diversity
+      format: si
     section: Key figures
     tag: airr-ov-kf-sequences-noreport
     index: ov-kf-sequences-noreport
@@ -275,6 +278,7 @@ main_dashboard:
       icon_color: teal
       caption: summed, with the spread per sample
       link: tab:Clonal Diversity
+      format: si
     section: Key figures
     tag: airr-ov-kf-clones
     index: ov-kf-clones
@@ -297,6 +301,7 @@ main_dashboard:
       icon_color: teal
       caption: summed, with the spread per sample
       link: tab:V Gene Usage
+      format: si
     section: Key figures
     tag: airr-ov-kf-unique-noclonal
     index: ov-kf-unique-noclonal
@@ -1008,7 +1013,7 @@ tabs:
       icon_name: mdi:chart-pie
       icon_color: violet
       caption: the largest, with every family's spread
-      decimals: 2
+      format: percent
     section: V genes at a glance
     tag: airr-vg-card-family-max
     index: vg-card-family-max
@@ -1028,7 +1033,7 @@ tabs:
       icon_name: mdi:chart-bell-curve
       icon_color: cyan
       caption: median, with its distribution
-      decimals: 3
+      format: percent
     section: V genes at a glance
     tag: airr-vg-card-gene-share
     index: vg-card-gene-share
@@ -1173,7 +1178,7 @@ tabs:
       icon_name: mdi:chart-bar
       icon_color: pink
       caption: the tallest length, with every length's spread
-      decimals: 3
+      format: percent
     section: CDR3 at a glance
     tag: airr-cdr3-card-peak
     index: cdr3-card-peak
@@ -1472,7 +1477,7 @@ tabs:
       icon_name: mdi:check-decagram
       icon_color: green
       caption: median, and each subject's value
-      decimals: 2
+      format: percent
     section: Clone definition
     tag: airr-div-card-sensitivity
     index: div-card-sensitivity
@@ -1606,8 +1611,8 @@ tabs:
     display:
       icon_name: mdi:trending-up
       icon_color: orange
-      caption: fraction of a sample's sequences, the median sample
-      decimals: 3
+      caption: share of a sample's sequences, the median sample
+      format: percent
     section: Expansion at a glance
     tag: airr-exp-card-top-clone
     index: exp-card-top-clone

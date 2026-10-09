@@ -47,7 +47,7 @@ The landing page, at compact width with the filter panel collapsed:
 - **Key figures**: four headline cards, each opening the tab that explains it. Samples
   (split by group), peaks called (the box shows the spread per library), the significant
   differential calls (split by direction) and the median FRiP score, its strip counting the
-  libraries at the ENCODE target (0.3), in the acceptable band (0.2) and below it. A group
+  libraries at the ENCODE target (30%), in the acceptable band (20%) and below it. A group
   and a sample filter above them narrow these four only.
 - **Findings**: result rows computed under the filters, each with a link to its tab: the
   median fold enrichment of the peaks, the most common HOMER feature class and its share,

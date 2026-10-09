@@ -628,12 +628,12 @@ tabs:
       icon_name: mdi:arrow-collapse-vertical
       icon_color: orange
       caption: median per sample, with its spread
-      decimals: 2
+      format: percent
     section: Samples at a glance
     tag: da-sm-card-floor
     index: sm-card-floor
     title: Share at the floor
-    description: Share of each sample's features, 0 to 1, sitting at the lowest value of the matrix, unexpressed after stabilisation.
+    description: Share of each sample's features sitting at the lowest value of the matrix, unexpressed after stabilisation.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: differentialabundance

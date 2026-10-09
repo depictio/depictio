@@ -258,7 +258,7 @@ main_dashboard:
       icon_color: orange
       caption: median per profiling run
       link: tab:MultiQC
-      decimals: 0
+      format: si
     section: Key figures
     tag: tp-ov-kf-assigned
     index: ov-kf-assigned
@@ -781,13 +781,13 @@ tabs:
     display:
       icon_name: mdi:waves
       icon_color: cyan
-      caption: median; 0.95 is Nonpareil's target
-      decimals: 2
+      caption: median; 95% is Nonpareil's target
+      format: percent
     section: Depth at a glance
     tag: tp-depth-card-coverage
     index: depth-card-coverage
     title: Metagenome coverage
-    description: Median share of the metagenome a library reaches, from 0 to 1.
+    description: Median share of the metagenome a library reaches.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: taxprofiler
@@ -1079,7 +1079,7 @@ tabs:
       icon_name: mdi:alert-circle-outline
       icon_color: gray
       caption: median share per run, with its distribution
-      decimals: 2
+      format: percent
     section: Profiles at a glance
     tag: tp-prof-card-unclassified
     index: prof-card-unclassified
@@ -1100,7 +1100,7 @@ tabs:
       icon_name: mdi:chart-donut
       icon_color: indigo
       caption: the most dominant taxon, by classifier
-      decimals: 2
+      format: percent
     section: Profiles at a glance
     tag: tp-prof-card-dominant
     index: prof-card-dominant
@@ -1401,12 +1401,12 @@ tabs:
       icon_name: mdi:chart-donut
       icon_color: indigo
       caption: median, with its spread
-      decimals: 2
+      format: percent
     section: Diversity at a glance
     tag: tp-div-card-top-share
     index: div-card-top-share
     title: Top-taxon share
-    description: Median share of a profile its single most abundant taxon holds, from 0 to 1.
+    description: Median share of a profile its single most abundant taxon holds.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: figure
     workflow_tag: taxprofiler

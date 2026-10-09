@@ -102,7 +102,7 @@ Filters: a clone count range and the diversity order (default "q = 1, Shannon"),
 the ranked bars only.
 
 **Clonal Expansion.** Strip: clones as a ring by size class, sequences split by size class,
-the median share of a sample's largest clone (as a fraction) and the size of the largest clone
+the median share of a sample's largest clone (as a percentage) and the size of the largest clone
 with every clone's size as a histogram (most clones hold one sequence).
 Then the rank-abundance curves with their bootstrap bands, and the clonal homeostasis sunburst
 (subject, sample, size class). Filter: size class.

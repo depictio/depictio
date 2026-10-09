@@ -231,7 +231,7 @@ main_dashboard:
       icon_color: teal
       caption: median share over samples, with its spread
       link: tab:Valid pairs
-      decimals: 2
+      format: percent
     section: Key figures
     tag: hc-ov-kf-valid
     index: ov-kf-valid
@@ -720,7 +720,7 @@ tabs:
       icon_name: mdi:check-decagram
       icon_color: teal
       caption: median per sample, with the distribution
-      decimals: 2
+      format: percent
     section: Pairs at a glance
     tag: hc-vp-card-validrate
     index: vp-card-validrate
@@ -740,7 +740,7 @@ tabs:
       icon_name: mdi:content-duplicate
       icon_color: orange
       caption: median per sample, with its spread
-      decimals: 3
+      format: percent
     section: Pairs at a glance
     tag: hc-vp-card-duprate
     index: vp-card-duprate
@@ -917,7 +917,7 @@ tabs:
       icon_name: mdi:ruler
       icon_color: indigo
       caption: median per sample, with the distribution
-      decimals: 2
+      format: percent
     section: Decay at a glance
     tag: hc-dd-card-longrange
     index: dd-card-longrange
@@ -1366,7 +1366,7 @@ tabs:
       icon_name: mdi:check-decagram
       icon_color: teal
       caption: median per domain, with the distribution
-      decimals: 2
+      format: percent
     section: Domains at a glance
     tag: hc-dom-card-valid
     index: dom-card-valid

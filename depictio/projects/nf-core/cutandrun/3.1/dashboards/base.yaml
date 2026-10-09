@@ -247,6 +247,7 @@ main_dashboard:
       icon_color: indigo
       caption: SEACR peaks, by target
       link: tab:Peaks
+      format: si
     section: Key figures
     tag: cr-ov-kf-peaks
     index: ov-kf-peaks
@@ -270,7 +271,7 @@ main_dashboard:
       icon_color: teal
       caption: median per sample, with its spread
       link: tab:Peaks
-      decimals: 2
+      format: percent
     section: Key figures
     tag: cr-ov-kf-frip
     index: ov-kf-frip
@@ -1403,7 +1404,7 @@ tabs:
       icon_name: mdi:target
       icon_color: teal
       caption: the weakest library; the box, every library
-      decimals: 2
+      format: percent
     section: Peaks at a glance
     tag: cr-pk-card-frip-min
     index: pk-card-frip-min
@@ -1667,7 +1668,7 @@ tabs:
       icon_name: mdi:alert-outline
       icon_color: pink
       caption: median, with its spread
-      decimals: 2
+      format: percent
     section: Agreement at a glance
     tag: cr-ca-card-shared
     index: ca-card-shared

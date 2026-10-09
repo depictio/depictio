@@ -279,7 +279,7 @@ main_dashboard:
       icon_color: red
       caption: C to T at the first base, per library
       link: tab:Authentication
-      decimals: 2
+      format: percent
     section: Key figures
     tag: ea-ov-kf-damage
     index: ov-kf-damage
@@ -1064,7 +1064,7 @@ tabs:
       icon_name: mdi:set-merge
       icon_color: blue
       caption: median per lane, with its spread
-      decimals: 2
+      format: percent
     section: Reads at a glance
     tag: ea-fate-card-collapse
     index: fate-card-collapse
@@ -1082,7 +1082,7 @@ tabs:
       icon_name: mdi:delete-outline
       icon_color: red
       caption: median per lane, distribution
-      decimals: 3
+      format: percent
     section: Reads at a glance
     tag: ea-fate-card-discard
     index: fate-card-discard
@@ -1482,12 +1482,12 @@ tabs:
       icon_name: mdi:content-duplicate
       icon_color: violet
       caption: median per library, with its spread
-      decimals: 2
+      format: percent
     section: Duplication at a glance
     tag: ea-dup-card-rate
     index: cx-card-rate
     title: Duplication rate
-    description: Share of the reads checked that Picard flagged as PCR duplicates, 0 to 1.
+    description: Share of the reads checked that Picard flagged as PCR duplicates.
     layout: {x: 0, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: eager
@@ -1737,7 +1737,7 @@ tabs:
       icon_name: mdi:dna
       icon_color: red
       caption: first base, median per library
-      decimals: 2
+      format: percent
     section: Damage at a glance
     tag: ea-auth-card-ct
     index: auth-card-ct
@@ -1756,7 +1756,7 @@ tabs:
       icon_name: mdi:swap-vertical
       icon_color: pink
       caption: last base, distribution
-      decimals: 2
+      format: percent
     section: Damage at a glance
     tag: ea-auth-card-ga
     index: auth-card-ga
@@ -1795,12 +1795,12 @@ tabs:
       icon_name: mdi:content-cut
       icon_color: violet
       caption: share per library, distribution
-      decimals: 3
+      format: percent
     section: Damage at a glance
     tag: ea-auth-card-short
     index: auth-card-short
     title: Under {SHORT_FRAGMENT_BP} bp
-    description: Share of mapped fragments shorter than the short-fragment cut-off, 0 to 1.
+    description: Share of mapped fragments shorter than the short-fragment cut-off.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: eager

@@ -989,7 +989,7 @@ tabs:
       icon_name: mdi:sigma
       icon_color: pink
       caption: share of the Bray-Curtis variation
-      decimals: 2
+      format: percent
     section: Ordination at a glance
     tag: am-ord-card-permanova
     index: ord-card-permanova

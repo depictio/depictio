@@ -229,6 +229,7 @@ main_dashboard:
       icon_color: blue
       caption: PSMs per sample, with their spread
       link: tab:Identification
+      format: si
     section: Key figures
     tag: mq-ov-kf-psms
     index: ov-kf-psms
@@ -270,7 +271,7 @@ main_dashboard:
       icon_color: blue
       caption: median per raw file, with its spread
       link: tab:Identification
-      decimals: 2
+      format: percent
     section: Key figures
     tag: mq-ov-kf-idrate
     index: ov-kf-idrate
@@ -911,7 +912,7 @@ tabs:
       icon_name: mdi:target
       icon_color: cyan
       caption: median per raw file, with its distribution
-      decimals: 2
+      format: percent
     section: Yield at a glance
     tag: mq-id-card-rate
     index: id-card-rate
@@ -1375,7 +1376,7 @@ tabs:
       icon_name: mdi:star-outline
       icon_color: violet
       caption: median per sample, with its spread
-      decimals: 2
+      format: percent
     section: Signature at a glance
     tag: mq-sig-card-ninemer
     index: sig-card-ninemer

@@ -209,7 +209,7 @@ main_dashboard:
       icon_color: teal
       caption: records over all callsets, by caller
       link: tab:Caller concordance
-      decimals: 0
+      format: si
     section: Key figures
     tag: sk-ov-kf-calls
     index: ov-kf-calls

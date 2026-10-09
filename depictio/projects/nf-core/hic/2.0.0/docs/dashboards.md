@@ -49,7 +49,7 @@ The landing page, at compact width with the filter panel collapsed:
 - **Pipeline**: six steps (map, pair, bin, decay, domains, compartments). Each step opens the
   versions of its process and the tab that shows its output.
 - **Key figures**: four headline cards, each opening the tab that explains it. The FASTQ
-  pairs in the sample sheet (split by sample), the median valid-pair rate (a share of 1, with
+  pairs in the sample sheet (split by sample), the median valid-pair rate (a percentage, with
   its spread over samples), the median log-log slope of the decay curve (with its spread) and the median domain size (with
   its spread). A sample filter and a FASTQ-pairs slider above them narrow these four only.
 - **Findings**: result rows whose values are computed under the filters, each with a link to

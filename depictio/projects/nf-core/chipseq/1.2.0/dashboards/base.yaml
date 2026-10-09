@@ -243,6 +243,7 @@ main_dashboard:
       icon_color: indigo
       caption: peaks per ChIP, with their spread
       link: tab:Peaks
+      format: si
     section: Key figures
     tag: cs-ov-kf-peaks
     index: ov-kf-peaks
@@ -284,9 +285,9 @@ main_dashboard:
     display:
       icon_name: mdi:target
       icon_color: lime
-      caption: median; ENCODE wants at least 0.01
+      caption: median; ENCODE wants at least 1%
       link: tab:MultiQC
-      decimals: 3
+      format: percent
     section: Key figures
     tag: cs-ov-kf-frip
     index: ov-kf-frip

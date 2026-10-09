@@ -228,6 +228,7 @@ main_dashboard:
       icon_color: blue
       caption: median per assembly, with its spread
       link: tab:Contiguity
+      format: si
     section: Key figures
     tag: ga-ov-kf-n50
     index: ov-kf-n50

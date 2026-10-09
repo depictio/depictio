@@ -1069,12 +1069,12 @@ tabs:
       icon_name: mdi:scale-balance
       icon_color: orange
       caption: median share of a fusion's reads, with its distribution
-      decimals: 2
+      format: percent
     section: Evidence at a glance
     tag: rf-evid-card-share
     index: evid-card-share
     title: Caller share
-    description: Median share of a fusion's reads that one caller accounts for, from 0 to 1.
+    description: Median share of a fusion's reads that one caller accounts for.
     layout: {x: 6, y: 0, w: 2, h: 2}
   - component_type: advanced_viz
     workflow_tag: rnafusion
@@ -1357,12 +1357,12 @@ tabs:
       icon_name: mdi:percent-outline
       icon_color: green
       caption: median share of the local reads, with its distribution
-      decimals: 2
+      format: percent
     section: Breakpoints at a glance
     tag: rf-bp-card-fraction
     index: bp-card-fraction
     title: Support fraction
-    description: Median share of the reads at the breakpoints that support the fusion, from 0 to 1.
+    description: Median share of the reads at the breakpoints that support the fusion.
     layout: {x: 4, y: 0, w: 2, h: 2}
   - component_type: card
     workflow_tag: rnafusion
@@ -1578,8 +1578,8 @@ tabs:
     display:
       icon_name: mdi:bullseye-arrow
       icon_color: violet
-      caption: median, 0 to 1, with its distribution
-      decimals: 2
+      caption: median, with its distribution
+      format: percent
     section: Validation at a glance
     tag: rf-valid-card-junction
     index: valid-card-junction

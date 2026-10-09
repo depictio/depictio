@@ -247,6 +247,7 @@ main_dashboard:
       icon_color: indigo
       caption: peaks per library, with their spread
       link: tab:Peaks
+      format: si
     section: Key figures
     tag: at-ov-kf-peaks
     index: ov-kf-peaks
@@ -289,14 +290,14 @@ main_dashboard:
     display:
       icon_name: mdi:target
       icon_color: lime
-      caption: median; ENCODE wants 0.3, accepts 0.2
+      caption: median; ENCODE wants 30%, accepts 20%
       link: tab:MultiQC
-      decimals: 2
+      format: percent
     section: Key figures
     tag: at-ov-kf-frip
     index: ov-kf-frip
     title: FRiP
-    description: Median fraction of each library's reads falling inside its called peaks, the ATAC signal-to-noise. The strip counts the libraries at the ENCODE target (0.3), in the acceptable band (0.2) and below it.
+    description: Median fraction of each library's reads falling inside its called peaks, the ATAC signal-to-noise. The strip counts the libraries at the ENCODE target (30%), in the acceptable band (20%) and below it.
     layout: {x: 6, y: 0, w: 2, h: 2}
   # Findings filter bar: the group, then the chromosome of the peak calls.
   - component_type: interactive
@@ -885,7 +886,7 @@ tabs:
       icon_name: mdi:bacteria-outline
       icon_color: cyan
       caption: median, with its spread
-      decimals: 2
+      format: percent
     section: Library quality at a glance
     tag: at-aq-card-mito
     index: aq-card-mito
@@ -904,7 +905,7 @@ tabs:
       icon_name: mdi:content-duplicate
       icon_color: grape
       caption: median, with its distribution
-      decimals: 2
+      format: percent
     section: Library quality at a glance
     tag: at-aq-card-dups
     index: aq-card-dups
@@ -1025,7 +1026,7 @@ tabs:
       icon_name: mdi:vector-link
       icon_color: teal
       caption: median, with its spread
-      decimals: 2
+      format: percent
     section: Fragment ladder
     tag: at-aq-card-paired
     index: aq-card-paired

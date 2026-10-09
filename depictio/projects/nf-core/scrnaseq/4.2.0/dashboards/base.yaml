@@ -1504,7 +1504,7 @@ tabs:
       icon_name: mdi:chart-line
       icon_color: blue
       caption: share of variance, then component by component
-      decimals: 3
+      format: percent
     section: Maps at a glance
     tag: sc-em-card-variance
     index: em-card-variance

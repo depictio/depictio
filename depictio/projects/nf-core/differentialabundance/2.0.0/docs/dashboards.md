@@ -71,7 +71,7 @@ ranking or a share), then at most three open sections; tables and details follow
 
 **Samples.** Strip: the samples (a ring by group), the DESeq2 size factor (a box plot), the
 median variance-stabilised expression per sample (a distribution) and the share of features
-at the matrix floor (a box plot, 0 to 1). Then the PCA, and under it the sample-to-sample
+at the matrix floor (a box plot). Then the PCA, and under it the sample-to-sample
 distance heatmap (`ward`, `Blues`) at full width, since sample ids label both its axes; a
 lasso on the PCA carries those samples to the other panels. Then the expression
 distribution of every sample on one shared grid, the panel a PCA cannot replace: a curve

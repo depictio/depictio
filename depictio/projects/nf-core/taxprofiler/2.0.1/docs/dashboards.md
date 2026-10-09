@@ -69,7 +69,7 @@ Nonpareil's redundancy levels; then each classifier's own top-taxa panel (kraken
 centrifuge, kaiju, metaphlan) and MALT's mappability. Its own sample filter reads the MultiQC
 report, so it works on a run whose sample sheet was not found.
 
-**Sequencing depth.** Strip: the median metagenome coverage (against 0.95, Nonpareil's
+**Sequencing depth.** Strip: the median metagenome coverage (against 95%, Nonpareil's
 target), the median Nonpareil diversity (with its spread), the median effort sequenced (its
 distribution) and the depth still needed (how many times deeper the median library would
 have to go, against 1). Then the coverage curve of each library and coverage against
