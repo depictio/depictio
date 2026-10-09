@@ -112,6 +112,16 @@ def test_maplibre_may_start_its_blob_workers() -> None:
     assert "blob:" not in _directive(CSP, "script-src")
 
 
+def test_indexed_file_readers_may_load_their_inflate_wasm() -> None:
+    """@gmod/bgzf-filehandle and @gmod/bbi fetch their WebAssembly from a data: URL.
+
+    Refused, a genome_view file lane loads its index, then reports "Failed to
+    fetch" for every VCF, BAM or BigWig read.
+    """
+    assert "data:" in _directive(CSP, "connect-src")
+    assert "'wasm-unsafe-eval'" in _directive(CSP, "script-src")
+
+
 def _parsed(policy: str) -> dict[str, list[str]]:
     """A policy as {directive: sources}.
 

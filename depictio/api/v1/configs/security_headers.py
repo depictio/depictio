@@ -28,8 +28,14 @@ from depictio.api.v1.configs.config import settings
 #     TileJSON) and tiles-{a,b,c,d}.basemaps.cartocdn.com (the .mvt tiles)
 #   open-street-map → tile.openstreetmap.org
 # The bare apex is listed separately: a `*.` wildcard does not match it.
+#
+# data: is there for the indexed-file readers behind genome_view file tracks:
+# @gmod/bgzf-filehandle (VCF, BAM) and @gmod/bbi (BigWig) load their inflate
+# WebAssembly with fetch() on an inlined data: URL. Refused, every read fails
+# with "Failed to fetch" after the index loads. A data: URL never leaves the
+# page, so allowing it opens no new destination.
 _BASE_CONNECT_SRC = (
-    "'self' ws: wss: "
+    "'self' data: ws: wss: "
     "https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com "
     "https://tile.openstreetmap.org"
 )
