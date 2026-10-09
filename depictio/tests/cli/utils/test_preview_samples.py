@@ -310,3 +310,38 @@ def test_a_recipe_that_fails_to_load_is_described_by_name(monkeypatch, tmp_path)
 
     assert row.status == "empty"
     assert row.recipe == RecipePreview(name=RECIPE, summary=None, sources=[])
+
+
+def test_a_recipe_is_loaded_with_the_version_of_its_workflow(monkeypatch, run_folder):
+    # Ingestion loads a recipe with its workflow's version, which finds one
+    # kept in a version folder (<pipeline>/<version>/recipes/); the preview
+    # does the same, or such a recipe would preview as found nothing.
+    from depictio.cli.cli.utils.template_preview import preview_data_collections
+
+    asked: list[tuple[str, str | None]] = []
+    module = ModuleType("fake_recipe", "Summarise the diversity tables.")
+    module.SOURCES = [  # type: ignore[attr-defined]
+        RecipeSource(ref="diversity", glob_pattern="qiime2/diversity/*.tsv", format="tsv")
+    ]
+
+    def _load(name, pipeline_version=None):
+        asked.append((name, pipeline_version))
+        return module
+
+    monkeypatch.setattr(recipes_pkg, "load_recipe", _load)
+    config = {
+        "workflows": [
+            {
+                "name": "pipe",
+                "version": "3.10.0",
+                "data_collections": [
+                    {"data_collection_tag": "summary", "config": _recipe_dc()},
+                ],
+            }
+        ]
+    }
+
+    (row,), _runs = preview_data_collections(config, LocalDataRoot(str(run_folder)))
+
+    assert set(asked) == {(RECIPE, "3.10.0")}
+    assert (row.status, row.matched) == ("ok", 6)

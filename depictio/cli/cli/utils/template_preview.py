@@ -321,8 +321,13 @@ def _preview_recipe_dc(
     root: DataRoot,
     optional: bool,
     settled_tags: frozenset[str] = frozenset(),
+    pipeline_version: str | None = None,
 ) -> DataCollectionPreview:
     """One row for a ``source: transformed`` DC, resolved through its recipe's SOURCES.
+
+    The recipe is loaded the way ingestion loads it, with the version of the
+    pipeline its workflow names (``pipeline_version``), so a recipe kept in a
+    version folder (``<pipeline>/<version>/recipes/``) is found here too.
 
     ``matched`` counts inputs found, not files: a ``dc_ref`` source is satisfied
     by another collection's table, so it counts when that collection is in
@@ -356,7 +361,7 @@ def _preview_recipe_dc(
     try:
         from depictio.recipes import load_recipe
 
-        module = load_recipe(recipe_name)
+        module = load_recipe(recipe_name, pipeline_version)
     except Exception as exc:  # noqa: BLE001 - a preview never fails the run
         logger.warning(f"Preview: could not load recipe '{recipe_name}' for '{tag}': {exc}")
         return row
@@ -507,9 +512,11 @@ def preview_data_collections(
     """
     rows: list[DataCollectionPreview] = []
     detected_runs: list[str] = []
-    recipe_slots: list[tuple[int, str, dict, bool, DataRoot]] = []
+    recipe_slots: list[tuple[int, str, dict, bool, DataRoot, str | None]] = []
     for workflow in config.get("workflows") or []:
         workflow_root = _workflow_root(workflow, root)
+        # Ingestion loads a recipe with its workflow's version: so does the preview.
+        version = workflow.get("version") or None
         data_location = workflow.get("data_location") or {}
         runs: list[str] = []
         if data_location.get("structure") == "sequencing-runs" and data_location.get("runs_regex"):
@@ -524,8 +531,12 @@ def preview_data_collections(
             # A materialized recipe DC has a scan block over its seed, so it is
             # previewed as what it now is: a file scan.
             if dc_config.get("source") == "transformed" and not dc_config.get("scan"):
-                recipe_slots.append((len(rows), tag, dc_config, optional, workflow_root))
-                rows.append(_preview_recipe_dc(tag, dc_config, workflow_root, optional))
+                recipe_slots.append((len(rows), tag, dc_config, optional, workflow_root, version))
+                rows.append(
+                    _preview_recipe_dc(
+                        tag, dc_config, workflow_root, optional, pipeline_version=version
+                    )
+                )
             else:
                 scan_root = _scan_root(dc_config, workflow_root, root)
                 rows.append(_preview_scan_dc(tag, dc_config, scan_root, runs, optional))
@@ -536,8 +547,10 @@ def preview_data_collections(
     # ends within the depth of the longest chain.
     settled = frozenset(row.tag for row in rows if row.status == "ok")
     while True:
-        for index, tag, dc_config, optional, workflow_root in recipe_slots:
-            rows[index] = _preview_recipe_dc(tag, dc_config, workflow_root, optional, settled)
+        for index, tag, dc_config, optional, workflow_root, version in recipe_slots:
+            rows[index] = _preview_recipe_dc(
+                tag, dc_config, workflow_root, optional, settled, pipeline_version=version
+            )
         now_settled = frozenset(row.tag for row in rows if row.status == "ok")
         if now_settled == settled:
             break
