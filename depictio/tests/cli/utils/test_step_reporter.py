@@ -8,6 +8,9 @@ the same bounded flush the CLI performs.
 from __future__ import annotations
 
 import threading
+from datetime import datetime, timedelta, timezone
+
+import pytest
 
 from depictio.cli.cli.utils.step_reporter import StepReporter
 
@@ -158,3 +161,20 @@ class TestReplay:
 
         assert live.steps[0]["status"] == "success"
         assert live.steps[0]["detail"] == "fresh"
+
+
+class TestTimestamps:
+    @pytest.mark.usefixtures("host_off_utc")
+    def test_steps_are_stamped_in_naive_utc(self):
+        # The server stores and the UI reads naive UTC: a local stamp shows hours
+        # off on any host that is not on UTC.
+        reporter = StepReporter(send=Recorder(), run_id=None, enabled=False)
+        reporter.start("scan")
+        reporter.finish("scan", "success")
+        (step,) = reporter.steps
+        utc_now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        for key in ("started_at", "finished_at"):
+            stamp = datetime.fromisoformat(step[key])
+            assert stamp.tzinfo is None
+            assert abs(utc_now - stamp) < timedelta(minutes=1)

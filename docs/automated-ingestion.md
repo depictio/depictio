@@ -83,7 +83,7 @@ have not settled are carried to the next cycle, not skipped.
 
 | Flag | Default | What it does |
 |---|---|---|
-| `--debounce` | 30s (or the project's `realtime.debounce_ms`) | Quiet period before a cycle starts |
+| `--debounce` | 30s | Quiet period before a cycle starts |
 | `--max-delay` | 300s | Ceiling, so a continuously-written stream still gets ingested |
 | `--interval` | 300s | Poll period |
 | `--settle` | 5s | Stability window described above |
@@ -112,17 +112,28 @@ any drift.
 
 ### Safety properties
 
-- **One watcher at a time per project**, enforced with a `flock` on
-  `~/.depictio/state/{server}/{project_id}.lock`, taken once the first cycle
-  has validated the project. `depictio ingest` does not take it.
+- **One ingestion at a time per project**, enforced with a `flock` on
+  `~/.depictio/state/{server}/{project_id}.lock` (under `DEPICTIO_CLI_STATE_DIR`
+  when it is set). A watcher takes it in its first cycle, once the project is
+  validated and before anything is written, and holds it until it exits.
+  `--once` and `depictio ingest` take the same lock for their one run. Whichever
+  comes second stops at once, naming the lock file and the pid holding it. A dry
+  run writes nothing and takes no lock.
 - **Events during a cycle coalesce into one follow-up pass**, not N queued ones.
 - **Joins are rebuilt at the end of every cycle**, as `depictio ingest` does, so a
   project with a `joins:` block cannot end up with fresh source tables and a
   joined one frozen at whatever the last manual run produced.
 - **Failures back off** 30s → 15min, reset on the first success, so an API
-  restart does not turn into a hammering loop.
+  restart does not turn into a hammering loop. The cycle after a failure
+  rebuilds every collection in full.
+- **The watcher keeps reporting during a long cycle and a backoff**, so the
+  Watchers pane does not mark it stale while it is working.
 - **SIGINT/SIGTERM** stops accepting triggers, finishes the current cycle,
-  flushes monitoring, exits 0. A second signal exits immediately.
+  flushes monitoring, exits 0. A stop during a failure backoff does not wait it
+  out. A second signal exits immediately.
+- **`--dry-run` writes nothing**: no sync, no file registration, no table, no
+  upload of MultiQC, GeoJSON, phylogeny or indexed files, no recipe output. Each
+  cycle reports what it would have done.
 - The data root must be a local mount. S3/remote roots are rejected explicitly
   rather than silently never firing.
 
@@ -245,9 +256,13 @@ in the log — whenever a partial write could not be trusted:
 
 - a run disappeared from the data root (a subset write cannot express "these
   rows should no longer exist")
-- the scan could not vouch for the whole picture: a dry run, or a scan that
+- the scan could not vouch for the whole picture: a dry run, a scan that
   is not a rescan (`ingest` without `--update-config` or `--sync-changed`),
-  where already-registered runs are skipped unchecked
+  where already-registered runs are skipped unchecked, or a scan without the
+  state cache (`--no-state-cache`, or a first scan on this host)
+- an earlier write of the collection failed after its scan had registered the
+  files: the next scan finds them unchanged, so only a full rebuild puts the
+  failed runs in the table
 - the collection is not one the run-based scan walks (single-file, MultiQC,
   GeoJSON, phylogeny, recipes, joins)
 - the table does not exist yet, or is not partitioned by run — see
@@ -343,22 +358,71 @@ The client contract is one rule: **a response without a `job_id` means the work
 is already done.** An older server ignores `async_mode` and answers inline, so
 no version negotiation is needed.
 
+The CLI waits at most an hour for a job, well past the worker's own 35-minute
+limit on a finalization. A job still unfinished then fails its collection with a
+message that says so, rather than holding the ingestion, or a watcher, until the
+job record expires a day later. The table is written; the next ingestion
+rebuilds it. Set `DEPICTIO_INGEST_JOB_TIMEOUT_SECONDS` in the CLI's environment
+to change the bound, or to `0` to wait without one.
+
+---
+
+## Starting an ingestion from the browser
+
+A project page can offer a **Run ingestion** button that runs the ingestion on
+the server, reading the project's `data_location` from the server's own
+filesystem. It is **off by default** and needs three server settings:
+
+```bash
+DEPICTIO_JOBS_ENABLED=true
+DEPICTIO_INGESTION_BROWSER_TRIGGER=true
+DEPICTIO_INGESTION_ALLOWED_DATA_ROOTS=/srv/pipelines,/mnt/shared/results
+```
+
+`DEPICTIO_INGESTION_ALLOWED_DATA_ROOTS` (`ingestion.allowed_data_roots`) lists
+the directories a browser-triggered ingestion may read, comma-separated or as a
+JSON list. It defaults to empty, and an empty list refuses every browser
+trigger: without it, any project owner could point a project at any directory
+the server can read and ingest it.
+
+- Each data location of the project, and each single-file scan path and image
+  directory, is resolved with `realpath` and must sit under one of the roots.
+  One path outside them refuses the whole ingestion.
+- The check runs when the button is pressed, and again in the worker that runs
+  the ingestion.
+- On the server, the scan skips any symlink whose `realpath` leaves the
+  directory it walks, before reading the target. A collection that still holds
+  a registered file outside the roots, from an earlier CLI ingestion say, fails
+  instead of being processed.
+- Raw server paths appear in the responses only for admins.
+
+A CLI ingestion (`depictio ingest`, `depictio watch`) is not affected: it reads
+the data on the machine it runs on, as its user, and follows a symlink wherever
+it points. Nextflow's `publishDir mode: 'symlink'` relies on that: every
+published file is a link into `work/`.
+
 ---
 
 ## Running the watcher as a service
 
-Both templates are parameterised — set the variables, don't edit the unit.
+Both templates are parameterised: set the variables, and the systemd unit's
+`User=` once.
 
 ### systemd
 
-`deploy/depictio-watch@.service` — a template unit, one instance per project:
+`deploy/depictio-watch@.service` is a template unit, one instance per project.
+`User=depictio` in it is a placeholder: set it to the account that can read
+`CLI.yaml`, the project YAML and the data root, in a drop-in so the unit file
+stays as shipped:
 
 ```bash
 sudo cp deploy/depictio-watch@.service /etc/systemd/system/
+sudo systemctl edit depictio-watch@.service    # [Service] then User=alice
 sudo mkdir -p /etc/depictio
 sudo tee /etc/depictio/myproject.env >/dev/null <<'EOF'
 DEPICTIO_CLI_CONFIG=/home/alice/.depictio/CLI.yaml
 DEPICTIO_PROJECT_CONFIG=/srv/projects/myproject/project.yaml
+DEPICTIO_CLI_BIN=/home/alice/venvs/depictio/bin/depictio
 DEPICTIO_WATCH_MODE=incremental
 DEPICTIO_WATCH_WRITE_MODE=replace-runs
 DEPICTIO_WATCH_INCREMENTAL_WRITE=1
@@ -371,6 +435,20 @@ sudo systemctl enable --now depictio-watch@myproject
 journalctl -u depictio-watch@myproject -f
 ```
 
+- `DEPICTIO_CLI_BIN` is an absolute path. systemd does not read a login shell's
+  `PATH`, so a CLI installed in a venv or a conda environment is not found by
+  name. The default, `/usr/local/bin/depictio`, only fits a system-wide install.
+- The scan cache and the project lock live in `/var/lib/depictio-watch`, which
+  systemd creates for `User=` (`StateDirectory=`). It stays writable under the
+  unit's `ProtectSystem=strict` and `ProtectHome=read-only`, which a directory
+  in the user's home would not.
+- A manual `depictio ingest` of the same project waits its turn only if it uses
+  the same lock: run it with `DEPICTIO_CLI_STATE_DIR=/var/lib/depictio-watch`.
+- If the lock file cannot be created, the watcher exits with status 73 and the
+  unit does not restart (`RestartPreventExitStatus=73`): the journal names the
+  directory. A lock held by another process exits 1 and is retried, so a
+  watcher started during a manual ingest comes up once that ingest ends.
+
 ### Docker Compose
 
 `deploy/docker-compose.watcher.yaml`:
@@ -379,7 +457,11 @@ journalctl -u depictio-watch@myproject -f
 docker compose -f deploy/docker-compose.watcher.yaml up -d
 ```
 
-Mount the data root **read-only** — the watcher never writes to it.
+Mount the data root **read-only**: the watcher never writes to it.
+
+The image runs as the user `depictio`, so the state volume is mounted over its
+home, `/home/depictio`, where the scan cache and the lock live under
+`.depictio/state`.
 
 ---
 
@@ -414,3 +496,11 @@ would be reclaimed, then `--apply`.
 **An agent shows a red heartbeat.**
 It has not reported for over three minutes. The process is wedged or cannot
 reach the API; check its logs. Dead agents disappear on their own via TTL.
+
+**"Another depictio process (pid N) already holds …lock".**
+A watcher or an ingestion of the same project is already running, as that pid.
+Wait for it, or stop it. A watcher holds the lock for as long as it runs.
+
+**"Cannot create the ingestion lock file".**
+The state directory is not writable by this user. Set `DEPICTIO_CLI_STATE_DIR`
+to one that is.

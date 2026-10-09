@@ -25,6 +25,7 @@ from datetime import datetime
 from typing import Any, Callable, Optional
 
 from depictio.cli.cli_logging import logger
+from depictio.models.timestamps import utc_now_naive
 
 #: Sentinel that tells the worker thread to finish and exit.
 _STOP = object()
@@ -67,12 +68,13 @@ class StepReporter:
 
     def start(self, name: str, detail: str | None = None, **extra: Any) -> None:
         """Mark a step as running. Call this *before* doing the work."""
-        self._started_at[name] = datetime.now()
+        # Naive UTC, as the server stores and the UI reads every timestamp.
+        self._started_at[name] = utc_now_naive()
         self._record(name, "running", detail, started_at=self._started_at[name], **extra)
 
     def finish(self, name: str, status: str, detail: str | None = None, **extra: Any) -> None:
         """Mark a step terminal, stamping its duration if it was started."""
-        now = datetime.now()
+        now = utc_now_naive()
         started = self._started_at.get(name)
         if started is not None and "duration_ms" not in extra:
             extra["duration_ms"] = (now - started).total_seconds() * 1000.0

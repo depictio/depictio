@@ -34,8 +34,12 @@ from depictio.cli.cli.utils.server_target import (
     ServerOption,
     resolve_server,
 )
-from depictio.cli.cli.utils.state import lock_path
-from depictio.cli.cli.utils.watch import ProjectWatcher, WatchConfig, project_lock
+from depictio.cli.cli.utils.watch import (
+    ProjectLock,
+    ProjectLockError,
+    ProjectWatcher,
+    WatchConfig,
+)
 from depictio.cli.cli_logging import logger
 
 WATCH_MODES = ("incremental", "full")
@@ -85,6 +89,11 @@ class _Cycles:
             # behind (a write that died between the object store and the server,
             # say) catch up on its own instead of staying skipped.
             skip_unchanged=incremental and self.last_ok,
+            # The same rule for writing only the changed runs. A failed cycle has
+            # already registered the runs it changed, so the next scan finds them
+            # unchanged: a write scoped to the runs that moved since would leave
+            # them out of the table for good.
+            incremental_write=self.base.incremental_write and incremental and self.last_ok,
             # The watcher says why it fired: a settled batch, a poll, or someone
             # pressing "Run now" on its agent card.
             trigger=watcher.trigger_kind if watcher else "watch",
@@ -99,6 +108,10 @@ class _Cycles:
             with ingestion_record(trap_sigterm=watcher is None) as record:
                 ok = run_ingest(options, record).ok
             self.exit_code = 0 if ok else 1
+        except ProjectLockError:
+            # Not a failed cycle: another process owns the project, and the
+            # watch command decides what that means.
+            raise
         except typer.Exit as exc:
             # A step that failed, and has said why.
             self.exit_code = exc.exit_code or 1
@@ -270,6 +283,10 @@ def watch(
     interrupted: SIGINT or SIGTERM finish the cycle in progress and then exit
     cleanly, so it is safe to run under systemd or as a container command.
 
+    One watcher or ingestion per project at a time: the first cycle takes the
+    project's lock before it writes anything, and the watch holds it until it
+    exits. A second one stops at once and names the lock file.
+
     Example, rewriting only the runs that changed:
       depictio watch results/ --write-mode replace-runs --incremental-write
     """
@@ -306,6 +323,10 @@ def watch(
         )
         incremental_write = False
 
+    # Held from the first cycle to the end of the watch. The first cycle takes it
+    # once it has validated the project, before its first write; the later ones
+    # find it held. A dry run writes nothing and never takes it.
+    lock = ProjectLock()
     cycles = _Cycles(
         IngestOptions(
             data_root=data_dir,
@@ -329,120 +350,125 @@ def watch(
             trigger="watch",
             trigger_reason="single --once pass" if once else "watcher started",
             scan_dry_run=dry_run,
+            project_lock=lock,
         )
     )
 
-    # The first cycle, at once: it brings the project up to date with whatever
-    # changed while nothing watched, and validates the configuration that says
-    # which locations to watch.
-    first_ok = cycles(mode, set())
-    project_config = cycles.project_config
-    if project_config is None:
-        rich_print_checked_statement(
-            "The first cycle stopped before the project configuration was validated: "
-            "nothing to watch.",
-            "error",
+    # One lock scope over the first cycle and the loop: released when the watch
+    # ends, however it ends.
+    with lock:
+        # The first cycle, at once: it brings the project up to date with whatever
+        # changed while nothing watched, and validates the configuration that says
+        # which locations to watch.
+        try:
+            first_ok = cycles(mode, set())
+        except ProjectLockError as exc:
+            # Already said by the cycle, which names the lock file and its holder.
+            raise typer.Exit(code=exc.exit_code) from exc
+        project_config = cycles.project_config
+        if project_config is None:
+            rich_print_checked_statement(
+                "The first cycle stopped before the project configuration was validated: "
+                "nothing to watch.",
+                "error",
+            )
+            raise typer.Exit(code=cycles.exit_code or 1)
+        if once or max_runs == 1:
+            raise typer.Exit(code=0 if first_ok else cycles.exit_code or 1)
+
+        # After that cycle's refresh, which adds the runs the server knows.
+        roots = _project_data_roots(project_config)
+        if not roots:
+            rich_print_checked_statement(
+                "No existing data locations to watch in this project.", "error"
+            )
+            raise typer.Exit(code=1)
+
+        config = WatchConfig(
+            mode=mode,  # type: ignore[arg-type]
+            backend=backend,  # type: ignore[arg-type]
+            debounce_seconds=debounce,
+            settle_seconds=settle,
+            poll_interval_seconds=interval,
+            max_delay_seconds=max_delay,
+            full_every=full_every,
+            # The first cycle already ran.
+            max_runs=max_runs - 1 if max_runs is not None else None,
         )
-        raise typer.Exit(code=cycles.exit_code or 1)
-    if once or max_runs == 1:
-        raise typer.Exit(code=0 if first_ok else cycles.exit_code or 1)
+        CLI_config = load_depictio_config(yaml_config_path=CLI_config_path, quiet=True)
+        watcher = ProjectWatcher(roots=roots, config=config, run_cycle=cycles)
+        cycles.watcher = watcher
+        watcher.note_run(cycles.last_run_id)
+        watcher.install_signal_handlers()
 
-    # After that cycle's refresh, which adds the runs the server knows.
-    roots = _project_data_roots(project_config)
-    if not roots:
-        rich_print_checked_statement(
-            "No existing data locations to watch in this project.", "error"
+        # Register with the server so the watcher is visible in the admin UI, and
+        # keep reporting as its state changes. Entirely best-effort: a server that
+        # does not support agents (or is simply down) must not stop the watching.
+        agent_id = f"{socket.gethostname()}:{os.getpid()}:{project_config.id}"
+        agents_supported = True
+        commands_supported = True
+
+        def report_status(status: str, extra: dict) -> None:
+            nonlocal agents_supported
+            if not agents_supported:
+                return
+            payload = {
+                "agent_id": agent_id,
+                "kind": "watcher",
+                "hostname": socket.gethostname(),
+                "pid": os.getpid(),
+                "cli_version": _cli_version(),
+                "project_id": str(project_config.id),
+                "project_name": project_config.name,
+                "mode": mode,
+                "backend": watcher.backend,
+                "watching": roots,
+                "status": status,
+                # The first cycle ran before the watcher counts its own.
+                "runs_total": int(extra.get("runs_total", 0)) + 1,
+            }
+            # Both rendered on the agent card. Sent only when set, so a watcher that
+            # has not run a cycle yet leaves them null rather than clearing them.
+            if extra.get("last_run_id"):
+                payload["last_run_id"] = extra["last_run_id"]
+            if extra.get("last_trigger_at"):
+                payload["last_trigger_at"] = extra["last_trigger_at"].isoformat()
+            if not api_agent_heartbeat(CLI_config, payload):
+                logger.info("Server has no CLI-agent registry; skipping further heartbeats.")
+                agents_supported = False
+
+        def poll_command() -> bool:
+            """Whether the agent card's "Run now" has been pressed since the last poll."""
+            nonlocal commands_supported
+            if not agents_supported or not commands_supported:
+                return False
+            requested = api_agent_claim_trigger(CLI_config, agent_id)
+            if requested is None:
+                logger.info("Server does not support UI-triggered runs; not polling for them.")
+                commands_supported = False
+                return False
+            return requested
+
+        watcher.on_status = report_status
+        watcher.on_poll_command = poll_command
+        report_status("idle", {})
+
+        rich_print_section_separator(
+            f"Watching {len(roots)} location(s), {watcher.backend} backend"
         )
-        raise typer.Exit(code=1)
+        for root in roots:
+            rich_print_checked_statement(f"  {root}", "info")
 
-    config = WatchConfig(
-        mode=mode,  # type: ignore[arg-type]
-        backend=backend,  # type: ignore[arg-type]
-        debounce_seconds=debounce,
-        settle_seconds=settle,
-        poll_interval_seconds=interval,
-        max_delay_seconds=max_delay,
-        full_every=full_every,
-        # The first cycle already ran.
-        max_runs=max_runs - 1 if max_runs is not None else None,
-    )
-    CLI_config = load_depictio_config(yaml_config_path=CLI_config_path, quiet=True)
-    lock_file = lock_path(CLI_config.api_base_url, str(project_config.id))
-    watcher = ProjectWatcher(roots=roots, config=config, run_cycle=cycles)
-    cycles.watcher = watcher
-    watcher.note_run(cycles.last_run_id)
-    watcher.install_signal_handlers()
-
-    # Register with the server so the watcher is visible in the admin UI, and
-    # keep reporting as its state changes. Entirely best-effort: a server that
-    # does not support agents (or is simply down) must not stop the watching.
-    agent_id = f"{socket.gethostname()}:{os.getpid()}:{project_config.id}"
-    agents_supported = True
-    commands_supported = True
-
-    def report_status(status: str, extra: dict) -> None:
-        nonlocal agents_supported
-        if not agents_supported:
-            return
-        payload = {
-            "agent_id": agent_id,
-            "kind": "watcher",
-            "hostname": socket.gethostname(),
-            "pid": os.getpid(),
-            "cli_version": _cli_version(),
-            "project_id": str(project_config.id),
-            "project_name": project_config.name,
-            "mode": mode,
-            "backend": watcher.backend,
-            "watching": roots,
-            "status": status,
-            # The first cycle ran before the watcher counts its own.
-            "runs_total": int(extra.get("runs_total", 0)) + 1,
-        }
-        # Both rendered on the agent card. Sent only when set, so a watcher that
-        # has not run a cycle yet leaves them null rather than clearing them.
-        if extra.get("last_run_id"):
-            payload["last_run_id"] = extra["last_run_id"]
-        if extra.get("last_trigger_at"):
-            payload["last_trigger_at"] = extra["last_trigger_at"].isoformat()
-        if not api_agent_heartbeat(CLI_config, payload):
-            logger.info("Server has no CLI-agent registry; skipping further heartbeats.")
-            agents_supported = False
-
-    def poll_command() -> bool:
-        """Whether the agent card's "Run now" has been pressed since the last poll."""
-        nonlocal commands_supported
-        if not agents_supported or not commands_supported:
-            return False
-        requested = api_agent_claim_trigger(CLI_config, agent_id)
-        if requested is None:
-            logger.info("Server does not support UI-triggered runs; not polling for them.")
-            commands_supported = False
-            return False
-        return requested
-
-    watcher.on_status = report_status
-    watcher.on_poll_command = poll_command
-    report_status("idle", {})
-
-    rich_print_section_separator(f"Watching {len(roots)} location(s), {watcher.backend} backend")
-    for root in roots:
-        rich_print_checked_statement(f"  {root}", "info")
-
-    try:
-        with project_lock(lock_file):
+        try:
             exit_code = watcher.run()
-    except RuntimeError as exc:
-        rich_print_checked_statement(str(exc), "error")
-        raise typer.Exit(code=1) from exc
-    except KeyboardInterrupt:
-        rich_print_checked_statement("Interrupted.", "warning")
-        exit_code = 130
-    finally:
-        if agents_supported:
-            api_agent_deregister(CLI_config, agent_id)
+        except KeyboardInterrupt:
+            rich_print_checked_statement("Interrupted.", "warning")
+            exit_code = 130
+        finally:
+            if agents_supported:
+                api_agent_deregister(CLI_config, agent_id)
 
-    raise typer.Exit(code=exit_code)
+        raise typer.Exit(code=exit_code)
 
 
 def register_watch_command(app: typer.Typer) -> None:

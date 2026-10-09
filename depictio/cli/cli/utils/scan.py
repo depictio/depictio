@@ -1064,14 +1064,27 @@ def scan_files_for_workflow(
     # The state cache can only authorise skipping a rescan; without one, the
     # existing-run check already short-circuits without touching disk.
     state: ProjectScanState | None = None
+    dc_ids = [str(dc.id) for dc in data_collections]
+    # Collections whose files may be registered ahead of their table: a write
+    # failed after an earlier scan registered them, so this scan will find those
+    # files unchanged and cannot say the table is up to date. Without the state
+    # that remembers it, that holds for every collection.
+    unvouched: set[str] = set(dc_ids)
     if use_state_cache and rescan_folders and project_id:
-        state = load_state(
-            CLI_config.api_base_url, project_id, project_hash=project_hash
-        ) or ProjectScanState(
+        loaded = load_state(CLI_config.api_base_url, project_id, project_hash=project_hash)
+        state = loaded or ProjectScanState(
             api_base_url=CLI_config.api_base_url,
             project_id=project_id,
             project_hash=project_hash,
         )
+        if loaded is not None:
+            unvouched = set(loaded.unsettled_dcs) & set(dc_ids)
+        if not dry_run:
+            # Persisted before the first file is registered, so even a scan that
+            # dies halfway leaves the mark; the process step clears it once the
+            # table is written (settle_collections).
+            state.mark_unsettled(dc_ids)
+            save_state(state)
 
     walk_bounds = _walk_bounds(data_collections) if honor_scan_bounds else _ScanBounds(None, ())
 
@@ -1209,13 +1222,18 @@ def scan_files_for_workflow(
                     file_id for run_id in missing_runs for file_id in files_by_run.get(run_id, [])
                 ]
 
-                api_delete_runs(missing_runs, CLI_config, concurrency=concurrency)
-                api_delete_files(orphaned_files, CLI_config, concurrency=concurrency)
+                runs_deleted = api_delete_runs(missing_runs, CLI_config, concurrency=concurrency)
+                files_deleted = api_delete_files(
+                    orphaned_files, CLI_config, concurrency=concurrency
+                )
 
+                # The counts the server confirmed, not the ones asked for: a
+                # delete that failed used to be reported as done.
+                incomplete = runs_deleted < len(missing_runs) or files_deleted < len(orphaned_files)
                 rich_print_checked_statement(
-                    f"Removed {len(missing_runs)} runs and {len(orphaned_files)} related "
-                    f"files from the DB: {removed_label}",
-                    "info",
+                    f"Removed {runs_deleted} of {len(missing_runs)} run(s) and {files_deleted} of "
+                    f"{len(orphaned_files)} related file(s) from the DB: {removed_label}",
+                    "warning" if incomplete else "info",
                 )
 
     # Upsert all runs at once with progress indicator
@@ -1231,7 +1249,14 @@ def scan_files_for_workflow(
                 console=None,
             ) as progress:
                 progress.add_task(f"Uploading {len(all_workflow_runs)} run(s) to server")
-                api_upsert_runs_batch(all_workflow_runs, CLI_config, rescan_folders)
+                response = api_upsert_runs_batch(all_workflow_runs, CLI_config, rescan_folders)
+            # Before the state below records these runs as seen: recorded, a run
+            # the server never stored would be skipped as unchanged from then on.
+            if response.status_code >= 400:
+                raise RuntimeError(
+                    f"Registering {len(all_workflow_runs)} run(s) failed "
+                    f"(HTTP {response.status_code}): {response.text[:300]}"
+                )
 
     # Only record state for work that actually reached the server. A dry run
     # must not convince the next invocation that these runs are up to date.
@@ -1276,18 +1301,23 @@ def scan_files_for_workflow(
             "success",
         )
 
+    signal = _change_signal(
+        all_workflow_runs,
+        data_collections,
+        missing_runs_tag,
+        rescan_folders=rescan_folders,
+        dry_run=dry_run,
+    )
+    if unvouched:
+        # Not covered means neither skipped nor written by changed run only:
+        # the process step rebuilds these from every registered file.
+        signal["covered_dcs"] = [dc_id for dc_id in signal["covered_dcs"] if dc_id not in unvouched]
     return {
         "result": "success",
         "runs_scanned": len(all_workflow_runs),
         "files_found": files_found,
         "warning": empty_outcome,
-        **_change_signal(
-            all_workflow_runs,
-            data_collections,
-            missing_runs_tag,
-            rescan_folders=rescan_folders,
-            dry_run=dry_run,
-        ),
+        **signal,
     }
 
 

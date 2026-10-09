@@ -16,6 +16,11 @@ from typer.testing import CliRunner
 from depictio.cli.cli.commands import watch as watch_module
 from depictio.cli.cli.commands.run import IngestOptions, IngestOutcome
 from depictio.cli.cli.commands.watch import _Cycles, register_watch_command
+from depictio.cli.cli.utils.watch import (
+    LOCK_UNAVAILABLE_EXIT_CODE,
+    ProjectLock,
+    ProjectLockError,
+)
 
 OK = IngestOutcome(success_count=7, total_steps=7)
 PARTIAL = IngestOutcome(success_count=6, total_steps=7)
@@ -95,6 +100,43 @@ class TestTheWatchCommand:
         assert result.exit_code == 2
         assert "nothing to watch" in result.output
 
+    @pytest.mark.parametrize("exit_code", [1, LOCK_UNAVAILABLE_EXIT_CODE])
+    def test_a_lock_it_cannot_take_stops_the_watch_before_its_loop(self, invoke, exit_code):
+        refused = ProjectLockError("another watcher holds it", exit_code=exit_code)
+        with patch.object(watch_module, "ProjectWatcher") as watcher:
+            result, calls = invoke(refused)
+
+        assert result.exit_code == exit_code
+        assert len(calls) == 1
+        watcher.assert_not_called()
+
+    def test_one_lock_is_held_from_the_first_cycle_to_the_end_of_the_watch(self, tmp_path, project):
+        lock_file = tmp_path / "state" / "p1.lock"
+        seen: list[ProjectLock] = []
+
+        def run(opts, record):
+            record.project_config = project
+            seen.append(opts.project_lock)
+            opts.project_lock.acquire(lock_file)
+            # Held against any other process, or any other open of the file.
+            with pytest.raises(ProjectLockError):
+                ProjectLock().acquire(lock_file)
+            return OK
+
+        app = typer.Typer()
+        register_watch_command(app)
+        app.command("noop")(lambda: None)
+        with patch.object(watch_module, "run_ingest", run):
+            result = CliRunner().invoke(
+                app, ["watch", str(tmp_path), "--server", "x.yaml", "--once"]
+            )
+
+        assert result.exit_code == 0, result.output
+        assert isinstance(seen[0], ProjectLock)
+        # Released when the watch ends: the next one takes it.
+        with ProjectLock() as after:
+            after.acquire(lock_file)
+
     @pytest.mark.parametrize(
         ("option", "value"),
         [("--mode", "sideways"), ("--backend", "telepathy"), ("--write-mode", "append")],
@@ -136,6 +178,32 @@ class TestCycles:
         assert [c.skip_unchanged for c in calls] == [False, False, True, False]
         assert [c.sync_files for c in calls] == [False, True, False, False]
         assert [c.sync_changed for c in calls] == [True, False, True, True]
+
+    def test_only_an_incremental_cycle_after_a_success_writes_only_changed_runs(self):
+        run, calls = _fake_run_ingest(OK, OK, PARTIAL, OK, OK)
+        cycles = _Cycles(IngestOptions(incremental_write=True))
+        with patch.object(watch_module, "run_ingest", run):
+            for mode in ("incremental", "incremental", "incremental", "incremental", "full"):
+                cycles(mode, set())
+
+        # A failed cycle may have registered runs whose table it never wrote: the
+        # next scan finds them unchanged, so a write scoped to the runs that moved
+        # would leave them out. The cycle after a failure rebuilds in full.
+        assert [c.incremental_write for c in calls] == [False, True, True, False, False]
+
+    def test_without_the_flag_no_cycle_writes_only_changed_runs(self):
+        run, calls = _fake_run_ingest(OK, OK)
+        cycles = _Cycles(IngestOptions(incremental_write=False))
+        with patch.object(watch_module, "run_ingest", run):
+            cycles("incremental", set())
+            cycles("incremental", set())
+
+        assert [c.incremental_write for c in calls] == [False, False]
+
+    def test_a_lock_held_elsewhere_is_not_a_failed_cycle(self):
+        cycles, run, _ = self._cycles(ProjectLockError("held"))
+        with patch.object(watch_module, "run_ingest", run), pytest.raises(ProjectLockError):
+            cycles("incremental", set())
 
     def test_a_failed_cycle_does_not_sync_the_project(self):
         cycles, run, calls = self._cycles(PARTIAL, OK)

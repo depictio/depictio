@@ -841,13 +841,14 @@ class _FakeServer:
     them, as the server answers from the aggregations the upserts appended.
     """
 
-    def __init__(self, knows_the_table: bool = True):
+    def __init__(self, knows_the_table: bool = True, upsert_status: int = 200):
         self.upserts: list[dict] = []
         self.knows_the_table = knows_the_table
+        self.upsert_status = upsert_status
 
     def upsert(self, **kwargs):
         self.upserts.append(kwargs)
-        return MagicMock(status_code=200)
+        return MagicMock(status_code=self.upsert_status, text="server error")
 
     def get_deltatable(self, dc_id, CLI_config):
         aggregations = [
@@ -948,6 +949,15 @@ class TestPersistJoinedTable:
         assert provenance["run_tags"] == ["run1", "run2"]
         # Sent as ISO text, which the upsert payload parses back into a datetime.
         assert datetime.fromisoformat(provenance["delta_commit_timestamp"])
+
+    def test_a_table_the_server_did_not_register_is_a_failed_join(self, setup):
+        # Written, but the server still serves the version before it: the join
+        # is not done, and saying "success" would hide that.
+        result = self.persist(setup, self.joined([10, 20, 30]), _FakeServer(upsert_status=500))
+
+        assert result["result"] == "error"
+        assert "registering it failed: HTTP 500" in result["message"]
+        assert "Delta version 0" in result["message"]
 
     def test_each_change_is_a_new_registered_version(self, setup):
         server = _FakeServer()

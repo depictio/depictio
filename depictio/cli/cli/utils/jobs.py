@@ -6,14 +6,18 @@ The design constraint that shapes everything here: **the absence of a
 new CLI safe against an old server — the server ignores ``async_mode``, does
 the work inline, and the client simply never enters the polling loop.
 
-Deliberately no overall timeout by default. Escaping the timeout is the entire
-point of the protocol; re-imposing one here would reintroduce the failure we
-set out to remove. ``overall_timeout`` exists for CI, where a hung job should
-fail the pipeline rather than block it forever.
+The wait is bounded, but far above any HTTP timeout: one hour by default
+(:data:`DEFAULT_JOB_TIMEOUT`), set with ``DEPICTIO_INGEST_JOB_TIMEOUT_SECONDS``,
+where 0 waits without limit. Escaping the request timeout is the point of the
+protocol, so the bound sits well past the server's own hard limit on a
+finalization task (35 minutes). It exists for the job that never ends: a worker
+killed mid-task leaves its job "running" until the record expires a day later,
+and an unbounded wait held the ingestion, and a watcher with it, that long.
 """
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
@@ -31,6 +35,30 @@ TERMINAL_STATES = frozenset({"success", "failed", "cancelled"})
 
 DEFAULT_POLL_INTERVAL = 1.0
 DEFAULT_MAX_INTERVAL = 15.0
+
+#: Longest wait on one job, in seconds, unless the environment says otherwise.
+DEFAULT_JOB_TIMEOUT = 3600.0
+JOB_TIMEOUT_ENV_VAR = "DEPICTIO_INGEST_JOB_TIMEOUT_SECONDS"
+
+
+def job_timeout() -> float | None:
+    """The bound on waiting for a job: the environment's, else the default.
+
+    ``None`` (from ``0``) waits without limit. A value that is not a number is
+    reported and ignored rather than silently disabling the bound.
+    """
+    raw = os.getenv(JOB_TIMEOUT_ENV_VAR, "").strip()
+    if not raw:
+        return DEFAULT_JOB_TIMEOUT
+    try:
+        seconds = float(raw)
+    except ValueError:
+        logger.warning(
+            f"{JOB_TIMEOUT_ENV_VAR}={raw!r} is not a number of seconds; "
+            f"waiting at most {DEFAULT_JOB_TIMEOUT:.0f}s for a job."
+        )
+        return DEFAULT_JOB_TIMEOUT
+    return seconds if seconds > 0 else None
 
 
 @dataclass(slots=True)
@@ -50,6 +78,10 @@ class JobOutcome:
 
 class JobPollError(RuntimeError):
     """Polling could not be completed (transport, auth, or timeout)."""
+
+
+class JobTimeoutError(JobPollError):
+    """The job did not reach a terminal state within the overall timeout."""
 
 
 def poll_job(
@@ -84,7 +116,7 @@ def poll_job(
 
     while True:
         if deadline is not None and time.monotonic() > deadline:
-            raise JobPollError(
+            raise JobTimeoutError(
                 f"Job {job_id} did not finish within {overall_timeout:.0f}s "
                 f"(last status: {last_status or 'unknown'})"
             )
@@ -153,6 +185,9 @@ def maybe_wait_for_job(
     a response without ``job_id`` came from a server that did the work inline
     (either an older build, or a newer one with offloading switched off), so
     there is nothing to wait for and the caller uses the payload as-is.
+
+    ``overall_timeout`` defaults to :func:`job_timeout`; past it,
+    :class:`JobTimeoutError` is raised.
     """
     job_id = response_payload.get("job_id")
     if not job_id:
@@ -163,7 +198,7 @@ def maybe_wait_for_job(
         api_base_url=api_base_url,
         token=token,
         on_update=on_update,
-        overall_timeout=overall_timeout,
+        overall_timeout=job_timeout() if overall_timeout is None else overall_timeout,
     )
 
 

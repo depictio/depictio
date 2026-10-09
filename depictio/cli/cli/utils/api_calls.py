@@ -463,21 +463,21 @@ def _delete_concurrently(
     """
     if not ids:
         return 0
-    if concurrency <= 1 or len(ids) == 1:
-        return sum(1 for item in ids if delete_one(item, CLI_config).status_code < 400)
 
-    deleted = 0
+    def deleted_one(item: str) -> bool:
+        try:
+            return delete_one(item, CLI_config).status_code < 400
+        except httpx.HTTPError as exc:
+            # Cleanup is best-effort: a stale id that cannot be removed must
+            # not abort a scan that otherwise succeeded.
+            logger.warning(f"Delete failed during cleanup: {exc}")
+            return False
+
+    if concurrency <= 1 or len(ids) == 1:
+        return sum(deleted_one(item) for item in ids)
+
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
-        futures = [executor.submit(delete_one, item, CLI_config) for item in ids]
-        for future in as_completed(futures):
-            try:
-                if future.result().status_code < 400:
-                    deleted += 1
-            except httpx.HTTPError as exc:
-                # Cleanup is best-effort: a stale id that cannot be removed must
-                # not abort a scan that otherwise succeeded.
-                logger.warning(f"Delete failed during cleanup: {exc}")
-    return deleted
+        return sum(executor.map(deleted_one, ids))
 
 
 def _delete_batch_or_fallback(
@@ -503,6 +503,7 @@ def _delete_batch_or_fallback(
 
     url = f"{CLI_config.api_base_url}/depictio/api/v1/{endpoint}"
     deleted = 0
+    failed = 0
     for start in range(0, len(ids), chunk_size):
         chunk = ids[start : start + chunk_size]
         try:
@@ -515,17 +516,29 @@ def _delete_batch_or_fallback(
                 idempotent=True,
             )
         except httpx.HTTPError as exc:
+            # Only what is left: the chunks before this one are already deleted,
+            # and counted.
             logger.warning(f"Batch delete failed ({exc}); falling back to per-id deletes.")
-            return _delete_concurrently(ids, delete_one, CLI_config, concurrency=concurrency)
+            deleted += _delete_concurrently(
+                ids[start:], delete_one, CLI_config, concurrency=concurrency
+            )
+            break
 
         if response.status_code == 404:
             logger.info("Server has no batch delete endpoint; falling back to per-id deletes.")
-            return _delete_concurrently(ids, delete_one, CLI_config, concurrency=concurrency)
+            deleted += _delete_concurrently(
+                ids[start:], delete_one, CLI_config, concurrency=concurrency
+            )
+            break
         if response.status_code >= 400:
+            # The chunk's ids stay; the summary below says how many.
             logger.warning(f"Batch delete returned {response.status_code}: {response.text}")
+            failed += len(chunk)
             continue
         deleted += response.json().get("deleted", 0)
 
+    if failed:
+        logger.warning(f"{failed} of {len(ids)} id(s) could not be deleted via {endpoint}.")
     return deleted
 
 

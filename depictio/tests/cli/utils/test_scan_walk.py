@@ -113,6 +113,57 @@ class TestSymlinks:
         assert _rel_paths(tmp_path) == {"ok.txt"}
 
 
+class TestConfinement:
+    """On the server, a walk keeps to its root: the ingestion worker reads with the
+    server's privileges, so a symlink inside an allowed data root must not pull
+    in files from elsewhere. The CLI follows a link wherever it points."""
+
+    @pytest.fixture
+    def escape(self, tmp_path):
+        """A run root holding one file of its own and links to files outside it."""
+        root, outside = tmp_path / "run", tmp_path / "elsewhere"
+        root.mkdir()
+        outside.mkdir()
+        (root / "own.tsv").write_text("own")
+        (outside / "secret.tsv").write_text("secret")
+        (outside / "dir").mkdir()
+        (outside / "dir" / "deep.tsv").write_text("deep")
+        (root / "linked.tsv").symlink_to(outside / "secret.tsv")
+        (root / "linked_dir").symlink_to(outside / "dir", target_is_directory=True)
+        return root
+
+    def test_a_link_out_of_the_root_is_skipped_when_confined(self, escape):
+        assert _rel_paths(escape, confine_to_root=True, follow_symlinks=True) == {"own.tsv"}
+
+    def test_a_sibling_sharing_the_root_name_is_outside(self, escape, tmp_path):
+        (tmp_path / "run_b").mkdir()
+        (tmp_path / "run_b" / "other.tsv").write_text("other")
+        (escape / "sibling.tsv").symlink_to(tmp_path / "run_b" / "other.tsv")
+        assert _rel_paths(escape, confine_to_root=True) == {"own.tsv"}
+
+    def test_a_link_that_stays_inside_is_kept_when_confined(self, escape):
+        (escape / "alias.tsv").symlink_to(escape / "own.tsv")
+        assert _rel_paths(escape, confine_to_root=True) == {"own.tsv", "alias.tsv"}
+
+    def test_the_cli_follows_a_link_wherever_it_points(self, escape):
+        # Nextflow's publishDir mode 'symlink' links every result into work/.
+        assert _rel_paths(escape, confine_to_root=False, follow_symlinks=True) == {
+            "own.tsv",
+            "linked.tsv",
+            "linked_dir/deep.tsv",
+        }
+
+    @pytest.mark.parametrize(("context", "kept"), [("server", False), ("CLI", True)])
+    def test_the_default_depends_on_where_it_runs(self, escape, monkeypatch, context, kept):
+        monkeypatch.setenv("DEPICTIO_CONTEXT", context)
+        assert ("linked.tsv" in _rel_paths(escape)) is kept
+
+    def test_a_root_reached_through_a_link_is_still_its_own_root(self, escape, tmp_path):
+        via = tmp_path / "via"
+        via.symlink_to(escape, target_is_directory=True)
+        assert _rel_paths(via, confine_to_root=True) == {"own.tsv"}
+
+
 class TestMetadata:
     def test_stat_fields_match_the_file(self, tmp_path):
         payload = "0123456789"

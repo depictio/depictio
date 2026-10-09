@@ -770,6 +770,10 @@ def skip_unchanged_reason(
     return f"no file changed; Delta table left at version {probe.version}"
 
 
+#: Collection types handed to a processor of their own, which writes as it runs.
+_WRITES_WHEN_DISPATCHED = frozenset({"multiqc", "geojson", "phylogeny", "indexed_file"})
+
+
 def client_aggregate_data(
     data_collection: DataCollection,
     CLI_config: CLIConfig,
@@ -805,32 +809,48 @@ def client_aggregate_data(
     rich_tables = command_parameters.get("rich_tables", False)
     preview_recipes = command_parameters.get("preview_recipes", False)
     write_mode = command_parameters.get("write_mode", "overwrite")
+    dry_run = bool(command_parameters.get("dry_run"))
+
+    # A dry run writes nothing, and every branch below but the table one writes
+    # as soon as it runs: MultiQC, GeoJSON, phylogeny and indexed files go to S3
+    # and the server, and a recipe writes its table. They stop here. The table
+    # path stops at its own write further down, after the diagnostics it reports.
+    kind = data_collection.config.type.lower()
+    is_recipe = (
+        kind not in _WRITES_WHEN_DISPATCHED
+        and data_collection.config.source == "transformed"
+        and data_collection.config.transform is not None
+        and not data_collection.config.transform.materialized
+    )
+    if dry_run and (kind in _WRITES_WHEN_DISPATCHED or is_recipe):
+        what = "recipe" if is_recipe else kind
+        logger.info(f"DRY RUN: would process the {what} collection; nothing was written.")
+        return {
+            "result": "success",
+            "message": f"DRY RUN: would process this {what} collection. Nothing was written.",
+        }
 
     # Handle MultiQC data collections specially - copy parquet files to S3 and extract metadata
-    if data_collection.config.type.lower() == "multiqc":
+    if kind == "multiqc":
         return process_multiqc_data_collection(data_collection, CLI_config, overwrite, workflow)
 
     # Handle GeoJSON data collections - upload file to S3 and store location
-    if data_collection.config.type.lower() == "geojson":
+    if kind == "geojson":
         return process_geojson_data_collection(data_collection, CLI_config, overwrite)
 
     # Phylogeny DCs have no delta table; the tree is copied to S3 for the Newick endpoint.
-    if data_collection.config.type.lower() == "phylogeny":
+    if kind == "phylogeny":
         return process_phylogeny_data_collection(data_collection, CLI_config, overwrite)
 
     # indexed_file DCs have no delta table either; the files and their indexes are
     # copied to S3 and read straight from the browser over HTTP range requests.
-    if data_collection.config.type.lower() == "indexed_file":
+    if kind == "indexed_file":
         return process_indexed_file_data_collection(data_collection, CLI_config, overwrite)
 
     # Handle transformed (recipe-based) data collections. A `materialized`
     # transform keeps the recipe for lineage but ships a pre-computed seed file,
     # so it falls through to the file-scan path instead of re-running the recipe.
-    if (
-        data_collection.config.source == "transformed"
-        and data_collection.config.transform is not None
-        and not data_collection.config.transform.materialized
-    ):
+    if is_recipe:
         return process_recipe_data_collection(
             data_collection,
             CLI_config,
@@ -971,7 +991,6 @@ def client_aggregate_data(
         )
         logger.info("S3 Destination does not exist, will create it during processing")
 
-    dry_run = bool(command_parameters.get("dry_run"))
     # Streaming writes the whole table in one unpartitioned overwrite, so it is
     # only taken when that is the write wanted: replace-runs may partition, a
     # scoped write always does, and a dry run reports on the frame.
@@ -1225,7 +1244,13 @@ def _await_upsert_job(response_payload: dict, CLI_config: CLIConfig):
     ingestion is not lost — only the column specs are missing, and the caller
     should say so rather than crash.
     """
-    from depictio.cli.cli.utils.jobs import JobOutcome, JobPollError, maybe_wait_for_job
+    from depictio.cli.cli.utils.jobs import (
+        JOB_TIMEOUT_ENV_VAR,
+        JobOutcome,
+        JobPollError,
+        JobTimeoutError,
+        maybe_wait_for_job,
+    )
 
     try:
         return maybe_wait_for_job(
@@ -1234,6 +1259,18 @@ def _await_upsert_job(response_payload: dict, CLI_config: CLIConfig):
             token=CLI_config.user.token.access_token,
             on_update=lambda st: logger.info(
                 f"  … {st.get('step') or 'working'}: {st.get('detail') or ''}"
+            ),
+        )
+    except JobTimeoutError as exc:
+        # A job the server never finishes would otherwise hold the cycle, and a
+        # watcher with it, until the job record expires a day later.
+        logger.error(f"Delta table finalization timed out: {exc}")
+        return JobOutcome(
+            status="failed",
+            error=(
+                f"{exc}. The table is written but its column specs are not; the next "
+                f"ingestion rebuilds it. Raise {JOB_TIMEOUT_ENV_VAR} if finalization "
+                "legitimately takes longer."
             ),
         )
     except JobPollError as exc:

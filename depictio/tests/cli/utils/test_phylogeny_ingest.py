@@ -202,3 +202,43 @@ class TestAggregateRouting:
         client_aggregate_data(_dc(), cli_config, {"overwrite": True})  # type: ignore[arg-type]
 
         assert calls == [True]
+
+    @pytest.mark.parametrize(
+        ("kind", "processor"),
+        [
+            ("multiqc", "process_multiqc_data_collection"),
+            ("geojson", "process_geojson_data_collection"),
+            ("phylogeny", "process_phylogeny_data_collection"),
+            ("indexed_file", "process_indexed_file_data_collection"),
+        ],
+    )
+    def test_a_dry_run_dispatches_nothing_that_writes(
+        self, monkeypatch, cli_config, kind, processor
+    ):
+        """These processors write to S3 and the server as soon as they run."""
+        process = MagicMock()
+        monkeypatch.setattr(deltatables, processor, process)
+
+        result = client_aggregate_data(_dc(kind), cli_config, {"dry_run": True})  # type: ignore[arg-type]
+
+        process.assert_not_called()
+        assert result["result"] == "success"
+        assert f"would process this {kind} collection" in result["message"]
+
+    def test_a_dry_run_runs_no_recipe(self, monkeypatch, cli_config):
+        process = MagicMock()
+        monkeypatch.setattr(deltatables, "process_recipe_data_collection", process)
+        recipe = SimpleNamespace(
+            id=DC_ID,
+            data_collection_tag="recipe_dc",
+            config=SimpleNamespace(
+                type="table",
+                source="transformed",
+                transform=SimpleNamespace(materialized=False),
+            ),
+        )
+
+        result = client_aggregate_data(recipe, cli_config, {"dry_run": True})  # type: ignore[arg-type]
+
+        process.assert_not_called()
+        assert "would process this recipe collection" in result["message"]

@@ -7,6 +7,8 @@ usefully — the history entry shape differs between deltalake versions, which i
 exactly the bug class these tests exist to catch.
 """
 
+from datetime import datetime
+
 import polars as pl
 import pytest
 
@@ -137,6 +139,13 @@ class TestHistoryParsing:
         commit = _parse_commit({"version": 3, "timestamp": 1784966848661})
         assert commit.timestamp is not None
         assert commit.timestamp.year == 2026
+
+    @pytest.mark.usefixtures("host_off_utc")
+    def test_timestamp_is_naive_utc_whatever_the_host_timezone(self):
+        # Sent as the commit time of each registered version, which the server
+        # stores as naive UTC: a local reading is hours off on most HPC hosts.
+        commit = _parse_commit({"version": 0, "timestamp": 1_784_966_400_000})
+        assert commit.timestamp == datetime(2026, 7, 25, 8, 0)
 
     def test_custom_metadata_is_read_from_the_flattened_entry(self):
         # delta-rs flattens custom metadata into the history entry rather than

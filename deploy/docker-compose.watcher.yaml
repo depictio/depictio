@@ -24,10 +24,16 @@ services:
       - ${DEPICTIO_DATA_ROOT:?set DEPICTIO_DATA_ROOT}:${DEPICTIO_DATA_ROOT_MOUNT:-/data}:ro
       - ${DEPICTIO_CLI_CONFIG:?set DEPICTIO_CLI_CONFIG}:/config/CLI.yaml:ro
       - ${DEPICTIO_PROJECT_CONFIG:?set DEPICTIO_PROJECT_CONFIG}:/config/project.yaml:ro
-      # Named volume for the scan-state cache and the per-project lock. Losing
-      # it costs one full re-scan, not correctness — but keeping it makes the
-      # "nothing changed" cycle nearly free.
-      - depictio_watch_state:/root/.depictio/state
+      # Named volume for the scan-state cache and the per-project lock, under
+      # ~/.depictio/state. Losing it costs one full re-scan, not correctness,
+      # but keeping it makes the "nothing changed" cycle nearly free.
+      #
+      # Mounted over the home of the image's `depictio` user, which the
+      # watcher runs as, rather than over ~/.depictio/state itself: the image
+      # has no such directory, and Docker would create it owned by root, where
+      # the watcher could not take its lock. A new volume starts as a copy of
+      # the home directory, owner included.
+      - depictio_watch_home:/home/depictio
 
     environment:
       DEPICTIO_CONTEXT: "cli"
@@ -72,5 +78,5 @@ services:
     security_opt: ["no-new-privileges:true"]
 
 volumes:
-  depictio_watch_state:
+  depictio_watch_home:
     driver: local

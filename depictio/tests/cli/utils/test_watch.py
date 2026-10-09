@@ -6,15 +6,20 @@ in directly so the tests describe the decision logic rather than the plumbing.
 """
 
 import os
+import threading
+import time
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from depictio.cli.cli.utils.watch import (
+    LOCK_UNAVAILABLE_EXIT_CODE,
     NETWORK_FSTYPES,
     ChangeAccumulator,
+    ProjectLock,
+    ProjectLockError,
     ProjectWatcher,
     WatchConfig,
-    project_lock,
     resolve_backend,
 )
 
@@ -185,30 +190,69 @@ class TestBackendResolution:
 class TestProjectLock:
     def test_lock_is_exclusive(self, tmp_path):
         lock_file = tmp_path / "project.lock"
-        with project_lock(lock_file):
-            with pytest.raises(RuntimeError, match="already holds"):
-                with project_lock(lock_file):
-                    pass
+        with ProjectLock() as first, ProjectLock() as second:
+            first.acquire(lock_file)
+            with pytest.raises(ProjectLockError, match="already holds") as refused:
+                second.acquire(lock_file)
+
+        # Names the file and the process holding it, which is what the person
+        # reading the error needs to act on.
+        assert str(lock_file) in str(refused.value)
+        assert f"pid {os.getpid()}" in str(refused.value)
+        assert refused.value.exit_code == 1
+
+    def test_a_refused_lock_leaves_the_holder_pid_in_place(self, tmp_path):
+        lock_file = tmp_path / "project.lock"
+        with ProjectLock() as first, ProjectLock() as second:
+            first.acquire(lock_file)
+            with pytest.raises(ProjectLockError):
+                second.acquire(lock_file)
+            assert lock_file.read_text() == str(os.getpid())
 
     def test_lock_is_released_on_exit(self, tmp_path):
         lock_file = tmp_path / "project.lock"
-        with project_lock(lock_file):
-            pass
-        with project_lock(lock_file):
-            pass
+        with ProjectLock() as lock:
+            lock.acquire(lock_file)
+        with ProjectLock() as lock:
+            lock.acquire(lock_file)
 
     def test_lock_is_released_on_exception(self, tmp_path):
         lock_file = tmp_path / "project.lock"
         with pytest.raises(ValueError):
-            with project_lock(lock_file):
+            with ProjectLock() as lock:
+                lock.acquire(lock_file)
                 raise ValueError("boom")
-        with project_lock(lock_file):
-            pass
+        with ProjectLock() as lock:
+            lock.acquire(lock_file)
 
     def test_lock_records_the_holding_pid(self, tmp_path):
         lock_file = tmp_path / "project.lock"
-        with project_lock(lock_file):
+        with ProjectLock() as lock:
+            lock.acquire(lock_file)
             assert lock_file.read_text() == str(os.getpid())
+
+    def test_acquiring_the_held_lock_again_is_a_no_op(self, tmp_path):
+        # Every watcher cycle asks for the lock its first cycle already took.
+        lock_file = tmp_path / "project.lock"
+        with ProjectLock() as lock:
+            lock.acquire(lock_file)
+            lock.acquire(lock_file)
+            assert lock.path == lock_file
+
+    def test_an_unwritable_state_directory_is_a_clear_error(self, tmp_path):
+        state_dir = tmp_path / "state"
+        state_dir.mkdir()
+        state_dir.chmod(0o500)
+        try:
+            with ProjectLock() as lock:
+                with pytest.raises(ProjectLockError, match="Cannot create") as refused:
+                    lock.acquire(state_dir / "server" / "project.lock")
+        finally:
+            state_dir.chmod(0o700)
+
+        assert "DEPICTIO_CLI_STATE_DIR" in str(refused.value)
+        # Its own exit status, so systemd can be told a restart cannot help.
+        assert refused.value.exit_code == LOCK_UNAVAILABLE_EXIT_CODE
 
 
 class TestWatcherLoop:
@@ -441,6 +485,71 @@ class TestWatcherLoop:
         watcher.sleep = self._ticking_sleep(clock, watcher, stop_after=3)
 
         assert watcher.run() == 0
+
+    def test_a_long_cycle_keeps_reporting(self, tmp_path, clock):
+        """The loop that beats is blocked in the cycle, so a thread beats instead.
+
+        Without it a cycle longer than three minutes showed the watcher as stuck,
+        and one longer than five had its agent deleted.
+        """
+        reports = []
+        watcher = self._watcher(
+            tmp_path,
+            clock,
+            lambda mode, paths: time.sleep(0.5) or True,
+            once=True,
+            heartbeat_interval_seconds=0.05,
+        )
+        watcher.on_status = lambda status, extra: reports.append(status)
+
+        watcher.run()
+        settled = list(reports)
+        time.sleep(0.2)
+
+        assert settled[0] == "ingesting"
+        assert settled.count("ingesting") >= 3
+        assert settled[-1] == "idle"
+        # Stopped with the cycle: nothing arrives after its outcome.
+        assert reports == settled
+
+    def test_a_stop_cuts_the_failure_backoff_short(self, tmp_path):
+        """``systemctl stop`` used to wait out a backoff of up to fifteen minutes."""
+        config = WatchConfig(backend="polling", once=True, backoff_initial_seconds=600.0)
+        watcher = ProjectWatcher(roots=[str(tmp_path)], config=config, run_cycle=lambda m, p: False)
+        stopper = threading.Timer(0.2, watcher.request_stop)
+        stopper.start()
+
+        started = time.monotonic()
+        try:
+            assert watcher.run() == 1
+        finally:
+            stopper.cancel()
+
+        assert time.monotonic() - started < 5.0
+
+    def test_a_stop_during_the_cycle_skips_the_backoff(self, tmp_path, clock):
+        slept = []
+        watcher = self._watcher(tmp_path, clock, None, once=True, backoff_initial_seconds=600.0)
+
+        def failing_cycle(mode, paths):
+            watcher.request_stop()
+            return False
+
+        watcher.run_cycle = failing_cycle
+        watcher.sleep = slept.append
+        assert watcher.run() == 1
+        assert slept == []
+
+    @pytest.mark.usefixtures("host_off_utc")
+    def test_the_trigger_time_is_naive_utc(self, tmp_path, clock):
+        """A local time is hours off on a host not on UTC, which an HPC node rarely is."""
+        watcher = self._watcher(tmp_path, clock, lambda mode, paths: True, once=True)
+        watcher.run()
+        utc_now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+        assert watcher._last_trigger_at is not None
+        assert watcher._last_trigger_at.tzinfo is None
+        assert abs(utc_now - watcher._last_trigger_at) < timedelta(minutes=1)
 
     def test_stop_request_ends_the_loop(self, tmp_path, clock):
         watcher = self._watcher(tmp_path, clock, lambda mode, paths: True)

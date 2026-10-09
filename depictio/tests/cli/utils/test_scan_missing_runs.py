@@ -16,7 +16,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from depictio.cli.cli.utils.delta_versioning import plan_scoped_write
+from depictio.cli.cli.utils.deltatables import skip_unchanged_reason
 from depictio.cli.cli.utils.scan import flat_run_tag_clash, scan_files_for_workflow
+from depictio.cli.cli.utils.scan_walk import iter_run_files, run_signature
+from depictio.cli.cli.utils.state import load_state, settle_collections
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import Permission, UserBase
 from depictio.models.models.workflows import Workflow, WorkflowDataLocation, WorkflowRun
@@ -24,6 +28,12 @@ from depictio.models.models.workflows import Workflow, WorkflowDataLocation, Wor
 NOW = "2026-09-03 23:00:00"
 OWNER = {"id": "507f1f77bcf86cd799439011", "email": "owner@example.org"}
 WF_CONFIG_ID = "507f1f77bcf86cd799439099"
+# What the server answers a run upsert and a delete that went through.
+STORED = MagicMock(status_code=200)
+
+
+def all_deleted(ids, *_args, **_kwargs) -> int:
+    return len(ids)
 
 
 @pytest.fixture
@@ -129,9 +139,11 @@ def test_rescan_over_two_locations_deletes_nothing(workflow, two_run_dirs):
             "depictio.cli.cli.utils.scan.scan_run_for_multiple_data_collections",
             side_effect=fake_scan,
         ),
-        patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch") as upsert,
-        patch("depictio.cli.cli.utils.scan.api_delete_runs") as delete_run,
-        patch("depictio.cli.cli.utils.scan.api_delete_files") as delete_file,
+        patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch", return_value=STORED) as upsert,
+        patch("depictio.cli.cli.utils.scan.api_delete_runs", side_effect=all_deleted) as delete_run,
+        patch(
+            "depictio.cli.cli.utils.scan.api_delete_files", side_effect=all_deleted
+        ) as delete_file,
     ):
         from depictio.cli.cli.utils.scan import scan_files_for_workflow
 
@@ -174,9 +186,9 @@ def test_run_that_vanished_from_disk_is_still_deleted(workflow, two_run_dirs):
             "depictio.cli.cli.utils.scan.scan_run_for_multiple_data_collections",
             side_effect=fake_scan,
         ),
-        patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch"),
-        patch("depictio.cli.cli.utils.scan.api_delete_runs") as delete_run,
-        patch("depictio.cli.cli.utils.scan.api_delete_files"),
+        patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch", return_value=STORED),
+        patch("depictio.cli.cli.utils.scan.api_delete_runs", side_effect=all_deleted) as delete_run,
+        patch("depictio.cli.cli.utils.scan.api_delete_files", side_effect=all_deleted),
     ):
         from depictio.cli.cli.utils.scan import scan_files_for_workflow
 
@@ -210,9 +222,9 @@ def test_without_rescan_nothing_is_reconciled(workflow, two_run_dirs):
             "depictio.cli.cli.utils.scan.scan_run_for_multiple_data_collections",
             side_effect=fake_scan,
         ),
-        patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch") as upsert,
-        patch("depictio.cli.cli.utils.scan.api_delete_runs") as delete_run,
-        patch("depictio.cli.cli.utils.scan.api_delete_files"),
+        patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch", return_value=STORED) as upsert,
+        patch("depictio.cli.cli.utils.scan.api_delete_runs", side_effect=all_deleted) as delete_run,
+        patch("depictio.cli.cli.utils.scan.api_delete_files", side_effect=all_deleted),
     ):
         from depictio.cli.cli.utils.scan import scan_files_for_workflow
 
@@ -259,9 +271,9 @@ def test_a_gone_run_the_cli_cannot_load_is_deleted_too(workflow, two_run_dirs, m
             "depictio.cli.cli.utils.scan.scan_run_for_multiple_data_collections",
             side_effect=fake_scan,
         ),
-        patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch"),
-        patch("depictio.cli.cli.utils.scan.api_delete_runs") as delete_run,
-        patch("depictio.cli.cli.utils.scan.api_delete_files"),
+        patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch", return_value=STORED),
+        patch("depictio.cli.cli.utils.scan.api_delete_runs", side_effect=all_deleted) as delete_run,
+        patch("depictio.cli.cli.utils.scan.api_delete_files", side_effect=all_deleted),
     ):
         from depictio.cli.cli.utils.scan import scan_files_for_workflow
 
@@ -317,7 +329,9 @@ class TestFlatRunsOfTheSameName:
         with (
             patch("depictio.cli.cli.utils.scan.api_get_files_by_dc_id") as get_files,
             patch("depictio.cli.cli.utils.scan.api_get_runs_by_wf_id") as get_runs,
-            patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch") as upsert,
+            patch(
+                "depictio.cli.cli.utils.scan.api_upsert_runs_batch", return_value=STORED
+            ) as upsert,
         ):
             with pytest.raises(ValueError, match="would both be run 'results'"):
                 scan_files_for_workflow(
@@ -357,9 +371,11 @@ def test_a_run_of_the_same_name_from_another_directory_is_replaced(workflow, tmp
         patch("depictio.cli.cli.utils.scan.api_get_files_by_dc_id", return_value=files_resp),
         patch("depictio.cli.cli.utils.scan.api_get_runs_by_wf_id", return_value=runs_resp),
         patch("depictio.cli.cli.utils.scan.scan_run_for_multiple_data_collections", scan_run),
-        patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch") as upsert,
-        patch("depictio.cli.cli.utils.scan.api_delete_runs") as delete_run,
-        patch("depictio.cli.cli.utils.scan.api_delete_files") as delete_file,
+        patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch", return_value=STORED) as upsert,
+        patch("depictio.cli.cli.utils.scan.api_delete_runs", side_effect=all_deleted) as delete_run,
+        patch(
+            "depictio.cli.cli.utils.scan.api_delete_files", side_effect=all_deleted
+        ) as delete_file,
     ):
         scan_files_for_workflow(
             workflow=workflow,
@@ -396,9 +412,9 @@ def test_the_same_directory_keeps_its_run(workflow, two_run_dirs):
         patch("depictio.cli.cli.utils.scan.api_get_files_by_dc_id", return_value=files_resp),
         patch("depictio.cli.cli.utils.scan.api_get_runs_by_wf_id", return_value=runs_resp),
         patch("depictio.cli.cli.utils.scan.scan_run_for_multiple_data_collections", scan_run),
-        patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch"),
-        patch("depictio.cli.cli.utils.scan.api_delete_runs") as delete_run,
-        patch("depictio.cli.cli.utils.scan.api_delete_files"),
+        patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch", return_value=STORED),
+        patch("depictio.cli.cli.utils.scan.api_delete_runs", side_effect=all_deleted) as delete_run,
+        patch("depictio.cli.cli.utils.scan.api_delete_files", side_effect=all_deleted),
     ):
         scan_files_for_workflow(
             workflow=workflow,
@@ -409,3 +425,129 @@ def test_the_same_directory_keeps_its_run(workflow, two_run_dirs):
 
     assert str(scan_run.call_args.kwargs["existing_run"].id) == str(registered["_id"])
     delete_run.assert_not_called()
+
+
+class TestARunRegisteredAheadOfItsTable:
+    """The scan registers a run's files before the process step writes its table.
+
+    When that write fails, the next scan finds the files unchanged against the
+    registry and the state. It must not vouch for the collection then: a skip, or
+    a write scoped to the runs that moved since, would leave the run out of the
+    table for good.
+    """
+
+    SERVER = "http://depictio.test"
+
+    @pytest.fixture
+    def scan(self, workflow, two_run_dirs):
+        run_a, run_b = two_run_dirs
+        existing = [
+            _existing_run(workflow.id, run_a.name, str(run_a)),
+            _existing_run(workflow.id, run_b.name, str(run_b)),
+        ]
+        files_resp = MagicMock(status_code=200)
+        files_resp.json.return_value = []
+        runs_resp = MagicMock(status_code=200)
+        runs_resp.json.return_value = existing
+        cli_config = _cli_config()
+        # A fresh dict per scan: the scan pops the token out of the one it gets.
+        cli_config.user.model_dump.side_effect = lambda: {**OWNER, "token": None}
+        cli_config.api_base_url = self.SERVER
+        upserted: list[set[str]] = []
+
+        def fake_scan(**kwargs):
+            run = _fake_scan(workflow)(**kwargs)
+            # What the real scan attaches, and the state records.
+            files = list(iter_run_files(kwargs["run_location"]))
+            run._scan_signature = run_signature(files)
+            run._scan_file_count = len(files)
+            return run
+
+        def upsert(runs, *_args):
+            upserted.append({r.run_tag for r in runs})
+            return self.upsert_response
+
+        def _scan():
+            with (
+                patch(
+                    "depictio.cli.cli.utils.scan.api_get_files_by_dc_id", return_value=files_resp
+                ),
+                patch("depictio.cli.cli.utils.scan.api_get_runs_by_wf_id", return_value=runs_resp),
+                patch(
+                    "depictio.cli.cli.utils.scan.scan_run_for_multiple_data_collections",
+                    side_effect=fake_scan,
+                ),
+                patch("depictio.cli.cli.utils.scan.api_upsert_runs_batch", side_effect=upsert),
+                patch("depictio.cli.cli.utils.scan.api_delete_runs", side_effect=all_deleted),
+                patch("depictio.cli.cli.utils.scan.api_delete_files", side_effect=all_deleted),
+            ):
+                return scan_files_for_workflow(
+                    workflow=workflow,
+                    data_collections=workflow.data_collections,
+                    CLI_config=cli_config,
+                    command_parameters={
+                        "rescan_folders": True,
+                        "rich_tables": False,
+                        "state_cache": True,
+                        "project_id": "p1",
+                    },
+                )
+
+        self.upsert_response = STORED
+        _scan.upserted = upserted
+        return _scan
+
+    @staticmethod
+    def _scoped(signal, dc_id):
+        return plan_scoped_write(
+            probe=MagicMock(version=3),
+            changed_runs=signal["changed_dcs"].get(dc_id, []),
+            removed_runs=signal["removed_runs"],
+            write_mode="replace-runs",
+            incremental_write=True,
+            signal_complete=signal["complete"],
+            covered=dc_id in signal["covered_dcs"],
+        )
+
+    def test_a_write_that_failed_is_rebuilt_in_full_by_the_next_cycle(
+        self, scan, workflow, two_run_dirs
+    ):
+        run_a, _ = two_run_dirs
+        dc = workflow.data_collections[0]
+        dc_id = str(dc.id)
+        # A first ingestion that wrote its table.
+        scan()
+        settle_collections(self.SERVER, "p1", [dc_id])
+
+        # Cycle N: run_a changes, the scan registers it, and the write fails.
+        (run_a / "table.tsv").write_text("a\tb\n1\t2\n3\t4\n")
+        cycle_n = scan()
+        assert scan.upserted[-1] == {run_a.name}
+        assert dc_id in cycle_n["covered_dcs"]
+        assert load_state(self.SERVER, "p1").unsettled_dcs == [dc_id]
+
+        # Cycle N+1: nothing moved on disk since, so no run is rescanned.
+        cycle_n1 = scan()
+        assert len(scan.upserted) == 2
+        assert dc_id not in cycle_n1["covered_dcs"]
+        plan = self._scoped(cycle_n1, dc_id)
+        assert plan.scoped is False and "failed" in plan.declined
+        signal = {"skip_unchanged": True, "scan_signal": cycle_n1}
+        assert skip_unchanged_reason(dc, MagicMock(version=3), signal) is None
+
+        # Once a write succeeds, the scan vouches for it again.
+        settle_collections(self.SERVER, "p1", [dc_id])
+        assert dc_id in scan()["covered_dcs"]
+
+    def test_a_first_scan_on_this_host_vouches_for_nothing(self, scan, workflow):
+        assert scan()["covered_dcs"] == []
+
+    def test_runs_the_server_refused_are_not_recorded_as_seen(self, scan, workflow):
+        self.upsert_response = MagicMock(status_code=500, text="boom")
+
+        with pytest.raises(RuntimeError, match=r"Registering 2 run\(s\) failed \(HTTP 500\)"):
+            scan()
+
+        state = load_state(self.SERVER, "p1")
+        assert state.run_state(str(workflow.id), "run_a") is None
+        assert state.unsettled_dcs == [str(workflow.data_collections[0].id)]

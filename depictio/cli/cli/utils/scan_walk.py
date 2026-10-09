@@ -16,6 +16,12 @@ already returned. Three things motivated pulling this out of ``scan.py``:
 * **Change detection.** :func:`run_signature` is the cheap "did anything in this
   run change" token used by the local state cache and by the watcher's polling
   trigger. Both need exactly the data a walk already collected.
+* **Confinement.** On the server, a walk never leaves its root: the ingestion
+  worker reads with the server's privileges, so a symlink planted inside an
+  allowed data root must not pull in files from elsewhere. The CLI reads with
+  its user's own, and Nextflow's ``publishDir mode: 'symlink'`` fills a results
+  directory with links into ``work/``, so there a symlink is followed wherever it
+  points.
 """
 
 from __future__ import annotations
@@ -27,6 +33,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 
 from depictio.cli.cli_logging import logger
+from depictio.models.utils import get_depictio_context
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,12 +78,18 @@ def is_ignored(name: str, rel_path: str, patterns: tuple[str, ...]) -> bool:
     return False
 
 
+def _is_within(path: str, real_root: str) -> bool:
+    """Whether a resolved ``path`` is ``real_root`` or lies under it."""
+    return path == real_root or path.startswith(os.path.join(real_root, ""))
+
+
 def iter_run_files(
     root: str,
     *,
     max_depth: int | None = None,
     ignore: list[str] | None = None,
     follow_symlinks: bool = False,
+    confine_to_root: bool | None = None,
 ) -> Iterator[ScannedPath]:
     """Yield every file under ``root``, with its stat already read.
 
@@ -89,6 +102,10 @@ def iter_run_files(
             into), a matching file is skipped.
         follow_symlinks: Whether to descend into symlinked directories. Off by
             default, matching ``os.walk``'s default and avoiding cycles.
+        confine_to_root: Skip, with a debug log, any symlink whose real path
+            leaves ``root``, before its target is read or even stat'ed.
+            ``None`` (default) confines everywhere but the CLI (see the
+            module docstring).
 
     Unreadable directories and entries whose ``stat`` fails (a broken symlink,
     a file deleted mid-walk) are logged and skipped rather than raised. A live
@@ -97,6 +114,8 @@ def iter_run_files(
     """
     root = os.path.abspath(root)
     patterns = tuple(ignore) if ignore else ()
+    if confine_to_root is None:
+        confine_to_root = get_depictio_context().lower() != "cli"
 
     # Resolve the root once. Every non-symlink child then inherits its parent's
     # resolved directory, so realpath() runs per directory and per symlink
@@ -125,6 +144,11 @@ def iter_run_files(
 
             try:
                 is_symlink = entry.is_symlink()
+                # Resolved once: checked here, then stored as the file's path.
+                target = os.path.realpath(entry.path) if is_symlink else None
+                if target is not None and confine_to_root and not _is_within(target, real_root):
+                    logger.debug(f"Skipping {rel_path}: it resolves to {target}, outside {root}")
+                    continue
                 # follow_symlinks=True here classifies a symlink by its target,
                 # so links to directories are recognised as directories and can
                 # be handled by the branch below rather than leaking into the
@@ -140,11 +164,7 @@ def iter_run_files(
                     # they are never yielded as files.
                     continue
                 if max_depth is None or depth + 1 <= max_depth:
-                    child_real = (
-                        os.path.realpath(entry.path)
-                        if is_symlink
-                        else os.path.join(real_dir, entry.name)
-                    )
+                    child_real = target or os.path.join(real_dir, entry.name)
                     stack.append((entry.path, child_real, rel_path, depth + 1))
                 continue
 
@@ -155,9 +175,7 @@ def iter_run_files(
                 logger.warning(f"Cannot stat {rel_path}: {exc}")
                 continue
 
-            real_path = (
-                os.path.realpath(entry.path) if is_symlink else os.path.join(real_dir, entry.name)
-            )
+            real_path = target or os.path.join(real_dir, entry.name)
 
             yield ScannedPath(
                 path=real_path,

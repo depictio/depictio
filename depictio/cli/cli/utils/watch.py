@@ -26,8 +26,10 @@ Two more things that look like details and are not:
   dashboards. Every path must hold a stable ``(size, mtime)`` across
   ``settle_seconds`` before it counts.
 * **Re-entrancy.** Events arriving during an ingestion are coalesced into a
-  single follow-up pass, never queued into N passes; and a lock file keeps two
-  watchers (or a watcher and a manual ``depictio run``) off the same project.
+  single follow-up pass, never queued into N passes. Every ingestion that writes
+  (a watcher from its first cycle to its exit, ``--once``, ``depictio ingest``)
+  takes the per-project :class:`ProjectLock` as soon as it has validated the
+  project and before its first write, so two of them never run on one project.
 """
 
 from __future__ import annotations
@@ -35,9 +37,9 @@ from __future__ import annotations
 import fcntl
 import os
 import signal
+import threading
 import time
-from collections.abc import Callable, Iterable, Iterator
-from contextlib import contextmanager
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -45,6 +47,7 @@ from typing import Literal
 
 from depictio.cli.cli.utils.scan_walk import iter_run_files, run_signature
 from depictio.cli.cli_logging import logger
+from depictio.models.timestamps import utc_now_naive
 
 WatchMode = Literal["incremental", "full"]
 WatchBackend = Literal["auto", "native", "polling", "both"]
@@ -289,32 +292,88 @@ def resolve_backend(configured: WatchBackend, paths: Iterable[str]) -> WatchBack
     return "both"
 
 
-@contextmanager
-def project_lock(lock_path: Path) -> Iterator[None]:
-    """Hold an exclusive, non-blocking lock for one project's ingestion.
+#: Exit status when the lock file cannot be created at all (a read-only state
+#: directory, typically). Distinct from 1 so a service manager can be told not
+#: to restart: unlike a lock another process holds, this does not clear itself.
+#: 73 is sysexits' EX_CANTCREAT.
+LOCK_UNAVAILABLE_EXIT_CODE = 73
+
+
+class ProjectLockError(RuntimeError):
+    """The per-project lock could not be taken. ``exit_code`` is the status to exit with."""
+
+    def __init__(self, message: str, *, exit_code: int = 1) -> None:
+        super().__init__(message)
+        self.exit_code = exit_code
+
+
+class ProjectLock:
+    """An exclusive, non-blocking lock for one project's ingestion.
 
     Guards against two watchers on the same project, and against a manual
-    ``depictio run`` racing a watcher cycle. Both would interleave writes to the
-    same runs and the same Delta table.
+    ``depictio ingest`` racing a watcher cycle. Both would interleave writes to
+    the same runs and the same Delta tables.
 
-    Raises ``RuntimeError`` when the lock is already held, rather than blocking:
-    a watcher that queues behind another watcher would drift arbitrarily far
-    behind the filesystem.
+    Taken by ``run_ingest`` once the project is validated, since the lock file is
+    named after the project's id, and held until :meth:`release` (or the end of
+    a ``with`` block). A watcher hands one instance to every cycle, so its first
+    cycle takes the lock and the later ones find it already held.
+
+    Raises :class:`ProjectLockError` when another process holds it, rather than
+    blocking: a watcher that queues behind another watcher would drift
+    arbitrarily far behind the filesystem.
     """
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    handle = open(lock_path, "w", encoding="utf-8")
-    try:
+
+    def __init__(self) -> None:
+        self.path: Path | None = None
+        self._handle = None
+
+    def __enter__(self) -> ProjectLock:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.release()
+
+    def acquire(self, lock_path: Path) -> None:
+        """Take the lock at ``lock_path``. Holding it already is a no-op."""
+        if self._handle is not None and self.path == lock_path:
+            return
+        try:
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            # Not "w": that would truncate the holder's pid before the flock
+            # below had a chance to refuse, and the error could not name it.
+            handle = open(lock_path, "a+", encoding="utf-8")
+        except OSError as exc:
+            raise ProjectLockError(
+                f"Cannot create the ingestion lock file {lock_path}: {exc.strerror or exc}. "
+                "Point DEPICTIO_CLI_STATE_DIR at a directory this user can write to.",
+                exit_code=LOCK_UNAVAILABLE_EXIT_CODE,
+            ) from exc
         try:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError as exc:
-            raise RuntimeError(
-                f"Another depictio process already holds {lock_path}. "
-                "Only one watcher or ingestion may run per project at a time."
+            handle.seek(0)
+            holder = handle.read().strip()
+            handle.close()
+            raise ProjectLockError(
+                f"Another depictio process{f' (pid {holder})' if holder else ''} already "
+                f"holds {lock_path}. Only one watcher or ingestion may run per project "
+                "at a time: wait for it to finish, or stop it."
             ) from exc
+        handle.seek(0)
+        handle.truncate()
         handle.write(str(os.getpid()))
         handle.flush()
-        yield
-    finally:
+        # Another project than the one held: the new lock is taken first, so
+        # there is no moment where neither is held.
+        self.release()
+        self._handle, self.path = handle, lock_path
+
+    def release(self) -> None:
+        """Let go of the lock, if held."""
+        handle, self._handle, self.path = self._handle, None, None
+        if handle is None:
+            return
         try:
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
         finally:
@@ -415,6 +474,9 @@ class ProjectWatcher:
         #: than asserting "idle" over an error the loop is still backing off from.
         self._status = "idle"
         self._last_report_at: float | None = None
+        #: Serialises reports: during a cycle the keepalive comes from another
+        #: thread, and its last beat must not land after the cycle's outcome.
+        self._report_lock = threading.RLock()
 
         if self.backend in ("polling", "both") and (
             config.debounce_seconds < config.poll_interval_seconds
@@ -432,7 +494,11 @@ class ProjectWatcher:
     # -- lifecycle ---------------------------------------------------------
 
     def request_stop(self, *_args: object) -> None:
-        """Finish the current cycle, then exit. Safe to call from a signal handler."""
+        """Finish the current cycle, then exit, cutting any failure backoff short.
+
+        Safe to call from a signal handler: it only sets a flag, which the loop
+        and the backoff check at least once a second.
+        """
         if self._stop:
             logger.warning("Second stop request — exiting immediately.")
             raise KeyboardInterrupt
@@ -490,20 +556,21 @@ class ProjectWatcher:
 
     def _report(self, status: str, **extra: object) -> None:
         """Publish a status change, if anyone is listening. Never raises."""
-        self._status = status
-        self._last_report_at = self.now()
-        if self.on_status is None:
-            return
-        payload = {
-            "runs_total": self._cycles,
-            "last_run_id": self._last_run_id,
-            "last_trigger_at": self._last_trigger_at,
-            **extra,
-        }
-        try:
-            self.on_status(status, payload)
-        except Exception as exc:  # noqa: BLE001 - telemetry must not break the loop
-            logger.debug(f"Status report failed (non-fatal): {exc}")
+        with self._report_lock:
+            self._status = status
+            self._last_report_at = self.now()
+            if self.on_status is None:
+                return
+            payload = {
+                "runs_total": self._cycles,
+                "last_run_id": self._last_run_id,
+                "last_trigger_at": self._last_trigger_at,
+                **extra,
+            }
+            try:
+                self.on_status(status, payload)
+            except Exception as exc:  # noqa: BLE001 - telemetry must not break the loop
+                logger.debug(f"Status report failed (non-fatal): {exc}")
 
     def _heartbeat(self) -> None:
         """Re-publish the current status if the last report is going stale.
@@ -518,6 +585,38 @@ class ProjectWatcher:
         if self.now() - self._last_report_at < self.config.heartbeat_interval_seconds:
             return
         self._report(self._status)
+
+    def _beat_until(self, done: threading.Event) -> None:
+        """Re-publish the status every heartbeat interval until ``done`` is set.
+
+        Runs on its own thread for the length of a cycle: the loop that
+        normally beats is blocked inside the cycle, and a cycle can outlast both
+        the UI's staleness window and the server's TTL. That watcher was shown
+        as stuck, then deleted, while it was ingesting.
+        """
+        while not done.wait(self.config.heartbeat_interval_seconds):
+            with self._report_lock:
+                # Checked under the lock: the cycle's outcome may have been
+                # reported while this beat waited for it.
+                if done.is_set():
+                    return
+                self._report(self._status)
+
+    def _pause(self, seconds: float) -> None:
+        """Wait up to ``seconds``, in steps of at most one, until a stop is requested.
+
+        A failure backoff reaches fifteen minutes, which a stop request used to
+        wait out in full: ``systemctl stop`` hung until SIGKILL and the agent was
+        never deregistered. The steps also keep the heartbeat going, so a watcher
+        backing off still reports its error rather than going stale.
+        """
+        deadline = self.now() + seconds
+        while not self._stop:
+            remaining = deadline - self.now()
+            if remaining <= 0:
+                return
+            self._heartbeat()
+            self.sleep(min(1.0, remaining))
 
     def _poll_command(self) -> bool:
         """Whether a run has been requested from outside since the last check.
@@ -547,14 +646,24 @@ class ProjectWatcher:
         )
         self._cycles += 1
         # Wall-clock, not the injected monotonic clock: this one is rendered to
-        # a person in the admin UI, not used for interval arithmetic.
-        self._last_trigger_at = datetime.now()
+        # a person in the admin UI, not used for interval arithmetic. Naive UTC,
+        # as the server stores every timestamp: a local time is hours off on a
+        # host that is not on UTC, which an HPC login node rarely is.
+        self._last_trigger_at = utc_now_naive()
         self._report("ingesting", mode=mode, changed_paths=len(paths))
+        done = threading.Event()
+        beat = threading.Thread(
+            target=self._beat_until, args=(done,), name="depictio-watch-heartbeat", daemon=True
+        )
+        beat.start()
         try:
             succeeded = self.run_cycle(mode, paths)
         except Exception as exc:  # noqa: BLE001 - a watcher must outlive one bad cycle
             logger.error(f"Ingestion cycle failed: {exc}")
             succeeded = False
+        finally:
+            done.set()
+            beat.join(timeout=5.0)
 
         if succeeded:
             self._consecutive_failures = 0
@@ -570,7 +679,7 @@ class ProjectWatcher:
         logger.warning(
             f"Cycle failed ({self._consecutive_failures} in a row); backing off {delay:.0f}s"
         )
-        self.sleep(delay)
+        self._pause(delay)
 
     def run(self) -> int:
         """Watch until stopped. Returns a process exit code."""

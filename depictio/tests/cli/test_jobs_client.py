@@ -6,13 +6,19 @@ deterministically — no sleeping, no server.
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import httpx
 import pytest
 
+from depictio.cli.cli.utils.deltatables import _await_upsert_job
 from depictio.cli.cli.utils.jobs import (
     DEFAULT_MAX_INTERVAL,
+    JOB_TIMEOUT_ENV_VAR,
     JobOutcome,
     JobPollError,
+    JobTimeoutError,
+    job_timeout,
     maybe_wait_for_job,
     poll_job,
 )
@@ -213,3 +219,53 @@ class TestMaybeWaitForJob:
 
         assert isinstance(outcome, JobOutcome)
         assert outcome.ok
+
+
+class TestTheDefaultBound:
+    """A job the server never finishes (its worker killed mid-task, say) stays
+    "running" until its record expires a day later. The wait gives up first."""
+
+    @pytest.fixture
+    def clock_leaps(self, monkeypatch):
+        """Every reading of the clock is 10 000 seconds after the one before."""
+        ticks = iter(range(0, 10_000_000, 10_000))
+        monkeypatch.setattr(
+            "depictio.cli.cli.utils.jobs.time.monotonic", lambda: float(next(ticks))
+        )
+
+    def test_a_job_that_never_ends_is_given_up_on(self, patched_client, clock_leaps, monkeypatch):
+        monkeypatch.delenv(JOB_TIMEOUT_ENV_VAR, raising=False)
+        patched_client(_client([{"status": "running"}]))
+
+        with pytest.raises(JobTimeoutError, match="did not finish within 3600s"):
+            maybe_wait_for_job({"job_id": "j1"}, api_base_url="http://api", token="t")
+
+    def test_zero_waits_without_limit(self, patched_client, clock_leaps, monkeypatch):
+        monkeypatch.setenv(JOB_TIMEOUT_ENV_VAR, "0")
+        patched_client(_client([{"status": "success"}]))
+
+        outcome = maybe_wait_for_job({"job_id": "j1"}, api_base_url="http://api", token="t")
+
+        assert outcome is not None and outcome.ok
+
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [("", 3600.0), ("90", 90.0), ("0", None), ("-5", None), ("an hour", 3600.0)],
+    )
+    def test_the_environment_sets_the_bound(self, monkeypatch, value, expected):
+        monkeypatch.setenv(JOB_TIMEOUT_ENV_VAR, value)
+        assert job_timeout() == expected
+
+    def test_a_timed_out_finalization_fails_the_collection_and_says_what_to_raise(
+        self, monkeypatch
+    ):
+        def never_finishes(*_args, **_kwargs):
+            raise JobTimeoutError("Job j1 did not finish within 3600s (last status: running)")
+
+        monkeypatch.setattr("depictio.cli.cli.utils.jobs.maybe_wait_for_job", never_finishes)
+
+        outcome = _await_upsert_job({"job_id": "j1"}, MagicMock())
+
+        assert outcome is not None and not outcome.ok
+        assert "did not finish within 3600s" in outcome.error
+        assert JOB_TIMEOUT_ENV_VAR in outcome.error

@@ -7,6 +7,7 @@ to hold before anything is skipped, and each test names the failure it prevents.
 """
 
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import polars as pl
 import pytest
@@ -16,6 +17,8 @@ from depictio.cli.cli.utils.deltatables import (
     align_lazy_schemas,
     skip_unchanged_reason,
 )
+from depictio.cli.cli.utils.process import process_project_data_collections
+from depictio.models.models.projects import Project
 
 DC_ID = "507f1f77bcf86cd799439011"
 
@@ -92,6 +95,65 @@ class TestSkipUnchanged:
         # `depictio data process` invoked on its own has no scan to lean on.
         reason = skip_unchanged_reason(dc(), probe(), {})
         assert reason is None
+
+
+class TestSettledCollections:
+    """The process step names the collections whose table now matches their files.
+
+    Only those lose the mark the scan left on them; a failed one keeps it, so the
+    next scan cannot vouch for it and its table is rebuilt in full.
+    """
+
+    @staticmethod
+    def _project(tmp_path):
+        return Project.model_validate(
+            {
+                "name": "Three Collections",
+                "permissions": {
+                    "owners": [{"id": DC_ID, "email": "owner@example.org"}],
+                    "editors": [],
+                    "viewers": [],
+                },
+                "workflows": [
+                    {
+                        "name": "wf",
+                        "engine": {"name": "python"},
+                        "data_location": {"structure": "flat", "locations": [str(tmp_path)]},
+                        "data_collections": [
+                            {
+                                "data_collection_tag": tag,
+                                "config": {
+                                    "type": "Table",
+                                    "scan": {
+                                        "mode": "recursive",
+                                        "scan_parameters": {"regex_config": {"pattern": "x"}},
+                                    },
+                                    "dc_specific_properties": {"format": "CSV"},
+                                },
+                            }
+                            for tag in ("written", "unchanged", "failed")
+                        ],
+                    }
+                ],
+            }
+        )
+
+    def test_written_and_unchanged_collections_settle_a_failed_one_does_not(self, tmp_path):
+        project = self._project(tmp_path)
+        written, unchanged, failed = project.workflows[0].data_collections
+        outcomes = [
+            (written, {"success": True, "data": {"message": "ok"}}, None),
+            (unchanged, {"success": True, "data": {"message": "left", "skipped": True}}, None),
+            (failed, {"success": False, "message": "write failed"}, None),
+        ]
+        with patch(
+            "depictio.cli.cli.utils.process._ingest_data_collections",
+            MagicMock(return_value=outcomes),
+        ):
+            result = process_project_data_collections(MagicMock(), project)
+
+        assert result["settled_dc_ids"] == [str(written.id), str(unchanged.id)]
+        assert result["failed_tags"] == ["failed"]
 
 
 class TestRunRestrictedFetch:

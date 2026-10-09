@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 import polars as pl
@@ -149,8 +149,12 @@ def _parse_commit(entry: dict[str, Any]) -> DeltaCommitInfo:
     raw_timestamp = entry.get("timestamp")
     timestamp = None
     if isinstance(raw_timestamp, (int, float)):
-        # Epoch milliseconds, not seconds.
-        timestamp = datetime.fromtimestamp(raw_timestamp / 1000)
+        # Epoch milliseconds, not seconds. Naive UTC, as the server stores every
+        # timestamp: it is sent as the commit time of each registered version,
+        # and a local time is hours off on a host that is not on UTC.
+        timestamp = datetime.fromtimestamp(raw_timestamp / 1000, tz=timezone.utc).replace(
+            tzinfo=None
+        )
 
     metrics = entry.get("operationMetrics") or {}
     return DeltaCommitInfo(
@@ -400,7 +404,11 @@ def plan_scoped_write(
         )
     if not covered:
         return ScopedWritePlan(
-            scoped=False, declined="this collection was not covered by a run-based scan"
+            scoped=False,
+            declined=(
+                "this collection was not covered by a run-based scan, or an earlier "
+                "write of it failed after its files were registered"
+            ),
         )
     if removed_runs:
         return ScopedWritePlan(

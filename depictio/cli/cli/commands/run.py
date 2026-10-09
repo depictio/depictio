@@ -2,7 +2,7 @@ import os
 import signal
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Annotated
 
@@ -51,7 +51,9 @@ from depictio.cli.cli.utils.server_target import (
     ServerOption,
     resolve_server,
 )
+from depictio.cli.cli.utils.state import lock_path, settle_collections
 from depictio.cli.cli.utils.step_reporter import StepReporter
+from depictio.cli.cli.utils.watch import ProjectLock, ProjectLockError
 from depictio.cli.cli_logging import logger
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
@@ -904,6 +906,10 @@ class IngestOptions:
     scan_dry_run: bool = False
     # Given the monitoring run id once the record is opened (None if it was not).
     on_run_opened: Callable[[str | None], None] | None = None
+    # The per-project lock, taken once the project is validated and before the
+    # first write, then left held for the caller to release: `ingest` holds it for
+    # its one run, `watch` from its first cycle to its exit. None takes no lock.
+    project_lock: ProjectLock | None = None
 
 
 @dataclass(frozen=True)
@@ -1482,6 +1488,20 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
         rich_print_checked_statement(escape(filter_error), "error")
         raise typer.Exit(code=1)
 
+    # One ingestion per project at a time, from here to the caller's release:
+    # everything above only read, and the first write is close below. A second
+    # watcher, or an `ingest` racing a watcher's cycle, would interleave writes
+    # to the same runs and Delta tables. Neither dry run writes, so neither locks.
+    if opts.project_lock is not None and project_config is not None:
+        if not dry_run and not scan_dry_run:
+            try:
+                opts.project_lock.acquire(
+                    lock_path(str(CLI_config.api_base_url), str(project_config.id))
+                )
+            except ProjectLockError as exc:
+                rich_print_checked_statement(escape(str(exc)), "error")
+                raise
+
     # A refresh keeps the runs of this configuration's locations and of those
     # added with --attach-run, and the full rescan removes any other. Settled
     # here, before the sync, so a refresh that has to stop changes nothing.
@@ -1853,6 +1873,17 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                             data_collection_tag=data_collection_tag,
                             command_parameters=command_parameters,
                         )
+                        # The scan marked every collection it registered files for
+                        # as unsettled; those whose table is now written are not.
+                        # A failed one keeps the mark, so the next scan cannot
+                        # vouch for it and it is rebuilt in full.
+                        if state_cache and not scan_dry_run and process_result:
+                            settle_collections(
+                                str(CLI_config.api_base_url),
+                                str(project_config.id),
+                                process_result.get("settled_dc_ids") or [],
+                                project_hash=project_config.hash,
+                            )
                         # Surface per-DC processing failures: a data collection
                         # that fails to process must not be reported as overall
                         # success (otherwise CI/automation can't detect it).
@@ -2672,8 +2703,12 @@ def register_run_command(app: typer.Typer):
             repartition=repartition,
             async_upsert=async_upsert,
         )
-        with ingestion_record() as record:
-            outcome = run_ingest(options, record)
+        try:
+            with ProjectLock() as lock, ingestion_record() as record:
+                outcome = run_ingest(replace(options, project_lock=lock), record)
+        except ProjectLockError as exc:
+            # Already said by run_ingest, which names the lock file and its holder.
+            raise typer.Exit(code=exc.exit_code) from exc
 
         # A run that did not complete every step is a failure for automation
         # purposes: exit non-zero so CI can detect it (even under

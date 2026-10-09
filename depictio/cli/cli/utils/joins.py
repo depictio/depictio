@@ -840,8 +840,16 @@ def persist_joined_table(
             console.print("  [green]✓ Delta table location registered in MongoDB[/green]")
             logger.info(f"Successfully registered Delta location for join '{join_def.name}'")
         except Exception as e:
+            # A failure, not a warning: the table is written, but the server
+            # still serves the version before it, so the join is not done.
             logger.warning(f"Failed to register Delta location in MongoDB: {e}")
-            console.print(f"  [yellow]⚠ Delta location registration failed: {e}[/yellow]")
+            return {
+                "result": "error",
+                "message": (
+                    f"Joined table written to {destination_prefix} (Delta version "
+                    f"{write_result.get('delta_version')}), but registering it failed: {e}"
+                ),
+            }
 
     if unchanged_at is not None:
         message = f"Joined table unchanged at {destination_prefix} (Delta version {unchanged_at})"

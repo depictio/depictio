@@ -22,6 +22,13 @@ What it deliberately does **not** do:
 * **Decide what exists server-side.** The cache is advisory. A miss, a corrupt
   file, a schema bump or a changed project config all fall through to the full
   path. It only ever answers "is this run byte-for-byte as I last left it".
+
+It also remembers which collections a scan registered files for whose table
+has not been written since (``unsettled_dcs``). The scan registers files before
+the process step writes the table, so a write that fails leaves the registry
+ahead of the table, and the next scan finds those files unchanged. Without this
+mark that scan would report the collection as untouched, and a skip or a write
+scoped to the runs that moved would leave the failed ones out for good.
 """
 
 from __future__ import annotations
@@ -70,6 +77,10 @@ class ProjectScanState(BaseModel):
     #: files match, so an unchanged tree is no longer sufficient evidence.
     project_hash: str | None = None
     workflows: dict[str, WorkflowState] = Field(default_factory=dict)
+    #: Collections a scan registered files for whose Delta table has not been
+    #: written since. Set by the scan before it registers anything, cleared by
+    #: :func:`settle_collections` once the process step wrote the table.
+    unsettled_dcs: list[str] = Field(default_factory=list)
     updated_at: datetime = Field(default_factory=datetime.now)
 
     def run_state(self, workflow_id: str, run_tag: str) -> RunState | None:
@@ -78,6 +89,9 @@ class ProjectScanState(BaseModel):
 
     def record_run(self, workflow_id: str, run: RunState) -> None:
         self.workflows.setdefault(workflow_id, WorkflowState()).runs[run.run_tag] = run
+
+    def mark_unsettled(self, dc_ids: list[str]) -> None:
+        self.unsettled_dcs = sorted(set(self.unsettled_dcs) | set(dc_ids))
 
     def forget_runs(self, workflow_id: str, run_tags: set[str]) -> None:
         workflow = self.workflows.get(workflow_id)
@@ -174,3 +188,20 @@ def save_state(state: ProjectScanState) -> None:
         logger.debug(f"Wrote scan state to {path}")
     except OSError as exc:
         logger.warning(f"Could not persist scan state to {path}: {exc}")
+
+
+def settle_collections(
+    api_base_url: str, project_id: str, dc_ids: list[str], *, project_hash: str | None = None
+) -> None:
+    """Clear the unsettled mark of the collections whose table was just written.
+
+    Never raises, like the rest of the cache. A mark that cannot be cleared
+    costs one full rebuild of that collection, never a missing run.
+    """
+    if not dc_ids:
+        return
+    state = load_state(api_base_url, project_id, project_hash=project_hash)
+    if state is None or not set(dc_ids) & set(state.unsettled_dcs):
+        return
+    state.unsettled_dcs = sorted(set(state.unsettled_dcs) - set(dc_ids))
+    save_state(state)
