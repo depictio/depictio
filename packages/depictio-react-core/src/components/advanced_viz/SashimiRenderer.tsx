@@ -1504,22 +1504,14 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
     [junctions],
   );
 
-  const gsJunctions = useMemo(() => {
-    if (!genomeSpyOn) return [];
-    // The same per-lane top-N as the arc panel, taken over the whole data
-    // rather than one locus, since GenomeSpy lets the reader pan to the rest.
-    const byLane = new Map<string, Junction[]>();
-    for (const j of supported) {
-      const bucket = byLane.get(j.lane);
-      if (bucket) bucket.push(j);
-      else byLane.set(j.lane, [j]);
-    }
-    const kept: Junction[] = [];
-    for (const arcs of byLane.values()) {
-      kept.push(...arcs.slice().sort((a, b) => b.count - a.count).slice(0, Math.max(1, topN)));
-    }
-    return junctionData(kept);
-  }, [genomeSpyOn, supported, topN]);
+  // The arc panel's junctions: one region, strongest `top_n` per lane. Taken
+  // over the whole data, the strongest junctions sit off the opened locus, so
+  // its lanes drew empty and each lane's y scale, which spans every row it
+  // holds, was set by domes on other chromosomes.
+  const gsJunctions = useMemo(
+    () => (genomeSpyOn ? junctionData(visible) : []),
+    [genomeSpyOn, visible],
+  );
 
   const gsCoverage = useMemo(() => {
     if (!genomeSpyOn || !config.coverage_dc_id || !showCoverage || !coverageRows) return null;
@@ -2025,6 +2017,7 @@ const SashimiRenderer: React.FC<Props> = ({ metadata, filters, refreshTick }) =>
       {genomeSpyOn && figure ? (
         <SashimiGenomeSpyView
           junctions={gsJunctions}
+          axisJunctions={junctions}
           coverage={gsCoverage}
           coverageShared={!config.coverage_sample_col}
           coverageTitle={coverageLog ? 'log10(1 + depth)' : 'depth'}

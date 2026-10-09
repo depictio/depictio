@@ -36,7 +36,11 @@ import type {
 } from './sashimiGenomeSpySpec';
 
 export interface SashimiGenomeSpyViewProps {
+  /** The junctions drawn: the arc panel's region, strongest `top_n` per lane. */
   junctions: SashimiJunctionDatum[];
+  /** Every junction in the data, drawn or not: a data-derived axis spans them,
+   *  so a region picked on another chromosome is still on the axis. */
+  axisJunctions: readonly Pick<SashimiJunctionDatum, 'chrom' | 'start' | 'end'>[];
   coverage: SashimiCoverageDatum[] | null;
   coverageShared: boolean;
   coverageTitle: string;
@@ -59,6 +63,7 @@ export interface SashimiGenomeSpyViewProps {
 const SashimiGenomeSpyView: React.FC<SashimiGenomeSpyViewProps> = (props) => {
   const {
     junctions,
+    axisJunctions,
     coverage,
     exons,
     region,
@@ -104,8 +109,8 @@ const SashimiGenomeSpyView: React.FC<SashimiGenomeSpyViewProps> = (props) => {
   // like genome_view's seed: a later empty fetch must not shrink the axis to
   // nothing under a live embed.
   const seedContigsRef = useRef<Contig[] | null>(null);
-  if (!seedContigsRef.current && junctions.length) {
-    seedContigsRef.current = sashimiContigs(junctions, coverage);
+  if (!seedContigsRef.current && axisJunctions.length) {
+    seedContigsRef.current = sashimiContigs(axisJunctions, coverage);
   }
   const contigs =
     assembly && assemblyContigs && assemblyContigs.length ? assemblyContigs : seedContigsRef.current;

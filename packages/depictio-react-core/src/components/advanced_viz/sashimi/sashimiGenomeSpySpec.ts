@@ -337,7 +337,7 @@ function geneLane(input: BuildSashimiSpecInput): Record<string, unknown> {
 /** Contigs for a data-derived axis: every chromosome a junction or a coverage
  *  bin sits on, sized to the furthest coordinate either reaches. */
 export function sashimiContigs(
-  junctions: readonly SashimiJunctionDatum[],
+  junctions: readonly Pick<SashimiJunctionDatum, 'chrom' | 'start' | 'end'>[],
   coverage: readonly SashimiCoverageDatum[] | null,
 ): Contig[] {
   const points: Record<string, unknown>[] = junctions.map((j) => ({
