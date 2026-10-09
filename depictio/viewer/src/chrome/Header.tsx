@@ -515,6 +515,7 @@ export const HeaderTitle: React.FC<{ model: HeaderModel }> = ({ model }) => (
     <Title
       order={3}
       className="dc-header-title"
+      data-testid="header-breadcrumb"
       style={{
         color: model.titleColor,
         whiteSpace: 'nowrap',

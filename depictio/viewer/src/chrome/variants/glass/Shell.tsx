@@ -402,6 +402,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
   return (
     <div
       className="hy-shell"
+      data-testid="app-shell"
       data-mode={mode}
       data-side={sideOpen ? 'open' : 'folded'}
       data-density={dense ? 'compact' : undefined}
@@ -622,6 +623,7 @@ const PhoneLayout: React.FC<DashboardShellProps> = ({
   return (
     <div
       className="hy-shell hy-shell--phone"
+      data-testid="app-shell"
       data-mode={mode}
       data-hy-showing={showing || undefined}
       style={

@@ -692,6 +692,7 @@ const ProjectDetailApp: React.FC = () => {
 
   return (
     <AppShell
+      data-testid="app-shell"
       layout="alt"
       header={{ height: 64 }}
       navbar={{

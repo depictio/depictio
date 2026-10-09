@@ -156,10 +156,11 @@ function waitForRestore(page: Page) {
   );
 }
 
-/** The editor header's breadcrumb (`<dashboard> / <tab>`). It stays mounted
- *  behind the Settings modal, so it can be read while the modal is open. */
+/** The editor header's breadcrumb (`<dashboard> / <tab>`, or the Glass top
+ *  bar's `<dashboard> › <tab>`). It stays mounted behind the Settings modal,
+ *  so it can be read while the modal is open. */
 function headerTitle(page: Page): Locator {
-  return page.locator('[data-tour-id="header-title"] h3').first();
+  return page.getByTestId("header-breadcrumb").first();
 }
 
 async function deleteDashboardViaApi(request: APIRequestContext, id: string): Promise<void> {

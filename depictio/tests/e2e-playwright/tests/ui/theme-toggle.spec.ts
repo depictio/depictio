@@ -4,8 +4,11 @@
  *   cypress/e2e/ui/dark-mode-core-tests.cy.js
  *
  * React-stack equivalents:
- *   - Toggle lives in the sidebar footer (src/chrome/ThemeToggle.tsx), a
- *     Mantine Switch with data-testid="theme-toggle".
+ *   - The toggle carries data-testid="theme-toggle" in both chrome styles:
+ *     a Mantine Switch in the Classic sidebar footer
+ *     (src/chrome/ThemeToggle.tsx), an icon button in the Glass top bar
+ *     (src/chrome/variants/glass/pages/GlassPage.tsx). `clickMantineSwitch`
+ *     clicks either.
  *   - Color scheme is reflected on [data-mantine-color-scheme] and persisted
  *     in the `theme-store` localStorage key (shared with the Dash app).
  *
@@ -28,12 +31,12 @@ test.describe("Theme Toggle", () => {
   test.beforeEach(async ({ loginAsUser, page }) => {
     await loginAsUser();
     await page.goto("/dashboards");
-    await expect(page.locator(".mantine-AppShell-root")).toBeVisible({
+    await expect(page.getByTestId("app-shell")).toBeVisible({
       timeout: 15_000,
     });
   });
 
-  test("toggle is present in the sidebar", async ({ page }) => {
+  test("toggle is present in the app chrome", async ({ page }) => {
     await expect(page.locator("[data-testid='theme-toggle']")).toBeAttached();
   });
 

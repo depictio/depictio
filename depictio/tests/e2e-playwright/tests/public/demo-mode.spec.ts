@@ -42,6 +42,6 @@ test.describe("Demo Mode", () => {
     await page.goto("/dashboards");
     await expect(page).toHaveURL(/\/dashboards/, { timeout: 15_000 });
     await expect(page).not.toHaveURL(/\/auth/);
-    await expect(page.locator(".mantine-AppShell-root")).toBeVisible();
+    await expect(page.getByTestId("app-shell")).toBeVisible();
   });
 });

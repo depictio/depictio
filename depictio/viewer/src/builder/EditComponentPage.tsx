@@ -66,7 +66,7 @@ const EditComponentPage: React.FC<EditComponentPageProps> = ({
 
   return (
     <BrandScope theme={brandTheme}>
-    <AppShell padding="md" header={{ height: 50 }}>
+    <AppShell data-testid="app-shell" padding="md" header={{ height: 50 }}>
       <AppShell.Header>
         <Group h="100%" px="md" justify="space-between">
           <Group gap="xs">
