@@ -2,8 +2,8 @@
 
 The run-folder dialog shows, for each data collection, what it looks for as
 the template wrote it (``rule``), the first files it matched (``samples``, as
-absolute locations) and, for a recipe collection, what each of the recipe's
-sources found (``recipe``). The counts stay what they were: every match is
+absolute locations), the folder holding every one of them (``found_in``) and,
+for a recipe collection, what each of the recipe's sources found (``recipe``). The counts stay what they were: every match is
 counted, only the names are capped at ``PREVIEW_SAMPLES``.
 """
 
@@ -62,6 +62,28 @@ def test_a_recursive_scan_counts_every_match_and_names_the_first_five(tmp_path):
     assert row.rule == r".*\.counts\.tsv"
     assert row.samples == [str(base / "counts" / name) for name in sorted(names)[:PREVIEW_SAMPLES]]
     assert all(sample.startswith("/") for sample in row.samples)
+    assert row.found_in == "counts"
+
+
+def test_where_a_scan_found_its_files_is_said_of_every_match_not_the_samples(tmp_path):
+    # The first five matches all sit in S1's folder; the sixth, past the
+    # samples shown, in S2's: the files are in stats/, not stats/S1/.
+    tree = {f"stats/S1/S1.{index}.mpairstat": b"x\n" for index in range(5)}
+    tree["stats/S2/S2.0.mpairstat"] = b"x\n"
+    base = write_tree(tmp_path / "run", tree)
+
+    row = _preview_scan_dc(
+        "stats", _recursive(r".*\.mpairstat"), LocalDataRoot(str(base)), [], False
+    )
+
+    assert all("/S1/" in sample for sample in row.samples)
+    assert row.found_in == "stats"
+
+
+def test_files_found_at_the_top_of_the_run_folder_are_found_in_it(tmp_path):
+    base = write_tree(tmp_path / "run", {"a.tsv": b"x\n", "deep/b.tsv": b"x\n"})
+    row = _preview_scan_dc("t", _recursive(r".*\.tsv"), LocalDataRoot(str(base)), [], False)
+    assert row.found_in == ""
 
 
 def test_a_recursive_scan_names_its_samples_run_by_run(tmp_path):
@@ -74,6 +96,7 @@ def test_a_recursive_scan_names_its_samples_run_by_run(tmp_path):
     row = _preview_scan_dc("qc", _recursive(r".*\.csv"), root, ["run_1", "run_2"], False)
 
     assert row.matched == 6
+    assert row.found_in == ""
     assert row.samples == [
         str(base / "run_1" / "qc" / "run_1_1.csv"),
         str(base / "run_1" / "qc" / "run_1_2.csv"),
@@ -87,6 +110,7 @@ def test_a_scan_that_matches_nothing_names_nothing(tmp_path):
     base = write_tree(tmp_path / "run", {"notes.txt": b"x\n"})
     row = _preview_scan_dc("counts", _recursive(r".*\.tsv"), LocalDataRoot(str(base)), [], False)
     assert (row.status, row.matched, row.samples, row.rule) == ("empty", 0, [], r".*\.tsv")
+    assert row.found_in is None
 
 
 def test_a_single_file_names_its_one_location(tmp_path):
@@ -196,6 +220,7 @@ def test_a_recipe_row_names_each_source_and_what_it_found(monkeypatch, run_folde
         matched=6,
         samples=[str(run_folder / "qiime2" / "diversity" / f"d{index}.tsv") for index in range(5)],
         found=True,
+        found_in="qiime2/diversity",
     )
     assert metadata == RecipeSourcePreview(
         ref="metadata", kind="collection", dc_ref="metadata", matched=1, found=True
@@ -226,6 +251,7 @@ def test_a_recipe_source_is_described_as_its_override_binds_it(monkeypatch, run_
     (source,) = row.recipe.sources
     assert (source.kind, source.pattern, source.matched, source.found) == ("file", sheet, 1, True)
     assert source.samples == [sheet]
+    assert source.found_in == "input"
 
 
 def test_a_missing_required_source_is_described_and_still_missing(monkeypatch, run_folder):

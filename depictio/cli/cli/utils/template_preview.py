@@ -68,8 +68,9 @@ class RecipeSourcePreview:
     collection settled), ``file`` for a glob or a path, and ``url`` for a URL
     outside the root, which is read at ingest and cannot be counted from here
     (``found`` is None). ``pattern`` is the glob or path the source is looked
-    up with once the template's ``source_overrides`` apply, and ``samples``
-    the first :data:`PREVIEW_SAMPLES` locations it found.
+    up with once the template's ``source_overrides`` apply, ``samples`` the
+    first :data:`PREVIEW_SAMPLES` locations it found, and ``found_in`` the
+    deepest folder holding all of them (see :func:`_common_folder`).
     """
 
     ref: str
@@ -80,6 +81,7 @@ class RecipeSourcePreview:
     matched: int = 0
     samples: list[str] = field(default_factory=list)
     found: bool | None = None
+    found_in: str | None = None
 
 
 @dataclass
@@ -107,8 +109,10 @@ class DataCollectionPreview:
     ``ok`` with ``matched`` 0 and ``location`` says where it points.
 
     ``rule`` is what a scanning collection looks for, as the template wrote it,
-    and ``samples`` the first :data:`PREVIEW_SAMPLES` locations it matched. A
-    recipe collection has no rule: ``recipe`` says what it is built from.
+    ``samples`` the first :data:`PREVIEW_SAMPLES` locations it matched, and
+    ``found_in`` the deepest folder holding every one it matched, not only
+    the samples (see :func:`_common_folder`). A recipe collection has no rule:
+    ``recipe`` says what it is built from.
     """
 
     tag: str
@@ -124,7 +128,29 @@ class DataCollectionPreview:
     status: PreviewStatus = "ok"
     rule: str | None = None
     samples: list[str] = field(default_factory=list)
+    found_in: str | None = None
     recipe: RecipePreview | None = None
+
+
+def _common_folder(relatives: list[str]) -> str | None:
+    """The deepest folder holding every one of ``relatives``, paths relative to
+    the root: ``""`` when one of them sits at its top, None for no path.
+
+    Said of every match, not of the first few shown, so a search across the
+    whole run folder can say where its files are (``hicpro/stats/``) without
+    naming the folder of the first sample alone.
+    """
+    common: list[str] | None = None
+    for relative in relatives:
+        folder = relative.strip("/").split("/")[:-1]
+        if common is None:
+            common = folder
+            continue
+        depth = 0
+        while depth < min(len(common), len(folder)) and common[depth] == folder[depth]:
+            depth += 1
+        common = common[:depth]
+    return None if common is None else "/".join(common)
 
 
 @dataclass
@@ -247,9 +273,11 @@ def _preview_scan_dc(
         scopes = [f"{run}/{within}".strip("/") for run in runs] if runs else [within]
         matched = 0
         samples: list[str] = []
+        every_hit: list[str] = []
         for scope in scopes:
             hits = root.match(regex, within=scope)
             matched += len(hits)
+            every_hit.extend(hits)
             samples.extend(root.url(rel) for rel in hits[: PREVIEW_SAMPLES - len(samples)])
         return DataCollectionPreview(
             tag=tag,
@@ -261,6 +289,7 @@ def _preview_scan_dc(
             status="ok" if matched else "empty",
             rule=rule,
             samples=samples,
+            found_in=_common_folder(every_hit),
         )
 
     return DataCollectionPreview(
@@ -364,10 +393,12 @@ def _preview_recipe_dc(
             glob_pattern, path = source.glob_pattern, source.path
 
         samples: list[str] = []
+        found_in: str | None = None
         if glob_pattern:
             globbed = root.glob(glob_pattern)
             hits = len(globbed)
             samples = [root.url(rel) for rel in globbed[:PREVIEW_SAMPLES]]
+            found_in = _common_folder(globbed)
         elif path:
             # The recipe layer's own rule (``resolve_sources``): a location
             # under the root is looked up in it, one outside it as it is.
@@ -375,6 +406,7 @@ def _preview_recipe_dc(
             if relative is not None:
                 hits = 1 if root.exists(relative) else 0
                 samples = [root.url(relative)] if hits else []
+                found_in = _common_folder([relative]) if hits else None
             elif "://" in path:
                 uncounted = True
                 recipe.sources.append(
@@ -401,6 +433,7 @@ def _preview_recipe_dc(
                 matched=hits,
                 samples=samples,
                 found=hits > 0,
+                found_in=found_in,
             )
         )
 

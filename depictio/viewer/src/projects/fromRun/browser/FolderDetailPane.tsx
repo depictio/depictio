@@ -8,7 +8,8 @@
  * finds one click away); the run records that make it a run folder (its
  * `pipeline_info`, previewable, and its MultiQC report); the search for run
  * folders below it; and its contents, one list, folders first, each folder
- * one click from opening. Once a search ran, its hits (`RunSearchResults`)
+ * one click from opening and each file one click from its first rows. Once a
+ * search ran, its hits (`RunSearchResults`)
  * come before the contents, which fold under a toggle. A folder in a private
  * bucket is read, and searched, with its connection details.
  */
@@ -43,6 +44,7 @@ import {
 } from 'depictio-react-core';
 import type { FolderInspection, RunStorageIn, TemplateInfo } from 'depictio-react-core';
 
+import { FilePreviewPanel, FilePreviewToggle, RunFileScope } from '../FilePreview';
 import { FlowBadge } from '../FlowBadge';
 import { FolderPath } from '../FolderPath';
 import { plural } from '../plural';
@@ -99,6 +101,11 @@ const Section: React.FC<{ title: string; description?: string; children: React.R
 /** A folder's child, spelled the way the tree spells folders. */
 function childLocation(location: string, name: string): string {
   return normalizeFolder(`${location}/${name}`);
+}
+
+/** A file of a folder as the server lists it (an S3 prefix ends with `/`). */
+function fileLocation(folder: string, name: string): string {
+  return folder.endsWith('/') ? `${folder}${name}` : `${folder}/${name}`;
 }
 
 const FILE_ICON: Array<[RegExp, string]> = [
@@ -209,12 +216,52 @@ function contentCounts(result: FolderInspection): string {
 
 const RECORD_FOLDERS = new Set(['pipeline_info', 'multiqc']);
 
+/** A file of the folder: its name, and its first rows one click away, shown
+ *  below it. */
+const FileEntry: React.FC<{ folder: string; name: string }> = ({ folder, name }) => {
+  const [open, setOpen] = useState(false);
+  const toggle = () => setOpen((o) => !o);
+  return (
+    <Stack gap={0} data-testid="browse-detail-file" data-name={name}>
+      <Group
+        gap="xs"
+        wrap="nowrap"
+        px="sm"
+        py={2}
+        onClick={toggle}
+        style={{ cursor: 'pointer' }}
+      >
+        <Icon icon={fileIcon(name)} width={16} style={{ flexShrink: 0 }} />
+        <Text size="sm" ff="monospace" truncate style={{ flex: 1, minWidth: 0 }}>
+          {name}
+        </Text>
+        <FilePreviewToggle
+          open={open}
+          onToggle={toggle}
+          label={`Preview ${name}`}
+          testId="browse-detail-file-preview-toggle"
+        />
+      </Group>
+      <Collapse in={open}>
+        {/* Mounted while open; the answer is kept per file. */}
+        {open && (
+          <Stack px="sm" pb={6}>
+            <FilePreviewPanel location={fileLocation(folder, name)} />
+          </Stack>
+        )}
+      </Collapse>
+    </Stack>
+  );
+};
+
 /** The folder's sub-folders, then its files, in one list: a folder opens on
- *  a click, a filter appears past a dozen entries. */
-const ContentsList: React.FC<{ result: FolderInspection; onOpen: (name: string) => void }> = ({
-  result,
-  onOpen,
-}) => {
+ *  a click, a file onto its first rows, a filter appears past a dozen
+ *  entries. */
+const ContentsList: React.FC<{
+  result: FolderInspection;
+  onOpen: (name: string) => void;
+  storage: RunStorageIn | null;
+}> = ({ result, onOpen, storage }) => {
   const [query, setQuery] = useState('');
   const { folders, files } = result;
   const total = folders.names.length + files.names.length;
@@ -232,6 +279,7 @@ const ContentsList: React.FC<{ result: FolderInspection; onOpen: (name: string) 
     );
   }
   return (
+    <RunFileScope dataRoot={result.location} storage={storage}>
     <Stack gap="xs">
       {total > FILTER_FROM && (
         <TextInput
@@ -244,7 +292,7 @@ const ContentsList: React.FC<{ result: FolderInspection; onOpen: (name: string) 
         />
       )}
       <Paper withBorder radius="md">
-        <ScrollArea.Autosize mah={300} type="auto" offsetScrollbars>
+        <ScrollArea.Autosize mah={420} type="auto" offsetScrollbars>
           <Stack gap={0} py={4}>
             {shownFolders.length > 0 && (
               <Stack gap={0} data-testid="browse-detail-folders">
@@ -289,12 +337,7 @@ const ContentsList: React.FC<{ result: FolderInspection; onOpen: (name: string) 
             {shownFiles.length > 0 && (
               <Stack gap={0} data-testid="browse-detail-files">
                 {shownFiles.map((name) => (
-                  <Group key={name} gap="xs" wrap="nowrap" px="sm" py={4}>
-                    <Icon icon={fileIcon(name)} width={16} style={{ flexShrink: 0 }} />
-                    <Text size="sm" ff="monospace" truncate>
-                      {name}
-                    </Text>
-                  </Group>
+                  <FileEntry key={name} folder={result.location} name={name} />
                 ))}
               </Stack>
             )}
@@ -312,6 +355,7 @@ const ContentsList: React.FC<{ result: FolderInspection; onOpen: (name: string) 
         </Text>
       )}
     </Stack>
+    </RunFileScope>
   );
 };
 
@@ -323,9 +367,10 @@ const ContentsSection: React.FC<{
   open: boolean;
   onToggle: () => void;
   onOpen: (name: string) => void;
-}> = ({ result, foldable, open, onToggle, onOpen }) => {
+  storage: RunStorageIn | null;
+}> = ({ result, foldable, open, onToggle, onOpen, storage }) => {
   const contentsId = useId();
-  const list = <ContentsList result={result} onOpen={onOpen} />;
+  const list = <ContentsList result={result} onOpen={onOpen} storage={storage} />;
 
   if (!foldable) {
     return (
@@ -573,6 +618,7 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
           open={contentsOpen}
           onToggle={() => setContentsOpen((open) => !open)}
           onOpen={openChild}
+          storage={storageFor?.(result.location) ?? null}
         />
       )}
     </Stack>

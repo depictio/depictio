@@ -1,10 +1,12 @@
 """Show the start of one file of a run folder: ``POST /projects/run_file_preview``.
 
 The run-folder dialog of ``POST /projects/from_run`` lists the files a template
-would read (the report's ``input_files``, each collection's ``samples``). This
-shows what one of them holds, so the user can tell it is the file they meant
-before a project is made from the folder: the first rows of a table, the first
-lines of a text, or in plain words why it is not shown.
+would read (the report's ``input_files``, each collection's ``samples``), and
+its folder browser the files of each folder. This shows what one of them
+holds, so the user can tell it is the file they meant before a project is made
+from the folder: the first rows of a table, the first lines of a text, or in
+plain words why it is not shown. ``data_root`` is then the folder the file was
+listed in.
 
 The run folder is opened exactly as ``from_run`` opens it
 (:func:`from_run._build_data_root`, with the request's storage settings read
@@ -377,8 +379,15 @@ def preview_run_file(payload: RunFilePreviewRequest, *, request, current_user) -
     S3 refusal or failure keeps its own code.
     """
     _settings, read_config = _request_read_config(payload.data_root, payload.storage)
+    # One bounded read of one file: the file count that keeps a scan off a
+    # whole disk does not apply, so any folder the browser lists can show its
+    # files, a home folder included.
     root = _build_data_root(
-        payload.data_root, read_config, request=request, current_user=current_user
+        payload.data_root,
+        read_config,
+        request=request,
+        current_user=current_user,
+        count_files=False,
     )
     relative = root.relative_of(payload.location)
     if relative is None:

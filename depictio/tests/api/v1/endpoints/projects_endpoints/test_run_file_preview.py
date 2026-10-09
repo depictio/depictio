@@ -281,6 +281,18 @@ def test_a_run_folder_off_the_policy_is_refused_as_from_run_refuses_it(run):
     assert (refused.status_code, refused.code) == (422, "local_path_outside")
 
 
+def test_a_folder_too_large_to_scan_still_shows_one_of_its_files(run, monkeypatch):
+    # The folder browser previews the files of any folder it lists, a home
+    # folder included: the file count that keeps a scan off a whole disk
+    # does not stop one bounded read.
+    from depictio.api.v1.endpoints.projects_endpoints import from_run
+
+    monkeypatch.setattr(from_run, "MAX_LOCAL_RUN_FILES", 1)
+    preview = _preview(run, "input/samplesheet.csv")
+    assert preview.format == "table"
+    assert preview.columns == ["sample", "reads", "group"]
+
+
 def test_local_folders_off_refuse_a_local_run_folder(run, monkeypatch):
     monkeypatch.delenv("DEPICTIO_LOCAL_DATA_ROOTS")
     refused = _refusal(run, "input/samplesheet.csv")
