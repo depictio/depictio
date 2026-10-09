@@ -213,6 +213,14 @@ A KPI strip is four different readings, not four numbers in one style:
   genome-wide under a section that says "region".
 - Give a `box_plot` or `histogram` secondary enough `decimals` to tell its values apart:
   "49 · 49 · 49" reads as one value.
+- A share between 0 and 1 takes `format: percent` (0.41 reads 41%), and a count past six
+  digits `format: si` (3.7M). `format` replaces `decimals`; never set both. A column that
+  already holds 0 to 100 (`*_pct`, `pct_*`, Picard-style percentages) keeps its number.
+- Never let `decimals` hide a value: a median of 0.0003 under `decimals: 3` prints 0.000.
+  When a run can produce values that small, drop `decimals`.
+- A rate whose denominator is 0 (precision of a callset with no calls, recall in a bin with no
+  truth) is null in the recipe, never 0: a 0 sinks the median and draws a bar that is not
+  there.
 - A table that holds a pooled row beside its parts (`chrom == 'all'` in a distance profile,
   `chrom == 'total'` in mosdepth) counts the whole twice under an unfiltered median. A card
   and a text value that read the same quantity take the same `filter_expr`, or the Key
@@ -294,6 +302,9 @@ A KPI strip is four different readings, not four numbers in one style:
   overlap past about 6 axes. Pick at most 6 axes that every row fills.
 - `genome_view` and `coverage_track` draw one tick per contig. On a draft assembly with
   hundreds of contigs, show the regions grouped by contig instead.
+- A locus navigator never names a contig in `default_region` (`NC_044048.1` holds for one
+  reference only): write `default_region: first`, which opens the first contig the data
+  carries, or leave it unset on a model genome where a gene or band says more.
 - Count axes in code figures take `dtick=1`, so they print no 0.5 ticks.
 - A single-panel code figure keeps the tile's narrow margins, so long category labels are
   cut: call `fig.update_yaxes(automargin=True)` (or `update_xaxes`) on it.
