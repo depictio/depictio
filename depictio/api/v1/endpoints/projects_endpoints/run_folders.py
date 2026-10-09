@@ -6,8 +6,8 @@ Three reads back the viewer's run-folder picker for ``POST /projects/from_run``:
   administrator listed for every user (``DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS``,
   ``DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS``), or those locations themselves.
   The S3 twin of ``GET /projects/local_dirs``, in the same shape;
-- ``GET /projects/folder_inspect``: what one folder holds, and which installed
-  template fits the run in it;
+- ``GET /projects/folder_inspect``: what one folder holds, which installed
+  template fits the run in it, and what the run's own records say about it;
 - ``GET /projects/find_runs``: the run folders below a folder.
 
 A folder on this computer goes through the guards and the policy of
@@ -35,6 +35,8 @@ Synchronous: the routes dispatch via ``asyncio.to_thread``.
 
 from __future__ import annotations
 
+import json
+import math
 import os
 import re
 from collections import deque
@@ -76,6 +78,7 @@ from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
 )
 from depictio.models.local_access import LocalDataPolicy, LocalPathRefused
 from depictio.models.logging import logger
+from depictio.models.models.run_info import WorkflowRunInfo
 from depictio.models.s3_access import (
     S3AccessFailed,
     S3AccessRefused,
@@ -90,9 +93,22 @@ from depictio.models.s3_access import (
 )
 
 # How many names of each kind folder_inspect returns; its counts cover them all.
-MAX_NAMES = 20
+# Enough to list a run folder's top level in full. The work stays bounded by
+# MAX_INSPECT_ENTRIES locally and by one listing page (1,000 keys) on S3.
+MAX_NAMES = 200
 # Entries of a local folder folder_inspect looks at before saying ``truncated``.
 MAX_INSPECT_ENTRIES = 10_000
+
+# The run's parameters folder_inspect returns, and the characters of each value.
+MAX_RUN_PARAMS = 200
+MAX_PARAM_CHARS = 300
+# A parameter whose name says it holds a credential is shown as this instead.
+HIDDEN_PARAM = "(hidden)"
+SECRET_PARAM_NAME = re.compile(
+    r"passw(or)?d|passphrase|secret|token|credential|api_?key|access_?key|private_?key"
+    r"|hook_?url|webhook",
+    re.IGNORECASE,
+)
 
 # find_runs below a local folder: how deep, and how many folders it opens.
 FIND_MAX_DEPTH = 6
@@ -132,17 +148,68 @@ class S3DirListing(LocalDirListing):
 
 
 class FolderNames(BaseModel):
-    """How many entries of one kind a folder holds, and the first names, sorted."""
+    """How many entries of one kind a folder holds, and the first
+    :data:`MAX_NAMES` names, sorted."""
 
     count: int = 0
     names: list[str] = Field(default_factory=list)
+
+
+RunReportKind = Literal[
+    "software_versions", "params", "execution_report", "execution_trace", "pipeline_dag"
+]
+
+# Which ``WorkflowRunInfo`` field holds the location of each kind of report.
+_REPORT_FIELDS: tuple[tuple[RunReportKind, str], ...] = (
+    ("software_versions", "software_versions_path"),
+    ("params", "params_json_path"),
+    ("execution_report", "execution_report_path"),
+    ("execution_trace", "execution_trace_path"),
+    ("pipeline_dag", "pipeline_dag_path"),
+)
+
+
+class RunReportFile(BaseModel):
+    """One file the run's engine wrote about the run, such as its execution report.
+
+    ``location`` is its real path, or its ``s3://`` URL. ``size`` is in bytes,
+    None when unknown.
+    """
+
+    kind: RunReportKind
+    location: str
+    name: str
+    size: int | None = None
+
+
+class RunInfoSummary(BaseModel):
+    """What the run's own records say about it, for display.
+
+    ``params`` holds at most :data:`MAX_RUN_PARAMS` of the run's parameters,
+    by name: a list or a mapping is written as JSON, a long text is cut at
+    :data:`MAX_PARAM_CHARS` characters, and a parameter whose name says it
+    holds a credential is shown as :data:`HIDDEN_PARAM`. ``params_total`` is
+    how many the run has. ``extra`` is the engine's other details that are a
+    single text or number.
+    """
+
+    engine: str | None = None
+    engine_version: str | None = None
+    run_name: str | None = None
+    homepage: str | None = None
+    params: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    params_total: int = 0
+    tools_executed: list[str] = Field(default_factory=list)
+    reports: list[RunReportFile] = Field(default_factory=list)
+    extra: dict[str, str] = Field(default_factory=dict)
 
 
 class FolderInspection(BaseModel):
     """What one folder holds, direct children only, and the run in it.
 
     ``detected`` is None when detection was not asked for, or when no engine
-    recognised the folder.
+    recognised the folder. ``run_info`` is set whenever ``detected`` is, even
+    when no installed template fits the run.
     """
 
     location: str
@@ -154,6 +221,7 @@ class FolderInspection(BaseModel):
     files: FolderNames = Field(default_factory=FolderNames)
     truncated: bool = False
     detected: DetectedTemplate | None = None
+    run_info: RunInfoSummary | None = None
 
 
 class FoundRun(BaseModel):
@@ -445,7 +513,114 @@ def _detect(root) -> DetectedTemplate | None:
     """The run in data root ``root`` and the template that fits it, or None when
     no engine recognises it. A read that fails while looking is None too,
     except an S3 refusal or failure, which keeps its own code."""
-    return describe_detection(*_detect_run(root))
+    return _detect_with_info(root)[0]
+
+
+def _detect_with_info(root) -> tuple[DetectedTemplate | None, WorkflowRunInfo | None]:
+    """:func:`_detect`, and the run's provenance it was decided from (None alike)."""
+    template_id, info = _detect_run(root)
+    return describe_detection(template_id, info), info
+
+
+def _clipped(text: str) -> str:
+    return text if len(text) <= MAX_PARAM_CHARS else f"{text[:MAX_PARAM_CHARS]}..."
+
+
+def _param_value(value: object) -> str | int | float | bool | None:
+    """One run parameter as :class:`RunInfoSummary` shows it."""
+    if value is None or isinstance(value, bool | int):
+        return value
+    if isinstance(value, float):
+        # NaN and infinity are not JSON.
+        return value if math.isfinite(value) else str(value)
+    if isinstance(value, str):
+        return _clipped(value)
+    try:
+        text = json.dumps(value, sort_keys=True, default=str)
+    except (TypeError, ValueError):
+        text = str(value)
+    return _clipped(text)
+
+
+def _run_params(params: dict) -> dict[str, str | int | float | bool | None]:
+    """The first :data:`MAX_RUN_PARAMS` of ``params`` by name, as shown."""
+    named = sorted(((str(name), value) for name, value in params.items()), key=lambda p: p[0])
+    return {
+        name: HIDDEN_PARAM if SECRET_PARAM_NAME.search(name) else _param_value(value)
+        for name, value in named[:MAX_RUN_PARAMS]
+    }
+
+
+def _run_extra(extra: dict) -> dict[str, str]:
+    """The entries of ``WorkflowRunInfo.extra`` that are one text or number, as text."""
+    return {
+        str(name): _clipped(str(value))
+        for name, value in sorted(extra.items(), key=lambda item: str(item[0]))
+        if isinstance(value, str | int | float) and not isinstance(value, bool)
+    }
+
+
+def _report_size(
+    location: str, root, policy: LocalDataPolicy | None, listed: dict[str, int] | None
+) -> int | None:
+    """The size of report ``location`` of data root ``root``, None when unknown.
+
+    Never a read of the file. An ``s3://`` root answers from the sizes of the
+    listing it already holds (``listed``, by root-relative path). A local one
+    stats a location below the root only, and only where ``policy`` lets the
+    server read data; without a policy, no size.
+    """
+    relative = root.relative_of(location)
+    if relative is None:
+        return None
+    if listed is not None:
+        size = listed.get(relative)
+        return size if size is not None and size >= 0 else None
+    if policy is None or not policy.allows(location):
+        return None
+    try:
+        return os.stat(location).st_size
+    except OSError:
+        return None
+
+
+def _run_info_summary(
+    info: WorkflowRunInfo | None, root, policy: LocalDataPolicy | None = None
+) -> RunInfoSummary | None:
+    """What :class:`RunInfoSummary` shows of ``info``, the run read from ``root``.
+
+    The report locations are those ``run_detection.read_run_info_for_root``
+    mapped back below the root; ``policy`` is the local-data policy a local
+    root was confined with (see :func:`_report_size`).
+    """
+    if info is None:
+        return None
+    objects = getattr(root, "objects", None)
+    listed = {obj.relative: obj.size for obj in objects} if objects is not None else None
+    reports: list[RunReportFile] = []
+    for kind, field_name in _REPORT_FIELDS:
+        location = getattr(info, field_name)
+        if not location:
+            continue
+        reports.append(
+            RunReportFile(
+                kind=kind,
+                location=location,
+                name=location.rstrip("/").rsplit("/", 1)[-1],
+                size=_report_size(location, root, policy, listed),
+            )
+        )
+    return RunInfoSummary(
+        engine=info.engine,
+        engine_version=info.engine_version,
+        run_name=info.run_name,
+        homepage=info.homepage,
+        params=_run_params(info.params),
+        params_total=len(info.params),
+        tools_executed=sorted(info.tools_executed),
+        reports=reports,
+        extra=_run_extra(info.extra),
+    )
 
 
 def _local_children(policy: LocalDataPolicy, folder: str) -> tuple[list[str], list[str], bool]:
@@ -486,6 +661,7 @@ def _inspection(
     markers: list[str],
     truncated: bool,
     detected: DetectedTemplate | None,
+    run_info: RunInfoSummary | None = None,
 ) -> FolderInspection:
     return FolderInspection(
         location=location,
@@ -497,6 +673,7 @@ def _inspection(
         files=FolderNames(count=len(files), names=files[:MAX_NAMES]),
         truncated=truncated,
         detected=detected,
+        run_info=run_info,
     )
 
 
@@ -514,14 +691,18 @@ def inspect_folder(
     ``s3://`` one those of ``GET /projects/s3_dirs``, read with ``storage``
     when given; anything else is a 422 ``location_unsupported``. Detection
     reads the folder the way ``POST /projects/from_run`` does, so what it names
-    is what the creation would pick.
+    is what the creation would pick. ``run_info`` comes from that same read:
+    the sizes of the run's reports from the S3 listing it made, or from the
+    files themselves on this computer, never from their contents.
     """
     if is_s3_url(location):
         folder = _s3_folder(location, storage)
         page = _first_page(folder)
-        detected = None
+        detected = run_info = None
         if detect:
-            detected = _detect(_build_data_root(folder.url, folder.reads))
+            root = _build_data_root(folder.url, folder.reads)
+            detected, info = _detect_with_info(root)
+            run_info = _run_info_summary(info, root)
         folders = _page_folders(folder, page)
         return _inspection(
             location=folder.url,
@@ -532,17 +713,20 @@ def inspect_folder(
             markers=_s3_markers(folder, folders),
             truncated=bool(page.get("IsTruncated")),
             detected=detected,
+            run_info=run_info,
         )
     if not _is_local_path(location):
         raise _unsupported_location()
 
     policy, real = _local_folder(location, request=request, current_user=current_user)
     folders, files, truncated = _local_children(policy, real)
-    detected = None
+    detected = run_info = None
     if detect:
         from depictio.cli.cli.utils.data_root import LocalDataRoot
 
-        detected = _detect(LocalDataRoot(real))
+        root = LocalDataRoot(real)
+        detected, info = _detect_with_info(root)
+        run_info = _run_info_summary(info, root, policy)
     return _inspection(
         location=real,
         source="local",
@@ -552,6 +736,7 @@ def inspect_folder(
         markers=run_markers(real, folders, policy),
         truncated=truncated,
         detected=detected,
+        run_info=run_info,
     )
 
 

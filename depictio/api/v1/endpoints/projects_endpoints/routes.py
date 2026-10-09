@@ -1083,7 +1083,8 @@ async def get_folder_inspect(
     current_user=Depends(get_user_or_anonymous),
 ):
     """Describe one folder: its direct sub-folders and files, whether it looks
-    like a run, and (``detect``, the default) the template its run fits.
+    like a run, and (``detect``, the default) the template its run fits, with
+    what the run's own records say about it (``run_info``).
 
     ``location`` is a folder on this computer (``depictio local``, with the
     guards of ``GET /projects/local_dirs``) or an ``s3://`` location (with

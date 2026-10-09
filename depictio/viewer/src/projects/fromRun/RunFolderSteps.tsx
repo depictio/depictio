@@ -66,6 +66,8 @@ interface RunPreviewStepProps {
   foundNothing: boolean;
   report: FromRunReport | null;
   templateTitle: string | null;
+  /** The engine the template was written for, when the catalog says. */
+  templateEngine?: string | null;
   detection: DetectedTemplate | null;
 }
 
@@ -79,6 +81,7 @@ export const RunPreviewStep: React.FC<RunPreviewStepProps> = ({
   foundNothing,
   report,
   templateTitle,
+  templateEngine = null,
   detection,
 }) => {
   const accent = useBrandAccents();
@@ -140,7 +143,12 @@ export const RunPreviewStep: React.FC<RunPreviewStepProps> = ({
         </Alert>
       )}
       {report && (
-        <RunPreview report={report} templateTitle={templateTitle} detection={detection} />
+        <RunPreview
+          report={report}
+          templateTitle={templateTitle}
+          templateEngine={templateEngine}
+          detection={detection}
+        />
       )}
     </Stack>
   );
@@ -150,6 +158,8 @@ interface RunCreateStepProps {
   /** The plan the Preview step showed; null before one came back. */
   report: FromRunReport | null;
   templateTitle: string | null;
+  /** The engine the template was written for, when the catalog says. */
+  templateEngine?: string | null;
   detection: DetectedTemplate | null;
   /** The name the project will get. */
   projectName: string;
@@ -160,6 +170,7 @@ interface RunCreateStepProps {
 export const RunCreateStep: React.FC<RunCreateStepProps> = ({
   report,
   templateTitle,
+  templateEngine = null,
   detection,
   projectName,
   savesStorage,
@@ -169,7 +180,12 @@ export const RunCreateStep: React.FC<RunCreateStepProps> = ({
   return (
     <Stack gap="md" pt="md">
       {report && (
-        <RunSummaryCard report={report} templateTitle={templateTitle} detection={detection} />
+        <RunSummaryCard
+          report={report}
+          templateTitle={templateTitle}
+          templateEngine={templateEngine}
+          detection={detection}
+        />
       )}
       <Paper withBorder radius="md" p="lg">
         <Stack gap="sm" align="center">

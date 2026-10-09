@@ -148,11 +148,14 @@ async function openWithFolder(page: Page, folder = DATA_ROOT): Promise<void> {
   await page.locator("[data-testid='run-data-root-input']").fill(folder);
 }
 
-/** A template version's card (a radio) in the version picker. */
-const versionRadio = (page: Page, templateId: string) =>
-  page.locator(
-    `[data-testid='run-version-control'] [role='radio'][data-template-id='${templateId}']`,
-  );
+/** The version field: a button showing the chosen version, opening the list. */
+const versionField = (page: Page) => page.locator("[data-testid='run-version-control']");
+
+/** Open the version list and pick `version` in it. */
+async function pickVersion(page: Page, version: string): Promise<void> {
+  await versionField(page).click();
+  await page.locator(`[data-testid='run-version-option-${version}']`).click();
+}
 
 test.describe("Create project from a run folder", () => {
   // Runs for admins in standard AND single-user mode; skipped in public mode
@@ -212,17 +215,26 @@ test.describe("Create project from a run folder", () => {
     const match = card.locator("[data-testid='run-detected-match']");
     await expect(match).toHaveAttribute("data-match", "exact");
     await expect(match).toHaveText("Exact match");
-    await expect(card).toContainText("Pipeline version of the run");
-    await expect(card).toContainText("Template version: the pipeline version it was written for");
+    // One table, the run beside the template, each row marked.
+    await expect(card).toContainText("This run");
+    await expect(card).toContainText("Depictio template");
+    for (const row of ["pipeline", "version", "engine"]) {
+      await expect(card.locator(`[data-testid='run-detected-${row}-agreement']`)).toHaveAttribute(
+        "data-agreement",
+        "same",
+      );
+    }
 
     // Both fields are filled in from the folder and say so.
     await expect(pipelineSelect).toHaveValue(AMPLISEQ);
     await expect(page.locator("[data-testid='run-pipeline-detected']")).toBeVisible();
     await expect(page.locator("[data-testid='run-version-detected']")).toBeVisible();
-    await expect(versionRadio(page, TEMPLATE_ID)).toBeChecked();
+    await expect(versionField(page)).toHaveAttribute("data-template-id", TEMPLATE_ID);
+    await expect(versionField(page)).toContainText("Matches this run");
 
-    // Versions newest first, as cards; the newest and the run's own version
-    // marked.
+    // Versions newest first, in the field's list; the newest and the run's
+    // own version marked.
+    await versionField(page).click();
     const options = page.locator("[data-testid^='run-version-option-']");
     await expect(options).toHaveCount(3);
     expect(
@@ -241,6 +253,9 @@ test.describe("Create project from a run folder", () => {
     await expect(page.locator("[data-testid='run-version-option-2.14.0']")).not.toContainText(
       "Matches this run",
     );
+    // The list closes again on a second click (its options stay mounted, hidden).
+    await versionField(page).click();
+    await expect(page.locator("[data-testid='run-version-option-2.16.0']")).toBeHidden();
 
     // One entry per pipeline, grouped by source; a manifest-only template is
     // not offered for a run folder.
@@ -319,10 +334,10 @@ test.describe("Create project from a run folder", () => {
 
     const card = page.locator("[data-testid='run-detection-card']");
     await expect(card).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
-    await expect(versionRadio(page, TEMPLATE_ID)).toBeChecked();
+    await expect(versionField(page)).toHaveAttribute("data-template-id", TEMPLATE_ID);
 
-    await page.locator("[data-testid='run-version-option-2.14.0']").click();
-    await expect(versionRadio(page, "nf-core/ampliseq/2.14.0")).toBeChecked();
+    await pickVersion(page, "2.14.0");
+    await expect(versionField(page)).toHaveAttribute("data-template-id", "nf-core/ampliseq/2.14.0");
 
     // The run is still 2.16.0; the template is now the 2.14.0 one.
     await expect(card.locator("[data-testid='run-detected-version']")).toHaveText("v2.16.0");
@@ -332,7 +347,11 @@ test.describe("Create project from a run folder", () => {
     const match = card.locator("[data-testid='run-detected-match']");
     await expect(match).toHaveAttribute("data-match", "other-version");
     await expect(match).toHaveText("Different version");
-    const detail = card.locator("[data-testid='run-detection-match-detail']");
+    await expect(card.locator("[data-testid='run-detected-version-agreement']")).toHaveAttribute(
+      "data-agreement",
+      "differs",
+    );
+    const detail = card.locator("[data-testid='run-detected-match-detail']");
     await expect(detail).toContainText("v2.16.0");
     await expect(detail).toContainText("v2.14.0");
     // The pipeline is still the detected one; the version no longer is.
@@ -341,24 +360,23 @@ test.describe("Create project from a run folder", () => {
 
     // One click puts the detected template back.
     await card.locator("[data-testid='run-use-detected']").click();
-    await expect(versionRadio(page, TEMPLATE_ID)).toBeChecked();
+    await expect(versionField(page)).toHaveAttribute("data-template-id", TEMPLATE_ID);
     await expect(match).toHaveAttribute("data-match", "exact");
     await expect(card.locator("[data-testid='run-use-detected']")).toHaveCount(0);
 
-    // The cards are one radio group for the keyboard: a single Tab stop, and
-    // an arrow moves the choice.
-    await expect(versionRadio(page, TEMPLATE_ID)).toHaveAttribute("tabindex", "0");
-    await expect(versionRadio(page, "nf-core/ampliseq/2.14.0")).toHaveAttribute("tabindex", "-1");
-    await versionRadio(page, TEMPLATE_ID).focus();
-    await page.keyboard.press("ArrowRight");
-    await expect(versionRadio(page, "nf-core/ampliseq/2.14.0")).toBeChecked();
-    await expect(versionRadio(page, "nf-core/ampliseq/2.14.0")).toBeFocused();
-    await page.keyboard.press("ArrowLeft");
-    await expect(versionRadio(page, TEMPLATE_ID)).toBeChecked();
+    // The list works from the keyboard: an arrow opens it on the chosen
+    // version, the next arrow moves down, Enter picks.
+    await versionField(page).focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.locator("[data-testid='run-version-option-2.16.0']")).toBeVisible();
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await expect(versionField(page)).toHaveAttribute("data-template-id", "nf-core/ampliseq/2.14.0");
+    await expect(page.locator("[data-testid='run-version-option-2.14.0']")).toBeHidden();
 
     // A picked version is what the preview asks for, and the preview says
     // it differs from the run.
-    await page.locator("[data-testid='run-version-option-2.14.0']").click();
+    await pickVersion(page, "2.14.0");
     await page.locator("[data-testid='create-from-run-submit']").click();
     await expect(page.locator("[data-testid='run-preview-report']")).toBeVisible({
       timeout: 20_000,
@@ -398,17 +416,17 @@ test.describe("Create project from a run folder", () => {
     const match = card.locator("[data-testid='run-detected-match']");
     await expect(match).toHaveAttribute("data-match", "closest");
     await expect(match).toHaveText("Closest available version");
-    const detail = card.locator("[data-testid='run-detection-match-detail']");
+    const detail = card.locator("[data-testid='run-detected-match-detail']");
     await expect(detail).toContainText("v2.17.0");
     await expect(detail).toContainText("v2.16.0");
 
     // The detected (closest) version is the one filled in and says so, and no
     // template version claims to match the run.
-    await expect(versionRadio(page, TEMPLATE_ID)).toBeChecked();
+    await expect(versionField(page)).toHaveAttribute("data-template-id", TEMPLATE_ID);
     await expect(page.locator("[data-testid='run-version-detected']")).toBeVisible();
-    await expect(page.locator("[data-testid='run-version-control']")).not.toContainText(
-      "Matches this run",
-    );
+    await expect(versionField(page)).not.toContainText("Matches this run");
+    await expect(versionField(page)).toContainText("Closest to this run");
+    await versionField(page).click();
     await expect(page.locator("[data-testid='run-version-option-2.16.0']")).toContainText(
       "Closest to this run",
     );
@@ -699,7 +717,7 @@ test.describe("Create project from a run folder", () => {
       "RNA-seq Expression Analysis",
     );
     await expect(page.locator("[data-testid='run-pipeline-detected']")).toHaveCount(0);
-    await expect(versionRadio(page, "nf-core/rnaseq/3.26.0")).toBeChecked();
+    await expect(versionField(page)).toHaveAttribute("data-template-id", "nf-core/rnaseq/3.26.0");
     await expect(submit).toBeEnabled();
 
     await submit.click();

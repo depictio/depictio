@@ -1,17 +1,18 @@
 /**
  * What Depictio read in the run folder as soon as one is chosen or typed:
- * the pipeline and version that made the run, and the template it would use
- * with how well that template matches. Loading, an unreadable folder and a
- * folder nobody recognised are states of this card, not separate alerts.
+ * the run next to the template it would use, compared row by row, with
+ * what that template finds in the folder one click away. Loading, an
+ * unreadable folder and a folder nobody recognised are states of this card,
+ * not separate alerts.
  */
 import React from 'react';
-import { Button, Group, Loader, Paper, SimpleGrid, Stack, Text, ThemeIcon } from '@mantine/core';
+import { Button, Group, Loader, Paper, Stack, Text, ThemeIcon } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { runTemplateMatchText, splitTemplateId } from 'depictio-react-core';
-import type { FolderInspection, RunTemplateMatch } from 'depictio-react-core';
+import type { FolderInspection, RunStorageIn, RunTemplateMatch } from 'depictio-react-core';
 
-import { RunMadeBy, TemplateUsed } from './RunIdentity';
+import { RunTemplateTable } from './RunIdentity';
+import { TemplateFindings } from './TemplateFindings';
 
 export type DetectionState =
   | { status: 'idle' }
@@ -26,7 +27,11 @@ interface DetectionCardProps {
    *  detected. */
   templateId: string | null;
   templateTitle: string | null;
+  /** The engine the template was written for, when the catalog says. */
+  templateEngine?: string | null;
   match: RunTemplateMatch | null;
+  /** The private bucket's connection details, for a folder in one. */
+  storage?: RunStorageIn | null;
   /** Offered when a template other than the detected one is chosen. */
   onUseDetected?: () => void;
   /** What to do about an unreadable folder, when the tab knows better than
@@ -56,7 +61,9 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
   state,
   templateId,
   templateTitle,
+  templateEngine = null,
   match,
+  storage = null,
   onUseDetected,
   errorHint,
   errorMessage,
@@ -98,7 +105,7 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
           </Text>
           <Text size="sm" c="dimmed">
             {result.looks_like_run
-              ? 'The folder holds run records, but none of them names a pipeline Depictio knows. Pick the pipeline below.'
+              ? 'The folder has a pipeline_info folder or a MultiQC report, but neither names a pipeline Depictio has a template for. Pick the pipeline below.'
               : 'The folder holds no pipeline_info folder or MultiQC report, so it does not look like the output of a run. Check the folder, or pick the pipeline below.'}
           </Text>
         </Line>
@@ -106,28 +113,26 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
     } else {
       const detectedId = detected.template_id;
       const usedId = templateId ?? detectedId;
-      const usedVersion = usedId ? splitTemplateId(usedId).version : null;
-      const text =
-        match && match !== 'exact'
-          ? runTemplateMatchText(match, { run: detected.version, template: usedVersion })
-          : null;
       body = (
         <Stack gap="sm">
-          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md" verticalSpacing="sm">
-            <RunMadeBy run={detected} testIdPrefix="run-detected" />
-            <TemplateUsed
-              templateId={usedId}
-              title={templateTitle}
-              match={match}
-              runVersion={detected.version}
-              testIdPrefix="run-detected"
-            />
-          </SimpleGrid>
-          {text && (
-            <Text size="xs" c="dimmed" data-testid="run-detection-match-detail">
-              {text.detail}
-            </Text>
-          )}
+          <RunTemplateTable
+            run={detected}
+            templateId={usedId}
+            templateName={templateTitle}
+            templateEngine={templateEngine}
+            match={match}
+            testIdPrefix="run-detected"
+            footer={
+              usedId ? (
+                <TemplateFindings
+                  location={result.location}
+                  templateId={usedId}
+                  storage={storage}
+                  testIdPrefix="run-detected"
+                />
+              ) : null
+            }
+          />
           {onUseDetected && detectedId && templateId && templateId !== detectedId && (
             <Group>
               <Button

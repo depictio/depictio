@@ -299,7 +299,8 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   const detectedPipeline = findRunPipeline(groups, detectedId);
   const titleOf = (id: string | null | undefined): string | null =>
     (id && templates.find((t) => t.template_id === id)?.name) || null;
-
+  const engineOf = (id: string | null | undefined): string | null =>
+    (id ? templates.find((t) => t.template_id === id)?.engine : null) ?? null;
   const selectedTemplate = templates.find((t) => t.template_id === choice.templateId) ?? null;
   // DATA_ROOT is injected server-side from the run folder field, so it never
   // gets a form input of its own.
@@ -560,7 +561,9 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
               state={detectionView}
               templateId={usedTemplateId}
               templateTitle={titleOf(usedTemplateId)}
+              templateEngine={engineOf(usedTemplateId)}
               match={match}
+              storage={rootStorage}
               onUseDetected={
                 detectedId ? () => setChoice({ templateId: detectedId, from: 'detected' }) : undefined
               }
@@ -616,6 +619,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             foundNothing={foundNothing}
             report={preview}
             templateTitle={previewTitle}
+            templateEngine={engineOf(preview?.template_id)}
             detection={detected}
           />
         </Stepper.Step>
@@ -624,6 +628,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
           <RunCreateStep
             report={preview}
             templateTitle={previewTitle}
+            templateEngine={engineOf(preview?.template_id)}
             detection={detected}
             projectName={displayName}
             savesStorage={Boolean(rootStorage)}
