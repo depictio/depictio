@@ -24,8 +24,7 @@ export type SidebarSection =
   | 'projects'
   | 'admin'
   | 'about'
-  | 'profile'
-  | 'cli-agents';
+  | 'profile';
 
 export interface NavEntry {
   key: SidebarSection;

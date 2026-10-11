@@ -3,12 +3,13 @@
  *   cypress/e2e/auth/standard/create-cli-config.cy.js
  *   cypress/e2e/auth/standard/auth-account-management.cy.js (token part)
  *
- * React-stack route is /cli-agents (was /cli_configs in Dash). Full
- * lifecycle: create → YAML shown once → listed → delete (type-"delete"
+ * React-stack home is the "cli-agents" section of the Account settings page,
+ * /profile#cli-agents (was /cli_configs in Dash, then a /cli-agents page).
+ * Full lifecycle: create → YAML shown once → listed → delete (type-"delete"
  * confirmation gate).
  *
  * Skipped only in public mode, where the add button is disabled
- * (CliAgentsApp.isAddDisabled). In single-user mode the auto-provisioned
+ * (CliAgentsPanel.isAddDisabled). In single-user mode the auto-provisioned
  * admin can manage CLI configs.
  */
 
@@ -25,7 +26,7 @@ test.describe("CLI Configurations", () => {
     page,
   }) => {
     await loginAsUser();
-    await page.goto("/cli-agents");
+    await page.goto("/profile#cli-agents");
 
     const addBtn = page.locator("[data-testid='add-cli-config-btn']");
     await expect(addBtn).toBeVisible({ timeout: 15_000 });

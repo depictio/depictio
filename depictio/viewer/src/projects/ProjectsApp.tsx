@@ -41,6 +41,7 @@ import type {
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useAuthMode } from '../auth/hooks/useAuthMode';
+import TourButton from '../walkthrough/TourButton';
 import { AppSidebar } from '../chrome';
 import ProjectsList from './ProjectsList';
 import CreateProjectModal, {
@@ -335,21 +336,24 @@ const ProjectsApp: React.FC = () => {
           description="The data behind your dashboards: workflows, data collections and who can use them."
           titleProps={{ 'data-tour-id': 'projects-header' }}
           actions={
-            <Tooltip
-              label="Project creation is disabled in public or demo mode for non-admin users"
-              disabled={!createDisabled}
-              withArrow
-            >
-              <Button
-                leftSection={<Plus size={17} strokeWidth={2} aria-hidden />}
-                onClick={openCreate}
-                disabled={createDisabled}
-                data-disabled={createDisabled ? true : undefined}
-                data-tour-id="projects-create"
+            <>
+              <TourButton />
+              <Tooltip
+                label="Project creation is disabled in public or demo mode for non-admin users"
+                disabled={!createDisabled}
+                withArrow
               >
-                New project
-              </Button>
-            </Tooltip>
+                <Button
+                  leftSection={<Plus size={17} strokeWidth={2} aria-hidden />}
+                  onClick={openCreate}
+                  disabled={createDisabled}
+                  data-disabled={createDisabled ? true : undefined}
+                  data-tour-id="projects-create"
+                >
+                  New project
+                </Button>
+              </Tooltip>
+            </>
           }
         >
           {body}
@@ -403,29 +407,32 @@ const ProjectsApp: React.FC = () => {
               Projects
             </Title>
           </Group>
-          {/* Visitors in public/demo mode see the button visibly disabled
-              rather than hidden — keeps the affordance discoverable while
-              making it obvious that login/elevated permissions are needed.
-              Admins bypass the gate. Mirrors
-              `app_layout.return_create_project_button` in Dash. */}
-          <Tooltip
-            label="Project creation is disabled in public/demo mode for non-admin users"
-            disabled={!createDisabled}
-            withArrow
-          >
-            <Button
-              color={accent.secondary}
-              variant="filled"
-              size="md"
-              onClick={openCreate}
-              disabled={createDisabled}
-              data-disabled={createDisabled ? true : undefined}
-              style={{ fontFamily: 'Virgil' }}
-              data-tour-id="projects-create"
+          <Group gap="sm" wrap="nowrap">
+            <TourButton />
+            {/* Visitors in public/demo mode see the button visibly disabled
+                rather than hidden — keeps the affordance discoverable while
+                making it obvious that login/elevated permissions are needed.
+                Admins bypass the gate. Mirrors
+                `app_layout.return_create_project_button` in Dash. */}
+            <Tooltip
+              label="Project creation is disabled in public/demo mode for non-admin users"
+              disabled={!createDisabled}
+              withArrow
             >
-              + New Project
-            </Button>
-          </Tooltip>
+              <Button
+                color={accent.secondary}
+                variant="filled"
+                size="md"
+                onClick={openCreate}
+                disabled={createDisabled}
+                data-disabled={createDisabled ? true : undefined}
+                style={{ fontFamily: 'Virgil' }}
+                data-tour-id="projects-create"
+              >
+                + New Project
+              </Button>
+            </Tooltip>
+          </Group>
         </Group>
       </AppShell.Header>
 

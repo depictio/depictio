@@ -12,7 +12,7 @@
  *     flow anymore, so the two fully-skipped Cypress specs are replaced by
  *     assertions on the new behaviour.
  *   - Write affordances are DISABLED, not hidden (new-dashboard-btn,
- *     add-cli-config-btn, Edit Password / Logout on profile).
+ *     add-cli-config-btn, Password form / Sign out on the account page).
  *   - Creation is additionally blocked at the API level (401/403).
  *
  * Only runs when the backend reports is_public_mode=true.
@@ -63,8 +63,12 @@ test.describe("Public Mode", () => {
       await expect(emailRow).not.toContainText("@example.com");
 
       // Write affordances are disabled, not hidden.
-      await expect(page.locator("[data-testid='edit-password-button']")).toBeDisabled();
       await expect(page.locator("[data-testid='logout-button']")).toBeDisabled();
+      // The Password section opens from the hash; its form is shown but locked.
+      await page.goto("/profile#password");
+      await expect(page.locator("[data-testid='save-password-btn']")).toBeDisabled({
+        timeout: 15_000,
+      });
     });
   });
 
@@ -113,7 +117,7 @@ test.describe("Public Mode", () => {
     test("CLI config creation is disabled for temporary users", async ({
       page,
     }) => {
-      await page.goto("/cli-agents");
+      await page.goto("/profile#cli-agents");
       const addBtn = page.locator("[data-testid='add-cli-config-btn']");
       await expect(addBtn).toBeVisible({ timeout: 15_000 });
       await expect(addBtn).toBeDisabled();

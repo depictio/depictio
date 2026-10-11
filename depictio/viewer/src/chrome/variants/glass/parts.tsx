@@ -1,12 +1,13 @@
 import React from 'react';
-import { Tooltip } from '@mantine/core';
-import { useBrandScopeAttributes } from 'depictio-react-core';
+import { Modal, Tooltip } from '@mantine/core';
+import { useBrandScopeAttributes, Z_LAYERS } from 'depictio-react-core';
 import {
   ArrowLeft,
   BookOpenText,
   ChevronRight,
   LogIn,
   Moon,
+  Server,
   Sun,
   UserRound,
   X,
@@ -19,7 +20,10 @@ import { useBrandLogoMode } from '../../useBrandLogoMode';
 import DepictioRose from '../../../components/rose/DepictioRose';
 import { useColorScheme } from '../../../hooks/useColorScheme';
 import { getEmbedColorScheme } from '../../../lib/embedColorScheme';
-import { useCurrentUser } from '../../../hooks/useCurrentUser';
+import { useServerStatus } from '../../../hooks/useServerStatus';
+import { useUpdateNotice } from '../../../hooks/useUpdateNotice';
+import { AvatarPicture, useAccountIdentity } from '../../account';
+import { ServerInfoPanel, ServerInfoPopover, UpdateDot } from '../../server';
 import type { HeaderModel } from '../../Header';
 import type { TabNavModel } from '../../Sidebar';
 import { cn } from './cn';
@@ -278,36 +282,10 @@ export const ThemeTile: React.FC<{ place?: 'rail' | 'top' | 'sheet' }> = ({ plac
   );
 };
 
-function initials(email: string): string {
-  const local = (email.split('@')[0] || email).replace(/[^a-zA-Z0-9._-]/g, '');
-  const parts = local.split(/[._-]+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
-
-function useProfile() {
-  const { user, authMode, isPublicMode, isDemoMode, loading } = useCurrentUser();
-  const signIn = !loading && !user && authMode === 'standard' && !isPublicMode && !isDemoMode;
-  const name =
-    authMode === 'single_user'
-      ? 'Single user mode'
-      : authMode === 'unauthenticated'
-        ? 'Unauthenticated mode'
-        : user
-          ? user.email
-          : 'Guest';
-  return {
-    signIn,
-    name,
-    mono: user && authMode === 'standard' ? initials(user.email) : null,
-  };
-}
-
-/** The reader: initials (or a figure) that open the profile page. */
+/** The reader: initials (or a figure) linking straight to Account settings. */
 export const ProfileTile: React.FC = () => {
-  const p = useProfile();
-  if (p.signIn) {
+  const who = useAccountIdentity();
+  if (who.signIn) {
     return (
       <Tooltip label="Sign in" withArrow>
         <a href="/auth/login" className="hy-avatar" aria-label="Sign in">
@@ -317,18 +295,23 @@ export const ProfileTile: React.FC = () => {
     );
   }
   return (
-    <Tooltip label={`Profile: ${p.name}`} withArrow openDelay={300}>
-      <a href="/profile" className="hy-avatar" aria-label={`Profile: ${p.name}`}>
-        {p.mono ?? <UserRound size={18} strokeWidth={1.9} aria-hidden />}
+    <Tooltip label="Account settings" withArrow>
+      <a href="/profile" className="hy-avatar" aria-label="Account settings" data-testid="profile-tile">
+        {who.avatarUrl ? (
+          <AvatarPicture src={who.avatarUrl} />
+        ) : (
+          (who.mono ?? <UserRound size={18} strokeWidth={1.9} aria-hidden />)
+        )}
       </a>
     </Tooltip>
   );
 };
 
-/** The same, as rows of the phone's More sheet. */
+/** The same, as the phone's More sheet row: avatar and name, linking to
+ *  Account settings. */
 export const ProfileRows: React.FC = () => {
-  const p = useProfile();
-  if (p.signIn) {
+  const who = useAccountIdentity();
+  if (who.signIn) {
     return (
       <a href="/auth/login" className="hy-sheet-link">
         <LogIn size={18} strokeWidth={STROKE} aria-hidden />
@@ -337,13 +320,91 @@ export const ProfileRows: React.FC = () => {
     );
   }
   return (
+    <a href="/profile" className="hy-sheet-link" data-testid="profile-rows">
+      <span className="hy-avatar hy-avatar--sm" aria-hidden>
+        {who.avatarUrl ? (
+          <AvatarPicture src={who.avatarUrl} />
+        ) : (
+          (who.mono ?? <UserRound size={14} strokeWidth={1.9} />)
+        )}
+      </span>
+      <span className="hy-sheet-link-text">
+        {who.name}
+        <span className="hy-sheet-link-note">Account settings</span>
+      </span>
+    </a>
+  );
+};
+
+/* ----------------------------------------------------------------- server */
+
+function statusLabel(status: string, version: string | null): string {
+  if (status === 'online') return version ? `Online · v${version}` : 'Online';
+  return status === 'unknown' ? 'Checking server' : 'Server offline';
+}
+
+/** The server's state at the sidebar's foot: a dot and "Online · v1.2.3"
+ *  (the dot alone when folded). It opens the server info popover. */
+export const SideStatus: React.FC<{ open: boolean }> = ({ open }) => {
+  const { status, version } = useServerStatus();
+  const label = statusLabel(status, version);
+  return (
+    <ServerInfoPopover tooltip={open ? null : status === 'online' ? 'Server online' : label}>
+      {({ label: named, updateDot }) => (
+        <button
+          type="button"
+          className="hy-status"
+          data-state={status}
+          aria-label={named(label)}
+          data-testid="hy-status"
+        >
+          <span className="hy-row-icon">
+            <span className="hy-status-dot" aria-hidden />
+          </span>
+          <span className="hy-status-text">{label}</span>
+          {updateDot && <UpdateDot />}
+        </button>
+      )}
+    </ServerInfoPopover>
+  );
+};
+
+/** The same as a row of the phone's More sheet: a popover has no room on a
+ *  phone, so the panel opens in a modal above the sheet. */
+export const ServerSheetRow: React.FC = () => {
+  const { status, version } = useServerStatus();
+  const { show } = useUpdateNotice();
+  const [opened, setOpened] = React.useState(false);
+  const label = statusLabel(status, version);
+  return (
     <>
-      <a href="/profile" className="hy-sheet-link">
-        <span className="hy-avatar hy-avatar--sm" aria-hidden>
-          {p.mono ?? <UserRound size={14} strokeWidth={1.9} />}
+      <button
+        type="button"
+        className="hy-sheet-link"
+        onClick={() => setOpened(true)}
+        aria-haspopup="dialog"
+        aria-label={show ? 'Server. Update available' : undefined}
+        data-testid="hy-sheet-server"
+      >
+        <span className="hy-sheet-server-icon">
+          <Server size={18} strokeWidth={STROKE} aria-hidden />
+          {show && <UpdateDot />}
         </span>
-        <span className="hy-sheet-link-text">{p.name}</span>
-      </a>
+        <span className="hy-sheet-link-text">
+          Server
+          <span className="hy-sheet-link-note">{label}</span>
+        </span>
+      </button>
+      <Modal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        title="Server"
+        centered
+        size="sm"
+        zIndex={Z_LAYERS.nestedOverlay}
+      >
+        <ServerInfoPanel variant="popover" />
+      </Modal>
     </>
   );
 };

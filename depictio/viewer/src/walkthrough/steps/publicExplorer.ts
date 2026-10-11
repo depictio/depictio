@@ -7,6 +7,9 @@ interface PublicExplorerOptions {
   expiryMinutes: number;
 }
 
+/** What a manual trigger (header button, Account settings) calls this tour. */
+export const publicExplorerLabel = 'Take the tour';
+
 /** Format a `Nh` or `Nh Mm` string from the auth.temporary_user_expiry_* pair.
  *  Hours-only is the common case (default 24h), so keep that path clean. */
 function formatExpiry(hours: number, minutes: number): string {
@@ -38,7 +41,7 @@ export function buildPublicExplorerWalkthrough(
     // anchored steps that actually show *how* to duplicate (menu trigger →
     // Duplicate item).
     version: 'v6',
-    label: 'Take the tour',
+    label: publicExplorerLabel,
     steps: [
       {
         id: 'welcome',
@@ -107,7 +110,7 @@ export function buildPublicExplorerWalkthrough(
         id: 'done',
         target: null,
         title: "You're all set",
-        body: "That's the tour. Keep exploring at your own pace — and check out the Projects page if you want to dig into the underlying datasets too. You can re-launch this tour any time from the user menu.",
+        body: "That's the tour. Keep exploring at your own pace — and check out the Projects page if you want to dig into the underlying datasets too. You can re-launch this tour any time from the compass button on the Dashboards page, or from Account settings.",
         position: 'bottom',
       },
     ],

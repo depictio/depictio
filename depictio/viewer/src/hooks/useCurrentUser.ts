@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 
 import { fetchAuthStatus } from 'depictio-react-core';
 
+import { syncMyAvatar } from '../chrome/account/avatar';
+
 /**
  * Calls /depictio/api/v1/auth/me/optional to identify the current user.
  * Anonymous-tolerant: returns null on missing/invalid token (HTTP 200 with
@@ -101,6 +103,7 @@ export function useCurrentUser(): UseCurrentUserResult {
     let cancelled = false;
     (async () => {
       try {
+        const startedAt = Date.now();
         const data = await fetchAuthStatus();
         if (cancelled) return;
         setAuthMode((data.auth_mode as AuthMode) ?? 'standard');
@@ -127,6 +130,9 @@ export function useCurrentUser(): UseCurrentUserResult {
         }
         const u = data.user;
         setUser(u?.email ? { id: u.id, email: u.email, is_admin: Boolean(u.is_admin) } : null);
+        // Feeds the shared avatar store (`chrome/account/avatar.ts`); anonymous
+        // visitors and users without a picture clear it (no fetch).
+        syncMyAvatar(u?.email ? (u.avatar_updated_at ?? null) : null, { startedAt });
       } catch {
         if (!cancelled) setUser(null);
       } finally {

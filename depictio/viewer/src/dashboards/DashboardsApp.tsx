@@ -26,6 +26,7 @@ import type {
 
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { AppSidebar } from '../chrome';
+import TourButton from '../walkthrough/TourButton';
 import DashboardsList from './DashboardsList';
 import type { ViewMode } from './hooks/useDashboardViewPrefs';
 import CreateDashboardModal from './CreateDashboardModal';
@@ -337,14 +338,17 @@ const DashboardsApp: React.FC = () => {
           title="Dashboards"
           description="Open, pin and organise the dashboards you can access."
           actions={
-            <Button
-              leftSection={<Plus size={17} strokeWidth={2} aria-hidden />}
-              onClick={openCreate}
-              data-testid="new-dashboard-btn"
-              data-tour-id="dashboards-create"
-            >
-              New dashboard
-            </Button>
+            <>
+              <TourButton />
+              <Button
+                leftSection={<Plus size={17} strokeWidth={2} aria-hidden />}
+                onClick={openCreate}
+                data-testid="new-dashboard-btn"
+                data-tour-id="dashboards-create"
+              >
+                New dashboard
+              </Button>
+            </>
           }
         >
           {body}
@@ -398,17 +402,20 @@ const DashboardsApp: React.FC = () => {
               Dashboards
             </Title>
           </Group>
-          <Button
-            color={accent.tertiary}
-            variant="filled"
-            size="md"
-            onClick={openCreate}
-            data-testid="new-dashboard-btn"
-            style={{ fontFamily: 'Virgil' }}
-            data-tour-id="dashboards-create"
-          >
-            + New Dashboard
-          </Button>
+          <Group gap="sm" wrap="nowrap">
+            <TourButton />
+            <Button
+              color={accent.tertiary}
+              variant="filled"
+              size="md"
+              onClick={openCreate}
+              data-testid="new-dashboard-btn"
+              style={{ fontFamily: 'Virgil' }}
+              data-tour-id="dashboards-create"
+            >
+              + New Dashboard
+            </Button>
+          </Group>
         </Group>
       </AppShell.Header>
 

@@ -308,6 +308,78 @@
 .hy-shell[data-side='folded'] :is(.hy-side-tools, .hy-side-foot) {
   align-items: center;
 }
+/* The server's state at the sidebar's foot: a quiet row, smaller than the
+   rows above it, that opens the server info popover. */
+.hy-status {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--gl-key-radius);
+  background: transparent;
+  color: var(--gl-rail-muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease,
+    box-shadow 150ms ease;
+}
+.hy-status:hover {
+  color: var(--gl-rail-fg);
+  background: var(--gl-rail-hover);
+}
+.hy-status:focus-visible {
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.hy-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mantine-color-green-6);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mantine-color-green-6) 20%, transparent);
+}
+.hy-status[data-state='offline'] .hy-status-dot {
+  background: var(--mantine-color-red-6);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mantine-color-red-6) 20%, transparent);
+}
+.hy-status[data-state='unknown'] .hy-status-dot {
+  background: var(--gl-faint);
+  box-shadow: none;
+}
+.hy-status-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hy-status .dc-update-dot {
+  top: 50%;
+  right: 10px;
+  transform: translateY(-50%);
+}
+.hy-shell[data-side='folded'] .hy-status {
+  width: 40px;
+  padding: 0;
+  justify-content: center;
+}
+.hy-shell[data-side='folded'] .hy-status-text {
+  display: none;
+}
+.hy-shell[data-side='folded'] .hy-status .dc-update-dot {
+  top: 6px;
+  right: 6px;
+  transform: none;
+}
 .hy-side-spacer {
   flex: 1;
   min-height: 12px;
@@ -1447,6 +1519,29 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+/* A sheet row that is a button (the tour, Sign out, the server) reads like
+   the links around it; a row that only says who you are is not interactive. */
+button.hy-sheet-link {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.hy-sheet-link-note {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--gl-muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.hy-sheet-server-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
 }
 
 /* ================================================================ compact */

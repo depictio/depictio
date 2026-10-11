@@ -48,7 +48,9 @@ import {
   ProfileRows,
   ProfileTile,
   RailTabs,
+  ServerSheetRow,
   SideRow,
+  SideStatus,
   TabList,
   ThemeTile,
   TopBar,
@@ -527,6 +529,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
           </div>
           <div className="hy-side-spacer" />
           <div className="hy-side-foot">
+            <SideStatus open={sideOpen} />
             <SideRow
               open={sideOpen}
               icon={<ArrowLeft size={ICON - 1} strokeWidth={stroke} aria-hidden />}
@@ -753,6 +756,7 @@ const PhoneLayout: React.FC<DashboardShellProps> = ({
           <div className="hy-sheet-rule" role="separator" />
           <ThemeTile place="sheet" />
           <ProfileRows />
+          <ServerSheetRow />
         </div>
       </Sheet>
 

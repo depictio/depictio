@@ -2515,6 +2515,93 @@ export async function fetchServerStatus(): Promise<ServerStatusResponse> {
   return res.json();
 }
 
+/** What the server says about itself: backs the server info popover.
+ *
+ *  `version_check` is non-null for admins only, so the same call serves the
+ *  version line everyone sees and the update notice only an admin gets. */
+export interface VersionCheckBlock {
+  enabled: boolean;
+  /** The deployment pins the setting through an env var: no UI toggle. */
+  locked_by_env: boolean;
+  update_available: boolean;
+  latest_version: string | null;
+  release_url: string | null;
+  /** Naive UTC ISO (no offset), like every other API timestamp. */
+  published_at: string | null;
+  checked_at: string | null;
+  last_error: string | null;
+}
+
+export interface ServerInfo {
+  status: 'online' | string;
+  version: string;
+  api_version: string;
+  repository_url: string;
+  release_notes_url: string;
+  docs_url: string;
+  version_check: VersionCheckBlock | null;
+}
+
+/** Optional-auth: the bearer goes along when there is one (it is what makes
+ *  `version_check` appear for an admin), and the route never answers 401. */
+export async function fetchServerInfo(): Promise<ServerInfo> {
+  const res = await authFetch(`${API_BASE}/utils/server-info`, { cache: 'no-cache' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load server info');
+  return res.json();
+}
+
+/** The admin view of the update check: the setting, where it comes from, and
+ *  the last result. */
+export interface VersionCheckAdmin {
+  enabled: boolean;
+  /** The env var's value, or null when it is unset. */
+  env_enabled: boolean | null;
+  /** The admin's stored override, or null when none is set. */
+  override: boolean | null;
+  locked_by_env: boolean;
+  interval_hours: number;
+  repository: string;
+  current_version: string;
+  update_available: boolean;
+  latest_version: string | null;
+  release_url: string | null;
+  published_at: string | null;
+  checked_at: string | null;
+  last_error: string | null;
+}
+
+export async function fetchVersionCheckAdmin(): Promise<VersionCheckAdmin> {
+  const res = await authFetch(`${API_BASE}/utils/version-check`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load the version check setting');
+  return res.json();
+}
+
+/** Turn the update check on or off. A 409 means the env var locks it; the
+ *  thrown error carries the server's `detail`. */
+export async function updateVersionCheckAdmin(enabled: boolean): Promise<VersionCheckAdmin> {
+  const res = await authFetch(`${API_BASE}/utils/version-check`, {
+    method: 'PUT',
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to save the version check setting');
+  return res.json();
+}
+
+/** Drop the admin's override, so the env default applies again. */
+export async function resetVersionCheckAdmin(): Promise<VersionCheckAdmin> {
+  const res = await authFetch(`${API_BASE}/utils/version-check`, { method: 'DELETE' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to reset the version check setting');
+  return res.json();
+}
+
+/** Check GitHub now. A 409 means the check is off; the thrown error carries
+ *  the server's `detail`. */
+export async function runVersionCheckAdmin(): Promise<VersionCheckAdmin> {
+  const res = await authFetch(`${API_BASE}/utils/version-check/run`, { method: 'POST' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to run the version check');
+  return res.json();
+}
+
 /**
  * Runtime configuration the frontend cannot know at build time.
  *
@@ -3408,7 +3495,19 @@ export type AuthMode = 'standard' | 'single_user' | 'unauthenticated';
 
 export interface AuthStatusResponse {
   auth_mode: AuthMode;
-  user: { id: string; email: string; is_admin: boolean } | null;
+  user: {
+    id: string;
+    email: string;
+    is_admin: boolean;
+    /** Naive-UTC ISO stamp of the user's profile picture, null when they have
+     *  none. Changes on every replacement, so it doubles as the cache key.
+     *  Older backends omit it, which reads as "no picture". */
+    avatar_updated_at?: string | null;
+    /** Where the picture came from. `provider` names the identity provider
+     *  (`google`, ...) when `avatar_source` is `provider`. */
+    avatar_source?: 'upload' | 'provider' | null;
+    avatar_provider?: string | null;
+  } | null;
   is_public_mode: boolean;
   is_single_user_mode: boolean;
   /** Demo mode (public mode + onboarding tooltips). Older backends omit this
@@ -3705,6 +3804,7 @@ export function persistSession(session: SessionPayload): void {
   } catch (err) {
     console.error('Failed to persist auth session:', err);
   }
+  announceSessionChange();
 }
 
 /** Clear the persisted session — used for logout.
@@ -3720,6 +3820,26 @@ export function clearSession(): void {
   } catch {
     // ignore — quota / private mode
   }
+  announceSessionChange();
+}
+
+/** Window event fired when this tab signs in or out. Pieces that fetch
+ *  something the signed-in user shapes (the server info's admin block) listen
+ *  to it, since a `storage` event only reaches the *other* tabs. */
+export const AUTH_SESSION_EVENT = 'depictio:auth-session';
+
+function announceSessionChange(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(AUTH_SESSION_EVENT));
+}
+
+/** Who is signed in, as an opaque id: the refresh token, which stays the same
+ *  while the access token is renewed and changes on a login or a logout.
+ *  Null when nobody is. */
+export function currentSessionId(): string | null {
+  const session = readStoredSession();
+  if (typeof session?.refresh_token === 'string') return session.refresh_token;
+  return typeof session?.access_token === 'string' ? session.access_token : null;
 }
 
 /** Proactively refresh the access token if it's within ``REFRESH_WINDOW_MS``
@@ -6222,6 +6342,44 @@ export async function editPassword(oldPassword: string, newPassword: string): Pr
     body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
   });
   if (!res.ok) await throwHttpDetailError(res, 'Password update failed');
+}
+
+// ---- Profile picture -------------------------------------------------------
+
+/** What the server answers after storing a picture. */
+export interface AvatarInfo {
+  source: 'upload' | 'provider';
+  provider: string | null;
+  /** Naive-UTC ISO stamp; the same value `/auth/me/optional` then reports as
+   *  `avatar_updated_at`. */
+  updated_at: string;
+}
+
+/** The current user's profile picture, or null when they have none (404).
+ *  Fetched as bytes through `authFetch` because an `<img src>` cannot send the
+ *  bearer token. */
+export async function fetchMyAvatarBlob(): Promise<Blob | null> {
+  const res = await authFetch(`${API_BASE}/auth/me/avatar`);
+  if (res.status === 404) return null;
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load profile picture');
+  return res.blob();
+}
+
+/** Replace the current user's picture. The server re-encodes it (square, 256 px
+ *  WebP), so any decodable image up to 5 MB is accepted. Throws with the
+ *  server's `detail` (too large, not an image, not allowed for this account). */
+export async function uploadMyAvatar(file: Blob): Promise<AvatarInfo> {
+  const form = new FormData();
+  form.append('file', file, 'avatar');
+  const res = await authFetch(`${API_BASE}/auth/me/avatar`, { method: 'PUT', body: form });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to upload profile picture');
+  return res.json();
+}
+
+/** Remove the current user's picture. Idempotent. */
+export async function deleteMyAvatar(): Promise<void> {
+  const res = await authFetch(`${API_BASE}/auth/me/avatar`, { method: 'DELETE' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to remove profile picture');
 }
 
 /** A long-lived CLI token entry — the management page only renders these

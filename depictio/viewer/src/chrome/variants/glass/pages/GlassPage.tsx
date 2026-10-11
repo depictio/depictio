@@ -20,7 +20,7 @@
  * The layout is CSS only (pages.css), so nothing re-renders on resize.
  */
 import React from 'react';
-import { MantineThemeContext, Menu, Tooltip, useMantineTheme } from '@mantine/core';
+import { MantineThemeContext, Tooltip, useMantineTheme } from '@mantine/core';
 import type { MantineTheme } from '@mantine/core';
 import { BRAND_PALETTES, brandAccent, useBranding } from 'depictio-react-core';
 import {
@@ -46,8 +46,9 @@ import { useBrandLogoMode } from '../../../useBrandLogoMode';
 import { useAppNavEntries, type SidebarSection } from '../../../AppSidebar';
 import { useColorScheme } from '../../../../hooks/useColorScheme';
 import { useCurrentUser } from '../../../../hooks/useCurrentUser';
+import { AvatarPicture, useAccountIdentity } from '../../../account';
+import { ServerInfoPopover, UpdateDot } from '../../../server';
 import { useServerStatus } from '../../../../hooks/useServerStatus';
-import { dispatchWalkthroughRestart } from '../../../../walkthrough';
 import { usePageMark } from './useGlassPages';
 import './pages.css';
 
@@ -60,7 +61,6 @@ export const SECTION_ICON: Record<SidebarSection, LucideIcon> = {
   admin: ShieldCheck,
   about: Info,
   profile: UserRound,
-  'cli-agents': Compass,
 };
 
 /**
@@ -78,7 +78,6 @@ export function useSectionPalettes(): Record<SidebarSection, string> {
       admin: BRAND_PALETTES.primary,
       about: 'gray',
       profile: BRAND_PALETTES.primary,
-      'cli-agents': 'violet',
     }),
     [brand],
   );
@@ -89,8 +88,7 @@ const SECTION_LABEL: Record<SidebarSection, string> = {
   projects: 'Projects',
   admin: 'Administration',
   about: 'About',
-  profile: 'Profile',
-  'cli-agents': 'CLI agents',
+  profile: 'Account settings',
 };
 
 /** Sections whose page controls wear the section's colour, not the primary. */
@@ -198,19 +196,11 @@ const ThemeKey: React.FC = () => {
   );
 };
 
-function initials(email: string): string {
-  const local = (email.split('@')[0] || email).replace(/[^a-zA-Z0-9._-]/g, '');
-  const parts = local.split(/[._-]+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
-
-/** The reader: initials (or a figure) opening Profile and the tour. */
+/** The reader: initials (or a figure) linking straight to Account settings. */
 export const ProfileKey: React.FC = () => {
-  const { user, authMode, isPublicMode, isDemoMode, loading } = useCurrentUser();
-  if (loading) return <span className="gp-avatar gp-avatar--idle" aria-hidden />;
-  if (!user && authMode === 'standard' && !isPublicMode && !isDemoMode) {
+  const who = useAccountIdentity();
+  if (who.loading) return <span className="gp-avatar gp-avatar--idle" aria-hidden />;
+  if (who.signIn) {
     return (
       <Tooltip label="Sign in" withArrow>
         <a href="/auth/login" className="gp-avatar" aria-label="Sign in">
@@ -219,38 +209,16 @@ export const ProfileKey: React.FC = () => {
       </Tooltip>
     );
   }
-  const name =
-    authMode === 'single_user'
-      ? 'Single user mode'
-      : authMode === 'unauthenticated'
-        ? 'Unauthenticated mode'
-        : (user?.email ?? 'Guest');
-  const mono = user && authMode === 'standard' ? initials(user.email) : null;
-  const tourId: 'public' | 'builder' = isPublicMode || isDemoMode ? 'public' : 'builder';
   return (
-    <Menu position="bottom-end" width={240} withArrow={false} offset={8}>
-      <Menu.Target>
-        <button type="button" className="gp-avatar" aria-label={`Account: ${name}`}>
-          {mono ?? <UserRound size={18} strokeWidth={1.9} aria-hidden />}
-        </button>
-      </Menu.Target>
-      <Menu.Dropdown>
-        <div className="gp-menu-who">
-          <span className="gp-menu-who-name">{name}</span>
-          {user?.is_admin && <span className="gp-menu-who-role">Administrator</span>}
-        </div>
-        <Menu.Divider />
-        <Menu.Item component="a" href="/profile" leftSection={<UserRound size={16} strokeWidth={STROKE} />}>
-          Profile
-        </Menu.Item>
-        <Menu.Item
-          leftSection={<Compass size={16} strokeWidth={STROKE} />}
-          onClick={() => dispatchWalkthroughRestart(tourId)}
-        >
-          {tourId === 'public' ? 'Take the demo tour' : 'Take the builder tour'}
-        </Menu.Item>
-      </Menu.Dropdown>
-    </Menu>
+    <Tooltip label="Account settings" withArrow>
+      <a href="/profile" className="gp-avatar" aria-label="Account settings" data-testid="profile-key">
+        {who.avatarUrl ? (
+          <AvatarPicture src={who.avatarUrl} />
+        ) : (
+          (who.mono ?? <UserRound size={18} strokeWidth={1.9} aria-hidden />)
+        )}
+      </a>
+    </Tooltip>
   );
 };
 
@@ -327,15 +295,26 @@ const StatusFoot: React.FC<{ open: boolean }> = ({ open }) => {
   const tip = mode ? `${label} · ${mode}` : label;
   return (
     <div className="gp-side-foot">
-      <Tooltip label={tip} withArrow disabled={open} position="right">
-        <div className="gp-status" data-state={status} aria-label={label}>
-          <span className="gp-status-dot" aria-hidden />
-          <span className="gp-status-text">
-            <span>{main}</span>
-            {ver && <span className="gp-status-ver">{ver}</span>}
-          </span>
-        </div>
-      </Tooltip>
+      {/* The status is also the way into the server info popover: version,
+          links and, for an admin, the update notice. */}
+      <ServerInfoPopover tooltip={open ? null : tip}>
+        {({ label: named, updateDot }) => (
+          <button
+            type="button"
+            className="gp-status"
+            data-state={status}
+            aria-label={named(label)}
+            data-testid="gp-status"
+          >
+            <span className="gp-status-dot" aria-hidden />
+            <span className="gp-status-text">
+              <span>{main}</span>
+              {ver && <span className="gp-status-ver">{ver}</span>}
+            </span>
+            {updateDot && <UpdateDot />}
+          </button>
+        )}
+      </ServerInfoPopover>
       {mode && open && (
         <span className="gp-mode">
           <ModeIcon size={14} strokeWidth={STROKE} aria-hidden />

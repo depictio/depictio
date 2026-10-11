@@ -24,6 +24,7 @@ import {
   ListChecks,
   Palette,
   ScrollText,
+  Settings,
   Users,
   Wrench,
 } from 'lucide-react';
@@ -41,6 +42,7 @@ import AdminBrandingPanel from './AdminBrandingPanel';
 import AdminBackupsPanel from './AdminBackupsPanel';
 import AdminMaintenancePanel from './AdminMaintenancePanel';
 import AdminMonitoringPanel from './AdminMonitoringPanel';
+import AdminSettingsPanel from './AdminSettingsPanel';
 import { usePageTitle } from '../branding';
 
 /** A page of the Glass admin: a plain tab, or one of the Log & Task panes
@@ -89,6 +91,7 @@ const NAV_GROUPS: AdminNavGroup[] = [
       { view: 'branding', label: 'Branding', icon: Palette },
       { view: 'backups', label: 'Backups', icon: ArchiveRestore, trusted: true },
       { view: 'maintenance', label: 'Maintenance', icon: Wrench },
+      { view: 'settings', label: 'Settings', icon: Settings },
     ],
   },
 ];
@@ -236,7 +239,9 @@ const AdminApp: React.FC = () => {
                       className="ga-tab"
                       data-hue={hue}
                       leftSection={<NavIcon size={17} strokeWidth={STROKE} aria-hidden />}
-                      data-testid={value === 'backups' ? 'admin-tab-backups' : undefined}
+                      data-testid={
+                        value === 'backups' || value === 'settings' ? `admin-tab-${value}` : undefined
+                      }
                       // The Log & Task tab of old: the e2e suite and anyone
                       // searching the docs still look for it by that name.
                       aria-label={value === 'tasks' ? 'Log & Task: Tasks' : undefined}
@@ -266,6 +271,7 @@ const AdminApp: React.FC = () => {
             )}
             {view === 'backups' && <AdminBackupsPanel />}
             {view === 'maintenance' && <AdminMaintenancePanel />}
+            {view === 'settings' && <AdminSettingsPanel />}
           </Tabs.Panel>
         </Tabs>
       );
@@ -312,6 +318,13 @@ const AdminApp: React.FC = () => {
           <Tabs.Tab value="maintenance" leftSection={<Icon icon="mdi:broom" width={16} />}>
             Maintenance
           </Tabs.Tab>
+          <Tabs.Tab
+            value="settings"
+            leftSection={<Icon icon="mdi:cog-outline" width={16} />}
+            data-testid="admin-tab-settings"
+          >
+            Settings
+          </Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="users" pt="md">
@@ -343,6 +356,9 @@ const AdminApp: React.FC = () => {
         )}
         <Tabs.Panel value="maintenance" pt="md">
           <AdminMaintenancePanel />
+        </Tabs.Panel>
+        <Tabs.Panel value="settings" pt="md">
+          <AdminSettingsPanel />
         </Tabs.Panel>
       </Tabs>
     );

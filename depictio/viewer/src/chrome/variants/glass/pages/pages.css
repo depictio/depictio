@@ -211,6 +211,12 @@
 .gp-key:focus-visible {
   box-shadow: 0 0 0 2px var(--gl-ring);
 }
+.gp-key:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: transparent;
+  color: var(--gl-muted);
+}
 .gp-avatar {
   display: grid;
   place-items: center;
@@ -236,24 +242,6 @@
 .gp-avatar--idle {
   opacity: 0.5;
   cursor: default;
-}
-.gp-menu-who {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 10px 6px;
-}
-.gp-menu-who-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 14.5px;
-  font-weight: 650;
-  color: var(--gl-fg);
-}
-.gp-menu-who-role {
-  font-size: 13px;
-  color: var(--gl-muted);
 }
 
 /* --------------------------------------------------------------- sidebar */
@@ -459,6 +447,41 @@
   line-height: 1;
   color: var(--gl-fg);
   font-variant-numeric: tabular-nums;
+}
+/* The status row is a button now (it opens the server info popover). */
+button.gp-status {
+  position: relative;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  outline: none;
+  transition: color 150ms ease;
+}
+button.gp-status:hover {
+  color: var(--gl-fg);
+}
+button.gp-status:focus-visible {
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.gp-status .dc-update-dot {
+  top: 50%;
+  right: 2px;
+  transform: translateY(-50%);
+}
+.gp-shell[data-side='folded'] button.gp-status {
+  width: 28px;
+  min-height: 28px;
+  justify-content: center;
+}
+.gp-shell[data-side='folded'] .gp-status .dc-update-dot {
+  top: 3px;
+  right: 3px;
+  transform: none;
 }
 .gp-status-dot {
   --gp-status: var(--mantine-color-green-6);
