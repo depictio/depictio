@@ -148,3 +148,45 @@ async def test_the_init_lock_is_held_throughout_the_wipe():
     assert db.list_collection_names() == ["initialization"]
     assert list(db.initialization.find()) == [{"_id": "init_lock", "worker_id": 70}]
     assert cleanup.mock_calls == [call(dry_run=False, force=True, min_age_seconds=0)]
+
+
+@pytest.mark.asyncio
+async def test_a_previous_boots_marker_does_not_end_the_wait():
+    """run_initialization's own complete marker outlives a boot; the lock does not."""
+    from depictio.api.v1.services import initialization
+
+    collection = mongomock.MongoClient().db.initialization
+    collection.insert_one({"initialization_complete": True, "s3_checks": None})
+    collection.insert_one({"_id": "init_lock", "initialization_complete": False})
+    polls = 0
+
+    async def initialization_finishes_on_the_second_poll(_seconds):
+        nonlocal polls
+        polls += 1
+        if polls == 2:
+            collection.update_one({"_id": "init_lock"}, {"$set": {"initialization_complete": True}})
+
+    with (
+        patch("depictio.api.v1.db.initialization_collection", collection),
+        patch.object(
+            initialization.asyncio, "sleep", side_effect=initialization_finishes_on_the_second_poll
+        ),
+    ):
+        assert await initialization.wait_for_initialization_complete()
+
+    assert polls == 2
+
+
+@pytest.mark.asyncio
+async def test_without_a_lock_any_complete_marker_ends_the_wait():
+    from depictio.api.v1.services import initialization
+
+    collection = mongomock.MongoClient().db.initialization
+    collection.insert_one({"initialization_complete": True})
+
+    with (
+        patch("depictio.api.v1.db.initialization_collection", collection),
+        patch.object(initialization.asyncio, "sleep", new_callable=AsyncMock) as sleep,
+    ):
+        assert await initialization.wait_for_initialization_complete()
+    sleep.assert_not_called()

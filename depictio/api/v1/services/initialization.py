@@ -101,6 +101,21 @@ async def cleanup_failed_initialization() -> None:
     logger.info(f"Worker {WORKER_ID}: Cleaned up failed initialization lock")
 
 
+def _initialization_done(initialization_collection) -> bool:
+    """Whether initialization is complete, read from the init lock when there is one.
+
+    ``run_initialization`` writes a second document marked
+    ``initialization_complete``, and the previous boot's copy survives until the
+    wipe clears it. Waiting on any such document let a worker go on while the lock
+    winner was still emptying the database (seen on EMBL dev). The lock belongs to
+    this boot; a deployment without one falls back to the old check.
+    """
+    lock = initialization_collection.find_one({"_id": "init_lock"})
+    if lock is not None:
+        return lock.get("initialization_complete") is True
+    return initialization_collection.find_one({"initialization_complete": True}) is not None
+
+
 async def wait_for_initialization_complete(timeout: int = 300) -> bool:
     """
     Wait for another worker to complete initialization.
@@ -120,7 +135,7 @@ async def wait_for_initialization_complete(timeout: int = 300) -> bool:
     start_time = time.time()
 
     while time.time() - start_time < timeout:
-        if initialization_collection.find_one({"initialization_complete": True}):
+        if _initialization_done(initialization_collection):
             logger.info(f"Worker {WORKER_ID}: Initialization completed by another worker")
             return True
         await asyncio.sleep(1)
