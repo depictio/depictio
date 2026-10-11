@@ -302,6 +302,11 @@ class MongoDBConfig(ServiceConfig):
         # than one that kept neither.
         instance_settings_collection: str = Field(default="instance_settings")
         branding_assets_collection: str = Field(default="branding_assets")
+        # Profile pictures: one document per user, keyed by the user's own id.
+        # Apart from `users` so the picture bytes never ride along on a user
+        # read (every auth check loads that document), and so a user delete or
+        # a backup reaches them by name like the branding assets.
+        user_avatars_collection: str = Field(default="user_avatars")
         # Holds the anonymous installation identity and the per-day send guards.
         # Deliberately its own collection: the wipe path in lifespan.py clears
         # everything except the init lock out of `initialization`, so an identity

@@ -37,6 +37,16 @@ class BrandingAssetBackupDoc(BaseModel):
     updated_at: int
 
 
+class UserAvatarBackupDoc(BaseModel):
+    """A stored profile picture, as written by `avatars.set_uploaded_avatar`."""
+
+    model_config = ConfigDict(extra="allow")
+
+    content_type: str
+    data_b64: str
+    source: str
+
+
 class CommentThreadBackupDoc(BaseModel):
     """A stored comment thread (``_id`` plus the ``CommentThread`` fields).
 
@@ -152,6 +162,7 @@ def validate_backup_file(backup_path: str) -> Dict[str, Any]:
             "groups": GroupBeanie,
             "instance_settings": InstanceSettingsBackupDoc,
             "branding_assets": BrandingAssetBackupDoc,
+            "user_avatars": UserAvatarBackupDoc,
             "comment_threads": CommentThreadBackupDoc,
             "dashboard_versions": DashboardVersionBackupDoc,
             "dashboard_version_counters": DashboardVersionCounterBackupDoc,
@@ -274,6 +285,7 @@ EXPECTED_BACKUP_COLLECTIONS = [
     "groups",
     "instance_settings",
     "branding_assets",
+    "user_avatars",
     "comment_threads",
     "dashboard_versions",
     "dashboard_version_counters",
@@ -316,6 +328,7 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
             "groups": GroupBeanie,
             "instance_settings": InstanceSettingsBackupDoc,
             "branding_assets": BrandingAssetBackupDoc,
+            "user_avatars": UserAvatarBackupDoc,
             "comment_threads": CommentThreadBackupDoc,
             "dashboard_versions": DashboardVersionBackupDoc,
             "dashboard_version_counters": DashboardVersionCounterBackupDoc,
