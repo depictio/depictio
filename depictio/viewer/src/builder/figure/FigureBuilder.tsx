@@ -116,6 +116,7 @@ const FigureBuilder: React.FC = () => {
           <StickyPreview>
             <Box
               component="div"
+              className="bgl-preview-box"
               style={{
                 minHeight: 400,
                 border: '1px solid var(--mantine-color-gray-3)',

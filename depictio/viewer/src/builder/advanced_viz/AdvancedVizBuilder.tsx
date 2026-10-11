@@ -829,6 +829,8 @@ const AdvancedVizBuilder: React.FC = () => {
                 withBorder
                 p="sm"
                 radius="md"
+                className="bgl-kind-tile"
+                data-selected={isSelected || undefined}
                 // Re-picking the kind already bound would run setKind's reset
                 // and wipe the saved bindings for nothing.
                 onClick={() => {
