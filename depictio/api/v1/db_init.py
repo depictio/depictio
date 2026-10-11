@@ -929,7 +929,9 @@ async def initialize_db(wipe: bool = False) -> UserBeanie | None:
 
         logger.info("Cleaning up S3 after MongoDB wipe")
         try:
-            result = await cleanup_orphaned_s3_files(dry_run=False, force=True)
+            # Whatever its age: nothing writes yet, since this worker holds the
+            # init lock and seeding only starts once initialization is done.
+            result = await cleanup_orphaned_s3_files(dry_run=False, force=True, min_age_seconds=0)
             logger.info(f"S3 cleanup: {result['deleted_count']} objects deleted")
         except Exception as e:
             logger.error(f"S3 cleanup failed: {e}")
