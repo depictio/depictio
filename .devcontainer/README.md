@@ -25,6 +25,10 @@ Click the "Code" button → "Create codespace on [branch]"
 
 Everything works automatically!
 
+To try Depictio rather than develop it, use the lighter codespace in
+[`try/`](try/README.md): it installs the published `depictio[local]` package
+and runs `depictio local up`, without Docker.
+
 ## 🔌 Services & Ports
 
 The devcontainer automatically starts all services:

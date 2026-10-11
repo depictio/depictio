@@ -1,0 +1,37 @@
+{
+  // "Try Depictio" codespace: the published depictio[local] package, run without
+  // Docker. MongoDB, Redis and SeaweedFS come from conda-forge on the first start.
+  // The contributor environment (full Compose stack, from the sources) is
+  // ../devcontainer.json.
+  //
+  // Open with:
+  // https://codespaces.new/depictio/depictio?devcontainer_path=.devcontainer/try/devcontainer.json&quickstart=1
+  "name": "Try Depictio",
+  "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
+  "features": {
+    "ghcr.io/va-h/devcontainers-features/uv:1": {}
+  },
+  // uv tool puts the depictio command in ~/.local/bin.
+  "remoteEnv": {
+    "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}"
+  },
+  // Installed once, when the codespace is created (or prebuilt).
+  "onCreateCommand": "uv tool install 'depictio[local]'",
+  // On every start, a restart after the codespace was stopped included: the
+  // services do not survive a stop, the data in ~/.depictio/local does.
+  "postStartCommand": "$HOME/.local/bin/depictio local up --no-open --port 8058",
+  // The API serves the viewer on the same port. The other services listen on
+  // 127.0.0.1 for the API only.
+  "portsAttributes": {
+    "8058": { "label": "Depictio", "onAutoForward": "openBrowser" }
+  },
+  "otherPortsAttributes": { "onAutoForward": "silent" },
+  "customizations": {
+    "codespaces": {
+      "openFiles": [".devcontainer/try/README.md"]
+    },
+    "vscode": {
+      "extensions": ["ms-python.python"]
+    }
+  }
+}
