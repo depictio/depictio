@@ -32,7 +32,7 @@ import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import type { ColDef } from 'ag-grid-community';
 import { GlassPage, useGlassPages } from '../../chrome/variants/glass/pages';
-import { Settings, ShieldCheck } from 'lucide-react';
+import { ClipboardCheck, Database, Settings, ShieldCheck } from 'lucide-react';
 
 import { notifications } from '@mantine/notifications';
 import {
@@ -564,24 +564,58 @@ const ProjectDetailApp: React.FC = () => {
                   variant="pills"
                   className="dc-project-tabs"
                 >
-                  <Tabs.List mb="md">
-                    <Tabs.Tab
-                      value="overview"
-                      fz="md"
-                      px="lg"
-                      leftSection={<Icon icon="mdi:table-cog" width={18} />}
-                    >
-                      Data collections
-                    </Tabs.Tab>
-                    <Tabs.Tab
-                      value="ingestion"
-                      fz="md"
-                      px="lg"
-                      leftSection={<Icon icon="mdi:clipboard-check-outline" width={18} />}
-                    >
-                      Ingestion
-                    </Tabs.Tab>
-                  </Tabs.List>
+                  {glass ? (
+                    // Glass: the switch for everything below, as two cards
+                    // centred under the workflows, each saying what it holds.
+                    <Tabs.List mb="md" justify="center">
+                      <Tabs.Tab
+                        value="overview"
+                        className="dc-project-tab"
+                        leftSection={
+                          <span className="dc-project-tab-icon">
+                            <Database size={20} strokeWidth={1.9} aria-hidden />
+                          </span>
+                        }
+                      >
+                        <span className="dc-project-tab-label">Data collections</span>
+                        <span className="dc-project-tab-meta">
+                          {stats.total} collection{stats.total === 1 ? '' : 's'}
+                          {stats.totalBytes > 0 ? ` · ${formatBytes(stats.totalBytes)}` : ''}
+                        </span>
+                      </Tabs.Tab>
+                      <Tabs.Tab
+                        value="ingestion"
+                        className="dc-project-tab"
+                        leftSection={
+                          <span className="dc-project-tab-icon">
+                            <ClipboardCheck size={20} strokeWidth={1.9} aria-hidden />
+                          </span>
+                        }
+                      >
+                        <span className="dc-project-tab-label">Ingestion report</span>
+                        <span className="dc-project-tab-meta">What each run found, and when</span>
+                      </Tabs.Tab>
+                    </Tabs.List>
+                  ) : (
+                    <Tabs.List mb="md">
+                      <Tabs.Tab
+                        value="overview"
+                        fz="md"
+                        px="lg"
+                        leftSection={<Icon icon="mdi:table-cog" width={18} />}
+                      >
+                        Data collections
+                      </Tabs.Tab>
+                      <Tabs.Tab
+                        value="ingestion"
+                        fz="md"
+                        px="lg"
+                        leftSection={<Icon icon="mdi:clipboard-check-outline" width={18} />}
+                      >
+                        Ingestion report
+                      </Tabs.Tab>
+                    </Tabs.List>
+                  )}
                   <Tabs.Panel value="overview">{overviewSections}</Tabs.Panel>
                   <Tabs.Panel value="ingestion">
                     <Stack gap="md">

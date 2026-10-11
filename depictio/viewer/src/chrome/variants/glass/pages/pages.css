@@ -932,24 +932,75 @@
 :root[data-chrome='glass'] .gp-main .mantine-Tabs-panel {
   padding-top: 20px;
 }
-/* The project page's own tabs, under the workflows: a larger strip and a lit
- * accent tab, so they read as the switch for what follows. */
+/* The project page's own tabs, under the workflows: two cards centred on the
+ * page, an icon chip, a title and what the tab holds, the active one lit in
+ * the accent. They read as the switch for everything that follows. */
 :root[data-chrome='glass'] .gp-main .dc-project-tabs .mantine-Tabs-list {
-  padding: 5px;
+  width: 100%;
+  overflow: visible;
+  gap: 14px;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+:root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab {
+  flex: 0 1 320px;
+  min-width: 0;
+  height: auto;
+  justify-content: flex-start;
+  gap: 14px;
+  padding: 14px 18px;
   border-radius: 18px;
-  box-shadow: inset 0 0 0 1px var(--gl-hair);
+  background: var(--gl-paper);
+  color: var(--gl-fg);
+  box-shadow: 0 0 0 1px var(--gl-hair), 0 1px 2px var(--gl-shade-a);
+  transition:
+    box-shadow 150ms ease,
+    background-color 150ms ease;
 }
-:root[data-chrome='glass'] .gp-main .dc-project-tabs .mantine-Tabs-tab {
-  height: 44px;
-  padding: 0 20px;
-  border-radius: 14px;
-  font-size: 15px;
-  font-weight: 650;
+:root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab:hover {
+  background: var(--gl-paper);
+  box-shadow: 0 0 0 1px var(--gl-line), 0 4px 12px -6px var(--gl-shade-b);
 }
-:root[data-chrome='glass'] .gp-main .dc-project-tabs .mantine-Tabs-tab[data-active] {
+:root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab[data-active] {
   background: var(--gl-accent-soft);
-  color: var(--gl-accent-fg);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 28%, transparent);
+  color: var(--gl-fg);
+  box-shadow:
+    0 0 0 1.5px color-mix(in srgb, var(--gl-accent) 55%, transparent),
+    0 6px 16px -10px color-mix(in srgb, var(--gl-accent) 60%, transparent);
+}
+:root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab .mantine-Tabs-tabLabel {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  text-align: left;
+}
+.dc-project-tab-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--gl-well);
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .dc-project-tab[data-active] .dc-project-tab-icon {
+  background: var(--gl-accent);
+  color: var(--mantine-primary-color-contrast);
+}
+.dc-project-tab-label {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+.dc-project-tab-meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gl-muted);
 }
 
 /* Tables: rows on the card, the head a soft rounded well. */
