@@ -3,6 +3,33 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.15.1-b1
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.15.1-b1</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.15.0 → 1.15.1-b1 [4dbed6df1]
+* fix(storage): the S3 orphan cleanup no longer deletes tables while they are being seeded ([#1175](https://github.com/depictio/depictio/pull/1175)) [4cfe78223]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.15.0
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
