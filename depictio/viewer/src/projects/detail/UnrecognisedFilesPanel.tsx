@@ -56,7 +56,7 @@ const CopyCommand: React.FC<{ command: string; label: string }> = ({ command, la
 /**
  * The tabular files of a composed run that no catalog output recognised.
  *
- * `depictio run` / `depictio local up` compose a dashboard from what the catalog
+ * `depictio ingest <results dir>` composes a dashboard from what the catalog
  * knows and never add anything else silently: they list the rest here, each
  * with the tiles it would get, and the command that ingests it. The files are
  * on the machine that ran the ingestion, so adding them is that command, not a
@@ -71,7 +71,9 @@ export const UnrecognisedFilesPanel: React.FC<{ templateOrigin: unknown }> = ({
   const files = origin.unrecognised_files ?? [];
   if (files.length === 0) return null;
   const dataRoot = origin.data_root ?? '<results directory>';
-  const base = `depictio local up --data-root ${shellQuote(dataRoot)} --refresh`;
+  // --reset-dashboards: a refresh otherwise keeps the dashboards as they are, and
+  // the Other data tab these files go to is new.
+  const base = `depictio ingest ${shellQuote(dataRoot)} --compose --reset-dashboards`;
 
   return (
     <Card withBorder radius="md" padding="lg" data-testid="unrecognised-files-panel">
