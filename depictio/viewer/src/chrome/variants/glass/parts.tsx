@@ -14,7 +14,9 @@ import {
 } from 'lucide-react';
 
 import BrandLogo from '../../BrandLogo';
+import PoweredBy from '../../PoweredBy';
 import { useBrandLogoMode } from '../../useBrandLogoMode';
+import DepictioRose from '../../../components/rose/DepictioRose';
 import { useColorScheme } from '../../../hooks/useColorScheme';
 import { getEmbedColorScheme } from '../../../lib/embedColorScheme';
 import { useCurrentUser } from '../../../hooks/useCurrentUser';
@@ -348,24 +350,42 @@ export const ProfileRows: React.FC = () => {
 
 /* ----------------------------------------------------------------- top bar */
 
-/** Home, as the brand in scope draws it: the real depictio logo (rose and
- *  lettering, the rose fanning on hover), or the instance's (or dashboard's)
- *  own, which `BrandLogo` picks and inks for the theme. */
-const HomeMark: React.FC<{ home: string; height: number }> = ({ home, height }) => {
+/** Home. A dashboard leads with its own title, so under depictio's brand the
+ *  bar keeps only the rose (fanning on hover) as the way home and credits
+ *  depictio on the right. A dashboard's or instance's own logo stays whole:
+ *  it is that dashboard's identity. */
+const HomeMark: React.FC<{ home: string; height: number; markSize: number }> = ({
+  home,
+  height,
+  markSize,
+}) => {
   const mode = useBrandLogoMode();
+  const [hovered, setHovered] = React.useState(false);
   if (mode === 'none') return null;
+  const markOnly = mode === 'inherit';
   return (
     <Tooltip label="All dashboards" withArrow openDelay={400}>
-      <a href={home} className="hy-top-brand" aria-label="depictio: all dashboards">
-        <BrandLogo height={height} width="auto" testId="glass-logo" />
+      <a
+        href={home}
+        className={cn('hy-top-brand', markOnly && 'hy-top-brand--mark')}
+        aria-label="depictio: all dashboards"
+        data-testid={markOnly ? 'glass-logo' : undefined}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        {markOnly ? (
+          <DepictioRose mode={hovered ? 'fan' : 'logo'} size={markSize} label="" />
+        ) : (
+          <BrandLogo height={height} width="auto" testId="glass-logo" />
+        )}
       </a>
     </Tooltip>
   );
 };
 
-/** The top bar's identity and place: the depictio logo and wordmark (or the
- *  instance's own logo), then where the reader is, dashboard and tab, with
- *  the load indicator. `after` takes the bar's keys on the right. */
+/** The top bar's identity and place: the way home, then where the reader is,
+ *  the dashboard's title first and the tab after it, with the load indicator.
+ *  `after` takes the bar's keys on the right, past the depictio credit. */
 export const TopBar: React.FC<{
   model: HeaderModel;
   home: string;
@@ -376,10 +396,14 @@ export const TopBar: React.FC<{
   after?: React.ReactNode;
 }> = ({ model, home, compact, dense, editing, after }) => (
   <header className={cn('hy-top', compact && 'hy-top--compact')}>
-    <HomeMark home={home} height={compact ? 34 : dense ? 38 : 44} />
+    <HomeMark
+      home={home}
+      height={compact ? 34 : dense ? 38 : 44}
+      markSize={compact ? 28 : dense ? 30 : 34}
+    />
     <span className="hy-top-rule" aria-hidden />
     <div
-      className="hy-top-title dc-header"
+      className={cn('hy-top-title dc-header', !model.dashboardName && 'hy-top-title--solo')}
       data-tour-id="header-title"
       data-testid="header-breadcrumb"
       style={{ ['--gl-title-color' as string]: model.titleColor } as React.CSSProperties}
@@ -402,8 +426,12 @@ export const TopBar: React.FC<{
     </div>
     {editing && <span className="hy-top-mode">Editing</span>}
     <span className="hy-flex" />
-    {/* "Powered by depictio", when an instance logo has taken the left. */}
-    {!compact && <span className="hy-top-powered">{model.poweredBy}</span>}
+    {/* The title has the left, so depictio is credited here, always. */}
+    {!compact && (
+      <span className="hy-top-powered">
+        <PoweredBy always />
+      </span>
+    )}
     {after}
   </header>
 );

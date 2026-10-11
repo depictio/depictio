@@ -261,18 +261,10 @@
   background: var(--gl-glass-strong);
   box-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair);
 }
-:root[data-chrome='glass'] .hy-top .hy-top-tab {
-  font-weight: 700;
-}
-/* The canvas carries the tab's heading, so the bar keeps a compact trail:
- * dashboard, then tab, in body type and without the icon. */
+/* The canvas carries the tab's heading, so the bar drops the tab's icon. */
 @media (min-width: 48em) {
   :root[data-chrome='glass'] .hy-shell:has(.dc-tab-intro) .hy-top-icon {
     display: none;
-  }
-  :root[data-chrome='glass'] .hy-shell:has(.dc-tab-intro) .hy-top .hy-top-tab {
-    font-size: 14px;
-    font-weight: 650;
   }
 }
 

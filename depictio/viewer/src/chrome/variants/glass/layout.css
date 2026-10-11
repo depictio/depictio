@@ -55,6 +55,13 @@
 .hy-top-brand:hover {
   background: var(--gl-hover);
 }
+/* Under depictio's brand the bar keeps only the rose, on a key-sized target. */
+.hy-top-brand--mark {
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+}
 .hy-top-brand:focus-visible {
   box-shadow: 0 0 0 2px var(--gl-ring);
 }
@@ -62,6 +69,8 @@
   display: flex;
   align-items: center;
   flex: none;
+  padding-right: 14px;
+  border-right: 1px solid var(--gl-line);
 }
 .hy-top-powered:empty {
   display: none;
@@ -82,16 +91,19 @@
   gap: 10px;
   min-width: 0;
 }
+/* The dashboard's title leads; the tab after it is where the reader is. */
 .hy-top .hy-top-dash {
   display: block !important;
   min-width: 0;
-  max-width: 34ch;
+  max-width: 42ch;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 16px;
-  font-weight: 550;
-  color: var(--gl-muted);
+  font-size: 21px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+  color: var(--gl-fg);
 }
 .hy-top-chev {
   flex: none;
@@ -101,15 +113,15 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border-radius: calc(var(--gl-key-radius) - 2px);
   background: color-mix(in srgb, var(--gl-title-color, var(--gl-accent)) 13%, transparent);
 }
 .hy-top-icon .dc-header-tab-icon {
   display: block !important;
-  width: 22px !important;
-  height: 22px !important;
+  width: 17px !important;
+  height: 17px !important;
 }
 .hy-top .hy-top-tab {
   margin: 0;
@@ -117,9 +129,15 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 20px;
-  font-weight: 750;
+  font-size: 15px;
+  font-weight: 550;
   line-height: 1.2;
+  color: var(--gl-muted);
+}
+/* No dashboard title to lead with: the tab takes its place. */
+.hy-top .hy-top-title--solo .hy-top-tab {
+  font-size: 21px;
+  font-weight: 700;
   letter-spacing: -0.015em;
   color: var(--gl-fg);
 }
@@ -1051,12 +1069,12 @@
 }
 .hy-top--compact .hy-top-dash {
   max-width: none;
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 16px;
 }
 .hy-top--compact .hy-top-tab {
+  font-size: 12.5px;
+}
+.hy-top--compact .hy-top-title--solo .hy-top-tab {
   font-size: 16px;
 }
 .hy-top--compact .hy-group--bar {
@@ -1172,18 +1190,19 @@
 .hy-shell[data-density='compact'] .hy-top {
   gap: 10px;
 }
-.hy-shell[data-density='compact'] .hy-top .hy-top-tab {
+.hy-shell[data-density='compact'] .hy-top .hy-top-dash,
+.hy-shell[data-density='compact'] .hy-top .hy-top-title--solo .hy-top-tab {
   font-size: 18px;
 }
-.hy-shell[data-density='compact'] .hy-top .hy-top-dash {
-  font-size: 14.5px;
+.hy-shell[data-density='compact'] .hy-top .hy-top-tab {
+  font-size: 14px;
 }
 .hy-shell[data-density='compact'] .hy-top-brand {
   height: 44px;
 }
 .hy-shell[data-density='compact'] .hy-top-icon {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
 }
 .hy-shell[data-density='compact'] .hy-key--top {
   width: 38px;
