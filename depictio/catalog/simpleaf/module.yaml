@@ -6,3 +6,4 @@ description: >-
   SimpleAF is a program to simplify and customize the running and
   configuration of single-cell processing with alevin-fry.
 biotools_url: null  # no bio.tools entry for this tool
+stage: quantification

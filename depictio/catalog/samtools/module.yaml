@@ -11,3 +11,4 @@ description: >-
   Utilities for manipulating and post-processing sequence alignments in the
   SAM, BAM and CRAM formats.
 biotools_url: https://bio.tools/samtools
+stage: alignment

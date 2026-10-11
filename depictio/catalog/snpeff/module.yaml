@@ -10,3 +10,4 @@ description: >-
 homepage: https://pcingola.github.io/SnpEff/
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/snpeff/snpeff
 biotools_url: https://bio.tools/snpeff
+stage: variants

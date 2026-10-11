@@ -11,3 +11,4 @@ description: >-
   Determines DNA damage patterns in ancient DNA reads, a Java replacement for
   mapDamage.
 biotools_url: https://bio.tools/damageprofiler
+stage: qc

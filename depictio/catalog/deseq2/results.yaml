@@ -24,7 +24,7 @@ renders_as:
   # features cleared the padj cut-off and how strong the top calls are.
   - { component: card, column: log2fc, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: gene_id, aggregation: nunique, secondary_layout: top_n, breakdown_col: direction, top_n_count: 3 }
-  - { component: card, column: direction, aggregation: count, secondary_layout: donut, breakdown_col: direction }
+  - { component: card, column: direction, aggregation: count, secondary_layout: donut, breakdown_col: direction, headline: true }
   - { component: card, column: neg_log10_padj, aggregation: max, secondary_layout: histogram, aggregations: [box_plot_stats] }
   - { component: figure, visu_type: histogram, dict_kwargs: {x: log2fc, color: direction} }
   - { component: table, row_selection_enabled: true, row_selection_column: gene_id }

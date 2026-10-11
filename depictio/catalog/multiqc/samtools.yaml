@@ -3,6 +3,7 @@ name: Alignment flagstats
 origin_tool: SAMtools
 mode: samtools
 description: Alignment flagstat summaries (mapped %, properly paired) — samtools, via MultiQC.
+stage: alignment
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

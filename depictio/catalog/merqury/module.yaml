@@ -12,3 +12,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/merq
 homepage: https://github.com/marbl/merqury
 description: K-mer based assembly consensus quality (QV), k-mer completeness and copy-number spectra.
 biotools_url: https://bio.tools/merqury
+stage: qc

@@ -19,3 +19,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/prok
 homepage: https://github.com/tseemann/prokka
 description: Structural and functional annotation of prokaryotic genomes and metagenome-assembled genomes.
 biotools_url: https://bio.tools/prokka
+stage: annotation

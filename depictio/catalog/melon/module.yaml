@@ -6,3 +6,4 @@ description: >-
   marker genes.
 homepage: https://github.com/xinehc/melon
 biotools_url: null  # no bio.tools entry for this tool
+stage: taxonomy

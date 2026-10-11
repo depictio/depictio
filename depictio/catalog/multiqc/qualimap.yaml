@@ -3,6 +3,7 @@ name: Transcript coverage
 origin_tool: Qualimap
 mode: qualimap
 description: Genomic origin of the reads (exonic, intronic, intergenic) and the 5' to 3' gene-body coverage profile, from Qualimap via MultiQC.
+stage: alignment
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

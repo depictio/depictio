@@ -12,7 +12,7 @@ renders_as:
   - { component: figure, visu_type: histogram, dict_kwargs: {x: AF, color: EFFECT} } # allele-frequency distribution
   # Metric cards and the row-level table behind them: the readings the
   # nf-core dashboards were already computing off this output by hand.
-  - { component: card, column: POS, aggregation: count, secondary_layout: top_n, breakdown_col: GENE, top_n_count: 3 }
+  - { component: card, column: POS, aggregation: count, secondary_layout: top_n, breakdown_col: GENE, top_n_count: 3, headline: true }
   - { component: card, column: POS, aggregation: nunique, secondary_layout: concentration, breakdown_col: GENE, top_n_count: 3 }
   - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: sample }
   - { component: card, column: AA, aggregation: nunique, secondary_layout: composition, breakdown_col: EFFECT, top_n_count: 3 }

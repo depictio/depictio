@@ -10,3 +10,4 @@ description: >-
   Tools to process, normalise, analyse and visualise Hi-C and other chromosome
   conformation capture data.
 biotools_url: https://bio.tools/hicexplorer
+stage: quantification

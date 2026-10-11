@@ -9,3 +9,4 @@ biotools_url: https://bio.tools/picard_tools
 description: >-
   Java command-line tools for manipulating high-throughput sequencing data and
   formats such as SAM, BAM, CRAM and VCF.
+stage: alignment

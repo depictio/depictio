@@ -3,6 +3,7 @@ name: Library and transcript metrics
 origin_tool: Picard
 mode: picard
 description: Library-level alignment metrics (duplication, insert-size distribution, where the bases land across transcript regions and along the gene body) from Picard, via MultiQC.
+stage: alignment
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

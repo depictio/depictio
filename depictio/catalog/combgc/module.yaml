@@ -14,3 +14,4 @@ source_url: https://github.com/nf-core/funcscan/blob/master/bin/comBGC.py
 edam_topics:
   - http://edamontology.org/topic_3174 # Metagenomics
   - http://edamontology.org/topic_0080 # Sequence analysis
+stage: annotation

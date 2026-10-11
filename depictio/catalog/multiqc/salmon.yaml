@@ -3,6 +3,7 @@ name: Transcript quantification
 origin_tool: Salmon
 mode: salmon
 description: Selective-alignment quantification summary (library type, fragment-length distribution, mapping rate), from Salmon via MultiQC.
+stage: quantification
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

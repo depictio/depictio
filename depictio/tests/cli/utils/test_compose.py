@@ -1,0 +1,836 @@
+"""The composer: a results directory in, an ordinary template out.
+
+Runs on the bundled runs (the catalog conformance run, nf-core/viralrecon and
+nf-core/ampliseq) and on small synthetic directories; nothing is ingested.
+"""
+
+from __future__ import annotations
+
+import shutil
+from pathlib import Path
+
+import pytest
+import yaml
+from typer.testing import CliRunner
+
+from depictio.cli.cli.utils.compose import (
+    ComposedTemplate,
+    Composition,
+    _resolve_recipe_sources,
+    compose_run,
+    compose_template,
+    distinct_labels,
+    glob_regex,
+    include_regex,
+    looks_headerless,
+    match_files,
+    propose_unrecognised,
+    walk,
+)
+from depictio.cli.cli.utils.compose_layout import card_row_widths
+from depictio.cli.cli.utils.multiqc_parquet import parquet_plots
+from depictio.models.components.advanced_viz.catalog import match_run_dir
+
+REPO = Path(__file__).resolve().parents[4]
+PROJECTS = REPO / "depictio" / "projects"
+CONFORMANCE = PROJECTS / "init" / "catalog_conformance" / "run_1"
+VIRALRECON = PROJECTS / "nf-core" / "viralrecon" / "3.0.0" / "run_1"
+AMPLISEQ_214 = PROJECTS / "nf-core" / "ampliseq" / "2.14.0"
+AMPLISEQ_216 = PROJECTS / "nf-core" / "ampliseq" / "2.16.0"
+
+
+def _load(template: ComposedTemplate) -> tuple[dict, dict]:
+    project = yaml.safe_load((template.template_dir / "template.yaml").read_text())
+    dashboard = yaml.safe_load((template.template_dir / "dashboards/composed.yaml").read_text())
+    return project, dashboard
+
+
+@pytest.fixture(scope="module")
+def conformance(tmp_path_factory) -> ComposedTemplate:
+    result = compose_template(CONFORMANCE, out_dir=tmp_path_factory.mktemp("conformance"))
+    assert isinstance(result, ComposedTemplate)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Matching
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "pattern",
+    [
+        "**/multiqc/multiqc_data/multiqc.parquet",
+        "**/*.tsv",
+        "variants/*/variants_long_table.csv",
+        "a/[bc]?.txt",
+        "**/x/**/y.csv",
+    ],
+)
+def test_glob_regex_matches_like_pathlib(tmp_path, pattern):
+    for rel in [
+        "multiqc/multiqc_data/multiqc.parquet",
+        "deep/multiqc/multiqc_data/multiqc.parquet",
+        "a.tsv",
+        "d/e/f.tsv",
+        "variants/ivar/variants_long_table.csv",
+        "variants/ivar/deeper/variants_long_table.csv",
+        "a/b1.txt",
+        "a/d1.txt",
+        "x/y.csv",
+        "q/x/r/s/y.csv",
+    ]:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("x")
+    import re
+
+    regex = re.compile(glob_regex(pattern))
+    expected = {p.relative_to(tmp_path).as_posix() for p in tmp_path.glob(pattern) if p.is_file()}
+    assert {f for f in walk(tmp_path) if regex.match(f)} == expected
+
+
+@pytest.mark.parametrize("run", [CONFORMANCE, VIRALRECON, AMPLISEQ_214, AMPLISEQ_216])
+def test_one_walk_finds_what_match_run_dir_finds(run):
+    def key(matches):
+        return {(m.tool_id, m.output_id, m.path) for m in matches}
+
+    assert key(match_files(walk(run))) == key(match_run_dir(run))
+
+
+# ---------------------------------------------------------------------------
+# The composed template
+# ---------------------------------------------------------------------------
+
+
+def test_tabs_follow_the_pipeline_stages(conformance):
+    assert conformance.tabs == [
+        "Overview",
+        "Quality control",
+        "Alignment & coverage",
+        "Quantification",
+        "Taxonomy & diversity",
+        "MultiQC",
+    ]
+
+
+def test_every_collection_is_optional_and_scans_what_was_found(conformance):
+    project, _ = _load(conformance)
+    collections = {c["data_collection_tag"]: c for c in project["workflows"][0]["data_collections"]}
+    assert set(collections) >= {
+        "multiqc_data",
+        "salmon_merged_gene_counts",
+        "mosdepth_amplicon_coverage",
+        "general_stats",
+    }
+    assert all(c["optional"] for c in collections.values())
+    salmon = collections["salmon_merged_gene_counts"]["config"]["scan"]
+    assert salmon == {
+        "mode": "single",
+        "scan_parameters": {"filename": "{DATA_ROOT}/salmon/salmon.merged.gene_counts.tsv"},
+    }
+
+
+def test_the_composed_dashboard_imports(conformance):
+    """What the importer checks, offline: every document, section and tile model."""
+    from depictio.models.components.advanced_viz.component import AdvancedVizLiteComponent
+    from depictio.models.components.lite import TextLiteComponent
+    from depictio.models.models.dashboards import DashboardDataLite
+
+    _, dashboard = _load(conformance)
+    documents = [dashboard["main_dashboard"], *dashboard["tabs"]]
+    for document in documents:
+        DashboardDataLite.model_validate(document)
+        grid = {s["name"] for s in document.get("grid_sections", [])}
+        filters = {s["name"] for s in document.get("filter_sections", [])}
+        for component in document["components"]:
+            kind = component["component_type"]
+            assert component["section"] in (filters if kind == "interactive" else grid)
+            if kind == "advanced_viz":
+                AdvancedVizLiteComponent.model_validate(component)
+            if kind == "text":
+                TextLiteComponent.model_validate(component)
+            if kind == "table":
+                assert component["layout"]["w"] == 8
+            assert set(component["layout"]) == {"x", "y", "w", "h"}
+
+
+def test_card_rows_are_always_full(conformance):
+    _, dashboard = _load(conformance)
+    for document in [dashboard["main_dashboard"], *dashboard["tabs"]]:
+        rows: dict[tuple, int] = {}
+        for c in document["components"]:
+            if c["component_type"] == "card":
+                key = (c["section"], c["layout"]["y"])
+                rows[key] = rows.get(key, 0) + c["layout"]["w"]
+        assert all(width == 8 for width in rows.values()), rows
+
+
+@pytest.mark.parametrize("n", range(1, 10))
+def test_card_row_widths_fill_every_row(n):
+    widths = card_row_widths(n)
+    assert len(widths) == n
+    assert sum(widths) % 8 == 0
+
+
+def test_the_multiqc_tab_holds_every_plot_of_the_report(conformance):
+    _, dashboard = _load(conformance)
+    tab = next(t for t in dashboard["tabs"] if t["title"] == "MultiQC")
+    pairs = {(c["selected_module"], c["selected_plot"]) for c in tab["components"]}
+    report = CONFORMANCE / "multiqc" / "multiqc_data" / "multiqc.parquet"
+    assert pairs == {(p.module, p.plot) for p in parquet_plots(report)}
+
+
+def test_the_overview_carries_general_statistics(conformance):
+    _, dashboard = _load(conformance)
+    overview = dashboard["main_dashboard"]
+    kinds = {(c["component_type"], c.get("selected_module")) for c in overview["components"]}
+    assert ("multiqc", "general_stats") in kinds
+    assert conformance.general_stats
+    assert (conformance.template_dir / "general_stats.tsv").read_text().startswith("sample\t")
+    # Every tab can be filtered by sample: a persistent filter on the report's samples.
+    persistent = [s for s in overview["filter_sections"] if s.get("persistent")]
+    assert persistent and persistent[0]["name"] == "Samples"
+
+
+def test_composing_twice_writes_the_same_dashboard(tmp_path):
+    first = compose_template(CONFORMANCE, out_dir=tmp_path / "a")
+    second = compose_template(CONFORMANCE, out_dir=tmp_path / "b")
+    assert isinstance(first, ComposedTemplate) and isinstance(second, ComposedTemplate)
+    assert (first.template_dir / "dashboards/composed.yaml").read_text() == (
+        second.template_dir / "dashboards/composed.yaml"
+    ).read_text()
+
+
+def test_a_recipe_reading_its_own_output_name_gets_a_raw_provider(tmp_path):
+    """mosdepth's recipes read a collection named like their own output."""
+    composition = compose_run(VIRALRECON)
+    by_tag = {c.tag: c for c in composition.collections}
+    assert by_tag["mosdepth_genome_coverage"].kind == "provider"
+    view = by_tag["mosdepth_genome_coverage_view"]
+    assert view.kind == "recipe" and view.needs == ["mosdepth_genome_coverage"]
+    tags = [c.tag for c in composition.collections]
+    assert tags.index("mosdepth_genome_coverage") < tags.index("mosdepth_genome_coverage_view")
+
+
+def test_nothing_recognised_writes_nothing(tmp_path):
+    (tmp_path / "notes.md").write_text("hello")
+    result = compose_template(tmp_path, out_dir=tmp_path / "out")
+    assert isinstance(result, Composition)
+    assert not (tmp_path / "out").exists()
+
+
+# ---------------------------------------------------------------------------
+# Recipes pointed at the files present
+# ---------------------------------------------------------------------------
+
+ALPHA = "qiime2/alpha_diversity_multi_canonical.py"
+ALPHA_FILES = [
+    f"qiime2/diversity/alpha_diversity/{m}_vector/metadata.tsv"
+    for m in ("shannon", "observed_features", "faith_pd", "evenness")
+]
+
+
+def test_a_recipe_whose_files_sit_where_it_expects_needs_no_override():
+    overrides, used, needs, _ = _resolve_recipe_sources(
+        ALPHA, [], ALPHA_FILES[:1], set(ALPHA_FILES)
+    )
+    assert overrides == {} and used == set(ALPHA_FILES) and needs == []
+
+
+def test_sibling_sources_are_rerooted_under_the_matched_file():
+    moved = {f"results/{f}" for f in ALPHA_FILES}
+    overrides, used, _, _ = _resolve_recipe_sources(ALPHA, [], sorted(moved)[:1], moved)
+    assert {o["path"] for o in overrides.values()} == moved
+    assert used == moved
+
+
+def test_a_missing_required_source_is_reported():
+    present = set(ALPHA_FILES[:3])
+    with pytest.raises(ValueError, match="evenness"):
+        _resolve_recipe_sources(ALPHA, [], sorted(present)[:1], present)
+
+
+def test_a_single_source_follows_its_file_wherever_it_is():
+    found = {"star_salmon/salmon.merged.gene_tpm.tsv"}
+    overrides, _, _, _ = _resolve_recipe_sources("salmon/sample_pca.py", [], sorted(found), found)
+    assert overrides == {"matrix": {"path": "star_salmon/salmon.merged.gene_tpm.tsv"}}
+
+
+# ---------------------------------------------------------------------------
+# Files nothing recognises
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def run_with_unknown(tmp_path) -> Path:
+    run = tmp_path / "run"
+    shutil.copytree(CONFORMANCE, run)
+    (run / "stats").mkdir()
+    (run / "stats" / "per_sample.tsv").write_text(
+        "sample\treads\tgc\tcondition\n"
+        + "".join(f"S{i}\t{1000 + i * 37}\t{40 + i % 7}\t{'ab'[i % 2]}\n" for i in range(12))
+    )
+    return run
+
+
+def test_an_unrecognised_table_is_proposed_not_added(run_with_unknown, tmp_path):
+    result = compose_template(run_with_unknown, out_dir=tmp_path / "out")
+    assert isinstance(result, ComposedTemplate)
+    proposal = next(
+        p for p in result.composition.unrecognised if p["path"] == "stats/per_sample.tsv"
+    )
+    assert proposal["sample_column"] == "sample"
+    assert proposal["proposal"] == [
+        "card: mean of reads",
+        "card: mean of gc",
+        "filter: condition",  # the sample has the dashboard's own filter
+        "figure: scatter of gc against reads",
+        "table",
+    ]
+    project, dashboard = _load(result)
+    assert "Other data" not in [t["title"] for t in dashboard["tabs"]]
+    listed = project["template"]["unrecognised_files"]
+    assert [f["path"] for f in listed] == ["stats/per_sample.tsv"]
+
+
+def test_include_unknown_adds_an_other_data_tab(run_with_unknown, tmp_path):
+    result = compose_template(run_with_unknown, out_dir=tmp_path / "out", include=["stats/*.tsv"])
+    assert isinstance(result, ComposedTemplate)
+    project, dashboard = _load(result)
+    tab = next(t for t in dashboard["tabs"] if t["title"] == "Other data")
+    kinds = sorted(c["component_type"] for c in tab["components"])
+    assert kinds == ["card", "card", "card", "figure", "interactive", "table"]
+    layouts = [c["secondary_layout"] for c in tab["components"] if c["component_type"] == "card"]
+    assert layouts == ["box_plot", "histogram", "donut"]  # each card its own summary
+    # A section per tool directory, the file's kind on its tiles, not its path.
+    assert [s["name"] for s in tab["grid_sections"]] == ["Stats"]
+    assert tab["grid_sections"][0]["description"] == "1 file, in stats/"
+    assert [s["name"] for s in tab["filter_sections"]] == ["Stats"]
+    table = next(c for c in tab["components"] if c["component_type"] == "table")
+    assert table["title"] == "Per sample"
+    figure = next(c for c in tab["components"] if c["component_type"] == "figure")
+    assert figure["dict_kwargs"] == {"x": "reads", "y": "gc", "color": "condition"}
+    assert project["template"]["unrecognised_files"] == []
+    tags = [c["data_collection_tag"] for c in project["workflows"][0]["data_collections"]]
+    assert "stats_per_sample" in tags
+
+    # One Samples filter, on the run's samples, linked to every collection naming them.
+    main = dashboard["main_dashboard"]
+    (sample_filter,) = [c for c in main["components"] if c["section"] == "Samples"]
+    assert sample_filter["data_collection_tag"] == "samples"
+    links = {link["target_dc_tag"]: link for link in project["links"]}
+    assert links["stats_per_sample"]["link_config"] == {
+        "resolver": "direct",
+        "target_field": "sample",
+    }
+    assert links["multiqc_data"]["target_type"] == "multiqc"
+    assert all(link["source_dc_tag"] == "samples" for link in project["links"])
+    hub = (result.template_dir / "samples.tsv").read_text().split()
+    assert hub[0] == "sample" and {"S0", "S11"} <= set(hub)
+
+
+def test_template_compose_command_writes_and_reports(run_with_unknown, tmp_path):
+    from depictio.cli.cli.commands.template import app
+
+    out = tmp_path / "ejected"
+    result = CliRunner().invoke(app, ["compose", str(run_with_unknown), "-o", str(out)])
+    assert result.exit_code == 0, result.output
+    assert (out / "template.yaml").is_file()
+    text = " ".join(result.output.split())
+    assert "Not recognised" in text and "stats/per_sample.tsv" in text
+    assert f"--template {out}" in text and "depictio ingest " in text
+
+
+def test_template_compose_command_on_nothing(tmp_path):
+    from depictio.cli.cli.commands.template import app
+
+    result = CliRunner().invoke(app, ["compose", str(tmp_path)])
+    assert result.exit_code == 1
+
+
+def test_multiqc_tabs_are_named_by_what_tells_their_reports_apart():
+    """nf-core/sarek writes one report per test profile: the tab says which."""
+    paths = [
+        "test_aws/multiqc/multiqc_data/multiqc.parquet",
+        "test_full_aws/multiqc/multiqc_data/multiqc.parquet",
+    ]
+    assert distinct_labels(paths) == ["test_aws", "test_full_aws"]
+    assert distinct_labels(
+        [
+            "multiqc/star_salmon/multiqc_report_data/multiqc.parquet",
+            "multiqc/star_rsem/multiqc_report_data/multiqc.parquet",
+        ]
+    ) == ["star_salmon", "star_rsem"]
+    nested = distinct_labels(["a/multiqc.parquet", "a/b/multiqc.parquet"])
+    assert len(set(nested)) == 2 and all(nested)
+
+
+def test_a_headerless_report_is_read_without_a_header(tmp_path):
+    """A Kraken-style report has no header row: its first line is data, not names."""
+    (tmp_path / "sample.kraken2.report.txt").write_text(
+        "100.00\t438151\t0\tR\t1\troot\n"
+        "99.50\t435960\t12\tD\t2\tBacteria\n"
+        "40.10\t175699\t3\tS\t562\tEscherichia coli\n"
+    )
+    assert looks_headerless(["100.00", "438151", "0", "R", "1", "root"])
+    assert not looks_headerless(["sample", "reads", "percent"])
+
+    proposal = propose_unrecognised(tmp_path, "sample.kraken2.report.txt")
+    assert proposal is not None
+    assert proposal["_headerless"] is True
+    assert proposal["proposal"][0] == "no header row: columns numbered"
+    assert all(c.startswith("column_") for c in proposal["columns"])
+    assert not any("100.00" in item for item in proposal["proposal"])
+
+
+def test_identifier_columns_are_not_averaged(tmp_path):
+    (tmp_path / "abundance.tsv").write_text(
+        "name\ttaxonomy_id\ttaxID\treads\tfraction\n"
+        "E. coli\t562\t562\t1200\t0.4\n"
+        "B. subtilis\t1423\t1423\t900\t0.3\n"
+        "S. aureus\t1280\t1280\t600\t0.2\n"
+    )
+    proposal = propose_unrecognised(tmp_path, "abundance.tsv")
+    assert proposal is not None
+    assert proposal["_numeric"] == ["reads", "fraction"]
+
+
+@pytest.mark.parametrize(
+    ("pattern", "path", "matches"),
+    [
+        ("amp/**", "amp/macrel/s1.macrel/s1.prediction.tsv", True),
+        ("amp*/**", "amp/macrel/s1.tsv", True),
+        ("amp/**", "arg/rgi/s1.tsv", False),
+        ("*.prediction.tsv", "amp/macrel/s1.prediction.tsv", True),
+        ("*penguins*", "extra_penguins.csv", True),
+        ("amp/*.tsv", "amp/macrel/s1.tsv", False),
+    ],
+)
+def test_include_globs_read_as_a_person_means_them(pattern, path, matches):
+    import re
+
+    assert bool(re.match(include_regex(pattern), path)) is matches
+
+
+def test_a_named_file_is_included_past_the_listing_cap(tmp_path, monkeypatch):
+    import depictio.cli.cli.utils.compose as compose
+
+    monkeypatch.setattr(compose, "MAX_UNRECOGNISED", 2)
+    for i in range(4):  # four shapes: four lines, not one group
+        (tmp_path / f"t{i}.tsv").write_text(f"sample\treads_{i}\nA\t1\nB\t2\n")
+    composition = compose_run(tmp_path, include=["t3.tsv"])
+    included = [p["path"] for p in composition.unrecognised if p.get("_include")]
+    assert included == ["t3.tsv"]
+
+
+# ---------------------------------------------------------------------------
+# Files of one shape, one per sample
+# ---------------------------------------------------------------------------
+
+
+def _write(root: Path, path: str, text: str) -> None:
+    (root / path).parent.mkdir(parents=True, exist_ok=True)
+    (root / path).write_text(text)
+
+
+def _groups(root: Path):
+    from depictio.cli.cli.utils.compose import file_shape, group_files
+
+    files = walk(root)
+    shapes = {p: shape for p in files if (shape := file_shape(root, p)) is not None}
+    return group_files(shapes, files)
+
+
+def test_a_directory_per_sample_is_one_group(tmp_path):
+    for sample in ("ERZ01", "ERZ02", "ERZ03"):
+        _write(
+            tmp_path,
+            f"arg/abricate/{sample}/{sample}.txt",
+            "GENE\tCOVERAGE\nblaA\t99.1\nmecA\t87\n",
+        )
+        _write(tmp_path, f"qc/{sample}_fastqc.html", "<html/>")  # the sample, elsewhere
+    (group,) = _groups(tmp_path)
+    assert group.wildcard == "sample"
+    assert group.values == ["ERZ01", "ERZ02", "ERZ03"]
+    assert group.glob == "arg/abricate/*/*.txt"
+    assert group.label == "abricate"
+
+
+def test_two_kinds_of_file_in_one_directory_are_two_groups(tmp_path):
+    for sample in ("MOCK_001", "MOCK_002"):
+        _write(
+            tmp_path,
+            f"bracken/db/{sample}_run_db.bracken.tsv",
+            "name\treads\nE. coli\t10\nB. sub\t5\n",
+        )
+        _write(tmp_path, f"bracken/db/{sample}_run_db.report.txt", "100.00\t15\t0\tR\t1\troot\n")
+    groups = _groups(tmp_path)
+    assert [(g.label, g.values) for g in groups] == [
+        ("db · bracken", ["MOCK_001", "MOCK_002"]),
+        ("db · report", ["MOCK_001", "MOCK_002"]),
+    ]
+
+
+def test_files_differing_in_two_ways_are_grouped_by_directory(tmp_path):
+    for tool in ("toolA", "toolB"):
+        for sample in ("s1", "s2"):
+            _write(tmp_path, f"{tool}/{sample}.tsv", "x\ty\n1\t2\n")
+    groups = _groups(tmp_path)
+    assert [(g.label, g.glob, g.values) for g in groups] == [
+        ("toolA", "toolA/*.tsv", ["s1", "s2"]),
+        ("toolB", "toolB/*.tsv", ["s1", "s2"]),
+    ]
+
+
+def test_a_file_that_names_its_samples_gets_a_file_column_instead(tmp_path):
+    for run in ("run1", "run2"):
+        _write(tmp_path, f"{run}.counts.tsv", "sample\treads\nA\t1\nB\t2\n")
+        _write(tmp_path, f"logs/{run}.log.tsv", "x\ty\n1\t2\n")
+    group = next(g for g in _groups(tmp_path) if g.glob.endswith("counts.tsv"))
+    assert group.wildcard == "file"
+
+
+def test_variants_of_one_output_are_files_not_samples(tmp_path):
+    """Matrices that differ by what they hold (counts, TPM) are not samples."""
+    for kind in ("gene_counts", "gene_tpm", "gene_lengths"):
+        _write(tmp_path, f"salmon/salmon.merged.{kind}.tsv", "gene_id\tA\tB\ng1\t1\t2\n")
+        _write(tmp_path, f"star_salmon/salmon.merged.{kind}.tsv", "gene_id\tA\tB\ng1\t1\t2\n")
+    groups = _groups(tmp_path)
+    assert {g.wildcard for g in groups} == {"file"}
+    assert [g.glob for g in groups] == [
+        "salmon/salmon.merged.gene_*.tsv",
+        "star_salmon/salmon.merged.gene_*.tsv",
+    ]
+
+
+def test_files_with_different_columns_are_not_grouped(tmp_path):
+    _write(tmp_path, "out/a.tsv", "x\ty\n1\t2\n")
+    _write(tmp_path, "out/b.tsv", "x\tz\n1\t2\n")
+    assert [len(g.files) for g in _groups(tmp_path)] == [1, 1]
+
+
+def test_a_group_is_one_collection_with_the_sample_read_off_its_paths(tmp_path):
+    import re
+
+    from depictio.cli.cli.utils.scan_utils import construct_full_regex, regex_match, wildcard_values
+    from depictio.models.models.data_collections import Regex
+
+    for sample in ("ERZ01", "ERZ02"):
+        _write(
+            tmp_path,
+            f"arg/abricate/{sample}/{sample}.txt",
+            "GENE\tCOVERAGE\nblaA\t99.1\nmecA\t87\n",
+        )
+        _write(tmp_path, f"qc/{sample}_fastqc.html", "<html/>")  # the sample, elsewhere
+    _write(tmp_path, "arg/abricate/ERZ01/notes.txt", "GENE\tCOVERAGE\nx\t1\n")  # not of the group
+    composition = compose_run(tmp_path, include=["arg/abricate/**"])
+    unknown = [c for c in composition.collections if c.kind == "unknown"]
+    group = next(c for c in unknown if len(c.files) == 2)
+    regex = group.config["scan"]["scan_parameters"]["regex_config"]
+    assert group.config["metatype"] == "Aggregate"
+    assert regex["wildcards"][0]["name"] == "sample"
+    full = construct_full_regex(Regex.model_validate(regex))
+    for path in group.files:
+        assert regex_match(path, full)[0]
+    assert not regex_match("arg/abricate/ERZ01/notes.txt", full)[0]
+    assert wildcard_values(
+        regex["pattern"], regex["wildcards"], f"{tmp_path}/{group.files[1]}"
+    ) == {"sample": "ERZ02"}
+    assert group.columns["sample"]
+    assert re.search("sample", " ".join(composition.unrecognised[0]["proposal"]))
+
+
+def test_aggregation_stamps_each_file_with_its_wildcard_values(tmp_path):
+    import polars as pl
+
+    from depictio.cli.cli.utils.deltatables import add_wildcard_columns
+
+    class FileInfo:
+        def __init__(self, location: str):
+            self.file_location = location
+
+    files = [FileInfo(f"{tmp_path}/abricate/{s}/{s}.txt") for s in ("ERZ01", "ERZ02")]
+    frames = [pl.LazyFrame({"GENE": ["blaA"]}), pl.LazyFrame({"GENE": ["mecA"]})]
+    scan = {
+        "mode": "recursive",
+        "scan_parameters": {
+            "regex_config": {
+                "pattern": r"^abricate/{sample}/{sample}\.txt$",
+                "wildcards": [{"name": "sample", "wildcard_regex": "ERZ01|ERZ02"}],
+            }
+        },
+    }
+    tagged = pl.concat(add_wildcard_columns(frames, files, scan)).collect()
+    assert tagged["sample"].to_list() == ["ERZ01", "ERZ02"]
+    plain = add_wildcard_columns(frames, files, {"mode": "recursive", "scan_parameters": {}})
+    assert plain is frames
+
+
+def test_a_grid_section_and_a_filter_section_may_share_a_name():
+    from depictio.cli.cli.utils.compose_layout import layout_dashboard
+
+    dashboard = {
+        "filter_sections": [{"name": "abricate"}],
+        "grid_sections": [{"name": "abricate"}],
+        "components": [
+            {"component_type": "interactive", "section": "abricate"},
+            {"component_type": "card", "section": "abricate"},
+            {"component_type": "table", "section": "abricate"},
+        ],
+    }
+    layout_dashboard(dashboard)
+    widths = {c["component_type"]: c["layout"]["w"] for c in dashboard["components"]}
+    assert widths["interactive"] == 1
+    assert widths["table"] == 8
+
+
+def test_a_sample_extending_another_is_the_same_sample():
+    from depictio.cli.cli.utils.compose import canonical_samples
+
+    canon = canonical_samples(
+        [
+            "MOCK_001",
+            "MOCK_001_Illumina_Hiseq_3000_1",
+            "MOCK_001_Illumina_Hiseq_3000_bracken-db.bracken",
+            "S1",
+            "S10",
+        ]
+    )
+    assert canon["MOCK_001_Illumina_Hiseq_3000_1"] == "MOCK_001"
+    assert canon["MOCK_001_Illumina_Hiseq_3000_bracken-db.bracken"] == "MOCK_001"
+    assert canon["S10"] == "S10"
+
+
+def test_a_group_goes_to_its_tools_section_and_stage(tmp_path):
+    """A directory the catalog names gives the section its tool's name and its stage's tab."""
+    from depictio.cli.cli.utils.compose import name_kinds, place_groups
+
+    for sample in ("MOCK_001", "MOCK_002"):
+        _write(
+            tmp_path,
+            f"bracken/bracken-db/{sample}_run_bracken-db.bracken.tsv",
+            "name\treads\nE\t1\nB\t2\n",
+        )
+        _write(
+            tmp_path,
+            f"bracken/bracken-db/{sample}_run_bracken-db.bracken.kraken2.report_bracken.txt",
+            "100.00\t15\t0\tR\t1\troot\n",
+        )
+        _write(tmp_path, f"mystery/{sample}.mystery.tsv", "x\ty\n1\t2\n")
+    groups = _groups(tmp_path)
+    place_groups(groups, {"bracken": ("Bracken", "taxonomy")})
+    name_kinds(groups)
+    assert [(g.home.name, g.home.stage, g.kind) for g in groups] == [
+        ("Bracken", "taxonomy", "Kraken2 report"),
+        ("Bracken", "taxonomy", ""),
+        ("Mystery", "other", ""),
+    ]
+    assert [g.label for g in groups] == ["Bracken · Kraken2 report", "Bracken", "Mystery"]
+
+
+def test_a_top_directory_holding_tool_directories_is_looked_through(tmp_path):
+    from depictio.cli.cli.utils.compose import name_kinds, place_groups
+
+    for sample in ("ERZ01", "ERZ02"):
+        _write(tmp_path, f"arg/abricate/{sample}/{sample}.txt", "GENE\tCOV\nblaA\t9\n")
+        _write(tmp_path, f"arg/argnorm/abricate/{sample}.normalized.tsv", "GENE\tCLASS\nblaA\tx\n")
+        _write(tmp_path, f"amp/macrel/{sample}.prediction.tsv", "seq\tprob\na\t0.1\n")
+    groups = _groups(tmp_path)
+    place_groups(groups, {})
+    name_kinds(groups)
+    assert sorted((g.home.name, g.kind) for g in groups) == [
+        ("Abricate", ""),
+        ("Argnorm", "Abricate · normalized"),
+        ("Macrel", "Prediction"),  # amp/ holds macrel/ only: looked through too
+    ]
+
+
+def test_a_table_written_twice_is_kept_once(tmp_path):
+    from depictio.cli.cli.utils.compose import drop_format_twins
+
+    _write(tmp_path, "nonpareil/all_samples.csv", "sample,kappa\nA,0.5\nB,0.6\n")
+    _write(tmp_path, "nonpareil/all_samples.tsv", "sample\tkappa\nA\t0.5\nB\t0.6\n")
+    groups = _groups(tmp_path)
+    dropped = drop_format_twins(groups)
+    assert [g.glob for g in groups] == ["nonpareil/all_samples.tsv"]
+    assert [(d.glob, k.glob) for d, k in dropped] == [
+        ("nonpareil/all_samples.csv", "nonpareil/all_samples.tsv")
+    ]
+
+
+def test_files_whose_first_row_is_data_are_one_headerless_group(tmp_path):
+    for sample, first in (("S1", "r1\tg7"), ("S2", "r9\tg2")):
+        _write(tmp_path, f"maps/{sample}.bowtie2out.txt", f"{first}\nr2\tg3\nr3\tg4\n")
+    # A header naming the sample: a header all the same, so these stay apart.
+    _write(tmp_path, "counts/S1.counts.tsv", "gene_id\tS1\ng1\t5\n")
+    _write(tmp_path, "counts/S2.counts.tsv", "gene_id\tS2\ng1\t7\n")
+    groups = _groups(tmp_path)
+    maps = next(g for g in groups if g.glob.startswith("maps/"))
+    assert maps.headerless and maps.values == ["S1", "S2"]
+    assert [len(g.files) for g in groups if g.glob.startswith("counts/")] == [1, 1]
+
+
+# ---------------------------------------------------------------------------
+# Icons and colours
+# ---------------------------------------------------------------------------
+
+
+def test_a_cards_icon_comes_from_its_columns_words():
+    from depictio.cli.cli.utils.compose_style import icon_for
+
+    assert icon_for("reads_mapped") == "mdi:counter"
+    assert icon_for("mean_read_length") == "mdi:ruler"
+    assert icon_for("GC content (%)") == "mdi:dna"
+    assert icon_for("percent_duplicates") == "mdi:percent"
+    assert icon_for("shannon_entropy") == "mdi:chart-bell-curve"
+    assert icon_for("taxonomy_id") == "mdi:bacteria"
+    assert icon_for("sample_id") == "mdi:flask"
+    assert icon_for("x7", "median", layout="box_plot") == "mdi:chart-box-outline"
+    assert icon_for("readsMapped") == "mdi:counter"
+    assert icon_for("kappa", "nunique") == "mdi:shape-outline"
+
+
+def test_every_icon_the_composer_uses_is_in_the_viewers_icon_subset():
+    """The production bundle only carries icons named in viewer sources and shipped
+    dashboards: one that is not would render as an empty box."""
+    import re
+
+    from depictio.cli.cli.utils import compose_style
+    from depictio.cli.cli.utils.compose import STAGE_STYLE
+
+    used = set(re.findall(r"mdi:[a-z0-9-]+", (Path(compose_style.__file__)).read_text()))
+    used |= {icon for icon, _ in STAGE_STYLE.values()}
+    used |= {"mdi:filter-variant", "mdi:table", "mdi:information-outline", "mdi:counter"}
+    known: set[str] = set()
+    for root, suffixes in (
+        (REPO / "depictio" / "viewer" / "src", (".ts", ".tsx")),
+        (REPO / "packages", (".ts", ".tsx")),
+        (PROJECTS, (".yaml", ".yml", ".json")),
+    ):
+        for path in root.rglob("*"):
+            if path.suffix in suffixes and "node_modules" not in path.parts:
+                known |= set(re.findall(r"mdi:[a-z0-9-]+", path.read_text(errors="ignore")))
+    assert used <= known, sorted(used - known)
+
+
+def test_sections_take_the_tabs_colour_then_others_tables_stay_gray():
+    from depictio.cli.cli.utils.compose_style import section_colors
+
+    colors = section_colors(
+        ["Bracken", "Centrifuge", "Tables", "Kraken 2"], "green", {"Tables": "gray"}
+    )
+    assert colors["Bracken"] == "green"
+    assert colors["Tables"] == "gray"
+    assert len({colors["Bracken"], colors["Centrifuge"], colors["Kraken 2"]}) == 3
+    # A gray tab (Other data) has no colour to lend its first section.
+    assert "gray" not in section_colors(["Abricate", "Deeparg"], "gray").values()
+
+
+def test_a_composed_dashboard_is_styled(run_with_unknown, tmp_path):
+    """After the reference dashboards: a card's colour says what it measures, no
+    section shows one twice, and the samples are teal with a flask everywhere."""
+    from depictio.cli.cli.utils.compose_style import SAMPLE_COLOR
+
+    result = compose_template(run_with_unknown, out_dir=tmp_path / "out", include=["stats/*.tsv"])
+    assert isinstance(result, ComposedTemplate)
+    _, dashboard = _load(result)
+    main = dashboard["main_dashboard"]
+    cards = [c for c in main["components"] if c["component_type"] == "card"]
+    assert cards[0]["title"] == "Samples" and cards[0]["icon_name"] == "mdi:flask"
+    assert cards[0]["icon_color"] == SAMPLE_COLOR
+    for document in (main, *dashboard["tabs"]):
+        by_section: dict[str, list[str]] = {}
+        for card in (c for c in document["components"] if c["component_type"] == "card"):
+            assert card["icon_name"] and card["icon_color"].startswith("#")
+            by_section.setdefault(card["section"], []).append(card["icon_color"])
+        for section, colors in by_section.items():
+            assert len(colors) == len(set(colors)), (document["title"], section, colors)
+    tab = next(t for t in dashboard["tabs"] if t["title"] == "Other data")
+    table = next(c for c in tab["components"] if c["component_type"] == "table")
+    assert "depictio_run_id" not in table["columns"] and "reads" in table["columns"]
+    (sample_filter,) = [c for c in main["components"] if c["component_type"] == "interactive"]
+    assert (
+        sample_filter["icon_name"] == "mdi:flask" and sample_filter["custom_color"] == SAMPLE_COLOR
+    )
+    # Sections take an icon from what they hold, not one icon for all.
+    icons = {s["icon"] for t in dashboard["tabs"] for s in t.get("grid_sections", [])}
+    assert len(icons) > 2
+
+
+def test_titles_quiet_shouted_column_names_but_keep_acronyms():
+    from depictio.cli.cli.utils.compose import card_title, pretty
+
+    assert pretty("COVERAGE_MAP") == "Coverage map"
+    assert pretty("STRAND") == "Strand"
+    assert pretty("GC") == "GC" and pretty("adjusted_ani") == "Adjusted ani"
+    assert pretty("GC_CONTENT") == "GC content" and pretty("%IDENTITY") == "%identity"
+    assert card_title("LR", "average") == "Mean LR"
+
+
+def test_a_section_shows_one_row_of_cards_the_samples_once():
+    from depictio.cli.cli.utils.compose import _glance_row
+
+    def cards(group: str, n: int) -> list[dict]:
+        samples = {"component_type": "card", "column_name": "sample", "secondary_layout": "top_n"}
+        rest = [{"component_type": "card", "column_name": f"{group}{i}"} for i in range(n)]
+        return [samples, *rest, {"component_type": "table"}]
+
+    row = _glance_row([cards("a", 3), cards("b", 3)])
+    assert len(row) == 4
+    assert [c["column_name"] for c in row] == ["sample", "b0", "a0", "b1"]
+
+
+def test_a_broad_recipe_glob_only_takes_the_files_with_its_input_columns(tmp_path):
+    """A recipe whose find reaches any top-level table (`*.tsv`) leaves another
+    tool's table alone: it lacks the columns the recipe declares it reads."""
+    (tmp_path / "stats.tsv").write_text("sample\treads\nA\t10\nB\t20\n")
+    composition = compose_run(tmp_path)
+    assert not composition.collections
+    assert [p["path"] for p in composition.unrecognised] == ["stats.tsv"]
+
+
+RSEQC_REPORT = """Total Reads                   16914
+Total Tags                    17450
+Total Assigned Tags           14574
+=====================================================================
+Group               Total_bases         Tag_count           Tags/Kb
+CDS_Exons           146030              14565               99.74
+5'UTR_Exons         0                   0                   0.00
+3'UTR_Exons         0                   0                   0.00
+Introns             530                 9                   16.95
+TSS_up_1kb          43552               0                   0.00
+TSS_up_5kb          76907               0                   0.00
+TSS_up_10kb         89031               0                   0.00
+TES_down_1kb        40737               0                   0.00
+TES_down_5kb        81271               0                   0.00
+TES_down_10kb       97060               0                   0.00
+=====================================================================
+"""
+
+
+def test_a_recipe_parsing_text_reports_gets_them_one_line_per_row(tmp_path):
+    """RSeQC's read_distribution recipe reads its reports as `line`s with the
+    file in `source_path` (Picard's as `raw`): the raw collection composed for it
+    reads them so, and the recipe runs on what that reading gives."""
+    import polars as pl
+
+    from depictio.recipes import load_recipe, validate_sources
+
+    reports = tmp_path / "rseqc" / "read_distribution"
+    reports.mkdir(parents=True)
+    for sample in ("S1", "S2"):
+        (reports / f"{sample}.read_distribution.txt").write_text(RSEQC_REPORT)
+
+    composition = compose_run(tmp_path)
+    by_tag = {c.tag: c for c in composition.collections}
+    raw = by_tag["rseqc_read_distribution_raw"]
+    kwargs = raw.config["dc_specific_properties"]["polars_kwargs"]
+    assert kwargs["new_columns"] == ["line"] and kwargs["include_file_paths"] == "source_path"
+    assert "rseqc_read_distribution" in by_tag
+
+    # Ingestion scans lazily, as here: `include_file_paths` is a scan option.
+    frame = pl.concat(pl.scan_csv(tmp_path / f, **kwargs).collect() for f in raw.files)
+    module = load_recipe("rseqc/read_distribution.py")
+    validate_sources(module, {"report": frame}, "rseqc/read_distribution.py")
+    result = module.transform({"report": frame})
+    assert set(result["sample_id"].to_list()) == {"S1", "S2"}

@@ -3,6 +3,7 @@ name: Structural-variant benchmark (Truvari)
 origin_tool: Truvari
 mode: truvari
 description: Structural-variant accuracy per callset (precision vs recall, TP / FP / FN classifications) as Truvari reports it through MultiQC.
+stage: benchmarking
 find:
   path_glob: "**/multiqc/multiqc_data/multiqc.parquet"
   path_glob_alt: # nested report dirs, e.g. rnaseq multiqc/star_salmon/multiqc_report_data/

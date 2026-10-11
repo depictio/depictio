@@ -9,3 +9,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/geno
 homepage: https://github.com/tbenavi1/genomescope2.0
 description: Genome size, heterozygosity and repeat content from a read k-mer spectrum.
 biotools_url: null  # no bio.tools entry for this tool
+stage: qc

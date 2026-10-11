@@ -26,7 +26,7 @@ renders_as:
   # across tools, so the tool ring keeps the three vocabularies apart.
   - { id: arg_hierarchy, component: advanced_viz, kind: sunburst, roles: {ranks: [tool, drug_class, gene_symbol], abundance: hits} }
   - { component: card, column: hits, aggregation: sum, secondary_layout: top_n, breakdown_col: drug_class, top_n_count: 4 }
-  - { component: card, column: gene_symbol, aggregation: nunique, secondary_layout: donut, breakdown_col: tool }
+  - { component: card, column: gene_symbol, aggregation: nunique, secondary_layout: donut, breakdown_col: tool, headline: true }
   - { component: card, column: identity_pct, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: coverage_pct, aggregation: average, secondary_layout: threshold, threshold_value: 80.0, threshold_direction: min, threshold_warn: 90.0 }
   - { component: table, row_selection_enabled: true, row_selection_column: gene_symbol }

@@ -231,7 +231,8 @@ app.add_typer(dashboard, name="dashboard", help="Validate, import and export das
 app.add_typer(
     template,
     name="template",
-    help="Export a project and its dashboards as a template someone else can run on their data.",
+    help="Export a project and its dashboards as a template someone else can run on their "
+    "data, or compose one from what the catalog recognises in a results directory.",
 )
 app.add_typer(
     manifest, name="manifest", help="Write a data manifest from a samplesheet or any table."

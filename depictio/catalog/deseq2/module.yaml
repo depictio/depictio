@@ -13,3 +13,4 @@ description: >-
   Differential gene expression analysis based on the negative binomial
   distribution.
 homepage: https://bioconductor.org/packages/release/bioc/html/DESeq2.html
+stage: differential

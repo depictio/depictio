@@ -5,3 +5,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/rtgt
 biotools_url: https://bio.tools/rtg-tools
 description: Real Time Genomics utilities for accurate VCF comparison and manipulation.
 homepage: https://www.realtimegenomics.com/products/rtg-tools
+stage: benchmarking

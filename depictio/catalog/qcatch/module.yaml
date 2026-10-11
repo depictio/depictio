@@ -6,3 +6,4 @@ description: >-
   Quality control and cell filtering for single-cell RNA-seq data processed by
   alevin-fry.
 biotools_url: https://bio.tools/qcatch
+stage: qc

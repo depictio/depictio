@@ -12,3 +12,4 @@ description: >-
 homepage: https://samtools.github.io/hts-specs/
 biotools_url: null  # no bio.tools entry for this tool
 source_url: https://github.com/samtools/hts-specs
+stage: variants

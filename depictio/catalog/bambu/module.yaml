@@ -14,3 +14,4 @@ description: >-
 homepage: https://github.com/GoekeLab/bambu
 biotools_url: null  # no bio.tools entry for this tool
 source_url: https://github.com/nf-core/nanoseq/blob/3.0.0/modules/local/bambu.nf
+stage: quantification

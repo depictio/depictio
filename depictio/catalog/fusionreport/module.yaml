@@ -10,3 +10,4 @@ description: >-
   report.
 homepage: https://github.com/Clinical-Genomics/fusion-report
 biotools_url: null  # no bio.tools entry for this tool
+stage: fusions

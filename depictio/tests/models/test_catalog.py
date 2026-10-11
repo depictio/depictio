@@ -1257,3 +1257,48 @@ def test_loader_records_the_yaml_each_output_came_from():
             path = output._source_file
             assert path is not None and path.is_file(), f"{entry.id}/{output.id}"
             assert path.suffix == ".yaml"
+
+
+# ---------------------------------------------------------------------------
+# Composition hints: stage, headline, priority
+# ---------------------------------------------------------------------------
+
+
+def test_every_bundled_tool_declares_a_stage():
+    """A composed dashboard files each tool under a tab; none may fall into "other" by omission."""
+    assert [e.id for e in load_catalog_entries() if e.stage is None] == []
+
+
+def test_an_output_stage_overrides_its_tool_stage():
+    entries = {e.id: e for e in load_catalog_entries()}
+    multiqc = entries["multiqc"]
+    outputs = {o.id: o for o in multiqc.outputs}
+    assert multiqc.stage_of(outputs["multiqc_fastqc"]) == "qc"
+    assert multiqc.stage_of(outputs["multiqc_star"]) == "alignment"
+
+
+def test_stage_is_a_closed_vocabulary():
+    with pytest.raises(ValueError, match="stage"):
+        CatalogOutput.model_validate(
+            {"id": "x", "find": {"filename": "x.tsv"}, "stage": "assembly"}
+        )
+
+
+def test_headline_is_a_card_field():
+    from depictio.models.components.advanced_viz.catalog import Render
+
+    assert Render(component="card", column="x", aggregation="count", headline=True).headline
+    with pytest.raises(ValueError, match="card fields are only valid"):
+        Render(component="table", headline=True)
+
+
+def test_every_headline_card_is_a_card():
+    headline = [
+        (o.id, r.component)
+        for e in load_catalog_entries()
+        for o in e.outputs
+        for r in o.renders_as
+        if r.headline
+    ]
+    assert headline
+    assert {component for _, component in headline} == {"card"}

@@ -8,3 +8,4 @@ nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/cnvk
 biotools_url: https://bio.tools/cnvkit
 description: Infers and visualises copy number from high-throughput DNA sequencing data.
 homepage: https://cnvkit.readthedocs.io/en/stable/index.html
+stage: variants

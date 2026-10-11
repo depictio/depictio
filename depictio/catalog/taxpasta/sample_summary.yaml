@@ -23,6 +23,7 @@ renders_as:
         },
     }
   - {
+      headline: true,
       component: card,
       column: taxa_observed,
       aggregation: median,

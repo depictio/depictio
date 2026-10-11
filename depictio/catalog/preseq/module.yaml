@@ -17,3 +17,4 @@ description: >-
   Software for predicting library complexity and genome coverage in high-
   throughput sequencing.
 biotools_url: https://bio.tools/preseq
+stage: qc

@@ -19,3 +19,4 @@ description: >-
   Calls peaks and enriched regions from sparse CUT&RUN and chromatin profiling
   data.
 homepage: https://github.com/FredHutch/SEACR
+stage: peaks

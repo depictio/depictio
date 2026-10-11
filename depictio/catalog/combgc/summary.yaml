@@ -11,7 +11,7 @@ fixture: summary.tsv
 renders_as:
   - { id: bgc_hierarchy, component: advanced_viz, kind: sunburst, roles: {ranks: [tool, product_class], abundance: regions} }
   - { component: figure, visu_type: bar, dict_kwargs: {x: sample, y: regions, color: product_class, title: BGC regions per sample} }
-  - { component: card, column: regions, aggregation: sum, secondary_layout: top_n, breakdown_col: product_class, top_n_count: 4 }
+  - { component: card, column: regions, aggregation: sum, secondary_layout: top_n, breakdown_col: product_class, top_n_count: 4, headline: true }
   - { component: card, column: contig, aggregation: nunique, secondary_layout: composition, breakdown_col: complete }
   - { component: card, column: length, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   - { component: card, column: cds_count, aggregation: average, secondary_layout: histogram }

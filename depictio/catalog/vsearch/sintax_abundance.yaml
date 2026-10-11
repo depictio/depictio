@@ -22,7 +22,7 @@ renders_as:
   # How many samples were classified, how many phyla they resolve to, and how
   # unevenly the abundance sits across them.
   - { component: card, column: sample, aggregation: nunique, secondary_layout: top_n, breakdown_col: Phylum, top_n_count: 3 }
-  - { component: card, column: Phylum, aggregation: nunique, secondary_layout: composition, breakdown_col: Phylum }
+  - { component: card, column: Phylum, aggregation: nunique, secondary_layout: composition, breakdown_col: Phylum, headline: true }
   - { component: card, column: rel_abundance, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
   # The ranks are the axes a reader narrows on before reading any of the above.
   - { component: interactive, interactive_type: MultiSelect, column_name: Kingdom }
