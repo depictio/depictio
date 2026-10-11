@@ -32,6 +32,7 @@ import {
 import { Z_LAYERS } from '../../zLayers';
 import GroupColorSwatches from '../GroupColorSwatches';
 import GroupingSteps from './GroupingSteps';
+import GuideBullets from './GuideBullets';
 import PendingGroupForm from './PendingGroupForm';
 import ValueListPreview from './ValueListPreview';
 import { colorBySegmentValue, groupPreview, selectionCapableCount } from './groupingGuide';
@@ -332,15 +333,24 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
         ]}
       />
 
-      {/* The sentence that tells the two apart. Without it "Color by column"
-          and "Color figures by groups" read as the same feature twice. */}
-      <Text size="xs" c="dimmed" mt={6} className="dc-ap-note">
-        {colorBy.kind === 'column'
-          ? 'A column already in your data: every figure whose dataset carries it is redrawn by its values.'
-          : colorBy.kind === 'groups'
-            ? 'The groups you drew below, which exist only on this dashboard.'
-            : 'A column is a field already in your data. Groups are sets you draw yourself, by selecting points on a figure.'}
-      </Text>
+      {/* What tells the two apart. Without it "Color by column" and "Color
+          figures by groups" read as the same feature twice. */}
+      {colorBy.kind === 'column' || colorBy.kind === 'groups' ? (
+        <Text size="xs" c="dimmed" mt={6} className="dc-ap-note">
+          {colorBy.kind === 'column'
+            ? 'Recolors every figure whose data carries this column.'
+            : 'Your groups below, on this dashboard only.'}
+        </Text>
+      ) : (
+        <Box mt={10}>
+          <GuideBullets
+            items={[
+              { icon: 'mdi:table-column', label: 'Column', text: 'a field in your data' },
+              { icon: 'mdi:lasso', label: 'Groups', text: 'points you select on a figure' },
+            ]}
+          />
+        </Box>
+      )}
 
       {(colorBy.kind === 'column' || columnPending) && (
         <Tooltip

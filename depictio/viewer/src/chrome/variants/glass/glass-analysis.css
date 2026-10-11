@@ -450,3 +450,28 @@
   margin-inline-end: 5px;
   color: var(--gl-accent-fg);
 }
+
+/* The guide's icon bullets: chips in the accent, like the step markers, and
+ * labels in the foreground ink; a step still ahead keeps them muted. */
+:root[data-chrome='glass'] .dc-analysis-panel .dc-ap-bullet-icon {
+  border-radius: 7px;
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+}
+:root[data-chrome='glass'] .dc-analysis-panel .dc-ap-bullet-label {
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass']
+  .dc-analysis-panel
+  .dc-ap-steps
+  .mantine-Stepper-step:not([data-progress], [data-completed])
+  :is(.dc-ap-bullet-label, .dc-ap-bullet-icon) {
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass']
+  .dc-analysis-panel
+  .dc-ap-steps
+  .mantine-Stepper-step:not([data-progress], [data-completed])
+  .dc-ap-bullet-icon {
+  background: var(--gl-well);
+}
