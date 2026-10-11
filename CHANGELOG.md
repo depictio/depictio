@@ -3,6 +3,74 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.15.0
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.15.0</summary>
+
+### Changes 📜
+
+#### Documentation Updates 📚
+
+* docs: versioning notes, time travel schemas and screenshots [24a57894f]
+* docs: automated ingestion guide, deploy units and diagrams [8ff51ff8c]
+* docs: advertise dashboards.versions; correct the stale architecture notes [2f69ce464]
+
+#### Other Changes 📝
+
+* Bump version: 1.14.1 → 1.15.0 [df8126388]
+* fix(viewer): time travel review fixes [95bfe8d59]
+* fix(versions): definitions come from the ledger, never the request [48667fc96]
+* test(versions): penguins_versioned, two datasets, their join and five versions [a04ae748d]
+* test(e2e): version history in the settings modal [f25cea51c]
+* feat(viewer): version history and data version as settings sections [9f1d2e27b]
+* feat(viewer): component history follows main's modal and menu conventions [981381a18]
+* fix(viewer): the version banners say what the data is [e9494caf0]
+* fix(versions): pinned tables, map data and figure totals read the pinned commit [8205e8822]
+* test(versions): iris_versioned, four data versions and four dashboards [e2a112992]
+* feat(viewer): dataset time travel and component history in the editor [5e6a3d887]
+* feat(react-core): thread data pins and overrides through every renderer [fe57fef1d]
+* feat(versions): component history, definition overrides and baselines [fdd7bf148]
+* feat(api): read a dashboard's data as a past version recorded it [341b1543b]
+* feat(models): stable component ids, and every chart type the builder offers [062cfc42a]
+* fix(viewer): ingestion monitoring review fixes [766fe63ce]
+* fix(cli): watch and ingest review fixes [2c4f3e79b]
+* fix(ingestion): jobs, offload and browser trigger review fixes [0ede79f78]
+* fix(cli): a persisted join records its Delta commit [16ec69091]
+* feat(viewer): live ingestion steps, a Watchers pane and dataset history [50c3e9b51]
+* feat(cli): incremental scan, and `depictio watch` as ingest on a loop [dd713ad16]
+* feat(cli): versioned Delta writes over a retried, job-aware client [e8db0da6a]
+* feat(api): offloaded finalization, Delta history and live ingestion steps [fde32da1f]
+* feat(models): jobs, ingestion steps and Delta commit provenance [c7b770464]
+* fix(versions): a baseline before the first write, and review fixes [2e4767107]
+* fix(editor): write nothing before the user acts [9f8ae1227]
+* fix(versions): a Save click seals its autosave; creation is explicit; stamps are UTC [e8f2f57f2]
+* docs(diagrams): draw version capture and restore, not boxes [654b16634]
+* fix(versions): drop ledgers with their project, and back them up [548aa9f62]
+* feat(versions): snapshot the settings added since the ledger forked [574942606]
+* feat(dashboards): compatibility report, and capture on the routes that bypassed /save [d622c959c]
+* feat(viewer): render a past dashboard version read-only [f0806ec0b]
+* docs(diagrams): hand-drawn schemas for version capture and restore [b47ddae64]
+* fix(dashboards): persist version counts; drop the ledger with the dashboard [f1486110c]
+* feat(viewer): version history drawer for dashboards [9f306f6c5]
+* feat(dashboards): version history with pin, restore and time travel [d47749678]
+* fix(files,scan): stop destroying file registration history [3b475b4ea]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.16.0
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
