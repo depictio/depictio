@@ -40,7 +40,7 @@ async def run_initialization(
     if s3_config_input is None:
         s3_config_input = settings.s3
 
-    admin_user = await initialize_db(wipe=bool(settings.mongodb.wipe))
+    admin_user = await initialize_db()
 
     if admin_user:
         logger.info(f"Admin user retrieved: {admin_user.email}")

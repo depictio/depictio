@@ -902,41 +902,51 @@ async def _bootstrap_admin_and_test_user() -> tuple[UserBeanie | None, dict | No
     return admin_user, token_payload
 
 
-async def initialize_db(wipe: bool = False) -> UserBeanie | None:
+async def wipe_database() -> None:
+    """Empty the database but for the init lock, then the S3 tables it registered.
+
+    Must run before any worker initialises Beanie (see ``handle_initialization``
+    in ``services/lifespan.py``): Beanie creates its indexes then, and a drop
+    afterwards either takes them with it or fails a sibling worker that is still
+    creating them.
+
+    Drops collection by collection rather than the whole database, so the init
+    lock this worker holds never disappears. Dropping the database and restoring
+    the lock left a gap in which a sibling worker took the lock too, and the
+    restore then failed on a duplicate key.
+    """
+    _ensure_mongodb_connection()
+
+    logger.info("Wipe is enabled. Deleting the database...")
+    from depictio.api.v1.db import db, initialization_collection
+
+    for name in db.list_collection_names():
+        if name != initialization_collection.name and not name.startswith("system."):
+            db.drop_collection(name)
+    initialization_collection.delete_many({"_id": {"$ne": "init_lock"}})
+    logger.info("Database deleted successfully.")
+
+    # Wipe orphaned S3 files after MongoDB wipe
+    from depictio.api.v1.endpoints.utils_endpoints.core_functions import (
+        cleanup_orphaned_s3_files,
+    )
+
+    logger.info("Cleaning up S3 after MongoDB wipe")
+    try:
+        # Whatever its age: nothing writes yet, since this worker holds the
+        # init lock and seeding only starts once initialization is done.
+        result = await cleanup_orphaned_s3_files(dry_run=False, force=True, min_age_seconds=0)
+        logger.info(f"S3 cleanup: {result['deleted_count']} objects deleted")
+    except Exception as e:
+        logger.error(f"S3 cleanup failed: {e}")
+        # Don't fail initialization if S3 cleanup fails
+        logger.warning("Continuing with initialization despite S3 cleanup failure")
+
+
+async def initialize_db() -> UserBeanie | None:
     """Initialize the database with default users and groups."""
 
     _ensure_mongodb_connection()
-
-    if wipe:
-        logger.info("Wipe is enabled. Deleting the database...")
-        from depictio.api.v1.db import client, initialization_collection
-
-        # Preserve the init_lock before wiping to prevent other workers from acquiring lock
-        init_lock = initialization_collection.find_one({"_id": "init_lock"})
-
-        client.drop_database(settings.mongodb.db_name)
-        logger.info("Database deleted successfully.")
-
-        # Restore the init_lock to prevent race conditions with other workers
-        if init_lock:
-            initialization_collection.insert_one(init_lock)
-            logger.info("Restored initialization lock after database wipe")
-
-        # Wipe orphaned S3 files after MongoDB wipe
-        from depictio.api.v1.endpoints.utils_endpoints.core_functions import (
-            cleanup_orphaned_s3_files,
-        )
-
-        logger.info("Cleaning up S3 after MongoDB wipe")
-        try:
-            # Whatever its age: nothing writes yet, since this worker holds the
-            # init lock and seeding only starts once initialization is done.
-            result = await cleanup_orphaned_s3_files(dry_run=False, force=True, min_age_seconds=0)
-            logger.info(f"S3 cleanup: {result['deleted_count']} objects deleted")
-        except Exception as e:
-            logger.error(f"S3 cleanup failed: {e}")
-            # Don't fail initialization if S3 cleanup fails
-            logger.warning("Continuing with initialization despite S3 cleanup failure")
 
     logger.info("Running initial database setup...")
 

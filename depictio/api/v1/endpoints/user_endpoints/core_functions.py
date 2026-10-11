@@ -590,7 +590,7 @@ async def _get_anonymous_user_session() -> dict:
             from depictio.api.v1.db_init import initialize_db
 
             try:
-                admin_user = await initialize_db(wipe=False)
+                admin_user = await initialize_db()
                 if not admin_user:
                     raise HTTPException(
                         status_code=500,
