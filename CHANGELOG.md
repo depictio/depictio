@@ -3,6 +3,33 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.15.1-b3
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.15.1-b3</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.15.1-b2 → 1.15.1-b3 [3642baccb]
+* fix(startup): a worker waiting for initialization reads this boot's lock, not an old marker ([#1178](https://github.com/depictio/depictio/pull/1178)) [7abfaad73]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.15.1-b2
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
