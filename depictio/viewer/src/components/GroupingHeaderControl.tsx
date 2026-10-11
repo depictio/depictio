@@ -168,12 +168,12 @@ const GroupingHeaderControl: React.FC<{
         styles={{ inner: { top: dashboardHeaderHeight() } }}
         title={
           <Group gap="xs">
-            <Icon icon="mdi:select-group" width={20} height={20} />
-            <Text fw={600} size="md">
+            <Icon icon="mdi:select-group" width={20} height={20} className="dc-ap-title-icon" />
+            <Text fw={600} size="md" className="dc-ap-title">
               Analysis
             </Text>
             {groupCount > 0 && (
-              <Badge size="sm" variant="light" color={groupingColor}>
+              <Badge size="sm" variant="light" color={groupingColor} className="dc-ap-title-count">
                 {groupCount} group{groupCount === 1 ? '' : 's'}
               </Badge>
             )}

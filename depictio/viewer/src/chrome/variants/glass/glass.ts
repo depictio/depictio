@@ -5,6 +5,7 @@ import { GlassButton, GlassButtonGroup } from './Button';
 import { glassPlotly, glassPlotlyDefaults } from './plotly';
 import './glass.css';
 import './glass-filters.css';
+import './glass-analysis.css';
 
 /**
  * Glass, the default chrome. The sidebar navigates, the dock acts; every

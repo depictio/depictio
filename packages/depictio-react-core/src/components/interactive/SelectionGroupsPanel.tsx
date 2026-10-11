@@ -98,6 +98,7 @@ const DisplayModeControl: React.FC<{
     openDelay={400}
   >
     <SegmentedControl
+      className="dc-ap-seg"
       size="sm"
       mt={6}
       fullWidth
@@ -223,10 +224,11 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
   }, [colorByColumns, components]);
 
   return (
-    <Box>
+    <Box className="dc-ap">
       {/* ── Section 1: what every figure is coloured (or split) by ──────── */}
-      <Group gap={6} wrap="nowrap" align="center">
+      <Group gap={6} wrap="nowrap" align="center" className="dc-ap-caption-row">
         <Divider
+          className="dc-ap-caption"
           label="Color figures by"
           labelPosition="left"
           styles={SECTION_LABEL_STYLES}
@@ -238,6 +240,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
           openDelay={400}
         >
           <Button
+            className="dc-ap-reset"
             size="compact-sm"
             variant="subtle"
             color="gray"
@@ -263,6 +266,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
           one on turns the other off, and users could not see why. Putting
           them on one segmented control makes the exclusivity structural. */}
       <SegmentedControl
+        className="dc-ap-seg"
         size="sm"
         mt={6}
         fullWidth
@@ -330,7 +334,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
 
       {/* The sentence that tells the two apart. Without it "Color by column"
           and "Color figures by groups" read as the same feature twice. */}
-      <Text size="xs" c="dimmed" mt={6}>
+      <Text size="xs" c="dimmed" mt={6} className="dc-ap-note">
         {colorBy.kind === 'column'
           ? 'A column already in your data: every figure whose dataset carries it is redrawn by its values.'
           : colorBy.kind === 'groups'
@@ -379,7 +383,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
           withArrow
           openDelay={400}
         >
-          <span style={{ display: 'flex', marginTop: 8 }}>
+          <span className="dc-ap-switch-row" style={{ display: 'flex', marginTop: 8 }}>
             <Switch
               size="sm"
               label="Show ungrouped (“Other”)"
@@ -391,13 +395,14 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
         </Tooltip>
       )}
       {groupsReachNothing && (
-        <Text size="xs" c="dimmed" mt={6}>
+        <Text size="xs" c="dimmed" mt={6} className="dc-ap-note">
           None of the components on this tab can receive these groups.
         </Text>
       )}
 
       {/* ── Section 2: on-the-fly groups (creation + list) ──────────────── */}
       <Divider
+        className="dc-ap-caption"
         label={groups.length > 0 ? `Your groups (${groups.length})` : 'Your groups'}
         labelPosition="left"
         mt={14}
@@ -425,7 +430,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
         />
       ) : (
         groups.length > 0 && (
-          <Group gap={6} wrap="nowrap" mt={8} align="center">
+          <Group gap={6} wrap="nowrap" mt={8} align="center" className="dc-ap-hint">
             <Icon icon="mdi:selection-drag" width={15} height={15} style={{ opacity: 0.6 }} />
             <Text size="sm" c="dimmed">
               Lasso or box-select on a marked tile to add another group.
@@ -436,6 +441,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
 
       {groups.length > 0 && (
         <Stack
+          className="dc-ap-list"
           gap={6}
           mt={8}
           // Taller than the 160 the header popover could afford: the panel is
@@ -456,7 +462,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
             // look identical, right up to the point where one of them silently
             // failed to reach a figure. The card says what the group is made
             // of, in the same shape `PendingGroupForm` showed before saving.
-            <Paper key={g.id} withBorder radius="sm" p={8} style={{ minWidth: 0 }}>
+            <Paper key={g.id} withBorder radius="sm" p={8} className="dc-ap-card" style={{ minWidth: 0 }}>
             <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
               <ColorSwatch color={g.color} size={14} style={{ flexShrink: 0 }} />
               <Text
@@ -476,7 +482,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                 withArrow
                 openDelay={400}
               >
-                <Badge size="sm" variant="light" color="gray" style={{ flexShrink: 0 }}>
+                <Badge size="sm" variant="light" color="gray" className="dc-ap-count" style={{ flexShrink: 0 }}>
                   {preview.values.distinct.toLocaleString()}
                 </Badge>
               </Tooltip>
@@ -499,6 +505,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                 <Popover.Target>
                   <Tooltip label="Edit name and color" withArrow openDelay={400}>
                     <ActionIcon
+                      className="dc-ap-act"
                       variant="subtle"
                       color="gray"
                       size="sm"
@@ -513,7 +520,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                     </ActionIcon>
                   </Tooltip>
                 </Popover.Target>
-                <Popover.Dropdown>
+                <Popover.Dropdown className="dc-ap-popover">
                   <Stack gap="xs">
                     <TextInput
                       size="xs"
@@ -553,6 +560,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                 openDelay={400}
               >
                 <ActionIcon
+                  className="dc-ap-act"
                   variant={g.filterActive ? 'filled' : 'subtle'}
                   color={g.filterActive ? 'blue' : 'gray'}
                   size="sm"
@@ -568,6 +576,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                 </ActionIcon>
               </Tooltip>
               <ActionIcon
+                className="dc-ap-act dc-ap-act--danger"
                 variant="subtle"
                 color="gray"
                 size="sm"
@@ -579,7 +588,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
                 <Icon icon="mdi:close" width={14} height={14} />
               </ActionIcon>
             </Group>
-            <Text size="xs" c="dimmed" mt={4} truncate>
+            <Text size="xs" c="dimmed" mt={4} truncate className="dc-ap-meta">
               on <Text span size="xs" fw={600} c="dimmed">{preview.columnName}</Text>
               {preview.datasetLabel && (
                 <>
@@ -606,6 +615,7 @@ const SelectionGroupsPanel: React.FC<SelectionGroupsPanelProps> = ({
       {groups.length > 0 && (
         <>
           <Divider
+            className="dc-ap-caption"
             label="In cards"
             labelPosition="left"
             mt={14}

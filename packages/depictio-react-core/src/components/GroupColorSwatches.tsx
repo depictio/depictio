@@ -17,12 +17,14 @@ const GroupColorSwatches: React.FC<{
   onSelect: (color: string) => void;
   mt?: number;
 }> = ({ value, onSelect, mt }) => (
-  <Group gap={4} mt={mt} wrap="wrap">
+  <Group gap={4} mt={mt} wrap="wrap" className="dc-swatch-row">
     {TAB10_PALETTE.map((c) => (
       <ColorSwatch
         key={c}
         color={c}
         size={16}
+        className="dc-swatch"
+        data-selected={value === c ? '' : undefined}
         style={{
           cursor: 'pointer',
           outline: value === c ? '2px solid var(--mantine-color-blue-5)' : 'none',

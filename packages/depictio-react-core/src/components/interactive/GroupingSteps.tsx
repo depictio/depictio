@@ -32,6 +32,7 @@ const GroupingSteps: React.FC<{
 
   return (
     <Stepper
+      className="dc-ap-steps"
       active={active}
       orientation="vertical"
       size="sm"
@@ -40,11 +41,15 @@ const GroupingSteps: React.FC<{
       mt={8}
       // The theme's own sizes, matching the panel's other labels: the guide is
       // the first thing a new user reads here and 11px made it work to read.
+      //
+      // One type scale for every step: Mantine gives the description a
+      // line-height of 1, which the plain-text steps inherited while the lasso
+      // step's own <Text> did not, so the current step read larger than the
+      // others. Size and line-height are set once here instead.
       styles={{
-        stepLabel: { fontSize: 14, fontWeight: 600 },
-        stepDescription: { fontSize: 13 },
+        stepLabel: { fontSize: 14, fontWeight: 600, lineHeight: 1.35 },
+        stepDescription: { fontSize: 13, lineHeight: 1.45, marginTop: 2 },
         stepBody: { marginLeft: 10 },
-        verticalSeparator: { marginLeft: 12 },
       }}
     >
       <Stepper.Step
@@ -52,6 +57,7 @@ const GroupingSteps: React.FC<{
         // on: the step is not "pending", it cannot be completed here at all,
         // and its description says why.
         color={blocked ? 'orange' : undefined}
+        className={blocked ? 'dc-ap-step--blocked' : undefined}
         icon={
           <Icon
             icon={blocked ? 'mdi:alert-circle-outline' : 'mdi:select-group'}
@@ -67,7 +73,7 @@ const GroupingSteps: React.FC<{
         label="Lasso or box-select on it"
         description={
           <Stack gap={4}>
-            <Text size="sm" c="dimmed">
+            <Text fz="inherit" lh="inherit" c="dimmed">
               On a chart, hover it and pick either selection tool from the toolbar in its top
               right, then drag over the points. Ticking rows in a table, drawing on a map or
               clicking thumbnails in a gallery all count the same.
@@ -75,8 +81,9 @@ const GroupingSteps: React.FC<{
             {/* Both drags are equally valid — spelling them out is the whole
                 point: the old copy said "lasso" and left box-select looking
                 like it would be ignored. */}
-            <Group gap={4}>
+            <Group gap={6} className="dc-ap-chips">
               <Badge
+                className="dc-ap-chip"
                 size="sm"
                 variant="light"
                 color={groupingColor}
@@ -85,6 +92,7 @@ const GroupingSteps: React.FC<{
                 Box select
               </Badge>
               <Badge
+                className="dc-ap-chip"
                 size="sm"
                 variant="light"
                 color={groupingColor}
