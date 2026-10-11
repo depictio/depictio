@@ -224,7 +224,7 @@ async def periodic_cleanup_orphaned_s3_files(
     while True:
         try:
             if _claim_s3_cleanup_cycle(interval_in_seconds):
-                # Not forced, even under a MongoDB wipe: initialize_db already ran
+                # Not forced, even under a MongoDB wipe: wipe_database already ran
                 # the wipe-time pass before seeding, so from here on an "everything
                 # looks orphaned" listing means something is wrong, and the safety
                 # check should stop it.

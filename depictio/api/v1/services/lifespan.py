@@ -16,6 +16,7 @@ from pymongo import AsyncMongoClient
 
 from depictio.api.v1.configs.config import MONGODB_URL, settings
 from depictio.api.v1.configs.logging_init import logger
+from depictio.api.v1.db_init import wipe_database
 from depictio.api.v1.initialization import run_initialization
 from depictio.api.v1.services.background_tasks import delayed_process_data_collections
 from depictio.api.v1.services.branding import migrate_legacy_logo_files
@@ -81,38 +82,45 @@ async def init_pymongo_beanie() -> AsyncMongoClient:
     return client
 
 
-async def handle_initialization() -> bool:
+async def handle_initialization() -> tuple[bool, AsyncMongoClient]:
     """
     Handle application initialization with worker coordination.
 
+    The init lock is taken before Beanie starts, because Beanie creates its
+    indexes as it initialises and the lock winner empties the database under a
+    wipe. An index created before that is lost with it, and a worker still
+    creating one fails with DatabaseDropPending (seen on EMBL dev, where that
+    worker then hung instead of exiting). So the winner wipes before its own
+    Beanie start, and every other worker waits for the whole initialization
+    before it starts Beanie.
+
     Returns:
-        True if this worker performed initialization, False otherwise
+        Whether this worker performed initialization, and the client to close on
+        shutdown
     """
     # Check if this worker should perform initialization
     should_initialize = await check_and_set_initialization()
 
-    # Only the winning worker clears stale markers during wipe
-    if should_initialize and settings.mongodb.wipe:
-        logger.info(f"Worker {WORKER_ID}: Clearing initialization markers for wipe")
-        from depictio.api.v1.db import initialization_collection
-
-        initialization_collection.delete_many({"_id": {"$ne": "init_lock"}})
-
-    if should_initialize:
-        logger.info(f"Worker {WORKER_ID}: Running initialization...")
-        try:
-            await run_initialization()
-            await mark_initialization_complete()
-            await clean_screenshots()
-            logger.info(f"Worker {WORKER_ID}: Initialization completed successfully")
-        except Exception as e:
-            logger.error(f"Worker {WORKER_ID}: Initialization failed: {e}")
-            await cleanup_failed_initialization()
-            raise
-    else:
+    if not should_initialize:
         await wait_for_initialization_complete()
+        return False, await init_pymongo_beanie()
 
-    return should_initialize
+    logger.info(f"Worker {WORKER_ID}: Running initialization...")
+    try:
+        if settings.mongodb.wipe:
+            await wipe_database()
+
+        mongo_client = await init_pymongo_beanie()
+        await run_initialization()
+        await mark_initialization_complete()
+        await clean_screenshots()
+        logger.info(f"Worker {WORKER_ID}: Initialization completed successfully")
+    except Exception as e:
+        logger.error(f"Worker {WORKER_ID}: Initialization failed: {e}")
+        await cleanup_failed_initialization()
+        raise
+
+    return True, mongo_client
 
 
 def start_background_services(should_initialize: bool):
@@ -403,8 +411,7 @@ async def lifespan(_app: FastAPI):
     - Real-time event services
     """
     # Startup
-    mongo_client = await init_pymongo_beanie()
-    should_initialize = await handle_initialization()
+    should_initialize, mongo_client = await handle_initialization()
     # Deliberately outside the `should_initialize` branch: an already-initialised
     # deployment never re-runs initialization, and it is exactly the deployment
     # whose logos are still on the filesystem. No-op once they have moved.

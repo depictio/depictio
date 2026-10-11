@@ -97,7 +97,7 @@ async def test_a_table_written_seconds_ago_is_kept(store):
 
 @pytest.mark.asyncio
 async def test_without_an_age_limit_a_fresh_orphan_goes_too(store):
-    """The wipe-time pass in initialize_db runs before anything writes."""
+    """The wipe-time pass in wipe_database runs before anything writes."""
     s3, _ = store
     result = await cleanup_orphaned_s3_files(dry_run=False, min_age_seconds=0)
 
