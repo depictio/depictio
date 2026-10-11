@@ -31,6 +31,7 @@ from depictio.cli.cli.local_stack import (
     examples_status,
     is_local_home,
     load_secrets,
+    local_data_roots,
     local_home,
     local_home_env_is_blank,
     lock_for_startup,
@@ -162,6 +163,7 @@ def _up_flags(
     port: int | None,
     screenshots: bool | None,
     open_browser: bool,
+    data_root_allow: list[Path] | None = None,
 ) -> list[str]:
     """The `up` flags given, minus the data ones. In 1.12.0b1, --template without
     --examples seeded no example."""
@@ -174,6 +176,8 @@ def _up_flags(
         flags += ["--port", str(port)]
     if screenshots is not None:
         flags.append("--screenshots" if screenshots else "--no-screenshots")
+    for path in data_root_allow or []:
+        flags += ["--data-root-allow", str(path)]
     if not open_browser:
         flags.append("--no-open")
     return flags
@@ -241,7 +245,9 @@ def _prepare_home(paths: Paths) -> None:
         )
 
 
-def _warn_ignored_flags(state: State, port: int | None, screenshots: bool | None) -> None:
+def _warn_ignored_flags(
+    state: State, port: int | None, screenshots: bool | None, data_roots: list[str]
+) -> None:
     """Name the flags that differ from what the running server was started with:
     they apply at startup only. --examples is covered by _wait_for_examples."""
     ignored = []
@@ -251,6 +257,13 @@ def _warn_ignored_flags(state: State, port: int | None, screenshots: bool | None
         ignored.append("--screenshots" if screenshots else "--no-screenshots")
     for flag in ignored:
         _warn(f"{flag} is ignored: the server is already running (depictio local down first)")
+    # Unknown for a server started before they were recorded.
+    if state.data_roots is not None and set(state.data_roots) != set(data_roots):
+        _warn(
+            "The running server lets the web UI read run folders under "
+            f"{_join(state.data_roots) or 'no folder'}, not {_join(data_roots) or 'no folder'}: "
+            "restart it to change that (depictio local down first)"
+        )
 
 
 def _restore_cli_config(paths: Paths, state: State) -> None:
@@ -308,7 +321,9 @@ def _prepare_viewer(paths: Paths, running: bool) -> None:
     _info(f"Built the viewer bundle (output in {log_path})")
 
 
-def _start_or_reuse(paths: Paths, port: int | None, seed: str, screenshots: bool | None) -> State:
+def _start_or_reuse(
+    paths: Paths, port: int | None, seed: str, screenshots: bool | None, data_roots: list[str]
+) -> State:
     """The server already running, else a new one; exits 1 on failure, and 130 on
     Ctrl-C (128 + the signal for SIGTERM and SIGHUP).
 
@@ -333,7 +348,7 @@ def _start_or_reuse(paths: Paths, port: int | None, seed: str, screenshots: bool
                     "depictio local up"
                 )
             _info(f"Depictio is already running at {state.url}")
-            _warn_ignored_flags(state, port, screenshots)
+            _warn_ignored_flags(state, port, screenshots, data_roots)
             _prepare_viewer(paths, running=True)
             _restore_cli_config(paths, state)
             return state
@@ -346,7 +361,15 @@ def _start_or_reuse(paths: Paths, port: int | None, seed: str, screenshots: bool
         # No spinner with --screenshots: the Chromium installer draws its own progress.
         spinner = contextlib.nullcontext() if screenshots else _spinner("Starting the local server")
         with spinner:
-            return start_stack(paths, port, seed, bool(screenshots), log=_info, warn=_warn)
+            return start_stack(
+                paths,
+                port,
+                seed,
+                bool(screenshots),
+                log=_info,
+                warn=_warn,
+                data_roots=data_roots,
+            )
     except LocalStackError as exc:
         _fail(str(exc))
     except KeyboardInterrupt as exc:
@@ -489,6 +512,15 @@ def up(
             "needed. Off by default.",
         ),
     ] = None,
+    data_root_allow: Annotated[
+        list[Path] | None,
+        typer.Option(
+            "--data-root-allow",
+            metavar="PATH",
+            help="Also let the web UI read run folders under PATH. Your home folder is "
+            "always allowed.",
+        ),
+    ] = None,
     # Moved to `depictio ingest --server local`: parsed only to say so.
     template: Annotated[str | None, typer.Option("--template", hidden=True)] = None,
     data_root: Annotated[str | None, typer.Option("--data-root", hidden=True)] = None,
@@ -503,7 +535,7 @@ def up(
     Then add data with: depictio ingest <results dir> --server local
     """
     if template is not None or data_root is not None or project_name is not None or variables:
-        flags = _up_flags(examples, template, port, screenshots, open_browser)
+        flags = _up_flags(examples, template, port, screenshots, open_browser, data_root_allow)
         _moved_to_ingest(template, data_root, project_name, variables, flags)
     seed = parse_examples(examples)
     # Before the home is created and locked: the lock needs POSIX too.
@@ -512,13 +544,17 @@ def up(
     except LocalStackError as exc:
         _fail(str(exc))
     paths = _paths()
+    try:
+        data_roots = local_data_roots(paths, data_root_allow or [])
+    except LocalStackError as exc:
+        raise typer.BadParameter(str(exc), param_hint="--data-root-allow") from exc
     _prepare_home(paths)
     try:
         lock = lock_for_startup(paths)
     except LocalStackError as exc:
         _fail(str(exc))
     with lock:
-        state = _start_or_reuse(paths, port, seed, screenshots)
+        state = _start_or_reuse(paths, port, seed, screenshots, data_roots)
     present = _wait_for_examples(paths, state, seed.split(",") if examples else [])
     _print_summary(paths, state, present)
     if open_browser:

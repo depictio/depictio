@@ -3,24 +3,18 @@ import {
   Accordion,
   ActionIcon,
   Anchor,
-  Box,
   Button,
   Divider,
   Drawer,
   FileButton,
   Group,
-  Modal,
-  NavLink,
-  ScrollArea,
   SegmentedControl,
-  Select,
   Stack,
   Switch,
   Text,
   Textarea,
   Tooltip,
 } from '@mantine/core';
-import { useMediaQuery } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
 
 import {
@@ -37,6 +31,12 @@ import {
   type LogoMode,
 } from 'depictio-react-core';
 import DashboardInfoBody from './DashboardInfoBody';
+import {
+  SECTION_ICON_STYLE,
+  SettingsNavModal,
+  SettingsRailNote,
+  type SettingsNavSection,
+} from '../components/settings/SettingsNavModal';
 import { useBranding } from '../branding';
 import { useFeedbackLink } from '../feedback';
 import { useUiScalePref } from '../hooks/useUiScalePref';
@@ -53,14 +53,6 @@ const SAVE_DEBOUNCE_MS = 600;
 // ---------------------------------------------------------------------------
 // Shared layout pieces
 // ---------------------------------------------------------------------------
-
-/** A bare glyph in the (dashboard's) primary colour, the way the chrome draws
- *  its icons elsewhere (`SectionIcon`, the sidebar): a tinted square read as a
- *  button in a row that already carries a chevron. */
-const SECTION_ICON_STYLE: React.CSSProperties = {
-  color: 'var(--mantine-primary-color-filled)',
-  flexShrink: 0,
-};
 
 /**
  * Header of one drawer section: icon, title, and a one-line subtitle saying
@@ -692,15 +684,8 @@ type Surface = 'viewer' | 'editor';
 
 /** One settings section: what both layouts draw, so neither carries its own
  *  copy of the contents. */
-interface SettingsSection {
+interface SettingsSection extends SettingsNavSection {
   key: SectionKey;
-  icon: string;
-  title: string;
-  /** Shorter name for the nav rail, when the title would wrap there. */
-  navLabel?: string;
-  /** What the section is for and who it affects. */
-  subtitle: string;
-  body: React.ReactNode;
 }
 
 /**
@@ -715,7 +700,7 @@ export type SettingsLayout = 'nav' | 'accordion';
 const DEFAULT_LAYOUT: SettingsLayout = 'nav';
 
 // ---------------------------------------------------------------------------
-// Per-browser memory (both layouts)
+// Per-browser memory (accordion layout)
 // ---------------------------------------------------------------------------
 
 function readStored<T>(key: string, valid: (v: unknown) => v is T): T | null {
@@ -741,7 +726,6 @@ function writeStored(key: string, value: unknown) {
 
 const isStringArray = (v: unknown): v is string[] =>
   Array.isArray(v) && v.every((x) => typeof x === 'string');
-const isString = (v: unknown): v is string => typeof v === 'string';
 
 // ---------------------------------------------------------------------------
 // Accordion layout
@@ -805,7 +789,7 @@ const AccordionLayout: React.FC<{
 };
 
 // ---------------------------------------------------------------------------
-// Nav layout
+// Nav layout (the shared `SettingsNavModal`)
 // ---------------------------------------------------------------------------
 
 /** The section a surface opens on before the reader has picked one: a
@@ -814,153 +798,6 @@ const AccordionLayout: React.FC<{
 const DEFAULT_ACTIVE: Record<Surface, SectionKey> = {
   viewer: 'view',
   editor: 'tab-defaults',
-};
-
-/** Below this the rail no longer fits beside the page and becomes a select. */
-const NARROW_QUERY = '(max-width: 640px)';
-
-const RAIL_WIDTH = 220;
-
-const NavLayout: React.FC<{
-  sections: SettingsSection[];
-  surface: Surface;
-  /** Open on this section rather than the remembered one (the Guide's "Open
-   *  Your view"). Read once: the modal remounts its body on every open. */
-  initialSection?: SectionKey;
-}> = ({ sections, surface, initialSection }) => {
-  const storageKey = `depictio-settings-active:${surface}`;
-  const [stored, setStored] = React.useState<string | null>(
-    () => initialSection ?? readStored(storageKey, isString),
-  );
-  const narrow = useMediaQuery(NARROW_QUERY, false, { getInitialValueInEffect: false });
-
-  // A remembered section can be missing today (no feedback link configured,
-  // or an editor-only one in the viewer): fall back rather than draw nothing.
-  const active =
-    sections.find((s) => s.key === stored) ??
-    sections.find((s) => s.key === DEFAULT_ACTIVE[surface]) ??
-    sections[0];
-  const select = (key: string) => {
-    setStored(key);
-    writeStored(storageKey, key);
-  };
-
-  const page = active && (
-    <Stack gap="lg" data-testid={`settings-section-${active.key}`}>
-      {narrow ? (
-        // The select above already names the section; repeating it as a
-        // heading on a phone only pushes the fields down.
-        <Text size="sm" c="dimmed">
-          {active.subtitle}
-        </Text>
-      ) : (
-        <Stack gap={2}>
-          <Group gap="sm" wrap="nowrap">
-            <Icon icon={active.icon} width={22} height={22} style={SECTION_ICON_STYLE} />
-            <Text fw={600} size="lg" lh={1.25}>
-              {active.title}
-            </Text>
-          </Group>
-          <Text size="sm" c="dimmed">
-            {active.subtitle}
-          </Text>
-        </Stack>
-      )}
-      <Divider />
-      {active.body}
-    </Stack>
-  );
-
-  if (narrow) {
-    return (
-      <Stack gap="md">
-        <Select
-          aria-label="Settings section"
-          value={active?.key ?? null}
-          onChange={(value) => value && select(value)}
-          data={sections.map((s) => ({ value: s.key, label: s.title }))}
-          allowDeselect={false}
-          comboboxProps={{ zIndex: Z_LAYERS.tooltip }}
-          leftSection={
-            active ? <Icon icon={active.icon} width={16} style={SECTION_ICON_STYLE} /> : null
-          }
-          data-testid="settings-nav-select"
-        />
-        {page}
-      </Stack>
-    );
-  }
-
-  return (
-    <Group
-      align="stretch"
-      gap={0}
-      wrap="nowrap"
-      // A fixed height, so moving between a short and a long section doesn't
-      // make the dialog jump.
-      h="min(640px, calc(100dvh - 140px))"
-    >
-      <Stack
-        w={RAIL_WIDTH}
-        gap={0}
-        justify="space-between"
-        p="sm"
-        style={{
-          flexShrink: 0,
-          borderRight: '1px solid var(--mantine-color-default-border)',
-          background: 'var(--mantine-color-default-hover)',
-        }}
-      >
-        <Stack gap={2} component="nav" aria-label="Settings sections">
-          {sections.map((s) => {
-            const isActive = s.key === active?.key;
-            return (
-              <NavLink
-                key={s.key}
-                label={s.navLabel ?? s.title}
-                active={isActive}
-                variant="light"
-                onClick={() => select(s.key)}
-                leftSection={
-                  <Icon
-                    icon={s.icon}
-                    width={18}
-                    height={18}
-                    style={{
-                      flexShrink: 0,
-                      color: isActive
-                        ? 'var(--mantine-primary-color-filled)'
-                        : 'var(--mantine-color-dimmed)',
-                    }}
-                  />
-                }
-                styles={{
-                  root: { borderRadius: 'var(--mantine-radius-sm)' },
-                  label: { fontWeight: isActive ? 600 : 500 },
-                }}
-                data-testid={`settings-nav-${s.key}`}
-              />
-            );
-          })}
-        </Stack>
-        <Group gap={6} wrap="nowrap" px={6} pt="sm">
-          <Icon
-            icon="mdi:check-circle-outline"
-            width={14}
-            style={{ color: 'var(--mantine-color-dimmed)', flexShrink: 0 }}
-          />
-          <Text size="xs" c="dimmed" lh={1.3}>
-            Changes save as you make them.
-          </Text>
-        </Group>
-      </Stack>
-      <ScrollArea style={{ flex: 1 }} type="auto">
-        <Box px="xl" py="lg" maw={620}>
-          {page}
-        </Box>
-      </ScrollArea>
-    </Group>
-  );
 };
 
 // ---------------------------------------------------------------------------
@@ -1221,40 +1058,21 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   }
 
   return (
-    <SettingsModal opened={opened} onClose={onClose} title={title} rootProps={rootProps}>
-      <NavLayout sections={sections} surface={surface} initialSection={initialSection} />
-    </SettingsModal>
-  );
-};
-
-/** The nav layout's frame: a wide modal, full screen on a phone, with no
- *  body padding so the rail runs edge to edge. */
-const SettingsModal: React.FC<{
-  opened: boolean;
-  onClose: () => void;
-  title: React.ReactNode;
-  rootProps: Record<string, unknown>;
-  children: React.ReactNode;
-}> = ({ opened, onClose, title, rootProps, children }) => {
-  const narrow = useMediaQuery(NARROW_QUERY, false, { getInitialValueInEffect: false });
-  return (
-    <Modal
+    <SettingsNavModal
       opened={opened}
       onClose={onClose}
       title={title}
-      size={860}
-      fullScreen={narrow}
-      radius="md"
-      centered
-      data-testid="settings-modal"
-      styles={{
-        header: { borderBottom: '1px solid var(--mantine-color-default-border)' },
-        body: narrow ? { paddingTop: 'var(--mantine-spacing-md)' } : { padding: 0 },
-      }}
-      {...rootProps}
-    >
-      {children}
-    </Modal>
+      sections={sections}
+      storageKey={`depictio-settings-active:${surface}`}
+      defaultSection={DEFAULT_ACTIVE[surface]}
+      initialSection={initialSection}
+      footer={
+        <SettingsRailNote icon="mdi:check-circle-outline">
+          Changes save as you make them.
+        </SettingsRailNote>
+      }
+      modalProps={rootProps}
+    />
   );
 };
 

@@ -242,6 +242,30 @@ def _collect_live_dcs(project: dict) -> dict[str, dict]:
     return live
 
 
+def _source_input_label(rel: str, data_root: str | None) -> str:
+    """How the report names one recipe input: the stored path, joined onto the data root.
+
+    The data root and an override are both the project's word, so this
+    server's disk is probed (``exists``, ``realpath``) only where its
+    local-data policy would read the path anyway: a ``depictio local``
+    server, below a root. Anywhere else a probe would tell the reader whether
+    a server file exists and where a symlink leads. A URL, an absolute path
+    and a remote data root are shown as they are.
+    """
+    if "://" in rel or os.path.isabs(rel) or not data_root:
+        return rel
+    if "://" in data_root:
+        return f"{data_root.rstrip('/')}/{rel}"
+    path = os.path.normpath(os.path.join(data_root, rel))
+
+    from depictio.api.v1.configs.settings_models import local_data_policy
+
+    policy = local_data_policy()
+    if policy is not None and policy.allows(path) and os.path.exists(path):
+        return os.path.realpath(path)
+    return path
+
+
 def _dc_source_inputs(config: dict, data_root: str | None) -> list[str]:
     """Resolve the input paths a recipe-derived (``transformed``) DC aggregates from.
 
@@ -279,8 +303,7 @@ def _dc_source_inputs(config: dict, data_root: str | None) -> list[str]:
             )
             if not rel:
                 continue
-            path = os.path.join(data_root, rel) if (data_root and not os.path.isabs(rel)) else rel
-            out.append(os.path.realpath(path) if os.path.exists(path) else path)
+            out.append(_source_input_label(rel, data_root))
     except Exception:
         return out
     return out

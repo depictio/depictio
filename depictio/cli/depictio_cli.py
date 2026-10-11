@@ -30,9 +30,11 @@ from depictio.cli.cli.commands.data import app as data
 from depictio.cli.cli.commands.dev import app as dev
 from depictio.cli.cli.commands.images import app as images
 from depictio.cli.cli.commands.local import app as local
+from depictio.cli.cli.commands.manifest import app as manifest
 from depictio.cli.cli.commands.migrate import migrate
 from depictio.cli.cli.commands.run import register_run_command
 from depictio.cli.cli.commands.standalone import register_standalone_commands
+from depictio.cli.cli.commands.template import app as template
 from depictio.cli.cli.commands.watch import register_watch_command
 from depictio.cli.cli.utils import logo_art
 from depictio.cli.cli.utils.renamed import note_renamed
@@ -47,7 +49,7 @@ TAGLINE = "Interactive dashboards for bioinformatics data"
 # The panels of `depictio --help`, in display order, with their commands.
 HELP_PANELS = {
     "Get started": ("local", "ingest", "watch"),
-    "Projects and data": ("config", "data", "dashboard"),
+    "Projects and data": ("config", "data", "dashboard", "template", "manifest"),
     "Administration": ("migrate", "backup"),
     "Reference": ("catalog", "commands", "version"),
 }
@@ -226,6 +228,14 @@ app.add_typer(
     "tables, upload images.",
 )
 app.add_typer(dashboard, name="dashboard", help="Validate, import and export dashboard YAML files.")
+app.add_typer(
+    template,
+    name="template",
+    help="Export a project and its dashboards as a template someone else can run on their data.",
+)
+app.add_typer(
+    manifest, name="manifest", help="Write a data manifest from a samplesheet or any table."
+)
 # Out of the help: `images push` is `data push-images` now, kept for the scripts that
 # call it, and `images list-bucket` with it.
 app.add_typer(images, name="images", hidden=True)

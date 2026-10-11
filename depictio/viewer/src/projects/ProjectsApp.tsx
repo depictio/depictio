@@ -16,10 +16,23 @@ import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
-import { createProject, deleteProject as apiDeleteProject, importProjectZip, listProjects, updateProject as apiUpdateProject, useBrandAccents } from 'depictio-react-core';
+import {
+  createProject,
+  createProjectFromManifest,
+  createProjectFromRun,
+  deleteProject as apiDeleteProject,
+  importProjectZip,
+  listProjects,
+  updateProject as apiUpdateProject,
+  useBrandAccents,
+} from 'depictio-react-core';
 import type {
   CreateProjectInput,
   EditProjectInput,
+  FromManifestReport,
+  FromManifestRequest,
+  FromRunReport,
+  FromRunRequest,
   ProjectListEntry,
 } from 'depictio-react-core';
 
@@ -27,7 +40,12 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useAuthMode } from '../auth/hooks/useAuthMode';
 import { AppSidebar } from '../chrome';
 import ProjectsList from './ProjectsList';
-import CreateProjectModal from './CreateProjectModal';
+import CreateProjectModal, {
+  ManifestCreatedModal,
+  manifestReportNeedsReview,
+} from './CreateProjectModal';
+import { RunCreatedModal } from './fromRun';
+import type { RunCreatedContext } from './fromRun';
 import EditProjectModal from './EditProjectModal';
 import DeleteProjectModal from './DeleteProjectModal';
 import { usePageTitle } from '../branding';
@@ -71,10 +89,21 @@ const ProjectsApp: React.FC = () => {
   const [createOpened, { open: openCreate, close: closeCreate }] = useDisclosure(false);
   const [editTarget, setEditTarget] = useState<ProjectListEntry | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectListEntry | null>(null);
+  /** Real from-manifest report held back for review (unmatched types, pruned
+   *  or failed collections) instead of redirecting past it. */
+  const [createdReport, setCreatedReport] = useState<FromManifestReport | null>(null);
+  /** From-run report whose ingestion is still running on the workers, with
+   *  what the create dialog knew about the run (template name, what was read
+   *  in the folder). Kept so the user can watch it finish instead of being
+   *  redirected to a dashboard whose collections are still empty. */
+  const [createdRun, setCreatedRun] = useState<{
+    report: FromRunReport;
+    context: RunCreatedContext;
+  } | null>(null);
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
   const [desktopOpened, toggleDesktop] = useProjectsSidebar();
-  const { user } = useCurrentUser();
+  const { user, localDataRootsEnabled, remoteBrowseEnabled } = useCurrentUser();
   const { status: authStatus, loading: authLoading } = useAuthMode();
   // Fail closed while the auth status is still loading — on the very first
   // frame `authStatus` is null so `is_public_mode` would silently evaluate
@@ -129,6 +158,55 @@ const ProjectsApp: React.FC = () => {
       });
       closeCreate();
       refresh();
+    },
+    [closeCreate, refresh],
+  );
+
+  const handleCreateFromManifest = useCallback(
+    async (input: FromManifestRequest) => {
+      const report = await createProjectFromManifest(input);
+      closeCreate();
+      if (manifestReportNeedsReview(report)) {
+        // Something was skipped, unmatched or failed: the project exists, so
+        // refresh the list, but keep the user here with the full report
+        // rather than redirecting to a dashboard that hides it.
+        refresh();
+        setCreatedReport(report);
+        return report;
+      }
+      const dashboardId = report.dashboards[0]?.dashboard_id;
+      notifications.show({
+        color: 'teal',
+        title: 'Project created from manifest',
+        message: dashboardId
+          ? `"${report.project_name}" is ready: opening its dashboard.`
+          : `"${report.project_name}" is ready.`,
+        autoClose: 2500,
+      });
+      if (dashboardId) window.location.assign(`/dashboard/${dashboardId}`);
+      else refresh();
+      return report;
+    },
+    [closeCreate, refresh],
+  );
+
+  // Unlike the from-manifest flow, this one answers as soon as the project and
+  // its dashboards exist: the collections are still being ingested on the
+  // workers. So there is never a redirect: the list refreshes behind a modal
+  // that watches the run and offers the dashboard once the user is ready.
+  const handleCreateFromRun = useCallback(
+    async (input: FromRunRequest, context: RunCreatedContext) => {
+      const report = await createProjectFromRun(input);
+      notifications.show({
+        color: 'teal',
+        title: 'Project created from run folder',
+        message: `"${report.project_name}" is ingesting in the background.`,
+        autoClose: 3000,
+      });
+      closeCreate();
+      refresh();
+      setCreatedRun({ report, context });
+      return report;
     },
     [closeCreate, refresh],
   );
@@ -282,6 +360,23 @@ const ProjectsApp: React.FC = () => {
         onClose={closeCreate}
         onCreate={handleCreate}
         onImport={handleImport}
+        onCreateFromManifest={handleCreateFromManifest}
+        onCreateFromRun={handleCreateFromRun}
+        localDataRootsEnabled={localDataRootsEnabled}
+        remoteBrowseEnabled={remoteBrowseEnabled}
+        // Mirrored server-side: a call carrying a private bucket's details
+        // is refused to non-admins in public mode.
+        privateBucketDisabledReason={
+          createDisabled
+            ? 'Private buckets are disabled in public/demo mode for non-admin users.'
+            : null
+        }
+      />
+      <ManifestCreatedModal report={createdReport} onClose={() => setCreatedReport(null)} />
+      <RunCreatedModal
+        report={createdRun?.report ?? null}
+        context={createdRun?.context ?? null}
+        onClose={() => setCreatedRun(null)}
       />
       <EditProjectModal
         opened={Boolean(editTarget)}

@@ -62,6 +62,14 @@ export interface UseCurrentUserResult {
   /** Deployment default for the /dashboards view, or null when the backend
    *  does not send one. Only applies to someone who never picked a view. */
   dashboardsDefaultView: string | null;
+  /** True when the server may read run folders from its own disk: the
+   *  "From a run folder" tab then accepts a local path and offers a folder
+   *  browser. False on older backends that do not send the flag. */
+  localDataRootsEnabled: boolean;
+  /** True when the server may browse S3 locations an administrator listed:
+   *  the run tab's folder browser then offers an S3 side. False on older
+   *  backends that do not send the flag. */
+  remoteBrowseEnabled: boolean;
   loading: boolean;
 }
 
@@ -77,6 +85,8 @@ export function useCurrentUser(): UseCurrentUserResult {
   const [temporaryUserExpiryMinutes, setTemporaryUserExpiryMinutes] = useState<number>(0);
   const [inspectorEnabled, setInspectorEnabled] = useState<boolean>(false);
   const [dashboardsDefaultView, setDashboardsDefaultView] = useState<string | null>(null);
+  const [localDataRootsEnabled, setLocalDataRootsEnabled] = useState<boolean>(false);
+  const [remoteBrowseEnabled, setRemoteBrowseEnabled] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -92,6 +102,8 @@ export function useCurrentUser(): UseCurrentUserResult {
         setWalkthroughDisabled(Boolean(data.walkthrough_disabled));
         setIsSingleUserMode(Boolean(data.is_single_user_mode));
         setInspectorEnabled(Boolean(data.inspector_enabled));
+        setLocalDataRootsEnabled(Boolean(data.local_data_roots_enabled));
+        setRemoteBrowseEnabled(Boolean(data.remote_browse_enabled));
         setDashboardsDefaultView(
           typeof data.dashboards_default_view === 'string'
             ? data.dashboards_default_view
@@ -128,6 +140,8 @@ export function useCurrentUser(): UseCurrentUserResult {
     temporaryUserExpiryMinutes,
     inspectorEnabled,
     dashboardsDefaultView,
+    localDataRootsEnabled,
+    remoteBrowseEnabled,
     loading,
   };
 }

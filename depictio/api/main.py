@@ -23,7 +23,9 @@ from depictio.api.v1.configs.security_headers import SECURITY_HEADERS
 from depictio.api.v1.endpoints.routers import router
 from depictio.api.v1.json_response import CustomJSONResponse
 from depictio.api.v1.middleware.analytics_middleware import AnalyticsMiddleware
+from depictio.api.v1.remote_fetch import RemoteFetchFailed, RemoteURLRejected
 from depictio.api.v1.services.lifespan import lifespan
+from depictio.models.s3_access import S3AccessError
 from depictio.version import get_api_version, get_version
 
 
@@ -191,6 +193,15 @@ if not _cors_origins:
     _logger.info(
         "CORS allowlist is empty — cross-origin browser requests are disabled. "
         "Set DEPICTIO_FASTAPI_CORS_ALLOWED_ORIGINS to allow specific origins."
+    )
+
+# Local folders are a single-user feature: on a shared server, reading the
+# server's own disk for whoever asks is never right, so the roots are ignored.
+if settings.local_data.root_list and not settings.auth.is_single_user_mode:
+    _logger.warning(
+        "DEPICTIO_LOCAL_DATA_ROOTS is set but single-user mode is off, so local folders "
+        "stay disabled. Set DEPICTIO_AUTH_SINGLE_USER_MODE=true (as `depictio local` "
+        "does) or unset DEPICTIO_LOCAL_DATA_ROOTS."
     )
 
 # Add analytics middleware if enabled
@@ -417,5 +428,49 @@ async def health_check() -> dict[str, str]:
 async def validation_exception_handler(
     _request: object, exc: RequestValidationError
 ) -> JSONResponse:
-    """Handle request validation errors with formatted error details."""
-    return JSONResponse(status_code=422, content={"detail": [str(error) for error in exc.errors()]})
+    """Handle request validation errors with formatted error details.
+
+    The rejected input is left out of each error: for a missing field it is
+    the whole body, storage secrets included, and the caller sent it anyway.
+    """
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": [
+                str({key: value for key, value in error.items() if key != "input"})
+                for error in exc.errors()
+            ]
+        },
+    )
+
+
+@app.exception_handler(S3AccessError)
+async def s3_access_exception_handler(_request: object, exc: S3AccessError) -> JSONResponse:
+    """S3 reads refused by the configuration, or failed at the store.
+
+    ``detail`` is the sanitized message (kind, bucket and prefix, never the
+    instance endpoint, keys or request ids) and ``code`` lets the viewer tell
+    a refusal from a denial or an outage: ``s3_refused`` and the access
+    errors are 422, a wrong region or an unreachable store 502.
+    """
+    return JSONResponse(
+        status_code=exc.status_code, content={"detail": exc.detail, "code": exc.code}
+    )
+
+
+@app.exception_handler(RemoteURLRejected)
+async def remote_url_exception_handler(_request: object, exc: RemoteURLRejected) -> JSONResponse:
+    """User-supplied URLs the fetch gateway refused, or could not fetch.
+
+    What reaches here is raised past a route by the remote reads the API runs
+    in-process (``create_from_url``, the scan and process helpers). ``detail``
+    is the gateway's message, written to be shown to clients. ``code`` is
+    ``remote_url_rejected`` (400) for a refusal by scheme, host, address range
+    or allow/deny list, and ``remote_fetch_failed`` (502) for a URL that passed
+    the checks but answered with an error or not at all.
+    """
+    if isinstance(exc, RemoteFetchFailed):
+        status_code, code = 502, "remote_fetch_failed"
+    else:
+        status_code, code = 400, "remote_url_rejected"
+    return JSONResponse(status_code=status_code, content={"detail": str(exc), "code": code})

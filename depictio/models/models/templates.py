@@ -30,7 +30,7 @@ class TemplateVariable(BaseModel):
     """A variable required by a template (e.g., DATA_ROOT).
 
     Variables are declared in the template metadata section and must be provided
-    by the user at template instantiation time (e.g., via --data-root CLI flag).
+    by the user at template instantiation time (e.g., via the DATA_DIR argument of `depictio ingest`).
     """
 
     name: str = Field(..., description="Variable name (e.g., 'DATA_ROOT')")
@@ -344,7 +344,12 @@ class TemplateOrigin(BaseModel):
         ..., description="Template identifier (e.g., 'nf-core/ampliseq/2.16.0')"
     )
     template_version: str = Field(..., description="Template schema version at time of use")
-    data_root: str = Field(..., description="The actual --data-root value provided by the user")
+    data_root: str | None = Field(
+        default=None,
+        description="The actual DATA_DIR value provided by the user. None for "
+        "manifest-driven instantiations, where MANIFEST_URL in `variables` plays "
+        "the equivalent provenance role.",
+    )
     applied_at: str = Field(
         default_factory=lambda: datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         description="Timestamp when template was applied",
@@ -397,5 +402,7 @@ class TemplateOrigin(BaseModel):
 
     @field_validator("data_root")
     @classmethod
-    def validate_data_root(cls, v: str) -> str:
+    def validate_data_root(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
         return _require_nonempty(v, "Data root")

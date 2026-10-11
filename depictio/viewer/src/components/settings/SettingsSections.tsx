@@ -13,11 +13,29 @@
  * - `Field` / `SwitchField` lay out one setting inside a section.
  * - `useOpenSections` keeps which sections are open, remembered in
  *   localStorage under a caller-chosen key.
+ * - `GatedButton` / `DisabledReason` show why an action is unavailable: on
+ *   hover, and in a dimmed line that stays readable without a pointer.
+ * - `EmptyState` / `ErrorAlert` are a section's nothing-here-yet and
+ *   something-failed states.
  */
 import React from 'react';
-import { Accordion, Group, Stack, Switch, Text, ThemeIcon } from '@mantine/core';
+import {
+  Accordion,
+  Alert,
+  Button,
+  Group,
+  Stack,
+  Switch,
+  Text,
+  ThemeIcon,
+  Tooltip,
+  type AlertProps,
+  type ButtonProps,
+} from '@mantine/core';
 import type { MantineColor } from '@mantine/core';
 import { Icon } from '@iconify/react';
+
+import { Z_LAYERS } from 'depictio-react-core';
 
 // ---------------------------------------------------------------------------
 // Section header
@@ -134,6 +152,110 @@ export const SwitchField: React.FC<{
     </Field>
   );
 };
+
+// ---------------------------------------------------------------------------
+// Unavailable actions
+// ---------------------------------------------------------------------------
+
+export type GatedButtonProps = ButtonProps &
+  Omit<React.ComponentPropsWithoutRef<'button'>, keyof ButtonProps> & {
+    /** Why the action is unavailable; null or empty when it is available. */
+    reason?: string | null;
+  };
+
+/**
+ * A button that stays visible when the action is unavailable and says why on
+ * hover. A natively disabled button swallows the pointer events a tooltip
+ * needs, so this one is marked `data-disabled` and `aria-disabled` instead
+ * (Mantine's documented pattern) and ignores clicks while gated. Pair it with
+ * a `DisabledReason` line for readers without a pointer. A caller's own
+ * `aria-disabled` (a step still settling, say) is kept, without the gated look.
+ */
+export const GatedButton = React.forwardRef<HTMLButtonElement, GatedButtonProps>(
+  ({ reason, onClick, 'aria-disabled': ariaDisabled, ...props }, ref) => {
+    const gated = Boolean(reason);
+    return (
+      <Tooltip
+        label={reason ?? ''}
+        disabled={!gated}
+        withArrow
+        multiline
+        maw={280}
+        zIndex={Z_LAYERS.tooltip}
+      >
+        <Button
+          ref={ref}
+          {...props}
+          data-disabled={gated || undefined}
+          aria-disabled={gated || ariaDisabled || undefined}
+          onClick={(event) => {
+            if (gated) {
+              event.preventDefault();
+              return;
+            }
+            onClick?.(event);
+          }}
+        />
+      </Tooltip>
+    );
+  },
+);
+GatedButton.displayName = 'GatedButton';
+
+/** The dimmed line under an unavailable action, saying why. Renders nothing
+ *  when there is no reason. */
+export const DisabledReason: React.FC<{
+  reason: string | null | undefined;
+  icon?: string;
+  testId?: string;
+}> = ({ reason, icon = 'mdi:lock-outline', testId }) =>
+  reason ? (
+    <Group gap={6} wrap="nowrap" align="flex-start" c="dimmed" data-testid={testId}>
+      <Icon icon={icon} width={14} style={{ flexShrink: 0, marginTop: 2 }} />
+      <Text size="xs" c="dimmed" lh={1.35}>
+        {reason}
+      </Text>
+    </Group>
+  ) : null;
+
+// ---------------------------------------------------------------------------
+// Empty and failed states
+// ---------------------------------------------------------------------------
+
+/** What a section shows when it has nothing to act on yet: a dimmed glyph, a
+ *  short title, and a line saying why and what to do about it. */
+export const EmptyState: React.FC<{
+  icon: string;
+  title: React.ReactNode;
+  testId?: string;
+  children: React.ReactNode;
+}> = ({ icon, title, testId, children }) => (
+  <Group gap="sm" wrap="nowrap" align="flex-start" data-testid={testId}>
+    <ThemeIcon variant="light" color="gray" size="lg" radius="md">
+      <Icon icon={icon} width={20} />
+    </ThemeIcon>
+    <Stack gap={2} style={{ minWidth: 0 }}>
+      <Text size="sm" fw={500}>
+        {title}
+      </Text>
+      <Text size="xs" c="dimmed" lh={1.35}>
+        {children}
+      </Text>
+    </Stack>
+  </Group>
+);
+
+/** A load or an action that failed, with the server's message as the body.
+ *  Takes every `Alert` prop except the look, such as a `title` or a
+ *  `data-testid`. */
+export const ErrorAlert: React.FC<Omit<AlertProps, 'color' | 'variant' | 'icon'>> = (props) => (
+  <Alert
+    color="red"
+    variant="light"
+    icon={<Icon icon="mdi:alert-circle-outline" width={18} />}
+    {...props}
+  />
+);
 
 // ---------------------------------------------------------------------------
 // Accordion

@@ -43,7 +43,7 @@ import {
   TextInput,
 } from '@mantine/core';
 
-import { checkMultiQCUniformity, createDataCollectionFromUpload, createMultiQCDataCollection, deleteDataCollection, fetchDataCollectionPreview, fetchDeltaHistory, fetchMultiQCByDataCollection, fetchProject, fetchVizSuggestions, renameDataCollection, useBrandAccents } from 'depictio-react-core';
+import { checkMultiQCUniformity, createDataCollectionFromUpload, createDataCollectionFromUrl, createMultiQCDataCollection, deleteDataCollection, fetchDataCollectionPreview, fetchDeltaHistory, fetchMultiQCByDataCollection, fetchProject, fetchVizSuggestions, renameDataCollection, useBrandAccents } from 'depictio-react-core';
 import type {
   ProjectListEntry,
   PreviewResult,
@@ -68,6 +68,7 @@ import IngestionReportPanel from './IngestionReportPanel';
 import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
 import ProjectIngestionTrigger from './ProjectIngestionTrigger';
 import { DeltaVersionHistory } from './DeltaVersionHistory';
+import ProjectSettingsModal from './ProjectSettingsModal';
 import { parseTemplate, TemplateChip, templateDocsUrl } from '../template';
 import {
   DcTypeBadges,
@@ -329,6 +330,7 @@ const ProjectDetailApp: React.FC = () => {
   const [manageTarget, setManageTarget] = useState<DataCollectionShape | null>(null);
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
   const [createDcOpened, setCreateDcOpened] = useState(false);
+  const [settingsOpened, setSettingsOpened] = useState(false);
   /** Cross-DC links for this project. Fetched alongside the project doc and
    *  refreshed when the user creates / edits / deletes a link from the
    *  Links section. Wired into the JoinsGraph for visualization. */
@@ -342,7 +344,7 @@ const ProjectDetailApp: React.FC = () => {
   // for a <Loader/>, and section-local state would reset to collapsed.
   const [dcManagerOpened, { toggle: toggleDcManager }] = useDisclosure(false);
 
-  const { user } = useCurrentUser();
+  const { user, isPublicMode, loading: userLoading } = useCurrentUser();
   const projectId = readProjectIdFromPath();
 
   usePageTitle('Project Data Collections');
@@ -368,17 +370,26 @@ const ProjectDetailApp: React.FC = () => {
 
   const refresh = () => setRefreshKey((k) => k + 1);
 
-  // Permission check — owners, editors, or admins may mutate DCs.
-  const canMutate = useMemo(() => {
-    if (!user || !project) return false;
-    if (user.is_admin) return true;
+  // Permission check: owners, editors, or admins may mutate DCs. Storage
+  // credentials are owners-only (stricter than canMutate), mirroring the
+  // backend's owner gate on /storage.
+  const { canMutate, isOwner } = useMemo(() => {
+    if (!user || !project) return { canMutate: false, isOwner: false };
+    if (user.is_admin) return { canMutate: true, isOwner: true };
     const matchUser = (list?: Array<{ _id?: string; id?: string }>) =>
       !!list?.some((u) => (u._id ?? u.id) === user.id);
-    return (
-      matchUser(project.permissions?.owners) ||
-      matchUser(project.permissions?.editors)
-    );
+    const owner = matchUser(project.permissions?.owners);
+    return { canMutate: owner || matchUser(project.permissions?.editors), isOwner: owner };
   }, [user, project]);
+
+  // Refresh and export are refused to non-admins on a public/demo deployment.
+  // Whether this is one is unknown until the auth status lands, so both stay
+  // gated until then rather than being enabled for a moment.
+  const publicModeReason = userLoading
+    ? 'Checking what you can change in this project...'
+    : isPublicMode && !user?.is_admin
+      ? 'Disabled in public/demo mode for non-admin users.'
+      : null;
 
   const workflows = useMemo<WorkflowShape[]>(
     () => (project?.workflows as WorkflowShape[] | undefined) || [],
@@ -493,6 +504,18 @@ const ProjectDetailApp: React.FC = () => {
             </Title>
           </Group>
           <Group gap="xs">
+            {/* Open to every reader once the project has loaded: the sections
+                inside disable what the reader may not change and say why. */}
+            <Button
+              variant="light"
+              color={accent.secondary}
+              data-testid="project-settings-button"
+              leftSection={<Icon icon="ic:baseline-settings" width={16} />}
+              disabled={!project}
+              onClick={() => setSettingsOpened(true)}
+            >
+              Project settings
+            </Button>
             <Button
               component="a"
               href={`/projects/${projectId}/permissions`}
@@ -675,6 +698,21 @@ const ProjectDetailApp: React.FC = () => {
         </Box>
       </AppShell.Main>
 
+      {/* Outside the loading switch above, so reloading the project after a
+          refresh keeps the dialog, and the run it follows, mounted. */}
+      {projectId && (
+        <ProjectSettingsModal
+          opened={settingsOpened}
+          onClose={() => setSettingsOpened(false)}
+          projectId={projectId}
+          projectName={project?.name}
+          canManageStorage={isOwner}
+          canMutate={canMutate}
+          publicModeReason={publicModeReason}
+          dataCollections={allDataCollections}
+          onReloadProject={refresh}
+        />
+      )}
       <CreateDataCollectionModal
         opened={createDcOpened}
         projectType={projectType}
@@ -1137,6 +1175,12 @@ const CreateDataCollectionModal: React.FC<{
 }> = ({ opened, projectType, projectId, onClose, onSuccess }) => {
   const accent = useBrandAccents();
   const [dcType, setDcType] = useState<'table' | 'multiqc'>('table');
+  // Where the table comes from. 'upload' pushes bytes through the browser;
+  // 'url' hands the server a location to fetch itself, which is the only
+  // workable route for files too large to upload or buckets the browser
+  // cannot reach.
+  const [tableSource, setTableSource] = useState<'upload' | 'url'>('upload');
+  const [remoteUrl, setRemoteUrl] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -1251,6 +1295,16 @@ const CreateDataCollectionModal: React.FC<{
     setLonColumn(coordsGuess.lonColumn);
   }, [file, coordsGuess]);
 
+  // The name last filled in from a picked file or a typed URL. While the name
+  // field still holds it, a newer file or URL replaces it; once the user
+  // edits the name, it is theirs and stays.
+  const autoNameRef = useRef('');
+  const autoFillName = (next: string) => {
+    if (name.trim() && name !== autoNameRef.current) return;
+    autoNameRef.current = next;
+    setName(next);
+  };
+
   // Reset everything when the modal closes — otherwise re-opening shows stale
   // state from the previous attempt.
   useEffect(() => {
@@ -1258,6 +1312,7 @@ const CreateDataCollectionModal: React.FC<{
       setDcType('table');
       setFile(null);
       setName('');
+      autoNameRef.current = '';
       setDescription('');
       setFileFormat('csv');
       setSeparator(',');
@@ -1271,6 +1326,8 @@ const CreateDataCollectionModal: React.FC<{
       setLonColumn(null);
       setCoordsConfirmed(false);
       setParsingHeader(false);
+      setTableSource('upload');
+      setRemoteUrl('');
       multiqcDropzone.clear();
       tableDropzone.clear();
     }
@@ -1279,8 +1336,10 @@ const CreateDataCollectionModal: React.FC<{
   }, [opened]);
 
   // Auto-fill format + name from picked filename. Don't clobber a name the
-  // user already typed; do clobber the format because picking a new file
-  // means a new format.
+  // user already typed (see autoFillName); do clobber the format because
+  // picking a new file means a new format. Runs per file only: re-running on
+  // every keystroke of the name field would reset a separator or format the
+  // user picked since.
   useEffect(() => {
     if (!file) return;
     const guessed = guessFormat(file.name);
@@ -1288,11 +1347,27 @@ const CreateDataCollectionModal: React.FC<{
       setFileFormat(guessed);
       setSeparator(guessed === 'tsv' ? '\t' : ',');
     }
-    if (!name.trim()) {
-      const stem = file.name.replace(/\.[^.]+$/, '');
-      setName(stem);
+    autoFillName(file.name.replace(/\.[^.]+$/, ''));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file]);
+
+  // Same auto-fill for the remote-URL source: the last path segment plays the
+  // role the picked filename plays above. It follows the URL as it is typed
+  // ("https://e" first gives "e") until the user edits the name.
+  useEffect(() => {
+    if (tableSource !== 'url') return;
+    const basename = remoteUrl.trim().split('?')[0].split('/').pop();
+    if (!basename) return;
+    const guessed = guessFormat(basename);
+    if (guessed) {
+      setFileFormat(guessed);
+      setSeparator(guessed === 'tsv' ? '\t' : ',');
     }
-  }, [file, name]);
+    autoFillName(basename.replace(/\.[^.]+$/, ''));
+    // `name` is intentionally read but not depended on: re-running on every
+    // keystroke of the name field would fight the user's own edits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remoteUrl, tableSource]);
 
   // Clear any prior uniformity mismatch (and stale pass state) when the user
   // changes the dropped file set — both refer to a different set of reports.
@@ -1425,6 +1500,46 @@ const CreateDataCollectionModal: React.FC<{
           message: result.message || `"${name.trim()}" is ready.`,
           autoClose: 4000,
         });
+      } else if (tableSource === 'url') {
+        const url = remoteUrl.trim();
+        if (!url) {
+          setError('Enter the URL of the file.');
+          setSubmitting(false);
+          return;
+        }
+        if (!/^(https?|s3):\/\//i.test(url)) {
+          // http:// passes here; whether the server accepts it depends on
+          // DEPICTIO_REMOTE_ALLOW_HTTP.
+          setError(
+            'The URL must start with https://, s3:// or http:// ' +
+              '(plain http:// is only accepted when the server allows it).',
+          );
+          setSubmitting(false);
+          return;
+        }
+        if (separator === 'custom' && !customSeparator) {
+          setError('Custom separator cannot be empty.');
+          setSubmitting(false);
+          return;
+        }
+        const result = await createDataCollectionFromUrl({
+          projectId,
+          name: name.trim(),
+          description: description.trim(),
+          dataType: 'table',
+          fileFormat,
+          separator,
+          customSeparator: separator === 'custom' ? customSeparator : null,
+          compression,
+          hasHeader,
+          url,
+        });
+        notifications.show({
+          color: 'teal',
+          title: 'Data collection created',
+          message: result.message || `"${name.trim()}" is ready.`,
+          autoClose: 2500,
+        });
       } else {
         if (!file) {
           setError('Pick a file to upload.');
@@ -1486,6 +1601,14 @@ const CreateDataCollectionModal: React.FC<{
 
   const isDelimited = fileFormat === 'csv' || fileFormat === 'tsv';
 
+  /** True while the chosen source still lacks an input the Create button needs. */
+  const isMissingInput = (): boolean => {
+    if (!name.trim()) return true;
+    if (dcType === 'multiqc') return multiqcDropzone.files.length === 0;
+    if (tableSource === 'url') return !remoteUrl.trim();
+    return !file || (coordsConfirmed && (!latColumn || !lonColumn));
+  };
+
   return (
     <Modal
       opened={opened}
@@ -1534,22 +1657,45 @@ const CreateDataCollectionModal: React.FC<{
 
           <Tabs.Panel value="table" pt="md">
             <Stack gap="xs">
-              <TableFileDropZone
-                dropzone={tableDropzone}
-                file={file}
-                submitting={submitting}
-                icon="mdi:file-upload-outline"
-                title="Drop a CSV, TSV, Parquet, or Feather file"
-                onRemove={() => {
-                  setFile(null);
-                  setCsvColumns([]);
-                  setLatColumn(null);
-                  setLonColumn(null);
-                  setCoordsConfirmed(false);
-                  tableDropzone.clear();
-                }}
+              <SegmentedControl
+                fullWidth
+                value={tableSource}
+                onChange={(value) => setTableSource(value as 'upload' | 'url')}
+                disabled={submitting}
+                data={[
+                  { label: 'Upload a file', value: 'upload' },
+                  { label: 'Remote URL', value: 'url' },
+                ]}
               />
-              {file && (
+              {tableSource === 'url' ? (
+                <TextInput
+                  label="File URL"
+                  placeholder="https://example.org/data.csv or s3://bucket/key.csv"
+                  description="Fetched by the server, so the file never travels through your browser. Private buckets use this project's storage credentials; a bucket the administrator marked public is read without any."
+                  value={remoteUrl}
+                  onChange={(e) => setRemoteUrl(e.currentTarget.value)}
+                  disabled={submitting}
+                />
+              ) : (
+                <TableFileDropZone
+                  dropzone={tableDropzone}
+                  file={file}
+                  submitting={submitting}
+                  icon="mdi:file-upload-outline"
+                  title="Drop a CSV, TSV, Parquet, or Feather file"
+                  onRemove={() => {
+                    setFile(null);
+                    setCsvColumns([]);
+                    setLatColumn(null);
+                    setLonColumn(null);
+                    setCoordsConfirmed(false);
+                    tableDropzone.clear();
+                  }}
+                />
+              )}
+              {/* The URL source sends no coordinates, so a file picked before
+                  switching to it must not keep offering them. */}
+              {tableSource === 'upload' && file && (
                 <Paper p="sm" withBorder radius="sm" bg="var(--mantine-color-default-hover)">
                   <Stack gap="xs">
                     {coordsGuess && !coordsConfirmed && (
@@ -1810,9 +1956,11 @@ const CreateDataCollectionModal: React.FC<{
           icon={<Icon icon="mdi:information-outline" width={18} />}
         >
           <Text size="xs">
-            The file will be scanned and aggregated to a Delta table on the
-            server. Larger files take longer — keep this dialog open until you
-            see the success notification. Need the legacy flow?{' '}
+            {dcType === 'table' && tableSource === 'url'
+              ? 'The server fetches the URL itself and aggregates it to a Delta table. The address is screened before any request is made, so private and internal addresses are refused. '
+              : 'The file will be scanned and aggregated to a Delta table on the server. '}
+            Larger files take longer: keep this dialog open until you see the
+            success notification. Need the legacy flow?{' '}
             <Anchor
               href={`/project/${readProjectIdFromPath()}/data`}
               target="_blank"
@@ -1832,13 +1980,7 @@ const CreateDataCollectionModal: React.FC<{
             color={accent.secondary}
             onClick={handleSubmit}
             loading={submitting}
-            disabled={
-              !name.trim() ||
-              (dcType === 'multiqc'
-                ? multiqcDropzone.files.length === 0
-                : !file ||
-                  (coordsConfirmed && (!latColumn || !lonColumn)))
-            }
+            disabled={isMissingInput()}
             leftSection={<Icon icon="mdi:cloud-upload-outline" width={16} />}
           >
             Create

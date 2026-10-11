@@ -147,6 +147,22 @@ class TestMajorReleaseGap:
         assert major_release_gap(info, "nf-core/rnaseq/3.26.0") is None
 
 
+class TestLookupCost:
+    def test_a_missing_version_is_not_looked_up_through_the_catalogue(
+        self, tmp_path: Path, shipped_templates: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A miss must cost no more than a hit: listing the catalogue for an error
+        message parses every shipped template, once per candidate id."""
+
+        def _no_catalogue(_projects_dir):
+            raise AssertionError("the template catalogue was parsed")
+
+        monkeypatch.setattr(templates_module, "_list_available_templates", _no_catalogue)
+        run = _nextflow_run(tmp_path / "run", "2.15.0")
+        template_id, _info = detect_template_from_run_dir(run)
+        assert template_id == "nf-core/ampliseq/2.14.0"
+
+
 class TestNoSelection:
     def test_unknown_pipeline_returns_none_with_info(
         self, tmp_path: Path, shipped_templates: Path

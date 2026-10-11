@@ -1,5 +1,6 @@
 import os
 import signal
+from collections import Counter
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
@@ -41,7 +42,11 @@ from depictio.cli.cli.utils.rich_utils import (
     rich_print_command_usage,
     rich_print_section_separator,
 )
-from depictio.cli.cli.utils.scan import flat_run_tag_clash, scan_project_files
+from depictio.cli.cli.utils.scan import (
+    flat_run_tag_clash,
+    prune_empty_optional_manifest_dcs,
+    scan_project_files,
+)
 from depictio.cli.cli.utils.scan_utils import (
     count_data_collection_matches,
     resolve_run_locations,
@@ -55,8 +60,19 @@ from depictio.cli.cli.utils.state import lock_path, settle_collections
 from depictio.cli.cli.utils.step_reporter import StepReporter
 from depictio.cli.cli.utils.watch import ProjectLock, ProjectLockError
 from depictio.cli.cli_logging import logger
+from depictio.models.models.manifest import is_remote_url
 from depictio.models.s3_utils import S3_storage_checks
 from depictio.models.utils import convert_model_to_dict
+
+# Colour per ``template_preview.PreviewStatus``, so a wrong DATA_DIR is
+# visible at a glance. Same palette ``rich_print_checked_statement`` uses for
+# success / warning / error, so the table reads like the rest of the CLI.
+_PREVIEW_STATUS_STYLES = {
+    "ok": "green",
+    "empty": "orange1",
+    "missing": "red",
+    "pruned": "dim",
+}
 
 
 def _cli_version() -> str | None:
@@ -103,6 +119,31 @@ def _redacted_command_line() -> str | None:
         return None
 
 
+def _manifest_location_problem(manifest: str) -> str | None:
+    """Why ``--manifest`` cannot be read from where it points, or ``None``.
+
+    Decided from the scheme alone, before any step runs: an s3:// manifest used
+    to pass every check up to the scan, after the project was already synced,
+    and a plain http:// one was taken for a local file that "does not exist".
+    """
+    from depictio.models.models.manifest import is_remote_url
+
+    scheme = manifest.split("://", 1)[0].lower() if "://" in manifest else ""
+    if scheme == "s3":
+        return (
+            "--manifest cannot be read from s3:// yet: serve the manifest over https, "
+            "or use a local path."
+        )
+    if not scheme or is_remote_url(manifest):
+        return None
+    if scheme == "http":
+        return (
+            "--manifest is a plain http:// URL, which an administrator has to allow (the "
+            "DEPICTIO_REMOTE_ALLOW_HTTP environment variable). Use https, or a local path."
+        )
+    return f"--manifest takes an https:// URL or a local path, not {scheme}://."
+
+
 def _ingestion_data_collections(project_config, count_files: bool = False) -> list[dict]:
     """Per-DC summary (tag / type / format) + the local scan paths the CLI
     resolved, walked from the validated project config. Best-effort; never raises.
@@ -139,6 +180,14 @@ def _ingestion_data_collections(project_config, count_files: bool = False) -> li
                 elif normalized_mode == "recursive":
                     rc = getattr(params, "regex_config", None)
                     pattern = getattr(rc, "pattern", None) if rc else None
+                elif normalized_mode == "url":
+                    pattern = getattr(params, "url", None)
+                elif normalized_mode == "s3_prefix":
+                    prefix = getattr(params, "prefix", None)
+                    glob = getattr(params, "pattern", None)
+                    pattern = f"{prefix}{glob}" if prefix and glob else prefix
+                elif normalized_mode == "manifest":
+                    pattern = getattr(params, "manifest_url", None)
                 else:
                     pattern = None
                 dcsp = getattr(cfg, "dc_specific_properties", None) if cfg else None
@@ -147,7 +196,7 @@ def _ingestion_data_collections(project_config, count_files: bool = False) -> li
                         "tag": getattr(dc, "data_collection_tag", None) or "",
                         "type": getattr(cfg, "type", None) if cfg else None,
                         "format": getattr(dcsp, "format", None) if dcsp else None,
-                        "scan_mode": mode,
+                        "scan_mode": normalized_mode,
                         "scan_pattern": pattern,
                         "locations": locations,
                         "file_count": file_count,
@@ -164,22 +213,81 @@ def _shorten_scan_pattern(pattern: str | None, locations: list[str]) -> str:
     A single-file scan's pattern is an absolute path, and in a terminal-width
     table it truncates to the data root every collection shares, hiding the one
     part that identifies the file. Relative to the configured location it stays
-    unambiguous and readable.
+    unambiguous and readable. A remote pattern (a URL, an s3:// prefix or a
+    manifest) is shown whole: it is not a path under a local location.
     """
     if not pattern:
         return "-"
+    if "://" in pattern:
+        return pattern
     for location in locations:
         try:
-            return str(Path(pattern).relative_to(location))
+            relative = Path(pattern).relative_to(location)
         except ValueError:
             continue
+        # The location itself (a single-file location is the file) says nothing.
+        return pattern if relative == Path(".") else str(relative)
     return pattern
+
+
+# Scan modes whose files are remote: a dry run does not list or fetch them.
+_REMOTE_SCAN_MODES = ("url", "s3_prefix", "manifest")
+
+
+def _remote_indexed_file_tags(resolved_config: dict) -> tuple[list[str], list[str]]:
+    """``(required, optional)`` tags of the indexed_file DCs that would read remotely.
+
+    Under a remote DATA_DIR an indexed_file DC counts as remote unless every
+    location it names is local (a ``--bind`` to a local folder, say): its files
+    are mirrored to S3 from local disk, next to their indexes.
+    """
+    from depictio.cli.cli.utils.bindings import scan_locations
+
+    required: list[str] = []
+    optional: list[str] = []
+    for wf in resolved_config.get("workflows", []):
+        for dc in wf.get("data_collections", []):
+            if str((dc.get("config") or {}).get("type", "")).lower() != "indexed_file":
+                continue
+            locations = scan_locations(wf, dc)
+            if locations and not any(is_remote_url(loc) for loc in locations):
+                continue
+            (optional if dc.get("optional") else required).append(
+                str(dc.get("data_collection_tag"))
+            )
+    return required, optional
+
+
+def _drop_remote_indexed_file_dcs(resolved_config: dict) -> None:
+    """Refuse a required remote indexed_file DC; skip an optional one, with a warning."""
+    from depictio.cli.cli.utils.templates import prune_links_for_tags
+
+    required, optional = _remote_indexed_file_tags(resolved_config)
+    if required:
+        raise ValueError(
+            f"Indexed-file data collections ({', '.join(required)}) need a local DATA_DIR; "
+            "they cannot be read from s3:// yet. Bind them to a local folder with --bind."
+        )
+    if not optional:
+        return
+    for wf in resolved_config.get("workflows", []):
+        wf["data_collections"] = [
+            dc
+            for dc in wf.get("data_collections", [])
+            if dc.get("data_collection_tag") not in optional
+        ]
+    prune_links_for_tags(resolved_config, set(optional))
+    rich_print_checked_statement(
+        f"Skipped optional indexed-file data collection(s) {', '.join(optional)}: "
+        "they need local files and cannot be read from s3:// yet.",
+        "warning",
+    )
 
 
 def _print_dry_run_scan_preview(project_config) -> bool:
     """Show what a real scan would match, per data collection.
 
-    Answering "is --data-root pointing at the right level?" is the whole reason
+    Answering "is DATA_DIR pointing at the right level?" is the whole reason
     to run ``--dry-run``, and it could not: every step was wrapped in
     ``if not dry_run`` and the run then printed "Data scanning completed" all
     the same. The counts come from the scanner's own matcher, so a preview
@@ -203,14 +311,21 @@ def _print_dry_run_scan_preview(project_config) -> bool:
     rows = []
     for record in records:
         file_count = record["file_count"]
+        if file_count is not None:
+            files = str(file_count)
+        elif record["scan_mode"] in _REMOTE_SCAN_MODES:
+            # Listed or fetched by the real scan only: a dry run reads nothing remote.
+            files = "not counted (remote)"
+        else:
+            # A collection with no scan config (a derived one) has no files
+            # to count, which is not the same as counting zero.
+            files = "n/a (no scan)"
         rows.append(
             {
                 "data collection": record["tag"],
                 "scan mode": record["scan_mode"] or "-",
                 "pattern": _shorten_scan_pattern(record["scan_pattern"], record["locations"]),
-                # A collection with no scan config (a derived one) has no files
-                # to count, which is not the same as counting zero.
-                "files": "n/a (no scan)" if file_count is None else str(file_count),
+                "files": files,
             }
         )
     render_records_table(rows, title="Dry run: files each data collection would match")
@@ -219,7 +334,7 @@ def _print_dry_run_scan_preview(project_config) -> bool:
     if empty:
         rich_print_checked_statement(
             f"{len(empty)} data collection(s) would match no file: {', '.join(empty)}. "
-            "Check --data-root and the scan patterns before running for real.",
+            "Check DATA_DIR and the scan patterns before running for real.",
             "warning",
         )
     return not empty
@@ -404,6 +519,103 @@ def ingestion_record(trap_sigterm: bool = True) -> Iterator[_IngestionRecord]:
         raise
     finally:
         restore_sigterm()
+
+
+def _render_run_preview(preview) -> None:
+    """Print what a ``--dry-run`` would actually ingest, per data collection.
+
+    The point of the table is to make a wrong DATA_DIR obvious before
+    anything is created: a collection that found nothing names the sources it
+    looked for, because "0 files" on its own does not tell you that your
+    prefix is one level too high.
+
+    Takes a ``template_preview.RunPreview``.
+    """
+    rich_print_checked_statement(f"Template: {preview.template_id}", "info")
+    rich_print_checked_statement(f"Data root: {preview.data_root}", "info")
+    rich_print_checked_statement(f"Project name: {preview.project_name}", "info")
+    if preview.detected_runs:
+        rich_print_checked_statement(
+            f"Detected runs ({len(preview.detected_runs)}): {', '.join(preview.detected_runs)}",
+            "info",
+        )
+    if preview.dashboards:
+        rich_print_checked_statement(f"Dashboards: {', '.join(preview.dashboards)}", "info")
+    if preview.truncated:
+        rich_print_checked_statement(
+            "The listing of this data root hit its key cap: this preview is partial "
+            "and every file count below is a lower bound.",
+            "warning",
+        )
+
+    # The derived variables, not the ones the user typed: the SKIP_*/IS_* flags
+    # are what the template conditionals gate on, so they decide which data
+    # collections exist at all.
+    if preview.resolved_variables:
+        render_records_table(
+            [
+                {"Variable": name, "Value": str(value)}
+                for name, value in sorted(preview.resolved_variables.items())
+            ],
+            columns=["Variable", "Value"],
+            title="Resolved template variables",
+            column_styles={"Variable": "yellow", "Value": "cyan"},
+        )
+
+    def _status_cell(status: str) -> str:
+        style = _PREVIEW_STATUS_STYLES.get(status, "white")
+        return f"[{style}]{status}[/{style}]"
+
+    render_records_table(
+        [
+            {
+                "Data collection": dc.tag,
+                "Kind": dc.kind,
+                "Mode": dc.mode or "-",
+                "Files": str(dc.matched),
+                "Status": _status_cell(dc.status),
+            }
+            for dc in preview.data_collections
+        ],
+        columns=["Data collection", "Kind", "Mode", "Files", "Status"],
+        title="Data collections under this data root",
+        column_styles={
+            "Data collection": "yellow",
+            "Kind": "cyan",
+            "Mode": "cyan",
+            "Files": "white",
+            "Status": "bold",
+        },
+    )
+
+    # Named below the table rather than in a column of it: a table cell is
+    # cropped to the terminal's width, and a source path cropped in the middle
+    # is exactly the half that would have told you the prefix is wrong.
+    missing = [dc for dc in preview.data_collections if dc.status == "missing"]
+    if missing:
+        rich_print_checked_statement("Sources not found under this data root:", "warning")
+        for dc in missing:
+            # A recipe DC names the sources it could not resolve; a scan DC that
+            # missed has one location, which is just as much the answer. Both
+            # read relative to the root, which is on its own line above.
+            sources = list(dc.missing_sources)
+            if not sources:
+                location = dc.location
+                if location.startswith(preview.data_root):
+                    location = location[len(preview.data_root) :].lstrip("/")
+                sources = [location]
+            rich_print_checked_statement(f"{dc.tag}: {', '.join(sources)}", "warning")
+
+    counts = Counter(dc.status for dc in preview.data_collections)
+    summary = (
+        f"{counts['ok']} data collection(s) will ingest, "
+        f"{counts['empty']} empty, {counts['missing']} missing sources"
+    )
+    if counts["pruned"]:
+        summary += f", {counts['pruned']} pruned (optional source absent)"
+    rich_print_checked_statement(
+        summary, "warning" if counts["empty"] or counts["missing"] else "success"
+    )
 
 
 def _write_provisioned_cli_config(base_raw_config: dict, provision: dict) -> str:
@@ -781,6 +993,38 @@ def load_project_file(path: str, project_name: str | None = None) -> dict:
     return config
 
 
+def _apply_bind_flags(config: dict, bind: list[str], *, check_unbound: bool = False) -> None:
+    """Apply each ``--bind`` to ``config`` in place, printing what it bound.
+
+    ``check_unbound`` also fails on a template variable deferred for --bind
+    (``resolve_template(allow_missing_vars=True)``) that no binding replaced.
+    A ``BindingError`` is printed and exits with code 1.
+    """
+    if not bind:
+        return
+    from depictio.cli.cli.utils.bindings import (
+        BindingError,
+        apply_bindings,
+        assert_no_unbound_vars,
+    )
+
+    try:
+        for note in apply_bindings(config, list(bind)):
+            rich_print_checked_statement(f"Bound {note}", "info")
+        if check_unbound:
+            assert_no_unbound_vars(config)
+    except BindingError as exc:
+        rich_print_checked_statement(str(exc), "error")
+        raise typer.Exit(code=1)
+
+
+def _bound_project_file(path: str, project_name: str | None, bind: list[str]) -> dict:
+    """The project file as ``load_project_file`` reads it, with each ``--bind`` applied."""
+    config = load_project_file(path, project_name)
+    _apply_bind_flags(config, bind)
+    return config
+
+
 def validate_project_locally(config: dict):
     """The configuration as a ``Project``, checked without a server.
 
@@ -863,6 +1107,10 @@ class IngestOptions:
     template: str | None = None
     project_config_path: str = ""
     project_name: str | None = None
+    # A data manifest (URL or local file) filling a manifest-driven template.
+    manifest: str | None = None
+    # TAG=LOCATION overrides of a data collection's scan, applied after resolution.
+    bind: tuple[str, ...] = ()
     var: tuple[str, ...] = ()
     update_config: bool = False
     dry_run: bool = False
@@ -938,6 +1186,8 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     template = opts.template
     project_config_path = opts.project_config_path
     project_name = opts.project_name
+    manifest = opts.manifest
+    bind = list(opts.bind)
     var = list(opts.var)
     update_config = opts.update_config
     dry_run = opts.dry_run
@@ -990,7 +1240,9 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     # pydantic validation error naming a file, a line and a function: it
     # read like an internal crash rather than a typo. Same cause, same
     # message, whichever way the project was described.
-    if data_root and not Path(data_root).is_dir():
+    # A remote root (s3://) is a prefix on another host: nothing to stat, the
+    # listing that resolution performs validates it.
+    if data_root and not is_remote_url(data_root) and not Path(data_root).is_dir():
         rich_print_checked_statement(
             f"DATA_DIR does not exist or is not a directory: {escape(data_root)}",
             "error",
@@ -1036,12 +1288,41 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     # trigger path forwards --pipeline-id, which already resolved a
     # template above, but the engine version and the tool list exist nowhere
     # except the run directory. Gating this on "no template yet" left every
-    # pipeline-triggered project with empty provenance.
+    # pipeline-triggered project with empty provenance. An s3:// DATA_DIR is
+    # read too: only the few files the run readers look at are fetched.
     detected_info = None
-    if data_root and Path(data_root).is_dir():
-        from depictio.models.models.run_info import read_run_info
+    remote_data_root = bool(data_root) and data_root.lower().startswith("s3://")
+    if data_root and (remote_data_root or Path(data_root).is_dir()):
+        from depictio.cli.cli.utils.data_root import as_data_root
+        from depictio.cli.cli.utils.run_detection import read_run_info_for_root
+        from depictio.models.s3_access import S3AccessError
 
-        detected_info = read_run_info(data_root)
+        # The S3 client is built from the CLI config, as for step 0's listing.
+        # Only an existing file is loaded here: a missing one is reported by
+        # the steps that need it, and a public bucket is read without it.
+        detection_config = None
+        if remote_data_root and os.path.isfile(cli_config_file(CLI_config_path)):
+            try:
+                detection_config = load_depictio_config(yaml_config_path=CLI_config_path)
+            except Exception as exc:
+                logger.debug(f"CLI config not available for run detection: {exc}")
+        try:
+            detected_info = read_run_info_for_root(
+                as_data_root(data_root, detection_config)  # type: ignore[arg-type]
+            )
+        except (S3AccessError, ValueError) as exc:
+            # With a template, step 0 lists DATA_DIR again and reports the
+            # failure there; without one, nothing else can choose it.
+            if template or project_config_path:
+                rich_print_checked_statement(
+                    f"Could not read DATA_DIR to detect its pipeline: {escape(str(exc))}",
+                    "warning",
+                )
+            else:
+                rich_print_checked_statement(
+                    f"Could not read DATA_DIR: {escape(str(exc))}", "error"
+                )
+                raise typer.Exit(code=1)
         if detected_info is not None:
             version = f" {detected_info.pipeline_version}" if detected_info.pipeline_version else ""
             rich_print_checked_statement(
@@ -1088,10 +1369,33 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
         )
         raise typer.Exit(code=1)
 
-    if template and not data_root:
+    if manifest and not template:
         rich_print_checked_statement(
-            "--template needs DATA_DIR, the results to ingest: depictio ingest "
-            "<results dir> --template <id>.",
+            "--manifest needs --template, the template the manifest fills: depictio "
+            "ingest --template <id> --manifest <url>.",
+            "error",
+        )
+        raise typer.Exit(code=1)
+
+    if manifest and data_root:
+        rich_print_checked_statement(
+            "Give DATA_DIR or --manifest, not both: a manifest lists the files itself.",
+            "error",
+        )
+        raise typer.Exit(code=1)
+
+    if manifest:
+        manifest_problem = _manifest_location_problem(manifest)
+        if manifest_problem:
+            rich_print_checked_statement(escape(manifest_problem), "error")
+            raise typer.Exit(code=1)
+
+    # --bind gives each data collection its location itself, so it stands in for
+    # DATA_DIR / --manifest.
+    if template and not data_root and not manifest and not bind:
+        rich_print_checked_statement(
+            "--template needs DATA_DIR, the results to ingest (or --manifest, or --bind): "
+            "depictio ingest <results dir> --template <id>.",
             "error",
         )
         raise typer.Exit(code=1)
@@ -1152,6 +1456,10 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     # Track whether we're in template mode
     is_template_mode = template is not None
     template_resolved_config: dict | None = None
+    # The template preview of step 0 already said what each data collection
+    # matches; the scan summary of step 5 would only repeat it (and misread
+    # an s3:// DATA_DIR as a path).
+    template_preview_shown = False
     # Only the template branch fills these; a --dashboard import outside it
     # substitutes nothing, since a hand-written dashboard names its data
     # collections directly instead of going through template variables.
@@ -1231,6 +1539,18 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
             _rec("provisioning", "failed", str(e))
             raise typer.Exit(code=1)
 
+    # The CLI config has to exist before step 0: a remote DATA_DIR builds
+    # its S3 client from it (credentials and endpoint), and without one it
+    # can only read a bucket on the public allowlist. Loaded best-effort
+    # here: a missing or invalid config still fails exactly where it always
+    # did, in step 2 below (or step 3 when S3 checks are skipped), with that
+    # step's own message and telemetry.
+    CLI_config = None
+    try:
+        CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
+    except Exception as exc:
+        logger.debug(f"CLI config not available before template resolution: {exc}")
+
     # Step 0 (template only): Resolve template and validate data
     if is_template_mode:
         rich_print_section_separator("Step 0: Resolving project template")
@@ -1248,6 +1568,28 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                 k, val = v.split("=", 1)
                 extra_vars[k.strip()] = val.strip()
 
+            # Manifest mode: MANIFEST_URL is just a template variable. A
+            # local manifest path is resolved to absolute so the config
+            # stays valid from any working directory.
+            if manifest:
+                if not is_remote_url(manifest):
+                    manifest_path = Path(manifest).resolve()
+                    if not manifest_path.is_file():
+                        rich_print_checked_statement(
+                            f"--manifest file does not exist: {manifest}", "error"
+                        )
+                        raise typer.Exit(code=1)
+                    manifest = str(manifest_path)
+                extra_vars.setdefault("MANIFEST_URL", manifest)
+
+            # Build the data root once. A remote one costs a full
+            # paginated listing, and the dry-run preview below resolves the
+            # same template again; handing both the same root keeps that to
+            # one listing.
+            from depictio.cli.cli.utils.data_root import as_data_root
+
+            template_root = as_data_root(data_root, CLI_config)
+
             # Resolve template
             (
                 resolved_config,
@@ -1257,10 +1599,17 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                 template_variables,
             ) = resolve_template(
                 template_id=template,  # type: ignore[arg-type]
-                data_root=data_root,  # type: ignore[arg-type]
+                data_root=template_root,  # type: ignore[arg-type]
                 project_name=project_name,
                 extra_vars=extra_vars or None,
                 provenance_files=provenance_file,
+                # --bind can make a declared variable irrelevant by replacing
+                # the scan block that used it; assert_no_unbound_vars below
+                # still fails when it turns out to be genuinely needed.
+                allow_missing_vars=bool(bind),
+                # A remote root needs the instance's or the project's
+                # credentials to be listed at all.
+                CLI_config=CLI_config,
             )
 
             rich_print_checked_statement(
@@ -1291,6 +1640,30 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                     wf.setdefault("config", {}).update(provenance)
 
             template_resolved_config = resolved_config
+
+            # --bind overrides the template author's scan choice per DC.
+            # Applied after resolution so it wins over {DATA_ROOT} / {MANIFEST_URL}
+            # substitution rather than being overwritten by it.
+            _apply_bind_flags(template_resolved_config, bind, check_unbound=True)
+
+            # An optional manifest DC the manifest lists nothing for is left
+            # out here, as POST /projects/from_manifest does, rather than
+            # failing its scan after the project is synced. After --bind, so
+            # a DC bound elsewhere is no longer a manifest DC.
+            pruned_manifest_dcs = prune_empty_optional_manifest_dcs(template_resolved_config)
+            if pruned_manifest_dcs:
+                rich_print_checked_statement(
+                    f"Left out {len(pruned_manifest_dcs)} optional data collection(s) the "
+                    f"manifest lists nothing for: {escape(', '.join(pruned_manifest_dcs))}",
+                    "info",
+                )
+
+            # The files of an indexed_file collection are mirrored to S3 from
+            # local disk next to their indexes; an s3:// root has no disk to
+            # read them from. Checked after --bind, which can put one back on
+            # a local folder, and said now rather than at the processing step.
+            if data_root and is_remote_url(data_root):
+                _drop_remote_indexed_file_dcs(template_resolved_config)
 
             # Resolve dashboard paths: CLI --dashboard overrides template defaults
             if dashboard:
@@ -1326,6 +1699,33 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                     ),
                 ):
                     rich_print_checked_statement(f"  {escape(line)}", "info")
+
+            if dry_run and data_root:
+                # The whole point of a dry run: say what this data root
+                # would actually yield, per data collection, rather than
+                # reporting success for steps that were all skipped.
+                from depictio.cli.cli.utils.template_preview import preview_data_root
+
+                rich_print_section_separator("Dry run: what this data root would ingest")
+                template_preview_shown = True
+                _render_run_preview(
+                    preview_data_root(
+                        template_id=template,  # type: ignore[arg-type]
+                        data_root=template_root,
+                        variables=extra_vars or None,
+                        CLI_config=CLI_config,
+                        # The configuration the run will use, --bind and the
+                        # pruning above applied, not the template resolved
+                        # afresh as if nothing had been bound.
+                        resolution=(
+                            template_resolved_config,
+                            template_metadata,
+                            template_origin,
+                            template_dashboard_paths,
+                            template_variables,
+                        ),
+                    )
+                )
 
         except typer.Exit:
             raise
@@ -1401,7 +1801,11 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
     else:
         rich_print_section_separator(f"Step 2/{total_steps}: Checking S3 storage configuration")
         try:
-            CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
+            # Already loaded when an s3:// DATA_DIR needed it for the listing;
+            # loading here otherwise is what surfaces a broken configuration,
+            # with this step's error.
+            if CLI_config is None:
+                CLI_config = load_depictio_config(yaml_config_path=CLI_config_path)
             S3_storage_checks(CLI_config.s3_storage)
             rich_print_checked_statement("S3 storage configuration check passed", "success")
             success_count += 1
@@ -1428,7 +1832,7 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
             project_config = validate_project_locally(
                 template_resolved_config
                 if is_template_mode and template_resolved_config is not None
-                else load_project_file(project_config_path, project_name)
+                else _bound_project_file(project_config_path, project_name, bind)
             )
             rich_print_checked_statement(
                 "Project configuration is valid (checked locally; a dry run does not "
@@ -1444,17 +1848,19 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                     CLI_config_path=CLI_config_path,
                     resolved_config=template_resolved_config,
                 )
-            elif project_name:
+            elif project_name or bind:
                 # --project applies to a project file too. It renames the
                 # project before the server is asked for its ids: renamed
                 # afterwards, the configuration would carry the ids of the
                 # project the file names, and the sync would update that one.
-                # The dict path of the template mode merges them by the new name.
+                # --bind patches the same dict in memory, since the file on disk
+                # must stay untouched. The dict path of the template mode merges
+                # them by the new name.
                 from depictio.cli.cli.utils.config import validate_template_project_config
 
                 CLI_config, validation_response = validate_template_project_config(
                     CLI_config_path=CLI_config_path,
-                    resolved_config=load_project_file(project_config_path, project_name),
+                    resolved_config=_bound_project_file(project_config_path, project_name, bind),
                 )
             else:
                 # Standard mode: load from YAML file
@@ -1810,7 +2216,7 @@ def run_ingest(opts: IngestOptions, ingestion: _IngestionRecord) -> IngestOutcom
                 else:
                     raise Exception("Failed to fetch remote project configuration")
 
-            if dry_run:
+            if dry_run and not template_preview_shown:
                 # The preview warns by itself when something would match nothing;
                 # the line below is an info, not a green "completed".
                 _print_dry_run_scan_preview(project_config)
@@ -2231,7 +2637,8 @@ def register_run_command(app: typer.Typer):
             str | None,
             typer.Argument(
                 metavar="DATA_DIR",
-                help="Directory of the pipeline results to ingest. Without --template or "
+                help="Directory of the pipeline results to ingest, or an s3:// prefix holding "
+                "them (e.g. s3://my-bucket/pipeline/run42). Without --template or "
                 "--project-config-path, the template is detected from it. Formerly "
                 "`--data-root`.",
                 show_default=False,
@@ -2247,6 +2654,17 @@ def register_run_command(app: typer.Typer):
                 help="Template to build the project from, e.g. nf-core/ampliseq/2.16.0, or "
                 "nf-core/ampliseq/latest for the newest shipped version. Default: detected "
                 "from DATA_DIR. Not with --project-config-path.",
+            ),
+        ] = None,
+        manifest: Annotated[
+            str | None,
+            typer.Option(
+                "--manifest",
+                help="A data manifest, as an https:// URL or a local file, listing the files "
+                "to ingest as {id, type, url[, run]} entries. In place of DATA_DIR, for a "
+                "manifest-driven template such as generic/manifest-tables/1 (it sets the "
+                "template's MANIFEST_URL variable).",
+                rich_help_panel=PROJECT_PANEL,
             ),
         ] = None,
         project_config_path: Annotated[
@@ -2333,6 +2751,21 @@ def register_run_command(app: typer.Typer):
                 rich_help_panel=PROJECT_PANEL,
             ),
         ] = None,
+        bind: Annotated[
+            list[str],
+            typer.Option(
+                "--bind",
+                help=(
+                    "Point one data collection at where its data actually is, as "
+                    "TAG=LOCATION. Repeatable. The scan mode is inferred from the "
+                    "location: a local directory or glob scans locally, a local file "
+                    "is a single file, https:// is a remote file, an s3:// prefix or "
+                    "glob is listed remotely. Example: "
+                    "--bind samples=s3://my-bucket/run42/*.samples.csv"
+                ),
+                rich_help_panel=PROJECT_PANEL,
+            ),
+        ] = [],
         dashboard: Annotated[
             list[str] | None,
             typer.Option(
@@ -2612,6 +3045,9 @@ def register_run_command(app: typer.Typer):
 
         Refreshed after a new run, the dashboards kept as edited in the viewer:
           depictio ingest results/ --update-config
+
+        A manifest-driven template, the files listed in a manifest instead of a directory:
+          depictio ingest --template generic/manifest-tables/1 --manifest https://data.example.org/run42/manifest.json
         """
         note_if_called_as(ctx, "run", "ingest")
         # Usage errors first, before anything is printed.
@@ -2669,6 +3105,8 @@ def register_run_command(app: typer.Typer):
             template=template,
             project_config_path=project_config_path,
             project_name=project_name,
+            manifest=manifest,
+            bind=tuple(bind or ()),
             var=tuple(var),
             update_config=update_config,
             dry_run=dry_run,

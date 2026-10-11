@@ -480,3 +480,57 @@ class TestHeterogeneousSequencingRunsRoot:
         assert info is not None
         assert "identities_seen" not in info.extra
         assert "more than one pipeline" not in caplog.text
+
+
+# Real shape: DSL1 nf-core (eager 2.4.5 megatest), no versions YAML, a
+# two-column table with the pipeline's own line first.
+VERSIONS_TABLE_DSL1 = """\
+nf-core/eager\tv2.4.5
+Nextflow\tv21.04.0
+FastQC\tv0.11.9
+MultiQC\tv1.13.dev0
+AdapterRemoval\tv2.3.2
+"""
+
+
+class TestDsl1VersionsTable:
+    def test_a_dsl1_run_is_recognised_from_its_software_versions_csv(self, tmp_path: Path) -> None:
+        pipeline_info = _pipeline_info(tmp_path / "run")
+        (pipeline_info / "software_versions.csv").write_text(VERSIONS_TABLE_DSL1)
+        (pipeline_info / "execution_trace_2022-08-02_13-55-24.txt").write_text("task_id\n")
+
+        info = _reader().read(tmp_path / "run")
+
+        assert info is not None
+        assert (info.pipeline_name, info.pipeline_version, info.engine_version) == (
+            "nf-core/eager",
+            "2.4.5",
+            "21.04.0",
+        )
+        assert info.tools_executed == {"fastqc", "multiqc", "adapterremoval"}
+        assert info.software_versions_path == str(pipeline_info / "software_versions.csv")
+
+    def test_a_versions_yaml_wins_over_the_dsl1_table(self, tmp_path: Path) -> None:
+        pipeline_info = _pipeline_info(tmp_path / "run")
+        (pipeline_info / "software_versions.yml").write_text(VERSIONS_YAML_2_SPACE)
+        (pipeline_info / "software_versions.csv").write_text(VERSIONS_TABLE_DSL1)
+
+        info = _reader().read(tmp_path / "run")
+
+        assert info is not None
+        assert (info.pipeline_name, info.pipeline_version) == ("nf-core/ampliseq", "2.8.0")
+
+    def test_a_comma_separated_table_is_read_too(self, tmp_path: Path) -> None:
+        pipeline_info = _pipeline_info(tmp_path / "run")
+        (pipeline_info / "software_versions.csv").write_text(
+            "nf-core/chipseq,v1.2.0\nNextflow,v20.04.1\nbwa,v0.7.17\n"
+        )
+
+        info = _reader().read(tmp_path / "run")
+
+        assert info is not None
+        assert (info.pipeline_name, info.pipeline_version) == ("nf-core/chipseq", "1.2.0")
+        assert info.tools_executed == {"bwa"}
+
+    def test_the_table_is_part_of_what_a_remote_run_is_read_from(self) -> None:
+        assert "pipeline_info/software_versions.csv" in NextflowRunInfoReader.footprint

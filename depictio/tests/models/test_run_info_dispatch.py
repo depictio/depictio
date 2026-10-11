@@ -155,3 +155,84 @@ class TestWorkflowRunInfo:
     def test_model_forbids_extra_fields(self) -> None:
         with pytest.raises(Exception):
             WorkflowRunInfo(unexpected_field="x")  # type: ignore[call-arg]
+
+
+def _copy_declared(original: Path, copy: Path) -> Path:
+    """``copy`` holding only what the connectors declare: footprint files with their
+    content, marker files empty, matched directories as directories."""
+    copy.mkdir(parents=True)
+    for reader in registered_readers():
+        # The stubs registered above declare nothing.
+        declared = (getattr(reader, "footprint", ()), True), (getattr(reader, "markers", ()), False)
+        for patterns, with_content in declared:
+            for pattern in patterns:
+                for path in original.glob(pattern):
+                    target = copy / path.relative_to(original)
+                    if path.is_dir():
+                        target.mkdir(parents=True, exist_ok=True)
+                    elif with_content or not target.exists():
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_bytes(path.read_bytes() if with_content else b"")
+    return copy
+
+
+def _relative(info: WorkflowRunInfo | None, root: Path) -> dict | None:
+    if info is None:
+        return None
+    prefix = f"{root}/"
+
+    def strip(value):
+        return (
+            value[len(prefix) :] if isinstance(value, str) and value.startswith(prefix) else value
+        )
+
+    dumped = {key: strip(value) for key, value in info.model_dump().items()}
+    dumped["extra"] = {key: strip(value) for key, value in info.extra.items()}
+    return dumped
+
+
+def _make_full_nextflow_run(root: Path) -> Path:
+    _make_nextflow_run(root)
+    pipeline_info = root / "pipeline_info"
+    (pipeline_info / "params_2026-01-01_10-00-00.json").write_text('{"run_name": "r1"}')
+    (pipeline_info / "execution_report_2026-01-01.html").write_text("<html></html>")
+    (pipeline_info / "execution_trace_2026-01-01.txt").write_text("task_id\n")
+    (root / "multiqc").mkdir()
+    (root / "multiqc" / "multiqc_report.html").write_text("<html></html>")
+    return root
+
+
+def _make_full_snakemake_run(root: Path) -> Path:
+    _make_snakemake_run(root)
+    (root / "config.yaml").write_text("name: my-pipeline\nversion: 2.0\n")
+    (root / ".snakemake" / "conda").mkdir()
+    (root / ".snakemake" / "conda" / "env.yaml").write_text("dependencies:\n  - samtools=1.19\n")
+    return root
+
+
+class TestFootprint:
+    """What each connector declares it reads, so a run folder can be staged locally."""
+
+    @pytest.mark.parametrize("name", ["nextflow", "snakemake"])
+    def test_bundled_connectors_declare_root_relative_patterns(self, name: str) -> None:
+        reader = next(r for r in registered_readers() if r.name == name)
+        assert reader.footprint and reader.markers
+        for pattern in (*reader.footprint, *reader.markers):
+            assert not pattern.startswith("/") and ".." not in pattern.split("/")
+        # A file is either opened or only looked for.
+        assert not set(reader.footprint) & set(reader.markers)
+
+    @pytest.mark.parametrize(
+        "make",
+        [_make_full_nextflow_run, _make_full_snakemake_run],
+        ids=["nextflow", "snakemake"],
+    )
+    def test_a_copy_of_the_declared_entries_reads_like_the_original(
+        self, tmp_path: Path, make
+    ) -> None:
+        original = make(tmp_path / "a" / "run")
+        copy = _copy_declared(original, tmp_path / "b" / "run")
+
+        expected = read_run_info(original)
+        assert expected is not None
+        assert _relative(read_run_info(copy), copy) == _relative(expected, original)

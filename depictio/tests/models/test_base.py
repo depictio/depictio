@@ -318,6 +318,28 @@ class TestMongoModel:
             with pytest.raises(ValueError, match="disallowed HTML content"):
                 MongoModel(description="<p>Test</p>")
 
+    @pytest.mark.parametrize(
+        ("raw", "escaped"),
+        [
+            ("Sample's data", "Sample&#x27;s data"),
+            ("R&D", "R&amp;D"),
+            ('say "hi"', "say &quot;hi&quot;"),
+        ],
+    )
+    def test_description_sanitization_idempotent(self, raw, escaped):
+        """Re-validating an already sanitized description (Mongo -> template ->
+        Project) must not escape it a second time."""
+        once = MongoModel(description=raw).description
+        assert once == escaped
+        twice = MongoModel(description=once).description
+        assert twice == once
+
+    def test_description_pre_escaped_markup_rejected(self):
+        """Entities that decode to markup are markup: they must not survive
+        as text that a later unescape would turn into tags."""
+        with pytest.raises(ValueError, match="disallowed HTML content"):
+            MongoModel(description="&lt;script&gt;alert(1)&lt;/script&gt;")
+
     def test_from_mongo_empty_data(self):
         """Test from_mongo with empty data."""
         result = MongoModel.from_mongo({})

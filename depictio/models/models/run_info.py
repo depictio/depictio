@@ -111,10 +111,24 @@ class RunInfoReader(Protocol):
     ``priority`` orders connectors when a directory carries more than one
     engine's footprint (a Nextflow run staged inside a Snakemake project, say).
     Higher wins.
+
+    ``footprint`` and ``markers`` list everything ``read`` looks at, as
+    root-relative ``Path.glob`` patterns. A run folder that is not on disk (an
+    ``s3://`` prefix) is recognised from a local copy holding only those
+    entries: the content of each ``footprint`` file, an empty file for each
+    ``markers`` file, and each matched directory. That copy must read exactly
+    as the original does, so a reader that starts looking at another file
+    declares it here.
     """
 
     name: str
     priority: int
+
+    footprint: tuple[str, ...]
+    """Patterns of the files ``read`` opens."""
+
+    markers: tuple[str, ...]
+    """Patterns of the files and directories ``read`` only tests for existence."""
 
     def read(self, run_dir: Path) -> WorkflowRunInfo | None:
         """Return the run's provenance, or None if this engine doesn't recognise it."""

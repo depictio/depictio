@@ -1095,6 +1095,19 @@ class TestResolveRunLocations:
         assert resolved.locations == []
         assert "does not exist" in resolved.warnings[0]
 
+    def test_a_remote_location_is_not_checked_against_the_local_filesystem(self):
+        """The remote preview reports what matched; a local stat would call an
+        s3:// prefix a missing directory."""
+        from types import SimpleNamespace
+
+        location = SimpleNamespace(
+            structure="flat", runs_regex=None, locations=["s3://bucket/run42", "HTTPS://x/y"]
+        )
+        resolved = resolve_run_locations(SimpleNamespace(data_location=location))  # type: ignore[arg-type]
+
+        assert resolved.locations == []
+        assert resolved.warnings == []
+
     def test_a_data_root_one_level_too_deep_names_what_it_looked_at(self, tmp_path):
         """The failure the dry run exists to catch: --data-root pointing inside a
         run instead of at the parent of the runs."""
@@ -1114,4 +1127,21 @@ class TestResolveRunLocations:
         resolved = resolve_run_locations(self._workflow("flat", [str(tmp_path)]))
 
         assert resolved.locations == [str(tmp_path)]
+        assert resolved.warnings == []
+
+    def test_remote_locations_and_a_manifest_file_are_not_missing(self, tmp_path):
+        """A remote DC's location and a local manifest file are read by the DC's
+        own scan: they are no run directory, and no reason to warn."""
+        manifest = tmp_path / "manifest.csv"
+        manifest.write_text("id,type,url\n")
+        workflow = self._workflow("flat", [str(tmp_path)])
+        workflow.data_location.locations = [
+            "https://data.example.org/run42/manifest.json",
+            "s3://bucket/run42/",
+            str(manifest),
+        ]
+
+        resolved = resolve_run_locations(workflow)
+
+        assert resolved.locations == []
         assert resolved.warnings == []

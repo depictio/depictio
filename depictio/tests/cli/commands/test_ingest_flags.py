@@ -621,7 +621,10 @@ class TestDryRun:
     def test_the_steps_say_what_they_would_do(self, app, runner, data_root, make_harness):
         harness = make_harness(data_root, remote_locations=[])
         origin = SimpleNamespace(
-            template_id=TEMPLATE, template_version="2.16.0", data_root=str(data_root)
+            template_id=TEMPLATE,
+            template_version="2.16.0",
+            data_root=str(data_root),
+            expected_data_collections=[],
         )
         meta = MagicMock(template_id=TEMPLATE)
         harness.resolve = MagicMock(
@@ -880,7 +883,8 @@ class TestDataDirArgument:
         result = _invoke(app, runner, harness, _template(data_root))
 
         assert result.exit_code == 0, result.output
-        assert resolve.call_args.kwargs["data_root"] == str(data_root)
+        # Resolved against the DataRoot built from DATA_DIR, not the bare string.
+        assert resolve.call_args.kwargs["data_root"].location == str(data_root)
         assert "is now" not in result.output
 
     def test_the_former_option_still_works_and_says_its_new_name(
@@ -893,7 +897,8 @@ class TestDataDirArgument:
         result = _invoke(app, runner, harness, [*args, "--skip", "server-check,s3-check"])
 
         assert result.exit_code == 0, result.output
-        assert resolve.call_args.kwargs["data_root"] == str(data_root)
+        # Resolved against the DataRoot built from DATA_DIR, not the bare string.
+        assert resolve.call_args.kwargs["data_root"].location == str(data_root)
         assert "--data-root is now the DATA_DIR argument" in normalize(result.stderr)
 
     def test_both_are_a_usage_error(self, app, runner, data_root, make_harness):
@@ -1247,7 +1252,10 @@ class TestDashboardsOnARefresh:
     def test_the_dry_run_says_which(self, app, runner, data_root, dashboard_file, make_harness):
         harness = make_harness(data_root, remote_locations=[])
         origin = SimpleNamespace(
-            template_id=TEMPLATE, template_version="2.16.0", data_root=str(data_root)
+            template_id=TEMPLATE,
+            template_version="2.16.0",
+            data_root=str(data_root),
+            expected_data_collections=[],
         )
         harness.resolve = MagicMock(
             return_value=(

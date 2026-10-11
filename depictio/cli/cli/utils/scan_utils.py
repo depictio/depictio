@@ -331,18 +331,27 @@ class ResolvedRuns(NamedTuple):
     warnings: list[str]
 
 
+_REMOTE_LOCATION = re.compile(r"^(s3|https?)://", re.IGNORECASE)
+
+
 def resolve_run_locations(workflow: Workflow) -> ResolvedRuns:
     """Run directories a scan of ``workflow`` would walk, best-effort.
 
     A location that does not exist, or that matches no run, becomes a warning
     rather than an exception: this feeds a preview, and one bad path must not
-    hide every other data collection's count behind a traceback.
+    hide every other data collection's count behind a traceback. A remote
+    location and a local manifest file are no run directory, and not missing
+    either: the data collections reading them scan them themselves.
     """
     structure = workflow.data_location.structure
     runs_regex = workflow.data_location.runs_regex
     run_locations: list[str] = []
     warnings: list[str] = []
     for location in workflow.data_location.locations:
+        if _REMOTE_LOCATION.match(location) or os.path.isfile(location):
+            # Nothing to stat on this host; a remote location is previewed from
+            # its own listing (template_preview), not from the local filesystem.
+            continue
         if not os.path.isdir(location):
             warnings.append(f"Configured location '{location}' does not exist.")
             continue

@@ -1,12 +1,24 @@
+import contextlib
 import os
+import re
+import tempfile
 from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 import polars as pl
 from pydantic import validate_call
 from rich.markup import escape
 
+from depictio.api.v1.configs.settings_models import local_data_policy
+from depictio.api.v1.remote_fetch import (
+    RemoteURLRejected,
+    bounded_download,
+    direct_download,
+    is_server_context,
+    s3_read_target_in_region,
+)
 from depictio.cli.cli.utils.api_calls import (
     api_create_files,
     api_get_files_by_dc_id,
@@ -29,6 +41,7 @@ from depictio.cli.cli.utils.multiqc_processor import process_multiqc_data_collec
 from depictio.cli.cli.utils.rich_utils import rich_print_checked_statement
 from depictio.cli.cli.utils.telemetry import cli_version
 from depictio.cli.cli_logging import logger
+from depictio.models.local_access import LocalPathRefused
 from depictio.models.models.base import convert_objectid_to_str
 from depictio.models.models.cli import CLIConfig
 from depictio.models.models.data_collections import DataCollection
@@ -40,7 +53,14 @@ from depictio.models.models.data_collections_types.indexed_file import (
 )
 from depictio.models.models.data_collections_types.phylogeny import phylogeny_s3_key
 from depictio.models.models.files import File
+from depictio.models.models.manifest import is_remote_url
 from depictio.models.models.s3 import PolarsStorageOptions
+from depictio.models.s3_access import (
+    S3AccessError,
+    S3AccessFailed,
+    S3Target,
+    blank_foreign_session_token,
+)
 from depictio.models.s3_utils import turn_S3_config_into_polars_storage_options
 
 
@@ -126,11 +146,13 @@ def fetch_file_data(
         raise Exception(error_msg)
 
     # Filter out stale file records whose paths no longer exist locally
-    # (happens when re-running with a different template or data_root)
+    # (happens when re-running with a different template or data_root).
+    # Remote locations (url, s3_prefix and manifest scans) are never
+    # staleness-checked here: reachability surfaces at read time.
     valid_files_data = []
     for fd in files_data:
         loc = fd.get("file_location", "")
-        if os.path.exists(loc):
+        if is_remote_url(loc) or os.path.exists(loc):
             valid_files_data.append(fd)
         else:
             logger.warning(f"Skipping stale file record (path does not exist): {loc}")
@@ -183,7 +205,195 @@ def convert_to_file_objects(files_data: list) -> list:
     return files
 
 
-def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict) -> pl.LazyFrame:
+def _delimited_kwargs(file_path: str, file_format: str, polars_kwargs: dict) -> dict:
+    """``polars_kwargs`` with the separator a delimited file is read with.
+
+    Picked from the file's extension first, falling back to the declared
+    format when the extension is ambiguous. nf-core pipelines emit
+    samplesheets/metadata as either .csv or .tsv depending on the user's
+    input, so a DC declared "CSV" may actually point at a tab-separated file;
+    without this a .tsv lands as one comma-joined column. A `.csv` extension
+    keeps the comma default; an extensionless path uses the declared format.
+    Shared by local paths and s3:// keys, so both read one file the same way.
+    """
+    effective_kwargs = dict(polars_kwargs)
+    if "separator" not in effective_kwargs:
+        name = str(file_path).rsplit("/", 1)[-1]
+        suffix = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+        if suffix in ("tsv", "tab"):
+            effective_kwargs["separator"] = "\t"
+        elif suffix != "csv" and file_format == "tsv":
+            effective_kwargs["separator"] = "\t"
+    return effective_kwargs
+
+
+def _lazy_scan_path(
+    file_path: str, file_format: str, polars_kwargs: dict, *, confine: bool = True
+) -> pl.LazyFrame:
+    """Format dispatch shared by local paths and downloaded remote files.
+
+    On a server reading its own disk (``depictio local``), a path the
+    local-data policy does not allow is refused here, at read time, whatever
+    registered it: a File record is only a path, and the scan that wrote it may
+    have run under another policy, or none. ``confine=False`` is for a file this
+    process just wrote itself (a remote download's temp file).
+    """
+    if confine:
+        policy = local_data_policy()
+        if policy is not None and not policy.allows_read(str(file_path)):
+            raise LocalPathRefused(
+                f"'{file_path}' is outside the folders this server may read.",
+                "local_path_outside",
+            )
+    if file_format in ["csv", "tsv", "txt"]:
+        return pl.scan_csv(file_path, **_delimited_kwargs(file_path, file_format, polars_kwargs))
+    elif file_format == "parquet":
+        return pl.scan_parquet(file_path, **polars_kwargs)
+    elif file_format == "feather":
+        return pl.scan_ipc(file_path, **polars_kwargs)
+    elif file_format in ["xls", "xlsx"]:
+        # Polars does not natively support lazy Excel scans.
+        # In this case, read eagerly and convert to lazy.
+        return pl.read_excel(file_path, **polars_kwargs).lazy()
+    error_msg = f"Unsupported file format: {file_format}"
+    logger.debug(error_msg)
+    raise ValueError(error_msg)
+
+
+def _download_remote_to_temp(url: str) -> str:
+    """Bounded streaming download of an http(s) URL to a temp file.
+
+    The temp file keeps the URL's extension so the csv/tsv separator
+    inference in _lazy_scan_path still applies.
+
+    The URLs read here (a url-mode location, every manifest entry) are never
+    vetted anywhere else, so server context (API process, Celery worker)
+    downloads through the SSRF gateway: validation, redirect re-validation and
+    the size cap from ``RemoteConfig``. CLI context reads directly, since
+    loopback and intranet hosts are the user's own, with the same redirect and
+    size caps. A partial file never survives a failure in either path.
+    """
+    suffix = os.path.splitext(urlparse(url).path)[1]
+    fd, temp_path = tempfile.mkstemp(prefix="depictio_remote_", suffix=suffix)
+    os.close(fd)
+    try:
+        if is_server_context():
+            bounded_download(url, temp_path)
+        else:
+            direct_download(url, temp_path)
+    except Exception:
+        _remove_temp_file(temp_path)
+        raise
+    return temp_path
+
+
+def _remove_temp_file(path: str) -> None:
+    """Delete a temp file this module created; one already gone is fine."""
+    with contextlib.suppress(OSError):
+        os.unlink(path)
+
+
+def _read_remote_file_lazy(
+    url: str,
+    file_format: str,
+    polars_kwargs: dict,
+    CLI_config: CLIConfig | None = None,
+) -> pl.LazyFrame:
+    """Read a remote file (a url, s3_prefix or manifest location) into a LazyFrame.
+
+    s3://: lazy scan straight through the object store, with the target
+    ``s3_read_target`` resolves for this very URL from ``CLI_config``: a
+    public bucket unsigned, the project's own storage settings, or (CLI
+    context only) the configuration's S3 credentials. The same decision the
+    preview and the listing make, so the three never read one URL two ways;
+    a location the configuration does not allow raises ``S3AccessRefused``.
+    The schema is resolved here, which sends the first request, so a read S3
+    refuses (a 403, a 404, a redirect to another region) raises
+    ``S3AccessFailed`` for this URL, rather than a raw object-store error
+    later, from the aggregation of every file.
+    http(s)://: bounded download to a temp file, eager read, temp deleted;
+    keeps lifetime simple at the cost of holding one file in memory.
+    """
+    if url[:5].lower() == "s3://":
+        if file_format not in ("parquet", "csv", "tsv", "txt"):
+            raise ValueError(
+                f"Format '{file_format}' is not supported for s3:// remote reads "
+                "(supported: parquet, csv, tsv, txt)."
+            )
+        # object-store wants the scheme in lower case; the key stays verbatim.
+        url = "s3://" + url[5:]
+        target = s3_read_target_in_region(url, CLI_config)
+        storage_options = target.polars_options()
+        if file_format == "parquet":
+            lf = pl.scan_parquet(url, storage_options=storage_options, **polars_kwargs)
+        else:
+            lf = pl.scan_csv(
+                url,
+                storage_options=storage_options,
+                **_delimited_kwargs(url, file_format, polars_kwargs),
+            )
+        try:
+            lf.collect_schema()
+        except Exception as exc:
+            if _is_object_store_error(exc):
+                logger.debug(f"S3 read of {url} failed: {exc}")
+                raise _s3_read_failure(exc, target) from exc
+            raise
+        return lf
+
+    temp_path = _download_remote_to_temp(url)
+    try:
+        # Eager read so the temp file can be deleted immediately: a lazy scan
+        # would dangle on a path removed before collection.
+        return (
+            _lazy_scan_path(temp_path, file_format, polars_kwargs, confine=False).collect().lazy()
+        )
+    finally:
+        _remove_temp_file(temp_path)
+
+
+# How object-store (under polars) reports an S3 answer. Its messages also carry
+# the endpoint, so only the status is taken from them, never the text.
+_OBJECT_STORE_STATUS = re.compile(r"status code: (\d{3})")
+_OBJECT_STORE_REDIRECT = "redirect without LOCATION"
+
+
+def _is_object_store_error(exc: Exception) -> bool:
+    message = str(exc)
+    return isinstance(exc, OSError) or "object-store error" in message or "S3 error" in message
+
+
+def _s3_read_failure(exc: Exception, target: S3Target) -> S3AccessFailed:
+    """The ``S3AccessFailed`` an object-store error on reading ``target`` stands for.
+
+    object-store reads an object with a HEAD first, whose answer has no body,
+    so the status is all there is to go on: a 404 cannot tell a missing key
+    from a missing bucket, and is reported as nothing found at the location.
+    """
+    from botocore.exceptions import ClientError
+
+    message = str(exc)
+    match = _OBJECT_STORE_STATUS.search(message)
+    status = int(match.group(1)) if match else None
+    if status is None and _OBJECT_STORE_REDIRECT in message:
+        status = 301
+    if status is None:
+        return S3AccessFailed.unreachable(target)
+    if status == 404:
+        return S3AccessFailed(
+            f"Nothing was found at {target.location}: check the bucket and the key.",
+            status_code=422,
+        )
+    answer = {"Error": {"Code": str(status)}, "ResponseMetadata": {"HTTPStatusCode": status}}
+    return S3AccessFailed.from_client_error(ClientError(answer, "HeadObject"), target)
+
+
+def read_single_file_lazy(
+    file_info: File,
+    file_format: str,
+    polars_kwargs: dict,
+    CLI_config: CLIConfig | None = None,
+) -> pl.LazyFrame:
     """
     Lazily scan a single file into a Polars LazyFrame according to the specified format.
 
@@ -191,6 +401,8 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
         file_info (File): A validated File object.
         file_format (str): The file format (e.g. csv, parquet).
         polars_kwargs (dict): Additional keyword arguments for the Polars scanner.
+        CLI_config (CLIConfig | None): Configuration s3:// remote locations
+            resolve their read target from.
 
     Returns:
         pl.LazyFrame: The lazy DataFrame representation of the file.
@@ -204,49 +416,38 @@ def read_single_file_lazy(file_info: File, file_format: str, polars_kwargs: dict
     logger.debug(f"Polars kwargs: {polars_kwargs}")
 
     try:
-        if file_format in ["csv", "tsv", "txt"]:
-            effective_kwargs = dict(polars_kwargs)
-            if "separator" not in effective_kwargs:
-                # Pick the delimiter from the on-disk extension first, falling
-                # back to the declared format when the extension is ambiguous.
-                # nf-core pipelines emit samplesheets/metadata as either .csv or
-                # .tsv depending on the user's input, so a DC declared "CSV" may
-                # actually point at a tab-separated file — without this a .tsv
-                # lands as one comma-joined column. A `.csv` extension keeps the
-                # comma default; an extensionless path uses the declared format.
-                path_str = str(file_path)
-                suffix = path_str.rsplit(".", 1)[-1].lower() if "." in path_str else ""
-                if suffix in ("tsv", "tab"):
-                    effective_kwargs["separator"] = "\t"
-                elif suffix != "csv" and file_format == "tsv":
-                    effective_kwargs["separator"] = "\t"
-            lf = pl.scan_csv(file_path, **effective_kwargs)
-        elif file_format == "parquet":
-            lf = pl.scan_parquet(file_path, **polars_kwargs)
-        elif file_format == "feather":
-            lf = pl.scan_ipc(file_path, **polars_kwargs)
-        elif file_format in ["xls", "xlsx"]:
-            # Polars does not natively support lazy Excel scans.
-            # In this case, read eagerly and convert to lazy.
-            df = pl.read_excel(file_path, **polars_kwargs)
-            lf = df.lazy()
+        if is_remote_url(file_path):
+            lf = _read_remote_file_lazy(file_path, file_format, polars_kwargs, CLI_config)
         else:
-            error_msg = f"Unsupported file format: {file_format}"
-            logger.debug(error_msg)
-            raise ValueError(error_msg)
+            lf = _lazy_scan_path(file_path, file_format, polars_kwargs)
 
         # Optionally, add a column from file_info if available (e.g., run_id)
         if hasattr(file_info, "run_id"):
             lf = lf.with_columns(pl.lit(str(file_info.run_tag)).alias("depictio_run_id"))
+        # Manifest-built DCs (and s3_prefix scans with an id_regex) carry the
+        # canonical entry ID as a column: the zero-config cross-DC join key
+        # (LinkConfig `direct` resolver).
+        if getattr(file_info, "manifest_id", None):
+            lf = lf.with_columns(pl.lit(str(file_info.manifest_id)).alias("depictio_manifest_id"))
         return lf
 
+    except (S3AccessError, RemoteURLRejected):
+        # Already a sanitized message, typed: wrapping it would lose what the
+        # API answers with (the code of an S3 error, the 4xx of a refused or
+        # unreachable URL, ``RemoteFetchFailed`` included).
+        raise
     except Exception as e:
         error_msg = f"Error scanning file {file_path}: {e}"
         logger.debug(error_msg)
         raise Exception(error_msg)
 
 
-def read_files_lazy(files: list, file_format: str, polars_kwargs: dict) -> list:
+def read_files_lazy(
+    files: list,
+    file_format: str,
+    polars_kwargs: dict,
+    CLI_config: CLIConfig | None = None,
+) -> list:
     """
     Lazily read all files into Polars LazyFrames.
 
@@ -254,13 +455,15 @@ def read_files_lazy(files: list, file_format: str, polars_kwargs: dict) -> list:
         files (list): List of validated File objects.
         file_format (str): Format of the files.
         polars_kwargs (dict): Additional keyword arguments for the Polars scanners.
+        CLI_config (CLIConfig | None): Configuration s3:// remote locations
+            resolve their read target from.
 
     Returns:
         list: List of Polars LazyFrames.
     """
     lazy_frames = []
     for file_info in files:
-        lf = read_single_file_lazy(file_info, file_format, polars_kwargs)
+        lf = read_single_file_lazy(file_info, file_format, polars_kwargs, CLI_config)
         lazy_frames.append(lf)
     if not lazy_frames:
         error_msg = "No LazyFrames were generated from the files."
@@ -488,11 +691,6 @@ def clustering_columns(
     return [c for c in candidates if c in present]
 
 
-# The names deltalake reads a session token from in the environment, in any case: a bare
-# TOKEN as well as AWS_SESSION_TOKEN.
-_SESSION_TOKEN_NAMES = ("aws_session_token", "aws_token", "session_token", "token")
-
-
 def delta_storage_options(storage_options: PolarsStorageOptions) -> dict:
     """The options deltalake and polars get for Depictio's S3: the model's, and an empty
     session token when the environment holds one issued for another access key.
@@ -500,15 +698,12 @@ def delta_storage_options(storage_options: PolarsStorageOptions) -> dict:
     deltalake fills in every option it is not given from the environment, a session
     token included, and sends it with the keys it is given: the user's own AWS session
     token would reach Depictio's S3, the local server's included. An option given wins
-    over the environment, and there is no way to give none: it is given empty.
+    over the environment, and there is no way to give none: it is given empty. The rule
+    is ``blank_foreign_session_token``, which the remote reads share.
     """
-    options = storage_options.model_dump()
-    # Kept when it goes with the key given: temporary credentials exported for that key.
-    if os.environ.get("AWS_ACCESS_KEY_ID") != storage_options.aws_access_key_id and any(
-        name.lower() in _SESSION_TOKEN_NAMES for name in os.environ
-    ):
-        options["aws_session_token"] = ""
-    return options
+    return blank_foreign_session_token(
+        storage_options.model_dump(), storage_options.aws_access_key_id
+    )
 
 
 def delta_table_stats(
@@ -954,7 +1149,12 @@ def client_aggregate_data(
     def _read(run_tags: set[str] | None) -> tuple[list[File], list]:
         collected = fetch_file_data(str(dc_id), CLI_config, run_tags=run_tags)
         with timed("parse"):
-            frames = read_files_lazy(collected, file_format, polars_kwargs)
+            # Each s3:// location resolves its own read target from CLI_config
+            # (public bucket, the project's storage settings, or, in CLI context
+            # only, the instance S3 config). The Delta write target below always
+            # stays on the instance config: read and write are two different
+            # credentials by design.
+            frames = read_files_lazy(collected, file_format, polars_kwargs, CLI_config=CLI_config)
         record("n_files", len(collected) if collected else 0)
         return collected, frames
 
@@ -1800,10 +2000,13 @@ def process_recipe_data_collection(
             for ref, so in transform_config.source_overrides.items()
         }
 
-    # Resolve data directory from workflow's data_location
-    # For sequencing-runs structure, collect all run directories
-    data_dir = "."
-    run_data_dirs: list[str] = []
+    from depictio.cli.cli.utils.data_root import DataRoot, data_root_for
+
+    # Resolve the data root from the workflow's data_location. It is a DataRoot
+    # rather than a path so the same recipe runs against a local directory or an
+    # s3:// prefix; for a sequencing-runs structure, one scoped root per run.
+    data_dir: str | DataRoot = "."
+    run_data_roots: list[DataRoot] = []
     if workflow is not None and hasattr(workflow, "data_location") and workflow.data_location:
         locations = getattr(workflow.data_location, "locations", None)
         structure = getattr(workflow.data_location, "structure", None)
@@ -1811,26 +2014,32 @@ def process_recipe_data_collection(
 
         if locations and len(locations) > 0:
             base_location = str(locations[0])
+            try:
+                base_root = data_root_for(base_location, CLI_config)
+            except ValueError as exc:
+                # An unlistable scheme, or an s3:// prefix that is neither
+                # allowlisted nor credentialed. A configuration problem, so it
+                # reads as one rather than as a traceback out of ingestion.
+                return {"result": "error", "message": f"Recipe data root unusable: {exc}"}
 
             if structure == "sequencing-runs" and runs_regex:
-                import re as _re
-
-                for entry in sorted(os.listdir(base_location)):
-                    entry_path = os.path.join(base_location, entry)
-                    if os.path.isdir(entry_path) and _re.match(runs_regex, entry):
-                        run_data_dirs.append(entry_path)
-                if run_data_dirs:
-                    data_dir = run_data_dirs[0]
+                # Same rule the listdir walk applied (``re.match`` on the
+                # directory name), asked of the root so it also answers on S3.
+                run_data_roots = [base_root.scoped(run) for run in base_root.runs(runs_regex)]
+                if run_data_roots:
+                    data_dir = run_data_roots[0]
                     rich_print_checked_statement(
-                        f"Recipe data dir: {escape(base_location)} ({len(run_data_dirs)} run(s))",
+                        f"Recipe data dir: {escape(base_location)} ({len(run_data_roots)} run(s))",
                         "info",
                     )
                 else:
-                    data_dir = base_location
-                    rich_print_checked_statement(f"Recipe data dir: {escape(data_dir)}", "info")
+                    data_dir = base_root
+                    rich_print_checked_statement(
+                        f"Recipe data dir: {escape(base_location)}", "info"
+                    )
             else:
-                data_dir = base_location
-                rich_print_checked_statement(f"Recipe data dir: {escape(data_dir)}", "info")
+                data_dir = base_root
+                rich_print_checked_statement(f"Recipe data dir: {escape(base_location)}", "info")
 
     # Resolve dc_ref sources: load referenced DCs from their Delta tables
     extra_sources: dict[str, pl.DataFrame] | None = None
@@ -1904,15 +2113,15 @@ def process_recipe_data_collection(
             return {"result": "error", "message": f"Recipe failed: {e}"}
 
     try:
-        if run_data_dirs and len(run_data_dirs) > 1:
+        if run_data_roots and len(run_data_roots) > 1:
             # Multi-run: execute recipe per run and concatenate
             all_dfs = []
-            for run_dir in run_data_dirs:
-                run_tag = os.path.basename(run_dir)
+            for run_root in run_data_roots:
+                run_tag = run_root.name
                 try:
                     run_df = execute_recipe(
                         recipe_name,
-                        run_dir,
+                        run_root,
                         overrides,
                         extra_sources=extra_sources,
                         pipeline_version=pipeline_version,

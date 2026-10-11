@@ -1,12 +1,27 @@
+import fnmatch
+import hashlib
 import os
+import re
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
+from urllib.parse import urlparse
 
 from bson import ObjectId
 from rich.markup import escape
 from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
 
+from depictio.api.v1.configs.settings_models import local_data_policy
+from depictio.api.v1.remote_fetch import (
+    RemoteFetchFailed,
+    direct_fetch_text,
+    direct_probe,
+    fetch_validated_text,
+    is_server_context,
+    probe_remote_url,
+    validate_remote_url,
+)
+from depictio.cli.cli.utils import data_root as data_root_module
 from depictio.cli.cli.utils.api_calls import (
     api_create_files,
     api_create_files_chunked,
@@ -58,6 +73,7 @@ from depictio.models.models.workflows import (
     WorkflowRun,
     WorkflowRunScan,
 )
+from depictio.models.s3_access import S3AccessError, iter_object_pages
 
 #: Counter keys carried by every per-data-collection scan stat block. Declared
 #: once so the run-level aggregate stays in sync when a counter is added.
@@ -216,7 +232,7 @@ def scan_single_file(
     else:
         # Record the real on-disk path, resolving any symlinks in the scanned path.
         # Runs can be scanned through an intermediate symlink (e.g. per-run isolation
-        # that points --data-root at a temporary symlink tree), and the stored path
+        # that points DATA_DIR at a temporary symlink tree), and the stored path
         # should be the original target, not the transient symlink. file_hash is
         # derived from basename + size + mtime (not the path), so this does not affect
         # change detection or hash-based dedup.
@@ -230,6 +246,15 @@ def scan_single_file(
         if not match:
             # logger.debug(f"File {file_name} does not match regex, skipping.")
             return None
+
+    # On a server reading its own disk (``depictio local``), a match whose real
+    # path leaves the allowed folders (a symlink out of the run folder, into a
+    # hidden or a Depictio-owned folder) is not data: it is skipped like a file
+    # the regex does not match. Off everywhere else.
+    policy = local_data_policy()
+    if policy is not None and not policy.allows_read(file_location):
+        logger.warning(f"Skipped {file_location}: outside the folders this server may read.")
+        return None
 
     # Get file details. Kept after the regex check so a non-matching file still
     # costs nothing on the legacy (non-``scanned``) path.
@@ -578,13 +603,23 @@ def scan_run_for_multiple_data_collections(
             and sc.scan_result["reason"] not in NOT_UPLOADED_SCAN_REASONS
         ]
 
-        # Registered files this scan did not encounter. Computed here rather
-        # than inside the branch below: a data collection that matched nothing
-        # in this run still needs the number, and that is precisely the case
-        # where every one of its files under this run has disappeared.
-        missing_files_location = set(existing_files_for_dc.keys()) - {
-            str(sc.file.file_location) for sc in dc_file_scan_results
-        }
+        # Registered files of this run that this scan did not encounter: this
+        # run's own (registered to it, or under its folder), never those of the
+        # other runs of the DC, which their own walk accounts for. Counted
+        # against every registered file, a sync deleted each run's files while
+        # walking the next one, and only the last run walked kept any (#1169).
+        # Computed here rather than inside the branch below: a data collection
+        # that matched nothing in this run still needs the number, and that is
+        # precisely the case where every one of its files under this run has
+        # disappeared. Registered locations are resolved paths, so the run is
+        # too: a run reached through a symlink would otherwise match nothing.
+        run_id = str(workflow_run.id)
+        run_prefix = os.path.join(os.path.realpath(run_location), "")
+        missing_files_location = {
+            location
+            for location, existing in existing_files_for_dc.items()
+            if str(existing.get("run_id")) == run_id or str(location).startswith(run_prefix)
+        } - {str(sc.file.file_location) for sc in dc_file_scan_results}
 
         # Hoisted so the id buckets below are always defined: a data collection
         # that matched nothing this cycle still needs an (empty) entry.
@@ -686,9 +721,7 @@ def scan_run_for_multiple_data_collections(
         # time has genuinely disappeared. Unlike the count above this one is
         # scoped correctly, which is what lets a deletion mark the collection as
         # changed instead of the table quietly keeping rows for a file that is
-        # no longer on disk. Registered locations are resolved paths, so the run
-        # is too: a run reached through a symlink would otherwise match nothing.
-        run_prefix = os.path.join(os.path.realpath(run_location), "")
+        # no longer on disk.
         vanished_files = [
             location for location in missing_files_location if str(location).startswith(run_prefix)
         ]
@@ -962,9 +995,9 @@ def _resolve_pending_runs(
 
         # A flat location is itself one run; otherwise each subdirectory matching
         # the regex is. The candidates carry every subdirectory, matching or not,
-        # so matching nothing can say *why*: a wrong --data-root level reads very
-        # differently from everything matched but already ingested, which is a
-        # legitimate no-op.
+        # so matching nothing can say *why*: a DATA_DIR at the wrong level reads
+        # very differently from everything matched but already ingested, which
+        # is a legitimate no-op.
         candidates = collect_run_candidates(location, structure, runs_regex)
         if structure != "flat" and not candidates.matched:
             rich_print_checked_statement(
@@ -1042,10 +1075,15 @@ def scan_files_for_workflow(
     # location that does not exist, so they are kept as ids only. A rescan
     # removes them like any run it no longer finds; they used to fail the scan.
     gone_run_ids: dict[str, str] = {}
+    # Runs located at a URL: an ``s3_prefix`` scan of the workflow registered
+    # them, and no walk of a local folder ever finds one.
+    remote_run_tags: set[str] = set()
     existing_runs_response = api_get_runs_by_wf_id(wf_id=str(workflow_id), CLI_config=CLI_config)
     logger.info(f"Existing Runs Response: {existing_runs_response}")
     if existing_runs_response.status_code == 200:
         for e in existing_runs_response.json() or []:
+            if "://" in str(e.get("run_location") or ""):
+                remote_run_tags.add(e["run_tag"])
             try:
                 existing_runs_reformated[e["run_tag"]] = WorkflowRun.from_mongo(e)
             except ValueError as exc:
@@ -1198,7 +1236,15 @@ def scan_files_for_workflow(
                 registered = _run_to_rescan(existing_runs_reformated.get(run_tag), run_location)
                 if registered is not None:
                     kept_ids.add(str(registered.id))
-        missing_runs_tag = {tag for tag, run_id in run_ids.items() if run_id not in kept_ids}
+        # Only the runs this walk covers: a run another scan registered (one
+        # at a URL) is never "no longer found" by it, unless the walk
+        # registered its name anew.
+        scanned_tags = {run.run_tag for run in all_workflow_runs if run}
+        missing_runs_tag = {
+            tag
+            for tag, run_id in run_ids.items()
+            if run_id not in kept_ids and (tag in scanned_tags or tag not in remote_run_tags)
+        }
         missing_runs = [run_ids[run_tag] for run_tag in sorted(missing_runs_tag)]
         removed_label = escape(", ".join(sorted(missing_runs_tag)))
 
@@ -1381,6 +1427,768 @@ def _change_signal(
     }
 
 
+# HEAD probes are quick metadata lookups, so they get a shorter timeout than
+# the policy's download timeout regardless of context.
+_PROBE_TIMEOUT_S = 10.0
+
+
+def _probe_url_metadata(url: str) -> dict:
+    """HEAD an http(s) URL for size/etag; s3 URLs return unknowns.
+
+    Server context (API process, Celery worker) goes through the SSRF gateway:
+    a URL the policy rejects raises ``RemoteURLRejected`` and aborts the scan,
+    so a rejected location is never registered. CLI context probes directly,
+    since the URL is the user's own input on the user's own machine, with the
+    same redirect cap.
+
+    A probe that fails for reachability reasons returns ``etag=None`` (and a
+    logged warning) so the caller can see it: the identity hash then falls
+    back to URL + size instead of silently becoming content-blind.
+    """
+    if urlparse(url).scheme.lower() == "s3":
+        return {"size": -1, "etag": ""}
+
+    if is_server_context():
+        validate_remote_url(url)  # policy violations propagate
+        # Narrow on purpose: a redirect hop the policy rejects must abort the
+        # scan too, so only reachability failures degrade.
+        try:
+            metadata = probe_remote_url(url, timeout_s=_PROBE_TIMEOUT_S)
+        except RemoteFetchFailed as exc:
+            logger.warning(f"Could not probe remote URL {url}: {exc}")
+            return {"size": -1, "etag": None}
+    else:
+        try:
+            metadata = direct_probe(url, timeout_s=_PROBE_TIMEOUT_S)
+        except Exception as exc:
+            logger.warning(f"Could not probe remote URL {url}: {exc}")
+            return {"size": -1, "etag": None}
+
+    size = metadata["size"]
+    return {"size": size if size > 0 else -1, "etag": metadata["etag"]}
+
+
+def _url_identity_hash(url: str, metadata: dict) -> str:
+    """Identity (not integrity) hash of a url-mode File, see the RFC.
+
+    A successful probe hashes URL + ETag (the ETag may be empty when the server
+    sends none). A failed probe (``etag`` is ``None``) hashes URL + size and
+    logs it, so the weaker hash is visible and a later successful probe shows
+    up as "updated" rather than hiding behind a URL-only hash for good.
+    """
+    etag = metadata.get("etag")
+    if etag is None:
+        logger.warning(
+            f"No ETag for {url} (probe failed): identity hash falls back to URL + size, "
+            "so content changes are not detected until a probe succeeds."
+        )
+        return hashlib.sha256(f"{url}|size={metadata.get('size', -1)}".encode()).hexdigest()
+    return hashlib.sha256(f"{url}|{etag}".encode()).hexdigest()
+
+
+def scan_url_for_data_collection(
+    workflow: Workflow,
+    data_collection: "DataCollection",
+    CLI_config: CLIConfig,
+    permissions: Permission,
+    update_files: bool,
+) -> dict:
+    """Register a remote URL (scan mode "url") as a File record.
+
+    The remote counterpart of the single-file scan: no filesystem walk — one
+    synthesized File whose file_location is the URL. Timestamps are the
+    registration time; file_hash is sha256(url + etag), an identity hash (not
+    content integrity — documented in the RFC).
+    """
+    import time
+
+    scan_params = data_collection.config.scan.scan_parameters  # type: ignore[union-attr]
+    url = scan_params.url  # type: ignore[union-attr]
+
+    # Existing-file lookup + stale cleanup (same semantics as single mode:
+    # a DC repointed at a different URL drops the old record).
+    response = api_get_files_by_dc_id(dc_id=str(data_collection.id), CLI_config=CLI_config)
+    existing_files: dict[str, dict] = {}
+    if response.status_code == 200:
+        for existing_file in response.json() or []:
+            location = existing_file["file_location"]
+            if location != url:
+                stale_id = existing_file.get("_id") or existing_file.get("id")
+                if stale_id:
+                    logger.info(f"Removing stale file {location} (expected {url})")
+                    api_delete_file(str(stale_id), CLI_config)
+            else:
+                existing_files[location] = existing_file
+    else:
+        logger.warning(
+            f"Failed to retrieve existing files for data collection {data_collection.id}."
+        )
+
+    metadata = _probe_url_metadata(url)
+    now_iso = format_timestamp(time.time())
+    file_hash = _url_identity_hash(url, metadata)
+
+    url_basename = os.path.basename(urlparse(url).path)
+    filename = url_basename or "remote-file"
+
+    file_id = None
+    scan_result = None
+    if url in existing_files:
+        file_id = existing_files[url]["_id"]
+        if existing_files[url].get("file_hash") == file_hash and not update_files:
+            scan_result = {"result": "failure", "reason": "skipped"}
+        else:
+            scan_result = {"result": "success", "reason": "updated"}
+    if scan_result is None:
+        scan_result = {"result": "success", "reason": "added"}
+
+    workflow_config_id = (
+        PyObjectId(workflow.config.id) if workflow.config and workflow.config.id else PyObjectId()
+    )
+    workflow_run = WorkflowRun(
+        workflow_id=PyObjectId(workflow.id),
+        run_tag=f"{data_collection.data_collection_tag}-url-scan",
+        files_id=[],
+        workflow_config_id=workflow_config_id,
+        run_location=url,
+        creation_time=now_iso,
+        last_modification_time=now_iso,
+        run_hash="",
+        permissions=permissions,
+    )
+
+    file_instance = File(
+        id=PyObjectId(file_id) if file_id else PyObjectId(),
+        filename=filename,
+        file_location=url,
+        creation_time=now_iso,
+        modification_time=now_iso,
+        file_hash=file_hash,
+        filesize=metadata["size"],
+        data_collection_id=data_collection.id,
+        run_id=workflow_run.id,
+        run_tag=workflow_run.run_tag,
+        permissions=permissions,
+    )
+
+    if scan_result["result"] == "success":
+        api_create_files(
+            files=[file_instance],
+            CLI_config=CLI_config,
+            update=scan_result["reason"] == "updated",
+        )
+        registered = 1
+    else:
+        registered = 0
+
+    rich_print_checked_statement(
+        f"Registered {registered} remote URL for data collection "
+        f"{data_collection.data_collection_tag}",
+        "info",
+    )
+    return {"result": "success"}
+
+
+# Keys examined per unit of ``max_files`` before a prefix listing stops asking
+# for more pages. Listing is paged lazily, so this bounds the number of list
+# calls an API thread can spend on a bucket full of non-matching keys.
+S3_PREFIX_KEY_BUDGET_FACTOR = 10
+
+
+def _key_matches(path: str, basename: str, pattern: str, pattern_syntax: str) -> bool:
+    """Whether an object matches ``pattern`` under ``pattern_syntax``.
+
+    ``path`` is the key as the pattern is written against it (relative to the
+    prefix, or to the run directory for a sequencing-runs scan) and ``basename``
+    is its file name. Both syntaxes are two-shot, so a pattern naming a file
+    reaches nested keys and a pattern spelling a path still works.
+
+    The regex branch calls the same ``regex_match`` the local recursive walk
+    uses, in the same order it uses it (basename first, the path only when the
+    pattern spells one), so a data collection means the same thing local and
+    remote. ``regex_match`` is ``re.match``: anchored at the start and not at
+    the end, deliberately.
+
+    The glob branch is fnmatch, where ``*`` spans ``/`` as well: that is what
+    makes ``*.csv`` reach into sub-prefixes the way the local recursive walk
+    does. It is *not* the ``Path.glob`` dialect ``data_root._glob_to_regex``
+    speaks, and the two are kept apart on purpose.
+    """
+    if pattern_syntax == "regex":
+        hit, _ = regex_match(basename, pattern)
+        if not hit and "/" in pattern:
+            hit, _ = regex_match(path, pattern)
+        return bool(hit)
+    return fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(basename, pattern)
+
+
+def list_s3_prefix(
+    prefix: str,
+    pattern: str,
+    max_files: int,
+    CLI_config: CLIConfig,
+    pattern_syntax: str = "glob",
+    match_path=None,
+) -> list[dict]:
+    """List objects under an ``s3://`` prefix whose relative key matches ``pattern``.
+
+    ``pattern`` is fnmatch by default, whose ``*`` also spans ``/``. That is
+    deliberate: it makes ``*.csv`` recurse into sub-prefixes, matching the
+    semantics of the local ``recursive`` mode rather than a single directory
+    listing. ``pattern_syntax="regex"`` reads it as a regex instead, matched the
+    way the local recursive walk matches its own ``regex_config`` pattern.
+
+    ``match_path`` optionally remaps what the pattern is matched against: it
+    takes the prefix-relative key and returns the path to match, or ``None`` to
+    drop the object from the scan entirely. The sequencing-runs caller uses it
+    to strip the run segment, so a data collection pattern written relative to a
+    run directory means remotely what it means locally.
+
+    Two bounds, both reported as warnings, and both checked between pages: a
+    page already fetched is always scanned in full. No further page is
+    requested once ``max_files`` objects match, and a further match on the
+    page that holds the last one shows the results are truncated. Nor once
+    ``max_files * S3_PREFIX_KEY_BUDGET_FACTOR`` keys have been listed, so a
+    prefix with millions of non-matching keys cannot pin the calling thread.
+
+    Returns dicts of {url, key, size, etag, last_modified}; raises ValueError on
+    a malformed prefix so the caller can surface it as a scan failure, and an
+    ``S3AccessError`` when the read is refused or fails.
+    """
+    key_budget = max_files * S3_PREFIX_KEY_BUDGET_FACTOR
+    # How a prefix is read is data_root's decision, as for a DataRoot. The pages
+    # are read here, one at a time, so the listing stops at the cap: matching
+    # and the two bounds are the scan mode's own contract.
+    _bucket, key_prefix = data_root_module.split_s3_prefix(prefix)
+    target = data_root_module._s3_read_target(prefix, CLI_config)
+
+    matches: list[dict] = []
+    # Every key listed counts against the budget, folder markers included:
+    # listing them costs the same.
+    keys_listed = 0
+    past_cap = False  # a match beyond max_files was seen
+    stopped_early = False  # pages were left unlisted
+    for page in iter_object_pages(target, key_prefix):
+        for obj in page.get("Contents", []):
+            keys_listed += 1
+            key = obj["Key"]
+            if key.endswith("/"):
+                continue
+            relative = key[len(key_prefix) :].lstrip("/") if key_prefix else key
+            candidate = relative if match_path is None else match_path(relative)
+            if candidate is None:
+                continue
+            if not _key_matches(candidate, os.path.basename(key), pattern, pattern_syntax):
+                continue
+            if len(matches) >= max_files:
+                past_cap = True
+                break
+            matches.append(
+                {
+                    "url": f"s3://{target.bucket}/{key}",
+                    "key": key,
+                    "relative": relative,
+                    "size": obj.get("Size", -1),
+                    "etag": (obj.get("ETag") or "").strip('"'),
+                    "last_modified": obj.get("LastModified"),
+                }
+            )
+        if past_cap:
+            break
+        # ``IsTruncated`` is set on every list_objects_v2 page; a listing that
+        # ends on the page a bound is reached on is complete.
+        if (len(matches) >= max_files or keys_listed >= key_budget) and page.get(
+            "IsTruncated", True
+        ):
+            stopped_early = True
+            break
+
+    if past_cap or (stopped_early and len(matches) >= max_files):
+        # Never let a cap silently look like "that's all there is". The cap is
+        # the tighter of the two bounds, so it is reported on its own.
+        certainty = "are" if past_cap else "may be"
+        rich_print_checked_statement(
+            f"s3_prefix scan stopped at the max_files cap ({max_files}) under {prefix}: "
+            f"results {certainty} truncated. Narrow `pattern` or raise `max_files`.",
+            "warning",
+        )
+    elif stopped_early:
+        message = (
+            f"s3_prefix scan listed {keys_listed} keys under {prefix}, reaching its "
+            f"budget of {key_budget} keys (max_files {max_files} x "
+            f"{S3_PREFIX_KEY_BUDGET_FACTOR}), and stopped before the end of the listing; "
+            f"results are partial ({len(matches)} matched). Narrow `prefix` or `pattern`, "
+            "or raise `max_files`."
+        )
+        logger.warning(message)
+        rich_print_checked_statement(message, "warning")
+    return matches
+
+
+def scan_s3_prefix_for_data_collection(
+    workflow: Workflow,
+    data_collection: "DataCollection",
+    CLI_config: CLIConfig,
+    permissions: Permission,
+    update_files: bool,
+) -> dict:
+    """Register every object under an ``s3://`` prefix matching the DC's pattern.
+
+    The remote counterpart of the recursive scan. Unlike manifest mode the
+    listing carries real sizes and ETags, so the identity hash is content-aware:
+    a re-uploaded object changes its ETag and is picked up as "updated".
+
+    The workflow's own ``data_location.structure`` decides how the objects are
+    grouped. A ``flat`` prefix is one run, as it has always been. A
+    ``sequencing-runs`` prefix has one run per first-level "directory" matching
+    ``runs_regex``, exactly like the local walk: the run segment becomes the
+    File's ``run_tag`` (and so the ``depictio_run_id`` column), and the DC's
+    pattern is matched against what is left of the key once that segment is
+    stripped, because a template's patterns are written relative to a run
+    directory and not to the data root.
+    """
+    import time
+
+    scan_params = data_collection.config.scan.scan_parameters  # type: ignore[union-attr]
+    prefix = scan_params.prefix  # type: ignore[union-attr]
+    pattern = scan_params.pattern  # type: ignore[union-attr]
+    pattern_syntax = scan_params.pattern_syntax  # type: ignore[union-attr]
+    id_regex = scan_params.id_regex  # type: ignore[union-attr]
+
+    runs_regex = workflow.data_location.runs_regex
+    per_run = workflow.data_location.structure == "sequencing-runs" and bool(runs_regex)
+
+    # Filled by the matcher below, so the caller can say what it actually saw
+    # when ``runs_regex`` turns out to match nothing.
+    seen_segments: set[str] = set()
+    run_segments: set[str] = set()
+    match_path = None
+    if per_run:
+        run_pattern = str(runs_regex)
+
+        def _strip_run_segment(relative: str) -> str | None:
+            """The key with its run segment stripped, or None to skip the object.
+
+            An object sitting directly under the prefix belongs to no run, and a
+            first segment that ``runs_regex`` rejects is a directory the local
+            walk would never have descended into. Both are skipped rather than
+            being folded into some other run.
+            """
+            segment, _, remainder = relative.partition("/")
+            if not remainder:
+                return None
+            seen_segments.add(segment)
+            if not re.match(run_pattern, segment):
+                return None
+            run_segments.add(segment)
+            return remainder
+
+        match_path = _strip_run_segment
+
+    try:
+        objects = list_s3_prefix(
+            prefix=prefix,
+            pattern=pattern,
+            max_files=scan_params.max_files,  # type: ignore[union-attr]
+            CLI_config=CLI_config,
+            pattern_syntax=pattern_syntax,
+            match_path=match_path,
+        )
+    except S3AccessError:
+        # Sanitized, with its own code: the API answers with it as is.
+        raise
+    except Exception as exc:
+        message = f"S3 prefix listing failed for {prefix}: {exc}"
+        logger.error(message)
+        return {"result": "error", "message": message}
+
+    if per_run and not run_segments:
+        # Say what was actually found: "no object matched the pattern" would
+        # send the reader after the DC's pattern when the run regex is what
+        # rejected every key.
+        rich_print_checked_statement(
+            f"runs_regex '{runs_regex}' matched no run directory under {prefix}. "
+            f"Directories seen: {sorted(seen_segments) or 'none'}. No run was scanned.",
+            "warning",
+        )
+
+    if not objects:
+        return {
+            "result": "error",
+            "message": (
+                f"No object under '{prefix}' matches pattern '{pattern}' "
+                f"for data collection '{data_collection.data_collection_tag}'"
+            ),
+        }
+
+    compiled_id = re.compile(id_regex) if id_regex else None
+
+    # Stale cleanup: registered locations no longer present under the prefix.
+    current_urls = {obj["url"] for obj in objects}
+    response = api_get_files_by_dc_id(dc_id=str(data_collection.id), CLI_config=CLI_config)
+    existing_files: dict[str, dict] = {}
+    if response.status_code == 200:
+        for existing_file in response.json() or []:
+            location = existing_file["file_location"]
+            if location not in current_urls:
+                stale_id = existing_file.get("_id") or existing_file.get("id")
+                if stale_id:
+                    logger.info(f"Removing stale file {location} (absent from {prefix})")
+                    api_delete_file(str(stale_id), CLI_config)
+            else:
+                existing_files[location] = existing_file
+    else:
+        logger.warning(
+            f"Failed to retrieve existing files for data collection {data_collection.id}."
+        )
+
+    now_iso = format_timestamp(time.time())
+    workflow_config_id = (
+        PyObjectId(workflow.config.id) if workflow.config and workflow.config.id else PyObjectId()
+    )
+
+    def _new_run(run_tag: str, run_location: str, run_id: str | None = None) -> WorkflowRun:
+        return WorkflowRun(
+            id=PyObjectId(run_id) if run_id else PyObjectId(),
+            workflow_id=PyObjectId(workflow.id),
+            run_tag=run_tag,
+            files_id=[],
+            workflow_config_id=workflow_config_id,
+            run_location=run_location,
+            creation_time=now_iso,
+            last_modification_time=now_iso,
+            run_hash="",
+            permissions=permissions,
+        )
+
+    if per_run:
+        # One run per matched run directory, keyed by its segment. Re-using the
+        # id of a run already registered under this workflow matters: the upsert
+        # endpoint matches on ``_id``, so a fresh id for a known run_tag would
+        # leave the files pointing at a run document that is never written.
+        existing_run_ids: dict[str, str] = {}
+        runs_response = api_get_runs_by_wf_id(wf_id=str(workflow.id), CLI_config=CLI_config)
+        if runs_response.status_code == 200:
+            for known_run in runs_response.json() or []:
+                known_id = known_run.get("_id") or known_run.get("id")
+                if known_id:
+                    existing_run_ids[known_run["run_tag"]] = str(known_id)
+        else:
+            logger.warning(f"Failed to retrieve existing runs for workflow {workflow.id}.")
+
+        runs_by_tag = {
+            tag: _new_run(tag, f"{prefix.rstrip('/')}/{tag}", existing_run_ids.get(tag))
+            for tag in sorted({obj["relative"].partition("/")[0] for obj in objects})
+        }
+    else:
+        # A flat prefix has no run dimension: one synthetic run, keyed by "" so
+        # the loop below can look it up the same way it looks up a real one.
+        runs_by_tag = {
+            "": _new_run(f"{data_collection.data_collection_tag}-s3-prefix-scan", prefix)
+        }
+
+    to_add: list[File] = []
+    to_update: list[File] = []
+    skipped = 0
+    unmatched_id = 0
+    for obj in objects:
+        url = obj["url"]
+        file_hash = hashlib.sha256(f"{url}|{obj['etag']}".encode()).hexdigest()
+        existing = existing_files.get(url)
+        if existing and existing.get("file_hash") == file_hash and not update_files:
+            skipped += 1
+            continue
+
+        entity_id = None
+        if compiled_id:
+            found = compiled_id.search(obj["relative"]) or compiled_id.search(
+                os.path.basename(obj["key"])
+            )
+            if found:
+                entity_id = found.group(1)
+            else:
+                unmatched_id += 1
+
+        modified = obj.get("last_modified")
+        modified_iso = format_timestamp(modified.timestamp()) if modified else now_iso
+
+        run = runs_by_tag[obj["relative"].partition("/")[0] if per_run else ""]
+        # ``run_tag`` becomes the depictio_run_id column. A per-run scan records
+        # the run it came from; a flat one keeps the constant it always used.
+        file_run_tag = run.run_tag if per_run else "remote"
+
+        file_instance = File(
+            id=PyObjectId(existing["_id"]) if existing else PyObjectId(),
+            filename=os.path.basename(obj["key"]) or "remote-file",
+            file_location=url,
+            creation_time=modified_iso,
+            modification_time=modified_iso,
+            file_hash=file_hash,
+            filesize=obj.get("size", -1),
+            data_collection_id=data_collection.id,
+            run_id=run.id,
+            run_tag=file_run_tag,
+            permissions=permissions,
+            manifest_id=entity_id,
+        )
+        (to_update if existing else to_add).append(file_instance)
+
+    if to_add:
+        api_create_files(files=to_add, CLI_config=CLI_config, update=False)
+    if to_update:
+        api_create_files(files=to_update, CLI_config=CLI_config, update=True)
+
+    if per_run:
+        # The files reference these runs, so they have to exist server-side.
+        # Same upsert the local walk ends on in scan_files_for_workflow.
+        api_upsert_runs_batch(list(runs_by_tag.values()), CLI_config, update_files)
+
+    if unmatched_id:
+        # Silent None ids would break cross-DC joins at render time, not here.
+        rich_print_checked_statement(
+            f"{unmatched_id} object(s) under {prefix} did not match id_regex "
+            f"'{id_regex}' — they carry no join id.",
+            "warning",
+        )
+
+    # Name the runs that were detected: with a per-run prefix the run set is
+    # the part of the scan a reader cannot infer from the file counts.
+    runs_summary = f" across runs {', '.join(sorted(runs_by_tag))}" if per_run else ""
+    rich_print_checked_statement(
+        f"S3 prefix scan for {data_collection.data_collection_tag}: "
+        f"{len(to_add)} added, {len(to_update)} updated, {skipped} unchanged{runs_summary}",
+        "info",
+    )
+    return {"result": "success", "added": len(to_add), "updated": len(to_update)}
+
+
+def fetch_manifest(manifest_url: str, field_map: dict | None = None):
+    """Load and parse a Data Manifest from a local path or an http(s) URL.
+
+    Format is decided by extension (.json vs anything else = CSV), falling
+    back to content sniffing (``DataManifest.parse``). s3:// manifests are not
+    supported yet (phase 2 covers file paths and https; the RFC tracks s3
+    manifests).
+
+    Remote manifests are re-fetched on every scan, including scans the API
+    runs in-process, so server context goes through the SSRF gateway
+    (``RemoteURLRejected`` propagates) and refuses a local path. CLI context
+    fetches directly with the same redirect and size caps.
+    """
+    from depictio.models.models.manifest import DataManifest, is_remote_url
+
+    if is_remote_url(manifest_url):
+        if manifest_url.lower().startswith("s3://"):
+            raise ValueError(
+                "s3:// manifest locations are not supported yet — "
+                "serve the manifest over https or use a local path."
+            )
+        if is_server_context():
+            text = fetch_validated_text(manifest_url)
+        else:
+            text = direct_fetch_text(manifest_url)
+    else:
+        if is_server_context():
+            # A path stored on a data collection is its owner's word: the
+            # server never opens one of its own files on a user's behalf.
+            raise ValueError(
+                f"Manifest '{manifest_url}' is a local path: the server reads "
+                "manifests over https only."
+            )
+        if not os.path.exists(manifest_url):
+            raise ValueError(f"Manifest '{manifest_url}' does not exist.")
+        with open(manifest_url, "rb") as fh:
+            text = fh.read()
+
+    return DataManifest.parse(text, source=manifest_url, field_map=field_map)
+
+
+def _manifest_field_map(scan_params) -> dict[str, str]:
+    """``fetch_manifest``'s field map for one manifest DC's scan parameters (model or dict)."""
+
+    def param(name: str, default: str | None) -> str | None:
+        if isinstance(scan_params, dict):
+            return scan_params.get(name, default)
+        return getattr(scan_params, name, default)
+
+    field_map = {
+        "id": param("id_field", "id") or "id",
+        "type": param("type_field", "type") or "type",
+        "url": param("url_field", "url") or "url",
+    }
+    run_field = param("run_field", "run")
+    if run_field:
+        field_map["run"] = run_field
+    return field_map
+
+
+def prune_empty_optional_manifest_dcs(config: dict) -> list[str]:
+    """Drop the optional manifest DCs whose manifest lists no entry of their type. In place.
+
+    Meant for a resolved template, before the project sync: the rule
+    ``POST /projects/from_manifest`` applies, the same one the template applies
+    to an optional single-file DC whose file is missing. The scan of such a DC
+    would otherwise fail on its empty type. A required DC with no entry raises
+    ``ValueError`` here, before the project exists on the server. The links
+    naming a pruned DC go with it, and its expected-DC record says why. Returns
+    the pruned tags, sorted.
+    """
+    from depictio.cli.cli.utils.templates import prune_links_for_tags
+    from depictio.models.models.manifest import DataManifest
+
+    manifests: dict[tuple, DataManifest] = {}
+    pruned: set[str] = set()
+    for workflow in config.get("workflows") or []:
+        for dc in workflow.get("data_collections") or []:
+            scan = (dc.get("config") or {}).get("scan") or {}
+            if str(scan.get("mode", "")).lower() != "manifest":
+                continue
+            params = scan.get("scan_parameters") or {}
+            manifest_url = params.get("manifest_url")
+            if not manifest_url:
+                continue  # the model reports it, with the rest of the config
+            field_map = _manifest_field_map(params)
+            key = (manifest_url, tuple(sorted(field_map.items())))
+            if key not in manifests:
+                manifests[key] = fetch_manifest(manifest_url, field_map=field_map)
+            manifest = manifests[key]
+            tag = dc.get("data_collection_tag") or ""
+            manifest_type = params.get("manifest_type") or tag
+            if manifest.entries_for_type(manifest_type):
+                continue
+            if dc.get("optional"):
+                pruned.add(tag)
+                continue
+            raise ValueError(
+                f"Manifest {manifest_url} has no entry of type '{manifest_type}', which data "
+                f"collection '{tag}' needs. Its types: "
+                f"{', '.join(sorted(manifest.types())) or 'none'}."
+            )
+
+    if not pruned:
+        return []
+    for workflow in config.get("workflows") or []:
+        workflow["data_collections"] = [
+            dc
+            for dc in workflow.get("data_collections") or []
+            if dc.get("data_collection_tag") not in pruned
+        ]
+    if config.get("links"):
+        prune_links_for_tags(config, pruned)
+    origin = config.get("template_origin")
+    if isinstance(origin, dict):
+        for expected in origin.get("expected_data_collections") or []:
+            if expected.get("data_collection_tag") in pruned:
+                expected["included"] = False
+                expected["removal_reason"] = "optional: the manifest lists no entry for it"
+    return sorted(pruned)
+
+
+def scan_manifest_for_data_collection(
+    workflow: Workflow,
+    data_collection: "DataCollection",
+    CLI_config: CLIConfig,
+    permissions: Permission,
+    update_files: bool,
+) -> dict:
+    """Register the manifest entries matching this DC's manifest_type.
+
+    One File per manifest row: file_location = the entry URL, run_tag = the
+    entry's run (or "remote"), manifest_id = the entry's canonical ID — read
+    back as the `depictio_manifest_id` column at aggregation time.
+    """
+    import time
+
+    scan_params = data_collection.config.scan.scan_parameters  # type: ignore[union-attr]
+    manifest = fetch_manifest(
+        scan_params.manifest_url,  # type: ignore[union-attr]
+        field_map=_manifest_field_map(scan_params),
+    )
+
+    entries = manifest.entries_for_type(scan_params.manifest_type)  # type: ignore[union-attr]
+    if not entries:
+        return {
+            "result": "error",
+            "message": (
+                f"Manifest has no entries of type '{scan_params.manifest_type}' "  # type: ignore[union-attr]
+                f"(available: {sorted(manifest.types())})"
+            ),
+        }
+
+    # Existing-file lookup + stale cleanup: any registered location no longer
+    # present in the manifest for this type is dropped.
+    manifest_urls = {entry.url for entry in entries}
+    response = api_get_files_by_dc_id(dc_id=str(data_collection.id), CLI_config=CLI_config)
+    existing_files: dict[str, dict] = {}
+    if response.status_code == 200:
+        for existing_file in response.json() or []:
+            location = existing_file["file_location"]
+            if location not in manifest_urls:
+                stale_id = existing_file.get("_id") or existing_file.get("id")
+                if stale_id:
+                    logger.info(f"Removing stale file {location} (absent from manifest)")
+                    api_delete_file(str(stale_id), CLI_config)
+            else:
+                existing_files[location] = existing_file
+    else:
+        logger.warning(
+            f"Failed to retrieve existing files for data collection {data_collection.id}."
+        )
+
+    now_iso = format_timestamp(time.time())
+    workflow_config_id = (
+        PyObjectId(workflow.config.id) if workflow.config and workflow.config.id else PyObjectId()
+    )
+    workflow_run = WorkflowRun(
+        workflow_id=PyObjectId(workflow.id),
+        run_tag=f"{data_collection.data_collection_tag}-manifest-scan",
+        files_id=[],
+        workflow_config_id=workflow_config_id,
+        run_location=scan_params.manifest_url,  # type: ignore[union-attr]
+        creation_time=now_iso,
+        last_modification_time=now_iso,
+        run_hash="",
+        permissions=permissions,
+    )
+
+    to_add: list[File] = []
+    to_update: list[File] = []
+    skipped = 0
+    for entry in entries:
+        file_hash = hashlib.sha256(f"{entry.url}|{entry.id}".encode()).hexdigest()
+        existing = existing_files.get(entry.url)
+        if existing and existing.get("file_hash") == file_hash and not update_files:
+            skipped += 1
+            continue
+        file_instance = File(
+            id=PyObjectId(existing["_id"]) if existing else PyObjectId(),
+            filename=os.path.basename(entry.url.split("?", 1)[0]) or "remote-file",
+            file_location=entry.url,
+            creation_time=now_iso,
+            modification_time=now_iso,
+            file_hash=file_hash,
+            filesize=-1,
+            data_collection_id=data_collection.id,
+            run_id=workflow_run.id,
+            run_tag=entry.run or "remote",
+            permissions=permissions,
+            manifest_id=entry.id,
+        )
+        (to_update if existing else to_add).append(file_instance)
+
+    if to_add:
+        api_create_files(files=to_add, CLI_config=CLI_config, update=False)
+    if to_update:
+        api_create_files(files=to_update, CLI_config=CLI_config, update=True)
+
+    rich_print_checked_statement(
+        f"Manifest scan for {data_collection.data_collection_tag}: "
+        f"{len(to_add)} added, {len(to_update)} updated, {skipped} unchanged",
+        "info",
+    )
+    return {"result": "success", "added": len(to_add), "updated": len(to_update)}
+
+
 def scan_files_for_data_collection(
     workflow: Workflow,
     data_collection_id: str,
@@ -1417,10 +2225,42 @@ def scan_files_for_data_collection(
         logger.debug(error_msg)
         raise ValueError(error_msg)
 
-    # Only handle single file mode here
-    if not data_collection.config.scan or data_collection.config.scan.mode.lower() != "single":
+    # Only handle single-file, url, s3_prefix and manifest modes here
+    if not data_collection.config.scan or data_collection.config.scan.mode.lower() not in (
+        "single",
+        "url",
+        "s3_prefix",
+        "manifest",
+    ):
         raise ValueError(
             "This function only handles single file mode. Use scan_files_for_workflow for aggregate mode."
+        )
+
+    if data_collection.config.scan.mode.lower() == "s3_prefix":
+        return scan_s3_prefix_for_data_collection(
+            workflow=workflow,
+            data_collection=data_collection,
+            CLI_config=CLI_config,
+            permissions=permissions,
+            update_files=update_files,
+        )
+
+    if data_collection.config.scan.mode.lower() == "url":
+        return scan_url_for_data_collection(
+            workflow=workflow,
+            data_collection=data_collection,
+            CLI_config=CLI_config,
+            permissions=permissions,
+            update_files=update_files,
+        )
+
+    if data_collection.config.scan.mode.lower() == "manifest":
+        return scan_manifest_for_data_collection(
+            workflow=workflow,
+            data_collection=data_collection,
+            CLI_config=CLI_config,
+            permissions=permissions,
+            update_files=update_files,
         )
 
     # Check for the file's existence in the DB
@@ -1514,6 +2354,13 @@ def scan_files_for_data_collection(
         "info",
     )
     return {"result": "success"}
+
+
+def _scan_failure(data_collection_tag: str, scan_result: dict) -> str:
+    """The error a failed DC scan raises with, the scanner's own reason included."""
+    reason = scan_result.get("message")
+    suffix = f": {reason}" if reason else ""
+    return f"Failed to scan data collection {data_collection_tag}{suffix}"
 
 
 def scan_project_files(
@@ -1613,6 +2460,13 @@ def scan_project_files(
             for dc in data_collections_to_scan
             if dc.config.scan and dc.config.scan.mode.lower() == "single"
         ]
+        # Remote acquisition modes: no filesystem walk, one synthetic File
+        # record set per DC (see scan_url/scan_s3_prefix/scan_manifest_for_data_collection).
+        remote_data_collections = [
+            dc
+            for dc in data_collections_to_scan
+            if dc.config.scan and dc.config.scan.mode.lower() in ("url", "s3_prefix", "manifest")
+        ]
         multiqc_data_collections = [
             dc
             for dc in data_collections_to_scan
@@ -1621,12 +2475,15 @@ def scan_project_files(
         # Note: Image DCs are now processed as single/aggregate (like Table DCs)
         # They have delta tables and scan configs, so no special handling needed
 
-        if multiqc_data_collections:
+        if multiqc_data_collections or remote_data_collections:
             parts = [
                 f"{len(aggregate_data_collections)} aggregate",
                 f"{len(single_data_collections)} single",
             ]
-            parts.append(f"{len(multiqc_data_collections)} MultiQC")
+            if remote_data_collections:
+                parts.append(f"{len(remote_data_collections)} remote (url/manifest)")
+            if multiqc_data_collections:
+                parts.append(f"{len(multiqc_data_collections)} MultiQC")
             rich_print_checked_statement(
                 f"  ↪ Found {', '.join(parts)} data collections",
                 "info",
@@ -1684,7 +2541,26 @@ def scan_project_files(
             )
 
             if scan_result["result"] != "success":
-                raise Exception(f"Failed to scan data collection {dc.data_collection_tag}")
+                raise Exception(_scan_failure(dc.data_collection_tag, scan_result))
+
+        # Scan remote (url/manifest) data collections individually — same path
+        # as single DCs; scan_files_for_data_collection dispatches on mode.
+        for dc in remote_data_collections:
+            scan_mode = dc.config.scan.mode.title() if dc.config.scan else "No scan config"
+            rich_print_checked_statement(
+                f"  ↪ Scanning Data Collection: [italic]'{dc.data_collection_tag}'[/italic] - type {dc.config.type} - metatype {scan_mode}",
+                "info",
+            )
+
+            scan_result = scan_files_for_data_collection(
+                workflow=workflow,
+                data_collection_id=str(dc.id),
+                CLI_config=CLI_config,
+                command_parameters=command_parameters,
+            )
+
+            if scan_result["result"] != "success":
+                raise Exception(_scan_failure(dc.data_collection_tag, scan_result))
 
         # Handle MultiQC data collections (no file scanning needed)
         for dc in multiqc_data_collections:

@@ -1,8 +1,10 @@
+import functools
 import os
 import re
 import secrets
+import tempfile
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from pydantic import AliasChoices, Field, SecretStr, computed_field, model_validator
 from pydantic_settings import (
@@ -16,6 +18,9 @@ from pydantic_settings import (
 # the earliest import in every context and must not pull in httpx.
 from depictio.telemetry.constants import DEFAULT_API_KEY as DEFAULT_TELEMETRY_API_KEY
 from depictio.telemetry.constants import DEFAULT_ENDPOINT as DEFAULT_TELEMETRY_ENDPOINT
+
+if TYPE_CHECKING:
+    from depictio.models.local_access import LocalDataPolicy
 
 # Passwords we refuse to accept on a server boot. Lower-cased before comparison.
 _WEAK_PASSWORDS: frozenset[str] = frozenset(
@@ -252,6 +257,7 @@ class MongoDBConfig(ServiceConfig):
         multiqc_prerender_collection: str = Field(default="multiqc_prerender")
         task_events_collection: str = Field(default="task_events")
         ingestion_runs_collection: str = Field(default="ingestion_runs")
+        project_storage_collection: str = Field(default="project_storage_configs")
         app_logs_collection: str = Field(default="app_logs")
         # Instance branding: the singleton overrides document and the uploaded
         # logo bytes. Named here so backup/restore can reach them like any other
@@ -850,6 +856,219 @@ class MultiQCPrerenderConfig(BaseSettings):
     )
 
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_MULTIQC_")
+
+
+class RemoteConfig(BaseSettings):
+    """Policy for fetching user-supplied remote URLs (scan modes url/manifest).
+
+    Source of truth for the SSRF gateway in ``depictio.api.v1.remote_fetch``.
+    The gateway instantiates this section on every call instead of reading the
+    ``settings`` singleton, so the CLI and the Celery worker apply the very same
+    policy without importing the full API configuration.
+
+    Environment variables: ``DEPICTIO_REMOTE_<FIELD>`` (upper-cased field name).
+    A malformed value fails validation at the first fetch instead of silently
+    falling back to a default.
+    """
+
+    allow_http: bool = Field(
+        default=False,
+        description=(
+            "Accept plain http:// URLs in addition to https:// and s3://. Off by "
+            "default: the gateway and the models reject http:// locations. Turn on "
+            "for local or airgapped deployments that serve data without TLS."
+        ),
+    )
+    url_allowlist: str = Field(
+        default="",
+        description=(
+            "Comma-separated host names the gateway may fetch from. Exclusive while "
+            "set: any host not listed is rejected, and a listed host skips the "
+            "private/loopback address rejection (this is how internal deployments "
+            "and tests opt a 127.0.0.1 or intranet host in). Empty accepts every "
+            "public host."
+        ),
+    )
+    url_denylist: str = Field(
+        default="",
+        description=(
+            "Comma-separated host names the gateway always rejects. Checked before "
+            "the allowlist, so a host present in both lists is denied."
+        ),
+    )
+    max_download_bytes: int = Field(
+        default=500 * 1024 * 1024,
+        ge=1,
+        description=(
+            "Size cap in bytes for a single remote download (data file or manifest). "
+            "Downloads stream and abort, removing the partial file, once the cap is "
+            "exceeded."
+        ),
+    )
+    public_s3_buckets: str = Field(
+        default="",
+        description=(
+            "Comma-separated S3 locations readable without credentials, each either "
+            "'bucket' or 'bucket/prefix'. Empty by default, so unsigned access is "
+            "opt-in. A bucket listed here is read with the signature disabled; every "
+            "other s3:// URL needs the project's storage settings (or, on the server, "
+            "an entry in credentialed_s3_buckets). The list is consulted before any "
+            "request goes out, so naming a bucket that is not on it never turns into "
+            "an existence or region oracle."
+        ),
+    )
+    credentialed_s3_buckets: str = Field(
+        default="",
+        description=(
+            "Comma-separated S3 locations the API and the Celery worker may read with "
+            "their own ambient credentials (the AWS default chain: environment, IAM "
+            "role, web identity), same 'bucket' or 'bucket/prefix' syntax as "
+            "public_s3_buckets. Empty by default. Without an entry here, a server-side "
+            "read of an s3:// location that is neither public nor covered by the "
+            "project's storage settings is refused, and the instance's own S3 "
+            "credentials are never used for a user-supplied location. Any user of "
+            "the instance can read what is listed here, so list only data every user "
+            "may see."
+        ),
+    )
+    timeout_s: float = Field(
+        default=30.0,
+        gt=0,
+        description=(
+            "httpx timeout in seconds applied to each connect/read/write operation "
+            "of a remote fetch (not a total download time)."
+        ),
+    )
+    max_redirects: int = Field(
+        default=3,
+        ge=0,
+        description=(
+            "Maximum redirect hops followed for a remote URL. The gateway re-validates "
+            "every Location against this policy before following it."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_REMOTE_")
+
+
+class LocalDataConfig(BaseSettings):
+    """Folders on the server's own disk that a project may be created from.
+
+    For ``depictio local``, where the server is the user's own computer: the
+    browser can then name a run folder on it, and list folders to pick one.
+    Off unless ``roots`` is set, and even then only in single-user mode and in
+    server context (see :func:`local_data_policy`): a shared server must never
+    read its own disk for whoever asks.
+
+    Environment variable: ``DEPICTIO_LOCAL_DATA_ROOTS``.
+    """
+
+    roots: str = Field(
+        default="",
+        description=(
+            "Comma-separated absolute folders (or '~/...') a run folder may be read from, "
+            "e.g. '~,/Volumes/data'. Empty, the default, turns local folders off. Even "
+            "below a root, hidden folders and the folders Depictio keeps for itself "
+            "(keys, admin token, backups, the local home) are never read. Honoured only "
+            "with DEPICTIO_AUTH_SINGLE_USER_MODE."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_LOCAL_DATA_")
+
+    @property
+    def root_list(self) -> list[str]:
+        """``roots`` as a list, blanks dropped."""
+        return [root.strip() for root in self.roots.split(",") if root.strip()]
+
+
+# Every environment variable the local-data policy is built from: the cache key
+# of `_local_data_policy_for`, so a changed setting builds a new policy.
+_LOCAL_POLICY_ENV: tuple[str, ...] = (
+    "DEPICTIO_CONTEXT",
+    "DEPICTIO_AUTH_SINGLE_USER_MODE",
+    "DEPICTIO_LOCAL_DATA_ROOTS",
+    "DEPICTIO_LOCAL_HOME",
+    "DEPICTIO_AUTH_KEYS_DIR",
+    "DEPICTIO_AUTH_CLI_CONFIG_DIR",
+    "DEPICTIO_BACKUP_BASE_DIR",
+    "DEPICTIO_BACKUP_BACKUP_DIR",
+    "DEPICTIO_BACKUP_S3_LOCAL_BACKUP_DIR",
+    "HOME",
+    "TMPDIR",
+)
+
+
+def local_data_policy() -> "LocalDataPolicy | None":
+    """The policy local folders are read under, or None when they are off.
+
+    On only in server context, in single-user mode, and with at least one root
+    in ``DEPICTIO_LOCAL_DATA_ROOTS``. Built from the environment rather than
+    the ``settings`` singleton, like :class:`RemoteConfig`, so the API, the
+    Celery worker and the CLI read paths judge a path alike; cached on that
+    environment, since the read paths ask once per file.
+    """
+    return _local_data_policy_for(tuple(os.environ.get(name) for name in _LOCAL_POLICY_ENV))
+
+
+def local_data_roots_enabled() -> bool:
+    """Whether this server reads run folders on its own disk (see :func:`local_data_policy`)."""
+    return local_data_policy() is not None
+
+
+def remote_browse_enabled() -> bool:
+    """Whether an administrator listed S3 locations every user may browse for a run
+    folder: ``DEPICTIO_REMOTE_PUBLIC_S3_BUCKETS`` or ``..._CREDENTIALED_S3_BUCKETS``.
+
+    Read from the environment like the gateway reads it. A malformed
+    ``DEPICTIO_REMOTE_*`` value turns browsing off here, logged, rather than
+    failing the page-load request that carries the flag; the reads themselves
+    still fail on it loudly.
+    """
+    from pydantic import ValidationError
+
+    from depictio.models.s3_access import parse_bucket_list
+
+    try:
+        remote = RemoteConfig()
+    except ValidationError as exc:
+        _warn(f"Remote S3 browsing is off: the DEPICTIO_REMOTE_* settings are invalid ({exc})")
+        return False
+    return bool(
+        parse_bucket_list(remote.public_s3_buckets)
+        or parse_bucket_list(remote.credentialed_s3_buckets)
+    )
+
+
+@functools.lru_cache(maxsize=8)
+def _local_data_policy_for(_env: tuple[str | None, ...]) -> "LocalDataPolicy | None":
+    # Imported here: this module is the earliest import in every context.
+    from depictio.models.local_access import LocalDataPolicy
+    from depictio.models.utils import get_depictio_context
+
+    if get_depictio_context().strip().lower() == "cli":
+        return None
+    roots = LocalDataConfig().root_list
+    if not roots:
+        return None
+    auth = AuthConfig()
+    if not auth.is_single_user_mode:
+        return None
+    backup = BackupConfig()
+    home = os.path.expanduser("~")
+    denied = [
+        os.path.join(home, ".depictio"),
+        os.environ.get("DEPICTIO_LOCAL_HOME", ""),
+        str(auth.keys_dir),
+        str(auth.cli_config_dir),
+        backup.backup_path,
+        backup.s3_local_backup_path,
+    ]
+    # Read by the server itself: uploads are written to the temporary directory
+    # and scanned from there, and the reference projects ship their data files
+    # inside the package. Never browsable, never a data root.
+    server_dirs = [tempfile.gettempdir(), str(Path(__file__).parents[3] / "projects")]
+    return LocalDataPolicy.build(roots, denied=denied, server_dirs=server_dirs, home=home)
 
 
 # ── Optional Features ─────────────────────────────────────────────────────────
@@ -1934,6 +2153,8 @@ class Settings(BaseSettings):
     celery: CeleryConfig = Field(default_factory=CeleryConfig)
     s3_cache: S3CacheConfig = Field(default_factory=S3CacheConfig)
     multiqc_prerender: MultiQCPrerenderConfig = Field(default_factory=MultiQCPrerenderConfig)
+    remote: RemoteConfig = Field(default_factory=RemoteConfig)
+    local_data: LocalDataConfig = Field(default_factory=LocalDataConfig)
 
     # Optional features
     jbrowse: JBrowseConfig = Field(default_factory=JBrowseConfig)

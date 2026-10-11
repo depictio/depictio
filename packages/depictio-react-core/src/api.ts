@@ -265,31 +265,71 @@ export function isHttpStatus(err: unknown, status: number): boolean {
   return err instanceof HttpError && err.status === status;
 }
 
-/** The `detail` of an error body as text, or null. Object details (a code
- *  plus a message) are reduced to their message, else serialised. */
-async function readErrorDetail(res: Response): Promise<string | null> {
+/** The `detail` of an error body as text (see `detailMessage`), and the
+ *  machine-readable `code` it names; a top-level `code` wins over one inside
+ *  `detail`. */
+async function readErrorBody(
+  res: Response,
+): Promise<{ detail: string | null; code: string | null }> {
   try {
     const body = await res.json();
     const detail = body?.detail;
-    if (detail == null) return null;
-    if (typeof detail === 'string') return detail;
-    if (typeof detail === 'object' && typeof detail.message === 'string') return detail.message;
-    return JSON.stringify(detail);
+    let code: string | null = typeof detail?.code === 'string' ? detail.code : null;
+    if (typeof body?.code === 'string') code = body.code;
+    return { detail: detail == null ? null : detailMessage(detail), code };
   } catch {
     // ignore non-JSON error bodies
-    return null;
+    return { detail: null, code: null };
   }
+}
+
+/** The `detail` of an error body as text, or null (see `readErrorBody`). */
+async function readErrorDetail(res: Response): Promise<string | null> {
+  return (await readErrorBody(res)).detail;
+}
+
+/** The error thrown for a FastAPI `{detail}` envelope. `message` is the
+ *  human-readable detail; `code` is the machine-readable reason when the
+ *  server sends one (`{detail, code}`, e.g. `template_not_detected` or
+ *  `s3_access_denied`), so a caller can tell one refusal from another without
+ *  matching on wording. */
+export class ApiDetailError extends HttpError {
+  readonly code: string | null;
+
+  constructor(message: string, status: number, code: string | null, detail: string | null = null) {
+    super(message, status, detail);
+    this.name = 'ApiDetailError';
+    this.code = code;
+  }
+}
+
+/** The server's machine-readable error code, or null when `err` carries none. */
+export function apiErrorCode(err: unknown): string | null {
+  return err instanceof ApiDetailError ? err.code : null;
+}
+
+/** The human text of a FastAPI `detail`: the string itself, else the
+ *  `message` or `detail` a structured one carries (e.g. a rejected-entries
+ *  report, or an `HTTPException(detail={detail, code})`), else the raw JSON. */
+function detailMessage(detail: unknown): string {
+  if (typeof detail === 'string') return detail;
+  const structured = detail as { message?: unknown; detail?: unknown } | null;
+  if (typeof structured?.message === 'string') return structured.message;
+  if (typeof structured?.detail === 'string') return structured.detail;
+  return JSON.stringify(detail);
 }
 
 /** Throw using FastAPI's `{detail}` envelope when present, otherwise fall back
  *  to `<prefix>: <status>`. Both single-string and JSON `detail` bodies are
- *  surfaced (the latter reduced to its message, else stringified). */
+ *  surfaced (the latter reduced to its message, else stringified). The thrown
+ *  error is an `ApiDetailError`, carrying the status and any `code` the body
+ *  names. */
 async function throwHttpDetailError(
   res: Response,
   prefix: string,
 ): Promise<never> {
-  const detail = await readErrorDetail(res);
-  throw new HttpError(detail ?? `${prefix}: ${res.status}`, res.status, detail);
+  const { detail, code } = await readErrorBody(res);
+  throw new ApiDetailError(detail ?? `${prefix}: ${res.status}`, res.status, code, detail);
 }
 
 // ── Render errors that belong to data time travel ──────────────────────────
@@ -3368,6 +3408,16 @@ export interface AuthStatusResponse {
    *  (`DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW`). Older backends omit it, and
    *  the listing then keeps its own built-in default. */
   dashboards_default_view?: string;
+  /** The server may read run folders from its own disk (single-user mode with
+   *  allowed local folders), so the "From a run folder" tab accepts a local
+   *  path and offers a folder browser. No path is ever sent here. Older
+   *  backends omit it: treat absent as `false`. */
+  local_data_roots_enabled?: boolean;
+  /** The server may browse S3 locations an administrator listed for reading
+   *  run folders, so the run tab's folder browser offers an S3 side. No
+   *  bucket name is ever sent here. Older backends omit it: treat absent as
+   *  `false`. */
+  remote_browse_enabled?: boolean;
 }
 
 /** Session payload persisted to localStorage['local-store'] on successful auth.
@@ -3983,6 +4033,714 @@ export async function createProject(
   return { ...result, project_id: result.project_id ?? newId };
 }
 
+/** One data collection ingested (or planned, under dry_run) from a manifest. */
+export interface ManifestIngestDCResult {
+  data_collection_tag: string;
+  data_collection_id: string | null;
+  entries: number;
+  status: 'ingested' | 'failed' | 'planned';
+  message: string | null;
+}
+
+/** One template dashboard imported (or planned) for a from-manifest project. */
+export interface DashboardImportResult {
+  path: string;
+  success: boolean;
+  dashboard_id: string | null;
+  title: string | null;
+  error: string | null;
+}
+
+/** Inputs for POST /projects/from_manifest. The backend injects the
+ *  `MANIFEST_URL` template variable from `manifest_url`: never send it via
+ *  `variables`. With `dry_run` nothing is created and the report comes back
+ *  with `planned` statuses and null ids. */
+export interface FromManifestRequest {
+  manifest_url: string;
+  template_id: string;
+  project_name?: string | null;
+  variables?: Record<string, string>;
+  dry_run?: boolean;
+}
+
+/** Report returned by POST /projects/from_manifest, both for real creation
+ *  and for a dry-run plan. `success: false` means the project exists but some
+ *  collections/dashboards failed (per-row `message`/`error` says why). */
+export interface FromManifestReport {
+  project_id: string | null;
+  project_name: string;
+  template_id: string;
+  manifest_url: string;
+  manifest_entries: number;
+  ingestion: ManifestIngestDCResult[];
+  dashboards: DashboardImportResult[];
+  unmatched_manifest_types: string[];
+  pruned_optional_dcs: string[];
+  dry_run: boolean;
+  success: boolean;
+}
+
+/** Create (or, with `dry_run`, plan) a project from a Data Manifest URL.
+ *  Backend errors carry actionable `{detail}` strings (rejected URL, unknown
+ *  template, duplicate name, unparseable manifest), surfaced verbatim. */
+export async function createProjectFromManifest(
+  input: FromManifestRequest,
+): Promise<FromManifestReport> {
+  const res = await authFetch(`${API_BASE}/projects/from_manifest`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create project from manifest');
+  return (await res.json()) as FromManifestReport;
+}
+
+/** What one data collection of a template resolved to under a run folder.
+ *
+ *  `matched` is how many sources the server actually found; `missing_sources`
+ *  names the ones it looked for and did not find, verbatim, because a data
+ *  root set one directory too high (or too low) shows every row at 0 and only
+ *  those paths say why. `status` is `ok` when something matched, `empty` when
+ *  the location exists but holds nothing, `missing` when it does not exist,
+ *  and `pruned` when a template conditional dropped the collection. */
+export interface FromRunDCPreview {
+  data_collection_tag: string;
+  /** `scan` walks a location for files; `recipe` derives a table from sources. */
+  kind: 'scan' | 'recipe';
+  /** Scan mode (`recursive`, `s3_prefix`, ...); null for a recipe. */
+  mode: string | null;
+  location: string;
+  matched: number;
+  missing_sources: string[];
+  optional: boolean;
+  status: 'ok' | 'empty' | 'missing' | 'pruned';
+  /** What a scan looks for, as the template wrote it (a pattern, a file
+   *  name, a manifest URL); null for a recipe. Older backends omit it. */
+  rule?: string | null;
+  /** The first files matched, as real paths or `s3://` URLs; `matched`
+   *  counts them all. Older backends omit it. */
+  samples?: string[];
+  /** The deepest folder holding every file matched, relative to the run
+   *  folder (`''` at its top); null when none was. Older backends omit it. */
+  found_in?: string | null;
+  /** For a recipe: the recipe applied and what each of its inputs found.
+   *  Older backends omit it. */
+  recipe?: FromRunRecipePreview | null;
+}
+
+/** One input a recipe reads: files found by a pattern or a path, another
+ *  collection's table, or a URL read at ingestion. `found` is null when it
+ *  cannot be told before ingestion (a URL). */
+export interface FromRunRecipeSource {
+  ref: string;
+  kind: 'file' | 'collection' | 'url';
+  /** The glob or path looked up (after the template's overrides). */
+  pattern: string | null;
+  /** The collection whose table is read, for `kind: 'collection'`. */
+  dc_ref: string | null;
+  optional: boolean;
+  matched: number;
+  /** The first files matched, as real paths or `s3://` URLs. */
+  samples: string[];
+  found: boolean | null;
+  /** The deepest folder holding every file matched, relative to the run
+   *  folder (`''` at its top); null when none was. */
+  found_in?: string | null;
+}
+
+/** The recipe that builds a table, as the template names it. */
+export interface FromRunRecipePreview {
+  /** e.g. `nf-core/ampliseq/alpha_diversity.py`. */
+  name: string;
+  /** First line of the recipe's own description. */
+  summary: string | null;
+  sources: FromRunRecipeSource[];
+}
+
+/** Inputs for POST /projects/from_run. The backend injects the `DATA_ROOT`
+ *  template variable from `dataRoot`, so it is never sent via `variables`. With
+ *  `dryRun` nothing is created: the report comes back with the per-collection
+ *  plan and null ids. */
+export interface FromRunRequest {
+  /** One pipeline run folder: an `s3://bucket/prefix`, or, when the server
+   *  allows local folders (`local_data_roots_enabled`), an absolute path or a
+   *  `~/...` path on the server's disk. */
+  dataRoot: string;
+  /** The template to use; null or absent asks the server to recognise the
+   *  pipeline from the folder (see `FromRunReport.detected_template`). A
+   *  folder it cannot recognise is a 422 with code `template_not_detected`. */
+  templateId?: string | null;
+  projectName?: string | null;
+  variables?: Record<string, string>;
+  dryRun?: boolean;
+  /** Connection settings of the private bucket `dataRoot` is in. The run
+   *  folder is then read with them alone; a real creation stores them as the
+   *  project's storage settings (`FromRunReport.storage_saved`), a dry run
+   *  stores nothing. */
+  storage?: RunStorageIn | null;
+}
+
+/** Connection settings typed in for a private bucket, before the project
+ *  they are for exists (`RunStorageIn` server-side). There is no bucket
+ *  field: the bucket is the one the `s3://` location names. An empty
+ *  `endpoint_url` means Amazon S3, an empty `region` the default one. The
+ *  access key and its secret are required: the server answers 422 without
+ *  either. The secret only ever travels in a request body, never in a URL,
+ *  and is never echoed back. */
+export interface RunStorageIn {
+  endpoint_url: string | null;
+  region: string | null;
+  access_key_id: string | null;
+  secret_access_key: string | null;
+}
+
+/** How the template chosen for a run relates to the run's own version:
+ *  `exact` when the template targets the version that made the run,
+ *  `closest` when another version of the same pipeline was chosen, `none`
+ *  when the run was recognised but no installed template matches it. */
+export type TemplateMatch = 'exact' | 'closest' | 'none';
+
+/** What the server recognised in a run folder (`POST /projects/from_run`
+ *  when no template was given, `GET /projects/folder_inspect`). Every field
+ *  is null when it could not tell; `template_id` null means no installed
+ *  template matches. `version` is the pipeline version that made the run;
+ *  `template_version` is the pipeline version the chosen template targets. */
+export interface DetectedTemplate {
+  template_id: string | null;
+  /** e.g. `nf-core/ampliseq`. */
+  pipeline: string | null;
+  /** Version of the pipeline that made the run. */
+  version: string | null;
+  /** Workflow engine, e.g. `nextflow`. */
+  engine: string | null;
+  /** Pipeline version the chosen template targets. Older backends omit it. */
+  template_version?: string | null;
+  /** Older backends omit it. */
+  match?: TemplateMatch | null;
+}
+
+/** Report returned by POST /projects/from_run, both for a dry-run plan and
+ *  for a real creation. A real run answers as soon as the project and its
+ *  dashboards exist and hands back `run_id`: the per-collection ingestion
+ *  continues on the workers and is polled with `getManifestRefreshRun`.
+ *  `truncated` means the server stopped counting early, so every `matched`
+ *  is a lower bound. */
+export interface FromRunReport {
+  project_id: string | null;
+  project_name: string;
+  /** The template actually used: the one asked for, with a `latest` alias
+   *  expanded to its version, or the one detected from the folder. */
+  template_id: string;
+  /** Set whenever detection ran (no template in the request), null otherwise. */
+  detected_template?: DetectedTemplate | null;
+  data_root: string;
+  detected_runs: string[];
+  resolved_variables: Record<string, string>;
+  data_collections: FromRunDCPreview[];
+  /** Empty on a dry run. */
+  dashboards: DashboardImportResult[];
+  pruned_optional_dcs: string[];
+  truncated: boolean;
+  /** Ingestion run to poll; null on a dry run. */
+  run_id: string | null;
+  dry_run: boolean;
+  success: boolean;
+  /** The request's `storage` was stored as the new project's storage
+   *  settings. False on a dry run and without `storage`; older backends
+   *  omit it. */
+  storage_saved?: boolean;
+  /** The run's own records under the data root. Null when no engine
+   *  recognised the folder; older backends omit it. */
+  run_info?: RunInfoSummary | null;
+  /** The files the template is pointed at (its `*_FILE` variables), in the
+   *  template's order. Older backends omit it. */
+  input_files?: RunInputFile[];
+}
+
+/** One file a template variable points at (`SAMPLESHEET_FILE`, ...), as the
+ *  dry run resolved it. */
+export interface RunInputFile {
+  /** The template variable, e.g. `METADATA_FILE`. */
+  name: string;
+  description: string | null;
+  required: boolean;
+  /** Real path or `s3://` URL; null when the variable is not set. */
+  location: string | null;
+  /** The file exists under the data root; null when that cannot be told. */
+  found: boolean | null;
+  /** Data collections that read it, or that a condition on it switches. */
+  used_by: string[];
+}
+
+/** Create (or, with `dryRun`, plan) a project from a pipeline run folder.
+ *  Backend errors carry actionable `{detail}` strings (unreadable prefix,
+ *  unknown template, duplicate name) and they are surfaced verbatim; the
+ *  thrown `ApiDetailError` keeps the server's `code` (`template_not_detected`,
+ *  `s3_access_denied`, ...). */
+export async function createProjectFromRun(
+  input: FromRunRequest,
+  options: { signal?: AbortSignal } = {},
+): Promise<FromRunReport> {
+  const res = await authFetch(`${API_BASE}/projects/from_run`, {
+    method: 'POST',
+    body: JSON.stringify({
+      data_root: input.dataRoot,
+      template_id: input.templateId ?? null,
+      project_name: input.projectName ?? null,
+      variables: input.variables ?? {},
+      dry_run: Boolean(input.dryRun),
+      ...(input.storage ? { storage: input.storage } : {}),
+    }),
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create project from run folder');
+  return (await res.json()) as FromRunReport;
+}
+
+/** One sub-directory in a folder listing (local or S3). */
+export interface LocalDirEntry {
+  name: string;
+  /** Absolute path on the server's disk, or an `s3://bucket/prefix/` URL. */
+  path: string;
+  /** The folder holds `pipeline_info/` or `multiqc/`, so it is likely the
+   *  output folder of one pipeline run. Always false for S3 entries (only
+   *  the listing-level flag is known there). */
+  looks_like_run: boolean;
+  /** The folder holds at least one sub-folder. Always true for S3 entries
+   *  (unknown without another request). Older backends omit it: treat absent
+   *  as `true`, so the folder can still be opened. */
+  has_children?: boolean;
+}
+
+/** Response of GET /projects/local_dirs and GET /projects/s3_dirs. Without a
+ *  path, `entries` are the allowed roots themselves and `path`, `root` and
+ *  `parent` are null. */
+export interface LocalDirListing {
+  path: string | null;
+  /** The allowed root `path` sits under. */
+  root: string | null;
+  /** Null at a root and for the roots listing. */
+  parent: string | null;
+  /** Sub-directories only, sorted by name. */
+  entries: LocalDirEntry[];
+  /** More sub-directories exist than the server lists (500). */
+  truncated: boolean;
+  /** The listed folder itself holds `pipeline_info/` or `multiqc/`. */
+  looks_like_run?: boolean;
+}
+
+/** The S3 listing has the local listing's shape; entry paths are
+ *  `s3://bucket/prefix/` URLs ending with a slash. */
+export type S3DirListing = LocalDirListing;
+
+/** Optional request settings shared by the folder calls. */
+export interface FolderRequestOptions {
+  /** Cancels the request (a newer selection or keystroke supersedes it). */
+  signal?: AbortSignal;
+  /** Connection settings of the private bucket an `s3://` location is in.
+   *  With them the call goes to the route's POST twin, the settings in the
+   *  body (never in the URL), and the location is read with them alone: the
+   *  bucket itself is then the browse root. Nothing is stored. */
+  storage?: RunStorageIn | null;
+}
+
+/** POST one of the folder routes' twins: the GET query fields and the
+ *  storage settings in a JSON body. */
+function postFolderRoute(
+  route: string,
+  body: Record<string, unknown>,
+  options: FolderRequestOptions,
+): Promise<Response> {
+  return authFetch(`${API_BASE}/projects/${route}`, {
+    method: 'POST',
+    body: JSON.stringify({ ...body, storage: options.storage }),
+    signal: options.signal,
+  });
+}
+
+/** List the sub-folders of `path` on the server's disk, or the allowed root
+ *  folders when `path` is omitted. Only available when the server allows
+ *  local folders (`local_data_roots_enabled`): a 404 means the path is outside
+ *  every allowed folder, refused or missing; a 403 means the caller may not
+ *  browse. Both carry a plain-English `{detail}`, surfaced verbatim. */
+export async function listLocalDirs(
+  path?: string | null,
+  options: FolderRequestOptions = {},
+): Promise<LocalDirListing> {
+  const query = path ? `?path=${encodeURIComponent(path)}` : '';
+  const res = await authFetch(`${API_BASE}/projects/local_dirs${query}`, {
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list folders');
+  return (await res.json()) as LocalDirListing;
+}
+
+/** List the sub-folders (common prefixes) of an `s3://` location the server
+ *  may browse, or the allowed locations themselves when `url` is omitted.
+ *  Only useful when `remote_browse_enabled`, or with `options.storage` for a
+ *  private bucket. A location outside every allowed one is refused with an
+ *  S3 code (`s3_refused`, `s3_access_denied`, ...). */
+export async function listS3Dirs(
+  url?: string | null,
+  options: FolderRequestOptions = {},
+): Promise<S3DirListing> {
+  const query = url ? `?url=${encodeURIComponent(url)}` : '';
+  const res =
+    url && options.storage
+      ? await postFolderRoute('s3_dirs', { url }, options)
+      : await authFetch(`${API_BASE}/projects/s3_dirs${query}`, {
+          signal: options.signal,
+        });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list S3 folders');
+  return (await res.json()) as S3DirListing;
+}
+
+/** Direct children of one kind (folders or files) in a folder inspection. */
+export interface FolderContents {
+  /** Everything visible, not only the names below. */
+  count: number;
+  /** The first 200 (20 on older backends), sorted. */
+  names: string[];
+}
+
+/** One file of a run's `pipeline_info` that Depictio recognised. */
+export interface RunReportFile {
+  kind: 'software_versions' | 'params' | 'execution_report' | 'execution_trace' | 'pipeline_dag';
+  /** A real path, or an `s3://` URL. */
+  location: string;
+  name: string;
+  /** Bytes; null when unknown. */
+  size: number | null;
+}
+
+/** What a run folder's `pipeline_info` says about the run. */
+export interface RunInfoSummary {
+  engine: string | null;
+  engine_version: string | null;
+  run_name: string | null;
+  homepage: string | null;
+  /** The run's parameters, long values clipped, at most 200 of them. */
+  params: Record<string, string | number | boolean | null>;
+  /** How many parameters the run has in all. */
+  params_total: number;
+  tools_executed: string[];
+  reports: RunReportFile[];
+  /** Other details the engine's reader kept, as text. */
+  extra: Record<string, string>;
+  /** The tasks of the run, from its execution trace. Null without a trace
+   *  (or a trace with no status); older backends omit it. */
+  tasks?: RunTaskSummary | null;
+  /** "pipeline version" pairs, when the folder holds runs of more than one
+   *  pipeline or version. Older backends omit it. */
+  identities_seen?: string[];
+  /** How many run sub-folders the identity was read across, when more than
+   *  the folder itself. Older backends omit it. */
+  runs_scanned?: number | null;
+}
+
+/** The tasks of a run, by the status of each task's last attempt. */
+export interface RunTaskSummary {
+  /** The trace read: a real path or an `s3://` URL. */
+  trace: string;
+  total: number;
+  completed: number;
+  cached: number;
+  /** Last attempt FAILED or ABORTED. */
+  failed: number;
+  /** Failed once, then completed (or cached). */
+  retried: number;
+  /** Last attempt in any other status: the run did not finish them. */
+  other: number;
+  /** The trace was bigger than the server reads: counts cover its start. */
+  partial: boolean;
+}
+
+/** Response of POST /projects/run_file_preview: the start of one file of a
+ *  run folder. */
+export interface RunFilePreview {
+  location: string;
+  name: string;
+  /** Bytes; null when unknown. */
+  size: number | null;
+  /** `none`: not previewable (binary, an HTML report, too large); `reason`
+   *  says why. */
+  format: 'table' | 'text' | 'none';
+  columns: string[];
+  /** Cells as text, long ones clipped. */
+  rows: Array<Array<string | null>>;
+  columns_total: number;
+  /** Known for a parquet file and for a table read in full; null otherwise. */
+  rows_total: number | null;
+  text: string | null;
+  /** Rows, columns or text were cut. */
+  truncated: boolean;
+  reason: string | null;
+}
+
+/** Read the start of one file of a run folder: its first rows as a table, or
+ *  its first lines. `location` must be under `dataRoot`; the folder is read
+ *  with the same checks as a dry run of `createProjectFromRun`. */
+export async function previewRunFile(
+  input: {
+    dataRoot: string;
+    location: string;
+    storage?: RunStorageIn | null;
+    maxRows?: number;
+  },
+  options: { signal?: AbortSignal } = {},
+): Promise<RunFilePreview> {
+  const res = await authFetch(`${API_BASE}/projects/run_file_preview`, {
+    method: 'POST',
+    body: JSON.stringify({
+      data_root: input.dataRoot,
+      location: input.location,
+      max_rows: input.maxRows ?? 20,
+      ...(input.storage ? { storage: input.storage } : {}),
+    }),
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to preview the file');
+  return (await res.json()) as RunFilePreview;
+}
+
+/** Response of GET /projects/folder_inspect: what one folder holds, and the
+ *  pipeline and template recognised in it. */
+export interface FolderInspection {
+  /** The resolved location (a real path, or an `s3://.../` URL). */
+  location: string;
+  source: 'local' | 's3';
+  name: string;
+  looks_like_run: boolean;
+  /** Run markers present, e.g. `pipeline_info`, `multiqc`. */
+  markers: string[];
+  folders: FolderContents;
+  files: FolderContents;
+  /** The listing was cut short, so the counts are a lower bound. */
+  truncated: boolean;
+  /** Null when no engine recognised the folder (or detection was off). */
+  detected: DetectedTemplate | null;
+  /** The run's own records, read with the detection. Null when no engine
+   *  recognised the folder; older backends omit it. */
+  run_info?: RunInfoSummary | null;
+}
+
+/** Inspect one folder: its direct contents, its run markers and, unless
+ *  `detect` is false, the pipeline, version and template recognised in it.
+ *  `location` is an absolute path, a `~/...` path or an `s3://` URL. */
+export async function inspectFolder(
+  location: string,
+  options: FolderRequestOptions & { detect?: boolean } = {},
+): Promise<FolderInspection> {
+  let res: Response;
+  if (options.storage) {
+    res = await postFolderRoute(
+      'folder_inspect',
+      { location, detect: options.detect !== false },
+      options,
+    );
+  } else {
+    const params = new URLSearchParams({ location });
+    if (options.detect === false) params.set('detect', 'false');
+    res = await authFetch(`${API_BASE}/projects/folder_inspect?${params.toString()}`, {
+      signal: options.signal,
+    });
+  }
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to inspect the folder');
+  return (await res.json()) as FolderInspection;
+}
+
+/** One run folder found below a location by `findRunFolders`. */
+export interface FoundRunFolder {
+  location: string;
+  name: string;
+  /** Path relative to the searched location, e.g. `a/run1`; `.` when the
+   *  searched folder is itself a run folder. */
+  relative: string;
+  markers: string[];
+  /** Filled for the first hits of a local search; null otherwise (inspect
+   *  the folder on selection instead). */
+  detected: DetectedTemplate | null;
+}
+
+/** Response of GET /projects/find_runs. */
+export interface FindRunsResult {
+  location: string;
+  runs: FoundRunFolder[];
+  /** A bound was hit (depth, folders visited, keys listed or hits kept), so
+   *  more run folders may exist. */
+  truncated: boolean;
+  /** Folders visited (local) or object keys listed (S3). */
+  scanned: number;
+}
+
+/** Look for run folders (folders holding `pipeline_info/` or `multiqc/`)
+ *  below `location`. Bounded server-side; `truncated` says when a bound was
+ *  hit. */
+export async function findRunFolders(
+  location: string,
+  options: FolderRequestOptions = {},
+): Promise<FindRunsResult> {
+  const params = new URLSearchParams({ location });
+  const res = options.storage
+    ? await postFolderRoute('find_runs', { location }, options)
+    : await authFetch(`${API_BASE}/projects/find_runs?${params.toString()}`, {
+        signal: options.signal,
+      });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to search for run folders');
+  return (await res.json()) as FindRunsResult;
+}
+
+/** Try storage settings typed in for a private bucket before its project
+ *  exists (`POST /projects/storage_test`): the bucket of `location` is
+ *  reached, its region detected and one key listed under the location's
+ *  prefix. Nothing is stored, the detected region included: put it in the
+ *  region field. Settings no read could use, and a failed connection, come
+ *  back as `{success: false, message}`; a location that is not `s3://` (422
+ *  `s3_refused`), settings without the access key or its secret (422) and a
+ *  refusal to the caller (403) throw an `ApiDetailError` carrying the
+ *  server's `detail`. */
+export async function testRunStorage(
+  location: string,
+  storage: RunStorageIn,
+  options: Pick<FolderRequestOptions, 'signal'> = {},
+): Promise<ProjectStorageTestResult> {
+  const res = await authFetch(`${API_BASE}/projects/storage_test`, {
+    method: 'POST',
+    body: JSON.stringify({ location, storage }),
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'The connection test did not run');
+  return (await res.json()) as ProjectStorageTestResult;
+}
+
+/** Per-DC status of a manifest refresh. A synchronous refresh reports
+ *  `ingested` / `failed` (or `planned` under `dry_run`); a polled async run
+ *  additionally passes through `dispatched` (queued for a worker) and
+ *  `running`. Mirrors `_REFRESH_STEP_TO_DC_STATUS` server-side. */
+export type ManifestRefreshStatus =
+  | 'ingested'
+  | 'failed'
+  | 'planned'
+  | 'dispatched'
+  | 'running'
+  /** An optional collection whose source is absent from the run folder: nominal, never a worker task. */
+  | 'skipped';
+
+/** One data collection of a manifest refresh (`ManifestIngestDCResult`
+ *  server-side). `data_collection_id` is empty for a polled run whose project
+ *  has since been deleted. `message` explains a `failed` row, including the
+ *  pre-flight skips (manifest unreachable, type dropped from the manifest)
+ *  that never reach a worker. */
+export interface ManifestRefreshEntry {
+  data_collection_tag: string;
+  data_collection_id: string | null;
+  entries: number;
+  status: ManifestRefreshStatus;
+  message: string | null;
+}
+
+/** Report of POST /projects/refresh_manifest and of the poll endpoint
+ *  GET /projects/refresh_manifest/{run_id}. `run_id` is set when the refresh
+ *  was fanned out to workers (`async_run`); `success` flips once every row is
+ *  `ingested`. */
+export interface ManifestRefreshReport {
+  project_id: string;
+  refreshed: ManifestRefreshEntry[];
+  run_id: string | null;
+  dry_run: boolean;
+  success: boolean;
+}
+
+/** Inputs for POST /projects/refresh_manifest. `dataCollectionTag` restricts
+ *  the refresh to one re-readable collection (all of them otherwise);
+ *  `dryRun` only reports per-DC entry counts; `asyncRun` dispatches the
+ *  per-DC re-ingestion to workers and returns a `run_id` to poll with
+ *  `getManifestRefreshRun`. */
+export interface RefreshManifestInput {
+  projectId: string;
+  dataCollectionTag?: string | null;
+  dryRun?: boolean;
+  asyncRun?: boolean;
+}
+
+/** Re-read and re-ingest the data collections whose source this server can
+ *  still reach, whatever their scan mode (owners and editors; admins only in
+ *  public mode). Backend errors carry actionable `{detail}` strings (nothing
+ *  re-readable, unknown tag, no edit permission) and are surfaced verbatim. */
+export async function refreshManifest(
+  input: RefreshManifestInput,
+): Promise<ManifestRefreshReport> {
+  const res = await authFetch(`${API_BASE}/projects/refresh_manifest`, {
+    method: 'POST',
+    body: JSON.stringify({
+      project_id: input.projectId,
+      data_collection_tag: input.dataCollectionTag ?? null,
+      dry_run: Boolean(input.dryRun),
+      async_run: Boolean(input.asyncRun),
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to refresh data');
+  return (await res.json()) as ManifestRefreshReport;
+}
+
+/** Poll an async manifest refresh by the `run_id` that `refreshManifest`
+ *  returned. Only the user who started the run (or an admin) may read it. */
+export async function getManifestRefreshRun(
+  runId: string,
+): Promise<ManifestRefreshReport> {
+  const res = await authFetch(
+    `${API_BASE}/projects/refresh_manifest/${encodeURIComponent(runId)}`,
+  );
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load manifest refresh status');
+  return (await res.json()) as ManifestRefreshReport;
+}
+
+/** A variable a project template accepts. `MANIFEST_URL` is special-cased by
+ *  the from-manifest endpoint and must not be collected from the user. */
+export interface TemplateVariable {
+  name: string;
+  description: string | null;
+  required: boolean;
+  default: string | null;
+}
+
+/** One entry from GET /projects/templates. Only templates with
+ *  `manifest_capable` can back the from-manifest flow, and only those with
+ *  `run_folder_capable` the from-run-folder flow. */
+export interface TemplateInfo {
+  template_id: string;
+  name: string;
+  description: string | null;
+  /** The template's own revision, not the pipeline version it targets (that
+   *  one is the version segment of `template_id`). */
+  version: string | null;
+  manifest_capable: boolean;
+  variables: TemplateVariable[];
+  dashboards: string[];
+  /** The template resolves against a run folder and scans under it. Older
+   *  backends omit it. */
+  run_folder_capable?: boolean;
+  /** First id segment, e.g. `nf-core`. Older backends omit it. */
+  source?: string | null;
+  /** Id without its version, e.g. `nf-core/ampliseq`. Older backends omit it. */
+  pipeline?: string | null;
+  /** Workflow engine when the template declares it, e.g. `nextflow`. */
+  engine?: string | null;
+}
+
+/** Envelope returned by GET /projects/templates. */
+export interface TemplateListResponse {
+  templates: TemplateInfo[];
+}
+
+/** List the project templates known to the backend, unwrapping the
+ *  `{templates}` envelope. */
+export async function listProjectTemplates(): Promise<TemplateInfo[]> {
+  const res = await authFetch(`${API_BASE}/projects/templates`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to list project templates');
+  const body = (await res.json()) as TemplateListResponse;
+  return body.templates ?? [];
+}
+
 /** Fields editable via the Edit modal. Update-project endpoint accepts a
  *  full Project, so the caller fetches the existing project, merges these
  *  fields, and PUTs the merged document. */
@@ -4047,6 +4805,95 @@ export async function updateProjectPermissions(
   if (!res.ok) await throwHttpError(res, 'Failed to update permissions');
 }
 
+/** Per-project S3-compatible storage configuration, as returned by the
+ *  backend. The secret is write-only: it is stored encrypted server-side and
+ *  never echoed back; responses only carry `has_secret`. `bucket` is null
+ *  only on a config saved before the bucket became required. */
+export interface ProjectStorageConfig {
+  endpoint_url: string;
+  bucket: string | null;
+  region: string;
+  access_key_id: string | null;
+  has_secret: boolean;
+  updated_at: string | null;
+}
+
+/** PUT body for the storage config. `bucket` is required (an empty one is
+ *  refused with a 422). `region` defaults to `us-east-1` server-side; the
+ *  connection test detects the bucket's real region and saves it. Omitting
+ *  (or nulling) `secret_access_key` KEEPS the previously stored secret, so
+ *  edits don't require retyping it; a non-empty string replaces it. */
+export interface ProjectStorageConfigInput {
+  endpoint_url: string;
+  bucket: string;
+  region?: string;
+  access_key_id?: string | null;
+  secret_access_key?: string | null;
+}
+
+/** Result of POST /projects/{id}/storage/test. A failed connection is NOT an
+ *  HTTP error: it comes back 200 with `success: false` and a sanitized
+ *  message. `detected_region` is set when the test found the bucket's region
+ *  (the server has then already saved it on the config); null otherwise,
+ *  and absent from servers older than the region detection. */
+export interface ProjectStorageTestResult {
+  success: boolean;
+  message: string;
+  detected_region?: string | null;
+}
+
+/** Fetch a project's storage config. Returns null when none is set (the
+ *  backend answers 404 for "not configured": that's a normal state, not an
+ *  error). Other failures (401/403, invalid project) throw with the backend's
+ *  `{detail}` string. */
+export async function getProjectStorage(
+  projectId: string,
+): Promise<ProjectStorageConfig | null> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage`);
+  if (res.status === 404) return null;
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load storage configuration');
+  return (await res.json()) as ProjectStorageConfig;
+}
+
+/** Create or update a project's storage config (owners only). Backend 400s
+ *  and 422s carry actionable `{detail}` strings (a rejected private endpoint
+ *  host, a missing bucket), surfaced verbatim. */
+export async function setProjectStorage(
+  projectId: string,
+  input: ProjectStorageConfigInput,
+): Promise<ProjectStorageConfig> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to save storage configuration');
+  return (await res.json()) as ProjectStorageConfig;
+}
+
+/** Remove a project's storage config, including the stored secret. */
+export async function deleteProjectStorage(projectId: string): Promise<void> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage`, {
+    method: 'DELETE',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to remove storage configuration');
+}
+
+/** Test the saved storage credentials against the configured bucket.
+ *  Connection failures come back as `{success: false, message}` rather than
+ *  throwing; only transport/authorization errors throw. S3 errors raised by
+ *  any route carry `{detail, code}` (`s3_refused`, `s3_access_denied`,
+ *  `s3_no_such_bucket`, `s3_wrong_region`, `s3_unreachable`, `s3_error`);
+ *  the thrown message is the `detail`. */
+export async function testProjectStorage(
+  projectId: string,
+): Promise<ProjectStorageTestResult> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/storage/test`, {
+    method: 'POST',
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Storage connection test failed');
+  return (await res.json()) as ProjectStorageTestResult;
+}
+
 /** Upload a project .zip and create the project from its contents.
  *  Hits the migrate router's import-project-zip endpoint (the sibling of
  *  exportProjectZip's /migrate/export-project below). */
@@ -4107,6 +4954,35 @@ export async function exportProjectZip(projectId: string): Promise<void> {
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+/** POST body for /projects/{id}/export_template. `template_id` is a
+ *  slash-separated path (e.g. `my-lab/rnaseq-qc/1`); each segment must match
+ *  `[A-Za-z0-9][A-Za-z0-9._-]*`. `data_root` re-parameterizes a local path
+ *  prefix as `{DATA_ROOT}` in the exported config; leave it unset for
+ *  manifest-driven projects. */
+export interface ExportTemplateRequest {
+  template_id: string;
+  description?: string | null;
+  version?: string;
+  data_root?: string | null;
+}
+
+/** Export a project as a reusable template bundle (owners/editors/admins).
+ *  Resolves to the zip Blob; the caller decides how to hand it to the user.
+ *  Backend 422s carry meaningful `{detail}` strings (bad template_id format,
+ *  or the exported config failing its round-trip self-check), surfaced
+ *  verbatim. */
+export async function exportProjectTemplate(
+  projectId: string,
+  payload: ExportTemplateRequest,
+): Promise<Blob> {
+  const res = await authFetch(`${API_BASE}/projects/${projectId}/export_template`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to export template');
+  return res.blob();
 }
 
 /** MultiQC report list response shape — used to render the DC viewer panel
@@ -4238,6 +5114,51 @@ export async function createDataCollectionFromUpload(
     }
     throw new Error(detail || `Upload failed: ${res.status}`);
   }
+  return res.json();
+}
+
+export interface CreateDataCollectionUrlInput {
+  projectId: string;
+  name: string;
+  description?: string;
+  dataType?: string;
+  fileFormat: string;
+  separator: string;
+  customSeparator?: string | null;
+  compression: string;
+  hasHeader: boolean;
+  /** Absolute https:// or s3:// URL (http:// only where the server allows it).
+   *  Screened server-side by the SSRF gateway. */
+  url: string;
+  latColumn?: string | null;
+  lonColumn?: string | null;
+}
+
+/** Create a data collection from a remote URL: the no-upload twin of
+ *  `createDataCollectionFromUpload`. The file is fetched server-side, so this
+ *  works for data far too large to push through the browser, and for buckets
+ *  the browser cannot reach. */
+export async function createDataCollectionFromUrl(
+  input: CreateDataCollectionUrlInput,
+): Promise<CreateDataCollectionResult> {
+  const res = await authFetch(`${API_BASE}/datacollections/create_from_url`, {
+    method: 'POST',
+    body: JSON.stringify({
+      project_id: input.projectId,
+      name: input.name,
+      description: input.description ?? '',
+      data_type: input.dataType ?? 'table',
+      file_format: input.fileFormat,
+      separator: input.separator,
+      custom_separator: input.customSeparator ?? null,
+      compression: input.compression,
+      has_header: input.hasHeader,
+      url: input.url,
+      lat_column: input.latColumn ?? null,
+      lon_column: input.lonColumn ?? null,
+    }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to create data collection from URL');
   return res.json();
 }
 
