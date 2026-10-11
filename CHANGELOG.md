@@ -3,6 +3,140 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.14.1
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.14.1</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.14.0 → 1.14.1 [6467e0e15]
+* fix(sections): one accent across the section dialog [574178760]
+* fix(dashboards): gate the JSON export on project access [d68acbfdb]
+* fix(figure): gate /figure/preview on project access and restrict code figures [9b788fbdd]
+* chore(nf-core): showcase scenarios and megatest status for the new releases [e7bbb77cd]
+* feat(nf-core/cutandrun): 3.2.2 template [ad7d757f1]
+* feat(nf-core/airrflow): 5.1.1 template [8b158ec1c]
+* feat(nf-core/chipseq): 2.1.0 template on the v2 authoring rules [d178016d8]
+* feat(nf-core/atacseq): 2.1.2 template on the v2 authoring rules [8f165f4a4]
+* fix(scripts): rewrite only whole version strings in bump_template_version [be97983c5]
+* fix(ingest): skip zero-byte pipeline outputs [b55f1c025]
+* fix(nf-core/ampliseq): narrow PERMANOVA to GROUP_COL in the recipe [f3719428a]
+* chore(tool-studio): regenerate the catalog snapshot [8ab4941e7]
+* fix(figure): let code figures write only to what they build [c4d23d142]
+* refactor(api,viewer): simplify the v2 platform code [115c795ff]
+* fix(nf-core/airrflow): say that SKIP_MULTIQC drops the MultiQC tab [6ee5711d5]
+* docs(nf-core): rules from the 2.x live check [b2ccd36ff]
+* fix(nf-core/cutandrun): skip the IGV copies of the SEACR beds [34830af00]
+* fix(advanced-viz): open default_region first on a contig the data carries [749275b07]
+* feat(cli): warn when a run is another major release than its template [4166065bb]
+* feat(nf-core): give the Findings figures two equal tiles per row [be0670502]
+* fix(nf-core/rnasplice): offer the sashimi's GenomeSpy view again [99ac54289]
+* fix(advanced-viz): draw the sashimi GenomeSpy view on the opened locus [df36197d4]
+* fix(nf-core/ampliseq): use the two-line nf-core logo like the other templates [1d83e72fd]
+* chore(seeds): ampliseq and viralrecon seeds with hero logos and number formats [6eb6b7238]
+* fix(seeds): regenerate from today's YAML, without the SINTAX alternates [b8d825bb5]
+* docs(nf-core): rules for file-track windows and the sashimi view [40d5095ca]
+* fix(text): fit hero logos into one box so pipeline names read alike [c067715ad]
+* fix(cards): print values under 0.001 and shares under 1% readably [9e9b71fe8]
+* fix(nf-core/rnasplice): offer the sashimi's arc view only [361d7b82a]
+* fix(nf-core/sarek): read the annotated VCFs at the default 1 Mb region [8723a6e1d]
+* fix(security): let the indexed-file readers load their inflate WebAssembly [cf50c56f4]
+* feat(nf-core/eager): open the locus navigator on the first contig [cd02dd9a0]
+* feat(nf-core): format shares as percentages and large counts with SI suffixes [a137e8c18]
+* chore(showcase): give the viralrecon nanopore run a project of its own [b53fa163d]
+* fix(advanced-viz): leave a CI bar row with no estimate out instead of drawing it at 0 [6ad28f279]
+* docs(nf-core): add the second live review lessons to RULES.md [124528466]
+* fix(nf-core/variantbenchmarking): read a near-empty benchmark honestly [8edda8c78]
+* feat(advanced-viz): default_region: first opens the first contig the data carries [2ad4d27dc]
+* fix(advanced-viz): let GenomeSpy lanes grow with their tile and in fullscreen [4172d917c]
+* feat(card): a number format for card values: percent, integer, si, decimals:N [195bb003c]
+* fix(security): let the browser read indexed files from the S3 origin [7402ec6fd]
+* feat(nf-core/airrflow): four Key figures on every route [20b5b0f82]
+* feat(nf-core/rnasplice): a sashimi of the event junctions, paired volcanoes, even rows [205a02f89]
+* feat(nf-core): show each pipeline's wordmark on the Overview hero [ee7029110]
+* fix(nf-core/hic): read the decay slope Key figure off the pooled curve [091e2d0da]
+* fix(advanced-viz): keep GenomeSpy tiles alive when a viz control changes [d1f48b4cc]
+* docs(nf-core/viralrecon): the nanopore route keeps its Key figures [40303705a]
+* docs(nf-core): add the last wave B lessons to RULES.md [1439bd7b9]
+* fix(advanced-viz): let CI bars of a non-rate metric take their own range [ed669d252]
+* fix(nf-core/scrnaseq,airrflow): correct the v2 dashboards from the live screenshots [b77b48bc3]
+* chore(seeds): viralrecon reference seeds with the Overview as main tab [f7da7c036]
+* fix(nf-core/viralrecon): keep the summary metrics on nanopore runs [50d4c4fe8]
+* fix(nf-core/viralrecon,nanoseq): correct the v2 dashboards from the live screenshots [d30c20854]
+* fix(nf-core/sarek,variantbenchmarking): correct the v2 dashboards from the live screenshots [8cb056b93]
+* fix(card): keep a long headline value on one line [b19b67108]
+* docs(nf-core): add the wave B round 2 lessons to RULES.md [d6007540c]
+* feat(nf-core/scrnaseq,airrflow): adopt the v2 template rules [07ac49144]
+* fix(nf-core/eager,mhcquant): correct the v2 dashboards from the live screenshots [0c581a0cb]
+* fix(advanced-viz): draw profile shaded bands at their own opacity [dc346528a]
+* fix(nf-core/funcscan,genomeassembler): correct the v2 dashboards from the live screenshots [00240bd42]
+* fix(nf-core/mag,taxprofiler): correct the v2 dashboards from the live screenshots [9b346184a]
+* fix(import): remove the tabs a re-imported YAML no longer holds [80ce84aee]
+* feat(nf-core/sarek,variantbenchmarking): v2 layout with an Overview main tab [91cb8e3a4]
+* feat(nf-core/viralrecon,nanoseq): v2 layout with an Overview main tab [58a9fecd7]
+* feat(nf-core/eager,mhcquant): v2 layout with an Overview main tab [d191c6f81]
+* feat(nf-core/funcscan,genomeassembler): v2 layout with an Overview main tab [699902a8d]
+* feat(nf-core/mag,taxprofiler): v2 layout with an Overview main tab [05f9f5a45]
+* fix(nf-core/smrnaseq,mhcquant): declare collections after those their recipes read [80494728a]
+* fix(nf-core/smrnaseq,differentialabundance,riboseq): corrections from the live sweep [59e7d9864]
+* fix(advanced-viz): honour hide_legend in every Plotly renderer [82c7ecd33]
+* fix(nf-core/rnaseq,rnafusion,rnasplice): corrections from the live sweep [faac2c8cd]
+* fix(nf-core/atacseq,chipseq,cutandrun): corrections from the live sweep [86f3afcb0]
+* fix(nf-core/methylseq): give the library correlation heatmap the full width [fca64b15f]
+* fix(nf-core/methylseq,hic,demultiplex): corrections from the live sweep [122391dc8]
+* docs(nf-core): rules from the wave B live check [2c8ad4fc2]
+* fix(viewer): keep long filter values off the bar's segments and bundle the record rail chevrons [2e41f692e]
+* feat(nf-core/methylseq,demultiplex): v2 layout with an Overview main tab [2c572eac7]
+* feat(nf-core/riboseq,differentialabundance): v2 layout with an Overview main tab [2070ced94]
+* feat(nf-core/rnafusion,smrnaseq): v2 layout with an Overview main tab [a6fe0bdf3]
+* feat(nf-core/rnaseq,rnasplice): v2 layout with an Overview main tab [1f4df4852]
+* feat(nf-core/cutandrun,hic): v2 layout with an Overview main tab [27ae91c4d]
+* feat(nf-core/atacseq,chipseq): v2 layout with an Overview main tab [a3c75a3b8]
+* chore(seeds): ampliseq reference seeds with the Overview as main tab [11d73fae1]
+* feat(nf-core/ampliseq): one colour per phylum across figures [4a782c668]
+* feat(dashboards): category_colors auto:<column> colours a column's largest values [4bab34c83]
+* docs(nf-core): RULES.md on tab intros and KPI strips [0ebbb40ab]
+* feat(nf-core/ampliseq): varied KPI strips and a tab intro on every child tab [9d1401410]
+* fix(cards): resolve a card's own palette colour to the theme's shade [28eaace78]
+* docs(nf-core): RULES.md lessons from the second live review [3df324bee]
+* feat(nf-core/ampliseq): tree summary, MA and QQ views, open set overlap [85be3a828]
+* fix(figures): charts follow their tile, and legends count toward its height [4a0fd89c8]
+* feat(volcano): MA view from a table of its own [c73bd1cc0]
+* fix(advanced-viz): fold the docked controls per control, not per group [fa0327e6c]
+* fix(api): let the map start its blob workers [4cbec46b0]
+* feat(nf-core/ampliseq): Overview v2 after the live review [0e1d4c267]
+* test(templates): count intro sentences per paragraph [3b1afa16b]
+* fix(api): re-pack only the sections a pruning touched, alternates as one tile [68f6aaf38]
+* fix(viewer): landing tiles read alike, palette names resolve everywhere [28cfa1dab]
+* feat(advanced-viz,text): name embedding and volcano axes, draw a logo as a text title [e0b824f5f]
+* feat(nf-core/ampliseq): rebuild the reference template on the v2 rules [d617a05e0]
+* fix(figure): let code figures assign by subscript [3580ade07]
+* docs(nf-core): template authoring rules [e24dacc5d]
+* test(templates): prose-only sentence count, per-block text height estimate [9abee46be]
+* feat(viewer): live text values, empty group headings, Guide sections [f29f9eaa8]
+* feat(api): resolve category_colors auto, compute text values, prune orphans [d8006d53e]
+* feat(advanced-viz,map): draw categories in the dashboard's category colours [e0c70bdf7]
+* feat(models,cli): category_colors auto and live text values [7161ce6bb]
+* Update CHANGELOG.md for v1.14.0 [46e973e08]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.14.0
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
