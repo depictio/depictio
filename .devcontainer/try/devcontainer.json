@@ -1,11 +1,13 @@
 {
   // "Try Depictio" codespace: the published depictio[local] package, run without
-  // Docker. MongoDB, Redis and SeaweedFS come from conda-forge on the first start.
-  // The contributor environment (full Compose stack, from the sources) is
-  // ../devcontainer.json.
+  // Docker. MongoDB, Redis and SeaweedFS come from conda-forge. The contributor
+  // environment (full Compose stack, from the sources) is ../devcontainer.json.
   //
   // Open with:
   // https://codespaces.new/depictio/depictio?devcontainer_path=.devcontainer/try/devcontainer.json&quickstart=1
+  //
+  // A Codespaces prebuild of this file on main (Settings > Codespaces) runs
+  // onCreateCommand ahead of time, so a new codespace only starts the services.
   "name": "Try Depictio",
   "image": "mcr.microsoft.com/devcontainers/python:1-3.12-bookworm",
   "features": {
@@ -15,8 +17,11 @@
   "remoteEnv": {
     "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}"
   },
-  // Installed once, when the codespace is created (or prebuilt).
-  "onCreateCommand": "uv tool install 'depictio[local]'",
+  // Runs once, when the codespace is created or prebuilt: installs the latest
+  // release, then starts the server once to download the binaries and load the
+  // examples, and stops it. The data stays in ~/.depictio/local. The prebuild
+  // runs on a schedule, so it picks up new releases.
+  "onCreateCommand": "uv tool install 'depictio[local]' && $HOME/.local/bin/depictio local up --no-open --port 8058 && $HOME/.local/bin/depictio local down",
   // On every start, a restart after the codespace was stopped included: the
   // services do not survive a stop, the data in ~/.depictio/local does.
   "postStartCommand": "$HOME/.local/bin/depictio local up --no-open --port 8058",
