@@ -16,12 +16,11 @@
  *
  * The sidebar navigates and folds to an icon rail (its own key at its head;
  * the logo only goes home). The top bar says where the reader is. Below `sm`
- * the sidebar becomes a frosted bottom bar and the top bar turns compact.
+ * the sidebar becomes a paper bottom bar and the top bar turns compact.
  * The layout is CSS only (pages.css), so nothing re-renders on resize.
  */
 import React from 'react';
 import { Menu, Tooltip } from '@mantine/core';
-import { useReducedMotion } from 'motion/react';
 import {
   ChevronRight,
   Compass,
@@ -38,7 +37,6 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import DepictioRose from '../../../../components/rose/DepictioRose';
 import BrandLogo from '../../../BrandLogo';
 import PoweredBy from '../../../PoweredBy';
 import { useBrandLogoMode } from '../../../useBrandLogoMode';
@@ -130,7 +128,7 @@ export const GlassKey = React.forwardRef<
         className={className ? `gp-key ${className}` : 'gp-key'}
         {...rest}
       >
-        <I size={18} strokeWidth={STROKE} aria-hidden />
+        <I size={20} strokeWidth={STROKE} aria-hidden />
       </button>
     </Tooltip>
   );
@@ -158,14 +156,14 @@ function initials(email: string): string {
 }
 
 /** The reader: initials (or a figure) opening Profile and the tour. */
-const ProfileKey: React.FC = () => {
+export const ProfileKey: React.FC = () => {
   const { user, authMode, isPublicMode, isDemoMode, loading } = useCurrentUser();
   if (loading) return <span className="gp-avatar gp-avatar--idle" aria-hidden />;
   if (!user && authMode === 'standard' && !isPublicMode && !isDemoMode) {
     return (
       <Tooltip label="Sign in" withArrow>
         <a href="/auth/login" className="gp-avatar" aria-label="Sign in">
-          <LogIn size={16} strokeWidth={1.9} aria-hidden />
+          <LogIn size={18} strokeWidth={1.9} aria-hidden />
         </a>
       </Tooltip>
     );
@@ -182,7 +180,7 @@ const ProfileKey: React.FC = () => {
     <Menu position="bottom-end" width={240} withArrow={false} offset={8}>
       <Menu.Target>
         <button type="button" className="gp-avatar" aria-label={`Account: ${name}`}>
-          {mono ?? <UserRound size={16} strokeWidth={1.9} aria-hidden />}
+          {mono ?? <UserRound size={18} strokeWidth={1.9} aria-hidden />}
         </button>
       </Menu.Target>
       <Menu.Dropdown>
@@ -207,35 +205,15 @@ const ProfileKey: React.FC = () => {
 
 /* -------------------------------------------------------------- top bar */
 
-/** Home: the rose in its own colours and the wordmark in Virgil, or the
- *  instance's own logo. Hovering fans the rose out. */
+/** Home: the real depictio logo (the rose fans on hover), or the instance's
+ *  own logo. */
 export const HomeMark: React.FC<{ height: number; href?: string }> = ({ height, href = '/dashboards' }) => {
   const mode = useBrandLogoMode();
-  const reduce = useReducedMotion();
-  const [fan, setFan] = React.useState(false);
   if (mode === 'none') return null;
-  const on = (v: boolean) => () => setFan(v && !reduce);
   return (
     <Tooltip label="All dashboards" withArrow openDelay={400}>
-      <a
-        href={href}
-        className="gp-brand"
-        aria-label="depictio: all dashboards"
-        onMouseEnter={on(true)}
-        onMouseLeave={on(false)}
-        onFocus={on(true)}
-        onBlur={on(false)}
-      >
-        {mode === 'inherit' ? (
-          <>
-            <DepictioRose mode={fan ? 'fan' : 'logo'} size={height + 4} label="" />
-            <span className="gp-wordmark" style={{ fontSize: height }}>
-              depictio
-            </span>
-          </>
-        ) : (
-          <BrandLogo height={height} width="auto" testId="glass-pages-logo" />
-        )}
+      <a href={href} className="gp-brand" aria-label="depictio: all dashboards">
+        <BrandLogo height={height} width="auto" testId="glass-pages-logo" />
       </a>
     </Tooltip>
   );
@@ -246,17 +224,17 @@ const TopBar: React.FC<{ section: SidebarSection; crumbs: Crumb[] }> = ({ sectio
   const trail: Crumb[] = [{ label: SECTION_LABEL[section], href: `/${section === 'admin' ? 'admin' : section}` }, ...crumbs];
   return (
     <header className="gp-top">
-      <HomeMark height={24} />
+      <HomeMark height={44} />
       <span className="gp-top-rule" aria-hidden />
       <nav className="gp-trail" aria-label="You are here">
         <span className="gp-trail-icon" style={tint(section)} aria-hidden>
-          <Icon size={16} strokeWidth={1.8} />
+          <Icon size={20} strokeWidth={1.8} />
         </span>
         {trail.map((c, i) => {
           const last = i === trail.length - 1;
           return (
             <React.Fragment key={`${c.label}-${i}`}>
-              {i > 0 && <ChevronRight className="gp-trail-chev" size={14} strokeWidth={2} aria-hidden />}
+              {i > 0 && <ChevronRight className="gp-trail-chev" size={16} strokeWidth={2} aria-hidden />}
               {last || !c.href ? (
                 <span className="gp-trail-here" aria-current={last ? 'page' : undefined} title={c.label}>
                   {c.label}
@@ -288,14 +266,21 @@ const StatusFoot: React.FC<{ open: boolean }> = ({ open }) => {
   const { status, version } = useServerStatus();
   const { isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
   const online = status === 'online';
-  const label = online ? (version ? `Online · v${version}` : 'Online') : status === 'unknown' ? 'Checking server' : 'Server offline';
+  const main = online ? 'Online' : status === 'unknown' ? 'Checking server' : 'Server offline';
+  const ver = online && version ? `v${version}` : null;
+  const label = ver ? `${main} · ${ver}` : main;
   const mode = isDemoMode ? 'Demo mode' : isPublicMode ? 'Public mode' : isSingleUserMode ? 'Single user mode' : null;
+  // Folded to the rail, the dot stands for both lines: they move to its tooltip.
+  const tip = mode ? `${label} · ${mode}` : label;
   return (
     <div className="gp-side-foot">
-      <Tooltip label={online ? 'Server online' : label} withArrow disabled={open} position="right">
+      <Tooltip label={tip} withArrow disabled={open} position="right">
         <div className="gp-status" data-state={status} aria-label={label}>
           <span className="gp-status-dot" aria-hidden />
-          <span className="gp-status-text">{label}</span>
+          <span className="gp-status-text">
+            <span>{main}</span>
+            {ver && <span className="gp-status-ver">{ver}</span>}
+          </span>
         </div>
       </Tooltip>
       {mode && open && <span className="gp-mode">{mode}</span>}
@@ -323,9 +308,9 @@ const Sidebar: React.FC<{ section: SidebarSection; open: boolean; onToggle: () =
             onClick={onToggle}
           >
             {open ? (
-              <PanelLeftClose size={18} strokeWidth={STROKE} aria-hidden />
+              <PanelLeftClose size={20} strokeWidth={STROKE} aria-hidden />
             ) : (
-              <PanelLeftOpen size={18} strokeWidth={STROKE} aria-hidden />
+              <PanelLeftOpen size={20} strokeWidth={STROKE} aria-hidden />
             )}
           </button>
         </Tooltip>
@@ -346,7 +331,7 @@ const Sidebar: React.FC<{ section: SidebarSection; open: boolean; onToggle: () =
                 style={tint(key)}
               >
                 <span className="gp-row-icon">
-                  <Icon size={19} strokeWidth={STROKE} aria-hidden />
+                  <Icon size={20} strokeWidth={STROKE} aria-hidden />
                 </span>
                 <span className="gp-row-label">{entry.label}</span>
               </a>
@@ -355,7 +340,6 @@ const Sidebar: React.FC<{ section: SidebarSection; open: boolean; onToggle: () =
         })}
       </div>
       <span className="gp-flex-col" />
-      <div className="gp-rule" role="separator" />
       <StatusFoot open={open} />
     </nav>
   );

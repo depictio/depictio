@@ -5,16 +5,16 @@
  * base chrome keeps today's look. Portalled surfaces (modals, menus,
  * popovers) opened from a page carry [data-gp-page] on <html>. */
 
-/* A run of icon keys that share a frosted tray. Without Glass it is no box at
+/* A run of icon keys that share a tray. Without Glass it is no box at
  * all, so the base toolbars lay out exactly as before. */
 .gp-tray {
   display: contents;
 }
 
 :root[data-chrome='glass'] {
-  --gp-side-open: 244px;
+  --gp-side-open: 268px;
   --gp-side-folded: 76px;
-  --gp-top-h: 66px;
+  --gp-top-h: 76px;
   --gp-radius: 18px;
   --gp-radius-lg: 22px;
   --gp-radius-input: 12px;
@@ -64,7 +64,7 @@
   min-height: 12px;
 }
 .gp-eyebrow {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -80,10 +80,10 @@
   z-index: 35;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
   margin: 8px 10px 0;
-  padding: 0 10px 0 14px;
+  padding: 0 12px 0 16px;
   border-radius: 18px;
   background: var(--gl-glass-strong);
   border: 1px solid var(--gl-rim);
@@ -95,10 +95,10 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 8px 0 4px;
-  border-radius: 10px;
+  gap: 10px;
+  height: 52px;
+  padding: 0 10px 0 6px;
+  border-radius: 12px;
   color: var(--gl-fg);
   text-decoration: none;
   outline: none;
@@ -110,39 +110,26 @@
 .gp-brand:focus-visible {
   box-shadow: 0 0 0 2px var(--gl-ring);
 }
-.gp-brand > span:first-child {
-  display: block !important;
-  line-height: 0;
-}
-/* Virgil, for the wordmark and nowhere else. */
-.gp-wordmark {
-  font-family: 'Virgil', var(--mantine-font-family);
-  font-weight: 400;
-  line-height: 1;
-  letter-spacing: 0.01em;
-  color: var(--gl-fg);
-  white-space: nowrap;
-}
 .gp-top-rule {
   flex: none;
   width: 1px;
-  height: 26px;
+  height: 32px;
   background: var(--gl-hair);
 }
 .gp-trail {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
-  font-size: 14px;
+  font-size: 16px;
 }
 .gp-trail-icon {
   flex: none;
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
   color: light-dark(
     color-mix(in oklab, var(--gp-tint) 82%, var(--mantine-color-black)),
     color-mix(in oklab, var(--gp-tint) 70%, var(--mantine-color-white))
@@ -196,7 +183,7 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 /* An icon key: quiet until hovered, a ring when focused by keyboard. */
@@ -204,8 +191,8 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   border: 0;
   border-radius: var(--gl-key-radius);
@@ -227,8 +214,8 @@
 .gp-avatar {
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   margin-left: 6px;
   padding: 0;
   border-radius: 50%;
@@ -236,7 +223,7 @@
   background: var(--gl-accent-soft);
   color: var(--gl-accent-fg);
   font-family: inherit;
-  font-size: 11px;
+  font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.02em;
   text-decoration: none;
@@ -260,12 +247,12 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13.5px;
+  font-size: 14.5px;
   font-weight: 650;
   color: var(--gl-fg);
 }
 .gp-menu-who-role {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--gl-muted);
 }
 
@@ -300,9 +287,9 @@
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 32px;
-  margin-bottom: 8px;
-  padding-left: 10px;
+  min-height: 36px;
+  margin-bottom: 10px;
+  padding-left: 12px;
 }
 .gp-shell[data-side='folded'] .gp-side-head {
   justify-content: center;
@@ -315,8 +302,8 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 1px solid var(--gl-hair);
   border-radius: calc(var(--gl-key-radius) - 2px);
@@ -336,13 +323,13 @@
   box-shadow: 0 0 0 2px var(--gl-ring);
 }
 .gp-shell[data-side='folded'] .gp-fold {
-  width: 40px;
-  height: 36px;
+  width: 44px;
+  height: 40px;
 }
 .gp-side-rows {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   width: 100%;
 }
 .gp-shell[data-side='folded'] .gp-side-rows {
@@ -352,13 +339,13 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
   width: 100%;
-  height: 40px;
-  padding: 0 10px 0 12px;
+  height: 44px;
+  padding: 0 12px 0 14px;
   border-radius: var(--gl-key-radius);
   color: var(--gl-fg);
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1;
   text-decoration: none;
@@ -380,7 +367,7 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 20px;
+  width: 22px;
   color: light-dark(
     color-mix(in oklab, var(--gp-tint) 82%, var(--mantine-color-black)),
     color-mix(in oklab, var(--gp-tint) 70%, var(--mantine-color-white))
@@ -406,14 +393,14 @@
   left: 4px;
   top: 50%;
   width: 3px;
-  height: 16px;
-  margin-top: -8px;
+  height: 18px;
+  margin-top: -9px;
   border-radius: 3px;
   background: var(--gp-tint);
 }
 .gp-shell[data-side='folded'] .gp-row {
-  width: 44px;
-  height: 44px;
+  width: 46px;
+  height: 46px;
   padding: 0;
   justify-content: center;
 }
@@ -428,66 +415,104 @@
   height: 3px;
   margin: 0 0 0 -6px;
 }
-.gp-rule {
-  flex: none;
-  align-self: stretch;
-  height: 1px;
-  margin: 8px 6px 10px;
-  background: var(--gl-hair);
-}
-.gp-shell[data-side='folded'] .gp-rule {
-  align-self: center;
-  width: 28px;
-  margin-inline: 0;
-}
 .gp-side-foot {
+  flex: none;
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: 8px;
   width: 100%;
-  padding: 0 10px;
+  margin-top: 10px;
+  padding: 12px 10px;
+  border-radius: var(--gl-key-radius);
+  background: var(--gl-well);
+  text-align: center;
 }
 .gp-shell[data-side='folded'] .gp-side-foot {
-  align-items: center;
+  width: 46px;
+  height: 46px;
   padding: 0;
+  gap: 0;
 }
 .gp-status {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  min-height: 24px;
-  font-size: 12px;
-  font-weight: 550;
-  color: var(--gl-muted);
+  min-height: 22px;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--gl-fg);
   font-variant-numeric: tabular-nums;
 }
 .gp-status-dot {
+  --gp-status: var(--mantine-color-green-6);
+  position: relative;
   flex: none;
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
-  background: var(--mantine-color-green-6);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mantine-color-green-6) 20%, transparent);
+  background: var(--gp-status);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gp-status) 20%, transparent);
+}
+/* Online: the dot breathes, a halo in the status colour swelling out of it
+ * and fading, slow and soft. Only the live state moves. */
+.gp-status[data-state='online'] .gp-status-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--gp-status);
+  opacity: 0;
+  animation: gp-status-breath 2.8s ease-in-out infinite;
+}
+@keyframes gp-status-breath {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  70%,
+  100% {
+    transform: scale(3);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gp-status-dot::after {
+    animation: none !important;
+  }
 }
 .gp-status[data-state='offline'] .gp-status-dot {
-  background: var(--mantine-color-red-6);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mantine-color-red-6) 20%, transparent);
+  --gp-status: var(--mantine-color-red-6);
 }
 .gp-status[data-state='unknown'] .gp-status-dot {
-  background: var(--gl-faint);
+  --gp-status: var(--gl-faint);
   box-shadow: none;
+}
+.gp-status-text {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+.gp-status-ver {
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--gl-faint);
 }
 .gp-shell[data-side='folded'] .gp-status-text {
   display: none;
 }
 .gp-mode {
-  align-self: flex-start;
-  padding: 3px 10px;
+  padding: 4px 12px;
   border-radius: 999px;
   background: var(--gl-accent-soft);
   color: var(--gl-accent-fg);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 650;
+  line-height: 1.2;
 }
 
 /* ------------------------------------------------------------------ main */
@@ -588,8 +613,11 @@
     border-color: var(--gl-hair);
     box-shadow: 0 8px 24px -18px var(--gl-shade-b);
   }
-  .gp-brand .gp-wordmark {
-    font-size: 20px !important;
+  .gp-brand {
+    height: 44px;
+  }
+  .gp-brand img {
+    height: 34px !important;
   }
   .gp-trail-here {
     display: none;
@@ -682,7 +710,7 @@
  *
  * The listing and admin surfaces are Mantine; here they take the Glass card
  * language: one radius, one hairline, one surface, one shadow, a 16px inner
- * edge; outlined fields; icon keys in frosted trays; soft pills. */
+ * edge; outlined fields; icon keys in trays; soft pills. */
 
 /* Cards and panels. */
 :root[data-chrome='glass'] .gp-main :is(.mantine-Paper-root[data-with-border], .mantine-Card-root, .dc-list-table) {
@@ -852,7 +880,7 @@
   border-color: var(--gl-hair);
 }
 
-/* Tabs: one frosted strip, the open tab a raised pill. On a phone the strip
+/* Tabs: one paper strip, the open tab a raised pill. On a phone the strip
  * scrolls inside itself. */
 :root[data-chrome='glass'] .gp-main .mantine-Tabs-list {
   flex-wrap: nowrap;
@@ -903,6 +931,25 @@
 }
 :root[data-chrome='glass'] .gp-main .mantine-Tabs-panel {
   padding-top: 20px;
+}
+/* The project page's own tabs, under the workflows: a larger strip and a lit
+ * accent tab, so they read as the switch for what follows. */
+:root[data-chrome='glass'] .gp-main .dc-project-tabs .mantine-Tabs-list {
+  padding: 5px;
+  border-radius: 18px;
+  box-shadow: inset 0 0 0 1px var(--gl-hair);
+}
+:root[data-chrome='glass'] .gp-main .dc-project-tabs .mantine-Tabs-tab {
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 14px;
+  font-size: 15px;
+  font-weight: 650;
+}
+:root[data-chrome='glass'] .gp-main .dc-project-tabs .mantine-Tabs-tab[data-active] {
+  background: var(--gl-accent-soft);
+  color: var(--gl-accent-fg);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 28%, transparent);
 }
 
 /* Tables: rows on the card, the head a soft rounded well. */
@@ -1001,9 +1048,6 @@
   box-shadow: 0 0 0 1px var(--gl-hair);
   background: var(--gl-well);
 }
-:root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] > .mantine-Card-section .mantine-Center-root {
-  background: var(--gl-well) !important;
-}
 :root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] .mantine-Title-root {
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -1050,8 +1094,6 @@
   border-radius: 10px;
   background: var(--gl-glass-strong);
   box-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
   filter: none !important;
 }
 :root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] > .mantine-ActionIcon-root:first-child svg[style*='white'] {
@@ -1186,7 +1228,7 @@
   font-family: var(--mantine-font-family) !important;
   font-weight: 600 !important;
 }
-/* Menus over the listing's cards: frosted, but opaque enough to read. */
+/* Menus over the listing's cards: paper, opaque. */
 :root[data-chrome='glass'][data-gp-page] .mantine-Menu-dropdown {
   background: light-dark(
     color-mix(in srgb, var(--mantine-color-white) 92%, transparent),

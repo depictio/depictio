@@ -37,6 +37,7 @@ import type { CardBadge } from './hooks/useDashboardViewPrefs';
 import { formatRelative } from '../lib/datetime';
 import { parseTemplateOrigin, TemplateChip } from '../projects/template';
 import { useBrandAccents } from 'depictio-react-core';
+import { placeholderBackground } from './thumbnailPlaceholder';
 
 interface DashboardCardProps {
   dashboard: DashboardListEntry;
@@ -83,7 +84,7 @@ const SingleThumbnail: React.FC<{
     // though a perfectly good logo was available — render the logo instead.
     if (isImagePath(icon)) {
       return (
-        <Center h="100%" w="100%" bg="var(--mantine-color-default-hover)">
+        <Center h="100%" w="100%" style={{ background: placeholderBackground(color) }}>
           <img
             src={resolveAssetUrl(icon)}
             alt={dashboard.title || dashboard.dashboard_id}
@@ -100,7 +101,7 @@ const SingleThumbnail: React.FC<{
       );
     }
     return (
-      <Center h="100%" w="100%" bg="var(--mantine-color-default-hover)">
+      <Center h="100%" w="100%" style={{ background: placeholderBackground(color) }}>
         <ThemeIcon size={64} variant="light" color={color} radius="md">
           <Icon icon={icon} width={36} />
         </ThemeIcon>

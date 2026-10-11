@@ -1,11 +1,11 @@
 /* Glass, the default chrome: scoped to [data-chrome='glass'].
  *
  * Every floating surface (top bar, sidebar, drawers, dock, the side panels,
- * dialogs, the phone bar and sheets) is frosted glass: a translucent fill, a
- * backdrop blur, a hairline of light on its rim and a soft long shadow. Under
- * it, a quiet, flat, faintly cool canvas. The palette stays neutral; the
- * instance's primary is the only accent (a key that is engaged, the
- * primary, an open drawer's tool). */
+ * dialogs, the phone bar and sheets) is an opaque paper panel: a solid fill,
+ * a hairline border and a soft shadow, over a plain white page (a deep slate
+ * in dark). No translucency, no backdrop blur. The palette stays neutral; the
+ * instance's primary is the only accent (a key that is engaged, the primary,
+ * an open drawer's tool). */
 
 :root[data-chrome='glass'] {
   /* Geometry: the rail floats off the edge, drawers float beside it. */
@@ -37,54 +37,41 @@
   --gl-badge-fg: var(--mantine-color-white);
   --gl-badge-ring: light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
 
-  /* The canvas: a flat cool paper, a deep slate in dark. */
-  --gl-paper: light-dark(
-    color-mix(in oklab, var(--mantine-color-gray-1) 78%, var(--mantine-color-indigo-0)),
-    color-mix(in oklab, var(--mantine-color-dark-8) 94%, var(--mantine-color-indigo-9))
-  );
+  /* The page: plain white, a deep slate in dark. */
+  --gl-paper: light-dark(var(--mantine-color-white), var(--mantine-color-dark-8));
   --gl-canvas-bg: var(--gl-paper);
   --gl-canvas-top: 12px;
 
-  /* Glass. */
-  --gl-glass: light-dark(
-    color-mix(in srgb, var(--mantine-color-white) 60%, transparent),
-    color-mix(in srgb, var(--mantine-color-dark-6) 58%, transparent)
-  );
-  --gl-glass-strong: light-dark(
-    color-mix(in srgb, var(--mantine-color-white) 78%, transparent),
-    color-mix(in srgb, var(--mantine-color-dark-6) 80%, transparent)
-  );
-  --gl-rim: light-dark(
-    color-mix(in srgb, var(--mantine-color-white) 90%, transparent),
-    color-mix(in srgb, var(--mantine-color-white) 9%, transparent)
-  );
+  /* Paper panels: opaque, edged by a hairline. On a white page the border
+     and the shadow are what set a panel apart, so the hairline is firmer
+     than it would need to be on a tinted page. */
+  --gl-glass: light-dark(var(--mantine-color-white), var(--mantine-color-dark-7));
+  --gl-glass-strong: var(--gl-glass);
   --gl-hair: light-dark(
-    color-mix(in srgb, var(--mantine-color-gray-9) 8%, transparent),
-    color-mix(in srgb, var(--mantine-color-white) 8%, transparent)
+    color-mix(in srgb, var(--mantine-color-gray-9) 11%, transparent),
+    color-mix(in srgb, var(--mantine-color-white) 10%, transparent)
   );
+  --gl-rim: var(--gl-hair);
   --gl-well: light-dark(
     color-mix(in srgb, var(--mantine-color-gray-9) 6%, transparent),
     color-mix(in srgb, var(--mantine-color-white) 8%, transparent)
   );
   --gl-shade-a: light-dark(
-    color-mix(in srgb, var(--mantine-color-indigo-9) 6%, transparent),
+    color-mix(in srgb, var(--mantine-color-gray-9) 5%, transparent),
     color-mix(in srgb, var(--mantine-color-black) 30%, transparent)
   );
   --gl-shade-b: light-dark(
-    color-mix(in srgb, var(--mantine-color-indigo-9) 14%, transparent),
-    color-mix(in srgb, var(--mantine-color-black) 55%, transparent)
+    color-mix(in srgb, var(--mantine-color-gray-9) 10%, transparent),
+    color-mix(in srgb, var(--mantine-color-black) 45%, transparent)
   );
   --gl-float-bg: var(--gl-glass);
   --gl-float-line: var(--gl-rim);
-  --gl-float-filter: blur(22px) saturate(1.7);
-  --gl-float-shadow: inset 0 1px 0 var(--gl-rim), 0 0 0 1px var(--gl-hair), 0 1px 2px var(--gl-shade-a),
-    0 22px 48px -22px var(--gl-shade-b);
+  --gl-float-filter: none;
+  --gl-float-shadow: 0 0 0 1px var(--gl-hair), 0 1px 2px var(--gl-shade-a),
+    0 10px 28px -18px var(--gl-shade-b);
   --gl-panel-bg: var(--gl-glass-strong);
 
-  --gl-surface: light-dark(
-    color-mix(in srgb, var(--mantine-color-white) 86%, transparent),
-    color-mix(in srgb, var(--mantine-color-dark-6) 72%, transparent)
-  );
+  --gl-surface: var(--gl-glass);
   --gl-raised: var(--gl-well);
   --gl-line: var(--gl-hair);
   --gl-line-soft: var(--gl-hair);
@@ -251,7 +238,7 @@
 :root[data-chrome='glass'] .hy-key--rail {
   border-radius: 14px;
 }
-/* A tray of panel tools: loose pills on one frosted well. */
+/* A tray of panel tools: loose pills on one soft well. */
 :root[data-chrome='glass'] .hy-group--bar:has(> :nth-child(2)) {
   gap: 3px;
   padding: 3px;
@@ -373,8 +360,6 @@
   background: var(--gl-glass-strong) !important;
   border: 1px solid var(--gl-rim);
   box-shadow: var(--gl-float-shadow);
-  -webkit-backdrop-filter: blur(26px) saturate(1.7);
-  backdrop-filter: blur(26px) saturate(1.7);
 }
 :root[data-chrome='glass'] .hy-sheet .mantine-Drawer-body {
   background: transparent;
@@ -471,7 +456,7 @@
   opacity: 1 !important;
 }
 /* A figure with a header row carries the toolbar up into it, left of the
-   tile's actions, on the same frosted strip, so it never sits on the
+   tile's actions, on the same paper strip, so it never sits on the
    plot's facet titles or legend. */
 :root[data-chrome='glass'] [data-testid='dashboard-content'] .dc-tile--figure:not([data-showcase]):has(> .mantine-Group-root:first-child) .js-plotly-plot .modebar {
   top: -34px !important;
@@ -479,8 +464,6 @@
   padding: 1px 4px;
   border-radius: 10px;
   background: var(--gl-glass-strong);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
   box-shadow: inset 0 1px 0 var(--gl-rim), 0 6px 16px -8px var(--gl-shade-b);
 }
 /* The title keeps to one line and, while the toolbar shows, ends in an
@@ -533,8 +516,6 @@
 :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-component-actions::before {
   border-radius: 12px !important;
   background: var(--gl-glass-strong) !important;
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
   box-shadow: inset 0 1px 0 var(--gl-rim), 0 6px 16px -8px var(--gl-shade-b) !important;
 }
 
@@ -599,7 +580,7 @@
   border-radius: 14px;
 }
 
-/* Sections on the canvas: frosted groups with a soft accent edge. */
+/* Sections on the canvas: paper groups with a soft accent edge. */
 :root[data-chrome='glass'] .depictio-section-accordion:not(.is-compact) .depictio-section-item:not(.is-plain) {
   border: 1px solid var(--gl-rim);
   border-radius: 24px;
@@ -657,7 +638,7 @@
   box-shadow: 0 0 0 1px var(--gl-hair), 0 14px 32px -22px var(--gl-shade-b) !important;
 }
 
-/* Filter controls, everywhere: frosted wells, soft pills. */
+/* Filter controls, everywhere: soft wells and pills. */
 :root[data-chrome='glass'] :is(.hy-shell, .hy-sheet) :is(.mantine-MultiSelect-input, .mantine-Select-input, .mantine-TextInput-input, .mantine-NumberInput-input, .mantine-DatePickerInput-input) {
   border-radius: 12px;
   border-color: transparent;
@@ -727,23 +708,19 @@
 
 /* ======================================================= editor surfaces */
 
-/* Dialogs: frosted cards over a softly blurred page, a pill for each action,
- * the commit in the accent. */
+/* Dialogs: paper cards over a dimmed page, a pill for each action, the
+ * commit in the accent. */
 :root[data-chrome='glass'] .mantine-Modal-overlay {
   background: light-dark(
     color-mix(in srgb, var(--mantine-color-gray-6) 22%, transparent),
     color-mix(in srgb, var(--mantine-color-black) 45%, transparent)
   ) !important;
-  -webkit-backdrop-filter: blur(4px) !important;
-  backdrop-filter: blur(4px) !important;
 }
 :root[data-chrome='glass'] .mantine-Modal-content {
   border: 1px solid var(--gl-rim);
   border-radius: 24px !important;
   background: var(--gl-glass-strong);
   box-shadow: var(--gl-float-shadow), 0 40px 80px -40px var(--gl-shade-b) !important;
-  -webkit-backdrop-filter: blur(28px) saturate(1.7);
-  backdrop-filter: blur(28px) saturate(1.7);
 }
 :root[data-chrome='glass'] .mantine-Modal-header {
   background: transparent;
@@ -785,7 +762,7 @@
   background: color-mix(in srgb, var(--gl-surface) 70%, transparent);
 }
 
-/* Menus and popovers: frosted, rounded, rows on a soft well. */
+/* Menus and popovers: paper, rounded, rows on a soft well. */
 :root[data-chrome='glass'] :is(.mantine-Menu-dropdown, .mantine-Popover-dropdown) {
   border: 1px solid var(--gl-rim);
   border-radius: 16px;

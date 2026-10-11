@@ -30,22 +30,14 @@ export interface DashboardThumbnailViewProps {
   onTogglePin: (id: string) => void;
 }
 
-/** Responsive column counts for the grid.
- *
- *  `auto` keeps the long-standing 1 / 2 / 4 layout, except that it never asks
- *  for more columns than the section has cards: a section holding two
- *  dashboards used to render them as quarter-width cards with two empty cells
- *  beside them, which is also what made those thumbnails needlessly small.
+/** Responsive column counts for an explicit cards-per-row.
  *
  *  An explicit count is what the widest screens get, and narrower breakpoints
  *  are capped at it: asking for 2 never squeezes more onto a laptop, and
- *  asking for 6 still collapses to one card on a phone. It is a deliberate
- *  choice, so a short section keeps it rather than growing its cards. */
-function gridCols(cardsPerRow: CardsPerRow, count: number): SimpleGridProps['cols'] {
-  if (cardsPerRow === 'auto') {
-    // `Math.max(1, ...)`: an empty section would otherwise ask for 0 columns.
-    return { base: 1, sm: Math.max(1, Math.min(2, count)), lg: Math.max(1, Math.min(4, count)) };
-  }
+ *  asking for 6 still collapses to one card on a phone. The columns are fixed
+ *  whatever the section holds, so a lone dashboard keeps the width it would
+ *  have in a full row instead of stretching across it. */
+function gridCols(cardsPerRow: Exclude<CardsPerRow, 'auto'>): SimpleGridProps['cols'] {
   return {
     base: 1,
     sm: Math.min(2, cardsPerRow),
@@ -53,6 +45,14 @@ function gridCols(cardsPerRow: CardsPerRow, count: number): SimpleGridProps['col
     lg: cardsPerRow,
   };
 }
+
+/** `auto`: as many columns of a readable width as fit. The empty tracks stay,
+ *  so one dashboard (or two) sits at the same card width as in a full row. */
+const AUTO_GRID_STYLE: React.CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
+  gap: 'var(--mantine-spacing-xl)',
+};
 
 const DashboardThumbnailView: React.FC<DashboardThumbnailViewProps> = ({
   groups,
@@ -69,37 +69,42 @@ const DashboardThumbnailView: React.FC<DashboardThumbnailViewProps> = ({
   onDuplicate,
   onExport,
   onTogglePin,
-}) => (
-  <SimpleGrid cols={gridCols(cardsPerRow, groups.length)} spacing="xl" verticalSpacing="xl">
-    {groups.map((group) => {
-      const projectId = group.parent.project_id
-        ? String(group.parent.project_id)
-        : null;
-      const projectName = projectId ? projectNames.get(projectId) : undefined;
-      const projectTemplateOrigin = projectId
-        ? projectTemplates?.get(projectId)
-        : undefined;
-      return (
-        <DashboardCard
-          key={group.parent.dashboard_id}
-          dashboard={group.parent}
-          childTabs={group.children}
-          isOwner={isOwnedByEmail(group.parent, currentUserEmail)}
-          projectName={projectName}
-          projectTemplateOrigin={projectTemplateOrigin}
-          visibleBadges={visibleBadges}
-          pinned={pinnedIds.has(String(group.parent.dashboard_id))}
-          pinDisabled={pinDisabled}
-          onTogglePin={() => onTogglePin(String(group.parent.dashboard_id))}
-          onView={onView}
-          onEdit={onEdit}
-          onDelete={onDelete}
-          onDuplicate={onDuplicate}
-          onExport={onExport}
-        />
-      );
-    })}
-  </SimpleGrid>
-);
+}) => {
+  const cards = groups.map((group) => {
+    const projectId = group.parent.project_id
+      ? String(group.parent.project_id)
+      : null;
+    const projectName = projectId ? projectNames.get(projectId) : undefined;
+    const projectTemplateOrigin = projectId
+      ? projectTemplates?.get(projectId)
+      : undefined;
+    return (
+      <DashboardCard
+        key={group.parent.dashboard_id}
+        dashboard={group.parent}
+        childTabs={group.children}
+        isOwner={isOwnedByEmail(group.parent, currentUserEmail)}
+        projectName={projectName}
+        projectTemplateOrigin={projectTemplateOrigin}
+        visibleBadges={visibleBadges}
+        pinned={pinnedIds.has(String(group.parent.dashboard_id))}
+        pinDisabled={pinDisabled}
+        onTogglePin={() => onTogglePin(String(group.parent.dashboard_id))}
+        onView={onView}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        onDuplicate={onDuplicate}
+        onExport={onExport}
+      />
+    );
+  });
+  return cardsPerRow === 'auto' ? (
+    <div style={AUTO_GRID_STYLE}>{cards}</div>
+  ) : (
+    <SimpleGrid cols={gridCols(cardsPerRow)} spacing="xl" verticalSpacing="xl">
+      {cards}
+    </SimpleGrid>
+  );
+};
 
 export default DashboardThumbnailView;

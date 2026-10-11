@@ -1,5 +1,5 @@
 import React from 'react';
-import { Badge, Group, Tooltip } from '@mantine/core';
+import { Badge, Box, Group, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 /** The type axis of a data collection: what kind of thing it holds, and so
@@ -89,14 +89,30 @@ export const DcTypeIcon: React.FC<{
   withTooltip?: boolean;
 }> = ({ type, size = 18, withTooltip = true }) => {
   const m = dcTypeMeta(type);
+  // The brand-colour logo (#201637) vanishes on a dark page: dark mode gets
+  // the white one, switched by Mantine's lightHidden/darkHidden in CSS.
+  const logoStyle: React.CSSProperties = { objectFit: 'contain', display: 'block', flexShrink: 0 };
   const el = m.isMultiqc ? (
-    <img
-      src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
-      alt="MultiQC"
-      width={size}
-      height={size}
-      style={{ objectFit: 'contain', display: 'block', flexShrink: 0 }}
-    />
+    <>
+      <Box
+        component="img"
+        darkHidden
+        src={`${import.meta.env.BASE_URL}logos/multiqc_icon_color.svg`}
+        alt="MultiQC"
+        width={size}
+        height={size}
+        style={logoStyle}
+      />
+      <Box
+        component="img"
+        lightHidden
+        src={`${import.meta.env.BASE_URL}logos/multiqc_icon_white.svg`}
+        alt="MultiQC"
+        width={size}
+        height={size}
+        style={logoStyle}
+      />
+    </>
   ) : (
     <Icon
       icon={m.icon}

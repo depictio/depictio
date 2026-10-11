@@ -276,7 +276,7 @@ export const GlassButton = React.forwardRef<HTMLButtonElement, ChromeButtonRende
 /**
  * A run of related actions. On the rail a column, in the dock a cluster (the
  * dock draws the rules between clusters), on the phone bar a transparent run,
- * in a sheet a list; anywhere else a tray of loose pills on a frosted well.
+ * in a sheet a list; anywhere else a tray of loose pills on a soft well.
  */
 export const GlassButtonGroup: React.FC<ChromeButtonGroupRenderProps> = ({
   group,

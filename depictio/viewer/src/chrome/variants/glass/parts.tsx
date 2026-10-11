@@ -13,7 +13,6 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import DepictioRose from '../../../components/rose/DepictioRose';
 import BrandLogo from '../../BrandLogo';
 import { useBrandLogoMode } from '../../useBrandLogoMode';
 import { useColorScheme } from '../../../hooks/useColorScheme';
@@ -57,7 +56,7 @@ export const Tile = React.forwardRef<HTMLButtonElement, TileProps>(function Tile
       )}
       {...rest}
     >
-      <I size={place === 'sheet' ? 18 : place === 'top' ? 18 : 20} strokeWidth={STROKE} aria-hidden className="hy-glyph" />
+      <I size={place === 'sheet' ? 18 : 21} strokeWidth={STROKE} aria-hidden className="hy-glyph" />
       {place === 'sheet' && <span className="hy-key-label">{label}</span>}
     </button>
   );
@@ -150,14 +149,14 @@ export const TabList: React.FC<{
           data-active={nav.guide.open || undefined}
         >
           <span className="hy-tablist-icon">
-            <BookOpenText size={17} strokeWidth={1.9} aria-hidden />
+            <BookOpenText size={20} strokeWidth={1.9} aria-hidden />
           </span>
           <span className="hy-tablist-label">Guide</span>
         </a>
       )}
       <a href={nav.backHref} className="hy-tablist-item hy-tablist-quiet">
         <span className="hy-tablist-icon">
-          <ArrowLeft size={16} strokeWidth={1.9} aria-hidden />
+          <ArrowLeft size={20} strokeWidth={1.9} aria-hidden />
         </span>
         <span className="hy-tablist-label">All dashboards</span>
       </a>
@@ -310,7 +309,7 @@ export const ProfileTile: React.FC = () => {
     return (
       <Tooltip label="Sign in" withArrow>
         <a href="/auth/login" className="hy-avatar" aria-label="Sign in">
-          <LogIn size={16} strokeWidth={1.9} aria-hidden />
+          <LogIn size={18} strokeWidth={1.9} aria-hidden />
         </a>
       </Tooltip>
     );
@@ -318,7 +317,7 @@ export const ProfileTile: React.FC = () => {
   return (
     <Tooltip label={`Profile: ${p.name}`} withArrow openDelay={300}>
       <a href="/profile" className="hy-avatar" aria-label={`Profile: ${p.name}`}>
-        {p.mono ?? <UserRound size={16} strokeWidth={1.9} aria-hidden />}
+        {p.mono ?? <UserRound size={18} strokeWidth={1.9} aria-hidden />}
       </a>
     </Tooltip>
   );
@@ -349,36 +348,16 @@ export const ProfileRows: React.FC = () => {
 
 /* ----------------------------------------------------------------- top bar */
 
-/** Home, as the brand in scope draws it. The stock depictio brand is drawn
- *  here, not from the raster: the rose in its own colours and the wordmark
- *  in Virgil, inked by the theme so it reads on light and dark alike. An
- *  instance's (or dashboard's) own logo goes through `BrandLogo`, which picks
- *  its dark variant. */
+/** Home, as the brand in scope draws it: the real depictio logo (rose and
+ *  lettering, the rose fanning on hover), or the instance's (or dashboard's)
+ *  own, which `BrandLogo` picks and inks for the theme. */
 const HomeMark: React.FC<{ home: string; height: number }> = ({ home, height }) => {
   const mode = useBrandLogoMode();
-  const [fan, setFan] = React.useState(false);
   if (mode === 'none') return null;
   return (
     <Tooltip label="All dashboards" withArrow openDelay={400}>
-      <a
-        href={home}
-        className="hy-top-brand"
-        aria-label="depictio: all dashboards"
-        onMouseEnter={() => setFan(true)}
-        onMouseLeave={() => setFan(false)}
-        onFocus={() => setFan(true)}
-        onBlur={() => setFan(false)}
-      >
-        {mode === 'inherit' ? (
-          <>
-            <DepictioRose mode={fan ? 'fan' : 'logo'} size={height + 4} label="" />
-            <span className="hy-wordmark" style={{ fontSize: height }}>
-              depictio
-            </span>
-          </>
-        ) : (
-          <BrandLogo height={height} width="auto" testId="glass-logo" />
-        )}
+      <a href={home} className="hy-top-brand" aria-label="depictio: all dashboards">
+        <BrandLogo height={height} width="auto" testId="glass-logo" />
       </a>
     </Tooltip>
   );
@@ -397,7 +376,7 @@ export const TopBar: React.FC<{
   after?: React.ReactNode;
 }> = ({ model, home, compact, dense, editing, after }) => (
   <header className={cn('hy-top', compact && 'hy-top--compact')}>
-    <HomeMark home={home} height={compact ? 20 : dense ? 22 : 25} />
+    <HomeMark home={home} height={compact ? 34 : dense ? 38 : 44} />
     <span className="hy-top-rule" aria-hidden />
     <div
       className="hy-top-title dc-header"
@@ -411,7 +390,7 @@ export const TopBar: React.FC<{
         </span>
       )}
       {model.dashboardName && (
-        <ChevronRight className="hy-top-chev" size={15} strokeWidth={2} aria-hidden />
+        <ChevronRight className="hy-top-chev" size={17} strokeWidth={2} aria-hidden />
       )}
       {model.tabIcon && <span className="hy-top-icon">{model.tabIcon}</span>}
       <h1 className="hy-top-tab dc-header-title" title={model.titleText}>

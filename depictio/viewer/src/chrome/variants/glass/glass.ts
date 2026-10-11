@@ -9,14 +9,14 @@ import './glass-filters.css';
 /**
  * Glass, the default chrome. The sidebar navigates, the dock acts; every
  * floating surface (sidebar, top bar, dock, drawers, the side panels) is
- * frosted glass over a quiet, flat tinted canvas, the palette stays neutral with
+ * an opaque paper panel on a plain white page, the palette stays neutral with
  * the instance's primary as the only accent, and the keys are springy pills.
  */
 const style: ChromeStyle = {
   ...BASE_CHROME_STYLE,
   id: 'glass',
   name: 'Glass',
-  tagline: 'Frosted panels over a calm canvas, with the actions in a dock',
+  tagline: 'Paper panels on a white page, with the actions in a dock',
   roles: {
     primary: { variant: 'filled', tone: 'primary' },
     secondary: { variant: 'light', tone: 'neutral' },

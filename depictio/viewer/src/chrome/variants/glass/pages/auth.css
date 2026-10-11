@@ -91,8 +91,6 @@
   box-shadow:
     var(--gl-float-shadow),
     0 40px 80px -40px var(--gl-shade-b);
-  -webkit-backdrop-filter: blur(28px) saturate(1.7);
-  backdrop-filter: blur(28px) saturate(1.7);
   animation: gp-auth-rise 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 @keyframes gp-auth-rise {
@@ -113,12 +111,8 @@
 .gp-auth-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 26px;
-}
-.gp-auth-brand > span:first-child {
-  display: block !important;
-  line-height: 0;
+  gap: 14px;
+  margin-bottom: 30px;
 }
 .gp-auth-brand--custom {
   flex-direction: column;
@@ -127,14 +121,6 @@
 }
 .gp-auth-brand--custom img {
   max-width: 100%;
-}
-/* Virgil, for the wordmark and nowhere else. */
-.gp-auth-wordmark {
-  font-family: 'Virgil', var(--mantine-font-family);
-  font-size: 30px;
-  line-height: 1;
-  letter-spacing: 0.01em;
-  color: var(--gl-fg);
 }
 .gp-auth-head {
   margin-bottom: 22px;

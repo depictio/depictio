@@ -1,5 +1,5 @@
 /**
- * The sign-in page under Glass: one frosted card over a calm field of
+ * The sign-in page under Glass: one paper card over a calm field of
  * triangles, the petals of the depictio rose drifting slowly away from it.
  */
 import React from 'react';
@@ -24,23 +24,22 @@ export interface GlassAuthCardProps {
   children: React.ReactNode;
 }
 
-/** The brand: the rose and the Virgil wordmark, or the instance's own logo
- *  with the depictio credit under it. */
+/** The brand: the real depictio logo, or the instance's own logo with the
+ *  depictio credit under it. */
 const AuthBrand: React.FC = () => {
   const mode = useBrandLogoMode();
   if (mode === 'none') return null;
   if (mode === 'custom') {
     return (
       <div className="gp-auth-brand gp-auth-brand--custom">
-        <BrandLogo height={72} />
+        <BrandLogo height={96} />
         <PoweredBy />
       </div>
     );
   }
   return (
     <div className="gp-auth-brand">
-      <DepictioRose mode="logo" size={38} label="" />
-      <span className="gp-auth-wordmark">depictio</span>
+      <BrandLogo height={72} width="auto" />
     </div>
   );
 };

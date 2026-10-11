@@ -28,10 +28,10 @@
   z-index: 35;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
   margin: var(--gl-top-inset);
-  padding: 0 12px 0 14px;
+  padding: 0 12px 0 16px;
   border-radius: var(--gl-top-radius);
   background: var(--gl-top-bg);
   border: var(--gl-top-border);
@@ -43,12 +43,12 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 8px;
-  height: 40px;
-  padding: 0 8px 0 4px;
+  gap: 10px;
+  height: 52px;
+  padding: 0 10px 0 6px;
   color: var(--gl-fg);
   text-decoration: none;
-  border-radius: 10px;
+  border-radius: 12px;
   outline: none;
   transition: background-color 150ms ease;
 }
@@ -57,19 +57,6 @@
 }
 .hy-top-brand:focus-visible {
   box-shadow: 0 0 0 2px var(--gl-ring);
-}
-.hy-top-brand > span:first-child {
-  display: block !important;
-  line-height: 0;
-}
-/* Virgil, for the wordmark and nowhere else. */
-.hy-wordmark {
-  font-family: 'Virgil', var(--mantine-font-family);
-  font-weight: 400;
-  line-height: 1;
-  letter-spacing: 0.01em;
-  color: var(--gl-wordmark, var(--gl-fg));
-  white-space: nowrap;
 }
 .hy-top-powered {
   display: flex;
@@ -86,13 +73,13 @@
 .hy-top-rule {
   flex: none;
   width: 1px;
-  height: 26px;
+  height: 32px;
   background: var(--gl-line);
 }
 .hy-top-title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 .hy-top .hy-top-dash {
@@ -102,7 +89,7 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 550;
   color: var(--gl-muted);
 }
@@ -114,15 +101,15 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   border-radius: calc(var(--gl-key-radius) - 2px);
   background: color-mix(in srgb, var(--gl-title-color, var(--gl-accent)) 13%, transparent);
 }
 .hy-top-icon .dc-header-tab-icon {
   display: block !important;
-  width: 18px !important;
-  height: 18px !important;
+  width: 22px !important;
+  height: 22px !important;
 }
 .hy-top .hy-top-tab {
   margin: 0;
@@ -130,7 +117,7 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 750;
   line-height: 1.2;
   letter-spacing: -0.015em;
@@ -143,10 +130,10 @@
   flex: none;
   display: inline-flex;
   align-items: center;
-  height: 24px;
-  padding: 0 10px;
+  height: 28px;
+  padding: 0 12px;
   border-radius: 999px;
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.02em;
   background: var(--gl-accent-soft);
@@ -156,18 +143,22 @@
   flex: none;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 .hy-group--top {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 .hy-key--top {
-  width: 38px;
-  height: 38px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--gl-key-radius);
   color: var(--gl-muted);
+}
+.hy-key--top :is(.hy-glyph, svg) {
+  width: 21px;
+  height: 21px;
 }
 .hy-key--top:not(:disabled):hover {
   color: var(--gl-fg);
@@ -175,8 +166,9 @@
 }
 .hy-top .hy-avatar {
   margin: 0 0 0 6px;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
+  font-size: 12.5px;
   border-color: var(--gl-line);
   background: var(--gl-accent-soft);
   color: var(--gl-accent-fg);
@@ -213,8 +205,8 @@
   display: flex;
   align-items: center;
   width: 100%;
-  min-height: 32px;
-  margin-bottom: 4px;
+  min-height: 36px;
+  margin-bottom: 6px;
 }
 .hy-shell[data-side='folded'] .hy-side-head {
   justify-content: center;
@@ -227,8 +219,8 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: 1px solid var(--gl-rail-line);
   border-radius: calc(var(--gl-key-radius) - 2px);
@@ -248,8 +240,8 @@
   box-shadow: 0 0 0 2px var(--gl-ring);
 }
 .hy-shell[data-side='folded'] .hy-fold {
-  width: 40px;
-  height: 36px;
+  width: 44px;
+  height: 40px;
 }
 .hy-side-scroll {
   flex: 0 1 auto;
@@ -263,7 +255,7 @@
   display: none;
 }
 .hy-side .hy-side-heading {
-  padding: 0 10px;
+  padding: 0 12px;
   color: var(--gl-rail-faint);
 }
 .hy-side .hy-tablist {
@@ -277,9 +269,9 @@
 }
 .hy-side .hy-tablist-item {
   --dc-tab-icon: var(--gl-rail-muted);
-  min-height: 40px;
+  min-height: 44px;
   color: var(--gl-rail-fg);
-  font-size: 14px;
+  font-size: 15px;
 }
 .hy-side .hy-tablist-item:hover {
   background: var(--gl-rail-hover);
@@ -292,7 +284,7 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 2px;
+  gap: 4px;
   width: 100%;
 }
 .hy-shell[data-side='folded'] :is(.hy-side-tools, .hy-side-foot) {
@@ -344,16 +336,16 @@
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 12px;
+  gap: 14px;
   width: 100%;
-  height: 40px;
-  padding: 0 10px;
+  height: 44px;
+  padding: 0 12px;
   border: 0;
   border-radius: var(--gl-key-radius);
   background: transparent;
   color: var(--gl-rail-muted);
   font-family: inherit;
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1;
   text-decoration: none;
@@ -377,7 +369,11 @@
   flex: none;
   display: grid;
   place-items: center;
+  width: 22px;
+}
+.hy-side :is(.hy-row-icon, .hy-key--rail) svg {
   width: 20px;
+  height: 20px;
 }
 .hy-row-label,
 .hy-key--rail .hy-key-label {
@@ -394,7 +390,7 @@
   box-shadow: none;
 }
 .hy-shell[data-side='folded'] :is(.hy-row, .hy-key--rail) {
-  width: 40px;
+  width: 44px;
   padding: 0;
   justify-content: center;
 }
@@ -415,8 +411,8 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: var(--gl-key-radius);
   color: var(--gl-rail-muted);
   text-decoration: none;
@@ -435,12 +431,12 @@
   box-shadow: 0 0 0 2px var(--gl-ring);
 }
 .hy-tab svg {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
 }
 .hy-tab img {
-  width: 20px !important;
-  height: 20px !important;
+  width: 22px !important;
+  height: 22px !important;
 }
 
 /* The editor's own tab list in the open sidebar: its foot (theme, status,
@@ -452,13 +448,13 @@
   display: none;
 }
 .hy-side-editor .depictio-chrome-tabs .mantine-Tabs-tab {
-  min-height: 38px;
+  min-height: 44px;
   border-radius: var(--gl-key-radius);
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 550;
 }
 .hy-side-editor .dc-sidebar-heading {
-  font-size: 10.5px !important;
+  font-size: 11.5px !important;
   font-weight: 700 !important;
   letter-spacing: 0.09em;
   color: var(--gl-faint) !important;
@@ -641,7 +637,7 @@
 
 /* The tab list: the Tabs drawer and the phone sheet. */
 .hy-eyebrow {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
@@ -663,18 +659,18 @@
   border-top: 1px solid var(--gl-line-soft);
 }
 .hy-tablist-group {
-  padding: 4px 10px 6px;
+  padding: 4px 12px 6px;
 }
 .hy-tablist-item {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 38px;
-  padding: 0 10px;
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px;
   border-radius: var(--gl-key-radius);
   color: var(--gl-fg);
-  font-size: 13.5px;
+  font-size: 15px;
   font-weight: 550;
   text-decoration: none;
   outline: none;
@@ -689,13 +685,13 @@
 .hy-tablist-icon {
   display: grid;
   place-items: center;
-  width: 20px;
+  width: 22px;
   flex: none;
 }
 .hy-tablist-icon svg,
 .hy-tablist-icon img {
-  width: 18px !important;
-  height: 18px !important;
+  width: 20px !important;
+  height: 20px !important;
 }
 .hy-tablist-label {
   min-width: 0;
@@ -751,9 +747,16 @@
 }
 /* The dashboard body is a flex child with a zero basis: its tiles overflowed
  * it, so the reserve above sat under the first screen instead of after the
- * last row. Growing it to its content puts the reserve at the very end. */
+ * last row. Sizing it from its content, and never shrinking it, puts the
+ * reserve at the very end. Only basis and shrink are set: the grow factor is
+ * the page's own (the body takes the leftover height, the tab intro and the
+ * bottom-pinned sections do not). A blanket `flex: 1 0 auto` here gave every
+ * child an equal share of the free height, so once "Collapse all" shortened
+ * the content the sections drifted down the canvas instead of staying packed
+ * under the intro. */
 .hy-stage > [data-testid='dashboard-content'] > * {
-  flex: 1 0 auto !important;
+  flex-basis: auto !important;
+  flex-shrink: 0 !important;
 }
 /* A `placement: top` strip (the Timeline) heads the canvas, full width of the
  * reading column; the canvas scrolls under it, the dock stays at the foot. */
@@ -1031,6 +1034,7 @@
   border-radius: 0;
 }
 .hy-top--compact .hy-top-brand {
+  height: 44px;
   padding: 0 4px;
 }
 .hy-top--compact .hy-top-rule {
@@ -1169,38 +1173,41 @@
   gap: 10px;
 }
 .hy-shell[data-density='compact'] .hy-top .hy-top-tab {
-  font-size: 15.5px;
+  font-size: 18px;
 }
 .hy-shell[data-density='compact'] .hy-top .hy-top-dash {
-  font-size: 13px;
+  font-size: 14.5px;
+}
+.hy-shell[data-density='compact'] .hy-top-brand {
+  height: 44px;
 }
 .hy-shell[data-density='compact'] .hy-top-icon {
-  width: 26px;
-  height: 26px;
-}
-.hy-shell[data-density='compact'] .hy-key--top {
-  width: 34px;
-  height: 34px;
-}
-.hy-shell[data-density='compact'] .hy-top .hy-avatar {
   width: 30px;
   height: 30px;
+}
+.hy-shell[data-density='compact'] .hy-key--top {
+  width: 38px;
+  height: 38px;
+}
+.hy-shell[data-density='compact'] .hy-top .hy-avatar {
+  width: 34px;
+  height: 34px;
 }
 .hy-shell[data-density='compact'] .hy-side {
   padding-top: 10px;
 }
 .hy-shell[data-density='compact'] :is(.hy-row, .hy-side .hy-key--rail) {
-  height: 34px;
-  font-size: 13px;
-  gap: 10px;
+  height: 38px;
+  font-size: 14px;
+  gap: 12px;
 }
 .hy-shell[data-density='compact'] .hy-side .hy-tablist-item {
-  min-height: 34px;
-  font-size: 13px;
+  min-height: 38px;
+  font-size: 14px;
 }
 .hy-shell[data-density='compact'] .hy-tab {
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
 }
 .hy-shell[data-density='compact'] .hy-dock {
   padding: 4px;

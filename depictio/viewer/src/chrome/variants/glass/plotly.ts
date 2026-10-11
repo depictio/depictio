@@ -24,7 +24,7 @@ const GLASS_HUES = ['teal', 'orange', 'grape', 'cyan', 'pink', 'lime', 'indigo',
  *
  * - One family, the app's Inter, in three steps: titles in the text colour,
  *   axis titles dimmed, tick labels faint. Sizes stay the figure's own.
- * - Transparent paper and plot: the tile's frosted surface shows through.
+ * - Transparent paper and plot: the tile's paper surface shows through.
  * - A whisper of horizontal grid only; zero lines as light as a rule, no
  *   axis lines boxing the plot, no ticks.
  * - The hover label is a small card of the tile's surface with a hairline rim.

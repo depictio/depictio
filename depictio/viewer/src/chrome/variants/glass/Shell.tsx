@@ -55,8 +55,8 @@ import './layout.css';
 
 /** The sidebar, open (names) and folded (the icon rail), and the top bar's
  *  height. Both float off the page edge. */
-const SIDE_W = { open: 244, folded: 76 };
-const TOP_H = 66;
+const SIDE_W = { open: 268, folded: 76 };
+const TOP_H = 76;
 /** The reader's Compact page width also tightens the chrome around it
  *  (the open sidebar keeps its width: tab names must stay whole). */
 const DENSE = { top: 8, folded: 8 };
@@ -396,7 +396,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
     transition: reduce ? 'none' : 'grid-template-columns 280ms cubic-bezier(0.2, 0.8, 0.2, 1)',
   } as React.CSSProperties;
 
-  const ICON = 19;
+  const ICON = 20;
   const stroke = STROKE;
 
   return (
@@ -451,9 +451,9 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
                 onClick={toggleSide}
               >
                 {sideOpen ? (
-                  <PanelLeftClose size={18} strokeWidth={stroke} aria-hidden />
+                  <PanelLeftClose size={20} strokeWidth={stroke} aria-hidden />
                 ) : (
-                  <PanelLeftOpen size={18} strokeWidth={stroke} aria-hidden />
+                  <PanelLeftOpen size={20} strokeWidth={stroke} aria-hidden />
                 )}
               </button>
             </Tooltip>

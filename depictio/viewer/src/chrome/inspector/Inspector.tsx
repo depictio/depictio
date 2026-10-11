@@ -9,6 +9,7 @@ import { useNotesEditor } from '../../components/notes/useNotesEditor';
 import NotesEditorSurface, {
   NotesSaveStatusIndicator,
 } from '../../components/notes/NotesEditorSurface';
+import '../../components/notes/notesSurface.css';
 import { useUiStore } from '../../store/useUiStore';
 import type { InspectorTab } from '../../store/useUiStore';
 

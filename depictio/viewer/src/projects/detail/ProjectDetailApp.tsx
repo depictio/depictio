@@ -65,7 +65,7 @@ import { useFolderDropzone } from '../../hooks/useFolderDropzone';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { AppSidebar } from '../../chrome';
-import JoinsGraph from './JoinsGraph';
+// import JoinsGraph from './JoinsGraph'; // its render is hidden, see DataCollectionViewer
 import IngestionReportPanel from './IngestionReportPanel';
 import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
 import ProjectIngestionTrigger from './ProjectIngestionTrigger';
@@ -345,7 +345,7 @@ const ProjectDetailApp: React.FC = () => {
   // expand/collapse state survives the remount that a refresh() triggers —
   // every DC mutation bumps refreshKey → setLoading(true) swaps the section
   // for a <Loader/>, and section-local state would reset to collapsed.
-  const [dcManagerOpened, { toggle: toggleDcManager }] = useDisclosure(false);
+  const [dcManagerOpened, { toggle: toggleDcManager }] = useDisclosure(true);
 
   const { user, isPublicMode, loading: userLoading } = useCurrentUser();
   const projectId = readProjectIdFromPath();
@@ -486,19 +486,22 @@ const ProjectDetailApp: React.FC = () => {
         </Center>
       ) : !project ? null : (
         (() => {
+          // The workflows come first and scope everything below them, so the
+          // tabs sit under the panel rather than the panel inside a tab.
+          const workflowsPanel =
+            projectType === 'advanced' && workflows.length > 0 ? (
+              <WorkflowsPanel
+                workflows={workflows}
+                templateSource={parseTemplate(project)?.source.toLowerCase() || null}
+                selectedWorkflowId={selectedWorkflowId}
+                onSelect={(id) => {
+                  setSelectedWorkflowId(id);
+                  setSelectedDcId(null);
+                }}
+              />
+            ) : null;
           const overviewSections = (
             <Stack gap="lg">
-              {projectType === 'advanced' && workflows.length > 0 && (
-                <WorkflowsPanel
-                  workflows={workflows}
-                  templateSource={parseTemplate(project)?.source.toLowerCase() || null}
-                  selectedWorkflowId={selectedWorkflowId}
-                  onSelect={(id) => {
-                    setSelectedWorkflowId(id);
-                    setSelectedDcId(null);
-                  }}
-                />
-              )}
               <DataCollectionsManagerSection
                 projectType={projectType}
                 stats={stats}
@@ -552,18 +555,29 @@ const ProjectDetailApp: React.FC = () => {
           return (
             <Stack gap="lg">
               <ProjectHeader project={project} projectType={projectType} />
+              {workflowsPanel}
               {projectId ? (
-                <Tabs value={activeTab} onChange={setActiveTab} keepMounted={false}>
+                <Tabs
+                  value={activeTab}
+                  onChange={setActiveTab}
+                  keepMounted={false}
+                  variant="pills"
+                  className="dc-project-tabs"
+                >
                   <Tabs.List mb="md">
                     <Tabs.Tab
                       value="overview"
-                      leftSection={<Icon icon="mdi:table-cog" width={16} />}
+                      fz="md"
+                      px="lg"
+                      leftSection={<Icon icon="mdi:table-cog" width={18} />}
                     >
                       Data collections
                     </Tabs.Tab>
                     <Tabs.Tab
                       value="ingestion"
-                      leftSection={<Icon icon="mdi:clipboard-check-outline" width={16} />}
+                      fz="md"
+                      px="lg"
+                      leftSection={<Icon icon="mdi:clipboard-check-outline" width={18} />}
                     >
                       Ingestion
                     </Tabs.Tab>
@@ -3192,8 +3206,7 @@ const DataCollectionViewer: React.FC<{
 
         {isMultiQC && <MultiQCReportsCard dcId={dcId} />}
 
-        {/* Relationships graph — rendered under the per-DC metadata so the
-         *  selected collection's joins/links sit alongside its details. */}
+        {/* "Data Collection Relationships" graph: hidden until the feature is revisited.
         <JoinsGraph
           dataCollections={allDataCollections.map((d) => ({
             id: (d._id ?? d.id) as string,
@@ -3205,6 +3218,7 @@ const DataCollectionViewer: React.FC<{
           links={links}
           highlightDcId={dcId}
         />
+        */}
       </Stack>
     </Paper>
   );

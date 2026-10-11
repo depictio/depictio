@@ -22,6 +22,7 @@ import { Z_LAYERS } from 'depictio-react-core';
 import type { DashboardPermissions } from 'depictio-react-core';
 import { useNotesEditor } from './notes/useNotesEditor';
 import NotesEditorSurface, { NotesSaveStatusIndicator } from './notes/NotesEditorSurface';
+import './notes/notesSurface.css';
 
 interface NotesFooterProps {
   dashboardId: string;
