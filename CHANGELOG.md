@@ -3,6 +3,110 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.16.0
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.16.0</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.15.1 → 1.16.0 [ebfd728ae]
+* docs(compose): the commands say `depictio ingest`, as main's CLI does [d94748290]
+* fix(compose): read a recipe's raw reports one line per row, as it declares [296223e63]
+* fix(compose): a broad recipe glob only takes the files with its input columns [d7dc8cd71]
+* docs(design): screenshots of a composed dashboard [6e2dbc167]
+* feat(compose): style after the reference dashboards, one row of cards a section [b42273db4]
+* fix(compose): sections of a gray tab start on the colour cycle [286db4305]
+* feat(compose): icons, colours and multi-metric cards in composed dashboards [86371d4f4]
+* feat(compose): one Samples filter for every tab, sections per tool [8d774c298]
+* feat(compose): one collection per file shape, the sample read off the path [dcf3b8be7]
+* fix(compose): what real nf-core runs from the megatests turned up [bca95efcc]
+* test(e2e): expect the General Statistics table from the catalog's general render [5a25495b6]
+* docs(design): record what the composer does, its limits and how it was validated [f91966d4f]
+* feat(viewer): list the files a composed run left out, with the command that adds each [c69db6522]
+* feat(compose): build a dashboard from whatever the catalog recognises in a run [e337430d0]
+* feat(catalog): say where each output sits in a pipeline, and which cards are key metrics [00f81c4b1]
+* feat(ingest): --result-json, how an ingestion ended, for scripts [3512139ba]
+* fix(run-folder): follow main's v1.15 changes after the restack [85e14aa3f]
+* feat(run-folder): a bucket refused in the folder browser asks for its credentials there [1a871d953]
+* fix(run-folder): a DSL1 nf-core run is recognised, and the preview finds a recipe kept in a version folder [6bdf1f531]
+* feat(run-folder): every file the folder browser lists opens onto its first rows, and a collection line says where its files are [eab60d4f4]
+* feat(run-folder): a recognised folder is checked against its template, line by line, and every file found can be previewed [6fee7d57d]
+* feat(run-folder): the folder browser compares the run with its template and shows what the template finds [9a0f8d60d]
+* fix(run): a single-file collection is previewed against the data root when a bind moved the walk [e73c9130c]
+* fix(projects): a scan leader stops at the task's time limit; a follower starts once its scan is recorded [50efb0471]
+* fix(projects): the ingestion report probes a recipe input only below a local-data root [9a3f681bf]
+* fix(projects): a refresh under depictio local takes the guards of every local read [c7ddd3f3a]
+* fix(projects): one scan leader for every collection that registers runs; a sync rescan keeps the other runs' files [73ccb8eb2]
+* fix(projects): the ingestion report shows a recipe override outside the data root as stored [64b8cfad9]
+* fix(remote-data): a recipe source outside the data root is read as it is; dry-run previews the bound config [151d60b4e]
+* fix(viewer): run-folder flow review fixes [3b99b2c5a]
+* fix(projects): under depictio local, a refresh re-reads a local source only inside a policy root [b24f0039b]
+* refactor(viewer): run-folder flow split into smaller components [946f2a94f]
+* refactor(projects): one copy of the run-folder helpers shared by creation, browsing and refresh [995792d82]
+* refactor(viewer): shared error and empty states in the project settings panels [50027c189]
+* refactor(remote-data): one copy of the shared ingest and validation steps [d1b048417]
+* fix(projects): storage settings given at creation need an access key and its secret [712a5145f]
+* fix(viewer): the run-folder hints state the stricter run rule [f0e4ee59c]
+* fix(viewer): a refused private bucket says so in the run tab's own words [26c14c3db]
+* fix(viewer): run-folder flow polish: version cards, folded template settings, find-runs first [549b44279]
+* fix(projects): a refresh of a run-folder project gives the creation's verdicts [ba5d1f779]
+* fix(projects): run folders need real MultiQC output; noise folders hidden; skipped dependants decided from structure [6155726d3]
+* feat(viewer): private bucket section in the run-folder flow [ef07d9460]
+* feat(projects): private bucket credentials when creating a project from a run folder [3bf0bdd17]
+* feat(viewer): redesign the run-folder flow: pipeline and version picker, folder tree, grouped preview [4a0ac6ce7]
+* feat(projects): browse, inspect and search run folders, local and s3://; template catalog says what fits a run [71027f5db]
+* fix(ingest): MultiQC reports under an s3:// run folder; dependants of an absent optional collection are skipped [df9e5f3ac]
+* feat(projects): create a project from a folder on this computer under depictio local [546f1d0a7]
+* feat(run): detect the template from a local or s3:// run folder; local stack passes remote settings [5b32d899e]
+* fix(projects): run-folder reads go through the S3 target resolution [6d61ae38e]
+* feat(viewer): run-folder tab detects the template and browses local folders [db290a30a]
+* fix(run): one dry-run preview for a remote DATA_DIR, indexed files stay local [44776d9a0]
+* fix(run): follow main's DATA_DIR wording after the restack [b2cab7177]
+* feat(projects): create a project from an S3 run folder, with a preview and background ingestion [abc56d713]
+* feat(remote-data): resolve a project template against an s3:// prefix [7b4529239]
+* fix(remote-data): follow main's v1.15 changes after the restack [8fbdccdf3]
+* test(s3-access): the polars session-token test skips where polars cannot build a cloud read [1169b66b9]
+* test(backup): the comment-threads backup test also mocks the project storage collection [0488aebbe]
+* fix(cli): bind, manifest and remote-read review fixes [ad9085b2a]
+* fix(projects): API review fixes for manifests, template export and storage [b3b58d7e7]
+* fix(viewer): project settings review fixes [0442f1b26]
+* fix(projects): the server never reads a local path a user stored on a project [481a58d0f]
+* test(remote-data): server-context tests pin DEPICTIO_CONTEXT [8089fce07]
+* fix(cli): --bind sits in the project help panel [d233ce253]
+* fix(remote-data): a project's keys for its own bucket come before the public list [40e23999f]
+* fix(remote-data): one S3 target resolution and one boto3 client for remote reads [e43a4764c]
+* fix(viewer): manifest tab polish and plain punctuation in the stack's text [a2629a1b6]
+* feat(viewer): project settings modal on the shared settings shell [b5d4d86e7]
+* docs(diagrams): redraw the data binding diagrams with real glyphs [e817dcb0c]
+* fix(cli): template export takes --server, CLI text follows depictio ingest [29b87e8f6]
+* fix(remote-data): follow main's v1.12-v1.14 changes after the restack [2b3629148]
+* feat(remote): read allowlisted public buckets unsigned, refresh any readable source [64fce8500]
+* feat(viewer): manifest refresh panel and post-create review modal [21f633eb7]
+* test(remote-data): coverage for template export, scan wrappers, create_from_url, and the manifest e2e in CI [86d85ab63]
+* feat(remote-data): read project data from https:// and s3://, and bind it per data collection [9456fe4bf]
+* Bump version: 1.15.1-b3 → 1.15.1 [6eabb59df]
+* feat(devcontainer): prebuilt image for the Try Depictio codespace [a95ffd5a0]
+* feat(devcontainer): warm the Try Depictio codespace at creation [10a4acc33]
+* feat(devcontainer): light Try Depictio codespace on the depictio[local] package [b8f2ef170]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.14.1
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
