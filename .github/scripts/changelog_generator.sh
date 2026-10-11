@@ -10,7 +10,7 @@ CURRENT_REF=${2:-HEAD}
 
 # If no previous tag provided, try to find the last release tag (excluding current)
 if [ -z "$PREVIOUS_TAG" ] && [ "$CURRENT_REF" != "HEAD" ]; then
-  PREVIOUS_TAG=$(git tag -l --sort=-version:refname | grep -v "^${CURRENT_REF}$" | head -1)
+  PREVIOUS_TAG=$(git describe --tags --abbrev=0 --match 'v[0-9]*' "${CURRENT_REF}^" 2>/dev/null || echo "")
 fi
 
 # Final fallback to git describe if still no tag found
