@@ -3,6 +3,33 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.15.1-b2
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.15.1-b2</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.15.1-b1 → 1.15.1-b2 [8fead8f2e]
+* fix(startup): under a MongoDB wipe, no worker starts Beanie before the database is emptied ([#1177](https://github.com/depictio/depictio/pull/1177)) [756ff7912]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.15.1-b1
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
