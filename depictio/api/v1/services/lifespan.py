@@ -5,6 +5,7 @@ Coordinates startup and shutdown tasks including initialization,
 background processing, and cleanup.
 """
 
+import asyncio
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -326,6 +327,29 @@ def start_installation_telemetry() -> None:
         logger.warning(f"Worker {WORKER_ID}: Telemetry startup failed: {exc}")
 
 
+def start_version_check() -> asyncio.Task | None:
+    """Start the release-check loop. Never fails boot.
+
+    Like telemetry it ignores ``should_initialize`` and runs in every worker, with
+    a MongoDB claim deciding which one asks GitHub (see
+    ``services/version_check.py``). Returns the task so the lifespan can keep a
+    reference (the event loop holds tasks weakly) and cancel it on shutdown.
+
+    Not started at all when the operator forced the check off, which is also how
+    the test suite keeps real network checks out (see ``tests/conftest.py``). With
+    the variable unset the loop starts and re-reads the admin's choice each tick.
+    """
+    if settings.version_check.enabled is False:
+        return None
+    try:
+        from depictio.api.v1.services.version_check import periodic_version_check
+
+        return asyncio.create_task(periodic_version_check())
+    except Exception as exc:
+        logger.warning(f"Worker {WORKER_ID}: Version check startup failed: {exc}")
+        return None
+
+
 def start_multiqc_prewarm(should_initialize: bool) -> None:
     """Fire-and-forget MultiQC prewarm for every dashboard at startup.
 
@@ -425,10 +449,13 @@ async def lifespan(_app: FastAPI):
     start_comment_indexes(should_initialize)
     start_multiqc_prewarm(should_initialize)
     start_installation_telemetry()
+    version_check_task = start_version_check()
 
     yield
 
     # Shutdown
+    if version_check_task:
+        version_check_task.cancel()
     await stop_event_services()
     stop_background_services(background_task, should_initialize)
     await mongo_client.close()

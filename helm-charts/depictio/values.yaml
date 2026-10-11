@@ -351,6 +351,14 @@ backend:
     # Set true to log the payload instead of sending it.
     DEPICTIO_TELEMETRY_DEBUG: "false"
 
+    # Release check: admins are told when a newer Depictio release exists (outbound
+    # GET to the GitHub Releases API, nothing about this installation is sent).
+    # On by default; admins can toggle it from /admin. Uncomment to override.
+    # Setting ENABLED (true or false) forces it and locks the /admin toggle.
+    # DEPICTIO_VERSION_CHECK_ENABLED: "false"
+    # DEPICTIO_VERSION_CHECK_INTERVAL_HOURS: "6"
+    # DEPICTIO_VERSION_CHECK_REPOSITORY: "depictio/depictio"
+
     # Dashboard feedback link, served to the SPA through /utils/public-config.
     # Both halves are required: the flag alone renders nothing, and so does a URL
     # without it. The URL is a template whose {dashboard}, {dashboard_id}, {tab}

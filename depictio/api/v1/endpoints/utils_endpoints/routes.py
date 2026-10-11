@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import (
     APIRouter,
@@ -12,6 +12,7 @@ from fastapi import (
     Response,
     UploadFile,
 )
+from pydantic import BaseModel
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
@@ -23,7 +24,11 @@ from depictio.api.v1.db import (
     runs_collection,
     workflows_collection,
 )
-from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
+from depictio.api.v1.endpoints.user_endpoints.core_functions import _async_fetch_user_from_token
+from depictio.api.v1.endpoints.user_endpoints.routes import (
+    get_current_user,
+    oauth2_scheme_optional,
+)
 from depictio.api.v1.endpoints.utils_endpoints.core_functions import (
     cleanup_orphaned_s3_files,
 )
@@ -36,7 +41,7 @@ from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
 from depictio.api.v1.s3 import s3_client
 from depictio.models.models.branding import BrandTheme, InstanceLook, resolve_brand_theme
 from depictio.models.models.users import UserBeanie
-from depictio.version import get_version
+from depictio.version import get_api_version, get_version
 
 # Define the router
 utils_endpoint_router = APIRouter()
@@ -120,6 +125,46 @@ async def status():
         "status": "online",
         "version": get_version(),
         "viewer_url": settings.viewer.external_url,
+    }
+
+
+@utils_endpoint_router.get("/server-info")
+async def server_info(
+    token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
+):
+    """Version and links for the account menu, plus the release check for admins.
+
+    Never 401s: the menu is rendered for anonymous and single-user visitors too.
+    The user is resolved from an optional bearer token exactly as
+    ``/auth/me/optional`` does (including its single-user-mode admin), and only
+    to decide whether to include ``version_check``. That block says whether a
+    newer release exists, which is operator information, so everyone else gets
+    ``null``.
+    """
+    from depictio.api.v1.services.version_check import public_block
+
+    user = None
+    if token:
+        try:
+            user = await _async_fetch_user_from_token(token)
+        except Exception as exc:  # noqa: BLE001 - any auth failure means anonymous here
+            logger.debug(f"/server-info: token resolution failed ({exc}); treating as anonymous")
+    if user is None and settings.auth.is_single_user_mode:
+        # Same fallback as `/auth/me/optional`: with no login in single-user mode
+        # (`depictio local up`) the visitor acts as the admin everywhere else, so
+        # they are the one who should hear about an update.
+        user = await UserBeanie.find_one({"is_admin": True, "is_anonymous": {"$ne": True}})
+
+    repository_url = f"https://github.com/{settings.version_check.repository}"
+    version = get_version()
+    return {
+        "status": "online",
+        "version": version,
+        "api_version": get_api_version(),
+        "repository_url": repository_url,
+        "release_notes_url": f"{repository_url}/releases/tag/v{version}",
+        "docs_url": "https://depictio.github.io/depictio-docs/",
+        "version_check": public_block() if getattr(user, "is_admin", False) else None,
     }
 
 
@@ -1099,3 +1144,64 @@ async def infrastructure_diagnostics(current_user=Depends(get_current_user)):
     except Exception as e:
         logger.error(f"❌ Infrastructure diagnostics failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Diagnostics failed: {str(e)}")
+
+
+# ── Release check (admin) ─────────────────────────────────────────────────────
+# Whether to look for newer Depictio releases, and what the last look found.
+# DEPICTIO_VERSION_CHECK_ENABLED, when set, wins and locks the toggle (409).
+# See services/version_check.py.
+
+
+class VersionCheckToggle(BaseModel):
+    enabled: bool
+
+
+_VERSION_CHECK_LOCKED = "Version check is set by DEPICTIO_VERSION_CHECK_ENABLED."
+
+
+@utils_endpoint_router.get("/version-check")
+async def get_version_check(current_user=Depends(get_current_user)):
+    """Release-check state for the admin panel."""
+    _require_admin(current_user)
+    from depictio.api.v1.services.version_check import admin_view
+
+    return admin_view()
+
+
+@utils_endpoint_router.put("/version-check")
+async def put_version_check(body: VersionCheckToggle, current_user=Depends(get_current_user)):
+    """Switch the release check on or off at runtime. 409 when the env sets it."""
+    _require_admin(current_user)
+    from depictio.api.v1.services.version_check import admin_view, locked_by_env, set_override
+
+    if locked_by_env():
+        raise HTTPException(status_code=409, detail=_VERSION_CHECK_LOCKED)
+    set_override(body.enabled)
+    logger.info(
+        f"Version check {'enabled' if body.enabled else 'disabled'} "
+        f"by {getattr(current_user, 'email', '?')}"
+    )
+    return admin_view()
+
+
+@utils_endpoint_router.delete("/version-check")
+async def delete_version_check(current_user=Depends(get_current_user)):
+    """Drop the admin's choice so the default (on) applies again. 409 when env-locked."""
+    _require_admin(current_user)
+    from depictio.api.v1.services.version_check import admin_view, locked_by_env, set_override
+
+    if locked_by_env():
+        raise HTTPException(status_code=409, detail=_VERSION_CHECK_LOCKED)
+    set_override(None)
+    return admin_view()
+
+
+@utils_endpoint_router.post("/version-check/run")
+async def run_version_check_now(current_user=Depends(get_current_user)):
+    """Check GitHub now ("Check now"), ignoring the interval. 409 when disabled."""
+    _require_admin(current_user)
+    from depictio.api.v1.services.version_check import is_enabled, run_version_check
+
+    if not is_enabled():
+        raise HTTPException(status_code=409, detail="Version check is disabled.")
+    return await run_version_check(force=True)

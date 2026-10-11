@@ -159,6 +159,9 @@ services:
         # the numbers useless. The shipped docker-compose.yaml has it on.
         DEPICTIO_TELEMETRY_ENABLED: "${DEPICTIO_TELEMETRY_ENABLED:-false}"
         DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "${DEPICTIO_TELEMETRY_DEPLOYMENT_KIND:-docker-compose-dev}"
+        # Release check for admins. No default on purpose: unset (empty) leaves the
+        # /admin toggle usable, any value forces it and locks the toggle.
+        DEPICTIO_VERSION_CHECK_ENABLED: "${DEPICTIO_VERSION_CHECK_ENABLED:-}"
         # Which view /dashboards opens in for someone who never picked one, and
         # the geometry of the thumbnails it shows. See .env.example.
         DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: "${DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW:-table}"

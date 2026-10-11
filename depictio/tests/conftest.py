@@ -25,6 +25,10 @@ _PYTEST_DEFAULTS = {
     "DEPICTIO_BOOTSTRAP_ADMIN_PASSWORD": "pytest_admin_password_aaaaaaaaaa",
     "DEPICTIO_BOOTSTRAP_SEED_TEST_USER": "true",
     "DEPICTIO_BOOTSTRAP_TEST_USER_PASSWORD": "test_pwd",
+    # Forced off so a test that boots the app lifespan never starts the release
+    # check, which would call api.github.com. Tests of the check itself patch
+    # `settings.version_check.enabled`.
+    "DEPICTIO_VERSION_CHECK_ENABLED": "false",
 }
 
 for _k, _v in _PYTEST_DEFAULTS.items():

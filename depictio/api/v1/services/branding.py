@@ -67,7 +67,10 @@ def _get_client() -> pymongo.MongoClient:
     return _client
 
 
-def _get_collection() -> Any:
+def get_instance_settings_collection() -> Any:
+    """The `instance_settings` collection, shared by every singleton settings
+    document (branding, the release-check state), so they reuse one short-timeout
+    client instead of each opening their own."""
     global instance_settings_collection
     if instance_settings_collection is None:
         instance_settings_collection = _get_client()[settings.mongodb.db_name][
@@ -106,7 +109,7 @@ def _theme_from_doc(doc: dict[str, Any]) -> BrandTheme:
 
 def get_brand_theme_overrides() -> BrandTheme:
     """The raw admin overrides (an empty theme when none are saved)."""
-    return _theme_from_doc(_get_collection().find_one({"_id": _DOC_ID}) or {})
+    return _theme_from_doc(get_instance_settings_collection().find_one({"_id": _DOC_ID}) or {})
 
 
 def set_brand_theme_overrides(theme: Optional[BrandTheme]) -> BrandTheme:
@@ -124,9 +127,9 @@ def set_brand_theme_overrides(theme: Optional[BrandTheme]) -> BrandTheme:
     if default_chrome:
         doc["default_chrome"] = default_chrome
     if doc:
-        _get_collection().replace_one({"_id": _DOC_ID}, doc, upsert=True)
+        get_instance_settings_collection().replace_one({"_id": _DOC_ID}, doc, upsert=True)
     else:
-        _get_collection().delete_one({"_id": _DOC_ID})
+        get_instance_settings_collection().delete_one({"_id": _DOC_ID})
     invalidate_branding_cache()
     return get_effective_brand_theme(use_cache=False)
 
@@ -138,7 +141,7 @@ def get_default_chrome() -> Optional[str]:
     default, and a stored id the viewer no longer knows is ignored client-side.
     """
     try:
-        doc = _get_collection().find_one({"_id": _DOC_ID}) or {}
+        doc = get_instance_settings_collection().find_one({"_id": _DOC_ID}) or {}
     except Exception as exc:
         logger.warning(f"Default look unavailable: {exc}")
         return None
@@ -154,14 +157,16 @@ def set_default_chrome(chrome: Optional[str]) -> None:
     ``set_brand_theme_overrides``.
     """
     if chrome:
-        _get_collection().update_one(
+        get_instance_settings_collection().update_one(
             {"_id": _DOC_ID}, {"$set": {"default_chrome": chrome}}, upsert=True
         )
         return
-    _get_collection().update_one({"_id": _DOC_ID}, {"$unset": {"default_chrome": ""}})
-    doc = _get_collection().find_one({"_id": _DOC_ID})
+    get_instance_settings_collection().update_one(
+        {"_id": _DOC_ID}, {"$unset": {"default_chrome": ""}}
+    )
+    doc = get_instance_settings_collection().find_one({"_id": _DOC_ID})
     if doc is not None and set(doc) <= {"_id"}:
-        _get_collection().delete_one({"_id": _DOC_ID})
+        get_instance_settings_collection().delete_one({"_id": _DOC_ID})
 
 
 def patch_brand_theme_overrides(patch: dict[str, Any]) -> BrandTheme:
