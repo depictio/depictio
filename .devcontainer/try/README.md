@@ -1,17 +1,8 @@
 # Try Depictio in Codespaces
 
 This codespace runs the published `depictio[local]` package, without Docker.
-When the codespace was created, it ran:
-
-```bash
-uv tool install "depictio[local]"
-depictio local up --no-open --port 8058
-depictio local down
-```
-
-The first `local up` downloads MongoDB, Redis and SeaweedFS from conda-forge and
-loads the Iris and Penguins examples. That takes about two minutes, unless the
-codespace came from a prebuild, where it was already done.
+Its image already holds the package, MongoDB, Redis and SeaweedFS, and the Iris
+and Penguins examples. It is rebuilt for each stable release.
 
 Each time the codespace starts, it runs:
 
