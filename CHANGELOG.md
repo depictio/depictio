@@ -3,6 +3,35 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.15.1
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.15.1</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.15.1-b3 → 1.15.1 [6eabb59df]
+* feat(devcontainer): prebuilt image for the Try Depictio codespace [a95ffd5a0]
+* feat(devcontainer): warm the Try Depictio codespace at creation [10a4acc33]
+* feat(devcontainer): light Try Depictio codespace on the depictio[local] package [b8f2ef170]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.15.1-b3
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
