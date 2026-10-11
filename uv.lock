@@ -896,7 +896,7 @@ wheels = [
 
 [[package]]
 name = "depictio"
-version = "1.15.1b3"
+version = "1.15.1"
 source = { editable = "." }
 dependencies = [
     { name = "beanie" },
