@@ -1,0 +1,33 @@
+{
+  // "Try Depictio" codespace: the published depictio[local] package, run without
+  // Docker. The image (Dockerfile next to this file) already holds the package,
+  // MongoDB, Redis and SeaweedFS, and the loaded examples; it is rebuilt for each
+  // stable release by .github/workflows/build-try-image.yaml. The contributor
+  // environment (full Compose stack, from the sources) is ../devcontainer.json.
+  //
+  // Open with:
+  // https://codespaces.new/depictio/depictio?devcontainer_path=.devcontainer/try/devcontainer.json&quickstart=1
+  "name": "Try Depictio",
+  "image": "ghcr.io/depictio/depictio-try:latest",
+  // uv tool puts the depictio command in ~/.local/bin.
+  "remoteEnv": {
+    "PATH": "/home/vscode/.local/bin:${containerEnv:PATH}"
+  },
+  // On every start, the first one included: the services do not survive a stop,
+  // the data in ~/.depictio/local does.
+  "postStartCommand": "$HOME/.local/bin/depictio local up --no-open --port 8058",
+  // The API serves the viewer on the same port. The other services listen on
+  // 127.0.0.1 for the API only.
+  "portsAttributes": {
+    "8058": { "label": "Depictio", "onAutoForward": "openBrowser" }
+  },
+  "otherPortsAttributes": { "onAutoForward": "silent" },
+  "customizations": {
+    "codespaces": {
+      "openFiles": [".devcontainer/try/README.md"]
+    },
+    "vscode": {
+      "extensions": ["ms-python.python"]
+    }
+  }
+}
