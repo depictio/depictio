@@ -136,10 +136,15 @@ backend:
       cpu: "2"
 
   env:
-    # Phase 1: private, login-required. Nobody but the bootstrap admin can
-    # sign in yet — see the rollout plan above for the phase 2 flip.
+    # Phase 1: private, login-required, Google sign-in only. Registration and
+    # email + password login are both closed: a Google account only gets in
+    # once an admin has created it, so an unknown address is refused (403).
+    # The password switch is ignored unless Google OAuth is enabled, so a
+    # missing client id cannot lock everyone out.
     DEPICTIO_AUTH_PUBLIC_MODE: "false"
     DEPICTIO_AUTH_REGISTRATION_DISABLED: "true"
+    DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED: "true"
+    DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: "true"
 
     # Anonymous user configuration (inert while PUBLIC_MODE is false; kept so
     # phase 2 only needs the one PUBLIC_MODE flip, no other env additions)
@@ -151,6 +156,13 @@ backend:
 
     # Explicit API URL to match ingress host (overrides computed URL)
     DEPICTIO_FASTAPI_PUBLIC_URL: "https://api.showcases.depictio.embl.org"
+
+# Read from top-level .Values.auth, NOT backend.env (templates/configmaps.yaml).
+# The client id/secret come from values-embl-secrets.yaml (same OAuth client as
+# the other EMBL environments); only the redirect URI is host-specific, and it
+# must be registered on that client in the Google Cloud Console.
+auth:
+  DEPICTIO_AUTH_GOOGLE_OAUTH_REDIRECT_URI: "https://showcases.depictio.embl.org/auth/google/callback"
 
 mongo:
   useOperator: true     # Use Percona PSMDB Operator for HA replica set
