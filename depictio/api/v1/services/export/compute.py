@@ -30,6 +30,43 @@ COMPUTE_TASKS: dict[str, str] = {
 }
 
 
+def needs_compute(kind: str | None, config: dict) -> bool:
+    """Whether the renderer of ``kind`` reads a compute result rather than tidy rows.
+
+    An embedding computes only in live mode (``compute_method`` set); a
+    precomputed one reads its coordinates as rows like any other kind.
+    """
+    if kind == "embedding":
+        return bool(config.get("compute_method"))
+    return kind in COMPUTE_TASKS
+
+
+def _embedding_payload(config: dict, base: dict) -> dict:
+    """The payload EmbeddingRenderer dispatches, at the config's own settings.
+
+    The renderer builds it from the config plus slider state; an export has no
+    sliders, so the config's values (the renderer's starting point) stand in.
+    """
+    method = config.get("compute_method")
+    params: dict[str, Any] = {"n_components": 2}
+    if method == "umap":
+        params["n_neighbors"] = config.get("umap_n_neighbors", 15)
+        params["min_dist"] = config.get("umap_min_dist", 0.1)
+    elif method == "tsne":
+        params["perplexity"] = config.get("tsne_perplexity", 30.0)
+        params["n_iter"] = config.get("tsne_n_iter", 1000)
+    elif method == "pcoa":
+        params["distance"] = config.get("pcoa_distance") or "bray_curtis"
+    extras = [c for c in (config.get("cluster_col"), config.get("color_col")) if c]
+    return {
+        **base,
+        "feature_id_col": config.get("sample_id_col") or "sample_id",
+        "method": method,
+        "params": params,
+        "extra_cols": extras,
+    }
+
+
 def run_compute(
     kind: str,
     component: dict,
@@ -51,13 +88,26 @@ def run_compute(
     if task_name is None:
         raise HTTPException(status_code=422, detail=f"{kind} has no inline compute.")
 
-    payload: dict[str, Any] = {
-        **(component.get("config") or {}),
+    config = component.get("config") or {}
+    base: dict[str, Any] = {
         "wf_id": str(component.get("wf_id")),
         "dc_id": str(component.get("dc_id")),
         "filter_metadata": list(filter_metadata or []),
     }
+    payload = _embedding_payload(config, base) if kind == "embedding" else {**config, **base}
     _apply_link_filters_to_payload(payload, access_token, kind)
     if kind == "complex_heatmap":
         _resolve_annotation_join(payload)
     return getattr(celery_tasks, task_name).run(payload)
+
+
+def embedding_rows(result: dict, config: dict) -> dict[str, list[Any]]:
+    """A live embedding's compute result as the rows its renderer draws."""
+    rows: dict[str, list[Any]] = {
+        config.get("sample_id_col") or "sample_id": list(result.get("sample_ids") or []),
+        config.get("dim_1_col") or "dim_1": list(result.get("dim_1") or []),
+        config.get("dim_2_col") or "dim_2": list(result.get("dim_2") or []),
+    }
+    for column, values in (result.get("extras") or {}).items():
+        rows[column] = list(values or [])
+    return rows

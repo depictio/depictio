@@ -177,3 +177,51 @@ class TestExportDrawsThePlan:
         spec, kwargs = self._spec(component, rows)
         assert (kwargs["wf_id"], kwargs["dc_id"]) == ("w2", "d2")
         assert spec["data"], "the MA builder drew from the MA table's columns"
+
+
+class TestLiveEmbedding:
+    def test_payload_is_the_one_the_renderer_dispatches(self) -> None:
+        from depictio.api.v1.services.export.compute import _embedding_payload
+
+        payload = _embedding_payload(
+            {
+                "compute_method": "umap",
+                "umap_n_neighbors": 12,
+                "umap_min_dist": 0.3,
+                "sample_id_col": "sample",
+                "cluster_col": "cluster",
+                "color_col": None,
+            },
+            {"wf_id": "w", "dc_id": "d", "filter_metadata": []},
+        )
+        assert payload["method"] == "umap"
+        assert payload["params"] == {"n_components": 2, "n_neighbors": 12, "min_dist": 0.3}
+        assert payload["feature_id_col"] == "sample"
+        assert payload["extra_cols"] == ["cluster"]
+
+    def test_json_draws_from_the_computed_coordinates(self) -> None:
+        from unittest.mock import patch
+
+        from depictio.api.v1.services.export.plotly_export import _python_advanced_viz_spec
+
+        component = _av(
+            "embedding",
+            compute_method="pca",
+            sample_id_col="sample_id",
+            dim_1_col="dim_1",
+            dim_2_col="dim_2",
+            cluster_col="cluster",
+        )
+        result = {
+            "sample_ids": ["a", "b", "c"],
+            "dim_1": [0.1, 0.2, 0.3],
+            "dim_2": [1.0, 0.5, 0.2],
+            "extras": {"cluster": ["x", "x", "y"]},
+        }
+        with (
+            patch("depictio.api.v1.services.export.compute.run_compute", return_value=result),
+            patch("depictio.api.v1.services.advanced_viz.data.load_tidy_columns") as load,
+        ):
+            spec = _python_advanced_viz_spec(component, [], object(), None, None)
+        assert load.call_count == 0, "a live embedding has no coordinate columns to read"
+        assert spec["data"], "drawn from the compute result"
