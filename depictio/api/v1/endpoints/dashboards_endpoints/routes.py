@@ -5262,9 +5262,10 @@ def _resolve_multiqc_sample_filter(
         ``MULTIQC_SAMPLE_FILTER_COLUMNS``, matching the frontend allowlist)
         -> the selected values, expanded to variants;
       - filters on a linked metadata DC -> the metadata DC is loaded with that
-        DC's own filters applied, the link's ``source_column`` values are
-        extracted and expanded to variants. Every metadata DC with an enabled
-        link contributes, not just the first one seen.
+        DC's own filters applied, the ``source_column`` values of its enabled
+        links are pooled and expanded to variants. Every metadata DC with an
+        enabled link contributes, not just the first one seen, and a DC linked
+        twice (two join columns) contributes both.
 
     The result is the INTERSECTION of all constraint sets — each active filter
     can only narrow the sample set further. (The previous implementation
@@ -5385,7 +5386,10 @@ def _resolve_multiqc_sample_filter(
         # `sample_name` produced surprising filter behavior when the user
         # hadn't declared the relationship. Skip that DC with a clear log line
         # so the user can see why filtering didn't apply and create a link.
-        links_by_source: dict[str, str] = {}
+        # A source collection can carry several links to the MultiQC one (the
+        # same table joined on its library id and on its sample name): every
+        # source_column counts, and the ids they yield are pooled.
+        links_by_source: dict[str, list[str]] = {}
         try:
             project_id = dashboard_data.get("project_id")
             if project_id:
@@ -5398,15 +5402,15 @@ def _resolve_multiqc_sample_filter(
                         and lk.get("enabled", True)
                         and lk.get("source_column")
                     ):
-                        links_by_source.setdefault(
-                            str(lk.get("source_dc_id")), str(lk.get("source_column"))
-                        )
+                        columns = links_by_source.setdefault(str(lk.get("source_dc_id")), [])
+                        if str(lk.get("source_column")) not in columns:
+                            columns.append(str(lk.get("source_column")))
         except Exception as e:
             logger.debug(f"_resolve_multiqc_sample_filter: project link lookup failed: {e}")
 
         for metadata_dc_id, entry in indirect_by_dc.items():
-            link_source_column = links_by_source.get(str(metadata_dc_id))
-            if not link_source_column:
+            link_source_columns = links_by_source.get(str(metadata_dc_id))
+            if not link_source_columns:
                 logger.info(
                     f"_resolve_multiqc_sample_filter: no enabled DCLink from "
                     f"{metadata_dc_id} → {multiqc_dc_id_str}; cross-DC filter ignored. "
@@ -5445,14 +5449,23 @@ def _resolve_multiqc_sample_filter(
                 )
                 if meta_df is None:
                     continue
-                if link_source_column not in meta_df.columns:
+                present = [c for c in link_source_columns if c in meta_df.columns]
+                for missing in (c for c in link_source_columns if c not in meta_df.columns):
                     logger.warning(
                         f"_resolve_multiqc_sample_filter: link.source_column "
-                        f"{link_source_column!r} not in metadata DC {metadata_dc_id}; "
+                        f"{missing!r} not in metadata DC {metadata_dc_id}; "
                         f"available columns={meta_df.columns}"
                     )
+                if not present:
                     continue
-                canonical = [str(s) for s in meta_df[link_source_column].unique().to_list()]
+                canonical = list(
+                    dict.fromkeys(
+                        str(s)
+                        for column in present
+                        for s in meta_df[column].unique().to_list()
+                        if s is not None
+                    )
+                )
                 # Always run the canonical→variants expansion. When no
                 # mappings are available, this returns canonical unchanged.
                 expanded = expand_canonical_samples_to_variants(
@@ -5460,7 +5473,7 @@ def _resolve_multiqc_sample_filter(
                 )
                 logger.debug(
                     f"_resolve_multiqc_sample_filter: dc={metadata_dc_id} "
-                    f"join_col={link_source_column!r} canonical={len(canonical)} "
+                    f"join_cols={present!r} canonical={len(canonical)} "
                     f"expanded={len(expanded)} mappings_keys={len(sample_mappings)}"
                 )
                 # An empty set here is a real answer: the metadata filters

@@ -66,6 +66,13 @@ def canonicalize_to_hub(name: str, hub_ids: Iterable[str]) -> str | None:
        ``-`` or space). When several hub ids qualify they are necessarily
        nested (``S1`` and ``S1_2`` for ``S1_2.md``) and the longest wins, the
        only reading that does not merge two samples.
+    4. a hub id sits inside the name as a whole token, bounded by a boundary
+       character or the string's end on both sides (``FLYE-CAPES_S11`` and
+       ``FLYE-MaxBin2-CAPES_S11.003.fa`` belong to ``CAPES_S11``; mag writes
+       ``<assembler>-<binner>-<sample>.<bin>``). Hits nested in a longer hit
+       collapse to the longest (``S11`` inside ``CAPES_S11``). Two unrelated
+       hub ids in one name are ambiguous, so the name stays unattached rather
+       than guessed.
     """
     hubs = hub_ids if isinstance(hub_ids, (set, frozenset)) else set(hub_ids)
     if not hubs:
@@ -87,7 +94,32 @@ def canonicalize_to_hub(name: str, hub_ids: Iterable[str]) -> str | None:
             and (best is None or len(hub) > len(best))
         ):
             best = hub
-    return best
+    if best is not None:
+        return best
+    return _infix_hub(base, hubs)
+
+
+def _infix_hub(base: str, hubs: Iterable[str]) -> str | None:
+    """The one hub id found as a whole token inside ``base``, else None.
+
+    Only reached when no hub id is the name or its prefix. A hit that lies
+    inside a longer hit is dropped; what is left must be a single id.
+    """
+    hits: list[str] = []
+    for hub in hubs:
+        if not hub or len(hub) >= len(base):
+            continue
+        start = base.find(hub)
+        while start != -1:
+            end = start + len(hub)
+            if (start == 0 or base[start - 1] in _TOKEN_BOUNDARY) and (
+                end == len(base) or base[end] in _TOKEN_BOUNDARY
+            ):
+                hits.append(hub)
+                break
+            start = base.find(hub, start + 1)
+    outer = {h for h in hits if not any(h != o and h in o for o in hits)}
+    return next(iter(outer)) if len(outer) == 1 else None
 
 
 def remap_mappings_to_hub(
