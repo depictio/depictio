@@ -224,3 +224,129 @@ def test_unlinked_metadata_dc_is_skipped(patched_db):
     result = _resolve_multiqc_sample_filter(dashboard, _component(), filters)
     assert result is not None
     assert set(result) == {"S1", "S1_R1"}
+
+
+# ── Filters declared on another tab of the family ──────────────────────────────
+#
+# A persistent filter section lives on the Overview and is rendered on every tab,
+# so on the MultiQC tab its components are not in that tab's own stored_metadata.
+
+
+ROUTES = "depictio.api.v1.endpoints.dashboards_endpoints.routes"
+OVERVIEW_ID = ObjectId()
+MULTIQC_TAB_ID = ObjectId()
+
+
+def _multiqc_tab() -> dict:
+    """The MultiQC tab's own document: it holds the panel and nothing else."""
+    return {
+        "dashboard_id": MULTIQC_TAB_ID,
+        "parent_dashboard_id": OVERVIEW_ID,
+        "project_id": PROJECT_ID,
+        "stored_metadata": [
+            {
+                "index": "mqc-comp",
+                "component_type": "multiqc",
+                "dc_id": MULTIQC_DC,
+                "wf_id": WF_ID,
+            }
+        ],
+    }
+
+
+@pytest.fixture
+def family_db(patched_db):
+    """The Overview tab, which declares the pinned filters, in the dashboards collection."""
+    import mongomock
+
+    client = mongomock.MongoClient()
+    coll = client.test_db.dashboards
+    coll.insert_one(
+        {
+            "dashboard_id": OVERVIEW_ID,
+            "stored_metadata": [
+                {
+                    "index": "pinned-habitat",
+                    "component_type": "interactive",
+                    "dc_id": META_DC_A,
+                    "wf_id": WF_ID,
+                    "column_name": "habitat",
+                    "interactive_component_type": "MultiSelect",
+                    "dc_config": {"delta_location": f"memory://{META_DC_A}", "type": "table"},
+                }
+            ],
+        }
+    )
+    coll.insert_one({"dashboard_id": MULTIQC_TAB_ID, "parent_dashboard_id": OVERVIEW_ID})
+    with patch(f"{ROUTES}.dashboards_collection", coll):
+        yield coll
+    client.close()
+
+
+def test_pinned_filter_from_another_tab_narrows_multiqc(family_db):
+    """A filter declared on the Overview reaches the MultiQC panel through its link."""
+    filters = [_filter("pinned-habitat", "habitat", ["w"])]
+    result = _resolve_multiqc_sample_filter(_multiqc_tab(), _component(), filters)
+    assert result is not None
+    assert set(result) == {"S2", "S2_R1", "S3", "S3_R1"}
+
+
+def test_pinned_and_local_filters_intersect(family_db):
+    """A pinned filter and one of the MultiQC tab's own narrow together."""
+    tab = _multiqc_tab()
+    tab["stored_metadata"].append(
+        {
+            "index": "direct-sample",
+            "component_type": "interactive",
+            "dc_id": MULTIQC_DC,
+            "wf_id": WF_ID,
+            "column_name": "sample_name",
+        }
+    )
+    filters = [
+        _filter("pinned-habitat", "habitat", ["w"]),
+        _filter("direct-sample", "sample_name", ["S1", "S2"]),
+    ]
+    result = _resolve_multiqc_sample_filter(tab, _component(), filters)
+    assert result is not None
+    assert set(result) == {"S2", "S2_R1"}
+
+
+def test_filter_unknown_to_the_family_uses_the_metadata_the_viewer_sent(patched_db):
+    """With no stored component anywhere, ``metadata.dc_id`` still names the collection."""
+    tab = {"project_id": PROJECT_ID, "stored_metadata": []}
+    filters = [
+        {
+            **_filter("floating", "habitat", ["w"]),
+            "metadata": {"dc_id": META_DC_A, "column_name": "habitat"},
+        }
+    ]
+    # The sent metadata carries no dc_config, so the Delta location is looked up
+    # in the registry: give it an empty one rather than a real MongoDB.
+    import mongomock
+
+    with patch("depictio.api.v1.db.deltatables_collection", mongomock.MongoClient().db.dt):
+        result = _resolve_multiqc_sample_filter(tab, _component(), filters)
+    assert result is not None
+    assert set(result) == {"S2", "S2_R1", "S3", "S3_R1"}
+
+
+def test_unknown_filter_without_metadata_is_still_ignored(patched_db):
+    """A filter nothing identifies stays a no-op, as before."""
+    tab = {"project_id": PROJECT_ID, "stored_metadata": []}
+    assert (
+        _resolve_multiqc_sample_filter(tab, _component(), [_filter("ghost", "habitat", ["w"])])
+        is None
+    )
+
+
+def test_family_lookup_failure_does_not_break_the_render(patched_db):
+    """A failing read of the sibling tabs costs the foreign filters, not the request."""
+
+    class Broken:
+        def find(self, *a, **k):
+            raise RuntimeError("mongo down")
+
+    filters = [_filter("pinned-habitat", "habitat", ["w"])]
+    with patch(f"{ROUTES}.dashboards_collection", Broken()):
+        assert _resolve_multiqc_sample_filter(_multiqc_tab(), _component(), filters) is None

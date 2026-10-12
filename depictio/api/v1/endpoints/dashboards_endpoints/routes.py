@@ -5188,6 +5188,59 @@ MULTIQC_SAMPLE_FILTER_COLUMNS = {
 }
 
 
+def _filter_metadata_index(dashboard_data: dict, filters: list[dict]) -> dict[str, dict]:
+    """Stored component metadata for every filter, keyed by component index.
+
+    A persistent filter section is declared on one tab (the Overview) and
+    rendered on every tab of the family, so on the MultiQC tab its components
+    are absent from that tab's own ``stored_metadata``. Resolving a filter from
+    this document alone dropped it without a trace, and the pinned sample
+    filter then narrowed nothing there. The rendered tab wins a collision (its
+    component is the one on screen); the rest of the family is read only when
+    a filter needs it, so the common case stays free of an extra query.
+    """
+    index: dict[str, dict] = {}
+    for m in dashboard_data.get("stored_metadata") or []:
+        key = str(m.get("index") or "")
+        if key:
+            index[key] = m
+
+    if all(str(f.get("index") or "") in index for f in filters):
+        return index
+
+    parent_id = dashboard_data.get("parent_dashboard_id") or dashboard_data.get("dashboard_id")
+    if not parent_id:
+        return index
+    try:
+        family = dashboards_collection.find(
+            {"$or": [{"dashboard_id": parent_id}, {"parent_dashboard_id": parent_id}]},
+            {"stored_metadata": 1},
+        )
+        for tab in family:
+            for m in tab.get("stored_metadata") or []:
+                key = str(m.get("index") or "")
+                if key and key not in index:
+                    index[key] = m
+    except Exception as e:  # noqa: BLE001 - a lookup failure only costs the foreign filters
+        logger.warning(f"_filter_metadata_index: tab family lookup failed: {e}")
+    return index
+
+
+def _sent_filter_metadata(f: dict) -> dict:
+    """What the viewer itself says about a filter, for one whose component is unknown.
+
+    The React viewer attaches ``metadata.dc_id`` to every filter, so a control
+    that is stored nowhere we can read (a floating component, a tab added since)
+    still names the collection it filters.
+    """
+    sent = f.get("metadata") or {}
+    return {
+        "dc_id": sent.get("dc_id") or f.get("dc_id"),
+        "column_name": sent.get("column_name"),
+        "interactive_component_type": sent.get("interactive_component_type"),
+    }
+
+
 def _resolve_multiqc_sample_filter(
     dashboard_data: dict,
     component: dict,
@@ -5228,9 +5281,7 @@ def _resolve_multiqc_sample_filter(
         return None
 
     multiqc_dc_id_str = str(component.get("dc_id") or component.get("data_collection_id") or "")
-    stored_meta_index = {
-        str(m.get("index")): m for m in (dashboard_data.get("stored_metadata") or [])
-    }
+    stored_meta_index = _filter_metadata_index(dashboard_data, filters)
 
     # One entry per direct sample filter (each is its own AND constraint).
     direct_sample_filters: list[list[str]] = []
@@ -5243,7 +5294,7 @@ def _resolve_multiqc_sample_filter(
         if value in (None, [], ""):
             continue
         fdx = str(f.get("index") or "")
-        comp_meta = stored_meta_index.get(fdx) or {}
+        comp_meta = stored_meta_index.get(fdx) or _sent_filter_metadata(f)
         comp_dc = str(comp_meta.get("dc_id") or comp_meta.get("data_collection_id") or "")
         column_name = f.get("column_name") or comp_meta.get("column_name")
 
