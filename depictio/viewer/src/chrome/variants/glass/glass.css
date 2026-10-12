@@ -564,9 +564,13 @@
 :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-card:not(.depictio-card--split):not(.depictio-card--minimal) > div:not(.depictio-card-icon) > div:last-child:not(.mantine-Card-section) > .mantine-Stack-root {
   padding-inline: 16px !important;
 }
+/* Pinned to the top corner at every width: the wide card's base rule centres
+ * it with a half-height lift (DepictioCard.css), which here would push it
+ * out through the card's top edge. */
 :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-card:not(.depictio-card--split) .depictio-card-icon {
   top: 14px !important;
   right: 14px !important;
+  transform: none !important;
 }
 :root[data-chrome='glass'] .depictio-card-split-icon {
   border-radius: 14px;
