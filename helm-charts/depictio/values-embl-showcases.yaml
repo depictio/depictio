@@ -22,12 +22,13 @@
 #     datasci-depictio-demo-showcases`, then ingest each template run with
 #     `scripts/nfcore_showcase.py ingest`, pointing a CLI config at
 #     https://api.showcases.depictio.embl.org.
-#   Phase 2 (future change, not enabled here): flip
-#     backend.env.DEPICTIO_AUTH_PUBLIC_MODE to "true" for public read access.
-#     Anonymous sessions are already write-blocked API-side (is_anonymous
-#     checks in dashboards_endpoints), so this does not need registration
-#     re-enabled. Optionally gate the opening with secrets.publicAccessCode
-#     for a soft launch before announcing the URL widely.
+#   Phase 2 (this file, as committed): public read, Google sign-in to comment.
+#     backend.env.DEPICTIO_AUTH_PUBLIC_MODE is "true", so a visitor browses the
+#     dashboards (every project is public) on a temporary account that expires
+#     after an hour, and signs in with Google to comment
+#     (DEPICTIO_COMMENTS_VIEWERS_CAN_COMMENT, which refuses temporary
+#     accounts). Optionally gate the opening with secrets.publicAccessCode for
+#     a soft launch before announcing the URL widely.
 #
 # ⚠ REQUIRED, in ~/actions-runner-embl/secrets/values-embl-showcases-secrets.yaml
 # (SENSITIVE, never committed — same external-secrets-dir convention as the
@@ -136,18 +137,22 @@ backend:
       cpu: "2"
 
   env:
-    # Phase 1: private, login-required, Google sign-in only. Email + password
-    # login is closed (ignored unless Google OAuth is enabled, so a missing
-    # client id cannot lock everyone out). Registration is open so reviewers
-    # can create their account by signing in with Google; a new account has no
-    # project access until an admin grants it.
-    DEPICTIO_AUTH_PUBLIC_MODE: "false"
+    # Public read, Google sign-in only. Email + password login is closed
+    # (ignored unless Google OAuth is enabled, so a missing client id cannot
+    # lock everyone out). Registration is open so reviewers can create their
+    # account by signing in with Google; every project is public, so a signed-in
+    # account can read all of them and, with the setting below, comment on them.
+    # Editing still needs a role an admin grants.
+    DEPICTIO_AUTH_PUBLIC_MODE: "true"
     DEPICTIO_AUTH_REGISTRATION_DISABLED: "false"
     DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED: "true"
     DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: "true"
 
-    # Anonymous user configuration (inert while PUBLIC_MODE is false; kept so
-    # phase 2 only needs the one PUBLIC_MODE flip, no other env additions)
+    # Viewers may read and write comment threads (not resolve, publish or
+    # review). Needs a release with the setting; an older image ignores it.
+    DEPICTIO_COMMENTS_VIEWERS_CAN_COMMENT: "true"
+
+    # Anonymous user configuration
     DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
     DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
 
