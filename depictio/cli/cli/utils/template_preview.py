@@ -190,6 +190,40 @@ def _scan_match_regex(mode: str, parameters: dict) -> str:
     return translate(pattern)
 
 
+def scan_dc_hits(dc_config: dict, root: DataRoot, runs: list[str]) -> list[str] | None:
+    """Every root-relative file a ``recursive`` or ``s3_prefix`` collection scans.
+
+    One pass per run directory when the workflow has them, the way the scan
+    scopes its walk; otherwise a single pass over the root. A recursive scan's
+    ``max_depth``/``ignore`` apply, counted from each pass's folder as the scan
+    counts them. None for another mode, or for an ``s3_prefix`` on a prefix this
+    root did not list (another bucket).
+    """
+    scan = dc_config.get("scan") or {}
+    mode = str(scan.get("mode") or "").lower()
+    parameters = scan.get("scan_parameters") or {}
+    if mode not in ("recursive", "s3_prefix"):
+        return None
+    regex = _scan_match_regex(mode, parameters)
+    within = ""
+    bounds: dict[str, Any] = {}
+    if mode == "s3_prefix":
+        relative = root.relative_of(parameters.get("prefix") or "")
+        if relative is None:
+            return None
+        within = relative
+    else:
+        bounds = {
+            "max_depth": parameters.get("max_depth"),
+            "ignore": list(parameters.get("ignore") or []) or None,
+        }
+    scopes = [f"{run}/{within}".strip("/") for run in runs] if runs else [within]
+    hits: list[str] = []
+    for scope in scopes:
+        hits.extend(root.match(regex, within=scope, **bounds))
+    return hits
+
+
 def _preview_scan_dc(
     tag: str,
     dc_config: dict,
@@ -245,40 +279,25 @@ def _preview_scan_dc(
         )
 
     if mode in ("recursive", "s3_prefix"):
-        regex = _scan_match_regex(mode, parameters)
         if mode == "recursive":
             rule = (parameters.get("regex_config") or {}).get("pattern")
+            location = root.url("")
         else:
             rule = parameters.get("pattern")
-        within = ""
-        location = root.url("")
-        if mode == "s3_prefix":
-            prefix = parameters.get("prefix") or ""
-            location = prefix
-            relative = root.relative_of(prefix)
-            if relative is None:
-                # A prefix on another bucket: outside what this root listed.
-                return DataCollectionPreview(
-                    tag=tag,
-                    kind="scan",
-                    mode=mode,
-                    location=prefix,
-                    matched=0,
-                    optional=optional,
-                    rule=rule,
-                )
-            within = relative
-        # One pass per run directory when the workflow has them, the way the
-        # scan itself scopes its walk; otherwise a single pass over the root.
-        scopes = [f"{run}/{within}".strip("/") for run in runs] if runs else [within]
-        matched = 0
-        samples: list[str] = []
-        every_hit: list[str] = []
-        for scope in scopes:
-            hits = root.match(regex, within=scope)
-            matched += len(hits)
-            every_hit.extend(hits)
-            samples.extend(root.url(rel) for rel in hits[: PREVIEW_SAMPLES - len(samples)])
+            location = parameters.get("prefix") or ""
+        every_hit = scan_dc_hits(dc_config, root, runs)
+        if every_hit is None:
+            # A prefix on another bucket: outside what this root listed.
+            return DataCollectionPreview(
+                tag=tag,
+                kind="scan",
+                mode=mode,
+                location=location,
+                matched=0,
+                optional=optional,
+                rule=rule,
+            )
+        matched = len(every_hit)
         return DataCollectionPreview(
             tag=tag,
             kind="scan",
@@ -288,7 +307,7 @@ def _preview_scan_dc(
             optional=optional,
             status="ok" if matched else "empty",
             rule=rule,
-            samples=samples,
+            samples=[root.url(rel) for rel in every_hit[:PREVIEW_SAMPLES]],
             found_in=_common_folder(every_hit),
         )
 
