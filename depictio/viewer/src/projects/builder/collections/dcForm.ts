@@ -205,7 +205,10 @@ export function withSuggestedPattern(form: DcFormState, s: BuilderSuggestion): D
     ...form,
     dc: {
       ...form.dc,
-      mode: s.mode,
+      // The button sits in the scan fields: the pattern replaces the one
+      // typed, it never switches the form back to one file (a suggestion for
+      // a single picked file says `single`).
+      mode: form.dc.mode === 'recursive' ? 'recursive' : s.mode,
       glob: s.glob ?? (s.regex ? regexToGlob(s.regex) : null),
       regex: s.regex,
     },
@@ -292,5 +295,5 @@ export function matchesStores(dc: BuilderDcDraft): boolean {
 /** A suggestion whose pattern differs from the form's, worth offering. */
 export function suggestionDiffers(form: DcFormState, s: BuilderSuggestion | null): boolean {
   if (!s || !s.regex) return false;
-  return form.dc.mode !== s.mode || (form.dc.regex ?? '') !== s.regex;
+  return (form.dc.regex ?? '') !== s.regex;
 }

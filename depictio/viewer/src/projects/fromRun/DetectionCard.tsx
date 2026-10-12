@@ -14,6 +14,8 @@ import type { FolderInspection, RunStorageIn, RunTemplateMatch } from 'depictio-
 import { RunChecks } from './RunChecks';
 import { useRunPlan } from './runPlan';
 
+import { useBrandAccents } from 'depictio-react-core';
+
 export type DetectionState =
   | { status: 'idle' }
   | { status: 'loading'; location: string }
@@ -96,6 +98,7 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
   errorHint,
   errorMessage,
 }) => {
+  const accent = useBrandAccents();
   if (state.status === 'idle') return null;
 
   let body: React.ReactNode;
@@ -152,8 +155,8 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
           />
           {onUseDetected && detectedId && templateId && templateId !== detectedId && (
             <Group>
-              <Button
-                size="xs"
+              <Button color={accent.secondary}
+                size="sm"
                 variant="light"
                 leftSection={<Icon icon="mdi:auto-fix" width={14} />}
                 onClick={onUseDetected}

@@ -155,11 +155,22 @@ async function openWithFolder(page: Page, folder = DATA_ROOT): Promise<void> {
   await page.locator("[data-testid='run-data-root-input']").fill(folder);
 }
 
+/** The template block detects from the folder; the two fields show once the
+ *  reader chooses the template themselves. Idempotent. */
+async function chooseMyself(page: Page): Promise<void> {
+  const select = page.locator("[data-testid='run-pipeline-select']");
+  if (!(await select.isVisible())) {
+    await page.locator("[data-testid='run-template-mode']").getByText("Choose myself").click();
+  }
+  await expect(select).toBeVisible();
+}
+
 /** The version field: a button showing the chosen version, opening the list. */
 const versionField = (page: Page) => page.locator("[data-testid='run-version-control']");
 
 /** Open the version list and pick `version` in it. */
 async function pickVersion(page: Page, version: string): Promise<void> {
+  await chooseMyself(page);
   await versionField(page).click();
   await page.locator(`[data-testid='run-version-option-${version}']`).click();
 }
@@ -196,6 +207,7 @@ test.describe("Create project from a run folder", () => {
     // Nothing typed: no detection card, the pipeline is left to detection.
     const card = page.locator("[data-testid='run-detection-card']");
     await expect(card).toHaveCount(0);
+    await chooseMyself(page);
     const pipelineSelect = page.locator("[data-testid='run-pipeline-select']");
     await expect(pipelineSelect).toHaveValue("");
     await expect(page.locator("[data-testid='run-version-empty']")).toBeVisible();
@@ -341,6 +353,7 @@ test.describe("Create project from a run folder", () => {
 
     const card = page.locator("[data-testid='run-detection-card']");
     await expect(card).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
+    await chooseMyself(page);
     await expect(versionField(page)).toHaveAttribute("data-template-id", TEMPLATE_ID);
 
     await pickVersion(page, "2.14.0");
@@ -429,6 +442,7 @@ test.describe("Create project from a run folder", () => {
 
     // The detected (closest) version is the one filled in and says so, and no
     // template version claims to match the run.
+    await chooseMyself(page);
     await expect(versionField(page)).toHaveAttribute("data-template-id", TEMPLATE_ID);
     await expect(page.locator("[data-testid='run-version-detected']")).toBeVisible();
     await expect(versionField(page)).not.toContainText("Matches this run");
@@ -715,15 +729,19 @@ test.describe("Create project from a run folder", () => {
     await expect(card).toHaveAttribute("data-state", "ready", { timeout: 20_000 });
     await expect(card).toContainText("No pipeline recognised in this folder");
 
-    // Previewing would only come back with "not recognised": the pipeline is
-    // asked for now.
+    // Previewing would only come back with "not recognised": the template
+    // tiles are locked and the Project Builder is the selected way forward.
     const submit = page.locator("[data-testid='create-from-run-submit']");
-    await expect(submit).toBeDisabled();
-    await expect(page.locator("[data-testid='run-submit-disabled-reason']")).toContainText(
-      "No template matches this folder: pick the pipeline below.",
+    await expect(page.locator("[data-testid='run-next-scratch']")).toHaveAttribute(
+      "data-active",
+      "true",
     );
+    await expect(page.locator("[data-testid='run-next-use-reason']")).toBeVisible();
+    await expect(submit).toBeEnabled();
+    await expect(submit).toContainText("Open the Project Builder");
 
     // A pipeline with a single template version: picked, it is the choice.
+    await chooseMyself(page);
     await page.locator("[data-testid='run-pipeline-select']").click();
     await page.locator("[data-testid='run-pipeline-option-nf-core/rnaseq']").click();
     await expect(page.locator("[data-testid='run-pipeline-select']")).toHaveValue(
@@ -786,6 +804,7 @@ test.describe("Create project from a run folder", () => {
 
     // The way out leads back to the pipeline picker, still empty.
     await notDetected.locator("[data-testid='run-pick-template']").click();
+    await chooseMyself(page);
     const select = page.locator("[data-testid='run-pipeline-select']");
     await expect(select).toBeVisible();
     await expect(select).toHaveValue("");

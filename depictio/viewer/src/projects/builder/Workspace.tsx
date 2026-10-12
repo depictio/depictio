@@ -16,6 +16,8 @@ import { Icon } from '@iconify/react';
 
 import {
   builderSuggest,
+  DEFAULT_ENGINE,
+  DEFAULT_WORKFLOW_NAME,
   findBuilderDc,
   isStorePath,
   isTrackFilePath,
@@ -36,6 +38,8 @@ import { FileTree } from './files/FileTree';
 import type { TreePickKind } from './files/FileTree';
 import { clampPanel, ResizeHandle } from './layout/ResizeHandle';
 import { joinRoot } from './paths';
+import { GuideStrip, guideStage } from './workflows/GuideStrip';
+import type { GuideStage } from './workflows/GuideStrip';
 import { WorkflowEditor } from './workflows/WorkflowEditor';
 import { WorkflowTree } from './workflows/WorkflowTree';
 
@@ -102,6 +106,11 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
   const [suggesting, setSuggesting] = useState(false);
   const [treeRefresh, setTreeRefresh] = useState(0);
   const [matchRefresh, setMatchRefresh] = useState(0);
+  /** The step of the guide the reader chose by clicking it. */
+  const [chosenStage, setChosenStage] = useState<GuideStage | null>(null);
+  /** Bumped to open the workflow editor and bring it into view. */
+  const [workflowFocus, setWorkflowFocus] = useState(0);
+  const treePanelRef = useRef<HTMLDivElement>(null);
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -130,6 +139,8 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
 
   // What the server suggests for the picked file, generalised over the
   // ticked examples; filled into what the reader has not set by hand.
+  const structure = activeWorkflow?.structure ?? 'flat';
+  const runsRegex = activeWorkflow?.runs_regex ?? '';
   const pickedKey = [...picked].sort().join('\n');
   const rootKey = `${root.data_root}\n${JSON.stringify(root.storage ?? null)}`;
   useEffect(() => {
@@ -141,7 +152,7 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
     const examples = [...picked].filter((p) => p !== activeFile);
     const controller = new AbortController();
     setSuggesting(true);
-    builderSuggest(root, activeFile, examples, { signal: controller.signal })
+    builderSuggest(root, activeFile, examples, { signal: controller.signal }, { structure, runs_regex: runsRegex })
       .then((s) => {
         if (controller.signal.aborted) return;
         setSuggestion(s);
@@ -156,7 +167,7 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
     return () => controller.abort();
     // `picked` is read through its key; `root` through its key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeFile, pickedKey, rootKey]);
+  }, [activeFile, pickedKey, rootKey, structure, runsRegex]);
 
   // A store is never previewed: `/suggest` describes it instead.
   const activeIsStore = activeFile ? isStore(activeFile) : false;
@@ -295,6 +306,7 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
   const totalDcs = state.workflows.reduce((n, w) => n + w.data_collections.length, 0);
 
   const tree = (
+    <div ref={treePanelRef} tabIndex={-1} style={{ outline: 'none' }} data-testid="builder-tree-panel">
     <FileTree
       root={root}
       refreshKey={treeRefresh}
@@ -306,6 +318,7 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
       onTogglePick={togglePick}
       onError={onRootError}
     />
+    </div>
   );
 
   const treeHeader = (
@@ -332,54 +345,140 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
     </PanelHeader>
   );
 
-  const center = (
+  // A file picked (or a collection open) takes the whole centre: the form is
+  // a step of its own, not one more block under the workflow to scroll to.
+  const focused = Boolean(activeFile || form);
+  const workflowDescribed = Boolean(
+    activeWorkflow &&
+      (activeWorkflow.name.trim() !== DEFAULT_WORKFLOW_NAME ||
+        activeWorkflow.engine !== DEFAULT_ENGINE ||
+        activeWorkflow.version?.trim() ||
+        activeWorkflow.engine_version?.trim() ||
+        activeWorkflow.repository_url?.trim() ||
+        activeWorkflow.catalog ||
+        activeWorkflow.structure !== 'flat'),
+  );
+
+  const selectStage = (stage: GuideStage) => {
+    if (stage === 'review') {
+      onReview();
+      return;
+    }
+    if (stage === 'define') return;
+    // Workflow or files: back to the overview, the collection form closed.
+    clearForm();
+    setChosenStage(stage);
+    if (stage === 'workflow') {
+      setWorkflowFocus((n) => n + 1);
+    } else {
+      treePanelRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      treePanelRef.current?.focus({ preventScroll: true });
+    }
+  };
+  const stage = guideStage({
+    hasFile: Boolean(activeFile),
+    editing: Boolean(form),
+    collections: totalDcs,
+    chosen: chosenStage,
+    workflowDescribed,
+  });
+  const disabledStages: Partial<Record<GuideStage, string>> = {
+    ...(focused ? {} : { define: 'Click a file in the tree first.' }),
+    ...(totalDcs === 0 ? { review: 'Add a data collection first.' } : {}),
+  };
+  const guide = (compact: boolean) => (
+    <GuideStrip
+      stage={stage}
+      workflowDescribed={workflowDescribed}
+      onSelect={selectStage}
+      disabled={disabledStages}
+      compact={compact}
+    />
+  );
+
+  const editor = form && (
+    <CollectionEditor
+      key={form.originalTag ?? 'new'}
+      state={state}
+      form={form}
+      onChange={setForm}
+      onSave={save}
+      onCancel={clearForm}
+      activeFile={activeFile}
+      suggestion={suggestion}
+      suggesting={suggesting}
+      match={match}
+      onRefreshMatch={remote ? () => setMatchRefresh((n) => n + 1) : undefined}
+      remote={remote}
+      columns={columns}
+      manifest={{
+        root,
+        trackFiles: [...picked].filter(isTrackFilePath).sort(),
+        onUseManifest: (path) => {
+          setForm((f) => (f ? withManifest(f, path) : f));
+          setActiveFile(path);
+          setPicked(new Set([path]));
+          setSuggestion(null);
+        },
+        onAwaitManifest: () => setForm((f) => (f ? { ...f, awaitingManifest: true } : f)),
+        onFilesChanged: () => setTreeRefresh((n) => n + 1),
+      }}
+    />
+  );
+
+  const filePane = (
+    <FilePane
+      activeFile={activeFile}
+      store={activeIsStore}
+      preview={preview}
+      suggestion={suggestion}
+      suggesting={suggesting}
+      examples={picked.size}
+      workflowName={activeWorkflow?.name || 'the workflow'}
+    />
+  );
+
+  const center = focused ? (
+    <Stack gap="md" p="md" maw={960} mx="auto" data-testid="builder-collection-step">
+      {guide(true)}
+      <Group gap="sm" wrap="nowrap">
+        <Button
+          variant="default"
+          size="sm"
+          leftSection={<Icon icon="mdi:arrow-left" width={16} />}
+          onClick={clearForm}
+          data-testid="builder-collection-back"
+        >
+          Back to the workflow
+        </Button>
+        <div style={{ minWidth: 0 }}>
+          <Text size="sm" fw={600} truncate>
+            {form?.originalTag ? `Edit ${form.originalTag}` : 'New data collection'}
+          </Text>
+          <Text size="xs" c="dimmed" truncate>
+            in {activeWorkflow?.name || 'the workflow'}: check the file, then define the collection
+          </Text>
+        </div>
+      </Group>
+      {filePane}
+      {editor}
+    </Stack>
+  ) : (
     <Stack gap="md" p="md" maw={960} mx="auto">
+      {guide(false)}
       {activeWorkflow && (
         <WorkflowEditor
           key={activeWorkflow.id}
           state={state}
           workflow={activeWorkflow}
+          root={root}
+          focusRequest={workflowFocus}
           onChange={(patch) => dispatch({ type: 'workflow/patch', id: activeWorkflow.id, patch })}
         />
       )}
-      <FilePane
-        activeFile={activeFile}
-        store={activeIsStore}
-        preview={preview}
-        suggestion={suggestion}
-        suggesting={suggesting}
-        examples={picked.size}
-        workflowName={activeWorkflow?.name || 'the workflow'}
-      />
-      {form && (
-        <CollectionEditor
-          key={form.originalTag ?? 'new'}
-          state={state}
-          form={form}
-          onChange={setForm}
-          onSave={save}
-          onCancel={clearForm}
-          activeFile={activeFile}
-          suggestion={suggestion}
-          suggesting={suggesting}
-          match={match}
-          onRefreshMatch={remote ? () => setMatchRefresh((n) => n + 1) : undefined}
-          remote={remote}
-          columns={columns}
-          manifest={{
-            root,
-            trackFiles: [...picked].filter(isTrackFilePath).sort(),
-            onUseManifest: (path) => {
-              setForm((f) => (f ? withManifest(f, path) : f));
-              setActiveFile(path);
-              setPicked(new Set([path]));
-              setSuggestion(null);
-            },
-            onAwaitManifest: () => setForm((f) => (f ? { ...f, awaitingManifest: true } : f)),
-            onFilesChanged: () => setTreeRefresh((n) => n + 1),
-          }}
-        />
-      )}
+      {/* The how-to for picking files comes once the workflows are described:
+          at the first step it only pulls the eye away from the form. */}
+      {stage !== 'workflow' && filePane}
     </Stack>
   );
 

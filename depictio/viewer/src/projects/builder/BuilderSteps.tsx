@@ -117,8 +117,17 @@ export const BuilderSteps: React.FC<BuilderStepsProps> = ({
   else if (step === 1 && dcCount === 0) nextReason = 'Add a data collection first.';
 
   const goTo = (target: number) => {
-    if (target === 1 && step === 0) onLeaveSource?.();
+    if (target > 0 && step === 0) onLeaveSource?.();
     setStep(target);
+  };
+
+  // A step of the header is open when going there is allowed: back always,
+  // forward under the rules of the Next button.
+  const canReach = (target: number): boolean => {
+    if (target <= step) return true;
+    if (notReadyReason) return false;
+    if (target === 2) return dcCount > 0;
+    return true;
   };
 
   const editDc = (tag: string) => {
@@ -131,16 +140,21 @@ export const BuilderSteps: React.FC<BuilderStepsProps> = ({
       <Box px="md" py="sm" style={{ borderBottom: BORDER }}>
         <Stepper
           active={step}
-          onStepClick={(s) => s < step && setStep(s)}
+          onStepClick={(s) => {
+            if (s !== step && canReach(s)) goTo(s);
+          }}
           color={accent.secondary}
           size="sm"
-          allowNextStepsSelect={false}
           styles={{ content: { display: 'none' } }}
           data-testid="builder-stepper"
         >
           <Stepper.Step label="Source & project" description="Where the files are" />
-          <Stepper.Step label="Data collections" description="Group files under workflows" />
-          <Stepper.Step label="Review & create" description="Check, then create" />
+          <Stepper.Step
+            label="Data collections"
+            description="Group files under workflows"
+            allowStepSelect={canReach(1)}
+          />
+          <Stepper.Step label="Review & create" description="Check, then create" allowStepSelect={canReach(2)} />
         </Stepper>
       </Box>
 
@@ -233,7 +247,8 @@ export const BuilderSteps: React.FC<BuilderStepsProps> = ({
               onClick={() => {
                 onReset();
                 setConfirmReset(false);
-                setStep(rootSpec ? Math.min(step, 1) : 0);
+                // The draft is empty again: back to the first step.
+                setStep(0);
               }}
               data-testid="builder-start-over-confirm"
             >

@@ -4695,6 +4695,8 @@ export interface BuilderCatalogMatch {
 /** Response of POST /projects/builder/suggest: a data collection for a file,
  *  generalised over the other example files given. */
 export interface BuilderSuggestion {
+  /** The file sits under a run of a sequencing-runs workflow: the pattern is read inside each run. */
+  in_run?: boolean;
   path: string;
   tag: string;
   type: BuilderDcType;
@@ -4769,6 +4771,8 @@ export interface BuilderMatchResult {
   /** Every file read shares the schema; null when not checked. */
   consistent: boolean | null;
   mismatches: BuilderSchemaMismatch[];
+  /** Columns read as several numeric types, which ingestion widens (no conflict). */
+  widened?: Record<string, { types: string[]; as: string }>;
   /** Indexed files whose index was not found next to them. */
   missing_indexes: string[];
   warnings: string[];
@@ -4786,6 +4790,38 @@ export interface BuilderTemplateResult {
   /** `custom/<slug>`. */
   template_id: string;
   warnings: string[];
+}
+
+/** What `POST /projects/builder/from_template` could not carry over from a
+ *  shipped template into a builder draft. */
+export interface BuilderTemplateDropped {
+  kind:
+    | 'collection'
+    | 'workflow'
+    | 'link'
+    | 'dashboards'
+    | 'conditional'
+    | 'provenance'
+    | 'variables'
+    | 'recipe'
+    /** A setting lost on a collection or workflow that is otherwise carried. */
+    | 'option';
+  /** The collection's tag, when the item is one. */
+  tag: string | null;
+  reason: string;
+}
+
+/** Response of POST /projects/builder/from_template: a shipped template as a
+ *  builder draft, and what the builder cannot express of it. */
+export interface BuilderTemplateDraft {
+  template_id: string;
+  title: string | null;
+  draft: BuilderProjectDraft;
+  carried: { workflows: number; collections: number; links: number };
+  dropped: BuilderTemplateDropped[];
+  /** False when no collection could be carried over. */
+  editable: boolean;
+  reason: string | null;
 }
 
 /** Response of POST /projects/builder/metadata: what a workflow's repository
@@ -4895,11 +4931,80 @@ export function builderSuggest(
   path: string,
   examples: string[] = [],
   options: BuilderRequestOptions = {},
+  workflow: { structure: BuilderWorkflowStructure; runs_regex?: string | null } = { structure: 'flat' },
 ): Promise<BuilderSuggestion> {
   return postBuilder(
     'suggest',
-    { root: builderRoot(root), path, ...(examples.length ? { examples } : {}) },
+    {
+      root: builderRoot(root),
+      path,
+      ...(examples.length ? { examples } : {}),
+      ...(workflow.structure === 'sequencing-runs'
+        ? { structure: workflow.structure, ...(workflow.runs_regex?.trim() ? { runs_regex: workflow.runs_regex } : {}) }
+        : {}),
+    },
     'Failed to read the file',
+    options,
+  );
+}
+
+/** Response of POST /projects/builder/runs_regex. */
+export interface BuilderRunsRegex {
+  /** The regex read off the first-level folders; null when they share no shape. */
+  regex: string | null;
+  /** The folders it matches, sorted. */
+  runs: string[];
+  /** First-level folders the root holds. */
+  folders: number;
+  /** Folders it leaves out (a few, by name). */
+  skipped: string[];
+  truncated: boolean;
+}
+
+/** Guess the runs regex of a `sequencing-runs` workflow from the data root's
+ *  first-level folders. */
+export function builderRunsRegex(
+  root: BuilderRootSpec,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderRunsRegex> {
+  return postBuilder('runs_regex', { root: builderRoot(root) }, 'Failed to read the folders', options);
+}
+
+/** Response of POST /projects/builder/runs_overview. */
+export interface BuilderRunsOverview {
+  regex: string;
+  /** Folders of the data root the regex takes as runs. */
+  runs_total: number;
+  /** The first of them, by name. */
+  runs: string[];
+  /** How many runs were read for the layout (capped). */
+  runs_read: number;
+  /** First-level folders the regex leaves out. */
+  skipped: string[];
+  /** Files seen in the runs read. */
+  files: number;
+  /** The shapes of the files the runs hold (`*` for a name that belongs to
+   *  one run), with how many runs hold each. */
+  layout: { shape: string; runs: number }[];
+  /** Runs that hold the whole layout. */
+  consistent: number;
+  deviating: { run: string; files: number; missing: string[]; extra: string[] }[];
+  deviating_total: number;
+  /** Something was left unread (many runs, many files, a capped listing). */
+  truncated: boolean;
+}
+
+/** What a runs regex takes in: the runs, the layout their files share and the
+ *  runs that depart from it. */
+export function builderRunsOverview(
+  root: BuilderRootSpec,
+  runsRegex: string,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderRunsOverview> {
+  return postBuilder(
+    'runs_overview',
+    { root: builderRoot(root), runs_regex: runsRegex },
+    'Failed to read the runs',
     options,
   );
 }
@@ -4934,6 +5039,21 @@ export function builderTemplate(
   options: BuilderRequestOptions = {},
 ): Promise<BuilderTemplateResult> {
   return postBuilder('template', { draft, remote }, 'Failed to build the template', options);
+}
+
+/** A shipped template (`nf-core/viralrecon/3.0.0`, `latest` aliases
+ *  included) as a builder draft, to start from and edit. What the builder
+ *  cannot express (recipes, joins, dashboards...) comes back in `dropped`. */
+export function builderFromTemplate(
+  templateId: string,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderTemplateDraft> {
+  return postBuilder(
+    'from_template',
+    { template_id: templateId },
+    'Failed to read the template',
+    options,
+  );
 }
 
 /** What a workflow repository says about the workflow. */

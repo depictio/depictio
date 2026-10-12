@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   builderCapabilities,
+  builderFromTemplate,
   builderMatch,
   builderTemplate,
   builderTracksManifest,
@@ -10,7 +11,7 @@ import {
   createProjectFromRun,
   previewRunFile,
 } from './api';
-import type { BuilderCapabilities } from './api';
+import type { BuilderCapabilities, BuilderTemplateDraft } from './api';
 import {
   BUILDER_HANDOFF_KEY,
   blockingIssues,
@@ -37,6 +38,7 @@ import {
   seedPropsForCapabilities,
   tableTags,
   tagFromPath,
+  stateFromTemplateDraft,
   takeBuilderHandoff,
   toProjectDraft,
   uniqueTag,
@@ -449,6 +451,108 @@ describe('hand-off from the run-folder wizard', () => {
     expect(takeBuilderHandoff(storage)).toEqual({ dataRoot: 's3://b/run', storage: null });
     expect(storage.data.has(BUILDER_HANDOFF_KEY)).toBe(false);
     expect(takeBuilderHandoff(storage)).toBeNull();
+  });
+
+  it('carries the choice and what was recognised', () => {
+    const storage = memoryStorage();
+    writeBuilderHandoff(
+      {
+        dataRoot: '/runs/a',
+        storage: null,
+        intent: 'edit-template',
+        templateId: 'nf-core/ampliseq/2.16.0',
+        detected: {
+          pipeline: 'nf-core/ampliseq',
+          version: '2.16.0',
+          engine: 'nextflow',
+          templateId: 'nf-core/ampliseq/2.16.0',
+          templateTitle: 'nf-core/ampliseq',
+        },
+      },
+      storage,
+    );
+    expect(takeBuilderHandoff(storage)).toEqual({
+      dataRoot: '/runs/a',
+      storage: null,
+      intent: 'edit-template',
+      templateId: 'nf-core/ampliseq/2.16.0',
+      detected: {
+        pipeline: 'nf-core/ampliseq',
+        version: '2.16.0',
+        engine: 'nextflow',
+        templateId: 'nf-core/ampliseq/2.16.0',
+        templateTitle: 'nf-core/ampliseq',
+      },
+    });
+  });
+
+  it('ignores an intent it does not know', () => {
+    const storage = memoryStorage();
+    storage.setItem(BUILDER_HANDOFF_KEY, JSON.stringify({ dataRoot: '/d', intent: 'delete-all' }));
+    expect(takeBuilderHandoff(storage)).toEqual({ dataRoot: '/d', storage: null });
+  });
+});
+
+describe('a shipped template as the draft', () => {
+  const result: BuilderTemplateDraft = {
+    template_id: 'nf-core/viralrecon/3.0.0',
+    title: 'nf-core/viralrecon',
+    draft: {
+      name: 'Viralrecon',
+      description: 'Viral genome analysis',
+      is_public: true,
+      workflows: [
+        {
+          name: 'viralrecon',
+          engine: 'nextflow',
+          engine_version: '24.10.4',
+          structure: 'sequencing-runs',
+          runs_regex: 'run_.*',
+          data_collections: [table('summary'), table('coverage')],
+        },
+        { name: 'qc', engine: 'python', structure: 'flat', data_collections: [table('qc')] },
+      ],
+      links: [{ source_tag: 'summary', source_column: 'sample', target_tag: 'coverage' }],
+    },
+    carried: { workflows: 2, collections: 3, links: 1 },
+    dropped: [{ kind: 'dashboards', tag: null, reason: 'Dashboards are not part of a builder draft.' }],
+    editable: true,
+    reason: null,
+  };
+
+  it('becomes a builder state with a stable id per workflow', () => {
+    const state = stateFromTemplateDraft(result);
+    expect(state).not.toBeNull();
+    expect(state?.project).toEqual({
+      name: 'Viralrecon',
+      description: 'Viral genome analysis',
+      is_public: true,
+      realtime: false,
+      data_management_platform_project_url: '',
+    });
+    expect(state?.workflows.map((w) => [w.id, w.name, w.engine])).toEqual([
+      ['wf-0', 'viralrecon', 'nextflow'],
+      ['wf-1', 'qc', 'python'],
+    ]);
+    expect(state?.activeWorkflowId).toBe('wf-0');
+    expect(state?.links).toHaveLength(1);
+    // The next added workflow must not reuse a loaded id.
+    const next = builderReducer(state as BuilderState, { type: 'workflow/add' });
+    expect(next.workflows.map((w) => w.id)).toEqual(['wf-0', 'wf-1', 'wf-2']);
+  });
+
+  it('is sent back unchanged to the template route', () => {
+    const state = stateFromTemplateDraft(result) as BuilderState;
+    const sent = toProjectDraft(state);
+    expect(sent.workflows.map((w) => w.data_collections.map((d) => d.tag))).toEqual([
+      ['summary', 'coverage'],
+      ['qc'],
+    ]);
+    expect(sent.workflows[0].engine_version).toBe('24.10.4');
+  });
+
+  it('is refused when it holds no workflow', () => {
+    expect(stateFromTemplateDraft({ ...result, draft: { ...result.draft, workflows: [] } })).toBeNull();
   });
 });
 
@@ -1212,6 +1316,13 @@ describe('v2 builder calls', () => {
   });
 
   const body = (i: number) => JSON.parse(String(calls[i].init.body));
+
+  it('asks for a shipped template as a draft', async () => {
+    await builderFromTemplate('nf-core/viralrecon/3.0.0');
+    expect(calls[0].url).toBe('/depictio/api/v1/projects/builder/from_template');
+    expect(calls[0].init.method).toBe('POST');
+    expect(body(0)).toEqual({ template_id: 'nf-core/viralrecon/3.0.0' });
+  });
 
   it('reads the capabilities and posts the manifest routes', async () => {
     await builderCapabilities();

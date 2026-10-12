@@ -15,7 +15,15 @@ import type {
   BuilderTableProps,
 } from 'depictio-react-core';
 
-import { ColumnField, ColumnsDescription, FoldSection, FormatFields, MONO, ReaderOptionsFields } from './shared';
+import {
+  ColumnField,
+  ColumnsDescription,
+  FoldSection,
+  FormatFields,
+  MONO,
+  OptionsSection,
+  ReaderOptionsFields,
+} from './shared';
 
 /** The table formats offered, and why SpatialData cannot be picked here. */
 export function tableFormatChoices(
@@ -117,63 +125,68 @@ export const TableForm: React.FC<{
           onChange(next);
         }}
       />
-      {spatial ? (
+      {spatial && (
         <SpatialDataFields
           source={props.spatialdata ?? {}}
           store={store}
           onChange={(spatialdata) => onChange({ ...props, spatialdata })}
         />
-      ) : (
-        <>
-          <ReaderOptionsFields
-            format={props.format}
-            reader={props.reader}
-            allowed={capabilities.reader_options}
-            onChange={(reader) => onChange({ ...props, reader })}
-          />
-          <FoldSection
-            label="Map coordinates (optional)"
-            initiallyOpen={Boolean(props.lat_column || props.lon_column)}
-            testId="builder-props-coordinates"
-          >
-            <Text size="xs" c="dimmed">
-              Pick both columns to place each row on a map, or neither.
-            </Text>
-            <Group grow align="flex-start">
-              <ColumnField
-                label="Latitude column"
-                value={props.lat_column}
-                columns={columns}
-                error={coordinates && !props.lat_column ? 'Pick both, or neither' : undefined}
-                testId="builder-props-lat-column"
-                onChange={(lat_column) => onChange({ ...props, lat_column })}
-              />
-              <ColumnField
-                label="Longitude column"
-                value={props.lon_column}
-                columns={columns}
-                error={coordinates && !props.lon_column ? 'Pick both, or neither' : coordinates ?? undefined}
-                testId="builder-props-lon-column"
-                onChange={(lon_column) => onChange({ ...props, lon_column })}
-              />
-            </Group>
-            <TextInput
-              label="Coordinate system"
-              description={`Blank: ${DEFAULT_CRS}`}
-              placeholder={DEFAULT_CRS}
-              value={props.crs ?? ''}
-              onChange={(e) => onChange({ ...props, crs: e.currentTarget.value })}
-              disabled={!props.lat_column && !props.lon_column}
-              styles={MONO}
-            />
-          </FoldSection>
-        </>
       )}
-      <ColumnsDescription
-        columns={columns}
-        value={props.columns_description}
-        onChange={(columns_description) => onChange({ ...props, columns_description })}
-      />
+      <OptionsSection>
+        {!spatial && (
+          <>
+            <ReaderOptionsFields
+              format={props.format}
+              reader={props.reader}
+              allowed={capabilities.reader_options}
+              onChange={(reader) => onChange({ ...props, reader })}
+            />
+            <FoldSection
+              label="Show rows on a map"
+              description="needs a latitude and a longitude column"
+              initiallyOpen={Boolean(props.lat_column || props.lon_column)}
+              testId="builder-props-coordinates"
+            >
+              <Text size="xs" c="dimmed">
+                Only for a table where each row is a place. Name the column holding its latitude and the one
+                holding its longitude, and dashboards can plot the rows on a map. Leave both empty otherwise.
+              </Text>
+              <Group grow align="flex-start">
+                <ColumnField
+                  label="Latitude column"
+                  value={props.lat_column}
+                  columns={columns}
+                  error={coordinates && !props.lat_column ? 'Pick both, or neither' : undefined}
+                  testId="builder-props-lat-column"
+                  onChange={(lat_column) => onChange({ ...props, lat_column })}
+                />
+                <ColumnField
+                  label="Longitude column"
+                  value={props.lon_column}
+                  columns={columns}
+                  error={coordinates && !props.lon_column ? 'Pick both, or neither' : coordinates ?? undefined}
+                  testId="builder-props-lon-column"
+                  onChange={(lon_column) => onChange({ ...props, lon_column })}
+                />
+              </Group>
+              <TextInput
+                label="Coordinate system"
+                description={`Blank: ${DEFAULT_CRS} (ordinary latitude and longitude in degrees)`}
+                placeholder={DEFAULT_CRS}
+                value={props.crs ?? ''}
+                onChange={(e) => onChange({ ...props, crs: e.currentTarget.value })}
+                disabled={!props.lat_column && !props.lon_column}
+                styles={MONO}
+              />
+            </FoldSection>
+          </>
+        )}
+        <ColumnsDescription
+          columns={columns}
+          value={props.columns_description}
+          onChange={(columns_description) => onChange({ ...props, columns_description })}
+        />
+      </OptionsSection>
     </Stack>
   );
 };

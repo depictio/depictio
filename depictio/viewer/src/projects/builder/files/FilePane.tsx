@@ -89,19 +89,44 @@ export const FilePane: React.FC<{
   const accent = useBrandAccents();
   if (!activeFile) {
     return (
-      <Paper withBorder radius="md" p="xl" style={{ borderStyle: 'dashed' }} data-testid="builder-file-empty">
-        <Stack gap="xs" align="center">
-          <ThemeIcon variant="light" color={accent.secondary} size={56} radius="xl">
-            <Icon icon="mdi:table-search" width={30} />
-          </ThemeIcon>
-          <Text fw={600}>Pick a file in the tree</Text>
-          <Text size="sm" c="dimmed" ta="center" maw={440}>
-            Its first rows show here and a data collection for{' '}
-            <Text span fw={600} inherit>
-              {workflowName}
-            </Text>{' '}
-            starts from it. Tick sibling files to cover many samples with one scan.
-          </Text>
+      <Paper withBorder radius="md" p="lg" style={{ borderStyle: 'dashed' }} data-testid="builder-file-empty">
+        <Stack gap="md">
+          <Group gap="sm" wrap="nowrap">
+            <ThemeIcon variant="light" color={accent.secondary} size={44} radius="xl">
+              <Icon icon="mdi:table-search" width={24} />
+            </ThemeIcon>
+            <div>
+              <Text fw={600}>Start from a file in the tree</Text>
+              <Text size="sm" c="dimmed">
+                A data collection groups the files of one kind for{' '}
+                <Text span fw={600} inherit>
+                  {workflowName}
+                </Text>
+                : a results table per sample, a metadata sheet, a tree.
+              </Text>
+            </div>
+          </Group>
+          <Stack gap="xs">
+            {[
+              ['mdi:cursor-default-click-outline', 'Click a file in the tree on the left', 'Its first rows and column types show here.'],
+              ['mdi:checkbox-multiple-marked-outline', 'Tick sibling files', 'One scan then covers every sample, and names that differ become wildcards.'],
+              ['mdi:table-edit', 'Fill in the collection', 'A form opens with a suggested name, type and scan rule; check what it matches, then save.'],
+            ].map(([icon, title, hint], index) => (
+              <Group key={title} gap="sm" wrap="nowrap" align="flex-start">
+                <ThemeIcon variant="light" color="gray" size="md" radius="xl">
+                  <Icon icon={icon} width={15} />
+                </ThemeIcon>
+                <div>
+                  <Text size="sm" fw={500} lh={1.3}>
+                    {index + 1}. {title}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    {hint}
+                  </Text>
+                </div>
+              </Group>
+            ))}
+          </Stack>
         </Stack>
       </Paper>
     );

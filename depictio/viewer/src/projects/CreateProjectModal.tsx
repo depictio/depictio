@@ -43,13 +43,14 @@ import type {
 
 import IngestionResultTable from './IngestionResultTable';
 import { useStepSettling } from './hooks/useStepSettling';
+import { KIND_ACCENT, kindBadgeProps, PROJECT_KINDS } from './projectTypes';
+import type { ProjectKind } from './projectTypes';
 import { DisabledReason, GatedButton } from '../components/settings/SettingsSections';
 import { RunFolderTab } from './fromRun';
 import type { RunCreatedContext } from './fromRun';
-import { PROJECT_BUILDER_ROUTE } from './builder/mode';
 
 type Tab = 'create' | 'import' | 'manifest' | 'run';
-type ProjectType = 'basic' | 'advanced';
+type ProjectType = ProjectKind;
 
 /** A required template variable with a declared default is filled in
  *  server-side, so only the ones without a default must be typed here. */
@@ -174,10 +175,12 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   );
 
   // Step-1 card click also auto-advances (matches Dash UX). The advanced
-  // card opens the Project Builder, a page of its own.
+  // card is the run-folder tab: one door for a folder of results, which
+  // recognises the pipeline first and hands over to the Project Builder only
+  // when the reader asks for it.
   const handleSelectType = (type: ProjectType) => {
     if (type === 'advanced') {
-      if (!builderDisabledReason) window.location.assign(PROJECT_BUILDER_ROUTE);
+      if (!builderDisabledReason) setTab('run');
       return;
     }
     setProjectType(type);
@@ -414,21 +417,11 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                       <ProjectTypeCard
                         active={projectType === 'basic'}
                         type="basic"
-                        title="Basic Project"
-                        description="Perfect for simple data visualization and exploration. No workflows required: upload data collections directly through the UI. Best for individual datasets and quick analysis."
-                        icon="mdi:view-dashboard-outline"
-                        tag="UI Creation Only"
-                        tagColor="cyan"
                         onClick={() => handleSelectType('basic')}
                       />
                       <ProjectTypeCard
                         active={false}
                         type="advanced"
-                        title="Advanced Project"
-                        description="Designed for workflow outputs and bioinformatics runs: point at a folder, group its files into data collections under one or several workflows, then ingest them. Best for pipeline results and computational analysis."
-                        icon="mdi:sitemap"
-                        tag="Project Builder"
-                        tagColor="orange"
                         disabled={Boolean(builderDisabledReason)}
                         disabledReason={builderDisabledReason}
                         onClick={() => handleSelectType('advanced')}
@@ -971,11 +964,6 @@ export const ManifestCreatedModal: React.FC<{
 interface ProjectTypeCardProps {
   active: boolean;
   type: ProjectType;
-  title: string;
-  description: string;
-  icon: string;
-  tag: string;
-  tagColor: string;
   disabled?: boolean;
   /** Shown on hover of a disabled card. */
   disabledReason?: string | null;
@@ -986,20 +974,14 @@ interface ProjectTypeCardProps {
 const ProjectTypeCard: React.FC<ProjectTypeCardProps> = ({
   active,
   type,
-  title,
-  description,
-  icon,
-  tag,
-  tagColor,
   disabled,
   disabledReason = null,
   onClick,
   testId,
 }) => {
-  // Project-type taxonomy, not a brand role — basic and advanced have to stay
-  // told apart, so these keep their own hues.
-  const typeAccent =
-    type === 'basic' ? 'var(--mantine-color-teal-6)' : 'var(--mantine-color-orange-6)';
+  const { title, summary, facts, icon, tag } = PROJECT_KINDS[type];
+  // Both kinds stay in the teal family (a lighter and a deeper shade).
+  const typeAccent = KIND_ACCENT[type];
   const card = (
     <Paper
       withBorder
@@ -1024,15 +1006,30 @@ const ProjectTypeCard: React.FC<ProjectTypeCardProps> = ({
         transition: 'border-color 120ms ease',
       }}
     >
-      <Stack gap="sm" align="center">
+      <Stack gap="sm" align="center" h="100%">
         <Icon icon={icon} width={42} height={42} color={typeAccent} />
         <Title order={4} ta="center">
           {title}
         </Title>
-        <Text size="xs" c="dimmed" ta="center" lh={1.4}>
-          {description}
+        <Text size="sm" ta="center" lh={1.4}>
+          {summary}
         </Text>
-        <Badge color={tagColor} variant="light" radius="sm">
+        <Stack gap={8} w="100%" mt={4} data-testid={`project-type-facts-${type}`}>
+          {facts.map((fact) => (
+            <Group key={fact.label} gap="xs" wrap="nowrap" align="flex-start">
+              <Icon icon={fact.icon} width={16} style={{ flexShrink: 0, marginTop: 2 }} color={typeAccent} />
+              <Text size="xs" lh={1.35}>
+                <Text span fw={600} inherit>
+                  {fact.label}:
+                </Text>{' '}
+                <Text span c="dimmed" inherit>
+                  {fact.value}
+                </Text>
+              </Text>
+            </Group>
+          ))}
+        </Stack>
+        <Badge {...kindBadgeProps(type)} radius="sm" mt="auto">
           {tag}
         </Badge>
       </Stack>

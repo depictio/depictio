@@ -55,6 +55,7 @@ const IssueList: React.FC<{ issues: BuilderIssue[]; onEditDc: (tag: string) => v
   issues,
   onEditDc,
 }) => {
+  const accent = useBrandAccents();
   if (issues.length === 0) return null;
   const errors = issues.filter((i) => i.level === 'error');
   return (
@@ -76,7 +77,7 @@ const IssueList: React.FC<{ issues: BuilderIssue[]; onEditDc: (tag: string) => v
             />
             <Text size="sm">{issue.message}</Text>
             {issue.tag && (
-              <Button size="compact-xs" variant="subtle" onClick={() => onEditDc(issue.tag as string)}>
+              <Button color={accent.secondary} size="compact-xs" variant="subtle" onClick={() => onEditDc(issue.tag as string)}>
                 Edit
               </Button>
             )}
@@ -158,7 +159,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                   {dataRoot}
                 </Text>
               </Stack>
-              <Button
+              <Button color={accent.secondary}
                 variant="subtle"
                 size="compact-sm"
                 leftSection={<Icon icon="mdi:pencil-outline" width={14} />}

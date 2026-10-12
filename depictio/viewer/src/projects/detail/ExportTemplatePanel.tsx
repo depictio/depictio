@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Alert, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { exportProjectTemplate } from 'depictio-react-core';
+import { exportProjectTemplate, useBrandAccents } from 'depictio-react-core';
 
 import {
   DisabledReason,
@@ -37,6 +37,7 @@ const ExportTemplatePanel: React.FC<ExportTemplatePanelProps> = ({
   canMutate,
   publicModeReason,
 }) => {
+  const accent = useBrandAccents();
   const [templateId, setTemplateId] = useState('');
   const [version, setVersion] = useState('1.0.0');
   const [description, setDescription] = useState('');
@@ -159,7 +160,7 @@ const ExportTemplatePanel: React.FC<ExportTemplatePanelProps> = ({
         </Alert>
       )}
       <Stack gap={6} align="flex-end">
-        <GatedButton
+        <GatedButton color={accent.secondary}
           data-testid="export-template-submit"
           leftSection={<Icon icon="mdi:package-down" width={16} />}
           onClick={handleExport}

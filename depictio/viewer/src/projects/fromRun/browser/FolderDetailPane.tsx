@@ -6,8 +6,9 @@
  * Top down: the folder and its path; the checks of the run against the
  * template Depictio would read it with (one line each, what the template
  * finds one click away); the run records that make it a run folder (its
- * `pipeline_info`, previewable, and its MultiQC report); the search for run
- * folders below it; and its contents, one list, folders first, each folder
+ * `pipeline_info`, previewable, and its MultiQC report, only when it has
+ * any); the search for run folders below it (a button in the header, its hits
+ * listed once it ran); and its contents, one list, folders first, each folder
  * one click from opening and each file one click from its first rows. Once a
  * search ran, its hits (`RunSearchResults`)
  * come before the contents, which fold under a toggle. A folder in a private
@@ -41,6 +42,7 @@ import {
   normalizeFolder,
   relativeToFolder,
   runTemplateMatch,
+  useBrandAccents,
 } from 'depictio-react-core';
 import type { FolderInspection, RunStorageIn, TemplateInfo } from 'depictio-react-core';
 
@@ -130,16 +132,9 @@ const RunRecords: React.FC<{
   result: FolderInspection;
   onOpen: (name: string) => void;
 }> = ({ result, onOpen }) => {
+  const accent = useBrandAccents();
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewId = useId();
-  if (result.markers.length === 0) {
-    return (
-      <Text size="sm" c="dimmed" data-testid="browse-detail-markers">
-        No pipeline_info folder and no MultiQC report here, so this does not look like the
-        output of a pipeline run.
-      </Text>
-    );
-  }
   const runInfo = result.run_info ?? null;
   return (
     <Stack gap="xs" data-testid="browse-detail-markers">
@@ -163,8 +158,8 @@ const RunRecords: React.FC<{
                 </Stack>
                 <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
                   {isInfo && runInfo && (
-                    <Button
-                      size="compact-xs"
+                    <Button color={accent.secondary}
+                      size="compact-sm"
                       variant="light"
                       leftSection={<Icon icon={previewOpen ? 'mdi:eye-off-outline' : 'mdi:eye-outline'} width={14} />}
                       onClick={() => setPreviewOpen((o) => !o)}
@@ -176,7 +171,7 @@ const RunRecords: React.FC<{
                     </Button>
                   )}
                   <Button
-                    size="compact-xs"
+                    size="compact-sm"
                     variant="subtle"
                     color="gray"
                     rightSection={<Icon icon="mdi:chevron-right" width={14} />}
@@ -452,6 +447,7 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
   onInspected,
   storageFor,
 }) => {
+  const accent = useBrandAccents();
   const [inspect, setInspect] = useState<InspectState>({ status: 'loading' });
   const [find, setFind] = useState<FindState | null>(null);
   /** The contents, folded while a search's hits are listed. */
@@ -535,7 +531,22 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
               {result?.name || folderName(location)}
             </Text>
           </Group>
-          {result?.looks_like_run && <FlowBadge status="run-folder" testId="browse-detail-run-badge" />}
+          <Group gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+            {result?.looks_like_run && (
+              <FlowBadge status="run-folder" testId="browse-detail-run-badge" />
+            )}
+            <Button
+              color={accent.secondary}
+              size="compact-sm"
+              variant="light"
+              leftSection={<Icon icon="mdi:folder-search-outline" width={14} />}
+              onClick={runFind}
+              loading={find?.status === 'loading' && activeFind !== null}
+              data-testid="browse-find-runs"
+            >
+              Find run folders here
+            </Button>
+          </Group>
         </Group>
         <FolderPath location={result?.location ?? location} maxLength={96} testId="browse-selected" />
       </Stack>
@@ -572,44 +583,32 @@ export const FolderDetailPane: React.FC<FolderDetailPaneProps> = ({
           ) : (
             <Text size="sm" c="dimmed" data-testid="browse-detail-not-recognised">
               {result.looks_like_run
-                ? 'This folder has a pipeline_info folder or a MultiQC report, but neither names a pipeline Depictio has a template for.'
-                : 'Depictio recognises no pipeline run here.'}
+                ? 'Run records found, but no pipeline Depictio has a template for.'
+                : 'Not a pipeline run folder.'}
             </Text>
           )}
 
-          <Section
-            title="Why this is a run folder"
-            description="A pipeline run leaves records beside its results; Depictio looks for these two."
-          >
-            <RunRecords result={result} onOpen={openChild} />
-          </Section>
+          {result.markers.length > 0 && (
+            <Section title="Run records">
+              <RunRecords result={result} onOpen={openChild} />
+            </Section>
+          )}
         </>
       )}
 
-      <Divider />
-
-      <Section title="Run folders below this one">
-        {activeFind ? (
-          <RunSearchResults
-            find={activeFind}
-            location={location}
-            onReveal={onReveal}
-            onClear={() => setFind(null)}
-          />
-        ) : (
-          <Group>
-            <Button
-              size="xs"
-              variant="light"
-              leftSection={<Icon icon="mdi:folder-search-outline" width={14} />}
-              onClick={runFind}
-              data-testid="browse-find-runs"
-            >
-              Find run folders here
-            </Button>
-          </Group>
-        )}
-      </Section>
+      {activeFind && (
+        <>
+          <Divider />
+          <Section title="Run folders below this one">
+            <RunSearchResults
+              find={activeFind}
+              location={location}
+              onReveal={onReveal}
+              onClear={() => setFind(null)}
+            />
+          </Section>
+        </>
+      )}
 
       {result && (
         <ContentsSection

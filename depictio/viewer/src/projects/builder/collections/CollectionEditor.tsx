@@ -5,15 +5,12 @@
  * a single file or a scan whose glob and regex stay in step (with its
  * wildcards), with the files it would ingest listed live below.
  */
-import React, { useState } from 'react';
+import React from 'react';
 import {
   ActionIcon,
   Badge,
-  Box,
   Button,
   Checkbox,
-  Collapse,
-  Divider,
   Group,
   NumberInput,
   Paper,
@@ -50,6 +47,7 @@ import type {
 import { DisabledReason, GatedButton } from '../../../components/settings/SettingsSections';
 import { useBuilderCapabilities } from '../BuilderCapabilitiesContext';
 import { useBuilderMode } from '../BuilderModeContext';
+import { OptionalBlock, SectionHead } from '../Requirement';
 import { WorkflowLogo } from '../workflows/WorkflowLogo';
 import {
   BuilderDcTypeIcon,
@@ -173,13 +171,11 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
   manifest,
 }) => {
   const accent = useBrandAccents();
+  const inRuns = state.workflows.find((w) => w.id === form.workflowId)?.structure === 'sequencing-runs';
   const mode = useBuilderMode();
   const { capabilities } = useBuilderCapabilities();
   const { dc } = form;
   const editing = form.originalTag !== null;
-  const [advancedOpen, setAdvancedOpen] = useState(
-    dc.max_depth != null || Boolean(dc.ignore?.length),
-  );
   const tagClash = isTagTaken(state, dc.tag, form.originalTag);
   const target = state.workflows.find((w) => w.id === form.workflowId) ?? state.workflows[0];
   const blocker = saveBlocker(state, form, remote, capabilities);
@@ -241,9 +237,11 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
           </Group>
         )}
 
+        <SectionHead title="Identity" hint="What the collection is called and where it goes." kind="required" />
         <Group grow align="flex-start">
           <TextInput
             label="Tag"
+            withAsterisk
             description="Unique across the whole project"
             value={dc.tag}
             onChange={(e) =>
@@ -256,6 +254,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
           />
           <Select
             label="Workflow"
+            withAsterisk
             description="Where the collection goes"
             value={target?.id ?? null}
             data={state.workflows.map((w) => ({ value: w.id, label: w.name || '(unnamed)' }))}
@@ -266,15 +265,9 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
           />
         </Group>
 
-        <TextInput
-          label="Description"
-          placeholder="Optional: what this collection holds"
-          value={dc.description ?? ''}
-          onChange={(e) => onChange({ ...form, dc: { ...dc, description: e.currentTarget.value } })}
-        />
-
         <Select
           label="Type"
+          withAsterisk
           value={dc.type}
           data={typeData}
           allowDeselect={false}
@@ -335,54 +328,61 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
           </Stack>
         )}
 
-        {METATYPE_DC_TYPES.has(dc.type) && (
-          <Select
-            label="Metatype"
-            description="Automatic: one file is Metadata (one row per sample), a scan is Aggregate"
-            value={dc.metatype ?? 'auto'}
-            data={METATYPE_OPTIONS}
-            allowDeselect={false}
-            onChange={(v) =>
-              onChange({
-                ...form,
-                dc: {
-                  ...dc,
-                  metatype: v === 'Metadata' || v === 'Aggregate' ? (v as BuilderMetatype) : null,
-                },
-              })
-            }
-            data-testid="builder-dc-metatype"
-          />
-        )}
+        <SectionHead
+          title="Files"
+          hint="Which files of the data root belong to this collection."
+          kind="required"
+        />
 
-        <Divider label="Files" labelPosition="left" />
-
-        <Group justify="space-between" align="flex-end">
+        <Stack gap={6} data-testid="builder-dc-mode-block">
+          <Text size="sm" fw={600}>
+            How are the files found?
+          </Text>
           <SegmentedControl
-            size="xs"
+            fullWidth
+            size="sm"
+            color={accent.secondary}
             value={dc.mode}
             data={[
-              { value: 'single', label: 'One file' },
+              {
+                value: 'single',
+                label: (
+                  <Group gap={6} justify="center" wrap="nowrap">
+                    <Icon icon="mdi:file-outline" width={16} />
+                    <span>One file</span>
+                  </Group>
+                ),
+              },
               {
                 value: 'recursive',
-                label: 'Scan (pattern)',
+                label: (
+                  <Group gap={6} justify="center" wrap="nowrap">
+                    <Icon icon="mdi:file-search-outline" width={16} />
+                    <span>Scan (pattern)</span>
+                  </Group>
+                ),
                 disabled: SINGLE_FILE_DC_TYPES.has(dc.type),
               },
             ]}
             onChange={(v) => onChange(withMode(form, v === 'recursive' ? 'recursive' : 'single', suggestion, activeFile))}
             data-testid="builder-dc-mode"
           />
-          <Checkbox
-            size="xs"
-            label="Optional: skip when nothing matches"
-            checked={Boolean(dc.optional)}
-            onChange={(e) => onChange({ ...form, dc: { ...dc, optional: e.currentTarget.checked } })}
-          />
-        </Group>
+          <Text size="xs" c="dimmed" data-testid="builder-dc-mode-hint">
+            {dc.mode === 'single'
+              ? inRuns
+                ? 'One file at a fixed path from the data root. For a file that repeats in every run, use Scan.'
+                : 'This collection is the one file below, at a fixed path.'
+              : inRuns
+                ? 'Every file matching the pattern below, searched inside each run: the pattern starts from the run folder.'
+                : 'This collection is every file whose name matches the pattern below, in each run or sample folder: one scan covers them all.'}
+            {SINGLE_FILE_DC_TYPES.has(dc.type) ? ' This type is always one file.' : ''}
+          </Text>
+        </Stack>
 
         {dc.mode === 'single' ? (
           <TextInput
             label="File"
+            withAsterisk
             description="Relative to the root"
             value={dc.path ?? ''}
             onChange={(e) => onChange({ ...form, dc: { ...dc, path: e.currentTarget.value } })}
@@ -420,6 +420,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
             />
             <TextInput
               label="Regex"
+              withAsterisk
               description="What ingestion matches: each file's name, or its path from the root when the pattern has a /"
               value={dc.regex ?? ''}
               onChange={(e) => onChange(withRegex(form, e.currentTarget.value))}
@@ -445,47 +446,15 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
               data-testid="builder-dc-regex"
             />
             <WildcardsEditor form={form} suggestion={suggestion} onChange={onChange} />
-            <Box>
-              <Button
-                variant="subtle"
-                size="compact-sm"
-                color="gray"
-                leftSection={<Icon icon={advancedOpen ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={16} />}
-                onClick={() => setAdvancedOpen((v) => !v)}
-              >
-                Advanced scan options
-              </Button>
-              <Collapse in={advancedOpen}>
-                <Stack gap={4} pt="xs">
-                  <Group grow align="flex-start">
-                    <NumberInput
-                      label="Max depth"
-                      description="Folder levels to descend (blank: no limit)"
-                      value={dc.max_depth ?? ''}
-                      onChange={(v) => onChange({ ...form, dc: { ...dc, max_depth: typeof v === 'number' ? v : null } })}
-                      min={0}
-                      allowDecimal={false}
-                      disabled={remote}
-                    />
-                    <TagsInput
-                      label="Ignore"
-                      description="Globs of paths to skip (Enter to add)"
-                      value={dc.ignore ?? []}
-                      onChange={(ignore) => onChange({ ...form, dc: { ...dc, ignore } })}
-                      placeholder="work/*, *.tmp"
-                      disabled={remote}
-                    />
-                  </Group>
-                  {remote && <DisabledReason reason={S3_WALK_REASON} icon="mdi:information-outline" />}
-                </Stack>
-              </Collapse>
-            </Box>
           </>
         )}
 
         <MatchesPanel state={match} onRefresh={onRefreshMatch} stores={matchesStores(dc)} />
 
-        <Divider label={`${DC_TYPE_META[dc.type].label} settings`} labelPosition="left" />
+        <SectionHead
+          title={`${DC_TYPE_META[dc.type].label} settings`}
+          hint="Fields marked * must be filled in; the rest are folded under Additional options."
+        />
         <PropsForm
           props={dc.props}
           onChange={(props) => onChange({ ...form, dc: { ...dc, props } })}
@@ -505,6 +474,71 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
             },
           }}
         />
+
+        <OptionalBlock
+          title="Optional details"
+          hint="A description, how the collection is classified, and scan limits."
+          initiallyOpen={Boolean(
+            dc.description?.trim() || dc.metatype || dc.optional || dc.max_depth != null || dc.ignore?.length,
+          )}
+          testId="builder-dc-optional"
+        >
+          <TextInput
+            label="Description"
+            placeholder="What this collection holds"
+            value={dc.description ?? ''}
+            onChange={(e) => onChange({ ...form, dc: { ...dc, description: e.currentTarget.value } })}
+          />
+          {METATYPE_DC_TYPES.has(dc.type) && (
+            <Select
+              label="Metatype"
+              description="Automatic: one file is Metadata (one row per sample), a scan is Aggregate"
+              value={dc.metatype ?? 'auto'}
+              data={METATYPE_OPTIONS}
+              allowDeselect={false}
+              onChange={(v) =>
+                onChange({
+                  ...form,
+                  dc: {
+                    ...dc,
+                    metatype: v === 'Metadata' || v === 'Aggregate' ? (v as BuilderMetatype) : null,
+                  },
+                })
+              }
+              data-testid="builder-dc-metatype"
+            />
+          )}
+          <Checkbox
+            label="Skip when nothing matches"
+            description="Ingestion carries on instead of failing when no file is found"
+            checked={Boolean(dc.optional)}
+            onChange={(e) => onChange({ ...form, dc: { ...dc, optional: e.currentTarget.checked } })}
+          />
+            {dc.mode === 'recursive' && (
+              <Group grow align="flex-start">
+                <NumberInput
+                  label="Max depth"
+                  description="Folder levels to descend (blank: no limit)"
+                  value={dc.max_depth ?? ''}
+                  onChange={(v) => onChange({ ...form, dc: { ...dc, max_depth: typeof v === 'number' ? v : null } })}
+                  min={0}
+                  allowDecimal={false}
+                  disabled={remote}
+                />
+                <TagsInput
+                  label="Ignore"
+                  description="Globs of paths to skip (Enter to add)"
+                  value={dc.ignore ?? []}
+                  onChange={(ignore) => onChange({ ...form, dc: { ...dc, ignore } })}
+                  placeholder="work/*, *.tmp"
+                  disabled={remote}
+                />
+              </Group>
+            )}
+            {dc.mode === 'recursive' && remote && (
+              <DisabledReason reason={S3_WALK_REASON} icon="mdi:information-outline" />
+            )}
+        </OptionalBlock>
 
         <Group justify="flex-end" gap="xs">
           <Button variant="default" onClick={onCancel} data-testid="builder-dc-cancel">

@@ -38,7 +38,7 @@ const TemplateNotDetectedAlert: React.FC<{
       </Text>
       <Group gap="xs">
         <Button
-          size="xs"
+          size="sm"
           variant="light"
           color="yellow"
           leftSection={<Icon icon="mdi:arrow-left" width={14} />}
@@ -49,7 +49,7 @@ const TemplateNotDetectedAlert: React.FC<{
         </Button>
         {onDefineYourself && (
           <Button
-            size="xs"
+            size="sm"
             variant="subtle"
             color="yellow"
             leftSection={<Icon icon="mdi:folder-cog-outline" width={14} />}
@@ -138,8 +138,8 @@ export const RunPreviewStep: React.FC<RunPreviewStepProps> = ({
           <Stack gap="xs" align="flex-start">
             <Text size="sm">{error}</Text>
             {onGiveBucketDetails && (
-              <Button
-                size="xs"
+              <Button color={accent.secondary}
+                size="sm"
                 variant="light"
                 leftSection={<Icon icon="mdi:cloud-lock-outline" width={14} />}
                 onClick={onGiveBucketDetails}

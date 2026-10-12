@@ -9,6 +9,7 @@ import { Anchor, Box, Group, Loader, Text } from '@mantine/core';
 import type { RenderTreeNodePayload } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { useBrandAccents } from 'depictio-react-core';
 import type { FolderSource } from 'depictio-react-core';
 
 import { FlowBadge } from '../FlowBadge';
@@ -94,7 +95,8 @@ export const FolderTreeNode: React.FC<FolderTreeNodeProps> = ({
   onSelect,
   onRetry,
 }) => {
-  const { node, expanded, hasChildren, elementProps, tree: controller } = payload;
+  const { node, expanded, hasChildren, elementProps, tree: controller, selected } = payload;
+  const accent = useBrandAccents();
   const props = (node.nodeProps ?? {}) as TreeNodeProps;
 
   if (props.kind === 'placeholder') {
@@ -160,7 +162,16 @@ export const FolderTreeNode: React.FC<FolderTreeNodeProps> = ({
       py={4}
       pr="xs"
       {...elementProps}
-      style={{ ...elementProps.style, borderRadius: 'var(--mantine-radius-sm)' }}
+      // The selected folder is the reference the detail pane shows and the
+      // footer selects: it stays marked wherever the reader scrolls or opens.
+      style={{
+        ...elementProps.style,
+        borderRadius: 'var(--mantine-radius-sm)',
+        background: selected ? `var(--mantine-color-${accent.secondary}-light)` : undefined,
+        boxShadow: selected ? `inset 3px 0 0 var(--mantine-color-${accent.secondary}-6)` : undefined,
+        fontWeight: selected ? 600 : undefined,
+      }}
+      aria-selected={selected}
       onClick={(event) => {
         elementProps.onClick(event);
         onSelect(node.value);
@@ -172,9 +183,10 @@ export const FolderTreeNode: React.FC<FolderTreeNodeProps> = ({
     >
       {chevron}
       <Icon icon={folderIcon(run, expanded)} width={16} style={{ flexShrink: 0 }} />
-      <Text size="sm" truncate style={{ flex: 1, minWidth: 0 }}>
+      <Text size="sm" truncate fw={selected ? 600 : undefined} style={{ flex: 1, minWidth: 0 }}>
         {node.label}
       </Text>
+      {selected && <Icon icon="mdi:check-circle" width={15} color={`var(--mantine-color-${accent.secondary}-6)`} />}
       {run && <FlowBadge status="run-folder" />}
     </Group>
   );

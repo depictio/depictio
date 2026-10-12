@@ -44,6 +44,9 @@ function holderReducer(holder: Holder, action: HolderAction): Holder {
 export function useBuilderDraft(dataRoot: string | null): {
   state: BuilderState;
   dispatch: Dispatch<BuilderAction>;
+  /** The folder whose saved draft (or fresh one) the state holds: null until
+   *  the first folder is read. */
+  loadedRoot: string | null;
   /** Drop the draft of this root and start over. */
   reset: () => void;
   /** Forget the saved draft (the project was created). */
@@ -78,5 +81,5 @@ export function useBuilderDraft(dataRoot: string | null): {
     if (root) clearBuilderDraft(root);
   }, []);
 
-  return { state: holder.draft, dispatch, reset, forget };
+  return { state: holder.draft, dispatch, loadedRoot: holder.root, reset, forget };
 }

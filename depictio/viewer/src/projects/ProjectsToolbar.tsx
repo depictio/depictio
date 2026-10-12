@@ -95,7 +95,7 @@ const FilterPopover: React.FC<{
               Filters
             </Text>
             {activeCount > 0 && (
-              <Button
+              <Button color={accent.secondary}
                 variant="subtle"
                 size="compact-xs"
                 onClick={() => setFilters(emptyProjectFilters())}

@@ -561,7 +561,7 @@ const PermissionsApp: React.FC = () => {
                   color="var(--mantine-color-red-6)"
                 />
                 <Text c="red">{loadError}</Text>
-                <Button component="a" href="/projects" variant="light">
+                <Button color={accent.secondary} component="a" href="/projects" variant="light">
                   Back to projects
                 </Button>
               </Stack>

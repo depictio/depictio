@@ -12,7 +12,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { refreshManifest, Z_LAYERS } from 'depictio-react-core';
+import { refreshManifest, Z_LAYERS, useBrandAccents } from 'depictio-react-core';
 import type { ManifestRefreshReport } from 'depictio-react-core';
 
 import { DisabledReason, Field, GatedButton } from '../../components/settings/SettingsSections';
@@ -280,6 +280,7 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
   publicModeReason,
   onReloadProject,
 }) => {
+  const accent = useBrandAccents();
   const { refreshableTags, selectedTag, setSelectedTag, report, error, state } = refresh;
   const inFlight = state === 'starting' || state === 'running';
   const empty = refreshableTags.length === 0;
@@ -350,7 +351,7 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
 
       <Stack gap={6}>
         <Group gap="xs">
-          <GatedButton
+          <GatedButton color={accent.secondary}
             size="xs"
             data-testid="manifest-refresh-button"
             leftSection={<Icon icon="mdi:refresh" width={14} />}
@@ -361,7 +362,7 @@ const ManifestRefreshPanel: React.FC<ManifestRefreshPanelProps> = ({
             Refresh now
           </GatedButton>
           {isRefreshEnded(state) && report && onReloadProject && (
-            <Button
+            <Button color={accent.secondary}
               size="xs"
               variant="subtle"
               leftSection={<Icon icon="mdi:reload" width={14} />}

@@ -22,6 +22,8 @@ import { Icon } from '@iconify/react';
 import { READER_FORMATS } from 'depictio-react-core';
 import type { BuilderReaderOptions } from 'depictio-react-core';
 
+import { OptionalBlock } from '../../Requirement';
+
 const SEPARATORS = [
   { value: ',', label: 'Comma ( , )' },
   { value: '\t', label: 'Tab' },
@@ -33,26 +35,52 @@ const TEXT_FORMATS = new Set(['csv', 'tsv', 'txt']);
 
 export const MONO = { input: { fontFamily: 'var(--mantine-font-family-monospace)' } };
 
-/** A section that folds, opened at first when it holds something. */
+/** The optional settings of a collection, together in one folded block, so they
+ *  read as "more, if you need it" and not as part of what must be filled in.
+ *  Each child is a `FoldSection` that says in a few words what it is for. */
+export const OptionsSection: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <OptionalBlock
+    title="Additional options"
+    hint="The defaults suit most files. Open a section only if you need it."
+    testId="builder-props-options"
+  >
+    <Stack gap={2}>{children}</Stack>
+  </OptionalBlock>
+);
+
+/** A section that folds, opened at first when it holds something. `description`
+ *  says what it is for, beside its title. */
 export const FoldSection: React.FC<{
   label: string;
+  description?: string;
   initiallyOpen?: boolean;
   testId?: string;
   children: React.ReactNode;
-}> = ({ label, initiallyOpen = false, testId, children }) => {
+}> = ({ label, description, initiallyOpen = false, testId, children }) => {
   const [open, setOpen] = useState(initiallyOpen);
   return (
     <div data-testid={testId}>
       <Button
         variant="subtle"
-        size="compact-sm"
+        size="compact-md"
         color="gray"
+        fullWidth
+        justify="flex-start"
         leftSection={<Icon icon={open ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={16} />}
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         data-testid={testId ? `${testId}-toggle` : undefined}
       >
-        {label}
+        <Group gap={8} wrap="nowrap" component="span">
+          <Text span size="sm" fw={600} inherit>
+            {label}
+          </Text>
+          {description && (
+            <Text span size="xs" c="dimmed" fw={400} truncate>
+              {description}
+            </Text>
+          )}
+        </Group>
       </Button>
       <Collapse in={open}>
         <Stack gap="xs" pt={4}>
@@ -124,7 +152,12 @@ export const ReaderOptionsFields: React.FC<{
   const set = (patch: Partial<BuilderReaderOptions>) => onChange({ ...r, ...patch });
   const touched = Object.values(r).some((v) => v !== undefined && v !== null && v !== '');
   return (
-    <FoldSection label="Reader options" initiallyOpen={touched} testId="builder-props-reader">
+    <FoldSection
+      label="How the file is read"
+      description="header, skipped lines, decimal comma, missing values"
+      initiallyOpen={touched}
+      testId="builder-props-reader"
+    >
       <Group grow align="flex-start">
         {has('has_header') && (
           <Switch
@@ -199,7 +232,11 @@ export const ColumnsDescription: React.FC<{
 }> = ({ columns, value, onChange }) => {
   const described = value ?? {};
   return (
-    <FoldSection label="Describe the columns (optional)" initiallyOpen={Object.keys(described).length > 0}>
+    <FoldSection
+      label="Describe the columns"
+      description="a note per column, shown in dashboards"
+      initiallyOpen={Object.keys(described).length > 0}
+    >
       {columns.length === 0 ? (
         <Text size="xs" c="dimmed">
           The columns show here once the file preview has read them.
@@ -255,6 +292,7 @@ export const ColumnField: React.FC<{
         value={current}
         onChange={(e) => onChange(e.currentTarget.value)}
         error={shownError}
+        withAsterisk={required}
         spellCheck={false}
         data-testid={testId}
       />
@@ -270,6 +308,7 @@ export const ColumnField: React.FC<{
       data={data}
       searchable
       clearable={clearable && !required}
+      withAsterisk={required}
       onChange={(v) => onChange(v)}
       error={shownError}
       data-testid={testId}

@@ -12,7 +12,14 @@ import { SPATIALDATA_FORMAT } from 'depictio-react-core';
 import type { BuilderCapabilities, BuilderImageProps } from 'depictio-react-core';
 
 import type { BuilderMode } from '../../mode';
-import { ColumnField, ColumnsDescription, FoldSection, FormatFields, ReaderOptionsFields } from './shared';
+import {
+  ColumnField,
+  ColumnsDescription,
+  FoldSection,
+  FormatFields,
+  OptionsSection,
+  ReaderOptionsFields,
+} from './shared';
 
 /** The table formats an image list can be in: the server's, plus `mixed`. */
 function imageFormats(capabilities: BuilderCapabilities): string[] {
@@ -39,12 +46,6 @@ export const ImageForm: React.FC<{
         formats={imageFormats(capabilities)}
         label="Format of the image list"
         onChange={(patch) => onChange({ ...props, ...patch })}
-      />
-      <ReaderOptionsFields
-        format={props.format}
-        reader={props.reader}
-        allowed={capabilities.reader_options}
-        onChange={(reader) => onChange({ ...props, reader })}
       />
       <ColumnField
         label="Image column"
@@ -87,8 +88,16 @@ export const ImageForm: React.FC<{
           </Text>
         </Group>
       )}
+      <OptionsSection>
+      <ReaderOptionsFields
+        format={props.format}
+        reader={props.reader}
+        allowed={capabilities.reader_options}
+        onChange={(reader) => onChange({ ...props, reader })}
+      />
       <FoldSection
-        label="Thumbnails and extensions (optional)"
+        label="Thumbnails and extensions"
+        description="thumbnail size, accepted image types"
         initiallyOpen={typeof thumb === 'number' || Boolean(props.supported_formats?.length)}
       >
         <Group grow align="flex-start">
@@ -116,6 +125,7 @@ export const ImageForm: React.FC<{
         value={props.columns_description}
         onChange={(columns_description) => onChange({ ...props, columns_description })}
       />
+      </OptionsSection>
     </Stack>
   );
 };

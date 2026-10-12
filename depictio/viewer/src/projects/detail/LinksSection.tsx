@@ -25,6 +25,7 @@ import {
   listLinkResolvers,
   listProjectLinks,
   updateProjectLink,
+  useBrandAccents,
 } from 'depictio-react-core';
 import type { DCLink, ResolverInfo } from 'depictio-react-core';
 
@@ -84,6 +85,7 @@ const LinksSection: React.FC<LinksSectionProps> = ({
   canMutate,
   onLinksChange,
 }) => {
+  const accent = useBrandAccents();
   const [links, setLinks] = useState<DCLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [resolvers, setResolvers] = useState<ResolverInfo[]>([]);
@@ -255,7 +257,7 @@ const LinksSection: React.FC<LinksSectionProps> = ({
         </UnstyledButton>
         <Group gap="xs" wrap="nowrap">
           <Tooltip label={disabledTip} disabled={canMutate}>
-            <Button
+            <Button color={accent.secondary}
               data-testid="add-link-btn"
               leftSection={<Icon icon="mdi:plus" width={16} />}
               onClick={openCreate}

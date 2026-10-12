@@ -118,6 +118,16 @@ const TracksChecks: React.FC<{ tracks: BuilderTracksCheck }> = ({ tracks }) => {
   );
 };
 
+/** Files with the same difference, one line for all of them. */
+function groupMismatches(mismatches: BuilderSchemaMismatch[]): { text: string; files: string[] }[] {
+  const groups = new Map<string, string[]>();
+  for (const m of mismatches) {
+    const text = mismatchText(m);
+    groups.set(text, [...(groups.get(text) ?? []), m.file]);
+  }
+  return [...groups].map(([text, files]) => ({ text, files }));
+}
+
 export const MatchesPanel: React.FC<{
   state: MatchState;
   /** Ask again with nothing changed; offered on S3 roots. */
@@ -256,16 +266,35 @@ export const MatchesPanel: React.FC<{
         </Group>
       )}
 
+      {result?.widened && Object.keys(result.widened).length > 0 && (
+        <Group gap={6} wrap="nowrap" align="flex-start" data-testid="builder-matches-widened">
+          <Icon icon="mdi:information-outline" width={14} style={{ flexShrink: 0, marginTop: 2 }} />
+          <Text size="xs" c="dimmed">
+            Read as integers in some files and decimals in others, so widened to one type (nothing to do):{' '}
+            {Object.entries(result.widened)
+              .map(([column, w]) => `${column} (${w.types.join(' and ')} become ${w.as})`)
+              .join(', ')}
+            .
+          </Text>
+        </Group>
+      )}
+
       {result && result.consistent === false && result.mismatches.length > 0 && (
         <Alert color="yellow" variant="light" p="xs" icon={<Icon icon="mdi:alert" width={14} />}>
           <Text size="xs" fw={600} mb={2}>
-            Schemas differ across the files: the collection can still be created.
+            {result.mismatches.length} of {result.count.toLocaleString()} files do not have the same columns as
+            the first one: the collection can still be created.
           </Text>
-          <Stack gap={0}>
-            {result.mismatches.map((m) => (
-              <Text key={m.file} size="xs" c="dimmed">
-                <b>{m.file}</b>: {mismatchText(m)}
-              </Text>
+          <Stack gap={4}>
+            {groupMismatches(result.mismatches).map((group) => (
+              <div key={group.text}>
+                <Text size="xs" fw={500}>
+                  {group.text}
+                </Text>
+                <Text size="xs" c="dimmed" ff="monospace" truncate>
+                  {group.files.length} file{group.files.length === 1 ? '' : 's'}, e.g. {group.files[0]}
+                </Text>
+              </div>
             ))}
           </Stack>
         </Alert>

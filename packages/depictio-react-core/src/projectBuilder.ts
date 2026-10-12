@@ -23,7 +23,12 @@
  * they stay in the page's state.
  */
 
-import type { BuilderCapabilities, BuilderRepoMetadata, RunStorageIn } from './api';
+import type {
+  BuilderCapabilities,
+  BuilderRepoMetadata,
+  BuilderTemplateDraft,
+  RunStorageIn,
+} from './api';
 
 // ── Contract shapes ─────────────────────────────────────────────────────────
 
@@ -1951,15 +1956,62 @@ export function clearBuilderDraft(
   }
 }
 
+// ── A shipped template as a draft ──────────────────────────────────────────
+
+/** The state a shipped template's draft opens the builder with: its project
+ *  fields, workflows (ids `wf-0`, `wf-1`...) and links. Null for a draft that
+ *  does not hold together (the server's answer is checked like a stored draft). */
+export function stateFromTemplateDraft(result: BuilderTemplateDraft): BuilderState | null {
+  const { draft } = result;
+  return parseBuilderState({
+    version: 1,
+    project: {
+      name: draft.name,
+      description: draft.description ?? '',
+      is_public: draft.is_public === true,
+      realtime: draft.realtime === true,
+      data_management_platform_project_url: draft.data_management_platform_project_url ?? '',
+    },
+    workflows: draft.workflows.map((workflow, index) => ({ ...workflow, id: `wf-${index}` })),
+    activeWorkflowId: 'wf-0',
+    links: draft.links ?? [],
+    claimed: {},
+    schemas: {},
+    nextId: draft.workflows.length,
+  });
+}
+
 // ── Hand-off from the run-folder wizard ────────────────────────────────────
 
-/** Where the run-folder wizard leaves the folder it could not match to a
- *  template, for the builder page to pick up once (sessionStorage). */
+/** Where the run-folder wizard leaves the folder it hands to the builder, for
+ *  the builder page to pick up once (sessionStorage). */
 export const BUILDER_HANDOFF_KEY = 'depictio:project-builder:handoff';
+
+/** What the reader chose to do with the folder: open the recognised template
+ *  as a draft to edit, or define the collections from scratch. */
+export type BuilderHandoffIntent = 'edit-template' | 'scratch';
+
+/** What the wizard recognised in the folder, so the builder can say so and
+ *  start from the right engine instead of its default. */
+export interface BuilderHandoffDetection {
+  /** e.g. `nf-core/ampliseq`. */
+  pipeline: string | null;
+  version: string | null;
+  /** Workflow engine, e.g. `nextflow`. */
+  engine: string | null;
+  /** The shipped template that fits, when there is one. */
+  templateId: string | null;
+  templateTitle: string | null;
+}
 
 export interface BuilderHandoff {
   dataRoot: string;
   storage: RunStorageIn | null;
+  /** Absent: the folder only. */
+  intent?: BuilderHandoffIntent;
+  /** The template to open as a draft (`intent` `edit-template`). */
+  templateId?: string | null;
+  detected?: BuilderHandoffDetection | null;
 }
 
 export function writeBuilderHandoff(
@@ -1973,6 +2025,18 @@ export function writeBuilderHandoff(
   } catch {
     return false;
   }
+}
+
+function parseDetection(raw: unknown): BuilderHandoffDetection | null {
+  if (!isRecord(raw)) return null;
+  const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
+  return {
+    pipeline: str(raw.pipeline),
+    version: str(raw.version),
+    engine: str(raw.engine),
+    templateId: str(raw.templateId),
+    templateTitle: str(raw.templateTitle),
+  };
 }
 
 /** The hand-off left for the builder, removed as it is read: it is used
@@ -1991,6 +2055,8 @@ export function takeBuilderHandoff(
     }
     const s = isRecord(parsed.storage) ? parsed.storage : null;
     const text = (v: unknown) => (typeof v === 'string' && v ? v : null);
+    const intent: BuilderHandoffIntent | undefined =
+      parsed.intent === 'edit-template' || parsed.intent === 'scratch' ? parsed.intent : undefined;
     return {
       dataRoot: parsed.dataRoot.trim(),
       storage: s
@@ -2001,6 +2067,9 @@ export function takeBuilderHandoff(
             secret_access_key: text(s.secret_access_key),
           }
         : null,
+      ...(intent ? { intent } : {}),
+      ...(text(parsed.templateId) ? { templateId: text(parsed.templateId) } : {}),
+      ...(parseDetection(parsed.detected) ? { detected: parseDetection(parsed.detected) } : {}),
     };
   } catch {
     return null;

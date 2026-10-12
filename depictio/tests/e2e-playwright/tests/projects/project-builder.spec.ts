@@ -24,6 +24,7 @@
 import { Page, Route } from "@playwright/test";
 import { test, expect, getAuthMode } from "@fixtures/auth";
 import {
+  detected,
   inspection,
   mockTemplates,
   openRunTab,
@@ -38,6 +39,48 @@ const TEMPLATE_ID = "custom/e2e-builder-survey";
 const PROJECT_ID = "665f0f3c1e4a2d7f8e5b8cb1";
 const RUN_ID = "run-builder-1";
 const HANDOFF_KEY = "depictio:project-builder:handoff";
+
+/** `POST /projects/builder/from_template` for an ampliseq template: two
+ *  collections and a link carried over, the rest left out. */
+const TEMPLATE_DRAFT = {
+  template_id: "nf-core/ampliseq/2.16.0",
+  title: "nf-core/ampliseq",
+  draft: {
+    name: "Ampliseq draft",
+    is_public: false,
+    workflows: [
+      {
+        name: "ampliseq",
+        engine: "nextflow",
+        structure: "flat",
+        data_collections: [
+          {
+            tag: "multiqc_data",
+            type: "multiqc",
+            mode: "recursive",
+            regex: "multiqc/multiqc_data/multiqc.parquet",
+            props: { kind: "multiqc" },
+          },
+          {
+            tag: "alpha",
+            type: "table",
+            mode: "single",
+            path: "qiime2/alpha_diversity.tsv",
+            props: { kind: "table", format: "tsv", separator: "\t" },
+          },
+        ],
+      },
+    ],
+    links: [{ source_tag: "alpha", source_column: "sample", target_tag: "multiqc_data" }],
+  },
+  carried: { workflows: 1, collections: 2, links: 1 },
+  dropped: [
+    { kind: "collection", tag: "taxonomy", reason: "built from other collections (source, transform)" },
+    { kind: "dashboards", tag: null, reason: "Dashboards are not part of a builder draft." },
+  ],
+  editable: true,
+  reason: null,
+};
 
 /** What `/suggest` derives for `quant/S1.tsv` alone, with `quant/S2.tsv`
  *  ticked, and for a Newick file (`compose.glob_regex` of the glob). */
@@ -721,7 +764,7 @@ test.describe("Project Builder", () => {
     await setRunFolderFlags(page, { local: true, remote: false });
   });
 
-  test("the create dialog's advanced project card opens the builder", async ({
+  test("the create dialog's advanced project card opens the folder tab, not the builder", async ({
     loginAsAdmin,
     page,
   }) => {
@@ -734,9 +777,82 @@ test.describe("Project Builder", () => {
     await expect(card).not.toHaveAttribute("aria-disabled", "true");
     await card.click();
 
+    // One door for a folder of results: it reads the folder first and hands
+    // over to the builder only when the reader asks.
+    await expect(page).toHaveURL(/\/projects$/);
+    await expect(page.getByRole("tab", { name: "From a run folder" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(byTestId(page, "run-data-root-input")).toBeVisible();
+  });
+
+  test("a recognised folder offers the template, its edit, or a start from scratch", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    await stubByParam(page, "**/api/v1/projects/folder_inspect**", "location", {
+      [S3_ROOT]: {
+        json: inspection(S3_ROOT, { looks_like_run: true, markers: ["pipeline_info"], detected: detected() }),
+      },
+    });
+    await stubBuilder(page, S3_ROOT);
+    const asked: string[] = [];
+    await page.route("**/api/v1/projects/builder/from_template", async (route) => {
+      asked.push(String((route.request().postDataJSON() ?? {}).template_id));
+      await answer(route, { json: TEMPLATE_DRAFT });
+    });
+
+    await loginAsAdmin();
+    await openRunTab(page);
+    await byTestId(page, "run-data-root-input").fill(S3_ROOT);
+    await expect(byTestId(page, "run-next-choice")).toBeVisible({ timeout: 20_000 });
+    // The template as it is stays the default, and the dialog's own button.
+    await expect(byTestId(page, "run-next-use")).toHaveAttribute("aria-checked", "true");
+    await expect(byTestId(page, "create-from-run-submit")).toHaveText("Next");
+    // Edit says how much of the template the builder carries over (2 of the
+    // 3 collections), and the detail below spells out what is left out.
+    await expect(byTestId(page, "run-next-edit")).toContainText("2 of 3 collections carry over");
+
+    await byTestId(page, "run-next-edit").click();
+    await expect(byTestId(page, "run-next-detail")).toContainText("2 of 3 collections");
+    await expect(byTestId(page, "create-from-run-submit")).toHaveText("Open the Project Builder");
+    await expect(byTestId(page, "run-project-name-input")).toHaveCount(0);
+    await byTestId(page, "create-from-run-submit").click();
+
+    // The builder opens on the template as the draft, and says what it left out.
     await expect(page).toHaveURL(/\/projects\/build$/);
-    await expect(byTestId(page, "builder-title")).toHaveText("Project Builder");
-    await expect(byTestId(page, "builder-root-input")).toBeVisible();
+    await expect(byTestId(page, "builder-root-input")).toHaveValue(S3_ROOT);
+    const start = byTestId(page, "builder-template-start");
+    await expect(start).toHaveAttribute("data-state", "loaded", { timeout: 20_000 });
+    await expect(byTestId(page, "builder-template-carried")).toContainText("2 collections");
+    expect(asked).toEqual(["nf-core/ampliseq/2.16.0"]);
+    await expect(byTestId(page, "builder-project-name")).toHaveValue("Ampliseq draft");
+  });
+
+  test("starting from scratch on a recognised folder keeps the detection and its engine", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    await stubByParam(page, "**/api/v1/projects/folder_inspect**", "location", {
+      [S3_ROOT]: {
+        json: inspection(S3_ROOT, { looks_like_run: true, markers: ["pipeline_info"], detected: detected() }),
+      },
+    });
+    await stubBuilder(page, S3_ROOT);
+
+    await loginAsAdmin();
+    await openRunTab(page);
+    await byTestId(page, "run-data-root-input").fill(S3_ROOT);
+    await byTestId(page, "run-next-scratch").click({ timeout: 20_000 });
+    await byTestId(page, "create-from-run-submit").click();
+
+    await expect(page).toHaveURL(/\/projects\/build$/);
+    // Recognised, offered, not applied: the draft is empty but not "python".
+    const start = byTestId(page, "builder-template-start");
+    await expect(start).toContainText("Recognised nf-core/ampliseq 2.16.0", { timeout: 20_000 });
+    await expect(start).toHaveAttribute("data-state", "idle");
+    await expect(byTestId(page, "builder-template-load")).toBeVisible();
   });
 
   test("an unrecognised pipeline hands its folder to the builder, once", async ({
@@ -803,7 +919,11 @@ test.describe("Project Builder", () => {
     await expect(byTestId(page, "run-detection-card")).toHaveAttribute("data-state", "ready", {
       timeout: 20_000,
     });
-    await byTestId(page, "run-define-collections").click();
+    // No template fits: starting from scratch is the selected choice, and the
+    // footer button is the way forward.
+    await expect(byTestId(page, "run-next-scratch")).toHaveAttribute("data-active", "true");
+    await expect(byTestId(page, "run-next-use-reason")).toBeVisible();
+    await byTestId(page, "create-from-run-submit").click();
 
     await expect(page).toHaveURL(/\/projects\/build$/);
     await expect(byTestId(page, "builder-root-input")).toHaveValue(S3_ROOT);

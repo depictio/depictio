@@ -378,6 +378,7 @@ export const GenomicTracksForm: React.FC<{
   capabilities: BuilderCapabilities;
   tools: ManifestTools;
 }> = ({ props, onChange, columns, capabilities, tools }) => {
+  const accent = useBrandAccents();
   const presets = capabilities.genomic_tracks?.assemblies ?? [];
   const trackFormats = capabilities.genomic_tracks?.track_formats ?? [];
   const custom = typeof props.assembly === 'object' && props.assembly !== null;
@@ -481,7 +482,7 @@ export const GenomicTracksForm: React.FC<{
             rightSectionWidth={100}
             rightSectionPointerEvents="all"
             rightSection={
-              <Button
+              <Button color={accent.secondary}
                 size="compact-xs"
                 variant="subtle"
                 onClick={() =>

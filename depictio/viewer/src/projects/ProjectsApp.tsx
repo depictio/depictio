@@ -334,7 +334,7 @@ const ProjectsApp: React.FC = () => {
                   color="var(--mantine-color-red-6)"
                 />
                 <Text c="red">{loadError}</Text>
-                <Button variant="light" onClick={refresh}>
+                <Button color={accent.secondary} variant="light" onClick={refresh}>
                   Try again
                 </Button>
               </Stack>

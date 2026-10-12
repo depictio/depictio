@@ -106,6 +106,9 @@ interface SourceStepProps {
   remote: boolean;
   /** Names of the projects that exist (server mode). */
   existingNames: string[];
+  /** What Depictio recognised in the folder, and the template it offers
+   *  (server mode). */
+  templateStart?: React.ReactNode;
 }
 
 export const REALTIME_EVENTS_OFF_REASON =
@@ -175,6 +178,7 @@ export const SourceStep: React.FC<SourceStepProps> = ({
   dispatch,
   remote,
   existingNames,
+  templateStart = null,
 }) => {
   const accent = useBrandAccents();
   const name = project.name.trim();
@@ -284,6 +288,8 @@ export const SourceStep: React.FC<SourceStepProps> = ({
           )}
         </Stack>
       </Paper>
+
+      {templateStart}
 
       <Paper withBorder radius="md" p="md">
         <Stack gap="sm">

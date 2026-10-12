@@ -30,6 +30,7 @@ import type {
   BuilderTreeListing,
   RunStorageBinding,
   RunStorageIn,
+  TemplateInfo,
 } from 'depictio-react-core';
 
 import FolderBrowserModal from '../../fromRun/browser/FolderBrowserModal';
@@ -99,8 +100,16 @@ export function useServerRoot(options: {
   remoteBrowseEnabled: boolean;
   privateBucketDisabledReason: string | null;
   handoff: BuilderHandoff | null;
+  /** The catalog's templates, to name the one recognised in a folder. */
+  templates?: TemplateInfo[];
 }): ServerRoot {
-  const { localDataRootsEnabled, remoteBrowseEnabled, privateBucketDisabledReason, handoff } = options;
+  const {
+    localDataRootsEnabled,
+    remoteBrowseEnabled,
+    privateBucketDisabledReason,
+    handoff,
+    templates = [],
+  } = options;
   const [value, setValueRaw] = useState(handoff?.dataRoot ?? '');
   const [target, setTarget] = useState(handoff?.dataRoot ?? '');
   const [probe, setProbe] = useState<RootProbe>({ status: 'idle' });
@@ -246,7 +255,8 @@ export function useServerRoot(options: {
         const bucket = s3BucketOf(location);
         if (bucket) setPrivateBucket((prev) => offerSection(prev, bucket));
       }}
-      templates={[]}
+      templates={templates}
+      title="Choose the data root"
     />
   ) : null;
 

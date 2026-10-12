@@ -30,8 +30,13 @@ import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
-import { listProjects, takeBuilderHandoff, useBrandAccents } from 'depictio-react-core';
-import type { BuilderHandoff, FromRunReport } from 'depictio-react-core';
+import {
+  listProjects,
+  listProjectTemplates,
+  takeBuilderHandoff,
+  useBrandAccents,
+} from 'depictio-react-core';
+import type { BuilderHandoff, FromRunReport, TemplateInfo } from 'depictio-react-core';
 
 import { useAuthMode } from '../../auth/hooks/useAuthMode';
 import { usePageTitle } from '../../branding';
@@ -46,7 +51,9 @@ import { BuilderSteps } from './BuilderSteps';
 import type { BuilderMode } from './mode';
 import { ServerCreatePanel, StandaloneCreatePanel } from './review/CreatePanel';
 import { SourceStep } from './source/SourceStep';
+import { TemplateStartCard } from './source/TemplateStartCard';
 import { useServerRoot } from './source/useServerRoot';
+import { isDraftEmpty, useTemplateStart } from './source/useTemplateStart';
 import { useStandaloneRoot } from './source/useStandaloneRoot';
 import { useBuilderDraft } from './useBuilderDraft';
 
@@ -104,7 +111,9 @@ const ServerFlow: React.FC<{
 }> = ({ localDataRootsEnabled, remoteBrowseEnabled, createDisabledReason }) => {
   const accent = useBrandAccents();
   const [handoff] = useState(consumeHandoff);
+  const [templates, setTemplates] = useState<TemplateInfo[]>([]);
   const root = useServerRoot({
+    templates,
     localDataRootsEnabled,
     remoteBrowseEnabled,
     // Mirrored server-side: a private bucket's details are refused to
@@ -115,8 +124,27 @@ const ServerFlow: React.FC<{
     handoff,
   });
   const draft = useBuilderDraft(root.rootSpec?.data_root ?? null);
+  const templateStart = useTemplateStart({
+    handoff,
+    root: root.rootSpec,
+    loadedRoot: draft.loadedRoot,
+    draft: draft.state,
+    dispatch: draft.dispatch,
+  });
   const [existingNames, setExistingNames] = useState<string[]>([]);
   const [created, setCreated] = useState<FromRunReport | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    listProjectTemplates()
+      .then((all) => {
+        if (!cancelled) setTemplates(all);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,6 +188,15 @@ const ServerFlow: React.FC<{
             dispatch={draft.dispatch}
             remote={remote}
             existingNames={existingNames}
+            templateStart={
+              <TemplateStartCard
+                key={root.rootSpec?.data_root ?? ''}
+                start={templateStart}
+                templates={templates}
+                draftHasWork={!isDraftEmpty(draft.state)}
+                onStartOver={draft.reset}
+              />
+            }
           />
         )}
         create={({ template, templateBlocker, engine }) =>
