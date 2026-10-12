@@ -799,8 +799,9 @@
 }
 
 /* A section's filter bar keeps to one row while the canvas has the room
-   (about 900px): the filters sit side by side at their own width, their
-   segments a little tighter, and More filters follows the last one instead
+   (about 900px): the filters sit side by side and share the bar's width
+   equally, their segments a little tighter and stretched to their share, and
+   More filters follows the last one instead
    of dropping to a line of its own. Reset takes room only when it is
    offered. Narrower, the bar stacks as everywhere else. The bar's wrapper
    is the container measured: the bar cannot query its own width. */
@@ -814,7 +815,7 @@
   }
   :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__clip {
     container-type: normal;
-    flex: 0 1 auto;
+    flex: 1 1 auto;
   }
   :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__grid {
     display: flex;
@@ -823,12 +824,12 @@
   }
   :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-filter-strip__item {
     --strip-gap: 20px;
-    flex: 0 1 auto;
+    flex: 1 1 0;
     min-width: 0;
   }
   :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-strip-segments {
-    width: auto;
-    grid-auto-columns: minmax(0, max-content);
+    width: 100%;
+    grid-auto-columns: minmax(0, 1fr);
   }
   :root[data-chrome='glass'] [data-testid='dashboard-content'] .depictio-strip-segments .depictio-strip-chip {
     min-width: 0;
