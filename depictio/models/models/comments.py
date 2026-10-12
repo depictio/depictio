@@ -488,3 +488,6 @@ class PublishedAnnotation(BaseModel):
 
 class CommentAccess(BaseModel):
     can_comment: bool
+    # Resolve or reopen threads, edit and publish annotations, review an
+    # agent's proposals: editors and owners only, even when viewers may comment.
+    can_moderate: bool = False

@@ -1,9 +1,12 @@
 """Comment threads and annotations pinned to dashboard components.
 
 Threads are internal to a project's editors and owners: every route below goes
-through ``_require_dashboard_editor`` on the thread's tab, except ``/access``
-(never raises, answers whether the caller may comment) and ``/published``
-(viewer level, shapes and labels only, never the discussion).
+through ``_require_commenter`` on the thread's tab, except ``/access`` (never
+raises, answers whether the caller may comment) and ``/published`` (viewer
+level, shapes and labels only, never the discussion). With
+``DEPICTIO_COMMENTS_VIEWERS_CAN_COMMENT`` a viewer passes ``_require_commenter``
+too, but never ``_require_moderator``: resolving, reviewing, publishing and the
+agents' proposals stay with editors.
 
 Storage (``comment_threads`` collection): one document per thread, ``_id`` an
 ObjectId, everything else the :class:`CommentThread` fields. ``project_id``,
@@ -226,15 +229,21 @@ def _thread_out(doc: dict) -> ThreadOut:
 
 
 def _load_thread(thread_id: str, current_user: User) -> tuple[CommentThread, dict]:
-    """The thread and its tab, once the caller is known to be an editor of it."""
+    """The thread and its tab, once the caller is known to be allowed to use it.
+
+    A proposal or a rejected thread is not there at all for a caller who may
+    comment but not moderate.
+    """
     doc = comment_threads_collection.find_one({"_id": _oid(thread_id)})
     if not doc:
         raise HTTPException(status_code=404, detail="Thread not found.")
     thread = _to_thread(doc)
-    dashboard = _require_dashboard_editor(
+    dashboard = _require_commenter(
         _oid(thread.anchor.dashboard_id, "Dashboard"),  # type: ignore[arg-type]
         current_user,
     )
+    if thread.status in ("proposed", "rejected") and not _can_moderate(dashboard, current_user):
+        raise HTTPException(status_code=404, detail="Thread not found.")
     return thread, dashboard
 
 
@@ -246,6 +255,42 @@ def _update_thread(thread_id: str, update: dict) -> ThreadOut:
     if not doc:
         raise HTTPException(status_code=404, detail="Thread not found.")
     return _thread_out(doc)
+
+
+def _require_commenter(dashboard_id: ObjectId, current_user: User) -> dict:
+    """The dashboard document, or the right HTTP error, for a caller who may use threads.
+
+    Editors, and viewers too when the instance lets them comment.
+    """
+    if not settings.comments.viewers_can_comment:
+        return _require_dashboard_editor(dashboard_id, current_user)  # type: ignore[arg-type]
+    if getattr(current_user, "is_anonymous", False) and not settings.auth.is_single_user_mode:
+        raise HTTPException(
+            status_code=403,
+            detail="Anonymous users cannot comment. Please login to continue.",
+        )
+    dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
+    if not dashboard:
+        raise HTTPException(status_code=404, detail="Dashboard not found.")
+    project_id = dashboard.get("project_id")
+    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
+        raise HTTPException(
+            status_code=403, detail="You don't have permission to comment on this dashboard."
+        )
+    return dashboard
+
+
+def _can_moderate(dashboard: dict, current_user: User) -> bool:
+    """Editors and owners. Every commenter is one unless viewers may comment."""
+    if not settings.comments.viewers_can_comment:
+        return True
+    project_id = dashboard.get("project_id")
+    return bool(project_id) and check_project_permission(project_id, current_user, "editor")
+
+
+def _require_moderator(dashboard: dict, current_user: User, what: str) -> None:
+    if not _can_moderate(dashboard, current_user):
+        raise HTTPException(status_code=403, detail=f"Only editors and owners can {what}.")
 
 
 def _human(current_user: User) -> Author:
@@ -319,11 +364,16 @@ async def get_comment_access(
             {"dashboard_id": ObjectId(dashboard_id)}, {"project_id": 1}
         )
         project_id = (dashboard or {}).get("project_id")
-        allowed = bool(project_id) and check_project_permission(project_id, current_user, "editor")
+        moderate = bool(project_id) and check_project_permission(project_id, current_user, "editor")
+        allowed = moderate or (
+            settings.comments.viewers_can_comment
+            and bool(project_id)
+            and check_project_permission(project_id, current_user, "viewer")
+        )
     except Exception as exc:  # noqa: BLE001 — an access probe must not fail
         logger.warning(f"comments: access check failed for {dashboard_id}: {exc}")
-        allowed = False
-    return CommentAccess(can_comment=allowed)
+        allowed = moderate = False
+    return CommentAccess(can_comment=allowed, can_moderate=allowed and moderate)
 
 
 @comments_endpoint_router.get("/dashboard/{dashboard_id}", response_model=list[ThreadOut])
@@ -340,7 +390,10 @@ async def list_threads(
 
     Rejected threads are hidden unless ``status=rejected`` is asked for.
     """
-    dashboard = _require_dashboard_editor(_oid(dashboard_id, "Dashboard"), current_user)  # type: ignore[arg-type]
+    dashboard = _require_commenter(_oid(dashboard_id, "Dashboard"), current_user)  # type: ignore[arg-type]
+    moderator = _can_moderate(dashboard, current_user)
+    if not moderator and status in ("proposed", "rejected"):
+        return []
 
     query: dict[str, Any] = {}
     if scope == "family":
@@ -362,7 +415,11 @@ async def list_threads(
         query["anchor.dashboard_id"] = str(dashboard["dashboard_id"])
         tabs = {str(dashboard["dashboard_id"]): dashboard}
 
-    query["status"] = status if status is not None else {"$ne": "rejected"}
+    if status is not None:
+        query["status"] = status
+    else:
+        # What a commenter who cannot moderate never sees: agent proposals.
+        query["status"] = {"$ne": "rejected"} if moderator else {"$in": ["open", "resolved"]}
 
     threads = [
         _reattach(t, tabs.get(t.anchor.dashboard_id))
@@ -383,12 +440,13 @@ async def count_threads(
     current_user: User = Depends(get_user_or_anonymous),
 ) -> dict[str, dict[str, int]]:
     """Open and proposed threads of a tab, per component index (``__tab__`` for the tab)."""
-    dashboard = _require_dashboard_editor(_oid(dashboard_id, "Dashboard"), current_user)  # type: ignore[arg-type]
+    dashboard = _require_commenter(_oid(dashboard_id, "Dashboard"), current_user)  # type: ignore[arg-type]
     counts: dict[str, dict[str, int]] = {"open": {}, "proposed": {}}
+    counted = ["open", "proposed"] if _can_moderate(dashboard, current_user) else ["open"]
     docs = comment_threads_collection.find(
         {
             "anchor.dashboard_id": str(dashboard["dashboard_id"]),
-            "status": {"$in": ["open", "proposed"]},
+            "status": {"$in": counted},
         }
     )
     for doc in docs:
@@ -464,10 +522,14 @@ async def create_thread(
     anchor updates that thread instead of creating a new one (200).
     Fingerprints in the anchor are always computed here; client values are ignored.
     """
-    dashboard = _require_dashboard_editor(
+    dashboard = _require_commenter(
         _oid(body.anchor.dashboard_id, "Dashboard"),  # type: ignore[arg-type]
         current_user,
     )
+    if body.agent is not None:
+        _require_moderator(dashboard, current_user, "open a thread for an agent")
+    if body.annotation is not None and body.annotation.published:
+        _require_moderator(dashboard, current_user, "publish an annotation")
     tab_id = str(dashboard["dashboard_id"])
 
     component: dict | None = None
@@ -600,7 +662,8 @@ async def update_thread(
     current_user: User = Depends(get_user_or_anonymous),
 ) -> ThreadOut:
     """Resolve or reopen a thread, and/or edit its annotation (including publishing it)."""
-    thread, _ = _load_thread(thread_id, current_user)
+    thread, dashboard = _load_thread(thread_id, current_user)
+    _require_moderator(dashboard, current_user, "resolve a thread or edit its annotation")
     if body.status is None and body.annotation is None:
         raise HTTPException(status_code=400, detail="Nothing to update.")
 
@@ -659,7 +722,8 @@ async def review_thread(
     current_user: User = Depends(get_user_or_anonymous),
 ) -> ThreadOut:
     """Accept or reject an agent's proposed thread. The decision and reason are kept."""
-    thread, _ = _load_thread(thread_id, current_user)
+    thread, dashboard = _load_thread(thread_id, current_user)
+    _require_moderator(dashboard, current_user, "review an agent's proposal")
     if thread.created_by.kind != "agent" or thread.status != "proposed":
         raise HTTPException(status_code=409, detail="Only a proposed agent thread can be reviewed.")
 

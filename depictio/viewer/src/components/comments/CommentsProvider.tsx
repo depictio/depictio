@@ -43,7 +43,7 @@ function sameStats(a: AnnotationStats | undefined, b: AnnotationStats): boolean 
   );
 }
 
-type Access = 'unknown' | 'editor' | 'viewer';
+type Access = 'unknown' | 'editor' | 'commenter' | 'viewer';
 
 export interface CommentsProviderProps {
   dashboardId: string | null;
@@ -60,9 +60,12 @@ export interface CommentsProviderProps {
 /**
  * Comments and chart annotations of the current tab.
  *
- * Editors and owners (the API's `/access` says `can_comment`) get the comments
- * context (chrome badges, drawer) and an annotation layer drawing every
- * annotation thread, with annotate mode. Everyone else gets no comments
+ * Editors and owners (the API's `/access` says `can_comment` and `can_moderate`)
+ * get the comments context (chrome badges, drawer) and an annotation layer
+ * drawing every annotation thread, with annotate mode. When the instance lets
+ * viewers comment, a viewer gets the context and the drawer but no moderation
+ * and no annotate mode; the layer holds the published annotations, as for
+ * any viewer. Everyone else gets no comments
  * context and a read-only layer holding only the annotations published to
  * viewers; if even that is refused, nothing is drawn.
  *
@@ -119,7 +122,9 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
     let cancelled = false;
     fetchCommentAccess(dashboardId)
       .then((r) => {
-        if (!cancelled) setAccess(r.can_comment ? 'editor' : 'viewer');
+        if (cancelled) return;
+        if (!r.can_comment) setAccess('viewer');
+        else setAccess(r.can_moderate === false ? 'commenter' : 'editor');
       })
       // An unreachable comments API is the same as no access.
       .catch(() => {
@@ -157,15 +162,16 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
   }, [dashboardId]);
 
   useEffect(() => {
-    if (access !== 'editor') return;
+    if (access !== 'editor' && access !== 'commenter') return;
     void refreshCounts();
     void loadThreads();
   }, [access, refreshCounts, loadThreads]);
 
-  // Viewers: the published annotations only, once per dashboard. A refusal
-  // (403 on a private dashboard, an older API) simply draws nothing.
+  // Viewers and commenters: the published annotations only, once per
+  // dashboard. A refusal (403 on a private dashboard, an older API) simply
+  // draws nothing.
   useEffect(() => {
-    if (access !== 'viewer' || !dashboardId) return;
+    if ((access !== 'viewer' && access !== 'commenter') || !dashboardId) return;
     let cancelled = false;
     fetchPublishedAnnotations(dashboardId)
       .then((items) => {
@@ -202,6 +208,8 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
   );
 
   const isEditor = access === 'editor' && !!dashboardId;
+  // Editors, and viewers where the instance lets them comment.
+  const canDiscuss = (access === 'editor' || access === 'commenter') && !!dashboardId;
 
   // Unsettled threads whose data or component changed since they were
   // written, per component: the chrome's comments icon turns orange on them.
@@ -218,7 +226,7 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
 
   const control = useMemo<CommentsControl | null>(
     () =>
-      isEditor
+      canDiscuss
         ? {
             openCounts: counts.open ?? {},
             proposedCounts: counts.proposed ?? {},
@@ -227,12 +235,16 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
             canComment: true,
           }
         : null,
-    [isEditor, counts, staleCounts, openComments],
+    [canDiscuss, counts, staleCounts, openComments],
   );
 
   // ── Annotation layer ──────────────────────────────────────────────────────
   const editorItems = useMemo(() => threadsToRenderable(threads ?? []), [threads]);
-  const layerItems = isEditor ? editorItems : access === 'viewer' ? published : NO_ITEMS;
+  const layerItems = isEditor
+    ? editorItems
+    : access === 'viewer' || access === 'commenter'
+      ? published
+      : NO_ITEMS;
 
   const annotate = useMemo<AnnotateState | null>(
     () =>
@@ -339,8 +351,9 @@ const CommentsProvider: React.FC<CommentsProviderProps> = ({
         onStats={isEditor ? mergeStats : undefined}
       >
         {children}
-        {isEditor && dashboardId && (
+        {canDiscuss && dashboardId && (
           <CommentsDrawer
+            canModerate={isEditor}
             dashboardId={dashboardId}
             metadata={metadata}
             filters={filters}

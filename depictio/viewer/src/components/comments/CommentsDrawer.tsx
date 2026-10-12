@@ -50,6 +50,8 @@ const DEFAULT_STATUSES: StatusFilter[] = ['open', 'proposed'];
 const TAB_GROUP = '__tab__';
 
 export interface CommentsDrawerProps {
+  /** Resolve, reopen, publish and review: editors and owners. Absent means yes. */
+  canModerate?: boolean;
   dashboardId: string;
   metadata: StoredMetadata[];
   filters: InteractiveFilter[];
@@ -180,6 +182,7 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
   filters,
   onApplyViewState,
   currentUser,
+  canModerate = true,
   threads,
   stats,
   loadError,
@@ -399,6 +402,7 @@ const CommentsDrawer: React.FC<CommentsDrawerProps> = ({
         key={t.id}
         thread={t}
         currentUser={currentUser}
+        canModerate={canModerate}
         focused={t.id === focusedThreadId}
         stats={stats[t.id]}
         onFocus={focusThread}

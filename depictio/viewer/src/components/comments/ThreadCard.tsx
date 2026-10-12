@@ -50,6 +50,8 @@ import { selectionHint } from './viewState';
 export interface ThreadCardProps {
   thread: CommentThread;
   currentUser: CurrentUser | null;
+  /** Resolve, reopen, publish and review: editors and owners. Absent means yes. */
+  canModerate?: boolean;
   focused: boolean;
   /** What the chart measured of this thread's annotation, once drawn. */
   stats?: AnnotationStats;
@@ -294,6 +296,7 @@ const CommentItem: React.FC<{
 const ThreadCard: React.FC<ThreadCardProps> = ({
   thread,
   currentUser,
+  canModerate = true,
   focused,
   stats,
   onFocus,
@@ -332,8 +335,8 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
   const proposed = status === 'proposed';
   const hint = selectionHint(thread.anchor.view_state?.selection);
   const filterCount = thread.anchor.view_state?.filters?.length ?? 0;
-  // The drawer is only shown to editors and owners, so any of them may edit.
-  const canEditAnnotation = Boolean(annotation) && status !== 'rejected';
+  // An annotation is edited and published by editors and owners only.
+  const canEditAnnotation = canModerate && Boolean(annotation) && status !== 'rejected';
   const summary = annotation ? annotationSummary(annotation, stats) : '';
   // Same default-palette value as the mark on the chart (a brand theme may
   // remap the Mantine palette names onto data colours).
@@ -646,7 +649,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
           </Group>
         )}
 
-        {annotation && (
+        {canModerate && annotation && (
           <Tooltip
             label="Accept the proposal before showing it to viewers"
             disabled={!proposed}
@@ -734,7 +737,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
 
         <Group gap={6} justify="space-between" wrap="nowrap" align="flex-start">
           <Group gap={6}>
-            {proposed && !rejecting && (
+            {canModerate && proposed && !rejecting && (
               <>
                 <Button
                   size="compact-xs"
@@ -761,7 +764,7 @@ const ThreadCard: React.FC<ThreadCardProps> = ({
                 </Button>
               </>
             )}
-            {(status === 'open' || status === 'resolved') && (
+            {canModerate && (status === 'open' || status === 'resolved') && (
               <Button
                 size="compact-xs"
                 variant="subtle"
