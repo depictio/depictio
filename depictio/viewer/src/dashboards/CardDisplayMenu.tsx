@@ -10,7 +10,7 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { useBrandAccents } from 'depictio-react-core';
+import { useListingAccents } from '../lib/useListingAccents';
 import type { CardBadge, CardsPerRow } from './hooks/useDashboardViewPrefs';
 import {
   CARD_BADGES,
@@ -53,7 +53,7 @@ const CardDisplayMenu: React.FC<CardDisplayMenuProps> = ({
   onCardsPerRowChange,
   onCardBadgesChange,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('dashboards');
   const customised =
     cardsPerRow !== DEFAULT_CARDS_PER_ROW ||
     CARD_BADGES.some((b) => !cardBadges.includes(b));

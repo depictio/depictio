@@ -22,7 +22,7 @@ import type {
   VisibilityFilter,
 } from './hooks/useProjectViewPrefs';
 import { emptyProjectFilters } from './hooks/useProjectViewPrefs';
-import { useBrandAccents } from 'depictio-react-core';
+import { useListingAccents } from '../lib/useListingAccents';
 import ShareViewButton from '../components/listing/ShareViewButton';
 import GlassTray from '../chrome/variants/glass/pages/GlassTray';
 
@@ -60,7 +60,7 @@ const FilterPopover: React.FC<{
   templateOptions: FilterOption[];
   setFilters: (f: ProjectFilters) => void;
 }> = ({ prefs, templateOptions, setFilters }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('projects');
   const activeCount =
     prefs.filters.types.length +
     prefs.filters.templates.length +
@@ -167,7 +167,7 @@ const ProjectsToolbar: React.FC<ProjectsToolbarProps> = ({
   setOnlyPinned,
   clearFilters,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('projects');
   const activeFilterChips: { key: string; label: string; onRemove: () => void }[] =
     [];
   for (const t of prefs.filters.types) {

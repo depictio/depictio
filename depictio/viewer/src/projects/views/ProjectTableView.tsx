@@ -10,6 +10,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { Globe, Lock, Table2, Workflow } from 'lucide-react';
 
 import type { ProjectListEntry } from 'depictio-react-core';
 
@@ -20,7 +21,8 @@ import type { Density } from '../hooks/useProjectViewPrefs';
 import { coerceString } from '../../dashboards/lib/format';
 import ColumnPicker from '../../components/ColumnPicker';
 import { type ColumnDef, useTableColumns } from '../../lib/useTableColumns';
-import { useBrandAccents } from 'depictio-react-core';
+import { useListingAccents } from '../../lib/useListingAccents';
+import { useGlassPages } from '../../chrome/variants/glass/pages';
 import {
   formatDateTime,
   formatDateTimeVerbose,
@@ -78,6 +80,13 @@ const ALL_COLUMNS: ColumnDef<ColumnKey>[] = [
   { key: 'yaml', label: 'YAML', description: 'YAML config path', defaultVisible: false },
   { key: 'id', label: 'ID', description: 'Project ID', defaultVisible: false },
 ];
+
+/** Your role as a dot tag on Glass: the page colour for owner, quiet otherwise. */
+const ROLE_TONE: Record<string, string | undefined> = {
+  Owner: undefined,
+  Editor: 'indigo',
+  Viewer: 'gray',
+};
 
 const STORAGE_KEY = 'depictio.projects.tableColumns.v1';
 
@@ -300,7 +309,8 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
   onDelete,
   onTogglePin,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('projects');
+  const glass = useGlassPages();
   const [sortKey, setSortKey] = useState<ColumnKey>('name');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
 
@@ -370,13 +380,33 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
     switch (key) {
       case 'name':
         return (
-          <UnstyledButton onClick={() => onView(r.project)} style={{ textAlign: 'left' }}>
-            <Text fw={500} size="sm">
+          <UnstyledButton
+            onClick={() => onView(r.project)}
+            style={{ textAlign: 'left' }}
+            className={glass ? 'dc-title-link' : undefined}
+            title={glass ? r.project.name : undefined}
+          >
+            <Text fw={500} size="sm" className={glass ? 'dc-title-text' : undefined}>
               {r.project.name}
             </Text>
           </UnstyledButton>
         );
-      case 'type':
+      case 'type': {
+        // Glass: told apart by glyph and word, not by hue.
+        if (glass) {
+          const TypeIcon = r.isAdvanced ? Workflow : Table2;
+          return (
+            <Badge
+              color="gray"
+              variant="light"
+              size="sm"
+              leftSection={<TypeIcon size={12} strokeWidth={2} aria-hidden />}
+              styles={{ root: { maxWidth: 'none' }, label: { overflow: 'visible' } }}
+            >
+              {r.isAdvanced ? 'Advanced' : 'Basic'}
+            </Badge>
+          );
+        }
         return (
           <Badge
             color={r.isAdvanced ? 'orange' : 'cyan'}
@@ -390,7 +420,22 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
             {r.isAdvanced ? 'Advanced' : 'Basic'}
           </Badge>
         );
+      }
       case 'visibility':
+        if (glass) {
+          const VisIcon = r.isPublic ? Globe : Lock;
+          return (
+            <Badge
+              color={r.isPublic ? 'cyan' : 'gray'}
+              variant="light"
+              size="sm"
+              leftSection={<VisIcon size={12} strokeWidth={2} aria-hidden />}
+              styles={{ root: { maxWidth: 'none' }, label: { overflow: 'visible' } }}
+            >
+              {r.isPublic ? 'Public' : 'Private'}
+            </Badge>
+          );
+        }
         return (
           <Badge
             color={r.isPublic ? 'green' : 'grape'}
@@ -403,12 +448,17 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
           </Badge>
         );
       case 'template':
-        return r.templateParsed ? <TemplateChip parsed={r.templateParsed} verbose /> : <Dash />;
+        return r.templateParsed ? <TemplateChip parsed={r.templateParsed} verbose plain={glass} /> : <Dash />;
       case 'owner':
         return r.ownerEmail ? <Text size="sm">{r.ownerEmail}</Text> : <Dash />;
       case 'role':
         return r.role ? (
-          <Badge variant="outline" size="sm" styles={{ root: { textTransform: 'none' } }}>
+          <Badge
+            variant={glass ? 'light' : 'outline'}
+            color={glass ? ROLE_TONE[r.role] : undefined}
+            size="sm"
+            styles={{ root: { textTransform: 'none' } }}
+          >
             {r.role}
           </Badge>
         ) : (
@@ -500,7 +550,7 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
             <Table.Tr>
               <Table.Th style={{ width: 36 }} aria-label="Pin" />
               {visibleColumns.map((col) => (
-                <Table.Th key={col.key}>
+                <Table.Th key={col.key} data-col={col.key}>
                   <SortHeader
                     label={col.label}
                     tooltip={col.description}
@@ -549,14 +599,17 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
                     </Tooltip>
                   </Table.Td>
                   {visibleColumns.map((col) => (
-                    <Table.Td key={col.key}>{renderCell(r, col.key)}</Table.Td>
+                    <Table.Td key={col.key} data-col={col.key}>
+                      {renderCell(r, col.key)}
+                    </Table.Td>
                   ))}
                   <Table.Td>
                     <Group gap={4} wrap="nowrap" justify="flex-end">
                       <Tooltip label="Workflows & data collections" withinPortal>
                         <ActionIcon
                           variant="subtle"
-                          color={accent.secondary}
+                          color={glass ? 'gray' : accent.secondary}
+                          className={glass ? 'dc-row-action' : undefined}
                           size="sm"
                           component="a"
                           href={`/projects/${r.id}`}
@@ -569,7 +622,8 @@ const ProjectTableView: React.FC<ProjectTableViewProps> = ({
                       <Tooltip label="Roles and permissions" withinPortal>
                         <ActionIcon
                           variant="subtle"
-                          color="blue"
+                          color={glass ? 'gray' : 'blue'}
+                          className={glass ? 'dc-row-action' : undefined}
                           size="sm"
                           component="a"
                           href={`/projects/${r.id}/permissions`}

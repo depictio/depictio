@@ -17,6 +17,7 @@ import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import { GlassPage, useGlassPages } from '../chrome/variants/glass/pages';
 import { Plus } from 'lucide-react';
+import '../chrome/variants/glass/pages/listing.css';
 
 import {
   createProject,

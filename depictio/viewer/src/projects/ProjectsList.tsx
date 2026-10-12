@@ -23,7 +23,8 @@ import { parseTemplate } from './template';
 import SharedViewBanner from '../components/listing/SharedViewBanner';
 import type { SharedViewScope } from '../components/listing/SharedViewBanner';
 import { listingUrl } from '../lib/listingUrl';
-import { matchesTemplateFilter, useBrandAccents } from 'depictio-react-core';
+import { matchesTemplateFilter } from 'depictio-react-core';
+import { useListingAccents } from '../lib/useListingAccents';
 
 interface ProjectsListProps {
   projects: ProjectListEntry[];
@@ -50,7 +51,7 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
   onEdit,
   onDelete,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('projects');
   const {
     prefs,
     arrivedScoped,

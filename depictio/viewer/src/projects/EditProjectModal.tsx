@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Button, Group, Modal, Stack, Text, TextInput } from '@mantine/core';
 
 import type { EditProjectInput, ProjectListEntry } from 'depictio-react-core';
-import { useBrandAccents } from 'depictio-react-core';
+import { useListingAccents } from '../lib/useListingAccents';
 
 interface EditProjectModalProps {
   opened: boolean;
@@ -17,7 +17,7 @@ const EditProjectModal: React.FC<EditProjectModalProps> = ({
   onClose,
   onSubmit,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('projects');
   const [name, setName] = useState('');
   const [dmpUrl, setDmpUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);

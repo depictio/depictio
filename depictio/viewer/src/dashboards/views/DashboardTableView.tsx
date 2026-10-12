@@ -14,6 +14,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { FolderKanban, Globe, Lock } from 'lucide-react';
 
 import type { DashboardListEntry } from 'depictio-react-core';
 import DashboardActionsMenu from '../DashboardActionsMenu';
@@ -33,7 +34,9 @@ import {
   formatRelative,
   timestampSortKey,
 } from '../../lib/datetime';
-import { useBrandAccents } from 'depictio-react-core';
+import { useListingAccents } from '../../lib/useListingAccents';
+import { useGlassPages } from '../../chrome/variants/glass/pages';
+import { useSectionPalettes } from '../../chrome/variants/glass/pages/GlassPage';
 
 export interface DashboardTableViewProps {
   groups: GroupedDashboards[];
@@ -280,7 +283,9 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
   onBulkExport,
   onBulkDelete,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('dashboards');
+  const glass = useGlassPages();
+  const projectInk = `var(--mantine-color-${useSectionPalettes().projects}-filled)`;
   const [sortKey, setSortKey] = useState<ColumnKey>('modified');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -408,7 +413,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
         const icon = coerceString(r.dashboard.icon, 'mdi:view-dashboard');
         const iconColor = coerceString(r.dashboard.icon_color, accent.tertiary);
         return (
-          <Group gap="xs" wrap="nowrap">
+          <Group gap="xs" wrap="nowrap" className={glass ? 'dc-title-cell' : undefined}>
             {isImagePath(icon) ? (
               <img
                 src={icon}
@@ -440,8 +445,10 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
               // "Open a dashboard" step finds a target in either view.
               data-tour-id="dashboard-card"
               style={{ textAlign: 'left', color: 'inherit' }}
+              className={glass ? 'dc-title-link' : undefined}
+              title={glass ? r.titleText : undefined}
             >
-              <Text fw={500} size="sm">
+              <Text fw={500} size="sm" className={glass ? 'dc-title-text' : undefined}>
                 {r.titleText}
               </Text>
             </UnstyledButton>
@@ -472,6 +479,23 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
       case 'project': {
         if (!r.projectName) return <Dash />;
         const pid = (r.dashboard.project_id as string | undefined) || null;
+        // Glass: the project is a place, not a label. Its name as plain text
+        // behind the Projects folder glyph, linked when it has a page.
+        if (glass) {
+          return (
+            <Text
+              size="sm"
+              className="dc-project"
+              component={pid ? 'a' : 'span'}
+              href={pid ? `/projects/${pid}` : undefined}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+              title={r.projectName}
+            >
+              <FolderKanban size={14} strokeWidth={1.9} color={projectInk} aria-hidden />
+              <span>{r.projectName}</span>
+            </Text>
+          );
+        }
         return (
           <Badge
             color={accent.secondary}
@@ -495,6 +519,19 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
       case 'lastViewed':
         return <TimeCell raw={r.lastViewedTs} />;
       case 'visibility':
+        if (glass) {
+          const VisIcon = r.isPublic ? Globe : Lock;
+          return (
+            <Badge
+              color={r.isPublic ? 'cyan' : 'gray'}
+              variant="light"
+              size="sm"
+              leftSection={<VisIcon size={12} strokeWidth={2} aria-hidden />}
+            >
+              {r.isPublic ? 'Public' : 'Private'}
+            </Badge>
+          );
+        }
         return (
           <Badge color={r.isPublic ? 'green' : 'grape'} variant="light" size="sm">
             {r.isPublic ? 'Public' : 'Private'}
@@ -638,7 +675,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
               </Table.Th>
               <Table.Th style={{ width: 36 }} aria-label="Pin" />
               {visibleColumns.map((col) => (
-                <Table.Th key={col.key}>
+                <Table.Th key={col.key} data-col={col.key}>
                   <SortHeader
                     label={col.label}
                     tooltip={col.description}
@@ -694,7 +731,9 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
                     </Tooltip>
                   </Table.Td>
                   {visibleColumns.map((col) => (
-                    <Table.Td key={col.key}>{renderCell(r, col.key)}</Table.Td>
+                    <Table.Td key={col.key} data-col={col.key}>
+                      {renderCell(r, col.key)}
+                    </Table.Td>
                   ))}
                   <Table.Td>
                     <DashboardActionsMenu

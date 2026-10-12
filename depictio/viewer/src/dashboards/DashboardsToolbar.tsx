@@ -26,7 +26,7 @@ import type {
   ViewMode,
 } from './hooks/useDashboardViewPrefs';
 import { emptyDashboardFilters } from './hooks/useDashboardViewPrefs';
-import { useBrandAccents } from 'depictio-react-core';
+import { useListingAccents } from '../lib/useListingAccents';
 import ShareViewButton from '../components/listing/ShareViewButton';
 import GlassTray from '../chrome/variants/glass/pages/GlassTray';
 import CardDisplayMenu from './CardDisplayMenu';
@@ -162,7 +162,7 @@ const FilterPopover: React.FC<{
   workflowOptions,
   setFilters,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('dashboards');
   const activeCount =
     prefs.filters.projects.length +
     prefs.filters.owners.length +
@@ -299,7 +299,7 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
   setCardBadges,
   clearFilters,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('dashboards');
   // Sort selector is meaningless in Table view (column headers handle sort).
   const showSort = prefs.view !== 'table';
   // Card layout options only shape the thumbnail cards; Table has its own

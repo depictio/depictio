@@ -34,7 +34,7 @@ import {
   WORKFLOW_COLOR_MAP,
   isWorkflowSelected,
 } from './lib/workflowIcons';
-import { useBrandAccents } from 'depictio-react-core';
+import { useListingAccents } from '../lib/useListingAccents';
 
 const COLOR_OPTIONS: { value: string; label: string }[] = [
   { value: 'gray', label: 'Gray' },
@@ -89,7 +89,7 @@ const CreateDashboardModal: React.FC<CreateDashboardModalProps> = ({
   onImport,
   disableImport = false,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('dashboards');
   const [tab, setTab] = useState<'create' | 'import'>('create');
 
   const [title, setTitle] = useState('');

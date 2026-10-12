@@ -26,7 +26,7 @@ import {
   WORKFLOW_COLOR_MAP,
   isWorkflowSelected,
 } from './lib/workflowIcons';
-import { useBrandAccents } from 'depictio-react-core';
+import { useListingAccents } from '../lib/useListingAccents';
 
 /** Mantine palette options — empty string = "no override" / inherit. */
 const COLOR_OPTIONS: { value: string; label: string }[] = [
@@ -63,7 +63,7 @@ const EditDashboardModal: React.FC<EditDashboardModalProps> = ({
   onClose,
   onSubmit,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('dashboards');
   const [title, setTitle] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [icon, setIcon] = useState('');

@@ -35,6 +35,7 @@ import { recordOpen as recordDashboardOpen } from './lib/dashboardRecents';
 import { usePageTitle } from '../branding';
 import { GlassPage, useGlassPages } from '../chrome/variants/glass/pages';
 import { Plus } from 'lucide-react';
+import '../chrome/variants/glass/pages/listing.css';
 
 /** Separate storage key from the in-dashboard tab sidebar
  *  (`tab-sidebar-collapsed:<familyId>`, see useSidebarOpen) so the management
