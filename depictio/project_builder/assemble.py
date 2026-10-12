@@ -15,7 +15,7 @@ import re
 from typing import Annotated, Any, Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from depictio.cli.cli.utils.compose import slug
 
@@ -101,6 +101,14 @@ class DcDraft(BaseModel):
     ignore: list[str] = Field(default_factory=list)
     optional: bool = False
     props: DcProps
+
+    @model_validator(mode="after")
+    def _has_a_rule(self) -> DcDraft:
+        if self.mode == "single" and not (self.path or "").strip("/"):
+            raise ValueError("A single-file collection needs the file's path.")
+        if self.mode == "recursive" and not (self.regex or self.path):
+            raise ValueError("A scanning collection needs a regex.")
+        return self
 
 
 class CatalogRef(BaseModel):

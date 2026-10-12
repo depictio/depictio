@@ -102,8 +102,11 @@ def _wildcard_token(names: list[str]) -> str:
 
     prefix = common_prefix(unique)
     suffix = common_prefix([item[::-1] for item in unique])[::-1]
-    if len(prefix) + len(suffix) > min(len(item) for item in unique):
-        suffix = ""
+    # Where the two overlap (S1.tsv, S11.tsv), the suffix keeps what the prefix
+    # leaves of the shortest name, so the extension survives: S1*.tsv.
+    room = min(len(item) for item in unique) - len(prefix)
+    if len(suffix) > room:
+        suffix = suffix[len(suffix) - room :] if room > 0 else ""
     return f"{prefix}*{suffix}"
 
 
@@ -138,6 +141,16 @@ def _tag_for(rel: str) -> str:
     if top and top.lower() not in stem.lower():
         return slug(f"{top}_{stem}")
     return slug(stem)
+
+
+def _suggested_format(name: str, dc_type: str, table: str | None) -> str | None:
+    if dc_type in ("table", "image"):
+        return table
+    if dc_type == "phylogeny":
+        return PHYLOGENY_SUFFIXES.get(_suffixes(name)[0])
+    if dc_type == "indexed_file":
+        return indexed_format(name)
+    return None
 
 
 def suggest(root: DataRoot, rel: str, examples: list[str] | None = None) -> dict[str, Any]:
@@ -183,7 +196,7 @@ def suggest(root: DataRoot, rel: str, examples: list[str] | None = None) -> dict
         "mode": "recursive" if recursive else "single",
         "glob": glob,
         "regex": glob_regex(glob),
-        "format": fmt if dc_type in ("table", "image") else indexed_format(name),
+        "format": _suggested_format(name, dc_type, fmt),
         "separator": separator if dc_type in ("table", "image") else None,
         "catalog": catalog,
         "multiqc": dc_type == "multiqc",

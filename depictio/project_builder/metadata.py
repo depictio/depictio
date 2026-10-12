@@ -231,7 +231,7 @@ def fetch_workflow_metadata(
     if not url:
         raise ValueError("repository url is required")
     if not re.match(r"^https?://", url):
-        raise ValueError("The repository URL must start with https://.")
+        raise ValueError("The repository URL must start with http:// or https://.")
 
     result: dict[str, Any] = {"repository_url": url}
     sources: list[str] = []

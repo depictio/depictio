@@ -55,7 +55,16 @@ def server_root_opener(request: Request, current_user=Depends(get_user_or_anonym
         try:
             storage = RunStorageIn(**spec.storage) if spec.storage else None
         except ValidationError as exc:
-            raise BuilderRefused(422, f"Invalid storage settings: {exc}", "storage_invalid")
+            # Never the rejected input: it may be the secret itself.
+            problems = "; ".join(
+                f"{'.'.join(str(part) for part in error.get('loc', ()))}: {error.get('msg')}"
+                for error in exc.errors(
+                    include_input=False, include_url=False, include_context=False
+                )
+            )
+            raise BuilderRefused(
+                422, f"Invalid storage settings: {problems}", "storage_invalid"
+            ) from None
         try:
             _settings, read_config = _request_read_config(spec.data_root, storage)
             key = (spec.data_root, _storage_key(spec.storage), str(current_user.id))

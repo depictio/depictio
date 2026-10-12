@@ -106,7 +106,12 @@ def match_collection(
             re.compile(regex)
         except re.error as exc:
             raise BuilderRefused(400, f"Invalid regex: {exc}", "regex_invalid") from exc
-        files = sorted(scan_dc_hits(config, root, runs) or [])
+        if structure == "sequencing-runs" and not runs:
+            # The scan walks run folders only: none matches, nothing is scanned.
+            files = []
+            warnings.append("No folder of the data root matches the runs regex.")
+        else:
+            files = sorted(scan_dc_hits(config, root, runs) or [])
         if root.is_remote and (dc.max_depth is not None or dc.ignore):
             warnings.append(
                 "max_depth and ignore apply to local folders only: an S3 prefix is listed whole."

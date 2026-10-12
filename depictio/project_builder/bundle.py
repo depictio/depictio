@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import shlex
 import shutil
 from pathlib import Path
 from typing import Any
@@ -29,7 +30,8 @@ def default_bundle_dir(data_root: Path, name: str) -> Path:
 
 
 def ingest_command(data_root: str, bundle: Path) -> str:
-    return f"depictio ingest {data_root} --template {bundle}"
+    """The command to copy and run: quoted, so a folder name never splits or runs."""
+    return f"depictio ingest {shlex.quote(data_root)} --template {shlex.quote(str(bundle))}"
 
 
 def write_bundle(

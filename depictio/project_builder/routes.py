@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
@@ -55,7 +55,7 @@ class SuggestBody(BaseModel):
 
 
 class WorkflowShape(BaseModel):
-    structure: str = "flat"
+    structure: Literal["flat", "sequencing-runs"] = "flat"
     runs_regex: str | None = None
 
 

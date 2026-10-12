@@ -26,6 +26,8 @@ INVALID = "inline_template_invalid"
 MAX_WORKFLOWS = 20
 MAX_DATA_COLLECTIONS = 200
 MAX_TEMPLATE_BYTES = 256 * 1024
+# The reader options a builder collection sets (the separator of a text table).
+ALLOWED_POLARS_KWARGS = frozenset({"separator"})
 
 TOP_LEVEL_KEYS = frozenset(
     {"template", "name", "description", "project_type", "is_public", "realtime", "workflows"}
@@ -86,7 +88,8 @@ def _under_root(value: Any, where: str) -> None:
 
 
 def _placeholders(value: Any) -> set[str]:
-    return set(re.findall(r"\{([A-Za-z0-9_]+)\}", json.dumps(value)))
+    """The ``{NAME}`` placeholders in ``value``; a regex repetition (``\\d{3}``) is not one."""
+    return set(re.findall(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", json.dumps(value)))
 
 
 def _check_regex(pattern: Any, where: str) -> None:
@@ -108,6 +111,8 @@ def _check_scan(scan: Any, dc_type: str, where: str, *, remote: bool) -> list[st
         if set(parameters) - {"filename"}:
             raise _refuse(f"{where}: a single-file scan takes a filename only.")
         _under_root(parameters.get("filename"), f"{where} filename")
+        if parameters.get("filename") == DATA_ROOT:
+            raise _refuse(f"{where}: a single-file scan names a file, not the data root itself.")
     elif mode == "recursive":
         if set(parameters) - {"regex_config", "max_depth", "ignore"}:
             raise _refuse(f"{where}: unknown recursive scan parameters.")
@@ -135,6 +140,12 @@ def _check_properties(config: dict, dc_type: str, where: str) -> None:
         raise _refuse(f"{where}: dc_specific_properties must be a mapping.")
     if dc_type == "image" and properties.get("local_images_path") is not None:
         _under_root(properties["local_images_path"], f"{where} local_images_path")
+    unknown_kwargs = set(properties.get("polars_kwargs") or {}) - ALLOWED_POLARS_KWARGS
+    if unknown_kwargs:
+        raise _refuse(
+            f"{where}: polars_kwargs takes {', '.join(sorted(ALLOWED_POLARS_KWARGS))} only, "
+            f"not {', '.join(sorted(unknown_kwargs))}."
+        )
     model = _properties_model(dc_type)
     # Placeholders are resolved later; validate the shape with a neutral value.
     neutral = json.loads(json.dumps(properties).replace(DATA_ROOT, "/data-root"))
