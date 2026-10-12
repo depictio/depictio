@@ -30,7 +30,7 @@ class TestGuessType:
             ("tree.nexus", "phylogeny"),
             ("areas.geojson", "geojson"),
             ("S1.vcf.gz", "indexed_file"),
-            ("calls.bcf", "indexed_file"),
+            ("calls.bcf", "table"),  # BCF is not a GenomeSpy lazy source
             ("S1.bam", "indexed_file"),
             ("cov.bw", "indexed_file"),
             ("cov.bigwig", "indexed_file"),
@@ -85,7 +85,6 @@ class TestFormats:
         [
             ("S1.vcf.gz", "vcf"),
             ("S1.VCF.GZ", "vcf"),
-            ("calls.bcf", "vcf"),
             ("S1.bam", "bam"),
             ("cov.bw", "bigwig"),
             ("peaks.bigbed", "bigbed"),

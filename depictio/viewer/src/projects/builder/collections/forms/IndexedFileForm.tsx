@@ -1,28 +1,33 @@
 /**
- * Indexed file properties (VCF, BAM, CRAM, BED, bigWig, GFF): the format, the
- * index next to each file, how a sample is named, and the assembly.
+ * Indexed file properties (the formats GenomeSpy reads lazily: VCF, BAM, bigWig,
+ * bigBed, GFF3, FASTA, any tabix file): the format, the index next to each file,
+ * how a sample is named, and the assembly.
  */
 import React from 'react';
 import { Group, NumberInput, Select, Stack, TextInput } from '@mantine/core';
 
 import type { BuilderIndexedFileProps } from 'depictio-react-core';
 
+// The server's IndexedFileFormat, in the same order.
 const FORMATS = [
-  { value: 'vcf', label: 'VCF' },
+  { value: 'vcf', label: 'VCF (bgzipped)' },
   { value: 'bam', label: 'BAM' },
-  { value: 'cram', label: 'CRAM' },
-  { value: 'bed', label: 'BED' },
   { value: 'bigwig', label: 'bigWig' },
-  { value: 'gff', label: 'GFF' },
+  { value: 'bigbed', label: 'bigBed' },
+  { value: 'gff3', label: 'GFF3 (bgzipped)' },
+  { value: 'fasta', label: 'FASTA' },
+  { value: 'tabix', label: 'Other tabix file (BED, bedGraph...)' },
 ];
 
-/** The usual index next to a file of each format. */
+/** The index each format needs, as the server defaults it (none: self-indexed). */
 const INDEX_HINT: Record<string, string> = {
   vcf: '.tbi',
   bam: '.bai',
-  cram: '.crai',
-  bed: '.tbi',
-  gff: '.tbi',
+  gff3: '.tbi',
+  tabix: '.tbi',
+  fasta: '.fai',
+  bigwig: 'none (self-indexed)',
+  bigbed: 'none (self-indexed)',
 };
 
 const MONO = { input: { fontFamily: 'var(--mantine-font-family-monospace)' } };
@@ -58,8 +63,8 @@ export const IndexedFileForm: React.FC<{
       <Group grow align="flex-start">
         <TextInput
           label="Sample regex"
-          description="Optional: reads the sample name from each file name"
-          placeholder="^([^.]+)"
+          description="Optional, with a group named sample; else the file name"
+          placeholder="(?P<sample>[^/]+?)\\.vcf\\.gz$"
           value={props.sample_regex ?? ''}
           onChange={(e) => onChange({ ...props, sample_regex: e.currentTarget.value })}
           styles={MONO}

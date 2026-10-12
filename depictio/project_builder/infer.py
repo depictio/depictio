@@ -35,7 +35,6 @@ GEOJSON_SUFFIXES = frozenset({".geojson"})
 # Longest suffix first: ".vcf.gz" before ".gz".
 INDEXED_SUFFIXES: dict[str, str] = {
     ".vcf.gz": "vcf",
-    ".bcf": "vcf",
     ".bam": "bam",
     ".bw": "bigwig",
     ".bigwig": "bigwig",
@@ -45,7 +44,9 @@ INDEXED_SUFFIXES: dict[str, str] = {
     ".gff.gz": "gff3",
     ".fa": "fasta",
     ".fasta": "fasta",
+    ".fna": "fasta",
     ".bed.gz": "tabix",
+    ".bedgraph.gz": "tabix",
 }
 
 

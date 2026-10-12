@@ -146,6 +146,15 @@ def _check_properties(config: dict, dc_type: str, where: str) -> None:
             f"{where}: polars_kwargs takes {', '.join(sorted(ALLOWED_POLARS_KWARGS))} only, "
             f"not {', '.join(sorted(unknown_kwargs))}."
         )
+    if dc_type == "indexed_file" and properties.get("sample_regex"):
+        try:
+            compiled = re.compile(properties["sample_regex"])
+        except re.error as exc:
+            raise _refuse(f"{where}: invalid sample_regex ({exc}).") from exc
+        if "sample" not in compiled.groupindex:
+            raise _refuse(
+                f"{where}: sample_regex needs a group named sample, e.g. (?P<sample>[^/]+?)\\.vcf\\.gz$."
+            )
     model = _properties_model(dc_type)
     # Placeholders are resolved later; validate the shape with a neutral value.
     neutral = json.loads(json.dumps(properties).replace(DATA_ROOT, "/data-root"))

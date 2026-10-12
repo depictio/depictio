@@ -316,6 +316,22 @@ export function formatFromPath(path: string): { format: string; separator: strin
 }
 
 /** Fresh properties for `type`, seeded from what is known of the file. */
+/** The server's indexed-file format for a file name (IndexedFileFormat): VCF
+ *  unless the extension says otherwise; any other bgzipped table is tabix. */
+export function indexedFormatOf(path: string): string {
+  const name = path.toLowerCase();
+  const byExtension: [RegExp, string][] = [
+    [/\.vcf(\.gz)?$/, 'vcf'],
+    [/\.bam$/, 'bam'],
+    [/\.(bw|bigwig)$/, 'bigwig'],
+    [/\.(bb|bigbed)$/, 'bigbed'],
+    [/\.gff3?(\.gz)?$/, 'gff3'],
+    [/\.(fa|fasta|fna)$/, 'fasta'],
+    [/\.gz$/, 'tabix'],
+  ];
+  return byExtension.find(([pattern]) => pattern.test(name))?.[1] ?? 'vcf';
+}
+
 export function defaultDcProps(
   type: BuilderDcType,
   hint: { format?: string | null; separator?: string | null; path?: string | null } = {},
@@ -330,12 +346,8 @@ export function defaultDcProps(
       return { kind: 'multiqc' };
     case 'image':
       return { kind: 'image', format, separator, image_column: '' };
-    case 'indexed_file': {
-      const ext = hint.path?.toLowerCase().replace(/\.gz$/, '').match(/\.([a-z0-9]+)$/)?.[1];
-      const known = ['vcf', 'bam', 'cram', 'bed', 'bigwig', 'bw', 'gff', 'gff3'];
-      const fmt = ext && known.includes(ext) ? (ext === 'bw' ? 'bigwig' : ext === 'gff3' ? 'gff' : ext) : 'vcf';
-      return { kind: 'indexed_file', format: fmt };
-    }
+    case 'indexed_file':
+      return { kind: 'indexed_file', format: indexedFormatOf(hint.path ?? '') };
     case 'geojson':
       return { kind: 'geojson', feature_id_key: '' };
     case 'phylogeny': {
