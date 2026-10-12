@@ -17,6 +17,8 @@ on:
       - "depictio/catalog/**"
       - "depictio/recipes/**"
       - "depictio/telemetry/**"
+      - "depictio/project_builder/**"
+      - "depictio/api/v1/remote_fetch.py"
       - "depictio/tests/cli/**"
       - "depictio/tests/models/**"
       - "depictio/*.py"
