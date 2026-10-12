@@ -418,6 +418,16 @@ backend:
     # covered by the project's storage settings is refused, and the instance's
     # own S3 keys are never used for one. Any user can read what is listed.
     DEPICTIO_REMOTE_CREDENTIALED_S3_BUCKETS: ""
+    # Component export / embed API (/depictio/api/v1/export): serves one
+    # dashboard component to another site, as a Plotly spec or a self-contained
+    # page, and puts "Export / embed" on every tile. Off by default, because it
+    # relaxes framing protections on that path. While on, anyone may export
+    # components of PUBLIC projects without a token; private ones need one.
+    DEPICTIO_FASTAPI_EMBED_ENABLED: "false"
+    # Comma-separated origins allowed to frame an embed (CSP frame-ancestors),
+    # e.g. "https://lab.example.org". Empty: embeds open standalone but no site
+    # can iframe them. "*" is rejected.
+    DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS: ""
     # Per-download size cap in bytes (500 MiB).
     DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: "524288000"
     # Per-request timeout in seconds.
