@@ -13,11 +13,13 @@ import {
   Loader,
   Modal,
   Paper,
+  SegmentedControl,
   Stack,
   Switch,
   Text,
   Title,
   useMantineColorScheme,
+  useMantineTheme,
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
@@ -26,8 +28,20 @@ import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import type { ColDef, ICellRendererParams, CellValueChangedEvent } from 'ag-grid-community';
-import { GlassPage, useGlassPages } from '../../chrome/variants/glass/pages';
-import { Database } from 'lucide-react';
+import { GlassPage, STROKE, useGlassPages } from '../../chrome/variants/glass/pages';
+import '../../chrome/variants/glass/pages/permissions.css';
+import {
+  ArrowRight,
+  Database,
+  Globe,
+  Lock,
+  ShieldCheck,
+  TriangleAlert,
+  UserMinus,
+  UserPlus,
+  UserRound,
+  Users,
+} from 'lucide-react';
 
 import { fetchProject, listAllUsers, toggleProjectVisibility, updateProjectPermissions, useBrandAccents } from 'depictio-react-core';
 import type { AdminUser, ProjectListEntry } from 'depictio-react-core';
@@ -35,6 +49,13 @@ import type { AdminUser, ProjectListEntry } from 'depictio-react-core';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { AppSidebar } from '../../chrome';
 import { usePageTitle } from '../../branding';
+
+type Role = 'Owner' | 'Editor' | 'Viewer';
+const ROLES: Role[] = ['Owner', 'Editor', 'Viewer'];
+
+function roleOf(r: UserRow): Role | '' {
+  return ROLES.find((role) => r[role]) ?? '';
+}
 
 interface UserRow {
   _id: string;
@@ -109,11 +130,24 @@ function rowsToPermissions(rows: UserRow[]): {
 const VisibilityCard: React.FC<{
   kind: 'public' | 'private';
   role: 'from' | 'to';
-}> = ({ kind, role }) => {
+  glass?: boolean;
+}> = ({ kind, role, glass }) => {
   const isPublic = kind === 'public';
   const color = isPublic ? 'teal' : 'violet';
   const icon = isPublic ? 'mdi:earth' : 'mdi:lock';
   const isFrom = role === 'from';
+  if (glass) {
+    const Mark = isPublic ? Globe : Lock;
+    return (
+      <div className="pm-vis" data-role={role}>
+        <span className="pm-vis-label">{isFrom ? 'From' : 'To'}</span>
+        <Mark size={28} strokeWidth={STROKE} aria-hidden />
+        <Badge color="gray" size="md" className="gp-tag-plain">
+          {isPublic ? 'Public' : 'Private'}
+        </Badge>
+      </div>
+    );
+  }
   return (
     <Stack gap={4} align="center" miw={120}>
       <Text size="xs" c="dimmed" fw={500}>
@@ -146,6 +180,7 @@ const PermissionsApp: React.FC = () => {
   const projectId = readProjectIdFromPath();
   const { user } = useCurrentUser();
   const { colorScheme } = useMantineColorScheme();
+  const primary = useMantineTheme().primaryColor;
   const isDark = colorScheme === 'dark';
 
   const [project, setProject] = useState<ProjectListEntry | null>(null);
@@ -232,30 +267,17 @@ const PermissionsApp: React.FC = () => {
     refresh();
   };
 
-  const handleCellChange = async (e: CellValueChangedEvent<UserRow>) => {
+  const saveRow = async (updated: UserRow) => {
     const next = [...rows];
-    const idx = next.findIndex((r) => r._id === e.data._id);
+    const idx = next.findIndex((r) => r._id === updated._id);
     if (idx < 0) return;
-    // Roles are mutually exclusive on the server (Pydantic validator). When
-    // the user enables one role, clear the others on the same row — otherwise
-    // the API rejects with "User cannot be both an X and a Y".
-    const updated: UserRow = { ...e.data };
-    const flippedOn = e.colDef.field as 'Owner' | 'Editor' | 'Viewer' | undefined;
-    if (flippedOn && updated[flippedOn]) {
-      const others = (['Owner', 'Editor', 'Viewer'] as const).filter(
-        (r) => r !== flippedOn,
-      );
-      others.forEach((r) => {
-        updated[r] = false;
-      });
-    }
     next[idx] = updated;
     try {
       await persist(next);
       notifications.show({
         color: 'teal',
         title: 'Permissions updated',
-        message: e.data.email,
+        message: updated.email,
         autoClose: 1500,
       });
     } catch (err) {
@@ -267,6 +289,18 @@ const PermissionsApp: React.FC = () => {
       // Revert
       refresh();
     }
+  };
+
+  // Roles are mutually exclusive on the server (Pydantic validator): the
+  // role switched on clears the others on the same row, otherwise the API
+  // rejects with "User cannot be both an X and a Y".
+  const setRole = (row: UserRow, role: Role) =>
+    saveRow({ ...row, Owner: false, Editor: false, Viewer: false, [role]: true });
+
+  const handleCellChange = (e: CellValueChangedEvent<UserRow>) => {
+    const flippedOn = e.colDef.field as Role | undefined;
+    if (flippedOn && e.data[flippedOn]) return setRole(e.data, flippedOn);
+    return saveRow({ ...e.data });
   };
 
   const handleAdd = async () => {
@@ -479,6 +513,161 @@ const PermissionsApp: React.FC = () => {
     [canManage, rows],
   );
 
+  const shownPublic = pendingPublic !== null ? pendingPublic : Boolean(project?.is_public);
+  const VisMark = shownPublic ? Globe : Lock;
+
+  // Glass: visibility as a row, members as a list with the role on each row.
+  const glassBody = project && (
+    <div className="pm-page" data-testid="permissions-page">
+      {!canManage && (
+        <Alert color="yellow" variant="light" icon={<Lock size={18} strokeWidth={STROKE} />}>
+          Read-only mode. Only project owners (or admins) can modify roles or visibility.
+        </Alert>
+      )}
+
+      <section aria-label="Visibility">
+        <div className="pm-visibility" data-public={shownPublic ? '' : undefined}>
+          <span className="pm-chip">
+            <VisMark size={20} strokeWidth={STROKE} aria-hidden />
+          </span>
+          <div className="pm-visibility-body">
+            <div className="pm-visibility-title">{shownPublic ? 'Public' : 'Private'}</div>
+            <div className="pm-visibility-text">
+              {shownPublic
+                ? 'Anyone signed in can view this project.'
+                : 'Only listed members can view this project.'}
+            </div>
+          </div>
+          <Switch
+            checked={shownPublic}
+            onChange={(e) => setPendingPublic(e.currentTarget.checked)}
+            disabled={!canManage || visibilityBusy}
+            aria-label="Public project"
+            data-testid="project-visibility-switch"
+          />
+        </div>
+      </section>
+
+      <section aria-label="Members">
+        <div className="pm-head">
+          <Users size={18} strokeWidth={STROKE} aria-hidden />
+          <Title order={4}>Members</Title>
+          <span className="pm-count">{rows.length}</span>
+        </div>
+        <p className="pm-hint">
+          <b>Owners</b> manage members and visibility, <b>editors</b> change the project's
+          content, <b>viewers</b> can only look.
+        </p>
+        <ul className="pm-members">
+          {rows.length === 0 && (
+            <li className="pm-empty">No members yet. Add a teammate by email below.</li>
+          )}
+          {rows.map((r) => {
+            const wildcard = r.email === '*';
+            const isSelf = !!user && (r._id === user.id || r.email === user.email);
+            const role = roleOf(r);
+            const Mark = wildcard ? Globe : UserRound;
+            return (
+              <li
+                key={r._id || r.email}
+                className="pm-member"
+                data-testid="permissions-member-row"
+                data-email={r.email}
+              >
+                <Mark size={17} strokeWidth={STROKE} className="pm-member-icon" aria-hidden />
+                <div className="pm-member-who">
+                  <span className="pm-member-email">{wildcard ? 'All signed-in users' : r.email}</span>
+                  {isSelf && (
+                    <Badge color="gray" size="sm" className="gp-tag-plain">
+                      You
+                    </Badge>
+                  )}
+                  {r.is_admin && (
+                    <Badge
+                      color="gray"
+                      size="sm"
+                      className="gp-tag-plain"
+                      leftSection={<ShieldCheck size={12} strokeWidth={STROKE} />}
+                    >
+                      Admin
+                    </Badge>
+                  )}
+                </div>
+                {canManage ? (
+                  <SegmentedControl
+                    size="xs"
+                    className="pm-role"
+                    value={role}
+                    data={ROLES.map((x) => ({ label: x, value: x }))}
+                    onChange={(v) => setRole(r, v as Role)}
+                    aria-label={`Role of ${r.email}`}
+                    data-testid="permissions-role-control"
+                  />
+                ) : (
+                  <Badge
+                    color={role === 'Owner' ? primary : role === 'Editor' ? 'indigo' : 'gray'}
+                    size="sm"
+                    className={role === 'Viewer' ? 'gp-tag-plain' : undefined}
+                  >
+                    {role || 'No role'}
+                  </Badge>
+                )}
+                <div className="pm-member-end">
+                  {canManage && (
+                    <ActionIcon
+                      size="md"
+                      variant="subtle"
+                      color="red"
+                      title="Remove user"
+                      aria-label={`Remove ${r.email}`}
+                      onClick={() => handleDelete(r)}
+                    >
+                      <UserMinus size={17} strokeWidth={STROKE} />
+                    </ActionIcon>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+          {canManage && (
+            <li className="pm-add">
+              <Autocomplete
+                flex={1}
+                placeholder={
+                  allUsers.length > 0
+                    ? 'Search users, or * for all signed-in users'
+                    : 'user@example.com, or * for all signed-in users'
+                }
+                value={emailInput}
+                onChange={setEmailInput}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !adding) handleAdd();
+                }}
+                disabled={adding}
+                leftSection={<UserPlus size={16} strokeWidth={STROKE} />}
+                data={[
+                  '*',
+                  ...allUsers.map((u) => u.email).filter((e) => e && !rows.some((r) => r.email === e)),
+                ]}
+                limit={20}
+                comboboxProps={{ withinPortal: true }}
+                data-testid="permissions-add-user-input"
+              />
+              <Button
+                loading={adding}
+                onClick={handleAdd}
+                disabled={!emailInput.trim()}
+                data-testid="permissions-add-user-btn"
+              >
+                Add member
+              </Button>
+            </li>
+          )}
+        </ul>
+      </section>
+    </div>
+  );
+
   const body = (
     <>
       {loading ? (
@@ -488,19 +677,25 @@ const PermissionsApp: React.FC = () => {
       ) : loadError ? (
         <Center mih={300}>
           <Stack align="center" gap="xs">
-            <Icon
-              icon="mdi:alert-circle"
-              width={32}
-              color="var(--mantine-color-red-6)"
-            />
+            {glass ? (
+              <TriangleAlert size={32} strokeWidth={STROKE} color="var(--mantine-color-red-6)" aria-hidden />
+            ) : (
+              <Icon
+                icon="mdi:alert-circle"
+                width={32}
+                color="var(--mantine-color-red-6)"
+              />
+            )}
             <Text c="red">{loadError}</Text>
-            <Button component="a" href="/projects" variant="light">
+            <Button component="a" href="/projects" variant={glass ? 'default' : 'light'}>
               Back to projects
             </Button>
           </Stack>
         </Center>
-      ) : !project ? null : (
-        <Stack gap="lg">
+      ) : !project ? null : glass ? (
+        glassBody
+      ) : (
+        <Stack gap="lg" data-testid="permissions-page">
           <Paper withBorder radius="md" p="lg">
             <Stack gap="xs">
               <Group gap="sm" justify="space-between">
@@ -663,13 +858,17 @@ const PermissionsApp: React.FC = () => {
       >
         <Stack gap="lg">
           <Group justify="center" gap="md" wrap="nowrap">
-            <VisibilityCard kind={project?.is_public ? 'public' : 'private'} role="from" />
-            <Icon
-              icon="mdi:arrow-right-bold"
-              width={28}
-              color="var(--mantine-color-dimmed)"
-            />
-            <VisibilityCard kind={pendingPublic ? 'public' : 'private'} role="to" />
+            <VisibilityCard kind={project?.is_public ? 'public' : 'private'} role="from" glass={glass} />
+            {glass ? (
+              <ArrowRight size={24} strokeWidth={STROKE} color="var(--gl-faint)" aria-hidden />
+            ) : (
+              <Icon
+                icon="mdi:arrow-right-bold"
+                width={28}
+                color="var(--mantine-color-dimmed)"
+              />
+            )}
+            <VisibilityCard kind={pendingPublic ? 'public' : 'private'} role="to" glass={glass} />
           </Group>
           <Text size="sm" ta="center" c="dimmed">
             {pendingPublic
@@ -685,12 +884,16 @@ const PermissionsApp: React.FC = () => {
               Cancel
             </Button>
             <Button
-              color={pendingPublic ? 'teal' : 'violet'}
+              color={glass ? undefined : pendingPublic ? 'teal' : 'violet'}
               leftSection={
-                <Icon
-                  icon={pendingPublic ? 'mdi:earth' : 'mdi:lock'}
-                  width={16}
-                />
+                glass ? (
+                  pendingPublic ? <Globe size={16} strokeWidth={STROKE} /> : <Lock size={16} strokeWidth={STROKE} />
+                ) : (
+                  <Icon
+                    icon={pendingPublic ? 'mdi:earth' : 'mdi:lock'}
+                    width={16}
+                  />
+                )
               }
               onClick={confirmToggleVisibility}
               loading={visibilityBusy}
