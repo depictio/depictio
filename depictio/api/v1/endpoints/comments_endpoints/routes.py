@@ -260,7 +260,9 @@ def _update_thread(thread_id: str, update: dict) -> ThreadOut:
 def _require_commenter(dashboard_id: ObjectId, current_user: User) -> dict:
     """The dashboard document, or the right HTTP error, for a caller who may use threads.
 
-    Editors, and viewers too when the instance lets them comment.
+    Editors, and viewers too when the instance lets them comment. Never a
+    temporary account: public mode hands one to every visitor, and a comment
+    needs someone the thread can name.
     """
     if not settings.comments.viewers_can_comment:
         return _require_dashboard_editor(dashboard_id, current_user)  # type: ignore[arg-type]
@@ -268,6 +270,11 @@ def _require_commenter(dashboard_id: ObjectId, current_user: User) -> dict:
         raise HTTPException(
             status_code=403,
             detail="Anonymous users cannot comment. Please login to continue.",
+        )
+    if getattr(current_user, "is_temporary", False):
+        raise HTTPException(
+            status_code=403,
+            detail="Temporary accounts cannot comment. Sign in with an account to continue.",
         )
     dashboard = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard:
@@ -358,6 +365,8 @@ async def get_comment_access(
     if current_user is None or not ObjectId.is_valid(dashboard_id):
         return CommentAccess(can_comment=False)
     if getattr(current_user, "is_anonymous", False) and not settings.auth.is_single_user_mode:
+        return CommentAccess(can_comment=False)
+    if settings.comments.viewers_can_comment and getattr(current_user, "is_temporary", False):
         return CommentAccess(can_comment=False)
     try:
         dashboard = dashboards_collection.find_one(
