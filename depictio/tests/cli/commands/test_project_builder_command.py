@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import sys
+import types
+
 from typer.testing import CliRunner
 
 from depictio.cli.cli.commands import project_builder as command
@@ -35,11 +38,10 @@ def test_it_serves_the_folder_with_the_viewer_bundle(monkeypatch, tmp_path):
     monkeypatch.setattr(command, "_missing_server_modules", lambda: [])
     monkeypatch.setattr(command, "_viewer_dist", lambda: tmp_path / "dist")
 
-    import depictio.project_builder.standalone as standalone
-
-    monkeypatch.setattr(
-        standalone, "serve", lambda root, **kwargs: served.update(root=root, **kwargs)
-    )
+    # A stand-in for the FastAPI module: this suite also runs where FastAPI is not installed.
+    standalone = types.ModuleType("depictio.project_builder.standalone")
+    standalone.serve = lambda root, **kwargs: served.update(root=root, **kwargs)
+    monkeypatch.setitem(sys.modules, "depictio.project_builder.standalone", standalone)
     result = runner.invoke(
         app, ["project-builder", str(tmp_path), "--no-open", "--port", "9000", "--out", "b"]
     )
