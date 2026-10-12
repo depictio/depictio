@@ -5205,18 +5205,25 @@ def _filter_metadata_index(dashboard_data: dict, filters: list[dict]) -> dict[st
         if key:
             index[key] = m
 
-    if all(str(f.get("index") or "") in index for f in filters):
+    # Only an active filter needs resolving: a cleared control, or one whose
+    # component no longer exists (a stale share link), must not cost every
+    # panel render a read of the whole family.
+    active = [f for f in filters if f.get("value") not in (None, [], "")]
+    if all(str(f.get("index") or "") in index for f in active):
         return index
 
     parent_id = dashboard_data.get("parent_dashboard_id") or dashboard_data.get("dashboard_id")
     if not parent_id:
         return index
+    query: dict = {"$or": [{"dashboard_id": parent_id}, {"parent_dashboard_id": parent_id}]}
+    # Scoped to the rendered dashboard's project, like the family it belongs to.
+    if dashboard_data.get("project_id"):
+        query["project_id"] = dashboard_data["project_id"]
     try:
-        family = dashboards_collection.find(
-            {"$or": [{"dashboard_id": parent_id}, {"parent_dashboard_id": parent_id}]},
-            {"stored_metadata": 1},
-        )
-        for tab in family:
+        family = dashboards_collection.find(query, {"stored_metadata": 1, "tab_order": 1})
+        for tab in sorted(
+            family, key=lambda t: (t.get("tab_order") is None, t.get("tab_order") or 0)
+        ):
             for m in tab.get("stored_metadata") or []:
                 key = str(m.get("index") or "")
                 if key and key not in index:
@@ -5231,7 +5238,9 @@ def _sent_filter_metadata(f: dict) -> dict:
 
     The React viewer attaches ``metadata.dc_id`` to every filter, so a control
     that is stored nowhere we can read (a floating component, a tab added since)
-    still names the collection it filters.
+    still names the collection it filters. The client chooses that id, so it is
+    not trusted on its own: it only counts when the project has an enabled link
+    from that collection to the MultiQC one (``links_by_source`` below).
     """
     sent = f.get("metadata") or {}
     return {

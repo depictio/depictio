@@ -264,6 +264,7 @@ def family_db(patched_db):
     coll.insert_one(
         {
             "dashboard_id": OVERVIEW_ID,
+            "project_id": PROJECT_ID,
             "stored_metadata": [
                 {
                     "index": "pinned-habitat",
@@ -277,7 +278,13 @@ def family_db(patched_db):
             ],
         }
     )
-    coll.insert_one({"dashboard_id": MULTIQC_TAB_ID, "parent_dashboard_id": OVERVIEW_ID})
+    coll.insert_one(
+        {
+            "dashboard_id": MULTIQC_TAB_ID,
+            "parent_dashboard_id": OVERVIEW_ID,
+            "project_id": PROJECT_ID,
+        }
+    )
     with patch(f"{ROUTES}.dashboards_collection", coll):
         yield coll
     client.close()
@@ -350,3 +357,93 @@ def test_family_lookup_failure_does_not_break_the_render(patched_db):
     filters = [_filter("pinned-habitat", "habitat", ["w"])]
     with patch(f"{ROUTES}.dashboards_collection", Broken()):
         assert _resolve_multiqc_sample_filter(_multiqc_tab(), _component(), filters) is None
+
+
+def test_own_tab_wins_a_collision_with_another_tab(family_db):
+    """Two tabs sharing an index: the component on the rendered tab is the one used."""
+    tab = _multiqc_tab()
+    tab["stored_metadata"].append(
+        {
+            "index": "pinned-habitat",
+            "component_type": "interactive",
+            "dc_id": META_DC_B,
+            "wf_id": WF_ID,
+            "column_name": "depth_zone",
+            "interactive_component_type": "MultiSelect",
+            "dc_config": {"delta_location": f"memory://{META_DC_B}", "type": "table"},
+        }
+    )
+    filters = [_filter("pinned-habitat", "depth_zone", ["d"])]
+    result = _resolve_multiqc_sample_filter(tab, _component(), filters)
+    assert result is not None
+    # DC B (S1+S2), not the Overview's DC A (S2+S3).
+    assert set(result) == {"S1", "S1_R1", "S2", "S2_R1"}
+
+
+def test_family_is_not_read_when_every_active_filter_is_local(patched_db):
+    """The common case costs no extra query."""
+
+    class Spy:
+        calls = 0
+
+        def find(self, *a, **k):
+            Spy.calls += 1
+            return []
+
+    tab = _multiqc_tab()
+    tab["stored_metadata"].append(
+        {
+            "index": "direct-sample",
+            "component_type": "interactive",
+            "dc_id": MULTIQC_DC,
+            "wf_id": WF_ID,
+            "column_name": "sample_name",
+        }
+    )
+    filters = [_filter("direct-sample", "sample_name", ["S1"])]
+    with patch(f"{ROUTES}.dashboards_collection", Spy()):
+        assert _resolve_multiqc_sample_filter(tab, _component(), filters) is not None
+    assert Spy.calls == 0
+
+
+def test_cleared_or_stale_filters_do_not_trigger_the_family_read(patched_db):
+    """An empty control, or a filter of a deleted component, must not cost a query."""
+
+    class Spy:
+        calls = 0
+
+        def find(self, *a, **k):
+            Spy.calls += 1
+            return []
+
+    tab = _multiqc_tab()
+    tab["stored_metadata"].append(
+        {
+            "index": "direct-sample",
+            "component_type": "interactive",
+            "dc_id": MULTIQC_DC,
+            "wf_id": WF_ID,
+            "column_name": "sample_name",
+        }
+    )
+    filters = [
+        _filter("direct-sample", "sample_name", ["S1"]),
+        _filter("cleared", "habitat", []),
+    ]
+    with patch(f"{ROUTES}.dashboards_collection", Spy()):
+        _resolve_multiqc_sample_filter(tab, _component(), filters)
+    assert Spy.calls == 0
+
+
+def test_foreign_filter_on_the_multiqc_sample_column_is_direct(patched_db):
+    """A sent filter on the MultiQC DC's own sample column takes the direct branch."""
+    tab = {"project_id": PROJECT_ID, "stored_metadata": []}
+    filters = [
+        {
+            **_filter("pinned-sample", "sample_name", ["S1"]),
+            "metadata": {"dc_id": MULTIQC_DC, "column_name": "sample_name"},
+        }
+    ]
+    result = _resolve_multiqc_sample_filter(tab, _component(), filters)
+    assert result is not None
+    assert set(result) == {"S1", "S1_R1"}
