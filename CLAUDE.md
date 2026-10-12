@@ -192,7 +192,18 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   `test_scan_parity.py` asks both sides the same questions
 - An inline template is browser input: `validate.validate_inline_template` holds it to what the
   builder produces (native single/recursive scans, no dashboards/conditionals/recipes/joins,
-  `DATA_ROOT` only, indexed files and images refused on S3) before `from_run` resolves it
+  `DATA_ROOT` only, indexed files and images refused on S3) before `from_run` resolves it.
+  A new draft option needs its key in `validate.py` too, or every template using it is a 422
+- `GET /projects/builder/capabilities` is what the SPA offers: kinds are detected from the
+  models (`capabilities.py`, `find_spec`), never from a version. `genomic_tracks`, `bioimage`
+  and `format: spatialdata` tables come from unmerged work: listed unavailable with a reason
+  and refused until their model modules exist. Bioimage stores and SpatialData tables are
+  refused on S3 roots; genomic tracks under S3 get `remote_base_uri: {DATA_ROOT}/<dir>/`
+- A project's `realtime` flag only acts when the instance has `DEPICTIO_EVENTS_ENABLED`
+  (off by default; `depictio local up` passes it through when set), and only on re-ingestion
+  (`depictio watch`, `depictio ingest`, Data refresh): nothing watches folders or S3 itself
+- Wildcard names are lowercase-capable identifiers: `{SAMPLE}` would be read as a template
+  variable. A `*.zarr` folder is one store (tree leaf, matched by name, never descended)
 
 ### Screenshot System
 - Playwright drives the React SPA; composite targeting via `.react-grid-item`
