@@ -447,3 +447,62 @@ def test_foreign_filter_on_the_multiqc_sample_column_is_direct(patched_db):
     result = _resolve_multiqc_sample_filter(tab, _component(), filters)
     assert result is not None
     assert set(result) == {"S1", "S1_R1"}
+
+
+class _Projects:
+    """A projects collection holding one project with the given links."""
+
+    def __init__(self, links: list[dict]):
+        self.links = links
+
+    def find_one(self, *args, **kwargs):
+        return {"_id": PROJECT_ID, "links": self.links}
+
+
+def _second_link(source_dc: str, column: str) -> dict:
+    return {**_link(source_dc), "source_column": column}
+
+
+def test_every_link_of_a_source_dc_contributes_its_column(patched_db):
+    """One table linked twice (library id and sample name): the ids of both count."""
+    patched_db[META_DC_A] = pl.DataFrame({"sample": ["S2"], "alias": ["S3"], "habitat": ["w"]})
+    links = [_link(META_DC_A), _second_link(META_DC_A, "alias")]
+    with patch("depictio.api.v1.db.projects_collection", _Projects(links)):
+        result = _resolve_multiqc_sample_filter(
+            _dashboard_data(), _component(), [_filter("habitat-a", "habitat", ["w"])]
+        )
+    assert result is not None
+    assert set(result) == {"S2", "S2_R1", "S3", "S3_R1"}
+
+
+def test_a_repeated_link_column_is_read_once(patched_db):
+    links = [_link(META_DC_A), _link(META_DC_A)]
+    with patch("depictio.api.v1.db.projects_collection", _Projects(links)):
+        result = _resolve_multiqc_sample_filter(
+            _dashboard_data(), _component(), [_filter("habitat-a", "habitat", ["w"])]
+        )
+    assert result is not None
+    assert set(result) == {"S2", "S2_R1", "S3", "S3_R1"}
+
+
+def test_a_link_column_missing_from_the_table_does_not_hide_the_others(patched_db):
+    links = [_second_link(META_DC_A, "gone"), _link(META_DC_A)]
+    with patch("depictio.api.v1.db.projects_collection", _Projects(links)):
+        result = _resolve_multiqc_sample_filter(
+            _dashboard_data(), _component(), [_filter("habitat-a", "habitat", ["w"])]
+        )
+    assert result is not None
+    assert set(result) == {"S2", "S2_R1", "S3", "S3_R1"}
+
+
+def test_a_null_in_a_link_column_is_not_a_sample_id(patched_db):
+    patched_db[META_DC_A] = pl.DataFrame(
+        {"sample": ["S2", "S3"], "alias": [None, None], "habitat": ["w", "w"]}
+    )
+    links = [_link(META_DC_A), _second_link(META_DC_A, "alias")]
+    with patch("depictio.api.v1.db.projects_collection", _Projects(links)):
+        result = _resolve_multiqc_sample_filter(
+            _dashboard_data(), _component(), [_filter("habitat-a", "habitat", ["w"])]
+        )
+    assert result is not None
+    assert set(result) == {"S2", "S2_R1", "S3", "S3_R1"}

@@ -101,3 +101,40 @@ def test_remap_ingest_mapping_to_hub() -> None:
     remapped = remap_mappings_to_hub(ingest, SAREK_HUB)
     assert set(remapped) == set(SAREK_HUB)
     assert set(SAREK_NAMES) <= {v for vs in remapped.values() for v in vs}
+
+
+# mag writes ``<assembler>-<binner>-<sample>.<bin>``: the sample is an infix.
+MAG_HUB = ["CAPES_S11", "CAPES_S12"]
+
+
+@pytest.mark.parametrize(
+    "name,expected",
+    [
+        ("FLYE-CAPES_S11", "CAPES_S11"),
+        ("FLYE-MaxBin2-CAPES_S11.003.fa", "CAPES_S11"),
+        ("FLYE-MaxBin2-CAPES_S12.001", "CAPES_S12"),
+        ("MEGAHIT-MetaBAT2-CAPES_S11", "CAPES_S11"),
+    ],
+)
+def test_infix_hub_id_is_claimed_at_token_boundaries(name: str, expected: str) -> None:
+    assert canonicalize_to_hub(name, MAG_HUB) == expected
+
+
+def test_infix_needs_whole_tokens() -> None:
+    # A hub id glued to other characters is not that sample.
+    assert canonicalize_to_hub("FLYE-XCAPES_S11", MAG_HUB) is None
+    assert canonicalize_to_hub("FLYE-CAPES_S110", MAG_HUB) is None
+
+
+def test_infix_prefers_the_longest_nested_hub_id() -> None:
+    hub = ["S11", "CAPES_S11"]
+    assert canonicalize_to_hub("FLYE-CAPES_S11.003", hub) == "CAPES_S11"
+
+
+def test_infix_with_two_unrelated_hub_ids_stays_unattached() -> None:
+    assert canonicalize_to_hub("FLYE-CAPES_S11-vs-CAPES_S12", MAG_HUB) is None
+
+
+def test_prefix_still_wins_over_infix() -> None:
+    hub = ["CAPES_S11", "FLYE"]
+    assert canonicalize_to_hub("FLYE-CAPES_S11", hub) == "FLYE"
