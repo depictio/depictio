@@ -16,11 +16,13 @@ import { RunPreview, RunSummaryCard } from './RunPreview';
 
 /** The preview's answer when no template was picked and the server could not
  *  tell which pipeline produced the folder: say so, and send the reader back
- *  to pick one. `message` is the server's own explanation. */
+ *  to pick one, or on to the Project Builder to define the collections
+ *  themselves. `message` is the server's own explanation. */
 const TemplateNotDetectedAlert: React.FC<{
   message: string;
   onPickTemplate: () => void;
-}> = ({ message, onPickTemplate }) => (
+  onDefineYourself?: (() => void) | null;
+}> = ({ message, onPickTemplate, onDefineYourself }) => (
   <Alert
     color="yellow"
     variant="light"
@@ -32,9 +34,9 @@ const TemplateNotDetectedAlert: React.FC<{
       <Text size="sm">{message}</Text>
       <Text size="sm">
         Choose the pipeline that produced this folder and its template version, then
-        preview again.
+        preview again{onDefineYourself ? ', or define its data collections yourself' : ''}.
       </Text>
-      <Group>
+      <Group gap="xs">
         <Button
           size="xs"
           variant="light"
@@ -45,6 +47,18 @@ const TemplateNotDetectedAlert: React.FC<{
         >
           Pick a pipeline
         </Button>
+        {onDefineYourself && (
+          <Button
+            size="xs"
+            variant="subtle"
+            color="yellow"
+            leftSection={<Icon icon="mdi:folder-cog-outline" width={14} />}
+            onClick={onDefineYourself}
+            data-testid="run-define-collections-preview"
+          >
+            Define collections yourself
+          </Button>
+        )}
       </Group>
     </Stack>
   </Alert>
@@ -58,6 +72,8 @@ interface RunPreviewStepProps {
   notDetected: string | null;
   /** Back to the Source step, to pick a template. */
   onPickTemplate: () => void;
+  /** On to the Project Builder with this folder; null when not offered. */
+  onDefineYourself?: (() => void) | null;
   error: string | null;
   /** Offered beside `error` when the read was refused for want of the
    *  bucket's connection details; null when not. */
@@ -78,6 +94,7 @@ export const RunPreviewStep: React.FC<RunPreviewStepProps> = ({
   detecting,
   notDetected,
   onPickTemplate,
+  onDefineYourself = null,
   error,
   onGiveBucketDetails,
   foundNothing,
@@ -105,7 +122,11 @@ export const RunPreviewStep: React.FC<RunPreviewStepProps> = ({
         )}
       </Box>
       {notDetected && (
-        <TemplateNotDetectedAlert message={notDetected} onPickTemplate={onPickTemplate} />
+        <TemplateNotDetectedAlert
+          message={notDetected}
+          onPickTemplate={onPickTemplate}
+          onDefineYourself={onDefineYourself}
+        />
       )}
       {error && (
         <Alert

@@ -14,7 +14,7 @@
  * `privateBucket.ts`.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Box, Button, Group, Stack, Stepper, TextInput } from '@mantine/core';
+import { Alert, Box, Button, Group, Paper, Stack, Stepper, Text, TextInput } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
 import {
@@ -35,6 +35,7 @@ import {
   s3BucketOf,
   storageForLocation,
   useBrandAccents,
+  writeBuilderHandoff,
 } from 'depictio-react-core';
 import type {
   FromRunReport,
@@ -44,6 +45,7 @@ import type {
 } from 'depictio-react-core';
 
 import { DisabledReason, GatedButton } from '../../components/settings/SettingsSections';
+import { PROJECT_BUILDER_ROUTE } from '../builder/mode';
 import { useStepSettling } from '../hooks/useStepSettling';
 import FolderBrowserModal from './browser/FolderBrowserModal';
 import { DetectionCard } from './DetectionCard';
@@ -483,6 +485,17 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   const noTemplateForFolder =
     step === 0 && !choice.templateId && inspection !== null && !detectedId;
 
+  // No template fits: the Project Builder takes the folder (and the private
+  // bucket's details, read once there and removed) to define the
+  // collections by hand.
+  const defineYourself =
+    trimmedRoot && !prefixInvalid
+      ? () => {
+          writeBuilderHandoff({ dataRoot: trimmedRoot, storage: rootStorage });
+          window.location.assign(PROJECT_BUILDER_ROUTE);
+        }
+      : null;
+
   // Disabled with a visible reason rather than hidden (project convention).
   let disabledReason: string | null = null;
   if (trimmedRoot.length === 0) {
@@ -642,6 +655,28 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
               error={templatesError}
             />
 
+            {noTemplateForFolder && defineYourself && (
+              <Paper withBorder radius="md" p="sm" data-testid="run-define-collections-card">
+                <Group justify="space-between" wrap="nowrap" gap="sm">
+                  <Text size="sm" c="dimmed">
+                    No template for this folder? Define its data collections yourself in the
+                    Project Builder.
+                  </Text>
+                  <Button
+                    size="xs"
+                    variant="light"
+                    color={accent.secondary}
+                    leftSection={<Icon icon="mdi:folder-cog-outline" width={14} />}
+                    onClick={defineYourself}
+                    style={{ flexShrink: 0 }}
+                    data-testid="run-define-collections"
+                  >
+                    Define collections yourself
+                  </Button>
+                </Group>
+              </Paper>
+            )}
+
             <TextInput
               label="Project Name (Optional)"
               description="Defaults to a name derived from the template"
@@ -672,6 +707,7 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
             detecting={!choice.templateId}
             notDetected={notDetected}
             onPickTemplate={() => setStep(0)}
+            onDefineYourself={defineYourself}
             error={previewError}
             onGiveBucketDetails={giveBucketDetails}
             foundNothing={foundNothing}

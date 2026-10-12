@@ -371,6 +371,11 @@ const ProjectsApp: React.FC = () => {
             ? 'Private buckets are disabled in public/demo mode for non-admin users.'
             : null
         }
+        builderDisabledReason={
+          createDisabled
+            ? 'Project creation is disabled in public/demo mode for non-admin users'
+            : null
+        }
       />
       <ManifestCreatedModal report={createdReport} onClose={() => setCreatedReport(null)} />
       <RunCreatedModal

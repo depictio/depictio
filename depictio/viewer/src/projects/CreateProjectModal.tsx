@@ -20,6 +20,7 @@ import {
   Textarea,
   TextInput,
   Title,
+  Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -45,6 +46,7 @@ import { useStepSettling } from './hooks/useStepSettling';
 import { DisabledReason, GatedButton } from '../components/settings/SettingsSections';
 import { RunFolderTab } from './fromRun';
 import type { RunCreatedContext } from './fromRun';
+import { PROJECT_BUILDER_ROUTE } from './builder/mode';
 
 type Tab = 'create' | 'import' | 'manifest' | 'run';
 type ProjectType = 'basic' | 'advanced';
@@ -78,6 +80,9 @@ interface CreateProjectModalProps {
   /** Why the run tab may not take a private bucket's connection details
    *  (public mode, non-admin); null when it may. */
   privateBucketDisabledReason?: string | null;
+  /** Why the Project Builder may not be opened (project creation disabled
+   *  for this user); null when it may. */
+  builderDisabledReason?: string | null;
 }
 
 const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
@@ -91,6 +96,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   localDataRootsEnabled = false,
   remoteBrowseEnabled = false,
   privateBucketDisabledReason = null,
+  builderDisabledReason = null,
 }) => {
   const accent = useBrandAccents();
   const [tab, setTab] = useState<Tab>('create');
@@ -167,9 +173,13 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
     [templates],
   );
 
-  // Step-1 card click also auto-advances (matches Dash UX).
+  // Step-1 card click also auto-advances (matches Dash UX). The advanced
+  // card opens the Project Builder, a page of its own.
   const handleSelectType = (type: ProjectType) => {
-    if (type === 'advanced') return; // disabled card
+    if (type === 'advanced') {
+      if (!builderDisabledReason) window.location.assign(PROJECT_BUILDER_ROUTE);
+      return;
+    }
     setProjectType(type);
     setActiveStep(1);
   };
@@ -415,11 +425,14 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
                         active={false}
                         type="advanced"
                         title="Advanced Project"
-                        description="Designed for complex bioinformatics runs, processing workflows, and data ingestion pipelines. Requires depictio-CLI for project design and workflow management. Best for bioinformatics and computational analysis."
+                        description="Designed for workflow outputs and bioinformatics runs: point at a folder, group its files into data collections under one or several workflows, then ingest them. Best for pipeline results and computational analysis."
                         icon="mdi:sitemap"
-                        tag="Depictio-CLI Only"
+                        tag="Project Builder"
                         tagColor="orange"
-                        disabled
+                        disabled={Boolean(builderDisabledReason)}
+                        disabledReason={builderDisabledReason}
+                        onClick={() => handleSelectType('advanced')}
+                        testId="create-project-builder-card"
                       />
                     </SimpleGrid>
                   </Stack>
@@ -964,7 +977,10 @@ interface ProjectTypeCardProps {
   tag: string;
   tagColor: string;
   disabled?: boolean;
+  /** Shown on hover of a disabled card. */
+  disabledReason?: string | null;
   onClick?: () => void;
+  testId?: string;
 }
 
 const ProjectTypeCard: React.FC<ProjectTypeCardProps> = ({
@@ -976,18 +992,30 @@ const ProjectTypeCard: React.FC<ProjectTypeCardProps> = ({
   tag,
   tagColor,
   disabled,
+  disabledReason = null,
   onClick,
+  testId,
 }) => {
   // Project-type taxonomy, not a brand role — basic and advanced have to stay
   // told apart, so these keep their own hues.
   const typeAccent =
     type === 'basic' ? 'var(--mantine-color-teal-6)' : 'var(--mantine-color-orange-6)';
-  return (
+  const card = (
     <Paper
       withBorder
       radius="md"
       p="lg"
       onClick={disabled ? undefined : onClick}
+      role="button"
+      tabIndex={disabled ? -1 : 0}
+      aria-disabled={disabled || undefined}
+      onKeyDown={(e) => {
+        if (!disabled && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
+      data-testid={testId}
       style={{
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.55 : 1,
@@ -1009,6 +1037,13 @@ const ProjectTypeCard: React.FC<ProjectTypeCardProps> = ({
         </Badge>
       </Stack>
     </Paper>
+  );
+  return disabled && disabledReason ? (
+    <Tooltip label={disabledReason} withArrow multiline maw={280} zIndex={Z_LAYERS.tooltip}>
+      {card}
+    </Tooltip>
+  ) : (
+    card
   );
 };
 
