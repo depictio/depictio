@@ -8,16 +8,29 @@ import { useEffect, useState } from 'react';
 
 export type ServerStatusValue = 'online' | 'offline' | 'unknown';
 
+/** Feature flags advertised by the (public) status endpoint. */
+export interface ServerFeatures {
+  ai: boolean;
+  ai_user_keys: boolean;
+}
+
 export interface ServerStatus {
   status: ServerStatusValue;
   version: string | null;
+  features: ServerFeatures;
 }
+
+const NO_FEATURES: ServerFeatures = { ai: false, ai_user_keys: false };
 
 const STATUS_URL = '/depictio/api/v1/utils/status';
 const POLL_INTERVAL_MS = 30_000;
 
 export function useServerStatus(): ServerStatus {
-  const [state, setState] = useState<ServerStatus>({ status: 'unknown', version: null });
+  const [state, setState] = useState<ServerStatus>({
+    status: 'unknown',
+    version: null,
+    features: NO_FEATURES,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -31,17 +44,28 @@ export function useServerStatus(): ServerStatus {
         });
         if (!res.ok) {
           if (!cancelled) {
-            setState((prev) => ({ status: 'offline', version: prev.version }));
+            setState((prev) => ({ ...prev, status: 'offline' }));
           }
           return;
         }
-        const data = (await res.json()) as { status?: string; version?: string };
+        const data = (await res.json()) as {
+          status?: string;
+          version?: string;
+          features?: Partial<ServerFeatures>;
+        };
         if (cancelled) return;
         const value: ServerStatusValue = data.status === 'online' ? 'online' : 'offline';
-        setState({ status: value, version: data.version || null });
+        setState({
+          status: value,
+          version: data.version || null,
+          features: {
+            ai: data.features?.ai === true,
+            ai_user_keys: data.features?.ai_user_keys === true,
+          },
+        });
       } catch {
         if (!cancelled) {
-          setState((prev) => ({ status: 'offline', version: prev.version }));
+          setState((prev) => ({ ...prev, status: 'offline' }));
         }
       }
     };

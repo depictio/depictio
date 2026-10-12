@@ -19,7 +19,7 @@ import type {
   Geometry,
 } from './annotations/types';
 
-const API_BASE = '/depictio/api/v1';
+export const API_BASE = '/depictio/api/v1';
 
 /** localStorage key shared with the Dash app — same payload shape. */
 const SESSION_KEY = 'local-store';
@@ -1275,7 +1275,10 @@ export type InteractiveFilterSource =
   /** Derived projection of saved selection groups (see `selectionGroups.ts`).
    *  Never merged into the user's filter list — composed at the fetch
    *  boundary only. */
-  | 'group_filter';
+  | 'group_filter'
+  /** Filter injected by the AI assistant (prompt-driven). Carries only a
+   *  `filter_expr` (no widget value); cleared as a group via the AI chip. */
+  | 'ai_prompt';
 
 /** Per-component computed data (current value under the given filter state).
  *  `metadata.dc_id` is required for cross-DC link resolution server-side; any
@@ -1435,6 +1438,9 @@ export interface RenderFigureOptions {
   /** Draw the figure in this style rather than its own (a highlight showing a
    *  figure from another tab). Sent only when set. */
   style?: FigureStyleRequest;
+  /** Transient Plotly kwargs override merged server-side over the stored
+   *  dict_kwargs (UI-mode figures only). Never persisted. */
+  dictKwargsPatch?: Record<string, unknown>;
 }
 
 /** The `style` override of a render request; see `figure_style_payload` in
@@ -1485,6 +1491,9 @@ export async function renderFigure(
         full_load: fullLoad,
         ...groupBody,
         ...(dataVersions ?? {}),
+        ...(options?.dictKwargsPatch && Object.keys(options.dictKwargsPatch).length > 0
+          ? { dict_kwargs_patch: options.dictKwargsPatch }
+          : {}),
       }),
       signal,
     },

@@ -122,7 +122,7 @@ function makeFill(
  * Maps the body's inline-markdown tokens to React nodes. The grammar itself
  * lives in `inlineMarkdown.ts` so it can be unit-tested without a DOM.
  */
-const renderInlineMarkdown = (
+export const renderInlineMarkdown = (
   input: string,
   resolveTab: TabLinkResolver | null = null,
   fill: Fill = plainFill,

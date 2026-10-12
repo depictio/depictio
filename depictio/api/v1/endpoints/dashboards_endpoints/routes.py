@@ -2491,8 +2491,8 @@ def _resolve_link_filters_cached(
 def _build_filter_metadata(filters: list[dict]) -> list[dict]:
     """Convert React filter payloads into the shape ``load_deltatable_lite`` expects.
 
-    Skips entries that are missing a ``column_name`` or whose value is empty;
-    those wouldn't survive ``process_metadata_and_filter`` anyway.
+    Skips widget entries that are missing a ``column_name`` or whose value is
+    empty; those wouldn't survive ``process_metadata_and_filter`` anyway.
 
     Carries ``filter_expr`` through (top-level or under ``metadata``) so the
     server-side pipeline can AND the source's row-scoping expression alongside
@@ -3767,6 +3767,25 @@ def _load_natural_page(
     return df.slice(start, limit)
 
 
+def merge_dict_kwargs_patch(
+    stored_dict_kwargs: dict | None,
+    patch: object,
+    mode: str,
+) -> dict:
+    """Merge a transient, per-request Plotly kwargs override (AI "figure
+    mutations") over a figure component's stored dict_kwargs.
+
+    Nothing is persisted. Code-mode figures ignore the patch — their output
+    is produced by the stored code, not by dict_kwargs. Non-dict or empty
+    patches are ignored rather than erroring so a malformed client payload
+    degrades to the stored rendering.
+    """
+    dict_kwargs = dict(stored_dict_kwargs or {})
+    if isinstance(patch, dict) and patch and mode == "ui":
+        dict_kwargs.update(patch)
+    return dict_kwargs
+
+
 @dashboards_endpoint_router.post("/render_figure/{dashboard_id}/{component_id}")
 async def render_figure_endpoint(
     dashboard_id: PyObjectId,
@@ -3838,6 +3857,7 @@ async def render_figure_endpoint(
         None if color_by_group else sanitize_color_by_column(request.get("color_by_column"))
     )
     grouping_display = sanitize_grouping_display(request.get("grouping_display"))
+    dict_kwargs_patch = request.get("dict_kwargs_patch")
 
     dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
     if not dashboard_data:
@@ -3886,17 +3906,24 @@ async def render_figure_endpoint(
     dc_config = component.get("dc_config") or {}
     mode = component.get("mode", "ui")
     category_colors = effective_category_colors(dashboard_data)
-    metadata = {
-        "wf_id": str(wf_id),
-        "dc_id": str(dc_id),
-        "dc_config": convert_objectid_to_str(dc_config),
-        "visu_type": component.get("visu_type", "scatter"),
-        "dict_kwargs": merge_category_colors(
+    # Brand theme first, then the transient AI patch on top: an explicit
+    # per-request mutation must win over the deployment's default styling.
+    dict_kwargs = merge_dict_kwargs_patch(
+        merge_category_colors(
             category_colors,
             merge_dashboard_brand_theme(
                 family_brand_theme(dashboard_data), component.get("dict_kwargs") or {}
             ),
         ),
+        dict_kwargs_patch,
+        mode,
+    )
+    metadata = {
+        "wf_id": str(wf_id),
+        "dc_id": str(dc_id),
+        "dc_config": convert_objectid_to_str(dc_config),
+        "visu_type": component.get("visu_type", "scatter"),
+        "dict_kwargs": dict_kwargs,
         "mode": mode,
         "code_content": component.get("code_content", ""),
         "selection_enabled": bool(component.get("selection_enabled", False)),

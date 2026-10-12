@@ -181,6 +181,24 @@ interface DashboardGridProps {
    * fold or unfold them on the dashboard.
    */
   collapseStorageKey?: string | null;
+  /**
+   * Host-provided per-section extras (e.g. the AI summarize affordances).
+   * Called with the section name (`null` for the unsectioned grid).
+   * `trailing` joins `renderSectionActions` in the header's actions slot,
+   * ahead of the host's own controls: it is interactive, so it must sit
+   * beside the `Accordion.Control` button, not inside it (see
+   * `SectionAccordionItem.actions`). `panelTop` renders inside the section
+   * panel above its grid (for the unsectioned grid, directly above it).
+   * Keeps this package AI-free.
+   */
+  renderSectionExtras?: (
+    sectionName: string | null,
+  ) => { trailing?: React.ReactNode; panelTop?: React.ReactNode } | null;
+  /** Transient per-figure Plotly kwargs overrides (AI figure mutations),
+   *  keyed by component index. Merged server-side over the stored
+   *  dict_kwargs; never persisted. Keeps this package AI-free — the host
+   *  owns where the overrides come from and when they clear. */
+  figureOverrides?: Record<string, Record<string, unknown>>;
 }
 
 /**
@@ -249,6 +267,8 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
   filterScopes,
   onResetFilters,
   collapseStorageKey,
+  renderSectionExtras,
+  figureOverrides,
 }) => {
   // Filter-bar members ride along in `metadataList` so they bucket into their
   // section, but they are drawn by the bar and never laid out on the grid:
@@ -838,6 +858,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
                     )
                   }
                   showDragHandle={editMode && isDraggable}
+                  dictKwargsPatch={figureOverrides?.[m.index]}
                 />
               ) : panelSource(m, (
                 <ComponentRenderer
@@ -857,6 +878,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
                   groupRender={groupRender}
                   extraActions={showOverlays ? renderItemOverlay!(m.index, m) : undefined}
                   showDragHandle={editMode && isDraggable}
+                  dictKwargsPatch={figureOverrides?.[m.index]}
                 />
               ))}
             </div>
@@ -884,6 +906,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
     onGrid,
     recordLinks,
     recordSources,
+    figureOverrides,
   ]);
 
   // Explicit width rather than `WidthProvider`: that HOC installs its own
@@ -1063,12 +1086,23 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
           )
         }
       >
-        {list.map((section) => (
+        {list.map((section) => {
+          const sectionName = section.sectionName ?? null;
+          const extras = renderSectionExtras?.(sectionName);
+          const hostActions = renderSectionActions?.(sectionName);
+          return (
           <SectionAccordionItem
             key={section.key}
             value={section.key}
             color={resolveSectionColor(section.spec?.color, section.sectionName)}
-            actions={renderSectionActions?.(section.sectionName ?? null)}
+            actions={
+              extras?.trailing || hostActions ? (
+                <>
+                  {extras?.trailing}
+                  {hostActions}
+                </>
+              ) : undefined
+            }
             plain={isPlain(section)}
           >
             <Accordion.Control>
@@ -1091,6 +1125,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
             </Accordion.Control>
             <Accordion.Panel>
               {renderSectionBar(section)}
+              {extras?.panelTop}
               {/* Plain wrapper so the width available inside the section box
                   can be read off the DOM — see `sectionInset`. Absent until
                   the section has been opened once: see `renderedSections`. */}
@@ -1099,7 +1134,8 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
               )}
             </Accordion.Panel>
           </SectionAccordionItem>
-        ))}
+          );
+        })}
       </SectionAccordion>
     );
 
@@ -1110,6 +1146,7 @@ const DashboardGrid: React.FC<DashboardGridProps> = ({
       className={rootClass}
       style={{ width: '100%', overflowX: 'hidden' }}
     >
+      {renderSectionExtras?.(null)?.panelTop}
       {leadBucket && renderGrid(leadBucket)}
       {foldable.length > 0 && (
         <Group justify="flex-end" mb={4}>

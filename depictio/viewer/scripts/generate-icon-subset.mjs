@@ -30,6 +30,7 @@ const SCAN_DIRS = [
   join(VIEWER, 'src'),
   join(REPO, 'packages/depictio-components/src'),
   join(REPO, 'packages/depictio-react-core/src'),
+  join(REPO, 'packages/depictio-react-ai/src'),
 ];
 
 const SCAN_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.jsx']);

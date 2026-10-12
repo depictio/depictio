@@ -71,6 +71,9 @@ interface FigureRendererProps {
   styleRequest?: FigureStyleRequest;
   /** The tab the figure comes from, linked from a showcase header. */
   sourceLink?: TabLinkTarget | null;
+  /** Transient Plotly kwargs override (AI figure mutations) merged server-side
+   *  over the stored dict_kwargs. Never persisted; UI-mode figures only. */
+  dictKwargsPatch?: Record<string, unknown>;
 }
 
 /**
@@ -97,6 +100,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
   renderSource,
   styleRequest,
   sourceLink,
+  dictKwargsPatch,
 }) => {
   const [figure, setFigure] = useState<{ data?: unknown[]; layout?: Record<string, unknown> } | null>(null);
   const [renderMeta, setRenderMeta] = useState<FigureResponse['metadata'] | null>(null);
@@ -189,7 +193,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
     // Queued so a dense dashboard doesn't fire every figure's render at once;
     // the vertical position is the priority, so the top of the page paints first.
     const options: RenderFigureOptions | undefined =
-      groupRender || styleRequest
+      groupRender || styleRequest || dictKwargsPatch
         ? {
             ...(groupRender
               ? {
@@ -201,6 +205,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
                 }
               : {}),
             ...(styleRequest ? { style: styleRequest } : {}),
+            ...(dictKwargsPatch ? { dictKwargsPatch } : {}),
           }
         : undefined;
     enqueueFetch(
@@ -241,7 +246,7 @@ const FigureRenderer: React.FC<FigureRendererProps> = ({
       ctrl.abort();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [renderDashboardId, renderComponentId, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad, JSON.stringify(groupRender ?? null), JSON.stringify(styleRequest ?? null), versionKey, definitionKey]);
+  }, [renderDashboardId, renderComponentId, JSON.stringify(filtersForFetch), theme, inView, refreshTick, fullLoad, JSON.stringify(groupRender ?? null), JSON.stringify(styleRequest ?? null), JSON.stringify(dictKwargsPatch ?? null), versionKey, definitionKey]);
 
   // First-paint loader vs refetch overlay: only show the big "Rendering…"
   // block until we have something to show; subsequent fetches keep the

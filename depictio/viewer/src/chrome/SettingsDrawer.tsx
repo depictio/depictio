@@ -647,6 +647,7 @@ const FeedbackBlock: React.FC<{ href: string; label: string }> = ({ href, label 
 
 type SectionKey =
   | 'about'
+  | 'ai'
   | 'view'
   | 'my-filters'
   | 'tab-defaults'
@@ -829,6 +830,9 @@ interface SettingsDrawerProps {
   filters?: FilterSettings;
   /** The section to open on, instead of the one last visited. */
   initialSection?: SettingsSectionKey;
+  /** Extra section (e.g. the AI key section when the AI feature is enabled),
+   *  drawn as its own settings section. */
+  extraSection?: React.ReactNode;
 }
 
 /** What the "Your filters" section needs from the viewer. */
@@ -887,6 +891,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
   dataVersionPanel,
   filters,
   initialSection,
+  extraSection,
 }) => {
   const surface: Surface =
     onChangeBrandTheme ||
@@ -929,6 +934,15 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       ),
     },
   ];
+  if (extraSection) {
+    sections.push({
+      key: 'ai',
+      icon: 'material-symbols:auto-awesome-outline',
+      title: 'AI assistant',
+      subtitle: 'Your provider key, kept in this browser',
+      body: extraSection,
+    });
+  }
   if (filters) {
     sections.push({
       key: 'my-filters',
