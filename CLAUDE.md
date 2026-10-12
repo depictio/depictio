@@ -15,8 +15,8 @@ Managed with **uv** (`uv.lock`). No venv is checked in — CI does
 `uv venv --python 3.12.9 venv && uv pip install -e ".[dev]"`. Prefix commands with
 `uv run --extra dev`: a fresh env from a plain `uv run` holds only the base install (the
 CLI alone), and a plain `uv sync` removes the extras.
-Extras: `[multiqc]`, `[server]` (API + worker), `[local]` (`depictio local up`), `[dev]`
-(server + test tools). `depictio/cli/pyproject.toml` is only the `depictio-cli` alias.
+Extras: `[multiqc]`, `[server]` (API + worker), `[local]` (`depictio local up`),
+`[builder]` (`depictio project-builder`), `[dev]` (server + test tools). `depictio/cli/pyproject.toml` is only the `depictio-cli` alias.
 `pixi.toml` offers an alternative Docker-free stack (`pixi run start-infra`, `pixi run api`).
 
 ### Testing
@@ -83,6 +83,7 @@ pre-commit run --all-files         # mandatory after all code changes
 | `/dashboards` | management |
 | `/dashboard/{id}` | viewer |
 | `/dashboard-edit/{id}` | editor (`+ /component/add/{id}`, `/component/edit/{id}`) |
+| `/projects/build` | Project Builder (also the whole SPA under `depictio project-builder`) |
 | `/about`, `/admin`, `/profile`, `/cli-agents` | supporting pages |
 
 Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
@@ -176,6 +177,22 @@ Route dispatch is plain regex in `depictio/viewer/src/main.tsx` +
   and all four versions stamp the newest commit: labels, counts and stamps all look
   right, and "restore v1's data" quietly shows the complete survey. `rebuild_demo.py`
   asserts the stamps ascend
+
+### Project Builder (`depictio/project_builder/`)
+- For a folder no template fits: pick files, group data collections under workflows, get an
+  ad-hoc **template** (`custom/<name>`, every location under `{DATA_ROOT}`), not a project.yaml
+- Two doors, one core: the SPA page `/projects/build` on a server (creates the project via
+  `POST /projects/from_run {template}`), and `depictio project-builder <dir>`, a thin no-Mongo
+  FastAPI app serving the same `viewer/dist` with a `depictio-mode` meta tag; it writes
+  `<dir>/.depictio/template/template.yaml` for `depictio ingest <dir|s3://…> --template`
+- The core asks everything of a `DataRoot` (local or `s3://`) and imports no FastAPI outside
+  `routes.py`/`standalone.py`: it must run on the CLI-only install (`cli-base-install.yaml`)
+- The match panel is `template_preview.scan_dc_hits`, the scan's own rule
+  (`iter_run_files` + `select_run_files`). A preview with its own walk drifts from ingestion;
+  `test_scan_parity.py` asks both sides the same questions
+- An inline template is browser input: `validate.validate_inline_template` holds it to what the
+  builder produces (native single/recursive scans, no dashboards/conditionals/recipes/joins,
+  `DATA_ROOT` only, indexed files and images refused on S3) before `from_run` resolves it
 
 ### Screenshot System
 - Playwright drives the React SPA; composite targeting via `.react-grid-item`
