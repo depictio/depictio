@@ -40,6 +40,7 @@ import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 import {
   activeFiltersFor,
+  compactExportFilters,
   componentExportPath,
   fetchExportManifest,
 } from 'depictio-react-core';
@@ -192,7 +193,13 @@ const ComponentExportModal: React.FC<ComponentExportModalProps> = ({
     snippets.push({
       value: 'curl',
       label: 'curl',
-      code: curlSnippet(url, path, { filters, theme }, needsToken, format),
+      code: curlSnippet(
+        url,
+        path,
+        { filters: compactExportFilters(filters), theme },
+        needsToken,
+        format,
+      ),
       language: 'bash',
     });
     if (format === 'json') {
@@ -379,15 +386,22 @@ const ComponentExportModal: React.FC<ComponentExportModalProps> = ({
                 <div data-testid="export-snippet">
                   {/* Mantine's copy button needs navigator.clipboard, which an
                       http:// deployment lacks; the button below falls back. */}
-                  <CodeHighlight code={shown.code} language={shown.language} withCopyButton={false} />
+                  <CodeHighlight
+                    code={shown.code}
+                    language={shown.language}
+                    withCopyButton={false}
+                    // A URL is one long token: wrap it rather than scroll it
+                    // out of sight, so what is copied is what is read.
+                    styles={{ code: { whiteSpace: 'pre-wrap', wordBreak: 'break-all' } }}
+                  />
                 </div>
               ) : null}
 
-              <Group justify="space-between">
-                <Text size="xs" c="dimmed">
-                  Every response carries an ETag and <code>X-Depictio-Revision</code>: poll with{' '}
-                  <code>If-None-Match</code>, pin with <code>?expect_revision=</code>.
-                </Text>
+              <Text size="xs" c="dimmed">
+                Every response carries an ETag and <code>X-Depictio-Revision</code>: poll with{' '}
+                <code>If-None-Match</code>, pin with <code>?expect_revision=</code>.
+              </Text>
+              <Group justify="flex-end">
                 <Group gap="xs">
                   <Button
                     size="xs"

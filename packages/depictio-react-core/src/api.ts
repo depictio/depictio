@@ -7373,6 +7373,30 @@ export interface ComponentExportParams {
 }
 
 /**
+ * The viewer's filters, cut to what the export reads, so a URL with a filter
+ * stays readable and short.
+ *
+ * A filter in the viewer carries its control's whole description twice (top
+ * level and `metadata`) plus nulls. The render path reads `column_name`,
+ * `interactive_component_type`, `value` and `filter_expr`; link resolution
+ * reads `dc_id` and `source` at either level, and `selection_column` only
+ * under `metadata`, so that one key keeps its nesting.
+ */
+export function compactExportFilters(filters: InteractiveFilter[]): Record<string, unknown>[] {
+  return filters.map((f) => {
+    const meta = (f.metadata ?? {}) as Record<string, unknown>;
+    const out: Record<string, unknown> = { index: f.index, value: f.value };
+    const pick = (key: string) => (f as unknown as Record<string, unknown>)[key] ?? meta[key];
+    for (const key of ['column_name', 'interactive_component_type', 'dc_id', 'source', 'filter_expr']) {
+      const value = pick(key);
+      if (value !== undefined && value !== null && value !== '') out[key] = value;
+    }
+    if (meta.selection_column) out.metadata = { selection_column: meta.selection_column };
+    return out;
+  });
+}
+
+/**
  * Path, from the site root, of one component's export. The SPA and the API
  * share an origin, so prefixing `window.location.origin` makes it absolute.
  */
@@ -7383,7 +7407,7 @@ export function componentExportPath(
 ): string {
   const query = new URLSearchParams({ format: params.format, theme: params.theme });
   if (params.filters && params.filters.length > 0) {
-    query.set('filters', JSON.stringify(params.filters));
+    query.set('filters', JSON.stringify(compactExportFilters(params.filters)));
   }
   if (params.controls && Object.keys(params.controls).length > 0) {
     query.set('controls', JSON.stringify(params.controls));

@@ -423,7 +423,7 @@ export type {
 
 // Component export: what each component of a dashboard can be served as, and
 // the URL that serves it (`/export/...`, on when `embed_enabled`).
-export { fetchExportManifest, componentExportPath } from './api';
+export { fetchExportManifest, componentExportPath, compactExportFilters } from './api';
 export type {
   ComponentExportFormat,
   ComponentExportManifestEntry,

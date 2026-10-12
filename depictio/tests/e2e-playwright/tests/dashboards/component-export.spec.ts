@@ -111,7 +111,9 @@ async function openExport(page: Page, componentId: string) {
   await tile.scrollIntoViewIfNeeded();
   await tile.hover();
   await tile.getByTestId("tile-export").click();
-  const dialog = page.getByTestId("component-export-modal");
+  // Mantine puts a test id on the modal's zero-size root; the dialog itself is
+  // the element with the role.
+  const dialog = page.getByRole("dialog", { name: /Export \/ embed/ });
   await expect(dialog).toBeVisible();
   return dialog;
 }
