@@ -12,6 +12,10 @@ from typing import cast, get_args
 from pydantic import BaseModel
 
 from depictio.api.v1.configs.config import settings
+from depictio.api.v1.endpoints.ai_endpoints.component_style import (
+    color_choices,
+    icon_choices,
+)
 from depictio.api.v1.endpoints.ai_endpoints.context import (
     COMPONENT_DC_TYPES,
     DashboardContext,
@@ -165,24 +169,45 @@ _CONSTRAINT_SHEETS: dict[str, str | Callable[[DataContext | None], str]] = {
         "  Optional: mode='ui' (default) or mode='code' with code_content for custom code."
     ),
     "card": (
-        "CARD: single aggregated statistic. Required: aggregation, column_name, column_type.\n"
+        "CARD: an aggregated statistic and the metrics that give it context.\n"
+        "Required: aggregation, column_name, column_type.\n"
         "Allowed aggregation × column_type:\n"
         f"{_aggregation_lines()}\n"
-        "Optional: aggregations (list of secondary stats, same compatibility rules),\n"
-        "secondary_layout — how the strip under the hero renders. Match the user's\n"
-        "wording: 'histogram'/'distribution' -> histogram, 'box plot' -> box_plot,\n"
-        "'trend'/'over time' -> trend, 'top N'/'breakdown' -> top_n. Never leave the\n"
-        "default 'vertical' when the user names a visual style.\n"
+        "DEFAULT TO A MULTI-METRIC CARD. Unless a single number was explicitly\n"
+        "asked for, always fill `aggregations` with 2 to 5 secondary stats taken\n"
+        "from the allowed list for that column type, and pick the secondary_layout\n"
+        "that suits them: grid for four to six, compact for two or three,\n"
+        "box_plot for the spread of a numeric column, top_n (with breakdown_col)\n"
+        "for a count or nunique card. A tile that shows one number alone has\n"
+        "spent the same space to answer a quarter as many questions.\n"
+        "secondary_layout is how the strip under the hero renders. Match the\n"
+        "user's wording: 'histogram'/'distribution' -> histogram, 'box plot' ->\n"
+        "box_plot, 'trend'/'over time' -> trend, 'top N'/'breakdown' -> top_n.\n"
+        "Never leave the default 'vertical' when the user names a visual style.\n"
         f"{_card_layout_lines()}\n"
-        "filter_expr (Polars expression scoped to the DC), icon_name, icon_color, title."
+        "ALWAYS set icon_name and icon_color: an unstyled card reads as a\n"
+        "placeholder next to one that carries its subject. Pick the icon for what\n"
+        "the column measures, and give the cards of one row the same colour so the\n"
+        "row reads as a row.\n"
+        f"  icon_name: {icon_choices('card')}\n"
+        f"  icon_color, title_color: {color_choices()}\n"
+        "Optional: filter_expr (Polars expression scoped to the DC), title."
     ),
     "interactive": (
         "INTERACTIVE: filter control. Required: interactive_component_type, column_name, column_type.\n"
         "Allowed interactive_component_type × column_type:\n"
         f"{_interactive_lines()}\n"
         "Timeline requires timescale ∈ (year, month, day, hour, minute).\n"
-        "Optional: filter_expr, placement (left|top — only Timeline supports top),\n"
-        f"group (≤ {MAX_INTERACTIVE_GROUP_SIZE} components share a group), title, icon_name."
+        "ALWAYS set icon_name and custom_color: a filter panel of unnamed grey\n"
+        "controls tells the reader nothing about what each one narrows.\n"
+        f"  icon_name: {icon_choices('interactive')}\n"
+        f"  custom_color: {color_choices()}\n"
+        "group: filters that answer one question share a group name and render\n"
+        "together in one collapsible card. Group whenever a section holds more\n"
+        "than two filters (the four measurement ranges of a table, the three\n"
+        f"identity columns of a cohort): at most {MAX_INTERACTIVE_GROUP_SIZE} per group,\n"
+        "and every ungrouped control costs a card of chrome of its own.\n"
+        "Optional: filter_expr, placement (left|top — only Timeline supports top), title."
     ),
     "table": (
         "TABLE: tabular view of the DC. Optional: columns (list of column names to show),\n"
@@ -239,8 +264,12 @@ component_type: card
 workflow_tag: <workflow_tag from context>
 data_collection_tag: <data_collection_tag from context>
 aggregation: average
+aggregations: [median, std_dev, min, max]
+secondary_layout: grid
 column_name: <column>
 column_type: float64
+icon_name: mdi:ruler
+icon_color: "#12b886"
 """,
     "interactive": """\
 component_type: interactive
@@ -249,6 +278,9 @@ data_collection_tag: <data_collection_tag from context>
 interactive_component_type: MultiSelect
 column_name: <column>
 column_type: object
+icon_name: mdi:form-select
+custom_color: "#228be6"
+group: <group name shared with the sibling filters, or omit>
 """,
     "table": """\
 component_type: table
@@ -520,6 +552,12 @@ RULES:
   another one (it names columns or a subject only another collection has).
 - text never needs a collection: set data_collection_tag to null.
 - The collection's type must fit the component type (see the type lines).
+- multiqc and advanced_viz are specialised, not general-purpose: pick multiqc
+  only for a MultiQC report collection and a request about its report metrics,
+  and advanced_viz only when the collection's columns carry what that plot
+  needs (a volcano needs a fold change and a p-value, an embedding needs its
+  coordinates, a tree needs a phylogeny). Otherwise a figure, a card or a table
+  is the answer.
 - alternatives lists other collections that could also serve the request
   (tags from INVENTORY only, none of them the chosen one). Empty when none.
 - reason is one short sentence the user will read.
@@ -679,6 +717,10 @@ RULES:
 - Use only column names listed under the collection you pick. For card and
   interactive, take column_type and aggregation / interactive_component_type
   from that collection's LEGAL SPACES.
+- multiqc and advanced_viz are specialised, not defaults: advanced_viz only
+  with a kind from that collection's LEGAL SPACES whose roles bind to real
+  columns there, multiqc only on a MultiQC report collection. When the data is
+  not the shape the specialised tile needs, propose a figure or a card.
 - data_collection_tag is copied verbatim from the collection heading; null for text.
 - text describes what the dashboard shows; it never uses a collection and never
   invents numbers.
@@ -1048,11 +1090,13 @@ PLAN_ANSWER_SHAPE = """{
   "subtitle": "<one sentence on what the dashboard answers>",
   "filter_sections": [
     {"name": "<section name>", "icon": "<Iconify id, e.g. mdi:filter-variant>",
-     "color": "<Mantine palette name, e.g. teal>", "description": "<one sentence>"}
+     "color": "<Mantine palette name, e.g. teal>", "description": "<one sentence>",
+     "rationale": "<one sentence: why this section is here, and why these components rather than others>"}
   ],
   "grid_sections": [
     {"name": "<section name>", "icon": "<Iconify id>", "color": "<palette name>",
-     "description": "<one sentence; becomes the section header text>"}
+     "description": "<one sentence; becomes the section header text>",
+     "rationale": "<one sentence: why this section is here, and why these components rather than others>"}
   ],
   "components": [
     {"tag": "<unique snake_case handle>",
@@ -1061,7 +1105,8 @@ PLAN_ANSWER_SHAPE = """{
      "data_collection_tag": "<tag copied from a dc[...] heading, or null for text>",
      "intent": "<one or two sentences: what it shows, which columns, which aggregation or chart>",
      "use": "<tool/render_id copied from CATALOG OFFERS; omit unless reproducing an offer>",
-     "viz_kind": "<kind copied from ADVANCED VIZ CANDIDATES; advanced_viz only, omit otherwise>"}
+     "viz_kind": "<kind copied from ADVANCED VIZ CANDIDATES; advanced_viz only, omit otherwise>",
+     "group": "<filter group name; interactive only, omit otherwise>"}
   ]
 }"""
 
@@ -1132,6 +1177,8 @@ LAYOUT (a funnel, top to bottom):
 3. Figures: charts, and advanced_viz when a candidate below fits the data.
 4. Reference table: one table at the end for the raw rows.
 Each grid section opens with a header the server writes from its description.
+A section's rationale is not rendered: it is shown to the person reviewing the
+generated dashboard, so justify the choice instead of restating the name.
 Typical grid sections: an overview of cards, one or two analysis sections of
 figures, a reference section holding the table.
 
@@ -1145,22 +1192,44 @@ ADVANCED VIZ CANDIDATES (viz_kind on collection: role -> best columns):
 {viz_block}
 
 LIMITS:
+- The catalog comes first. Every render under CATALOG OFFERS was written for
+  this kind of output by the people who produce it, so plan the offers that
+  serve the intent before inventing anything of your own on the same
+  collection: copy the offer's id into `use` and let the fill pass reproduce
+  it. Invent a component only for what no offer covers.
+- advanced_viz is a specialised plot, not a default. Use one only when its
+  viz_kind is listed under ADVANCED VIZ CANDIDATES for that collection and the
+  candidate's roles bind to real columns there (a volcano needs a fold change
+  and a p-value, an embedding needs its coordinates). When the data is not that
+  shape, a figure is the right answer and a forced advanced_viz is a dropped
+  tile.
 - At most {max_components} components and at most {max_sections} grid sections.
 - At least one interactive filter, in a filter section.
+- Group the filters that answer one question: give them the same `group` name
+  and they render together in one collapsible card, up to
+  {MAX_INTERACTIVE_GROUP_SIZE} per group. Group whenever a filter section holds
+  more than two controls (the measurement ranges of a table, the identity
+  columns of a cohort); an ungrouped control costs a card of chrome of its own.
 - Card rows come in multiples of 4 per section: plan 4 or 8 cards in a section,
   never 3.
+- Every card is a multi-metric card: its intent names the hero statistic AND the
+  secondary ones the tile carries with it (a median, a spread, a top-N
+  breakdown, a distribution). A card intent that asks for one number alone is
+  a wasted tile.
 - At most one table, last, in the reference section.
 - MultiSelect only on columns with at most {MAX_MULTISELECT_DISTINCT} distinct
   values (see distinct= in the schema); numbers get a Slider or RangeSlider.
-- advanced_viz only with a viz_kind listed under ADVANCED VIZ CANDIDATES for
-  that collection; map only when the collection has latitude and longitude
-  columns.
+- map only when the collection has latitude and longitude columns.
 - Reference only columns listed under the collection you pick; text needs no
   collection (data_collection_tag null).
 - A component's section names a section you declared: interactive components
   go in filter_sections, everything else in grid_sections.
 - Tags are unique snake_case handles; intents are concrete (columns,
   aggregation, chart kind) so the fill pass needs no guessing.
+- Section colours follow the intent whenever it names one (a colour, a palette,
+  a brand: "in green", "our brand is teal"): pick the nearest palette name and
+  give it to every section. With no such steer, colour the sections so the
+  funnel's stages still read apart.
 
 Respond with valid JSON of the form:
 {PLAN_ANSWER_SHAPE}
