@@ -1,9 +1,11 @@
 """The builder's HTTP routes, one factory for both servers.
 
-``build_builder_router(opener)`` declares ``/tree``, ``/suggest``, ``/match``,
-``/template`` and ``/metadata``; what differs between the main API and the
-standalone server is only how a request's root is opened, so that is the
-injected dependency. The main API's opener (``projects_endpoints/builder.py``)
+``build_builder_router(opener)`` declares ``/capabilities``, ``/tree``,
+``/suggest``, ``/match``, ``/tracks_manifest``, ``/template`` and
+``/metadata``; what differs between the main API and the standalone server is
+how a request's root is opened, so that is the injected dependency, and what
+the instance can do (``capabilities``), which each passes in. The main API's
+opener (``projects_endpoints/builder.py``)
 authenticates and confines like the run-folder dialog; the standalone one
 serves the single folder it was started on.
 
@@ -22,7 +24,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from depictio.cli.cli.utils.data_root import DataRoot
-from depictio.project_builder import assemble, infer, match, tree
+from depictio.project_builder import assemble, capabilities, infer, match, tracks, tree
 from depictio.project_builder.errors import BuilderRefused
 from depictio.project_builder.validate import validate_inline_template
 
@@ -65,6 +67,12 @@ class MatchBody(BaseModel):
     collection: assemble.DcDraft
 
 
+class TracksManifestBody(BaseModel):
+    root: RootSpec
+    files: list[str] = Field(min_length=1, max_length=tracks.MAX_MANIFEST_FILES)
+    sample_regex: str | None = Field(default=None, max_length=500)
+
+
 class TemplateBody(BaseModel):
     draft: assemble.ProjectDraft
     remote: bool = False
@@ -84,7 +92,7 @@ async def run_refusable(fn: Callable[..., Any], *args: Any, **kwargs: Any) -> An
 
 def template_for(draft: assemble.ProjectDraft, remote: bool) -> dict[str, Any]:
     """The template a draft becomes, validated as ``from_run`` will validate it."""
-    template = assemble.build_template(draft)
+    template = assemble.build_template(draft, remote=remote)
     warnings = validate_inline_template(template, remote=remote)
     return {
         "template": template,
@@ -103,9 +111,24 @@ def metadata_for(repo_url: str) -> dict[str, Any]:
         raise BuilderRefused(400, str(exc), "repo_url_invalid") from exc
 
 
-def build_builder_router(opener_dependency: Callable[..., RootOpener]) -> APIRouter:
-    """The builder routes, opening roots through ``opener_dependency`` (a FastAPI dependency)."""
+def build_builder_router(
+    opener_dependency: Callable[..., RootOpener],
+    *,
+    mode: Literal["server", "standalone"] = "server",
+    events_enabled: Callable[[], bool | None] = lambda: None,
+) -> APIRouter:
+    """The builder routes, opening roots through ``opener_dependency`` (a FastAPI dependency).
+
+    ``events_enabled``: whether the instance acts on a project's realtime flag
+    (None when it cannot know, as the standalone builder).
+    """
     router = APIRouter()
+
+    @router.get("/capabilities")
+    async def get_capabilities(_opener: RootOpener = Depends(opener_dependency)):
+        """The collection kinds and options this Depictio offers, and the instance
+        settings they depend on."""
+        return await asyncio.to_thread(capabilities.capabilities, mode, events_enabled())
 
     @router.post("/tree")
     async def post_tree(body: TreeBody, opener: RootOpener = Depends(opener_dependency)):
@@ -134,6 +157,19 @@ def build_builder_router(opener_dependency: Callable[..., RootOpener]) -> APIRou
             root = opener(body.root, count_files=True)
             return match.match_collection(
                 root, body.workflow.structure, body.workflow.runs_regex, body.collection
+            )
+
+        return await run_refusable(run)
+
+    @router.post("/tracks_manifest")
+    async def post_tracks_manifest(
+        body: TracksManifestBody, opener: RootOpener = Depends(opener_dependency)
+    ):
+        """A genome-browser track manifest for picked track files, uris relative to the root."""
+
+        def run():
+            return tracks.manifest_for(
+                opener(body.root, count_files=False), body.files, body.sample_regex
             )
 
         return await run_refusable(run)

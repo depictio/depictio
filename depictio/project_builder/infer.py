@@ -20,9 +20,21 @@ from depictio.cli.cli.utils.data_root import DataRoot
 from depictio.models.local_access import is_multiqc_output
 from depictio.project_builder.errors import BuilderRefused
 from depictio.project_builder.roots import confine_rel
+from depictio.project_builder.stores import describe_store, is_ome_tiff, is_store_name
 
-# Data collection types the builder authors.
-DC_TYPES = ("table", "multiqc", "image", "indexed_file", "geojson", "phylogeny")
+# Data collection types the builder authors (the last two when this Depictio has them).
+DC_TYPES = (
+    "table",
+    "multiqc",
+    "image",
+    "indexed_file",
+    "geojson",
+    "phylogeny",
+    "genomic_tracks",
+    "bioimage",
+)
+# Stands where the varying segment of a generalised glob was, until it is the wildcard.
+_WILDCARD_MARK = "DEPICTIOWILDCARDMARK"
 
 PHYLOGENY_SUFFIXES = {
     ".nwk": "newick",
@@ -77,6 +89,8 @@ def guess_type(name: str) -> str:
     """The data collection type a file named ``name`` most likely feeds."""
     if is_multiqc_output(name, is_dir=False) and name.endswith(".parquet"):
         return "multiqc"
+    if is_ome_tiff(name) or is_store_name(name):
+        return "bioimage"
     suffix, _inner = _suffixes(name)
     if suffix in PHYLOGENY_SUFFIXES:
         return "phylogeny"
@@ -144,6 +158,39 @@ def _tag_for(rel: str) -> str:
     return slug(stem)
 
 
+def path_wildcard(glob: str) -> dict[str, Any] | None:
+    """The one varying segment of a generalised glob as a ``{sample}`` wildcard.
+
+    ``star/*/quant.tsv`` (examples differing in one folder) becomes the scan
+    regex ``^star/{sample}/quant\\.tsv$`` with ``sample`` matching that folder,
+    so each file's rows carry the folder they came from. The wildcard takes the
+    whole varying part, shared start included (``S*.tsv`` gives ``S1``, not
+    ``1``), and stops before the shared end. None when the glob varies in more
+    than one place, or at mixed depths (``**``).
+    """
+    parts = glob.split("/")
+    varying = [i for i, part in enumerate(parts) if "*" in part]
+    if "**" in parts or len(varying) != 1 or parts[varying[0]].count("*") != 1:
+        return None
+    suffix = parts[varying[0]].split("*", 1)[1]
+    parts[varying[0]] = _WILDCARD_MARK + suffix
+    pattern = glob_regex("/".join(parts)).replace(_WILDCARD_MARK, "{sample}")
+    regex = "[^/]+?" if suffix else "[^/]+"
+    return {"pattern": pattern, "wildcards": [{"name": "sample", "regex": regex}]}
+
+
+def _entry(root: DataRoot, rel: str):
+    """The listing entry of ``rel`` in its folder, or None."""
+    parent, _sep, name = rel.rpartition("/")
+    return next((entry for entry in root.children(parent) if entry.name == name), None)
+
+
+def _unavailable(dc_type: str) -> list[str]:
+    from depictio.project_builder.capabilities import UNAVAILABLE, available_types
+
+    return [] if dc_type in available_types() else [UNAVAILABLE[dc_type]]
+
+
 def _suggested_format(name: str, dc_type: str, table: str | None) -> str | None:
     if dc_type in ("table", "image"):
         return table
@@ -160,17 +207,45 @@ def suggest(root: DataRoot, rel: str, examples: list[str] | None = None) -> dict
     ``examples``: other files the user says belong to the same collection;
     with them the guess is a recursive scan over the glob that generalises all
     of them. Without, a single-file scan, with a ``**/<name>`` glob ready for
-    when the user switches to recursive.
+    when the user switches to recursive. A ``*.zarr`` store is picked like a
+    file and suggested as a bioimage, with what its top level shows.
     """
+    from depictio.project_builder.capabilities import available_types
+    from depictio.project_builder.tracks import infer_index_uri, infer_track_format
+
     rel = confine_rel(rel)
     others = [confine_rel(example) for example in examples or [] if example]
-    if not rel or not root.exists(rel):
+    entry = _entry(root, rel) if rel else None
+    if entry is None or not root.exists(rel):
         raise BuilderRefused(404, f"'{rel}' is not a file of the data root.", "file_missing")
     name = PurePosixPath(rel).name
+    if entry.is_dir and not is_store_name(name):
+        raise BuilderRefused(
+            400, f"'{rel}' is a folder: pick a file, or a .zarr store.", "folder_picked"
+        )
     dc_type = guess_type(name)
     fmt, separator = table_format(name)
+    warnings: list[str] = []
+    store = None
+    tracks = None
+    if dc_type == "bioimage":
+        if entry.is_dir:
+            store = describe_store(root, rel)
+            fmt = store["format"]
+        else:
+            fmt = "ome-tiff"
+        warnings += _unavailable("bioimage")
+    elif dc_type == "indexed_file" and "genomic_tracks" in available_types():
+        track_format = infer_track_format(name)
+        if track_format:
+            dc_type = "genomic_tracks"
+            index = infer_index_uri(rel, track_format)
+            tracks = {
+                "format": track_format,
+                "index": index if index and root.exists(index) else None,
+            }
 
-    if dc_type == "indexed_file" and not others:
+    if dc_type in ("indexed_file", "genomic_tracks") and not others:
         # One file per sample is the norm: every file of that kind, anywhere.
         glob = "**/*" + name[len(name.split(".", 1)[0]) :]
     elif dc_type == "multiqc" and not others:
@@ -181,7 +256,7 @@ def suggest(root: DataRoot, rel: str, examples: list[str] | None = None) -> dict
 
     catalog = []
     seen: set[tuple[str, str]] = set()
-    for match in match_files([rel]):
+    for match in match_files([] if entry.is_dir else [rel]):
         key = (match.tool_id, match.output_id)
         if key in seen:
             continue
@@ -197,8 +272,12 @@ def suggest(root: DataRoot, rel: str, examples: list[str] | None = None) -> dict
         "mode": "recursive" if recursive else "single",
         "glob": glob,
         "regex": glob_regex(glob),
-        "format": _suggested_format(name, dc_type, fmt),
+        "format": fmt if dc_type == "bioimage" else _suggested_format(name, dc_type, fmt),
         "separator": separator if dc_type in ("table", "image") else None,
         "catalog": catalog,
         "multiqc": dc_type == "multiqc",
+        "store": store,
+        "tracks": tracks,
+        "path_wildcard": path_wildcard(glob) if others else None,
+        "warnings": warnings,
     }

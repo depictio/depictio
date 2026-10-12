@@ -9,6 +9,7 @@ paths as the main API, so the SPA's client is the same in both. On top:
 - ``GET  /context``: the folder served, where the bundle will be written;
 - ``POST /plan``: what the template would ingest (a dry-run ``FromRunReport``);
 - ``POST /write``: write the template bundle for ``depictio ingest --template``;
+- ``POST /write_manifest``: write a generated track manifest next to it;
 - ``POST /depictio/api/v1/projects/run_file_preview``: the run-folder dialog's
   file preview, for that folder only.
 
@@ -31,7 +32,14 @@ from pydantic import BaseModel, Field
 from depictio.cli.cli.utils.data_root import LocalDataRoot
 from depictio.cli.cli.utils.file_preview import RunFilePreview, preview_root_file
 from depictio.models.local_access import LocalPathRefused
-from depictio.project_builder.bundle import default_bundle_dir, write_bundle
+from depictio.project_builder.bundle import (
+    BUNDLE_FILE,
+    default_bundle_dir,
+    ingest_command,
+    watch_command,
+    write_bundle,
+    write_manifest,
+)
 from depictio.project_builder.errors import BuilderRefused
 from depictio.project_builder.plan import plan_inline
 from depictio.project_builder.roots import standalone_root
@@ -56,6 +64,12 @@ class PlanBody(BaseModel):
 
 class WriteBody(BaseModel):
     template: dict[str, Any]
+    overwrite: bool = False
+
+
+class WriteManifestBody(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    tsv: str
     overwrite: bool = False
 
 
@@ -128,7 +142,9 @@ def create_app(
 
         return open_root
 
-    app.include_router(build_builder_router(standalone_opener), prefix=BUILDER_PREFIX)
+    app.include_router(
+        build_builder_router(standalone_opener, mode="standalone"), prefix=BUILDER_PREFIX
+    )
 
     extra = APIRouter()
 
@@ -138,11 +154,14 @@ def create_app(
         probe = bundle_dir if bundle_dir.exists() else bundle_dir.parent
         while not probe.exists() and probe != probe.parent:
             probe = probe.parent
+        bundle = bundle_dir / BUNDLE_FILE
         return {
             "mode": "standalone",
             "data_root": str(root_path),
             "out_dir": str(bundle_dir),
             "writable": os.access(probe, os.W_OK),
+            "ingest_command": ingest_command(str(root_path), bundle),
+            "watch_command": watch_command(str(root_path), bundle),
         }
 
     @extra.post("/plan")
@@ -164,6 +183,17 @@ def create_app(
             plan_inline(body.template, root)
             return write_bundle(
                 body.template, bundle_dir, data_root=str(root_path), overwrite=body.overwrite
+            )
+
+        return await run_refusable(run)
+
+    @extra.post("/write_manifest")
+    async def post_write_manifest(body: WriteManifestBody):
+        """Write a track manifest into the template folder, when it is inside the served one."""
+
+        def run():
+            return write_manifest(
+                body.name, body.tsv, bundle_dir, data_root=root_path, overwrite=body.overwrite
             )
 
         return await run_refusable(run)

@@ -1,4 +1,5 @@
-"""``POST /projects/builder/{tree,suggest,match,template,metadata}`` on the main API.
+"""``/projects/builder/{capabilities,tree,suggest,match,tracks_manifest,template,metadata}``
+on the main API.
 
 The routes are the core's (``depictio.project_builder.routes``); what is under
 test here is how the main API opens the root a request names, which has to be
@@ -44,7 +45,7 @@ from depictio.tests.cli.s3_stubs import (
 
 PREFIX = "/depictio/api/v1/projects/builder"
 LOOPBACK = "http://localhost:8058"
-BUILDER_PATHS = ("tree", "suggest", "match", "template", "metadata")
+BUILDER_PATHS = ("tree", "suggest", "match", "tracks_manifest", "template", "metadata")
 
 
 def _user(is_admin: bool = True) -> UserBase:
@@ -333,6 +334,7 @@ ROUTE_BODIES = {
     "tree": {"root": {"data_root": "/nowhere"}},
     "suggest": {"root": {"data_root": "/nowhere"}, "path": "a.csv"},
     "match": {"root": {"data_root": "/nowhere"}, "collection": SHEET},
+    "tracks_manifest": {"root": {"data_root": "/nowhere"}, "files": ["a.bam"]},
     "template": {"draft": _draft(SHEET)},
     "metadata": {"repo_url": "https://github.com/nf-core/rnaseq"},
 }
@@ -663,6 +665,125 @@ class TestMetadata:
         assert gateway == []
 
 
+# ── capabilities, track manifests and the v2 options ─────────────────────────
+
+
+class TestCapabilities:
+    @pytest.mark.parametrize("enabled", [True, False])
+    def test_realtime_is_what_the_server_does_with_the_flag(self, monkeypatch, client, enabled):
+        from depictio.api.v1.configs.config import settings
+
+        monkeypatch.setattr(settings.events, "enabled", enabled)
+        body = client.get(f"{PREFIX}/capabilities").json()
+        assert body["mode"] == "server"
+        assert body["realtime"]["events_enabled"] is enabled
+        assert (body["realtime"]["reason"] is None) is enabled
+        assert {"type": "genomic_tracks", "available": False} == {
+            k: v for k, v in body["dc_types"][6].items() if k != "reason"
+        }
+
+    def test_capabilities_need_a_caller(self, caller, client):
+        caller.user = None
+        assert client.get(f"{PREFIX}/capabilities").status_code == 401
+
+    def test_capabilities_are_behind_the_public_mode_gate(self, monkeypatch, caller, client):
+        public = MagicMock()
+        public.auth.is_public_mode = True
+        monkeypatch.setattr(routes, "settings", public)
+        caller.user = _user(is_admin=False)
+        assert client.get(f"{PREFIX}/capabilities").status_code == 403
+
+
+class TestTracksManifest:
+    def test_picked_tracks_become_a_manifest(self, client, run_root):
+        response = _post(
+            client,
+            "tracks_manifest",
+            root=run_root,
+            files=["variants/S1.vcf.gz", "variants/S1.vcf.gz.tbi", "variants/S2.vcf.gz"],
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert [row["uri"] for row in body["rows"]] == ["variants/S1.vcf.gz", "variants/S2.vcf.gz"]
+        assert body["rows"][0]["index_uri"] == "variants/S1.vcf.gz.tbi"
+        assert body["tsv"].startswith("track_id\tsample\tformat\turi\tindex_uri\tname\n")
+        assert "need an index" in body["warnings"][0]
+
+    def test_a_path_leaving_the_root_is_a_400(self, client, run_root):
+        response = _post(client, "tracks_manifest", root=run_root, files=["../escape.bam"])
+        assert (response.status_code, response.json()["code"]) == (400, "builder_path_refused")
+
+    def test_no_track_among_the_files_is_a_422(self, client, run_root):
+        response = _post(client, "tracks_manifest", root=run_root, files=["samplesheet.csv"])
+        assert (response.status_code, response.json()["code"]) == (422, "tracks_none")
+
+    def test_the_local_folder_gates_apply(self, remote_client, run_root):
+        response = _post(remote_client, "tracks_manifest", root=run_root, files=["a.bam"])
+        assert response.status_code == 403
+
+
+class TestTemplateOptions:
+    def test_wildcards_links_and_reader_options_reach_the_template(self, client):
+        quant = {
+            **QUANT_DC,
+            "regex": r"^star/{sample}/quant\.tsv$",
+            "wildcards": [{"name": "sample", "regex": "[^/]+"}],
+        }
+        sheet = {
+            **SHEET,
+            "metatype": "Metadata",
+            "props": {**SHEET["props"], "reader": {"comment_prefix": "#", "null_values": ["NA"]}},
+        }
+        draft = {
+            **_draft(sheet, quant),
+            "data_management_platform_project_url": "https://lims.example.org/p/9",
+            "links": [
+                {
+                    "source_tag": "sheet",
+                    "source_column": "sample",
+                    "target_tag": "quant",
+                    "target_field": "sample",
+                }
+            ],
+        }
+        response = _post(client, "template", draft=draft)
+        assert response.status_code == 200, response.text
+        template = response.json()["template"]
+        collections = template["workflows"][0]["data_collections"]
+        assert collections[0]["config"]["dc_specific_properties"]["polars_kwargs"] == {
+            "separator": ",",
+            "comment_prefix": "#",
+            "null_values": ["NA"],
+        }
+        assert collections[1]["config"]["scan"]["scan_parameters"]["regex_config"]["wildcards"] == [
+            {"name": "sample", "wildcard_regex": "[^/]+"}
+        ]
+        assert template["links"][0]["target_type"] == "table"
+        assert template["data_management_platform_project_url"] == "https://lims.example.org/p/9"
+
+    def test_an_unavailable_kind_is_refused_with_its_reason(self, client):
+        tracks = {
+            "tag": "tracks",
+            "type": "genomic_tracks",
+            "mode": "single",
+            "path": "tracks.tsv",
+            "props": {"kind": "genomic_tracks"},
+        }
+        response = _post(client, "template", draft=_draft(tracks))
+        assert response.status_code == 422
+        assert "no genome-browser track collections yet" in response.json()["detail"]
+
+    def test_a_bad_wildcard_is_refused_with_the_code(self, client):
+        quant = {
+            **QUANT_DC,
+            "regex": r"^{SAMPLE}\.tsv$",
+            "wildcards": [{"name": "SAMPLE", "regex": "x"}],
+        }
+        response = _post(client, "template", draft=_draft(quant))
+        assert (response.status_code, response.json()["code"]) == (422, "inline_template_invalid")
+        assert "reads as a template variable" in response.json()["detail"]
+
+
 # ── where the router is mounted ──────────────────────────────────────────────
 
 
@@ -715,3 +836,8 @@ class TestMountedOnTheMainRouter:
 
     def test_a_get_is_not_a_builder_route(self, main_client):
         assert main_client.get(f"{PREFIX}/tree").status_code in (404, 405)
+
+    def test_capabilities_resolve_to_the_builder_not_a_project_id(self, main_client):
+        response = main_client.get(f"{PREFIX}/capabilities")
+        assert response.status_code == 200
+        assert response.json()["mode"] == "server"

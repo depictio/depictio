@@ -4,6 +4,12 @@ The list comes from the collection's own scan block (``assemble.dc_config``)
 handed to ``template_preview.scan_dc_hits``, the function the from_run dry run
 counts with, and which walks and filters exactly as the scan does. So "these
 files will be ingested" is the scan's answer, not a look-alike.
+
+Collections of image stores (bioimage, SpatialData tables) register ``*.zarr``
+folders instead of files, by the same name rule (``stores.match_stores``); an
+OME-TIFF collection keeps its ``*.ome.tif(f)`` files outside any store. A
+genomic tracks collection's manifest is matched like a table, then read back
+for what ingestion would make of its rows (``tracks.check_manifest``).
 """
 
 from __future__ import annotations
@@ -16,9 +22,18 @@ from depictio.cli.cli.utils.file_preview import preview_root_file
 from depictio.cli.cli.utils.template_preview import scan_dc_hits
 from depictio.models.local_access import LocalPathRefused
 from depictio.models.logging import logger
-from depictio.project_builder.assemble import DcDraft, IndexedFileProps, dc_config
+from depictio.project_builder.assemble import (
+    BioimageProps,
+    DcDraft,
+    GenomicTracksProps,
+    IndexedFileProps,
+    TableProps,
+    dc_config,
+)
 from depictio.project_builder.errors import BuilderRefused
 from depictio.project_builder.roots import confine_rel
+from depictio.project_builder.stores import inside_store, is_ome_tiff, match_stores
+from depictio.project_builder.tracks import check_manifest
 
 # Files listed back to the browser at most.
 MAX_LISTED = 500
@@ -81,6 +96,25 @@ def _index_suffix(props: IndexedFileProps) -> str:
     return DEFAULT_INDEX_SUFFIX.get(props.format, "")
 
 
+def store_kind(dc: DcDraft) -> str | None:
+    """``zarr`` when ``dc`` registers stores, ``ome-tiff`` for OME-TIFF files, else None."""
+    props = dc.props
+    if isinstance(props, BioimageProps):
+        return "ome-tiff" if props.format == "ome-tiff" else "zarr"
+    if isinstance(props, TableProps) and props.format == "spatialdata":
+        return "zarr"
+    return None
+
+
+def _full_regex(scan: dict[str, Any]) -> str:
+    """The scan's regex with its wildcards spliced in, as the walk reads it."""
+    regex_config = scan["scan_parameters"]["regex_config"]
+    pattern = regex_config["pattern"]
+    for wildcard in regex_config.get("wildcards") or []:
+        pattern = pattern.replace(f"{{{wildcard['name']}}}", f"({wildcard['wildcard_regex']})")
+    return pattern
+
+
 def match_collection(
     root: DataRoot, structure: str, runs_regex: str | None, dc: DcDraft
 ) -> dict[str, Any]:
@@ -91,35 +125,58 @@ def match_collection(
     """
     if dc.path:
         dc = dc.model_copy(update={"path": confine_rel(dc.path)})
-    config = dc_config(dc)
+    config = dc_config(dc, remote=root.is_remote)
     scan = config["scan"]
     runs = _runs(root, structure, runs_regex)
     warnings: list[str] = []
+    stores = store_kind(dc)
 
-    if scan["mode"] == "single":
+    if stores and root.is_remote:
+        files: list[str] = []
+        regex = None
+        warnings.append(
+            "Image stores are read from a folder on this computer at ingest: an s3:// prefix "
+            "can't be scanned for them."
+        )
+    elif scan["mode"] == "single":
         rel = dc.path or ""
         files = [rel] if rel and root.exists(rel) else []
         regex = None
     else:
         regex = scan["scan_parameters"]["regex_config"]["pattern"]
         try:
-            re.compile(regex)
-        except re.error as exc:
+            re.compile(_full_regex(scan))
+        except (re.error, KeyError) as exc:
             raise BuilderRefused(400, f"Invalid regex: {exc}", "regex_invalid") from exc
         if structure == "sequencing-runs" and not runs:
             # The scan walks run folders only: none matches, nothing is scanned.
             files = []
             warnings.append("No folder of the data root matches the runs regex.")
+        elif stores == "zarr":
+            files = match_stores(root, _full_regex(scan), runs or [""])
         else:
             files = sorted(scan_dc_hits(config, root, runs) or [])
-        if root.is_remote and (dc.max_depth is not None or dc.ignore):
+            if stores == "ome-tiff":
+                files = [rel for rel in files if is_ome_tiff(rel) and not inside_store(rel)]
+            else:
+                inside = [rel for rel in files if inside_store(rel)]
+                if inside:
+                    warnings.append(
+                        f"{len(inside)} matched file(s) are inside a .zarr store: tighten the "
+                        "regex so it does not read image chunks."
+                    )
+        if stores and (dc.max_depth is not None or dc.ignore):
+            warnings.append("max_depth and ignore do not limit where stores are found.")
+        elif root.is_remote and (dc.max_depth is not None or dc.ignore):
             warnings.append(
                 "max_depth and ignore apply to local folders only: an S3 prefix is listed whole."
             )
 
-    if not files:
-        warnings.append("No file matches yet.")
-    if any(rel.startswith(BUNDLE_FOLDER) or f"/{BUNDLE_FOLDER}" in rel for rel in files):
+    if not files and not (stores and root.is_remote):
+        warnings.append("No store matches yet." if stores == "zarr" else "No file matches yet.")
+    if regex is not None and any(
+        rel.startswith(BUNDLE_FOLDER) or f"/{BUNDLE_FOLDER}" in rel for rel in files
+    ):
         warnings.append(
             "The rule also matches files under .depictio/, where the builder writes its template."
         )
@@ -127,7 +184,7 @@ def match_collection(
     schema: dict[str, str] | None = None
     consistent: bool | None = None
     mismatches: list[dict[str, Any]] = []
-    if dc.type in ("table", "image") and files:
+    if dc.type in ("table", "image", "genomic_tracks") and files and not stores:
         sample = files[: SCHEMA_SAMPLE_REMOTE if root.is_remote else SCHEMA_SAMPLE_LOCAL]
         schemas = {rel: _schema(root, rel) for rel in sample}
         schema, consistent, mismatches = _compare(sample, schemas)
@@ -140,6 +197,24 @@ def match_collection(
         if suffix:
             missing_indexes = [rel for rel in files[:MAX_LISTED] if not root.exists(rel + suffix)]
 
+    tracks = None
+    if isinstance(dc.props, GenomicTracksProps) and files:
+        props = dc.props
+        tracks = check_manifest(
+            root,
+            files[0],
+            uri_column=props.uri_column,
+            format_column=props.format_column or "format",
+            index_column=props.index_column or "index_uri",
+            default_format=props.default_format,
+            tracks_base=props.tracks_base_path,
+        )
+        if len(files) > 1:
+            warnings.append(f"Track checks read the first of {len(files)} manifests.")
+
+    if isinstance(dc.props, (TableProps,)) and dc.props.reader and dc.props.reader.polars_kwargs():
+        warnings.append("Schemas are read without the reader options; ingestion applies them.")
+
     return {
         "regex": regex,
         "files": files[:MAX_LISTED],
@@ -150,5 +225,7 @@ def match_collection(
         "consistent": consistent,
         "mismatches": mismatches,
         "missing_indexes": missing_indexes,
+        "stores": bool(stores),
+        "tracks": tracks,
         "warnings": warnings,
     }

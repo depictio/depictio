@@ -87,4 +87,12 @@ def server_root_opener(request: Request, current_user=Depends(get_user_or_anonym
     return open_root
 
 
-builder_endpoint_router = build_builder_router(server_root_opener)
+def _events_enabled() -> bool:
+    from depictio.api.v1.configs.config import settings
+
+    return bool(settings.events.enabled)
+
+
+builder_endpoint_router = build_builder_router(
+    server_root_opener, mode="server", events_enabled=_events_enabled
+)

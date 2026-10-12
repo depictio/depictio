@@ -680,6 +680,62 @@ class TestCreation:
         assert stored["name"] == "Chosen name"
         assert stored["template_origin"]["template_id"] == "custom/lab-run"
 
+    def test_links_wildcards_and_project_fields_are_stored(self, local_home, mock_db, dispatch):
+        from depictio.project_builder.assemble import LinkDraft, WildcardDraft
+
+        draft = ProjectDraft(
+            name="Linked run",
+            realtime=True,
+            data_management_platform_project_url="https://lims.example.org/p/3",
+            workflows=[
+                WorkflowDraft(
+                    name="main",
+                    data_collections=[
+                        table_dc("sheet", path="samplesheet.csv"),
+                        DcDraft(
+                            tag="quant",
+                            type="table",
+                            mode="recursive",
+                            regex=r"^star/{sample}/quant\.tsv$",
+                            wildcards=[WildcardDraft(name="sample", regex="[^/]+")],
+                            props=TableProps(format="tsv", separator="\t"),
+                        ),
+                    ],
+                )
+            ],
+            links=[
+                LinkDraft(
+                    source_tag="sheet",
+                    source_column="sample",
+                    target_tag="quant",
+                    target_field="sample",
+                )
+            ],
+        )
+        report = _create(local_home, build_template(draft))
+        assert _rows(report)["quant"].matched == 3
+
+        stored = mock_db["projects"].find_one({"_id": ObjectId(report.project_id)})
+        assert stored["realtime"]["enabled"] is True
+        assert stored["data_management_platform_project_url"] == "https://lims.example.org/p/3"
+        ids = {
+            dc["data_collection_tag"]: str(dc["_id"])
+            for wf in stored["workflows"]
+            for dc in wf["data_collections"]
+        }
+        (link,) = stored["links"]
+        # Tags are resolved to the new collections' ids at creation.
+        assert (link["source_dc_id"], link["target_dc_id"]) == (ids["sheet"], ids["quant"])
+        assert link["link_config"]["target_field"] == "sample"
+        quant = next(
+            dc
+            for wf in stored["workflows"]
+            for dc in wf["data_collections"]
+            if dc["data_collection_tag"] == "quant"
+        )
+        regex_config = quant["config"]["scan"]["scan_parameters"]["regex_config"]
+        assert regex_config["wildcards"] == [{"name": "sample", "wildcard_regex": "[^/]+"}]
+
     def test_a_taken_name_is_a_409_as_on_create(self, local_home, mock_db, dispatch):
         user = _user(is_admin=True)
         _create(local_home, user=user)

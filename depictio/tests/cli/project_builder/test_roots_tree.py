@@ -236,7 +236,13 @@ class TestListFolder:
 
     def test_an_entry_carries_the_path_to_ask_for_next(self, listed_root):
         top = {e["name"]: e for e in tree.list_folder(listed_root)["entries"]}
-        assert top["star"] == {"name": "star", "path": "star", "is_dir": True, "size": None}
+        assert top["star"] == {
+            "name": "star",
+            "path": "star",
+            "is_dir": True,
+            "size": None,
+            "store": None,
+        }
         assert top["alpha.tsv"]["path"] == "alpha.tsv"
         assert top["alpha.tsv"]["size"] == len(LISTED["alpha.tsv"])
 

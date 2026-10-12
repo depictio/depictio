@@ -37,12 +37,15 @@ SCRIPT = textwrap.dedent(
     from depictio.project_builder import (
         assemble,
         bundle,
+        capabilities,
         errors,
         infer,
         match,
         metadata,
         plan,
         roots,
+        stores,
+        tracks,
         tree,
         validate,
     )
@@ -76,6 +79,8 @@ SCRIPT = textwrap.dedent(
         get_bytes=lambda url: (_ for _ in ()).throw(OSError("offline")),
     )
 
+    offered = capabilities.capabilities("standalone", None)
+
     leaked = sorted(
         name for name in sys.modules if name.split(".")[0] in BLOCKED or name in BLOCKED_MODULES
     )
@@ -90,6 +95,7 @@ SCRIPT = textwrap.dedent(
                 "status": report["data_collections"][0]["status"],
                 "written": Path(written["path"]).is_file(),
                 "sources": fetched["sources"],
+                "realtime": offered["realtime"]["events_enabled"],
             }
         )
     )
@@ -118,6 +124,7 @@ def test_the_core_works_with_the_server_stack_refused(tmp_path):
         "status": "ok",
         "written": True,
         "sources": ["nf-core"],
+        "realtime": None,
     }
 
 

@@ -54,9 +54,20 @@ class TestGuessType:
         assert infer.guess_type(name) == dc_type
 
     def test_it_guesses_every_type_but_image_which_only_the_user_picks(self):
-        names = ["multiqc.parquet", "t.nwk", "a.geojson", "a.vcf.gz", "a.csv", "photo.png"]
+        names = [
+            "multiqc.parquet",
+            "t.nwk",
+            "a.geojson",
+            "a.vcf.gz",
+            "a.csv",
+            "photo.png",
+            "cells.ome.tif",
+            "s1.zarr",
+        ]
         guessed = {infer.guess_type(n) for n in names}
-        assert guessed == set(infer.DC_TYPES) - {"image"}
+        # A track file is an indexed file by name; a genomic tracks collection
+        # is offered for it only where this Depictio has one (see suggest).
+        assert guessed == set(infer.DC_TYPES) - {"image", "genomic_tracks"}
 
 
 class TestFormats:
@@ -164,6 +175,10 @@ SUGGESTION_KEYS = {
     "separator",
     "catalog",
     "multiqc",
+    "store",
+    "tracks",
+    "path_wildcard",
+    "warnings",
 }
 
 

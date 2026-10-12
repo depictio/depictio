@@ -96,12 +96,43 @@ def test_unknown_api_paths_are_404_not_the_spa(client: TestClient):
 
 def test_context_names_the_folder_and_the_bundle(client: TestClient, folder: Path, tmp_path):
     context = client.get(f"{P}/context").json()
+    bundle = tmp_path / "bundle" / "template.yaml"
     assert context == {
         "mode": "standalone",
         "data_root": str(folder.resolve()),
         "out_dir": str(tmp_path / "bundle"),
         "writable": True,
+        "ingest_command": f"depictio ingest {folder.resolve()} --template {bundle}",
+        "watch_command": f"depictio watch {folder.resolve()} --template {bundle}",
     }
+
+
+def test_capabilities_cannot_know_the_server_s_realtime(client: TestClient):
+    body = client.get(f"{P}/capabilities").json()
+    assert body["mode"] == "standalone"
+    assert body["realtime"]["events_enabled"] is None
+    assert "real-time events on" in body["realtime"]["reason"]
+
+
+def test_a_track_manifest_is_written_inside_the_folder(folder: Path, viewer_dist: Path):
+    (folder / "tracks").mkdir()
+    (folder / "tracks" / "S1.bw").write_bytes(b"x")
+    app = create_app(folder, viewer_dist=viewer_dist, out_dir=folder / ".depictio" / "template")
+    client = TestClient(app, base_url="http://127.0.0.1:8129")
+    made = client.post(
+        f"{P}/tracks_manifest", json={"root": _spec(folder), "files": ["tracks/S1.bw"]}
+    ).json()
+    written = client.post(f"{P}/write_manifest", json={"name": "tracks", "tsv": made["tsv"]})
+    assert written.status_code == 200
+    assert written.json() == {"path": ".depictio/template/tracks.tsv"}
+    assert (folder / ".depictio" / "template" / "tracks.tsv").read_text() == made["tsv"]
+    again = client.post(f"{P}/write_manifest", json={"name": "tracks", "tsv": made["tsv"]})
+    assert (again.status_code, again.json()["code"]) == (409, "manifest_exists")
+
+
+def test_a_template_folder_outside_the_served_one_holds_no_manifest(client: TestClient):
+    response = client.post(f"{P}/write_manifest", json={"name": "tracks", "tsv": "a\n"})
+    assert (response.status_code, response.json()["code"]) == (409, "manifest_outside_root")
 
 
 def test_tree_lists_one_level_without_hidden_entries(client: TestClient, folder: Path):
@@ -148,6 +179,9 @@ def test_plan_then_write_then_overwrite(client: TestClient, folder: Path, tmp_pa
     assert "{DATA_ROOT}/samplesheet.csv" in bundle.read_text()
     assert written.json()["ingest_command"] == (
         f"depictio ingest {folder.resolve()} --template {bundle}"
+    )
+    assert written.json()["watch_command"] == (
+        f"depictio watch {folder.resolve()} --template {bundle}"
     )
 
     again = client.post(f"{P}/write", json={"template": template})

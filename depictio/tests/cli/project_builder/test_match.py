@@ -30,6 +30,8 @@ RESULT_KEYS = {
     "consistent",
     "mismatches",
     "missing_indexes",
+    "stores",
+    "tracks",
     "warnings",
 }
 

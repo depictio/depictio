@@ -151,7 +151,11 @@ class TestWholeTemplate:
     @pytest.mark.parametrize("key", sorted(validate.TOP_LEVEL_KEYS - {"template", "workflows"}))
     def test_every_allowed_top_level_key_is_accepted(self, key):
         template = _good()
-        template[key] = {"realtime": {"enabled": True}}.get(key, "x")
+        template[key] = {
+            "realtime": {"enabled": True},
+            "data_management_platform_project_url": "https://lims.example.org/p/1",
+            "links": [],
+        }.get(key, "x")
         if key == "is_public":
             template[key] = True
         validate_inline_template(template, remote=False)
@@ -414,6 +418,8 @@ class TestDataCollections:
             "indexed_file",
             "geojson",
             "phylogeny",
+            "genomic_tracks",
+            "bioimage",
         }
 
     def test_an_optional_collection_stays_optional(self):
@@ -486,10 +492,10 @@ class TestScans:
         parameters["follow_symlinks"] = True
         assert "unknown recursive scan parameters" in _refusal(template).detail
 
-    def test_the_regex_config_takes_a_pattern_only(self):
+    def test_the_regex_config_takes_a_pattern_and_wildcards_only(self):
         template = _good()
-        _dc(template, 1)["config"]["scan"]["scan_parameters"]["regex_config"]["wildcards"] = []
-        assert "wildcards are not supported here" in _refusal(template).detail
+        _dc(template, 1)["config"]["scan"]["scan_parameters"]["regex_config"]["id_regex"] = "x"
+        assert "holds a pattern and its wildcards only" in _refusal(template).detail
 
     @pytest.mark.parametrize("pattern", [None, "", 3, ["a"]])
     def test_a_recursive_scan_needs_a_regex(self, pattern):
@@ -579,8 +585,8 @@ class TestRemote:
         assert "Images are uploaded" in _refusal(template, remote=True).detail
         assert "scan mode" in _refusal(template, remote=False).detail
 
-    def test_the_remote_types_are_the_two_that_need_a_local_disk(self):
-        assert set(validate.REMOTE_REFUSED_TYPES) == {"indexed_file", "image"}
+    def test_the_remote_types_are_those_that_need_a_local_disk(self):
+        assert set(validate.REMOTE_REFUSED_TYPES) == {"indexed_file", "image", "bioimage"}
 
     @pytest.mark.parametrize(
         "bounds",

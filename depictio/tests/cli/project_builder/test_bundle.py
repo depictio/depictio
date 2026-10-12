@@ -40,11 +40,12 @@ class TestWriteBundle:
         out = tmp_path / "bundle"
         written = write_bundle(template, out, data_root="/data/run1")
         path = out / "template.yaml"
-        assert set(written) == {"path", "yaml", "ingest_command"}
+        assert set(written) == {"path", "yaml", "ingest_command", "watch_command"}
         assert written["path"] == str(path)
         assert path.read_text() == written["yaml"] == template_yaml(template)
         assert yaml.safe_load(path.read_text()) == template
         assert written["ingest_command"] == f"depictio ingest /data/run1 --template {path}"
+        assert written["watch_command"] == f"depictio watch /data/run1 --template {path}"
         assert not (out / "template.yaml.bak").exists()
 
     def test_a_remote_root_is_named_as_given(self, tmp_path, template):

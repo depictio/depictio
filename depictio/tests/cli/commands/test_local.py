@@ -91,6 +91,21 @@ def test_server_env_keeps_the_telemetry_opt_out(paths, monkeypatch):
     assert env["DEPICTIO_TELEMETRY_DEPLOYMENT_KIND"] == "local"
 
 
+def test_server_env_keeps_the_realtime_opt_in_and_only_that(paths, monkeypatch):
+    # A project's realtime flag does nothing unless events are on; the switch is
+    # the user's, the events' Redis is the local stack's own.
+    monkeypatch.setenv("DEPICTIO_EVENTS_ENABLED", "true")
+    monkeypatch.setenv("DEPICTIO_EVENTS_REDIS_HOST", "redis")
+    monkeypatch.setenv("DEPICTIO_EVENTS_REDIS_DB", "9")
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+    env = server_env(paths, ports, SECRETS, "none", False)
+
+    assert env["DEPICTIO_EVENTS_ENABLED"] == "true"
+    assert env["DEPICTIO_EVENTS_REDIS_HOST"] == "127.0.0.1"
+    assert env["DEPICTIO_EVENTS_REDIS_PORT"] == "3"
+    assert "DEPICTIO_EVENTS_REDIS_DB" not in env
+
+
 def test_the_server_reaches_127_0_0_1_without_the_proxy(paths, monkeypatch):
     monkeypatch.setenv("http_proxy", "http://proxy:3128")
     monkeypatch.setenv("no_proxy", "localhost,.example.org")
