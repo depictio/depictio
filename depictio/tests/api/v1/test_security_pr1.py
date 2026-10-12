@@ -28,6 +28,22 @@ def _reload_settings_module():
     return importlib.reload(mod)
 
 
+@pytest.fixture(autouse=True)
+def _restore_settings_module():
+    """Put the original settings classes back after a reload.
+
+    ``importlib.reload`` rebinds every class in place. Code that captured the old
+    ones (``validate_call`` signatures, isinstance checks) then rejects instances
+    of the new ones in later tests on the same worker.
+    """
+    import depictio.api.v1.configs.settings_models as mod
+
+    saved = dict(vars(mod))
+    yield
+    vars(mod).clear()
+    vars(mod).update(saved)
+
+
 @pytest.mark.parametrize(
     "weak_pw",
     ["", "minio", "minio123", "changeme", "admin", "test_pwd", "short"],

@@ -54,6 +54,7 @@ from depictio.api.v1.endpoints.user_endpoints.core_functions import (
     _redeem_magic_link_ticket,
 )
 from depictio.api.v1.endpoints.user_endpoints.rate_limit import enforce_rate_limit
+from depictio.api.v1.endpoints.user_endpoints.token_scopes import request_is_scoped
 from depictio.api.v1.endpoints.user_endpoints.utils import (
     create_access_token,
 )
@@ -63,6 +64,7 @@ from depictio.models.models.users import (
     RequestUserRegistration,
     TokenBeanie,
     TokenData,
+    TokenScope,
     User,
     UserBase,
     UserBaseUI,
@@ -424,7 +426,8 @@ async def refresh_token_browser(request: dict) -> dict:
         raise HTTPException(401, "Invalid refresh token")
 
     user = await UserBeanie.find_one({"_id": token_doc.user_id})
-    token_data = TokenData(name=token_doc.name, sub=user.id)
+    # Carry the scopes over: a refresh must never widen a token.
+    token_data = TokenData(name=token_doc.name, sub=user.id, scopes=token_doc.scopes)
     new_access_token, expire_datetime = await create_access_token(token_data, expiry_hours=1)
 
     token_doc.access_token = new_access_token
@@ -475,7 +478,8 @@ async def refresh_token_endpoint(
         raise HTTPException(401, "Invalid refresh token")
 
     user = await UserBeanie.find_one({"_id": token_doc.user_id})
-    token_data = TokenData(name=token_doc.name, sub=user.id)
+    # Carry the scopes over: a refresh must never widen a token.
+    token_data = TokenData(name=token_doc.name, sub=user.id, scopes=token_doc.scopes)
     new_access_token, expire_datetime = await create_access_token(token_data, expiry_hours=1)
 
     token_doc.access_token = new_access_token
@@ -1185,9 +1189,13 @@ async def delete_token(
 
 
 class _CreateMeTokenRequest(BaseModel):
-    """Body for POST /auth/me/tokens — only the human-readable name is required."""
+    """Body for POST /auth/me/tokens — only the human-readable name is required.
+
+    ``scopes`` limits the token (e.g. an agent token); omitted keeps full access.
+    """
 
     name: str
+    scopes: list[TokenScope] | None = None
 
 
 @auth_endpoint_router.post("/me/tokens", include_in_schema=True)
@@ -1205,6 +1213,12 @@ async def create_my_token(
             status_code=403,
             detail="CLI token creation is disabled in public mode for non-admin users",
         )
+    # The scope gate already refuses this route to scoped tokens; checked here
+    # too so a scoped token can never mint a wider one.
+    if request_is_scoped():
+        raise HTTPException(status_code=403, detail="A scoped token cannot create tokens")
+    if request.scopes is not None and not request.scopes:
+        raise HTTPException(status_code=400, detail="Pick at least one scope")
 
     name = (request.name or "").strip()
     if not name:
@@ -1224,6 +1238,7 @@ async def create_my_token(
         token_lifetime="long-lived",
         token_type="bearer",
         sub=current_user.id,  # type: ignore[invalid-argument-type]
+        scopes=sorted(set(request.scopes)) if request.scopes is not None else None,
     )
     token = await _add_token(token_data)
     if token is None:

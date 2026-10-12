@@ -360,6 +360,9 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
         # adding real backup coverage for it is a separate, deliberate change.
         # 'jobs' (background job status) and 'cli_agents' (watcher heartbeats) are
         # TTL-indexed on expires_at: a restore would bring back only expired rows.
+        # 'agent_tool_calls' is the agent tool audit ledger (90-day TTL), same
+        # footing as 'task_events'; 'agent_quotas' holds daily write counters
+        # (2-day TTL).
         ledger_collections = [
             "task_events",
             "app_logs",
@@ -367,6 +370,8 @@ def check_backup_collections_coverage() -> Dict[str, Any]:
             "ingestion_runs",
             "jobs",
             "cli_agents",
+            "agent_tool_calls",
+            "agent_quotas",
         ]
         # The assistant's history ('ai_summaries', 'ai_analyses', and the
         # 'ai_generations' run records) is LLM output keyed by dashboard:

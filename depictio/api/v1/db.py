@@ -81,6 +81,8 @@ comment_threads_collection = db[settings.mongodb.collections.comment_threads_col
 dashboard_filter_states_collection = db["dashboard_filter_states"]
 cli_agents_collection = db[settings.mongodb.collections.cli_agents_collection]
 jobs_collection = db[settings.mongodb.collections.jobs_collection]
+agent_tool_calls_collection = db[settings.mongodb.collections.agent_tool_calls_collection]
+agent_quotas_collection = db[settings.mongodb.collections.agent_quotas_collection]
 test_collection = db[settings.mongodb.collections.test_collection]
 
 

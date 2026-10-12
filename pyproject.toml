@@ -62,6 +62,9 @@ server = [
   # LLM client for the AI endpoints (provider-agnostic; lazy-imported so the
   # app boots without a working install when DEPICTIO_AI_ENABLED is false)
   "litellm>=1.50,<2",
+  # Model Context Protocol server, mounted at /depictio/api/v1/mcp when
+  # DEPICTIO_MCP_ENABLED is true
+  "mcp==2.2.0",
   "mypy-boto3-s3==1.43.50",
   # Dashboard thumbnails. The Chromium they drive is downloaded separately, by the
   # worker image or by `depictio local up --screenshots`.

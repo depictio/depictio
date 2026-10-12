@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Center, Group, Loader, Paper, Stack, Text, Tooltip } from '@mantine/core';
+import { Badge, Button, Center, Group, Loader, Paper, Stack, Text, Tooltip } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
@@ -14,6 +14,7 @@ import {
   type AuthStatusResponse,
   type CliAgentConfig,
   type CliToken,
+  type TokenScope,
 } from 'depictio-react-core';
 
 import CreateTokenModal from './CreateTokenModal';
@@ -68,8 +69,8 @@ const CliAgentsPanel: React.FC = () => {
   const isAddDisabled = Boolean(status?.is_public_mode);
 
   const handleCreate = useCallback(
-    async (name: string) => {
-      const created = await createLongLivedToken(name);
+    async (name: string, scopes: TokenScope[] | null) => {
+      const created = await createLongLivedToken(name, scopes);
       // Generate the YAML config; the modal tolerates null and shows a
       // graceful fallback (matches Dash behaviour).
       let config: CliAgentConfig | null = null;
@@ -201,6 +202,23 @@ const EmptyTokensState: React.FC = () => (
   </Paper>
 );
 
+/** Full access for legacy/unscoped tokens, otherwise one badge per scope. */
+const TokenScopeBadges: React.FC<{ scopes: TokenScope[] | null }> = ({ scopes }) => (
+  <Group gap={4} mt={4} data-testid="cli-token-scopes">
+    {scopes === null ? (
+      <Badge size="xs" variant="light" color="gray">
+        Full access
+      </Badge>
+    ) : (
+      scopes.map((scope) => (
+        <Badge key={scope} size="xs" variant="light">
+          {scope.replace('_', ' ')}
+        </Badge>
+      ))
+    )}
+  </Group>
+);
+
 interface TokensListProps {
   tokens: CliToken[];
   onDelete: (token: CliToken) => void;
@@ -220,6 +238,7 @@ const TokensList: React.FC<TokensListProps> = ({ tokens, onDelete }) => (
               <Text size="xs" c="dimmed">
                 Expires: {token.expire_datetime}
               </Text>
+              <TokenScopeBadges scopes={token.scopes} />
             </Stack>
           </Group>
           <Button

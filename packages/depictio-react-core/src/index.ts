@@ -649,6 +649,7 @@ export {
   createLongLivedToken,
   deleteLongLivedToken,
   generateAgentConfig,
+  TOKEN_SCOPES,
   // Cross-DC links
   listProjectLinks,
   createProjectLink,
@@ -1087,6 +1088,7 @@ export type {
   CliToken,
   CreatedToken,
   CliAgentConfig,
+  TokenScope,
   // Link types
   LinkResolverName,
   LinkTargetType,
