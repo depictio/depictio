@@ -203,6 +203,23 @@ class TestViewersCanComment:
                 create(open_world, user)
             assert status_of(e) == 403
 
+    def test_a_temporary_account_cannot_even_on_a_public_project(self, open_world):
+        # Public mode gives every visitor one; a public project makes it a viewer.
+        open_world.db["projects"].update_one(
+            {"_id": open_world.project_id}, {"$set": {"is_public": True}}
+        )
+        guest = _user()
+        guest.is_temporary = True
+        assert not run(cr.get_comment_access(open_world.main, current_user=guest)).can_comment
+        with pytest.raises(HTTPException) as e:
+            create(open_world, guest)
+        assert status_of(e) == 403
+        with pytest.raises(HTTPException) as e:
+            listing(open_world, guest)
+        assert status_of(e) == 403
+        # A signed-in account on the same public project may.
+        assert create(open_world, _user()).status == "open"
+
     def test_a_stranger_to_the_project_cannot(self, open_world):
         with pytest.raises(HTTPException) as e:
             create(open_world, _user())
