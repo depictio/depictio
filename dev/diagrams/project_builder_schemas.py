@@ -11,6 +11,9 @@
 * ``one_rule``  — what you see is what gets ingested: the match panel and the
   scan resolve one draft through the same function, on a folder and on an
   ``s3://`` prefix alike.
+* ``instance``  — what the instance decides: the collection kinds come from
+  the models it has, and a project's realtime flag only acts on a server with
+  events on, after a re-ingestion.
 
 PNG rendering needs Playwright (already a dev dependency); the PNG uses the Virgil
 font shipped in ``depictio/viewer/src/assets/fonts`` (see sketch.py). Shared
@@ -42,6 +45,8 @@ from sketch import (  # noqa: E402
     dot,
     folder,
     page,
+    tick,
+    warning,
     write,
 )
 
@@ -342,6 +347,88 @@ def build_one_rule() -> Sketch:
     return s
 
 
+# ── figure 3: what the instance decides ──────────────────────────────────────
+
+INST_W, INST_H = 1100, 760
+
+
+def build_instance() -> Sketch:
+    """Left: the kinds the builder offers, read from the models the server has.
+    Right: what a project's realtime flag needs before a dashboard moves."""
+    s = Sketch(INST_W, INST_H, seed=67)
+    s.heading(
+        40,
+        52,
+        "What the instance decides",
+        "the builder offers what this Depictio has, and says what an option depends on",
+    )
+
+    # -- left: collection kinds ---------------------------------------------------
+    left, col_w = 40, 470
+    api = Box(left, 112, col_w, 64, SHARED, "")
+    s.rect(api)
+    s.text(api.cx, api.y + 28, "`GET /projects/builder/capabilities`", size=16, weight="bold")
+    s.text(api.cx, api.y + 50, "kinds found in the models (`find_spec`), not a version", size=13, colour=DIM)
+    s.arrow(api.cx, api.bottom + 2, api.cx, 222)
+
+    kinds = Box(left, 226, col_w, 222, WHITE, "")
+    s.rect(kinds)
+    s.text(left + 20, 256, "offered", size=15, weight="bold", anchor="start")
+    for i, name in enumerate(("table", "MultiQC", "image", "indexed file", "GeoJSON", "phylogeny")):
+        x = left + 34 + (i % 3) * 145
+        y = 290 + (i // 3) * 34
+        tick(s, x, y - 5)
+        s.text(x + 16, y, name, size=15, anchor="start")
+    s.line(left + 16, 352, left + col_w - 16, 352, colour=GREY, amount=0.6, passes=1)
+    s.text(left + 20, 380, "when the models exist", size=15, weight="bold", anchor="start")
+    for i, name in enumerate(("genome tracks", "bioimage", "SpatialData table")):
+        chip = Box(left + 16 + i * 148, 394, 142, 38, LIGHT_GREY, "")
+        s.rect(chip, dashed=True, colour=GREY)
+        s.text(chip.cx, chip.cy + 5, name, size=13, colour=DIM)
+    s.text(left, 480, "otherwise: shown disabled, with the reason;", size=14, colour=DIM, anchor="start")
+    s.text(left, 502, "the server refuses them (422)", size=14, colour=DIM, anchor="start")
+
+    s.text(left, 580, "on an `s3://` root, refused:", size=15, weight="bold", anchor="start")
+    s.text(left, 606, "indexed files, images, bioimage stores,", size=14, anchor="start")
+    s.text(left, 628, "SpatialData tables (read from local disk)", size=14, anchor="start")
+    s.text(left, 660, "genome tracks there are read in place:", size=15, weight="bold", anchor="start")
+    s.text(left, 686, "`remote_base_uri: {DATA_ROOT}/<dir>/`", size=14, anchor="start")
+
+    # -- right: realtime ------------------------------------------------------------
+    right, rw = 580, 480
+    rcx = right + rw / 2
+    s.text(rcx, 132, "a project's realtime flag", size=17, weight="bold")
+    flag = Box(right, 150, 220, 64, YELLOW, "")
+    s.rect(flag)
+    s.text(flag.cx, flag.y + 28, "`realtime: on`", size=15, weight="bold")
+    s.text(flag.cx, flag.y + 50, "in the template", size=13, colour=DIM)
+    events = Box(right + 260, 150, 220, 64, ORANGE, "")
+    s.rect(events)
+    s.text(events.cx, events.y + 28, "`DEPICTIO_EVENTS_ENABLED`", size=14, weight="bold")
+    s.text(events.cx, events.y + 50, "off by default", size=13, colour=DIM)
+    s.text(rcx, 188, "+", size=24, weight="bold")
+
+    trigger = Box(right, 268, rw, 92, WHITE, "")
+    s.rect(trigger)
+    s.text(rcx, trigger.y + 28, "a re-ingestion", size=16, weight="bold")
+    s.text(rcx, trigger.y + 54, "`depictio watch <dir>` · `depictio ingest` · Data refresh", size=14)
+    s.text(rcx, trigger.y + 78, "(no watcher for `s3://`: Data refresh or a scheduled ingest)", size=13, colour=DIM)
+    s.arrow(rcx, trigger.bottom + 2, rcx, 398)
+    node(s, Box(right, 402, rw, 58, BLUE, "aggregation finalised → event published"))
+    s.arrow(rcx, 462, rcx, 498)
+    node(s, Box(right, 502, rw, 58, GREEN, "open dashboards refresh"))
+    s.arrow(flag.cx, flag.bottom + 2, flag.cx + 40, trigger.y - 3)
+    s.arrow(events.cx, events.bottom + 2, events.cx - 40, trigger.y - 3)
+
+    warning(s, right + 14, 610)
+    s.text(right + 36, 615, "nothing watches folders or buckets by itself", size=15, anchor="start")
+    s.text(right + 36, 646, "server events off → the builder greys the switch out", size=14, colour=DIM, anchor="start")
+    s.text(right + 36, 670, "standalone → allowed, \"takes effect only on a server", size=14, colour=DIM, anchor="start")
+    s.text(right + 36, 692, "with real-time events on\"", size=14, colour=DIM, anchor="start")
+    s.text(right + 36, 722, "`depictio local up` passes `DEPICTIO_EVENTS_ENABLED` through", size=14, colour=DIM, anchor="start")
+    return s
+
+
 @app.command()
 def main(
     out: Path = typer.Option(
@@ -351,10 +438,11 @@ def main(
     ),
     png: bool = typer.Option(True, "--png/--no-png", help="Also render PNGs through Playwright."),
 ) -> None:
-    """Write the placement and one-rule schemas under --out."""
+    """Write the placement, one-rule and instance schemas under --out."""
     stem = out / "project_builder"
     write(build_placement(), stem, "placement", png=png)
     write(build_one_rule(), stem, "one_rule", png=png)
+    write(build_instance(), stem, "instance", png=png)
 
 
 if __name__ == "__main__":
