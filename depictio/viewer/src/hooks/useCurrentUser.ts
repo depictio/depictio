@@ -70,6 +70,12 @@ export interface UseCurrentUserResult {
    *  the run tab's folder browser then offers an S3 side. False on older
    *  backends that do not send the flag. */
   remoteBrowseEnabled: boolean;
+  /** True when the component export API answers: every tile then offers
+   *  "Export / embed". False on older backends that do not send the flag. */
+  embedEnabled: boolean;
+  /** True when some site may frame an embed. False means an iframe snippet
+   *  would be refused by the embed's own CSP. */
+  embedFramingEnabled: boolean;
   loading: boolean;
 }
 
@@ -87,6 +93,8 @@ export function useCurrentUser(): UseCurrentUserResult {
   const [dashboardsDefaultView, setDashboardsDefaultView] = useState<string | null>(null);
   const [localDataRootsEnabled, setLocalDataRootsEnabled] = useState<boolean>(false);
   const [remoteBrowseEnabled, setRemoteBrowseEnabled] = useState<boolean>(false);
+  const [embedEnabled, setEmbedEnabled] = useState<boolean>(false);
+  const [embedFramingEnabled, setEmbedFramingEnabled] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
@@ -104,6 +112,8 @@ export function useCurrentUser(): UseCurrentUserResult {
         setInspectorEnabled(Boolean(data.inspector_enabled));
         setLocalDataRootsEnabled(Boolean(data.local_data_roots_enabled));
         setRemoteBrowseEnabled(Boolean(data.remote_browse_enabled));
+        setEmbedEnabled(Boolean(data.embed_enabled));
+        setEmbedFramingEnabled(Boolean(data.embed_framing_enabled));
         setDashboardsDefaultView(
           typeof data.dashboards_default_view === 'string'
             ? data.dashboards_default_view
@@ -142,6 +152,8 @@ export function useCurrentUser(): UseCurrentUserResult {
     dashboardsDefaultView,
     localDataRootsEnabled,
     remoteBrowseEnabled,
+    embedEnabled,
+    embedFramingEnabled,
     loading,
   };
 }

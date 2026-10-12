@@ -90,3 +90,31 @@ class TestGetEmbedUser:
         ):
             user = await get_embed_user(token="expired")
         assert user.is_admin is False and user.is_anonymous is True
+
+
+class TestViewerFlags:
+    """`/auth/me/optional` tells the viewer whether to draw "Export / embed"."""
+
+    @pytest.mark.asyncio
+    async def test_flags_follow_the_settings_and_never_name_an_origin(self, monkeypatch) -> None:
+        import json
+
+        from depictio.api.v1.endpoints.user_endpoints import routes as user_routes
+
+        monkeypatch.setattr(user_routes.settings.auth, "single_user_mode", False)
+        monkeypatch.setattr(user_routes.settings.fastapi, "embed_enabled", True)
+        monkeypatch.setattr(
+            user_routes.settings.fastapi, "embed_allowed_origins", ["https://lab.example.org"]
+        )
+        on = await user_routes.get_current_user_info_optional(token=None)
+        assert on["embed_enabled"] is True
+        assert on["embed_framing_enabled"] is True
+        assert "lab.example.org" not in json.dumps(on, default=str), (
+            "this endpoint answers without a token: the flag, never the allowlist"
+        )
+
+        monkeypatch.setattr(user_routes.settings.fastapi, "embed_enabled", False)
+        monkeypatch.setattr(user_routes.settings.fastapi, "embed_allowed_origins", [])
+        off = await user_routes.get_current_user_info_optional(token=None)
+        assert off["embed_enabled"] is False
+        assert off["embed_framing_enabled"] is False

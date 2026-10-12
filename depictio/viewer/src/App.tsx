@@ -119,6 +119,7 @@ import Inspector from './chrome/inspector/Inspector';
 import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
 import InspectorProviders from './chrome/inspector/InspectorProviders';
 import { CommentsHeaderButton, CommentsProvider } from './components/comments';
+import ComponentExportProvider from './components/export/ComponentExportProvider';
 import NotesFooter from './components/NotesFooter';
 import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
@@ -245,7 +246,12 @@ const App: React.FC = () => {
   );
   const contentScaleStyle = useContentScaleStyle();
   const contentMaxWidth = useContentMaxWidth();
-  const { user: currentUser, inspectorEnabled } = useCurrentUser();
+  const {
+    user: currentUser,
+    inspectorEnabled,
+    embedEnabled,
+    embedFramingEnabled,
+  } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
   // `control` is null while the flag is off, so no provider value reaches the
   // component chrome and no inspect action is rendered anywhere.
@@ -1250,6 +1256,13 @@ const App: React.FC = () => {
           colours a category: one value, one colour, on every surface. */}
       <CategoryColorsContext.Provider value={dashboard}>
       <TabLinkProvider tabs={tabSiblings}>
+      {/* Only while the server's export API is on: otherwise the provider
+          renders its children alone and no tile shows "Export / embed". */}
+      <ComponentExportProvider
+        enabled={embedEnabled}
+        framingEnabled={embedFramingEnabled}
+        isPublic={Boolean(dashboard?.is_public)}
+      >
       {/* Editors and owners only: for anyone else the provider renders its
           children alone, so no comment badge, button or drawer appears. */}
       <CommentsProvider
@@ -1822,6 +1835,7 @@ const App: React.FC = () => {
       />
     </AppShell>
       </CommentsProvider>
+      </ComponentExportProvider>
       </TabLinkProvider>
       </CategoryColorsContext.Provider>
       </BrandScope>

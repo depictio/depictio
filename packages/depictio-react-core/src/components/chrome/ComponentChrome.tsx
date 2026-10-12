@@ -11,6 +11,9 @@ import { useInspectorControl } from './InspectorContext';
 import CommentsButton from './CommentsButton';
 import CurrentDataBadge from './CurrentDataBadge';
 import { useCommentsControl } from './CommentsContext';
+import ExportButton from './ExportButton';
+import { useChromeSource, useComponentExportControl } from './ExportContext';
+import { isDataVersionActive, useDataVersions } from '../../dataVersions';
 import AnnotateButton from './AnnotateButton';
 import { useAnnotationLayer } from '../../annotations/AnnotationLayerContext';
 import { componentSupportsAnnotation } from '../../annotations/plotDecorate';
@@ -30,7 +33,7 @@ export { actionsFor };
 /** Every action the chrome draws: the per-type ones (`actionsFor`, the table
  *  the Guide also reads), plus those that depend on the viewer rather than on
  *  the component type. */
-export type ChromeAction = TypeChromeAction | 'comments' | 'annotate';
+export type ChromeAction = TypeChromeAction | 'comments' | 'annotate' | 'export';
 
 export interface ComponentChromeProps {
   metadata: StoredMetadata;
@@ -159,6 +162,28 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
   const annotateActive =
     canAnnotateHere && annotationLayer?.annotate?.componentIndex === String(metadata.index);
   if (canAnnotateHere) actions.push('annotate');
+  // Export / embed: a property of the app (is the export API on?) and of where
+  // the tile comes from, so it is prepended from context like the two above.
+  // Left out where the API has nothing to serve: a JBrowse tile is an iframe
+  // onto a live server, and a tile drawn from a past version would export the
+  // live dashboard under a label that says otherwise.
+  const exporter = useComponentExportControl();
+  const chromeSource = useChromeSource();
+  const dataVersions = useDataVersions();
+  const showingPast =
+    isDataVersionActive(dataVersions) || Boolean(dataVersions.definitionVersionId);
+  const exportTarget =
+    exporter && chromeSource?.dashboardId && componentType !== 'jbrowse' && !showingPast
+      ? {
+          dashboardId: chromeSource.dashboardId,
+          componentId: chromeSource.componentId ?? String(metadata.index),
+          componentType,
+          vizKind: (metadata as { viz_kind?: string | null }).viz_kind ?? null,
+          title: typeof metadata.title === 'string' ? metadata.title : undefined,
+          filters: chromeSource.filters,
+        }
+      : null;
+  if (exportTarget) actions.push('export');
   // Same reasoning as `inspect`: whether this action exists is a property of
   // the component's provenance, not of its type.
   if (metadata.catalog_source) actions.push('catalog');
@@ -243,6 +268,9 @@ const ComponentChrome: React.FC<ComponentChromeProps> = ({
             }
           />
         );
+      case 'export':
+        if (!exporter || !exportTarget) return null;
+        return <ExportButton key="export" target={exportTarget} onOpen={exporter.open} />;
       case 'catalog':
         if (!metadata.catalog_source) return null;
         return <CatalogButton key="catalog" source={metadata.catalog_source} />;
