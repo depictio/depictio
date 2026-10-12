@@ -3,6 +3,34 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.17.1
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.17.1</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.17.0 → 1.17.1 [e7d53c173]
+* fix(viewer): a section's filter bar shares its width between the filters [4d32715f9]
+* Update CHANGELOG.md for v1.17.0 [086b49d4d]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.17.0
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
