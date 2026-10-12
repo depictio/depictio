@@ -136,13 +136,13 @@ backend:
       cpu: "2"
 
   env:
-    # Phase 1: private, login-required, Google sign-in only. Registration and
-    # email + password login are both closed: a Google account only gets in
-    # once an admin has created it, so an unknown address is refused (403).
-    # The password switch is ignored unless Google OAuth is enabled, so a
-    # missing client id cannot lock everyone out.
+    # Phase 1: private, login-required, Google sign-in only. Email + password
+    # login is closed (ignored unless Google OAuth is enabled, so a missing
+    # client id cannot lock everyone out). Registration is open so reviewers
+    # can create their account by signing in with Google; a new account has no
+    # project access until an admin grants it.
     DEPICTIO_AUTH_PUBLIC_MODE: "false"
-    DEPICTIO_AUTH_REGISTRATION_DISABLED: "true"
+    DEPICTIO_AUTH_REGISTRATION_DISABLED: "false"
     DEPICTIO_AUTH_PASSWORD_LOGIN_DISABLED: "true"
     DEPICTIO_AUTH_GOOGLE_OAUTH_ENABLED: "true"
 
