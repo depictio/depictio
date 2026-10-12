@@ -33,7 +33,7 @@ from depictio.project_builder.assemble import (
 from depictio.project_builder.errors import BuilderRefused
 from depictio.project_builder.roots import confine_rel
 from depictio.project_builder.stores import inside_store, is_ome_tiff, match_stores
-from depictio.project_builder.tracks import check_manifest
+from depictio.project_builder.tracks import check_manifest, infer_track_format
 
 # Files listed back to the browser at most.
 MAX_LISTED = 500
@@ -198,7 +198,12 @@ def match_collection(
             missing_indexes = [rel for rel in files[:MAX_LISTED] if not root.exists(rel + suffix)]
 
     tracks = None
-    if isinstance(dc.props, GenomicTracksProps) and files:
+    if isinstance(dc.props, GenomicTracksProps) and files and infer_track_format(files[0]):
+        warnings.append(
+            "These are track files: a genomic tracks collection reads a manifest listing "
+            "them. Pick one, or generate it from the track files."
+        )
+    elif isinstance(dc.props, GenomicTracksProps) and files:
         props = dc.props
         tracks = check_manifest(
             root,

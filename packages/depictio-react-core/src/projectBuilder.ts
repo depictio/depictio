@@ -591,6 +591,14 @@ export function isTrackFilePath(path: string): boolean {
   return TRACK_FILE.test(path.trim());
 }
 
+/** Whether a genomic tracks collection points at track files instead of a
+ *  manifest: the file it was picked from (its one file, or the example a scan
+ *  was generalised from) is a track. Ticking more tracks turns the collection
+ *  into a scan of them, which needs a manifest just the same. */
+export function readsTrackFiles(dc: Pick<BuilderDcDraft, 'path'>): boolean {
+  return Boolean(dc.path && isTrackFilePath(dc.path));
+}
+
 /** The table format a file name suggests, and its separator. */
 export function formatFromPath(path: string): { format: string; separator: string | null } {
   const name = path.toLowerCase().replace(/\/+$/, '').replace(/\.(gz|bz2|zst|xz)$/, '');
@@ -714,6 +722,22 @@ export function defaultLinkResolver(targetType: BuilderDcType | null | undefined
 /** The target field a link to `target` starts with: `sample_name` for
  *  MultiQC, the sample column of genomic tracks, else the source column when
  *  the target has it. */
+/** The columns a collection's rows will have: its files' schema, then one
+ *  column per scan wildcard, which ingestion fills from each file's path. */
+export function builderDcColumns(
+  dc: BuilderDcDraft | null | undefined,
+  schema: Record<string, string> | null | undefined,
+): string[] {
+  const columns = Object.keys(schema ?? {});
+  if (dc?.mode === 'recursive') {
+    for (const wildcard of dc.wildcards ?? []) {
+      const name = wildcard.name.trim();
+      if (name && !columns.includes(name)) columns.push(name);
+    }
+  }
+  return columns;
+}
+
 export function defaultLinkTargetField(
   target: BuilderDcDraft | null | undefined,
   sourceColumn: string,
@@ -1526,7 +1550,7 @@ export function validateBuilderState(
       if (!props.uri_column?.trim()) {
         error('genomic_tracks_uri_column', `“${label}”: name the manifest column holding each track's file.`, extra);
       }
-      if (dc.mode === 'single' && dc.path && isTrackFilePath(dc.path)) {
+      if (readsTrackFiles(dc)) {
         error(
           'genomic_tracks_manifest_is_track',
           `“${label}” reads a track file as its manifest: pick a table listing the tracks, or generate one.`,

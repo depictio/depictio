@@ -33,7 +33,7 @@ import {
   assemblyIssue,
   coordinatesIssue,
   isTagTaken,
-  isTrackFilePath,
+  readsTrackFiles,
   offeredDcTypes,
   tableTags,
   useBrandAccents,
@@ -141,7 +141,7 @@ function saveBlocker(
     const assembly = assemblyIssue(p);
     if (assembly) return assembly;
     if (!p.uri_column?.trim()) return "Name the manifest column holding each track's file.";
-    if (dc.mode === 'single' && dc.path && isTrackFilePath(dc.path)) {
+    if (readsTrackFiles(dc)) {
       return 'Pick the manifest listing the tracks, or generate one from the track files.';
     }
   }
@@ -500,7 +500,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
               ...manifest,
               mode,
               tag: dc.tag,
-              readsTrackFile: dc.mode === 'single' && Boolean(dc.path && isTrackFilePath(dc.path)),
+              readsTrackFile: readsTrackFiles(dc),
               awaiting: Boolean(form.awaitingManifest),
             },
           }}

@@ -26,6 +26,7 @@ import { Icon } from '@iconify/react';
 
 import {
   BUILDER_LINK_RESOLVERS,
+  builderDcColumns,
   builderMatch,
   defaultLinkResolver,
   defaultLinkTargetField,
@@ -107,7 +108,8 @@ const LinkRow: React.FC<{
   onPatch: (patch: Partial<BuilderLinkDraft>) => void;
   onRemove: () => void;
 }> = ({ index, link, state, capabilities, issues, onPatch, onRemove }) => {
-  const columnsOf = (tag: string) => Object.keys(state.schemas[tag] ?? {});
+  const columnsOf = (tag: string) =>
+    builderDcColumns(tag ? findBuilderDc(state, tag)?.dc : null, state.schemas[tag]);
   const source = link.source_tag ? findBuilderDc(state, link.source_tag)?.dc ?? null : null;
   const target = link.target_tag ? findBuilderDc(state, link.target_tag)?.dc ?? null : null;
   const sourceTags = linkSourceTags(state);

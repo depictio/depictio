@@ -14,6 +14,7 @@ import type { BuilderCapabilities } from './api';
 import {
   BUILDER_HANDOFF_KEY,
   blockingIssues,
+  builderDcColumns,
   builderDraftKey,
   builderReducer,
   clearBuilderDraft,
@@ -30,6 +31,7 @@ import {
   normalizeDcDraft,
   offeredDcTypes,
   parseBuilderState,
+  readsTrackFiles,
   regexToGlob,
   saveBuilderDraft,
   seedPropsForCapabilities,
@@ -707,6 +709,20 @@ describe('wildcards', () => {
     const bad = named(save(initialBuilderState(), { ...dc, wildcards: [{ name: 'SAMPLE', regex: '.+' }] }));
     expect(errorCodes(bad)).toContain('dc_wildcard_invalid');
   });
+
+  it('adds a scan\'s wildcards to its columns, as ingestion does', () => {
+    const dc: BuilderDcDraft = {
+      ...table('quant'),
+      mode: 'recursive',
+      regex: '^star/{sample}/quant\\.tsv$',
+      wildcards: [{ name: 'sample', regex: '[^/]+' }],
+    };
+    const schema = { gene: 'String', count: 'Int64' };
+    expect(builderDcColumns(dc, schema)).toEqual(['gene', 'count', 'sample']);
+    expect(builderDcColumns(dc, { ...schema, sample: 'String' })).toEqual(['gene', 'count', 'sample']);
+    expect(builderDcColumns({ ...dc, mode: 'single' }, schema)).toEqual(['gene', 'count']);
+    expect(builderDcColumns(null, undefined)).toEqual([]);
+  });
 });
 
 describe('table options', () => {
@@ -943,6 +959,12 @@ describe('genomic tracks and bioimages', () => {
     expect(errorCodes(none, { capabilities: caps })).toEqual(['genomic_tracks_assembly']);
     const trackFile = named(save(initialBuilderState(), tracks('c', { path: 'bw/S1.bw' })));
     expect(errorCodes(trackFile, { capabilities: caps })).toEqual(['genomic_tracks_manifest_is_track']);
+    // Ticking more tracks makes it a scan of them: still no manifest.
+    const trackScan = named(
+      save(initialBuilderState(), tracks('c', { mode: 'recursive', path: 'bw/S1.bw', regex: '^bw/[^/]*$' })),
+    );
+    expect(errorCodes(trackScan, { capabilities: caps })).toEqual(['genomic_tracks_manifest_is_track']);
+    expect(readsTrackFiles({ path: 'manifests/run1.tsv' })).toBe(false);
   });
 
   it('starts a manifest as TSV when a track file was picked', () => {

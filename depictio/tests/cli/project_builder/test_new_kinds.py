@@ -346,6 +346,19 @@ class TestGenomicTracks:
         assert checks["missing_indexes"] == ["S2.bam"]
         assert checks["absolute_uris"] == ["/etc/hosts.bed"]
 
+    def test_track_files_are_not_read_as_a_manifest(self, imaging):
+        dc = DcDraft(
+            tag="tracks",
+            type="genomic_tracks",
+            mode="recursive",
+            regex=r"^tracks/S\d\.bam$",
+            props=GenomicTracksProps(),
+        )
+        found = match_collection(imaging, "flat", None, dc)
+        assert found["files"] == ["tracks/S1.bam", "tracks/S2.bam"]
+        assert found["tracks"] is None
+        assert any("reads a manifest listing them" in w for w in found["warnings"])
+
     def test_a_manifest_without_the_uri_column_says_so(self, imaging):
         found = match_collection(imaging, "flat", None, _tracks(uri_column="path"))
         assert found["tracks"]["missing_uri_column"] is True
