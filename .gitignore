@@ -472,9 +472,6 @@ depictio/viewer/dist-table-harness/
 # which every `pnpm dev` / `pnpm build` runs first). Regenerate with `pnpm run icons`.
 depictio/viewer/src/generated/
 
-# Generated Project Builder single-file bundle (built via pnpm run build:project-builder)
-depictio/viewer/dist-project-builder/
-
 # Nextflow runtime artifacts (from local pipeline validation runs)
 .nextflow/
 .nextflow.log*

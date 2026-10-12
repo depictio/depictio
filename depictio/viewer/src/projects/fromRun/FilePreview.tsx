@@ -6,12 +6,15 @@
  * run, and the answer is kept per file while the page lives.
  *
  * The run folder, and the connection details of the private bucket it may be
- * in, come from `RunFileScope`, set once around a plan.
+ * in, come from `RunFileScope`, set once around a plan. A scope that asks for
+ * types (`inferTypes`, the Project Builder) shows each column's dtype under
+ * its name.
  */
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   ActionIcon,
   Alert,
+  Badge,
   Code,
   Collapse,
   Group,
@@ -34,6 +37,8 @@ import { plural } from './plural';
 interface RunFileScopeValue {
   dataRoot: string;
   storage: RunStorageIn | null;
+  /** Ask the server for each column's dtype. */
+  inferTypes?: boolean;
 }
 
 const RunFileScopeContext = createContext<RunFileScopeValue | null>(null);
@@ -42,9 +47,12 @@ const RunFileScopeContext = createContext<RunFileScopeValue | null>(null);
 export const RunFileScope: React.FC<{
   dataRoot: string;
   storage?: RunStorageIn | null;
+  inferTypes?: boolean;
   children: React.ReactNode;
-}> = ({ dataRoot, storage = null, children }) => (
-  <RunFileScopeContext.Provider value={{ dataRoot, storage }}>{children}</RunFileScopeContext.Provider>
+}> = ({ dataRoot, storage = null, inferTypes = false, children }) => (
+  <RunFileScopeContext.Provider value={{ dataRoot, storage, inferTypes }}>
+    {children}
+  </RunFileScopeContext.Provider>
 );
 
 export function useRunFileScope(): RunFileScopeValue | null {
@@ -53,18 +61,29 @@ export function useRunFileScope(): RunFileScopeValue | null {
 
 const previews = new Map<string, RunFilePreview>();
 
-type PreviewState =
+export type RunFilePreviewState =
+  | { status: 'idle' }
   | { status: 'loading' }
   | { status: 'error'; error: string }
   | { status: 'ready'; preview: RunFilePreview };
 
-function usePreview(scope: RunFileScopeValue, location: string): PreviewState {
-  const key = `${scope.dataRoot}\n${location}`;
+type PreviewState = RunFilePreviewState;
+
+function usePreview(scope: RunFileScopeValue | null, location: string | null): PreviewState {
+  // A scope asking for types keeps its answers apart: one without them would
+  // otherwise be served from the cache.
+  const key =
+    scope && location ? `${scope.dataRoot}\n${location}${scope.inferTypes ? '\ntypes' : ''}` : null;
   const [state, setState] = useState<PreviewState>(() => {
-    const known = previews.get(key);
+    const known = key ? previews.get(key) : undefined;
+    if (!key) return { status: 'idle' };
     return known ? { status: 'ready', preview: known } : { status: 'loading' };
   });
   useEffect(() => {
+    if (!key || !scope || !location) {
+      setState({ status: 'idle' });
+      return undefined;
+    }
     const known = previews.get(key);
     if (known) {
       setState({ status: 'ready', preview: known });
@@ -73,7 +92,12 @@ function usePreview(scope: RunFileScopeValue, location: string): PreviewState {
     const controller = new AbortController();
     setState({ status: 'loading' });
     previewRunFile(
-      { dataRoot: scope.dataRoot, location, storage: scope.storage },
+      {
+        dataRoot: scope.dataRoot,
+        location,
+        storage: scope.storage,
+        ...(scope.inferTypes ? { inferTypes: true } : {}),
+      },
       { signal: controller.signal },
     )
       .then((preview) => {
@@ -90,6 +114,14 @@ function usePreview(scope: RunFileScopeValue, location: string): PreviewState {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
   return state;
+}
+
+/** The start of `location`, read below the folder of the `RunFileScope`
+ *  around the caller; `idle` without a scope or a location. For a page that
+ *  needs the columns too (the Project Builder), shown with
+ *  `RunFilePreviewView`. */
+export function useRunFilePreview(location: string | null): RunFilePreviewState {
+  return usePreview(useRunFileScope(), location);
 }
 
 /** "First 20 rows of 1 240 · 14 of 30 columns · 12.3 KB". */
@@ -154,13 +186,32 @@ const PreviewBody: React.FC<{ preview: RunFilePreview }> = ({ preview }) => {
         >
           <Table.Thead>
             <Table.Tr>
-              {preview.columns.map((column, index) => (
-                // Column names repeat in some reports; the position keeps keys unique.
-                // eslint-disable-next-line react/no-array-index-key
-                <Table.Th key={`${index}-${column}`} ff="monospace">
-                  {column}
-                </Table.Th>
-              ))}
+              {preview.columns.map((column, index) => {
+                const dtype = preview.dtypes?.[column];
+                return (
+                  // Column names repeat in some reports; the position keeps keys unique.
+                  // eslint-disable-next-line react/no-array-index-key
+                  <Table.Th key={`${index}-${column}`} ff="monospace">
+                    {column}
+                    {dtype && (
+                      <Badge
+                        display="block"
+                        size="xs"
+                        variant="light"
+                        color="gray"
+                        radius="sm"
+                        tt="none"
+                        fw={500}
+                        mt={2}
+                        data-testid="file-preview-dtype"
+                        data-column={column}
+                      >
+                        {dtype}
+                      </Badge>
+                    )}
+                  </Table.Th>
+                );
+              })}
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -195,8 +246,12 @@ export const FilePreviewPanel: React.FC<{ location: string }> = ({ location }) =
 const PreviewPanel: React.FC<{ scope: RunFileScopeValue; location: string }> = ({
   scope,
   location,
-}) => {
-  const state = usePreview(scope, location);
+}) => <RunFilePreviewView state={usePreview(scope, location)} />;
+
+/** A preview already read (`useRunFilePreview`): the rows, a loader or why
+ *  not; nothing while idle. */
+export const RunFilePreviewView: React.FC<{ state: RunFilePreviewState }> = ({ state }) => {
+  if (state.status === 'idle') return null;
   return (
     <Stack
       gap={4}

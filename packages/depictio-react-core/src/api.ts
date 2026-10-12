@@ -18,6 +18,14 @@ import type {
   AnnotationStyle,
   Geometry,
 } from './annotations/types';
+import type {
+  BuilderDcDraft,
+  BuilderDcType,
+  BuilderProjectDraft,
+  BuilderRootSpec,
+  BuilderScanMode,
+  BuilderWorkflowStructure,
+} from './projectBuilder';
 
 const API_BASE = '/depictio/api/v1';
 
@@ -4177,6 +4185,10 @@ export interface FromRunRequest {
    *  project's storage settings (`FromRunReport.storage_saved`), a dry run
    *  stores nothing. */
   storage?: RunStorageIn | null;
+  /** An inline template (the `template` of `builderTemplate`), in place of
+   *  `templateId`: the two are mutually exclusive, so `template_id` is not
+   *  sent alongside it. */
+  template?: Record<string, unknown> | null;
 }
 
 /** Connection settings typed in for a private bucket, before the project
@@ -4284,7 +4296,9 @@ export async function createProjectFromRun(
     method: 'POST',
     body: JSON.stringify({
       data_root: input.dataRoot,
-      template_id: input.templateId ?? null,
+      ...(input.template
+        ? { template: input.template }
+        : { template_id: input.templateId ?? null }),
       project_name: input.projectName ?? null,
       variables: input.variables ?? {},
       dry_run: Boolean(input.dryRun),
@@ -4474,6 +4488,9 @@ export interface RunFilePreview {
   /** Rows, columns or text were cut. */
   truncated: boolean;
   reason: string | null;
+  /** column → inferred dtype, when the request asked for it (`inferTypes`)
+   *  and the file is a table. Older backends omit it. */
+  dtypes?: Record<string, string> | null;
 }
 
 /** Read the start of one file of a run folder: its first rows as a table, or
@@ -4485,6 +4502,8 @@ export async function previewRunFile(
     location: string;
     storage?: RunStorageIn | null;
     maxRows?: number;
+    /** Ask for each column's dtype (`RunFilePreview.dtypes`). */
+    inferTypes?: boolean;
   },
   options: { signal?: AbortSignal } = {},
 ): Promise<RunFilePreview> {
@@ -4495,6 +4514,7 @@ export async function previewRunFile(
       location: input.location,
       max_rows: input.maxRows ?? 20,
       ...(input.storage ? { storage: input.storage } : {}),
+      ...(input.inferTypes ? { infer_types: true } : {}),
     }),
     signal: options.signal,
   });
@@ -4610,6 +4630,259 @@ export async function testRunStorage(
   });
   if (!res.ok) await throwHttpDetailError(res, 'The connection test did not run');
   return (await res.json()) as ProjectStorageTestResult;
+}
+
+// ── Project Builder ─────────────────────────────────────────────────────────
+//
+// `/projects/builder/*`: read a folder one level at a time, suggest a data
+// collection for a file, list the files a collection would ingest, and turn
+// the assembled draft into a template. Served by the API (authenticated, like
+// the run-folder calls) and by `depictio project-builder <dir>`, a thin local
+// server without auth where `/context`, `/plan` and `/write` stand in for
+// project creation. The draft shapes live in `projectBuilder.ts`.
+
+/** One entry of a builder folder listing. */
+export interface BuilderTreeEntry {
+  name: string;
+  /** Relative to the data root (POSIX). */
+  path: string;
+  is_dir: boolean;
+  /** Bytes; null for a folder or when unknown. */
+  size: number | null;
+}
+
+/** Response of POST /projects/builder/tree: one folder level. */
+export interface BuilderTreeListing {
+  /** The folder listed, relative to the data root (`''` at its top). */
+  path: string;
+  entries: BuilderTreeEntry[];
+  /** More entries exist than the server lists. */
+  truncated: boolean;
+  /** The data root is an `s3://` location. */
+  is_remote: boolean;
+  /** How to name the data root to a reader. */
+  root_label: string;
+}
+
+/** A catalog output the suggested file is recognised as. */
+export interface BuilderCatalogMatch {
+  tool_id: string;
+  output_id: string;
+  renders: string[];
+}
+
+/** Response of POST /projects/builder/suggest: a data collection for a file,
+ *  generalised over the other example files given. */
+export interface BuilderSuggestion {
+  path: string;
+  tag: string;
+  type: BuilderDcType;
+  mode: BuilderScanMode;
+  glob: string | null;
+  regex: string | null;
+  format: string | null;
+  separator: string | null;
+  catalog: BuilderCatalogMatch[];
+  /** The file is a MultiQC parquet. */
+  multiqc: boolean;
+}
+
+/** How one matched file's columns differ from the first file's. */
+export interface BuilderSchemaMismatch {
+  file: string;
+  missing: string[];
+  extra: string[];
+  /** column → [first file's dtype, this file's dtype]. */
+  changed: Record<string, [string, string]>;
+}
+
+/** Response of POST /projects/builder/match: exactly the files ingestion
+ *  would scan for the collection (same walk, same regex rule, same bounds). */
+export interface BuilderMatchResult {
+  /** The regex the scan uses; null in single mode. */
+  regex: string | null;
+  /** Relative to the data root, the first 500. */
+  files: string[];
+  count: number;
+  /** The run folders, for a sequencing-runs workflow. */
+  runs: string[];
+  truncated: boolean;
+  /** column → dtype of the first file; null when it could not be read. */
+  schema: Record<string, string> | null;
+  /** Every file read shares the schema; null when not checked. */
+  consistent: boolean | null;
+  mismatches: BuilderSchemaMismatch[];
+  /** Indexed files whose index was not found next to them. */
+  missing_indexes: string[];
+  warnings: string[];
+}
+
+/** Response of POST /projects/builder/template. */
+export interface BuilderTemplateResult {
+  /** The inline template: what `from_run`, `/plan` and `/write` take. */
+  template: Record<string, unknown>;
+  yaml: string;
+  /** `custom/<slug>`. */
+  template_id: string;
+  warnings: string[];
+}
+
+/** Response of POST /projects/builder/metadata: what a workflow's repository
+ *  says about it. `sources` names where each piece came from; `blocked` means
+ *  the server may not fetch that URL. */
+export interface BuilderRepoMetadata {
+  name?: string | null;
+  engine?: string | null;
+  version?: string | null;
+  catalog?: { name: string; url: string } | null;
+  description?: string | null;
+  author?: string | null;
+  license?: string | null;
+  homepage?: string | null;
+  repository_url: string;
+  /** Data URIs. */
+  logo_light?: string | null;
+  logo_dark?: string | null;
+  sources: string[];
+  blocked?: boolean;
+}
+
+/** Response of GET /projects/builder/context (standalone server only). */
+export interface BuilderContext {
+  mode: 'standalone';
+  /** The folder the builder was launched on, absolute. */
+  data_root: string;
+  /** Where `/write` puts the template bundle. */
+  out_dir: string;
+  writable: boolean;
+}
+
+/** Response of POST /projects/builder/write (standalone server only). */
+export interface BuilderWriteResult {
+  path: string;
+  yaml: string;
+  /** e.g. `depictio ingest <dir> --template <bundle>`. */
+  ingest_command: string;
+}
+
+/** Request settings shared by the builder calls. */
+export interface BuilderRequestOptions {
+  signal?: AbortSignal;
+}
+
+async function postBuilder<T>(
+  route: string,
+  body: Record<string, unknown>,
+  fallback: string,
+  options: BuilderRequestOptions,
+): Promise<T> {
+  const res = await authFetch(`${API_BASE}/projects/builder/${route}`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+    signal: options.signal,
+  });
+  if (!res.ok) await throwHttpDetailError(res, fallback);
+  return (await res.json()) as T;
+}
+
+/** The root as the builder routes take it: connection details only for an
+ *  `s3://` location, never an empty object. */
+function builderRoot(root: BuilderRootSpec): BuilderRootSpec {
+  return root.storage ? { data_root: root.data_root, storage: root.storage } : { data_root: root.data_root };
+}
+
+/** List one folder level of the data root (`path` relative to it, `''` for
+ *  its top). A private bucket refused for want of its details throws an
+ *  `ApiDetailError` with an S3 code (`s3_refused`, `s3_access_denied`). */
+export function builderTree(
+  root: BuilderRootSpec,
+  path: string,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderTreeListing> {
+  return postBuilder('tree', { root: builderRoot(root), path }, 'Failed to list the folder', options);
+}
+
+/** Suggest a data collection for `path`, generalised over `examples` (other
+ *  files of the same collection, relative to the data root). */
+export function builderSuggest(
+  root: BuilderRootSpec,
+  path: string,
+  examples: string[] = [],
+  options: BuilderRequestOptions = {},
+): Promise<BuilderSuggestion> {
+  return postBuilder(
+    'suggest',
+    { root: builderRoot(root), path, ...(examples.length ? { examples } : {}) },
+    'Failed to read the file',
+    options,
+  );
+}
+
+/** The files `collection` would ingest under `workflow`'s structure. */
+export function builderMatch(
+  root: BuilderRootSpec,
+  workflow: { structure: BuilderWorkflowStructure; runs_regex?: string | null },
+  collection: BuilderDcDraft,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderMatchResult> {
+  return postBuilder(
+    'match',
+    {
+      root: builderRoot(root),
+      workflow:
+        workflow.structure === 'sequencing-runs'
+          ? { structure: workflow.structure, runs_regex: workflow.runs_regex ?? null }
+          : { structure: workflow.structure },
+      collection,
+    },
+    'Failed to match the files',
+    options,
+  );
+}
+
+/** Turn the draft into a template. `remote` is true for an `s3://` root. A
+ *  draft breaking a rule is a 422 with code `inline_template_invalid`. */
+export function builderTemplate(
+  draft: BuilderProjectDraft,
+  remote: boolean,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderTemplateResult> {
+  return postBuilder('template', { draft, remote }, 'Failed to build the template', options);
+}
+
+/** What a workflow repository says about the workflow. */
+export function builderMetadata(
+  repoUrl: string,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderRepoMetadata> {
+  return postBuilder('metadata', { repo_url: repoUrl }, 'Failed to fetch the metadata', options);
+}
+
+/** The folder a standalone builder was launched on (`depictio
+ *  project-builder <dir>`). */
+export async function builderContext(options: BuilderRequestOptions = {}): Promise<BuilderContext> {
+  const res = await authFetch(`${API_BASE}/projects/builder/context`, { signal: options.signal });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read the builder context');
+  return (await res.json()) as BuilderContext;
+}
+
+/** Standalone only: what ingesting the folder with `template` would find, as
+ *  a dry-run `FromRunReport` (no project id). */
+export function builderPlan(
+  template: Record<string, unknown>,
+  options: BuilderRequestOptions = {},
+): Promise<FromRunReport> {
+  return postBuilder('plan', { template }, 'Failed to plan the ingestion', options);
+}
+
+/** Standalone only: write the template bundle next to the data. An existing
+ *  bundle is a 409 with code `bundle_exists` unless `overwrite`. */
+export function builderWrite(
+  template: Record<string, unknown>,
+  overwrite: boolean,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderWriteResult> {
+  return postBuilder('write', { template, overwrite }, 'Failed to write the template', options);
 }
 
 /** Per-DC status of a manifest refresh. A synchronous refresh reports

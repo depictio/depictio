@@ -41,7 +41,9 @@ export const WORKFLOW_ICON_MAP: Record<string, string> = {
  *  clashed with the logo sitting right next to them.)
  *
  *  `python` has no logo asset, so it is keyed off its official brand blue
- *  (#3776AB) — the badge then carries the identity the icon can't. */
+ *  (#3776AB) — the badge then carries the identity the icon can't. `r`
+ *  (the Project Builder's other plain-data engine) likewise takes its logo's
+ *  blue (#276DC3). */
 export const WORKFLOW_COLOR_MAP: Record<string, string> = {
   nextflow: 'teal',
   snakemake: 'teal',
@@ -49,6 +51,7 @@ export const WORKFLOW_COLOR_MAP: Record<string, string> = {
   galaxy: 'yellow',
   iwc: 'yellow',
   python: 'blue',
+  r: 'blue',
 };
 
 /** True when a workflow system is selected and has a logo (i.e. it overrides
