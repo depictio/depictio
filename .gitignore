@@ -496,3 +496,6 @@ depictio/cli/uv.lock
 # gene tables beside them are).
 depictio/viewer/public/assets/genomes/*.gff3.gz
 depictio/viewer/public/assets/genomes/*.gff3.gz.tbi
+
+# Generated outreach bundles (scripts/nfcore_outreach.py): regenerate, never commit.
+dev/outreach/
