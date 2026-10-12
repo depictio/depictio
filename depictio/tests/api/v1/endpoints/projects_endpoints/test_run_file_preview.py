@@ -22,6 +22,7 @@ from depictio.api.v1.endpoints.projects_endpoints.local_dirs import CodedHTTPExc
 from depictio.api.v1.endpoints.projects_endpoints.run_file_preview import (
     RunFilePreviewRequest,
 )
+from depictio.cli.cli.utils import file_preview
 from depictio.models.models.users import UserBase
 from depictio.tests.cli.s3_stubs import (
     MEGATEST_TREE,
@@ -196,7 +197,7 @@ def test_a_parquet_file_that_is_not_one_says_so(run):
 
 def test_a_parquet_file_past_the_cap_is_not_opened(run, monkeypatch):
     pl.DataFrame({"a": [1, 2]}).write_parquet(run / "multiqc" / "multiqc.parquet")
-    monkeypatch.setattr(run_file_preview, "MAX_PARQUET_BYTES", 10)
+    monkeypatch.setattr(file_preview, "MAX_PARQUET_BYTES", 10)
     monkeypatch.setattr(
         pl, "scan_parquet", lambda *_a, **_k: pytest.fail("a parquet over the cap was opened")
     )
@@ -367,3 +368,47 @@ async def test_the_route_is_closed_to_non_admins_in_public_mode(run, monkeypatch
         await routes.post_run_file_preview(payload, _request(), current_user=_user(is_admin=False))
     assert exc.value.status_code == 403
     assert "public/demo mode" in str(exc.value.detail)
+
+
+# ── dtypes ───────────────────────────────────────────────────────────────────
+
+
+def test_dtypes_only_when_asked(run):
+    assert _preview(run, "input/samplesheet.csv").dtypes is None
+
+
+def test_a_csv_names_its_inferred_dtypes(run):
+    preview = _preview(run, "input/samplesheet.csv", infer_types=True)
+    assert preview.dtypes == {"sample": "String", "reads": "Int64", "group": "String"}
+    # The cells themselves are still text.
+    assert preview.rows[0] == ["S1", "100", "a"]
+
+
+def test_a_gzipped_tsv_names_its_dtypes(run):
+    preview = _preview(run, "qiime2/abundance.tsv.gz", infer_types=True)
+    assert preview.dtypes == {"sample": "String", "reads": "Int64"}
+
+
+def test_a_parquet_file_names_its_schema(run):
+    pl.DataFrame({"a": [1, 2], "b": [0.5, 1.5], "c": ["x", "y"]}).write_parquet(
+        run / "multiqc" / "multiqc.parquet"
+    )
+    preview = _preview(run, "multiqc/multiqc.parquet", infer_types=True)
+    assert preview.dtypes == {"a": "Int64", "b": "Float64", "c": "String"}
+
+
+def test_a_text_file_has_no_dtypes(run):
+    assert _preview(run, "pipeline_info/versions.yml", infer_types=True).dtypes is None
+
+
+def test_preview_root_file_reads_without_a_route(run):
+    """The standalone builder previews a root's file with no request or user."""
+    from depictio.cli.cli.utils.data_root import LocalDataRoot
+
+    preview = file_preview.preview_root_file(
+        LocalDataRoot(str(run)), "input/metadata.tsv", infer_types=True
+    )
+    assert (preview.format, preview.columns) == ("table", ["sample", "reads"])
+    assert preview.dtypes == {"sample": "String", "reads": "Int64"}
+    with pytest.raises(FileNotFoundError):
+        file_preview.preview_root_file(LocalDataRoot(str(run)), "input/nope.tsv")
