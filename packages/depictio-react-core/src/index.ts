@@ -168,6 +168,7 @@ export {
   InteractiveTitle,
   defaultInteractiveTitle,
   interactiveAccent,
+  interactiveAccentRaw,
   interactiveIcon,
   interactiveTitle,
 } from './components/interactive/frame';

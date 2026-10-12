@@ -538,6 +538,10 @@ export interface StoredMetadata {
    *  When omitted, the renderer defaults to visible for ungrouped components and
    *  hidden for components inside a group (compact mode). */
   show_marks?: boolean;
+  /** Slider / RangeSlider: whether the ticks carry their value labels. Unset
+   *  labels every tick; `false` keeps the ticks and drops the labels. Moot when
+   *  `show_marks` hides the ticks. */
+  show_mark_labels?: boolean;
   /** Filter bar only (a grid section with `display: 'strip'`): the short label
    *  shown instead of the title. */
   strip_label?: string | null;

@@ -670,10 +670,13 @@
 :root[data-chrome='glass'] .mantine-SegmentedControl-control::before {
   display: none;
 }
-:root[data-chrome='glass'] .mantine-Slider-track::before {
+/* Slider and RangeSlider alike: the range filter is a different Mantine
+   component with its own class names, and styling only the first left the two
+   filter kinds of one panel looking unrelated. */
+:root[data-chrome='glass'] :is(.mantine-Slider-track, .mantine-RangeSlider-track)::before {
   background: var(--gl-well);
 }
-:root[data-chrome='glass'] .mantine-Slider-thumb {
+:root[data-chrome='glass'] :is(.mantine-Slider-thumb, .mantine-RangeSlider-thumb) {
   width: 18px;
   height: 18px;
   border-width: 0;
@@ -681,7 +684,7 @@
   box-shadow: 0 0 0 1px var(--gl-hair), 0 2px 6px var(--gl-shade-b);
   transition: scale 200ms var(--gl-spring);
 }
-:root[data-chrome='glass'] .mantine-Slider-thumb:hover {
+:root[data-chrome='glass'] :is(.mantine-Slider-thumb, .mantine-RangeSlider-thumb):hover {
   scale: 1.12;
 }
 
@@ -892,11 +895,11 @@
 
 @media (prefers-reduced-motion: reduce) {
   :root[data-chrome='glass'] .hy-tab,
-  :root[data-chrome='glass'] .mantine-Slider-thumb {
+  :root[data-chrome='glass'] :is(.mantine-Slider-thumb, .mantine-RangeSlider-thumb) {
     transition: none;
   }
   :root[data-chrome='glass'] .hy-tab:hover,
-  :root[data-chrome='glass'] .mantine-Slider-thumb:hover {
+  :root[data-chrome='glass'] :is(.mantine-Slider-thumb, .mantine-RangeSlider-thumb):hover {
     translate: none;
     scale: none;
   }
