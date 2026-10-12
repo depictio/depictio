@@ -68,6 +68,9 @@ DEFAULT_DOCS_URL = (
 )
 DEFAULT_REPO = "depictio/depictio"
 DEFAULT_CATEGORY = "Pipeline templates"
+# Screenshots are shipped next to each template, so once its PR is on the
+# default branch they have a stable public URL GitHub renders inline.
+DEFAULT_IMAGE_BASE = "https://raw.githubusercontent.com/{repo}/main"
 # Branch naming for the template PRs (`feat/nfcore-templates-<pipeline>`); the
 # PR title is the fallback when a pipeline landed on a differently named branch.
 PR_BRANCH_MARKER = "nfcore-templates-"
@@ -441,6 +444,51 @@ def load_dashboard_urls(path: str | None) -> dict[str, str]:
     return {str(k): str(v) for k, v in data.items()}
 
 
+def _slug(title: str) -> str:
+    """``"Screening overview"`` -> ``"screening-overview"``, the screenshot file stem."""
+    return re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")
+
+
+def screenshots_for_tabs(facts: PipelineFacts, image_base: str) -> list[tuple[str, str]]:
+    """``(tab title, image URL)`` in tab order, for the screenshots that exist.
+
+    Template screenshots are named after the tab they show, so pairing them up
+    gives each image a caption a maintainer can act on ("the Resistome tab
+    looks wrong") instead of a filename. Screenshots with no matching tab are
+    appended under their own stem rather than dropped.
+    """
+    by_stem = {Path(p).stem: p for p in facts.screenshots}
+    out: list[tuple[str, str]] = []
+    for tab in facts.tabs:
+        path = by_stem.pop(_slug(tab.title), None)
+        if path:
+            out.append((tab.title, f"{image_base.rstrip('/')}/{path}"))
+    out += [
+        (stem.replace("-", " ").capitalize(), f"{image_base.rstrip('/')}/{path}")
+        for stem, path in sorted(by_stem.items())
+    ]
+    return out
+
+
+def render_screenshots(facts: PipelineFacts, image_base: str) -> str:
+    """The hero image inline, the rest folded away.
+
+    A one-pager with a picture at the top gets read; one without gets skimmed.
+    A wall of five full-page screenshots does not get read either, so only the
+    first is inline.
+    """
+    shots = screenshots_for_tabs(facts, image_base)
+    if not shots:
+        return ""
+    first_title, first_url = shots[0]
+    parts = [f"![{first_title}]({first_url})\n\n*{first_title}*\n\n"]
+    if len(shots) > 1:
+        parts.append(f"<details>\n<summary>The other {len(shots) - 1} tab(s)</summary>\n\n")
+        parts += [f"![{title}]({url})\n\n*{title}*\n\n" for title, url in shots[1:]]
+        parts.append("</details>\n\n")
+    return "".join(parts)
+
+
 def _md_table(headers: list[str], rows: list[list[str]]) -> str:
     if not rows:
         return "_(none)_\n"
@@ -501,6 +549,7 @@ def render_discussion(
     instance: str,
     docs_url_template: str,
     urls: dict[str, str],
+    image_base: str = "",
 ) -> str:
     """The GitHub Discussion body: what it is, what to click, what I am asking."""
     docs_url = docs_url_template.format(pipeline=facts.pipeline, version=facts.version)
@@ -525,6 +574,8 @@ def render_discussion(
             f"`s3://nf-core-awsmegatests/{facts.pipeline}/results-{facts.megatest_sha}/`{root}\n"
         )
     parts.append("\n")
+    if image_base:
+        parts.append(render_screenshots(facts, image_base))
 
     parts.append("### What the dashboard shows\n\n")
     parts.append(
@@ -786,11 +837,20 @@ def cmd_outreach(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
 
+    image_base = args.image_base.format(repo=args.repo)
+    unillustrated = [f.pipeline for f in all_facts if not f.screenshots]
+    if unillustrated:
+        print(
+            f"  ! no screenshots for {', '.join(unillustrated)} — those bundles open with a "
+            f"wall of text (add PNGs under the template's docs/screenshots/)",
+            file=sys.stderr,
+        )
+
     bundles = [
         (
             facts,
             discussion_title(facts),
-            render_discussion(facts, args.instance, args.docs_url, urls),
+            render_discussion(facts, args.instance, args.docs_url, urls, image_base),
         )
         for facts in all_facts
     ]
@@ -850,6 +910,12 @@ def main(argv: list[str] | None = None) -> int:
         "--dashboard-urls",
         help="JSON file mapping pipeline -> live dashboard URL, so the bundles deep-link "
         "instead of pointing at the instance's dashboard list",
+    )
+    parser.add_argument(
+        "--image-base",
+        default=DEFAULT_IMAGE_BASE,
+        help="Base URL the templates' screenshots are embedded from; {repo} is substituted. "
+        "Pass an empty string to leave the bundles text-only.",
     )
     parser.add_argument(
         "--repo", default=DEFAULT_REPO, help=f"GitHub repo (default: {DEFAULT_REPO})"
