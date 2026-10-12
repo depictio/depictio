@@ -53,7 +53,7 @@ from typing import Any, Literal
 
 from bson import ObjectId
 from fastapi import HTTPException
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from depictio.api.v1.configs.settings_models import S3DepictioCLIConfig, local_data_policy
 from depictio.api.v1.db import projects_collection
@@ -77,6 +77,14 @@ from depictio.api.v1.endpoints.projects_endpoints.storage_config import (
     ProjectStorageConfigIn,
     RunStorageIn,
     read_settings,
+)
+from depictio.cli.cli.utils.template_preview import (  # noqa: F401 — re-exported
+    FromRunDCPreview,
+    FromRunRecipePreview,
+    FromRunRecipeSource,
+)
+from depictio.cli.cli.utils.template_preview import (
+    report_rows as _report_rows,
 )
 from depictio.models.local_access import LocalPathRefused
 from depictio.models.logging import logger
@@ -120,11 +128,21 @@ class FromRunRequest(BaseModel):
     # run folder is read with them alone, and they become the new project's
     # storage settings. Ignored for a folder on this computer.
     storage: RunStorageIn | None = None
+    # An ad-hoc template, as the Project Builder assembles it (``POST
+    # /projects/builder/template``), instead of one of the server's own:
+    # validated (``project_builder.validate``), never stored as a template.
+    template: dict[str, Any] | None = None
 
     @field_validator("template_id")
     @classmethod
     def _well_formed_template_id(cls, value: str | None) -> str | None:
         return None if value is None else validate_template_id(value)
+
+    @model_validator(mode="after")
+    def _one_template(self) -> "FromRunRequest":
+        if self.template is not None and self.template_id is not None:
+            raise ValueError("Give template_id or template, not both.")
+        return self
 
 
 class DetectedTemplate(BaseModel):
@@ -174,106 +192,6 @@ def describe_detection(template_id: str | None, info) -> DetectedTemplate | None
         engine=info.engine,
         match=match,
     )
-
-
-class FromRunRecipeSource(BaseModel):
-    """What one source of a recipe found under the data root.
-
-    The wire shape of ``template_preview.RecipeSourcePreview``: ``kind`` is
-    ``collection`` for a source read from another data collection, ``file``
-    for a glob or a path, and ``url`` for a URL outside the data root, which
-    is read at ingest and so is neither found nor missing here (``found`` is
-    None).
-    """
-
-    ref: str
-    kind: Literal["file", "collection", "url"]
-    pattern: str | None = None
-    dc_ref: str | None = None
-    optional: bool = False
-    matched: int = 0
-    samples: list[str] = Field(default_factory=list)
-    found: bool | None = None
-    found_in: str | None = None
-
-
-class FromRunRecipePreview(BaseModel):
-    """The recipe a data collection is built with, and what each of its sources found."""
-
-    name: str
-    summary: str | None = None
-    sources: list[FromRunRecipeSource] = Field(default_factory=list)
-
-
-class FromRunDCPreview(BaseModel):
-    """What one data collection would find under the data root.
-
-    The wire shape of ``template_preview.DataCollectionPreview``: ``status`` is
-    one of ``ok`` / ``empty`` / ``missing`` / ``pruned`` and ``kind`` is
-    ``scan`` or ``recipe``. ``rule`` is what a scanning collection looks for,
-    as the template wrote it, ``samples`` the first few locations it matched,
-    ``found_in`` the deepest folder (relative to the data root) holding every
-    location it matched, and ``recipe`` is set for a recipe collection.
-    """
-
-    data_collection_tag: str
-    kind: str
-    mode: str | None = None
-    location: str = ""
-    matched: int = 0
-    missing_sources: list[str] = Field(default_factory=list)
-    optional: bool = False
-    status: str = "ok"
-    rule: str | None = None
-    samples: list[str] = Field(default_factory=list)
-    found_in: str | None = None
-    recipe: FromRunRecipePreview | None = None
-
-
-def _report_recipe(recipe) -> FromRunRecipePreview | None:
-    """A ``template_preview.RecipePreview`` in the report's shape, None for none."""
-    if recipe is None:
-        return None
-    return FromRunRecipePreview(
-        name=recipe.name,
-        summary=recipe.summary,
-        sources=[
-            FromRunRecipeSource(
-                ref=source.ref,
-                kind=source.kind,
-                pattern=source.pattern,
-                dc_ref=source.dc_ref,
-                optional=source.optional,
-                matched=source.matched,
-                samples=list(source.samples),
-                found=source.found,
-                found_in=source.found_in,
-            )
-            for source in recipe.sources
-        ],
-    )
-
-
-def _report_rows(preview_rows) -> list[FromRunDCPreview]:
-    """``template_preview.DataCollectionPreview`` rows in the report's shape, one per tag."""
-    rows = {
-        row.tag: FromRunDCPreview(
-            data_collection_tag=row.tag,
-            kind=row.kind,
-            mode=row.mode,
-            location=row.location,
-            matched=row.matched,
-            missing_sources=list(row.missing_sources),
-            optional=row.optional,
-            status=row.status,
-            rule=row.rule,
-            samples=list(row.samples),
-            found_in=row.found_in,
-            recipe=_report_recipe(row.recipe),
-        )
-        for row in preview_rows
-    }
-    return list(rows.values())
 
 
 class RunInputFile(BaseModel):
@@ -908,10 +826,13 @@ def _create_project_from_run(
     dry_run: bool = False,
     request=None,
     storage: RunStorageIn | None = None,
+    template: dict[str, Any] | None = None,
 ) -> FromRunReport:
     """The full run folder → project + dashboards + dispatched ingestion flow.
 
-    ``template_id=None`` recognises the template from the folder. ``request``
+    ``template_id=None`` recognises the template from the folder, unless
+    ``template`` hands one in (the Project Builder's ad-hoc template), which is
+    then held to ``validate_inline_template`` and resolved from memory. ``request``
     is the HTTP request, which a local data root needs for its ``Host`` guard.
     ``storage`` (an ``s3://`` data root only) is read with alone, validated
     first as a saved config is, and stored on the created project before its
@@ -927,9 +848,23 @@ def _create_project_from_run(
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
 
+    if template is not None and template_id is not None:
+        raise HTTPException(status_code=422, detail="Give template_id or template, not both.")
+
     storage_settings, read_config = _request_read_config(data_root, storage)
     root = _build_data_root(data_root, read_config, request=request, current_user=current_user)
     _assert_variables_confined(variables or {}, root)
+
+    if template is not None:
+        return _create_project_from_inline_template(
+            template,
+            root=root,
+            read_config=read_config,
+            storage_settings=storage_settings,
+            current_user=current_user,
+            project_name=project_name,
+            dry_run=dry_run,
+        )
 
     detected: DetectedTemplate | None = None
     if template_id is None:
@@ -1051,5 +986,122 @@ def _create_project_from_run(
             "data collection; no ingestion run was opened."
         )
 
+    report.success = all_ok
+    return report
+
+
+def _default_image_folders(config: dict[str, Any]) -> None:
+    """Give each image collection without an ``s3_base_folder`` one in the server's bucket.
+
+    The images are uploaded there at ingest, and served from there only; the
+    Project Builder cannot know the bucket, so the server picks a fresh folder.
+    """
+    from uuid import uuid4
+
+    from depictio.api.v1.configs.config import settings
+
+    for workflow in config.get("workflows") or []:
+        for dc in workflow.get("data_collections") or []:
+            dc_config = dc.get("config") or {}
+            if str(dc_config.get("type") or "").lower() != "image":
+                continue
+            properties = dc_config.setdefault("dc_specific_properties", {})
+            if not properties.get("s3_base_folder"):
+                tag = dc.get("data_collection_tag") or "images"
+                properties["s3_base_folder"] = (
+                    f"s3://{settings.s3.bucket}/images/{uuid4().hex[:12]}/{tag}"
+                )
+
+
+def _create_project_from_inline_template(
+    template: dict[str, Any],
+    *,
+    root,
+    read_config,
+    storage_settings,
+    current_user,
+    project_name: str | None,
+    dry_run: bool,
+) -> FromRunReport:
+    """``from_run`` for an ad-hoc template: validate, resolve from memory, preview, create.
+
+    The same steps as a catalogue template, minus what an ad-hoc one cannot
+    have (detection, dashboards, file variables), plus the builder's rules
+    (``validate_inline_template``) before anything is resolved. Confinement to
+    the run folder is checked on the resolved config as for any template.
+    """
+    from depictio.cli.cli.utils.template_preview import preview_data_root
+    from depictio.project_builder.errors import BuilderRefused
+    from depictio.project_builder.plan import check_project, resolve_inline
+    from depictio.project_builder.validate import validate_inline_template
+
+    try:
+        validate_inline_template(template, remote=root.is_remote)
+        resolution = resolve_inline(
+            template, root, project_name=project_name, CLI_config=read_config
+        )
+        resolved_config = resolution[0]
+        _assert_data_collections_confined(resolved_config, root)
+        check_project(resolved_config)
+    except BuilderRefused as exc:
+        raise CodedHTTPException(exc.status, exc.detail, exc.code or "inline_template_invalid")
+    template_metadata = resolution[1]
+    run = _read_run(root)
+
+    try:
+        preview = preview_data_root(
+            template_id=template_metadata.template_id, data_root=root, resolution=resolution
+        )
+    except S3AccessError:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"Data root preview failed: {exc}")
+
+    report = FromRunReport(
+        project_name=resolved_config.get("name", ""),
+        template_id=template_metadata.template_id,
+        data_root=root.location,
+        detected_runs=list(preview.detected_runs),
+        resolved_variables=dict(preview.resolved_variables),
+        data_collections=_report_rows(preview.data_collections),
+        pruned_optional_dcs=list(preview.pruned_optional_dcs),
+        truncated=preview.truncated,
+        run_info=_run_info_report(run, root),
+        dry_run=dry_run,
+    )
+    if dry_run:
+        report.success = True
+        return report
+
+    _default_image_folders(resolved_config)
+    create_payload = _new_project_document(resolved_config, current_user)
+    projects_collection.insert_one(create_payload)
+    project_oid = create_payload["_id"]
+    if storage_settings is not None:
+        _save_storage_or_roll_back(project_oid, storage_settings)
+        report.storage_saved = True
+    report.project_id = str(project_oid)
+
+    stored = projects_collection.find_one({"_id": project_oid}) or {}
+    preflight = _preflight_split(stored, preview.data_collections)
+    all_ok = True
+    if preflight.to_dispatch or preflight.failed or preflight.skipped:
+        run_id, all_dispatched, _results = _dispatch_refresh_tasks(
+            project_dict=stored,
+            to_dispatch=preflight.to_dispatch,
+            current_user=current_user,
+            preflight_failed=preflight.failed,
+            preflight_skipped=preflight.skipped,
+            command="from_run",
+            scan_modes=_scan_modes(stored),
+            data_root=root.location,
+        )
+        report.run_id = run_id
+        all_ok = all_dispatched
+    else:
+        logger.warning(
+            f"from_run created project '{report.project_name}' with no ingestable "
+            "data collection; no ingestion run was opened."
+        )
     report.success = all_ok
     return report

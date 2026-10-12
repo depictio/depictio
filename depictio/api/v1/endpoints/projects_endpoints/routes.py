@@ -1024,6 +1024,7 @@ async def create_project_from_run(
         dry_run=payload.dry_run,
         request=request,
         storage=payload.storage,
+        template=payload.template,
     )
 
 

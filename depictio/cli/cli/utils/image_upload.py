@@ -302,8 +302,13 @@ def upload_collection_images(data_collection, CLI_config, overwrite: bool = Fals
     tag = data_collection.data_collection_tag
     props = data_collection.config.dc_specific_properties
     s3_base_folder = props.s3_base_folder
-    bucket, prefix = parse_s3_folder(s3_base_folder)
     served = CLI_config.s3_storage.bucket
+    if not s3_base_folder:
+        raise ImageUploadError(
+            f"'{tag}': no s3_base_folder to upload the images to. Set it to a folder in "
+            f"the server's bucket, e.g. s3://{served}/images/{tag}"
+        )
+    bucket, prefix = parse_s3_folder(s3_base_folder)
     # Both checked before uploading: the dashboard could show none of the images.
     if bucket != served:
         # The server's image route refuses any other bucket.
