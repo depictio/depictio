@@ -178,6 +178,7 @@ SUGGESTION_KEYS = {
     "store",
     "tracks",
     "path_wildcard",
+    "in_run",
     "warnings",
 }
 
@@ -324,3 +325,83 @@ class TestSuggest:
         with pytest.raises(BuilderRefused) as exc:
             infer.suggest(s3_root, "star/S9/quant.tsv")
         assert exc.value.code == "file_missing"
+
+
+class TestTags:
+    def test_a_run_folder_is_not_part_of_the_tag(self):
+        from depictio.project_builder.infer import _tag_for
+
+        path = "run_7/sample_a/info/labels.tsv"
+        assert _tag_for(path, runs=True) == "labels"
+
+    def test_a_top_folder_still_prefixes_a_flat_path(self):
+        from depictio.project_builder.infer import _tag_for
+
+        assert _tag_for("star/quant.sf") == "star_quant"
+
+    def test_ticked_files_are_named_after_the_folder_that_does_not_vary(self):
+        from depictio.project_builder.infer import _tag_for_glob
+
+        assert (
+            _tag_for_glob("*/counts/*.info_raw", "r1/s1/counts/s1.info_raw", runs=True) == "counts"
+        )
+
+    def test_a_shared_file_name_stays_the_tag(self):
+        from depictio.project_builder.infer import _tag_for_glob
+
+        assert _tag_for_glob("*/info/labels.tsv", "r1/s1/info/labels.tsv", runs=True) == "labels"
+
+
+class TestSuggestInRuns:
+    """A file under a run is suggested as a scan read inside each run."""
+
+    @pytest.fixture
+    def runs_root(self, tmp_path):
+        from depictio.cli.cli.utils.data_root import LocalDataRoot
+
+        from ..s3_stubs import write_tree
+
+        files = {}
+        for run in ("run_1", "run_2"):
+            for sample in ("alpha", "bravo"):
+                files[f"{run}/{sample}/info/labels.tsv"] = b"id\tv\n1\t2\n"
+                files[f"{run}/{sample}/counts/{sample}.dat"] = b"x\ty\n1\t2\n"
+        files["sheet.csv"] = b"a,b\n1,2\n"
+        return LocalDataRoot(str(write_tree(tmp_path / "root", files)))
+
+    def test_a_file_in_a_run_is_a_scan_without_the_run(self, runs_root):
+        answer = infer.suggest(
+            runs_root, "run_1/alpha/info/labels.tsv", runs=True, runs_regex=r"^run_\d+$"
+        )
+        assert answer["mode"] == "recursive"
+        assert answer["in_run"] is True
+        assert answer["glob"] == "**/labels.tsv"
+        assert answer["tag"] == "labels"
+
+    def test_a_sample_named_in_the_file_becomes_a_wildcard(self, runs_root):
+        answer = infer.suggest(
+            runs_root, "run_1/alpha/counts/alpha.dat", runs=True, runs_regex=r"^run_\d+$"
+        )
+        assert answer["glob"] == "*/counts/*.dat"
+        assert answer["tag"] == "counts"
+
+    def test_ticked_files_generalise_inside_the_run(self, runs_root):
+        answer = infer.suggest(
+            runs_root,
+            "run_1/alpha/info/labels.tsv",
+            ["run_2/bravo/info/labels.tsv", "run_1/bravo/info/labels.tsv"],
+            runs=True,
+            runs_regex=r"^run_\d+$",
+        )
+        assert answer["glob"] == "*/info/labels.tsv"
+        assert answer["mode"] == "recursive"
+
+    def test_a_file_outside_the_runs_stays_one_file(self, runs_root):
+        answer = infer.suggest(runs_root, "sheet.csv", runs=True, runs_regex=r"^run_\d+$")
+        assert answer["mode"] == "single"
+        assert answer["in_run"] is False
+
+    def test_without_runs_nothing_changes(self, runs_root):
+        answer = infer.suggest(runs_root, "run_1/alpha/info/labels.tsv")
+        assert answer["mode"] == "single"
+        assert answer["in_run"] is False

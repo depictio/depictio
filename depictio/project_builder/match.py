@@ -67,12 +67,39 @@ def _schema(root: DataRoot, rel: str) -> dict[str, str] | None:
     return preview.dtypes or dict.fromkeys(preview.columns, "String")
 
 
+_NUMERIC_TYPE = re.compile(r"^(U?Int(8|16|32|64)|Float(32|64))$")
+
+
+def _widened(types: set[str]) -> str | None:
+    """The type a column read as several numeric types becomes, or None when a
+    type is not numeric (a real conflict). Ingestion concatenates the files with
+    relaxed dtypes, so integers and floats of one column are widened, not refused."""
+    if len(types) < 2 or not all(_NUMERIC_TYPE.match(t) for t in types):
+        return None
+    return "Float64" if any(t.startswith("Float") for t in types) else "Int64"
+
+
 def _compare(files: list[str], schemas: dict[str, dict[str, str]]) -> tuple[Any, ...]:
-    """The reference schema (the first file's), whether all agree, and how each other differs."""
+    """``(reference schema, all agree, mismatches, widened)``.
+
+    The reference is the first file's. Columns read as different *numeric* types
+    (a column of 0 and 1 is Int64 in one file, Float64 in another) are widened by
+    ingestion, so they are reported in ``widened`` and are no mismatch; a missing
+    or extra column, or a change to or from a non-numeric type, is.
+    """
     readable = [f for f in files if schemas.get(f) is not None]
     if not readable:
-        return None, None, []
+        return None, None, [], {}
     reference = schemas[readable[0]]
+    seen: dict[str, set[str]] = {}
+    for rel in readable:
+        for column, dtype in schemas[rel].items():
+            seen.setdefault(column, set()).add(dtype)
+    widened = {
+        column: {"types": sorted(types), "as": target}
+        for column, types in seen.items()
+        if (target := _widened(types))
+    }
     mismatches = []
     for rel in readable[1:]:
         other = schemas[rel]
@@ -81,11 +108,11 @@ def _compare(files: list[str], schemas: dict[str, dict[str, str]]) -> tuple[Any,
         changed = {
             column: [reference[column], other[column]]
             for column in reference
-            if column in other and reference[column] != other[column]
+            if column in other and reference[column] != other[column] and column not in widened
         }
         if missing or extra or changed:
             mismatches.append({"file": rel, "missing": missing, "extra": extra, "changed": changed})
-    return reference, not mismatches, mismatches
+    return reference, not mismatches, mismatches, widened
 
 
 def _index_suffix(props: IndexedFileProps) -> str:
@@ -184,10 +211,11 @@ def match_collection(
     schema: dict[str, str] | None = None
     consistent: bool | None = None
     mismatches: list[dict[str, Any]] = []
+    widened: dict[str, Any] = {}
     if dc.type in ("table", "image", "genomic_tracks") and files and not stores:
         sample = files[: SCHEMA_SAMPLE_REMOTE if root.is_remote else SCHEMA_SAMPLE_LOCAL]
         schemas = {rel: _schema(root, rel) for rel in sample}
-        schema, consistent, mismatches = _compare(sample, schemas)
+        schema, consistent, mismatches, widened = _compare(sample, schemas)
         if len(files) > len(sample):
             warnings.append(f"Schemas compared on the first {len(sample)} of {len(files)} files.")
 
@@ -229,6 +257,7 @@ def match_collection(
         "schema": schema,
         "consistent": consistent,
         "mismatches": mismatches,
+        "widened": widened,
         "missing_indexes": missing_indexes,
         "stores": bool(stores),
         "tracks": tracks,

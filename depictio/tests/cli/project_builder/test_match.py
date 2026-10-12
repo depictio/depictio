@@ -29,6 +29,7 @@ RESULT_KEYS = {
     "schema",
     "consistent",
     "mismatches",
+    "widened",
     "missing_indexes",
     "stores",
     "tracks",
@@ -298,25 +299,21 @@ class TestSchemas:
         assert result["mismatches"] == [
             {"file": "s/b.tsv", "missing": ["count"], "extra": [], "changed": {}},
             {"file": "s/c.tsv", "missing": [], "extra": ["extra"], "changed": {}},
-            {
-                "file": "s/d.tsv",
-                "missing": [],
-                "extra": [],
-                "changed": {"count": ["Int64", "Float64"]},
-            },
         ]
+        # An integer column that is decimal in one file is widened, not a conflict.
+        assert result["widened"] == {"count": {"types": ["Float64", "Int64"], "as": "Float64"}}
 
     def test_a_file_that_differs_in_all_three_ways_is_one_mismatch(self, tmp_path):
         base = write_tree(
             tmp_path / "t",
-            {"a.tsv": b"gene\tcount\tkeep\nA\t1\t2\n", "b.tsv": b"gene\tother\tkeep\nA\tx\t2.5\n"},
+            {"a.tsv": b"gene\tcount\tkeep\nA\t1\t2\n", "b.tsv": b"gene\tother\tkeep\nA\tx\tword\n"},
         )
         (mismatch,) = _match(LocalDataRoot(str(base)), scan_dc(regex=r".*\.tsv$"))["mismatches"]
         assert mismatch == {
             "file": "b.tsv",
             "missing": ["count"],
             "extra": ["other"],
-            "changed": {"keep": ["Int64", "Float64"]},
+            "changed": {"keep": ["Int64", "String"]},
         }
 
     def test_the_same_columns_in_another_order_agree(self, tmp_path):
@@ -500,3 +497,46 @@ class TestS3Root:
 
     def test_every_tree_file_is_there_to_begin_with(self, s3_root):
         assert _match(s3_root, scan_dc(regex=r".*"))["count"] == len(RUN_TREE)
+
+
+class TestCompareWidening:
+    """Integers and decimals of one column are widened by ingestion: no conflict."""
+
+    def test_numeric_differences_are_widened_not_mismatches(self):
+        from depictio.project_builder.match import _compare
+
+        schemas = {
+            "a.tsv": {"id": "String", "p": "Float64"},
+            "b.tsv": {"id": "String", "p": "Int64"},
+            "c.tsv": {"id": "String", "p": "Int64"},
+        }
+        reference, consistent, mismatches, widened = _compare(list(schemas), schemas)
+        assert reference == schemas["a.tsv"]
+        assert consistent is True
+        assert mismatches == []
+        assert widened == {"p": {"types": ["Float64", "Int64"], "as": "Float64"}}
+
+    def test_two_integer_widths_widen_to_int64(self):
+        from depictio.project_builder.match import _compare
+
+        schemas = {"a.tsv": {"n": "Int32"}, "b.tsv": {"n": "Int64"}}
+        assert _compare(list(schemas), schemas)[3] == {
+            "n": {"types": ["Int32", "Int64"], "as": "Int64"}
+        }
+
+    def test_a_change_to_text_is_still_a_mismatch(self):
+        from depictio.project_builder.match import _compare
+
+        schemas = {"a.tsv": {"p": "Float64"}, "b.tsv": {"p": "String"}}
+        _, consistent, mismatches, widened = _compare(list(schemas), schemas)
+        assert consistent is False
+        assert mismatches[0]["changed"] == {"p": ["Float64", "String"]}
+        assert widened == {}
+
+    def test_missing_and_extra_columns_are_still_mismatches(self):
+        from depictio.project_builder.match import _compare
+
+        schemas = {"a.tsv": {"x": "Int64", "y": "Int64"}, "b.tsv": {"x": "Int64", "z": "Int64"}}
+        _, consistent, mismatches, _ = _compare(list(schemas), schemas)
+        assert consistent is False
+        assert (mismatches[0]["missing"], mismatches[0]["extra"]) == (["y"], ["z"])

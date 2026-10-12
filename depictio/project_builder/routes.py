@@ -1,8 +1,8 @@
 """The builder's HTTP routes, one factory for both servers.
 
 ``build_builder_router(opener)`` declares ``/capabilities``, ``/tree``,
-``/suggest``, ``/match``, ``/tracks_manifest``, ``/template`` and
-``/metadata``; what differs between the main API and the standalone server is
+``/suggest``, ``/runs_regex``, ``/runs_overview``, ``/match``, ``/tracks_manifest``, ``/template``,
+``/from_template`` (a shipped template as a draft) and ``/metadata``; what differs between the main API and the standalone server is
 how a request's root is opened, so that is the injected dependency, and what
 the instance can do (``capabilities``), which each passes in. The main API's
 opener (``projects_endpoints/builder.py``)
@@ -24,7 +24,16 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from depictio.cli.cli.utils.data_root import DataRoot
-from depictio.project_builder import assemble, capabilities, infer, match, tracks, tree
+from depictio.project_builder import (
+    assemble,
+    capabilities,
+    from_template,
+    infer,
+    match,
+    runs,
+    tracks,
+    tree,
+)
 from depictio.project_builder.errors import BuilderRefused
 from depictio.project_builder.validate import validate_inline_template
 
@@ -54,11 +63,23 @@ class SuggestBody(BaseModel):
     root: RootSpec
     path: str
     examples: list[str] = Field(default_factory=list, max_length=50)
+    # ``sequencing-runs``: the first folder of a path is a run, not a name.
+    structure: Literal["flat", "sequencing-runs"] = "flat"
+    runs_regex: str | None = Field(default=None, max_length=500)
 
 
 class WorkflowShape(BaseModel):
     structure: Literal["flat", "sequencing-runs"] = "flat"
     runs_regex: str | None = None
+
+
+class RunsRegexBody(BaseModel):
+    root: RootSpec
+
+
+class RunsOverviewBody(BaseModel):
+    root: RootSpec
+    runs_regex: str | None = Field(default=None, max_length=500)
 
 
 class MatchBody(BaseModel):
@@ -76,6 +97,12 @@ class TracksManifestBody(BaseModel):
 class TemplateBody(BaseModel):
     draft: assemble.ProjectDraft
     remote: bool = False
+
+
+class FromTemplateBody(BaseModel):
+    """A template shipped with Depictio (``nf-core/viralrecon/3.0.0``, ``.../latest``)."""
+
+    template_id: str = Field(max_length=200)
 
 
 class MetadataBody(BaseModel):
@@ -144,7 +171,33 @@ def build_builder_router(
         """A first guess (tag, type, scan rule, format, catalog tools) for a picked file."""
 
         def run():
-            return infer.suggest(opener(body.root, count_files=False), body.path, body.examples)
+            return infer.suggest(
+                opener(body.root, count_files=False),
+                body.path,
+                body.examples,
+                runs=body.structure == "sequencing-runs",
+                runs_regex=body.runs_regex,
+            )
+
+        return await run_refusable(run)
+
+    @router.post("/runs_regex")
+    async def post_runs_regex(body: RunsRegexBody, opener: RootOpener = Depends(opener_dependency)):
+        """A runs regex guessed from the data root's first-level folders."""
+
+        def run():
+            return runs.suggest_runs_regex(opener(body.root, count_files=False))
+
+        return await run_refusable(run)
+
+    @router.post("/runs_overview")
+    async def post_runs_overview(
+        body: RunsOverviewBody, opener: RootOpener = Depends(opener_dependency)
+    ):
+        """The runs a regex takes in, the layout their files share, and the runs that differ."""
+
+        def run():
+            return runs.overview(opener(body.root, count_files=True), body.runs_regex)
 
         return await run_refusable(run)
 
@@ -178,6 +231,16 @@ def build_builder_router(
     async def post_template(body: TemplateBody, _opener: RootOpener = Depends(opener_dependency)):
         """The ad-hoc template a draft becomes, validated; nothing is read or stored."""
         return await run_refusable(template_for, body.draft, body.remote)
+
+    @router.post("/from_template")
+    async def post_from_template(
+        body: FromTemplateBody, _opener: RootOpener = Depends(opener_dependency)
+    ):
+        """A shipped template as a builder draft, and what could not be carried over.
+
+        Only templates shipped with Depictio are read, by id; nothing else on disk is.
+        """
+        return await run_refusable(from_template.draft_for_template, body.template_id)
 
     @router.post("/metadata")
     async def post_metadata(body: MetadataBody, _opener: RootOpener = Depends(opener_dependency)):

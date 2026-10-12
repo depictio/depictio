@@ -12,6 +12,7 @@ first, then the run-relative path when the regex spells one).
 
 from __future__ import annotations
 
+import re
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -143,8 +144,12 @@ def anti_unify(paths: list[str]) -> str:
     return f"**/{_wildcard_token([p[-1] for p in parts])}"
 
 
-def _tag_for(rel: str) -> str:
-    """A tag from a path: the file stem, prefixed by its top folder when it has one."""
+def _tag_for(rel: str, *, runs: bool = False) -> str:
+    """A tag from a path: the file stem, prefixed by its top folder when it has one.
+
+    ``runs``: the top folder is a run (``sequencing-runs``), which says nothing
+    of the file: the tag is the stem alone.
+    """
     path = PurePosixPath(rel)
     stem = path.name
     for suffix in sorted({".gz", *TABULAR, *PHYLOGENY_SUFFIXES, *GEOJSON_SUFFIXES}, key=len):
@@ -152,10 +157,24 @@ def _tag_for(rel: str) -> str:
             stem = stem[: -len(suffix)]
             break
     stem = stem.split(".", 1)[0] if stem.count(".") else stem
-    top = path.parts[0] if len(path.parts) > 1 else ""
+    top = path.parts[0] if len(path.parts) > 1 and not runs else ""
     if top and top.lower() not in stem.lower():
         return slug(f"{top}_{stem}")
     return slug(stem)
+
+
+def _tag_for_glob(glob: str, rel: str, *, runs: bool = False) -> str:
+    """A tag for a collection of several files: the stem when every file shares
+    it, else the nearest folder of the pattern that does not vary, else the
+    extension (``*/counts/*.tsv`` is ``counts``)."""
+    name = PurePosixPath(glob).name
+    if "*" not in name:
+        return _tag_for(rel, runs=runs)
+    folders = [part for part in PurePosixPath(glob).parts[:-1] if "*" not in part and part != "."]
+    if folders:
+        return slug(folders[-1])
+    suffix = name.lstrip("*").lstrip(".")
+    return slug(suffix) if suffix else _tag_for(rel, runs=runs)
 
 
 def path_wildcard(glob: str) -> dict[str, Any] | None:
@@ -201,7 +220,48 @@ def _suggested_format(name: str, dc_type: str, table: str | None) -> str | None:
     return None
 
 
-def suggest(root: DataRoot, rel: str, examples: list[str] | None = None) -> dict[str, Any]:
+def _under_run(rel: str, runs_regex: str | None) -> str | None:
+    """``rel`` seen from inside its run: the path without its first folder, or
+    None when it is not under a run (a file at the root, or in a folder the
+    runs regex does not take)."""
+    parts = PurePosixPath(rel).parts
+    if len(parts) < 2:
+        return None
+    if runs_regex:
+        try:
+            if not re.match(runs_regex, parts[0]):
+                return None
+        except re.error:
+            return None
+    return "/".join(parts[1:])
+
+
+def _sample_glob(inside: str) -> str:
+    """The glob for one file of a run, a sample's name read as the part that varies.
+
+    A folder of the path whose name is part of the file's name (a sample:
+    ``<sample>/counts/<sample>.tsv``) becomes ``*`` in both places; without such
+    a folder the file is looked for by name anywhere in the run.
+    """
+    path = PurePosixPath(inside)
+    name = path.name
+    for index, folder in enumerate(path.parts[:-1]):
+        if len(folder) >= 3 and folder in name:
+            parts = list(path.parts)
+            parts[index] = "*"
+            parts[-1] = name.replace(folder, "*")
+            return "/".join(parts)
+    return f"**/{name}"
+
+
+def suggest(
+    root: DataRoot,
+    rel: str,
+    examples: list[str] | None = None,
+    *,
+    runs: bool = False,
+    runs_regex: str | None = None,
+) -> dict[str, Any]:
     """The builder's first guess for a data collection reading ``rel``.
 
     ``examples``: other files the user says belong to the same collection;
@@ -209,6 +269,11 @@ def suggest(root: DataRoot, rel: str, examples: list[str] | None = None) -> dict
     of them. Without, a single-file scan, with a ``**/<name>`` glob ready for
     when the user switches to recursive. A ``*.zarr`` store is picked like a
     file and suggested as a bioimage, with what its top level shows.
+
+    ``runs``: the workflow is ``sequencing-runs``. A file under a run (its first
+    folder, which ``runs_regex`` takes when given) is suggested as a scan read
+    inside each run, so its glob leaves the run out; the run is not part of what
+    the collection is called. A file elsewhere (at the root) stays one file.
     """
     from depictio.project_builder.capabilities import available_types
     from depictio.project_builder.tracks import infer_index_uri, infer_track_format
@@ -223,6 +288,13 @@ def suggest(root: DataRoot, rel: str, examples: list[str] | None = None) -> dict
         raise BuilderRefused(
             400, f"'{rel}' is a folder: pick a file, or a .zarr store.", "folder_picked"
         )
+    inside = _under_run(rel, runs_regex) if runs else None
+    scan_rel = inside if inside is not None else rel
+    scan_others = (
+        [rel_in for other in others if (rel_in := _under_run(other, runs_regex)) is not None]
+        if inside is not None
+        else others
+    )
     dc_type = guess_type(name)
     fmt, separator = table_format(name)
     warnings: list[str] = []
@@ -245,14 +317,16 @@ def suggest(root: DataRoot, rel: str, examples: list[str] | None = None) -> dict
                 "index": index if index and root.exists(index) else None,
             }
 
-    if dc_type in ("indexed_file", "genomic_tracks") and not others:
+    if dc_type in ("indexed_file", "genomic_tracks") and not scan_others:
         # One file per sample is the norm: every file of that kind, anywhere.
         glob = "**/*" + name[len(name.split(".", 1)[0]) :]
-    elif dc_type == "multiqc" and not others:
-        glob = rel
+    elif dc_type == "multiqc" and not scan_others:
+        glob = scan_rel
+    elif inside is not None and not scan_others:
+        glob = _sample_glob(inside)
     else:
-        glob = anti_unify([rel, *others])
-    recursive = bool(others) or dc_type in ("indexed_file", "multiqc")
+        glob = anti_unify([scan_rel, *scan_others])
+    recursive = bool(scan_others) or inside is not None or dc_type in ("indexed_file", "multiqc")
 
     catalog = []
     seen: set[tuple[str, str]] = set()
@@ -267,7 +341,11 @@ def suggest(root: DataRoot, rel: str, examples: list[str] | None = None) -> dict
 
     return {
         "path": rel,
-        "tag": _tag_for(rel),
+        "tag": (
+            _tag_for_glob(glob, rel, runs=inside is not None)
+            if scan_others or (inside is not None and "*" in PurePosixPath(glob).name)
+            else _tag_for(rel, runs=inside is not None)
+        ),
         "type": dc_type,
         "mode": "recursive" if recursive else "single",
         "glob": glob,
@@ -278,6 +356,7 @@ def suggest(root: DataRoot, rel: str, examples: list[str] | None = None) -> dict
         "multiqc": dc_type == "multiqc",
         "store": store,
         "tracks": tracks,
-        "path_wildcard": path_wildcard(glob) if others else None,
+        "path_wildcard": path_wildcard(glob) if scan_others else None,
+        "in_run": inside is not None,
         "warnings": warnings,
     }
