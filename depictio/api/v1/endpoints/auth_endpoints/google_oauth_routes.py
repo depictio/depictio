@@ -22,6 +22,7 @@ from depictio.api.v1.endpoints.auth_endpoints.utils import (
     validate_oauth_state,
 )
 from depictio.api.v1.endpoints.user_endpoints.core_functions import _add_token
+from depictio.api.v1.services.avatars import set_provider_avatar
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.google_oauth import (
     GoogleOAuthLoginResponse,
@@ -133,6 +134,12 @@ async def google_oauth_callback(
                 detail="Registration is disabled on this instance. "
                 "Ask an administrator for access.",
             )
+
+        # Profile picture from Google's userinfo. Never raises and never blocks
+        # the login on a failure; an uploaded picture is left untouched, and an
+        # unchanged URL is not downloaded again (see services/avatars.py).
+        if user.id is not None and google_user.picture:
+            await set_provider_avatar(user.id, provider="google", url=google_user.picture)
 
         # Step 4: Create authentication token for the user
         logger.info(f"Creating authentication token for user: {user.id}")

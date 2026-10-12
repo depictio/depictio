@@ -831,6 +831,7 @@ def test_backup_leaves_out_threads_and_versions_of_temporary_users_dashboards():
         "groups",
         "instance_settings",
         "branding_assets",
+        "user_avatars",
         "comment_threads",
         "dashboard_versions",
         "dashboard_version_counters",

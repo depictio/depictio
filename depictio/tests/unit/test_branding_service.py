@@ -118,6 +118,44 @@ class TestEffectiveBrandTheme:
         assert overrides.plots.colorway == ["#111111", "#222222"]
 
 
+class TestDefaultChrome:
+    """The instance's default chrome style lives beside the theme, not in it."""
+
+    def test_unset_by_default(self, fake_store):
+        assert branding_svc.get_default_chrome() is None
+
+    def test_set_and_clear(self, fake_store):
+        branding_svc.set_default_chrome("base")
+        assert branding_svc.get_default_chrome() == "base"
+        branding_svc.set_default_chrome(None)
+        assert branding_svc.get_default_chrome() is None
+        assert fake_store.docs == {}
+
+    def test_saving_the_theme_keeps_it(self, fake_store):
+        branding_svc.set_default_chrome("base")
+        branding_svc.set_brand_theme_overrides(BrandTheme(app_name="X"))
+        assert branding_svc.get_default_chrome() == "base"
+        branding_svc.set_brand_theme_overrides(None)
+        assert branding_svc.get_default_chrome() == "base"
+
+    def test_clearing_it_keeps_the_theme(self, fake_store):
+        branding_svc.set_brand_theme_overrides(BrandTheme(app_name="X"))
+        branding_svc.set_default_chrome("glass")
+        branding_svc.set_default_chrome(None)
+        assert branding_svc.get_brand_theme_overrides().app_name == "X"
+        assert branding_svc.get_default_chrome() is None
+
+    def test_model_accepts_only_known_styles(self):
+        from pydantic import ValidationError
+
+        from depictio.models.models.branding import InstanceLook
+
+        assert InstanceLook(default_chrome="glass").default_chrome == "glass"
+        assert InstanceLook().default_chrome is None
+        with pytest.raises(ValidationError):
+            InstanceLook(default_chrome="neon")
+
+
 class TestResolvedBrandTheme:
     """The wire format: derived values materialised once, server-side."""
 

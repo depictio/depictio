@@ -31,6 +31,21 @@ import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import type { ColDef } from 'ag-grid-community';
+import { GlassPage, STROKE, useGlassPages } from '../../chrome/variants/glass/pages';
+import '../../chrome/variants/glass/pages/project-detail.css';
+import {
+  Check,
+  ClipboardCheck,
+  Database,
+  GitBranch,
+  HardDrive,
+  Layers,
+  Settings,
+  ShieldCheck,
+  Table2,
+  Workflow,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 import { notifications } from '@mantine/notifications';
 import {
@@ -52,6 +67,7 @@ import type {
   VizSuggestionsResponse,
 } from 'depictio-react-core';
 import LinksSection from './LinksSection';
+import type { ProjectJoin } from './ConnectionsMap';
 import ManageDataCollectionModal, {
   type ManageDcType,
 } from './ManageDataCollectionModal';
@@ -63,7 +79,6 @@ import { useFolderDropzone } from '../../hooks/useFolderDropzone';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { AppSidebar } from '../../chrome';
-import JoinsGraph from './JoinsGraph';
 import IngestionReportPanel from './IngestionReportPanel';
 import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
 import ProjectIngestionTrigger from './ProjectIngestionTrigger';
@@ -223,6 +238,24 @@ function workflowLabel(wf: WorkflowShape): string {
   );
 }
 
+/** What the page below the workflows is scoped to: the selected workflow, the
+ *  only one there is, or all of them. */
+function workflowScope(
+  workflows: WorkflowShape[],
+  selectedId: string | null,
+): { label: string; count: number } | null {
+  if (workflows.length === 0) return null;
+  const wf =
+    workflows.length === 1
+      ? workflows[0]
+      : workflows.find((w) => (w._id ?? w.id) === selectedId);
+  if (wf) return { label: workflowLabel(wf), count: wf.data_collections?.length ?? 0 };
+  return {
+    label: 'All workflows',
+    count: workflows.reduce((n, w) => n + (w.data_collections?.length ?? 0), 0),
+  };
+}
+
 function engineDescription(wf: WorkflowShape): string | null {
   if (!wf.engine) return null;
   if (typeof wf.engine === 'string') return wf.engine;
@@ -245,53 +278,6 @@ function flattenDataCollections(
 ): DataCollectionShape[] {
   if (!workflows) return [];
   return workflows.flatMap((wf) => wf.data_collections ?? []);
-}
-
-/** Best-effort column extraction matching the Dash version's priority
- *  (depictio/dash/components/depictio_cytoscape_joins.py:948-989):
- *  last_aggregation.aggregation_columns_specs > config.columns
- *  > config.dc_specific_properties.columns_description (keys)
- *  > delta_table_schema (keys or field names). Falls back to []. */
-function extractColumns(dc: DataCollectionShape): string[] {
-  // Priority 1: aggregation_columns_specs from the latest aggregation entry.
-  // For DCs ingested through the React table-create / append flow this is
-  // the only populated source — without it the cytoscape table-DC node
-  // renders an empty box.
-  const lastAggRaw = dc.last_aggregation;
-  const lastAgg = Array.isArray(lastAggRaw)
-    ? lastAggRaw[lastAggRaw.length - 1]
-    : lastAggRaw;
-  const specs = (lastAgg as
-    | { aggregation_columns_specs?: Array<{ name?: unknown }> }
-    | undefined)?.aggregation_columns_specs;
-  if (Array.isArray(specs) && specs.length > 0) {
-    const names = specs
-      .map((s) => (typeof s?.name === 'string' ? s.name : null))
-      .filter((n): n is string => !!n);
-    if (names.length > 0) return names;
-  }
-
-  const config = (dc.config ?? {}) as Record<string, unknown>;
-  const direct = config.columns;
-  if (Array.isArray(direct)) return direct.map(String);
-
-  const dcSpec = config.dc_specific_properties as
-    | { columns_description?: Record<string, unknown> }
-    | undefined;
-  if (dcSpec?.columns_description && typeof dcSpec.columns_description === 'object') {
-    return Object.keys(dcSpec.columns_description);
-  }
-
-  const schema = (dc as Record<string, unknown>).delta_table_schema;
-  if (schema && typeof schema === 'object' && !Array.isArray(schema)) {
-    return Object.keys(schema as Record<string, unknown>);
-  }
-  if (Array.isArray(schema)) {
-    return (schema as Array<Record<string, unknown>>)
-      .map((f) => (typeof f?.name === 'string' ? f.name : null))
-      .filter((n): n is string => !!n);
-  }
-  return [];
 }
 
 const ProjectDetailApp: React.FC = () => {
@@ -334,7 +320,7 @@ const ProjectDetailApp: React.FC = () => {
   const [settingsOpened, setSettingsOpened] = useState(false);
   /** Cross-DC links for this project. Fetched alongside the project doc and
    *  refreshed when the user creates / edits / deletes a link from the
-   *  Links section. Wired into the JoinsGraph for visualization. */
+   *  Links section. */
   const [projectLinks, setProjectLinks] = useState<DCLink[]>([]);
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
@@ -343,12 +329,13 @@ const ProjectDetailApp: React.FC = () => {
   // expand/collapse state survives the remount that a refresh() triggers —
   // every DC mutation bumps refreshKey → setLoading(true) swaps the section
   // for a <Loader/>, and section-local state would reset to collapsed.
-  const [dcManagerOpened, { toggle: toggleDcManager }] = useDisclosure(false);
+  const [dcManagerOpened, { toggle: toggleDcManager }] = useDisclosure(true);
 
   const { user, isPublicMode, loading: userLoading } = useCurrentUser();
   const projectId = readProjectIdFromPath();
 
   usePageTitle('Project Data Collections');
+  const glass = useGlassPages();
 
   useEffect(() => {
     if (!projectId) {
@@ -461,8 +448,335 @@ const ProjectDetailApp: React.FC = () => {
     return { total, aggregate, metadata, totalBytes };
   }, [dataCollections]);
 
+  const body = (
+    <>
+      {loading ? (
+        <Center mih={300}>
+          <Loader />
+        </Center>
+      ) : loadError ? (
+        <Center mih={300}>
+          <Stack align="center" gap="xs">
+            <Icon
+              icon="mdi:alert-circle"
+              width={32}
+              color="var(--mantine-color-red-6)"
+            />
+            <Text c="red">{loadError}</Text>
+            <Button component="a" href="/projects" variant="light">
+              Back to projects
+            </Button>
+          </Stack>
+        </Center>
+      ) : !project ? null : (
+        (() => {
+          // The workflows come first and scope everything below them, so the
+          // tabs sit under the panel rather than the panel inside a tab.
+          const workflowsPanel =
+            projectType === 'advanced' && workflows.length > 0 ? (
+              <WorkflowsPanel
+                workflows={workflows}
+                templateSource={parseTemplate(project)?.source.toLowerCase() || null}
+                selectedWorkflowId={selectedWorkflowId}
+                scope={workflowScope(workflows, selectedWorkflowId)}
+                onSelect={(id) => {
+                  setSelectedWorkflowId(id);
+                  setSelectedDcId(null);
+                }}
+              />
+            ) : null;
+          const overviewSections = (
+            <Stack gap="lg">
+              <DataCollectionsManagerSection
+                projectType={projectType}
+                scopeLabel={
+                  projectType === 'advanced'
+                    ? (workflowScope(workflows, selectedWorkflowId)?.label ?? null)
+                    : null
+                }
+                stats={stats}
+                dataCollections={dataCollections}
+                selectedDcId={selectedDcId}
+                canMutate={canMutate}
+                opened={dcManagerOpened}
+                onToggle={toggleDcManager}
+                onSelect={setSelectedDcId}
+                onRename={setRenameTarget}
+                onDelete={setDeleteTarget}
+                onManage={setManageTarget}
+                onCreate={() => setCreateDcOpened(true)}
+              />
+              <UnrecognisedFilesPanel
+                templateOrigin={(project as Record<string, unknown>).template_origin}
+              />
+              {projectId && (
+                <LinksSection
+                  projectId={projectId}
+                  dataCollections={allDataCollections.map((d) => ({
+                    id: (d._id ?? d.id) as string,
+                    tag: d.data_collection_tag || ((d._id ?? d.id) as string),
+                    type: (d.config?.type as string | undefined) || 'unknown',
+                  }))}
+                  canMutate={canMutate}
+                  onLinksChange={setProjectLinks}
+                  joins={
+                    ((project as Record<string, unknown>).joins as ProjectJoin[] | undefined) || []
+                  }
+                />
+              )}
+              <Box ref={dcViewerRef}>
+                {selectedDc && (
+                  <DataCollectionViewer
+                    dc={selectedDc}
+                    projectType={projectType}
+                    allDataCollections={dataCollections}
+                    joins={
+                      ((project as Record<string, unknown>).joins as
+                        | Array<{
+                            dc1?: string;
+                            dc2?: string;
+                            on_columns?: string[];
+                          }>
+                        | undefined) || []
+                    }
+                    links={projectLinks}
+                  />
+                )}
+              </Box>
+            </Stack>
+          );
+          return (
+            <Stack gap="lg">
+              <ProjectHeader project={project} projectType={projectType} />
+              {workflowsPanel}
+              {projectId ? (
+                <Tabs
+                  value={activeTab}
+                  onChange={setActiveTab}
+                  keepMounted={false}
+                  variant="pills"
+                  className="dc-project-tabs"
+                >
+                  {glass ? (
+                    // Glass: the page's switch, two equal halves across the
+                    // content width, each saying what it holds.
+                    <Tabs.List mb="xl">
+                      <Tabs.Tab
+                        value="overview"
+                        className="dc-project-tab"
+                        leftSection={
+                          <span className="dc-project-tab-icon">
+                            <Database size={20} strokeWidth={STROKE} aria-hidden />
+                          </span>
+                        }
+                      >
+                        <span className="dc-project-tab-label">Data collections</span>
+                        <span className="dc-project-tab-meta">
+                          {stats.total} collection{stats.total === 1 ? '' : 's'}
+                          {stats.totalBytes > 0 ? ` · ${formatBytes(stats.totalBytes)}` : ''}
+                        </span>
+                      </Tabs.Tab>
+                      <Tabs.Tab
+                        value="ingestion"
+                        className="dc-project-tab"
+                        leftSection={
+                          <span className="dc-project-tab-icon">
+                            <ClipboardCheck size={20} strokeWidth={STROKE} aria-hidden />
+                          </span>
+                        }
+                      >
+                        <span className="dc-project-tab-label">Ingestion report</span>
+                        <span className="dc-project-tab-meta">What each run found, and when</span>
+                      </Tabs.Tab>
+                    </Tabs.List>
+                  ) : (
+                    <Tabs.List mb="md">
+                      <Tabs.Tab
+                        value="overview"
+                        fz="md"
+                        px="lg"
+                        leftSection={<Icon icon="mdi:table-cog" width={18} />}
+                      >
+                        Data collections
+                      </Tabs.Tab>
+                      <Tabs.Tab
+                        value="ingestion"
+                        fz="md"
+                        px="lg"
+                        leftSection={<Icon icon="mdi:clipboard-check-outline" width={18} />}
+                      >
+                        Ingestion report
+                      </Tabs.Tab>
+                    </Tabs.List>
+                  )}
+                  <Tabs.Panel value="overview">{overviewSections}</Tabs.Panel>
+                  <Tabs.Panel value="ingestion">
+                    <Stack gap="md">
+                      <Group justify="space-between" wrap="wrap" gap="sm">
+                        <SegmentedControl
+                          size="xs"
+                          w="fit-content"
+                          value={ingestionView}
+                          onChange={(v: string) => setIngestionView(v as 'report' | 'history')}
+                          data={[
+                            { value: 'report', label: 'Latest run' },
+                            { value: 'history', label: 'History' },
+                          ]}
+                        />
+                        <ProjectIngestionTrigger
+                          projectId={projectId}
+                          // Switch to History as soon as a run starts —
+                          // that is where its progress is visible.
+                          onStarted={() => setIngestionView('history')}
+                          onFinished={() => setIngestionHistorySignal((n) => n + 1)}
+                        />
+                      </Group>
+                      {ingestionView === 'report' ? (
+                        <IngestionReportPanel
+                          projectId={projectId}
+                          dcIdByTag={dcIdByTag}
+                          onPreviewDc={(dcId) => {
+                            // Jump to the Overview tab with this DC selected so
+                            // its table/preview shows in the DataCollectionViewer,
+                            // then scroll it into view (see the effect above).
+                            scrollToDcRef.current = true;
+                            setSelectedWorkflowId(null);
+                            setSelectedDcId(dcId);
+                            setActiveTab('overview');
+                          }}
+                        />
+                      ) : (
+                        <ProjectIngestionHistoryPanel
+                          projectId={projectId}
+                          refreshSignal={ingestionHistorySignal}
+                        />
+                      )}
+                    </Stack>
+                  </Tabs.Panel>
+                </Tabs>
+              ) : (
+                overviewSections
+              )}
+            </Stack>
+          );
+        })()
+      )}
+    </>
+  );
+
+  const modals = (
+    <>
+      {/* Outside the loading switch, so reloading the project after a
+          refresh keeps the dialog, and the run it follows, mounted. */}
+      {projectId && (
+        <ProjectSettingsModal
+          opened={settingsOpened}
+          onClose={() => setSettingsOpened(false)}
+          projectId={projectId}
+          projectName={project?.name}
+          canManageStorage={isOwner}
+          canMutate={canMutate}
+          publicModeReason={publicModeReason}
+          dataCollections={allDataCollections}
+          onReloadProject={refresh}
+        />
+      )}
+      <CreateDataCollectionModal
+        opened={createDcOpened}
+        projectType={projectType}
+        projectId={projectId}
+        onClose={() => setCreateDcOpened(false)}
+        onSuccess={() => {
+          setCreateDcOpened(false);
+          refresh();
+        }}
+      />
+      <RenameDataCollectionModal
+        target={renameTarget}
+        onClose={() => setRenameTarget(null)}
+        onSuccess={() => {
+          setRenameTarget(null);
+          refresh();
+        }}
+      />
+      <DeleteDataCollectionModal
+        target={deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onSuccess={() => {
+          setDeleteTarget(null);
+          if (selectedDcId === (deleteTarget?._id ?? deleteTarget?.id)) {
+            setSelectedDcId(null);
+          }
+          refresh();
+        }}
+      />
+      {manageTarget && (
+        <ManageDataCollectionModal
+          opened={!!manageTarget}
+          dcId={(manageTarget._id ?? manageTarget.id) as string}
+          dcName={manageTarget.data_collection_tag || 'data collection'}
+          dcType={
+            (((manageTarget.config?.type as string | undefined) || '').toLowerCase() ===
+            'multiqc'
+              ? 'multiqc'
+              : 'table') as ManageDcType
+          }
+          tableFormat={
+            (manageTarget.config?.dc_specific_properties?.format as string | undefined) || null
+          }
+          onClose={() => setManageTarget(null)}
+          onSuccess={() => {
+            setManageTarget(null);
+            refresh();
+          }}
+        />
+      )}
+    </>
+  );
+
+  if (glass) {
+    const name = project?.name || 'Project';
+    return (
+      <>
+        <GlassPage
+          section="projects"
+          title={name}
+          description="Workflows, data collections, ingestion runs and the links between them."
+          crumbs={[{ label: name }]}
+          actions={
+            <Group gap="xs">
+              {/* Open to every reader once the project has loaded: the sections
+                  inside disable what the reader may not change and say why. */}
+              <Button
+                variant="default"
+                data-testid="project-settings-button"
+                leftSection={<Settings size={17} strokeWidth={1.8} aria-hidden />}
+                disabled={!project}
+                onClick={() => setSettingsOpened(true)}
+              >
+                Project settings
+              </Button>
+              <Button
+                component="a"
+                href={`/projects/${projectId}/permissions`}
+                variant="default"
+                leftSection={<ShieldCheck size={17} strokeWidth={1.8} aria-hidden />}
+              >
+                Permissions
+              </Button>
+            </Group>
+          }
+        >
+          {body}
+        </GlassPage>
+        {modals}
+      </>
+    );
+  }
+
   return (
     <AppShell
+      data-testid="app-shell"
       layout="alt"
       header={{ height: 64 }}
       navbar={{
@@ -545,228 +859,10 @@ const ProjectDetailApp: React.FC = () => {
 
       <AppShell.Main>
         <Box px="lg" py="md">
-          {loading ? (
-            <Center mih={300}>
-              <Loader />
-            </Center>
-          ) : loadError ? (
-            <Center mih={300}>
-              <Stack align="center" gap="xs">
-                <Icon
-                  icon="mdi:alert-circle"
-                  width={32}
-                  color="var(--mantine-color-red-6)"
-                />
-                <Text c="red">{loadError}</Text>
-                <Button component="a" href="/projects" variant="light">
-                  Back to projects
-                </Button>
-              </Stack>
-            </Center>
-          ) : !project ? null : (
-            (() => {
-              const overviewSections = (
-                <Stack gap="lg">
-                  {projectType === 'advanced' && workflows.length > 0 && (
-                    <WorkflowsPanel
-                      workflows={workflows}
-                      templateSource={parseTemplate(project)?.source.toLowerCase() || null}
-                      selectedWorkflowId={selectedWorkflowId}
-                      onSelect={(id) => {
-                        setSelectedWorkflowId(id);
-                        setSelectedDcId(null);
-                      }}
-                    />
-                  )}
-                  <DataCollectionsManagerSection
-                    projectType={projectType}
-                    stats={stats}
-                    dataCollections={dataCollections}
-                    selectedDcId={selectedDcId}
-                    canMutate={canMutate}
-                    opened={dcManagerOpened}
-                    onToggle={toggleDcManager}
-                    onSelect={setSelectedDcId}
-                    onRename={setRenameTarget}
-                    onDelete={setDeleteTarget}
-                    onManage={setManageTarget}
-                    onCreate={() => setCreateDcOpened(true)}
-                  />
-                  <UnrecognisedFilesPanel
-                    templateOrigin={(project as Record<string, unknown>).template_origin}
-                  />
-                  {projectId && (
-                    <LinksSection
-                      projectId={projectId}
-                      dataCollections={allDataCollections.map((d) => ({
-                        id: (d._id ?? d.id) as string,
-                        tag: d.data_collection_tag || ((d._id ?? d.id) as string),
-                        type: (d.config?.type as string | undefined) || 'unknown',
-                      }))}
-                      canMutate={canMutate}
-                      onLinksChange={setProjectLinks}
-                    />
-                  )}
-                  <Box ref={dcViewerRef}>
-                    {selectedDc && (
-                      <DataCollectionViewer
-                        dc={selectedDc}
-                        projectType={projectType}
-                        allDataCollections={dataCollections}
-                        joins={
-                          ((project as Record<string, unknown>).joins as
-                            | Array<{
-                                dc1?: string;
-                                dc2?: string;
-                                on_columns?: string[];
-                              }>
-                            | undefined) || []
-                        }
-                        links={projectLinks}
-                      />
-                    )}
-                  </Box>
-                </Stack>
-              );
-              return (
-                <Stack gap="lg">
-                  <ProjectHeader project={project} projectType={projectType} />
-                  {projectId ? (
-                    <Tabs value={activeTab} onChange={setActiveTab} keepMounted={false}>
-                      <Tabs.List mb="md">
-                        <Tabs.Tab
-                          value="overview"
-                          leftSection={<Icon icon="mdi:table-cog" width={16} />}
-                        >
-                          Data collections
-                        </Tabs.Tab>
-                        <Tabs.Tab
-                          value="ingestion"
-                          leftSection={<Icon icon="mdi:clipboard-check-outline" width={16} />}
-                        >
-                          Ingestion
-                        </Tabs.Tab>
-                      </Tabs.List>
-                      <Tabs.Panel value="overview">{overviewSections}</Tabs.Panel>
-                      <Tabs.Panel value="ingestion">
-                        <Stack gap="md">
-                          <Group justify="space-between" wrap="wrap" gap="sm">
-                            <SegmentedControl
-                              size="xs"
-                              w="fit-content"
-                              value={ingestionView}
-                              onChange={(v: string) => setIngestionView(v as 'report' | 'history')}
-                              data={[
-                                { value: 'report', label: 'Report' },
-                                { value: 'history', label: 'History' },
-                              ]}
-                            />
-                            <ProjectIngestionTrigger
-                              projectId={projectId}
-                              // Switch to History as soon as a run starts —
-                              // that is where its progress is visible.
-                              onStarted={() => setIngestionView('history')}
-                              onFinished={() => setIngestionHistorySignal((n) => n + 1)}
-                            />
-                          </Group>
-                          {ingestionView === 'report' ? (
-                            <IngestionReportPanel
-                              projectId={projectId}
-                              dcIdByTag={dcIdByTag}
-                              onPreviewDc={(dcId) => {
-                                // Jump to the Overview tab with this DC selected so
-                                // its table/preview shows in the DataCollectionViewer,
-                                // then scroll it into view (see the effect above).
-                                scrollToDcRef.current = true;
-                                setSelectedWorkflowId(null);
-                                setSelectedDcId(dcId);
-                                setActiveTab('overview');
-                              }}
-                            />
-                          ) : (
-                            <ProjectIngestionHistoryPanel
-                              projectId={projectId}
-                              refreshSignal={ingestionHistorySignal}
-                            />
-                          )}
-                        </Stack>
-                      </Tabs.Panel>
-                    </Tabs>
-                  ) : (
-                    overviewSections
-                  )}
-                </Stack>
-              );
-            })()
-          )}
+          {body}
         </Box>
       </AppShell.Main>
-
-      {/* Outside the loading switch above, so reloading the project after a
-          refresh keeps the dialog, and the run it follows, mounted. */}
-      {projectId && (
-        <ProjectSettingsModal
-          opened={settingsOpened}
-          onClose={() => setSettingsOpened(false)}
-          projectId={projectId}
-          projectName={project?.name}
-          canManageStorage={isOwner}
-          canMutate={canMutate}
-          publicModeReason={publicModeReason}
-          dataCollections={allDataCollections}
-          onReloadProject={refresh}
-        />
-      )}
-      <CreateDataCollectionModal
-        opened={createDcOpened}
-        projectType={projectType}
-        projectId={projectId}
-        onClose={() => setCreateDcOpened(false)}
-        onSuccess={() => {
-          setCreateDcOpened(false);
-          refresh();
-        }}
-      />
-      <RenameDataCollectionModal
-        target={renameTarget}
-        onClose={() => setRenameTarget(null)}
-        onSuccess={() => {
-          setRenameTarget(null);
-          refresh();
-        }}
-      />
-      <DeleteDataCollectionModal
-        target={deleteTarget}
-        onClose={() => setDeleteTarget(null)}
-        onSuccess={() => {
-          setDeleteTarget(null);
-          if (selectedDcId === (deleteTarget?._id ?? deleteTarget?.id)) {
-            setSelectedDcId(null);
-          }
-          refresh();
-        }}
-      />
-      {manageTarget && (
-        <ManageDataCollectionModal
-          opened={!!manageTarget}
-          dcId={(manageTarget._id ?? manageTarget.id) as string}
-          dcName={manageTarget.data_collection_tag || 'data collection'}
-          dcType={
-            (((manageTarget.config?.type as string | undefined) || '').toLowerCase() ===
-            'multiqc'
-              ? 'multiqc'
-              : 'table') as ManageDcType
-          }
-          tableFormat={
-            (manageTarget.config?.dc_specific_properties?.format as string | undefined) || null
-          }
-          onClose={() => setManageTarget(null)}
-          onSuccess={() => {
-            setManageTarget(null);
-            refresh();
-          }}
-        />
-      )}
+      {modals}
     </AppShell>
   );
 };
@@ -2145,12 +2241,63 @@ const DeleteDataCollectionModal: React.FC<{
   );
 };
 
+/** Basic / Advanced as one calm tag: the kind is the icon, never a hue. */
+const ProjectTypeTag: React.FC<{
+  projectType: 'basic' | 'advanced';
+  size?: 'sm' | 'md';
+}> = ({ projectType, size = 'sm' }) => {
+  const Glyph = projectType === 'advanced' ? Workflow : Table2;
+  return (
+    <Badge
+      variant="light"
+      color="gray"
+      size={size}
+      leftSection={<Glyph size={12} strokeWidth={2} aria-hidden />}
+    >
+      {projectType === 'advanced' ? 'Advanced' : 'Basic'}
+    </Badge>
+  );
+};
+
 const ProjectHeader: React.FC<{
   project: ProjectListEntry;
   projectType: 'basic' | 'advanced';
 }> = ({ project, projectType }) => {
   const accent = useBrandAccents();
   const tmpl = parseTemplate(project);
+  const glass = useGlassPages();
+  // Glass: the page head already names the project, so the card keeps only
+  // its facts, on one row.
+  if (glass) {
+    return (
+      <Paper withBorder radius="md" px="lg" py="md">
+        <Group gap="lg" wrap="wrap" align="center">
+          <Group gap="xs" wrap="nowrap">
+            <Text size="sm" c="dimmed" fw={600}>
+              Type
+            </Text>
+            <ProjectTypeTag projectType={projectType} size="md" />
+            <Text size="sm" c="dimmed" visibleFrom="sm">
+              {projectType === 'advanced'
+                ? 'CLI-driven, with workflows and pipelines'
+                : 'Data collections managed here directly'}
+            </Text>
+          </Group>
+          {tmpl && (
+            <Group gap="xs" wrap="wrap">
+              <Text size="sm" c="dimmed" fw={600}>
+                Template
+              </Text>
+              <TemplateChip parsed={tmpl} verbose plain />
+              <Anchor href={templateDocsUrl(tmpl)} target="_blank" rel="noreferrer" size="sm" fw={600}>
+                Documentation
+              </Anchor>
+            </Group>
+          )}
+        </Group>
+      </Paper>
+    );
+  }
   return (
     <Paper withBorder radius="md" p="lg">
       <Stack gap="xs">
@@ -2247,9 +2394,116 @@ const WorkflowsPanel: React.FC<{
    *  redundant engine badge. */
   templateSource: string | null;
   selectedWorkflowId: string | null;
+  /** What the content below is scoped to (Glass draws the link to it). */
+  scope: { label: string; count: number } | null;
   onSelect: (id: string | null) => void;
-}> = ({ workflows, templateSource, selectedWorkflowId, onSelect }) => {
+}> = ({ workflows, templateSource, selectedWorkflowId, scope, onSelect }) => {
+  const glass = useGlassPages();
   const brandImage = templateSource ? WORKFLOW_BRAND_IMAGE[templateSource] : undefined;
+  if (glass) {
+    // A lone workflow is the scope whether or not it was clicked, so it
+    // always shows as selected and cannot be toggled off.
+    const only = workflows.length === 1;
+    return (
+      <section className="pd-workflows" aria-label="Workflows">
+        <div className="pd-section-head">
+          <GitBranch size={18} strokeWidth={STROKE} aria-hidden />
+          <Title order={4}>Workflows</Title>
+          <span className="pd-count">{workflows.length}</span>
+          {!only && (
+            <span className="pd-hint">
+              {selectedWorkflowId
+                ? 'The data collections below are scoped to the selected workflow.'
+                : 'Pick one to scope the data collections below.'}
+            </span>
+          )}
+          {selectedWorkflowId && !only && (
+            <Button
+              variant="subtle"
+              color="gray"
+              size="compact-xs"
+              ml="auto"
+              onClick={() => onSelect(null)}
+            >
+              Show all
+            </Button>
+          )}
+        </div>
+        <div className="pd-wf-grid" role="group" aria-label="Workflow">
+          {workflows.map((wf) => {
+            const id = (wf._id ?? wf.id) as string;
+            const isSelected = only || id === selectedWorkflowId;
+            const dcCount = wf.data_collections?.length ?? 0;
+            const engine = engineDescription(wf);
+            const toggle = () => {
+              if (!only) onSelect(isSelected ? null : id);
+            };
+            return (
+              <div
+                key={id}
+                className="pd-wf-card"
+                data-selected={isSelected || undefined}
+                role="button"
+                tabIndex={0}
+                aria-pressed={isSelected}
+                aria-disabled={only || undefined}
+                onClick={toggle}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggle();
+                  }
+                }}
+              >
+                <span className="pd-wf-chip">
+                  {brandImage ? (
+                    <img
+                      src={`${import.meta.env.BASE_URL}logos/workflows/${brandImage}`}
+                      alt=""
+                      width={22}
+                      height={22}
+                    />
+                  ) : (
+                    <Workflow size={20} strokeWidth={STROKE} aria-hidden />
+                  )}
+                </span>
+                <span className="pd-wf-body">
+                  <span className="pd-wf-name">{workflowLabel(wf)}</span>
+                  <span className="pd-wf-meta">
+                    {[
+                      wf.version ? `Version ${wf.version}` : null,
+                      !brandImage && engine ? engine : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || 'Workflow'}
+                  </span>
+                  <span className="pd-wf-meta">
+                    <Database size={13} strokeWidth={STROKE} aria-hidden />
+                    {dcCount} data collection{dcCount === 1 ? '' : 's'}
+                  </span>
+                </span>
+                <span className="pd-wf-mark" aria-hidden>
+                  {isSelected && <Check size={13} strokeWidth={3} />}
+                </span>
+                {isSelected && <span className="pd-wf-selected">Selected</span>}
+              </div>
+            );
+          })}
+        </div>
+        {scope && (
+          <div className="pd-scope" role="status">
+            <span className="pd-scope-label">
+              <GitBranch size={14} strokeWidth={STROKE} aria-hidden />
+              <b>{scope.label}</b>
+              <span>
+                {scope.count} data collection{scope.count === 1 ? '' : 's'}
+              </span>
+            </span>
+          </div>
+        )}
+      </section>
+    );
+  }
   return (
     <Stack gap="md">
       <Group gap="xs">
@@ -2359,6 +2613,9 @@ const WorkflowsPanel: React.FC<{
 
 const DataCollectionsManagerSection: React.FC<{
   projectType: 'basic' | 'advanced';
+  /** The workflow the list is scoped to (advanced projects), named in the
+   *  Glass header. */
+  scopeLabel?: string | null;
   stats: DcStats;
   dataCollections: DataCollectionShape[];
   selectedDcId: string | null;
@@ -2378,6 +2635,7 @@ const DataCollectionsManagerSection: React.FC<{
   onCreate: () => void;
 }> = ({
   projectType,
+  scopeLabel,
   stats,
   dataCollections,
   selectedDcId,
@@ -2391,6 +2649,99 @@ const DataCollectionsManagerSection: React.FC<{
   onCreate,
 }) => {
   const accent = useBrandAccents();
+  const glass = useGlassPages();
+  if (glass) {
+    const n = dataCollections.length;
+    return (
+      <Paper withBorder radius="md" p="md" className="pd-manager">
+        <Group justify="space-between" wrap="nowrap" gap="sm">
+          <UnstyledButton
+            onClick={onToggle}
+            style={{ flex: 1, minWidth: 0 }}
+            aria-expanded={opened}
+          >
+            <div className="pd-manager-title">
+              <Title order={4}>
+                {scopeLabel ? `${scopeLabel} data collections` : 'Data collections'}
+              </Title>
+              <span className="pd-hint">
+                {n} data collection{n === 1 ? '' : 's'}
+                {scopeLabel ? ` in ${scopeLabel}` : ''}
+              </span>
+            </div>
+          </UnstyledButton>
+          <Group gap="xs" wrap="nowrap">
+            <Button
+              data-testid="create-dc-btn"
+              size="xs"
+              leftSection={<Icon icon="mdi:plus" width={16} />}
+              disabled={!canMutate}
+              onClick={() => {
+                if (!opened) onToggle();
+                onCreate();
+              }}
+              title={
+                canMutate ? 'Create a new data collection' : 'Owner permission required'
+              }
+            >
+              Create Data Collection
+            </Button>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={onToggle}
+              aria-label={opened ? 'Collapse data collections' : 'Expand data collections'}
+            >
+              <Icon icon={opened ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={22} />
+            </ActionIcon>
+          </Group>
+        </Group>
+        <Collapse in={opened}>
+          <ScrollArea.Autosize mah={640} type="auto" offsetScrollbars pt="md">
+            <Stack gap="md" pr="sm">
+              <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+                <StatCard glassIcon={Database} label="Total collections" primary={String(stats.total)} secondary="Data collections" />
+                <StatCard
+                  glassIcon={Layers}
+                  label="Collection types"
+                  primaryDual={[
+                    { count: stats.aggregate, label: 'Aggregate', color: 'var(--gl-accent)' },
+                    { count: stats.metadata, label: 'Metadata', color: 'var(--gl-faint)' },
+                  ]}
+                />
+                <StatCard
+                  glassIcon={HardDrive}
+                  label="Total storage"
+                  primary={formatBytes(stats.totalBytes)}
+                  secondary={
+                    stats.totalBytes > 0
+                      ? `${n} collection${n === 1 ? '' : 's'}`
+                      : 'No size info yet'
+                  }
+                />
+              </SimpleGrid>
+              <Paper withBorder radius="md" p="md">
+                <Group gap="xs" mb="xs">
+                  <Title order={5}>Data collections</Title>
+                  <span className="pd-count">{n}</span>
+                </Group>
+                <DataCollectionsTable
+                  projectType={projectType}
+                  dataCollections={dataCollections}
+                  selectedDcId={selectedDcId}
+                  canMutate={canMutate}
+                  onSelect={onSelect}
+                  onRename={onRename}
+                  onDelete={onDelete}
+                  onManage={onManage}
+                />
+              </Paper>
+            </Stack>
+          </ScrollArea.Autosize>
+        </Collapse>
+      </Paper>
+    );
+  }
   return (
     /* Header mirrors the Cross-DC links section (LinksSection.tsx): Paper,
        clickable title area, then the primary action and the chevron as an
@@ -2516,18 +2867,44 @@ const DataCollectionsManagerSection: React.FC<{
 };
 
 const StatCard: React.FC<{
-  icon: string;
-  iconColor: string;
+  icon?: string;
+  iconColor?: string;
+  /** Glass: a Lucide glyph in a small accent chip instead of a coloured icon. */
+  glassIcon?: LucideIcon;
   label: string;
   primary?: string;
   secondary?: string;
   primaryColor?: string;
   primaryDual?: Array<{ count: number; label: string; color: string }>;
-}> = ({ icon, iconColor, label, primary, secondary, primaryColor, primaryDual }) => (
+}> = ({ icon, iconColor, glassIcon: GlassGlyph, label, primary, secondary, primaryColor, primaryDual }) => GlassGlyph ? (
+  <Card withBorder radius="md" p="md" className="pd-stat">
+    <div className="pd-stat-head">
+      <span className="pd-stat-chip">
+        <GlassGlyph size={16} strokeWidth={STROKE} />
+      </span>
+      <span className="pd-stat-label">{label}</span>
+    </div>
+    {primary && <div className="pd-stat-value">{primary}</div>}
+    {primaryDual && (
+      <div className="pd-stat-dual">
+        {primaryDual.map((p) => (
+          <div key={p.label}>
+            <div className="pd-stat-value">{p.count}</div>
+            <div className="pd-stat-sub">
+              <i style={{ background: p.color }} aria-hidden />
+              {p.label}
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+    {secondary && <div className="pd-stat-sub">{secondary}</div>}
+  </Card>
+) : (
   <Card withBorder radius="md" p="md">
     <Stack gap="xs" align="center">
       <Group gap={6}>
-        <Icon icon={icon} width={20} color={iconColor} />
+        {icon && <Icon icon={icon} width={20} color={iconColor} />}
         <Text fw={600}>{label}</Text>
       </Group>
       {primary && (
@@ -2615,6 +2992,7 @@ const DataCollectionsTable: React.FC<{
   onManage,
 }) => {
   const accent = useBrandAccents();
+  const glass = useGlassPages();
   const [filter, setFilter] = useState('');
   const [sortKey, setSortKey] = useState<DcSortKey>('tag');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -2746,7 +3124,11 @@ const DataCollectionsTable: React.FC<{
                 onClick={() => onSelect(isSelected ? null : id)}
                 style={{
                   cursor: 'pointer',
-                  background: isSelected ? 'var(--mantine-color-teal-light)' : undefined,
+                  background: isSelected
+                    ? glass
+                      ? 'var(--gl-accent-soft)'
+                      : 'var(--mantine-color-teal-light)'
+                    : undefined,
                 }}
               >
                 <Table.Td>
@@ -2787,7 +3169,7 @@ const DataCollectionsTable: React.FC<{
                       <ActionIcon
                         data-testid="manage-dc-btn"
                         variant="subtle"
-                        color={accent.secondary}
+                        color={glass ? 'gray' : accent.secondary}
                         size="sm"
                         disabled={!canMutate}
                         onClick={guard(() => onManage(dc))}
@@ -2802,7 +3184,7 @@ const DataCollectionsTable: React.FC<{
                     )}
                     <ActionIcon
                       variant="subtle"
-                      color="blue"
+                      color={glass ? 'gray' : 'blue'}
                       size="sm"
                       disabled={!canMutate}
                       onClick={guard(() => onRename(dc))}
@@ -3102,19 +3484,6 @@ const DataCollectionViewer: React.FC<{
 
         {isMultiQC && <MultiQCReportsCard dcId={dcId} />}
 
-        {/* Relationships graph — rendered under the per-DC metadata so the
-         *  selected collection's joins/links sit alongside its details. */}
-        <JoinsGraph
-          dataCollections={allDataCollections.map((d) => ({
-            id: (d._id ?? d.id) as string,
-            tag: d.data_collection_tag || ((d._id ?? d.id) as string),
-            type: (d.config?.type as string | undefined) || 'unknown',
-            columns: extractColumns(d),
-          }))}
-          joins={joins}
-          links={links}
-          highlightDcId={dcId}
-        />
       </Stack>
     </Paper>
   );
@@ -3581,6 +3950,7 @@ const DetailRow: React.FC<{
 
 const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
   const accent = useBrandAccents();
+  const glass = useGlassPages();
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -3648,7 +4018,7 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
     }
     return (
       <Button
-        color={accent.secondary}
+        color={glass ? undefined : accent.secondary}
         variant="light"
         size="sm"
         onClick={handleLoad}

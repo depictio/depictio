@@ -113,6 +113,10 @@ services:
       # look identical from the inside.
       DEPICTIO_TELEMETRY_ENABLED: "${DEPICTIO_TELEMETRY_ENABLED:-true}"
       DEPICTIO_TELEMETRY_DEPLOYMENT_KIND: "${DEPICTIO_TELEMETRY_DEPLOYMENT_KIND:-docker-compose}"
+      # Release check: admins are told when a newer Depictio exists. Deliberately
+      # NO default: unset (empty) means "on, and the admin may toggle it from
+      # /admin"; any value here wins and locks that toggle. See .env.example.
+      DEPICTIO_VERSION_CHECK_ENABLED: "${DEPICTIO_VERSION_CHECK_ENABLED:-}"
       # Which view /dashboards opens in for someone who never picked one, and
       # the geometry of the thumbnails it shows. See .env.example.
       DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: "${DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW:-table}"

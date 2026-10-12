@@ -181,6 +181,10 @@
     },
   };
 
+  // Petals: the loading loop's movement on its own, for a hover. The wedges leave
+  // the logo shape where they rest, so nothing folds or turns: only the radii move.
+  VARIANTS.petals = { reset: VARIANTS.loading.reset, plan: VARIANTS.loading.plan };
+
   // Fan: the eight blades start folded on the first wedge, at one o'clock, all at the
   // same radius. They open like a hand fan into a perfect disc, the disc springs into
   // the logo clockwise, one sweep, the data loop, back to the disc, and the fan folds
@@ -285,7 +289,7 @@
    <depictio-rose size="64" mode="loading"></depictio-rose>
 
    Attributes (all optional, all live):
-     mode    loading | fan | intro | live | sweep | logo   default loading
+     mode    loading | petals | fan | intro | live | sweep | logo   default loading
      size    px, the side of the square                default 64
      speed   playback multiplier                       default 1
      hold    seconds the mark rests on the logo shape  default 1.2
@@ -397,9 +401,23 @@
       const reduce = this._mq && this._mq.matches && this.getAttribute('motion') !== 'always';
       const still = mode === 'logo' || reduce;
       this.toggleAttribute('data-still', !!(still && mode === 'loading'));
+      // Where each wedge is mid-motion, read before the animations are cancelled,
+      // so going back to the logo eases there instead of jumping.
+      const from = still && !reduce && this._wedges.map(w => {
+        const m = /^matrix\(([^,]+)/.exec(getComputedStyle(w).transform);
+        return m ? parseFloat(m[1]) : null;
+      });
       this._stop();
       if (still) {
-        this._wedges.forEach((w, i) => { w.style.transform = 'scale(' + R.RADII[i] + ')'; });
+        this._wedges.forEach((w, i) => {
+          const to = 'scale(' + R.RADII[i] + ')';
+          w.style.transform = to;
+          const f = from && from[i];
+          if (f !== null && f !== undefined && Math.abs(f - R.RADII[i]) > .005) {
+            w.animate([{ transform: 'scale(' + f.toFixed(4) + ')' }, { transform: to }],
+              { duration: 320, easing: OUT });
+          }
+        });
         return;
       }
       R.play(this._wedges, R.VARIANTS[mode] ? mode : 'loading', this.params);

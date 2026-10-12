@@ -17,6 +17,9 @@ import { Box } from '@mantine/core';
 const GAP = 'var(--mantine-spacing-md)';
 const HEADER = 'var(--app-shell-header-offset, 0px)';
 const FOOTER = 'var(--app-shell-footer-offset, 0px)';
+// The Glass builder scrolls inside its canvas, under a floating top bar and
+// above a step bar: the room those take is declared once on its shell.
+const CHROME = 'var(--bld-chrome-h, 0px)';
 
 export const STICKY_TOP = `calc(${HEADER} + ${GAP})`;
 
@@ -26,7 +29,7 @@ const StickyPreview: React.FC<{ children: React.ReactNode }> = ({ children }) =>
     style={{
       position: 'sticky',
       top: STICKY_TOP,
-      maxHeight: `calc(100dvh - ${HEADER} - ${FOOTER} - 2 * ${GAP})`,
+      maxHeight: `calc(100dvh - ${HEADER} - ${FOOTER} - ${CHROME} - 2 * ${GAP})`,
       overflowY: 'auto',
     }}
   >

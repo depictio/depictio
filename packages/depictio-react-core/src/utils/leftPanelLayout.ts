@@ -93,7 +93,10 @@ const GROUP_HEADER_H = 1;
 function rowsForMember(member: InteractiveGroup['members'][number]): number {
   const type = member.interactive_component_type;
   if (type !== 'Slider' && type !== 'RangeSlider') return DEFAULT_H;
-  return member.show_marks === false ? DEFAULT_H : DEFAULT_H + 1;
+  // Ticks without labels hang no text below the track, so they need no row.
+  return member.show_marks === false || member.show_mark_labels === false
+    ? DEFAULT_H
+    : DEFAULT_H + 1;
 }
 
 /**

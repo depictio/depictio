@@ -24,6 +24,7 @@ import {
   isMultiqcIcon,
   themedIconSrc,
   useBranding,
+  useChromeStyle,
   Z_LAYERS,
 } from 'depictio-react-core';
 import type { BrandTheme, DashboardSummary } from 'depictio-react-core';
@@ -178,7 +179,99 @@ const GUIDE_VALUE = '__guide__';
 
 export type TabMoveDirection = 'up' | 'down';
 
-interface SidebarProps {
+/** One tab as a layout draws it. */
+export interface TabNavItem {
+  id: string;
+  label: string;
+  /** A real link: middle-click and Cmd+Click open the tab in a new browser tab. */
+  href: string;
+  /** The tab's icon, 18px, in its colour (`--dc-tab-icon` can recolour it). */
+  icon: React.ReactNode;
+  /** Mantine colour name of the tab (author's, else brand). */
+  color: string;
+  active: boolean;
+  /** The dashboard's main tab rather than a child tab. */
+  isParent: boolean;
+}
+
+/** The tab list as data, for layouts that draw their own tabs. */
+export interface TabNavModel {
+  /** Ungrouped tabs first (main tab included), then one section per `tab_group`. */
+  sections: { group: string | null; items: TabNavItem[] }[];
+  /** The Guide's entry, when the author kept it on. Its click opens the Guide
+   *  in place (and closes it when it is the open page). */
+  guide?: {
+    open: boolean;
+    href: string;
+    onClick: (e: React.MouseEvent<HTMLAnchorElement>) => void;
+  };
+  /** Back to the dashboards list. */
+  backHref: string;
+}
+
+/** The tab list of `Sidebar`, as a model. */
+export function useTabNav({
+  tabs,
+  activeId,
+  guide,
+  versionId,
+}: {
+  tabs: DashboardSummary[];
+  activeId: string | null;
+  guide?: SidebarProps['guide'];
+  versionId?: SidebarProps['versionId'];
+}): TabNavModel {
+  const { colorScheme } = useMantineColorScheme();
+  const isDark = colorScheme === 'dark';
+  const brand = useBranding();
+  const linkMode: 'view' | 'edit' = window.location.pathname.startsWith('/dashboard-edit/')
+    ? 'edit'
+    : 'view';
+  const sections = groupTabs(tabs).map((section) => ({
+    group: section.group,
+    items: section.tabs.map((d): TabNavItem => {
+      const isParent = !d.parent_dashboard_id;
+      const color = resolveTabColor(d, isParent, brand);
+      const image = tabImageSrc(d, isParent, isDark);
+      return {
+        id: d.dashboard_id,
+        label: isParent
+          ? d.main_tab_name || d.title || d.dashboard_id
+          : d.title || d.dashboard_id,
+        href: dashboardHref(d.dashboard_id, linkMode, versionId),
+        icon: image ? (
+          <img src={image} alt="" width={18} height={18} style={{ objectFit: 'contain' }} />
+        ) : (
+          <Icon
+            icon={resolveTabIcon(d, isParent)}
+            width={18}
+            height={18}
+            style={{
+              color: `var(--dc-tab-icon, var(--mantine-color-${color}-${isDark ? 4 : 6}))`,
+              flexShrink: 0,
+            }}
+          />
+        ),
+        color,
+        active: d.dashboard_id === activeId && !guide?.open,
+        isParent,
+      };
+    }),
+  }));
+  return {
+    sections,
+    guide: guide
+      ? {
+          open: guide.open,
+          href: guide.href,
+          onClick: dashboardLinkClickHandler(guide.open ? guide.onClose : guide.onOpen),
+        }
+      : undefined,
+    backHref: '/dashboards',
+  };
+}
+
+export interface SidebarProps {
   tabs: DashboardSummary[];
   activeId: string | null;
   /** When 'edit', renders per-tab "..." menu + trailing "+ Add tab" pill.
@@ -249,6 +342,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   // overrides, the instance's otherwise (App/EditorApp nest the context).
   const brand = useBranding();
   const isEdit = mode === 'edit';
+  const chromeStyle = useChromeStyle();
 
   // Lift the per-tab menu open-state up here so only ONE "..." menu can be
   // open at a time. Each child Menu was previously self-contained, so opening
@@ -351,7 +445,7 @@ const Sidebar: React.FC<SidebarProps> = ({
     const isActive = d.dashboard_id === activeId;
     // The open Guide takes the list's fill, so the current tab draws as any
     // other until it closes.
-    const isFilled = isActive && !guide?.open;
+    const isFilled = isActive && !guide?.open && chromeStyle.layout.activeTabFilled !== false;
     const label = isParent
       ? d.main_tab_name || d.title || d.dashboard_id
       : d.title || d.dashboard_id;
@@ -380,7 +474,11 @@ const Sidebar: React.FC<SidebarProps> = ({
         width={18}
         height={18}
         style={{
-          color: isFilled ? 'var(--mantine-color-white)' : `var(--mantine-color-${iconColor}-6)`,
+          // Variables so a chrome style can recolour tab icons without
+          // fighting an inline colour.
+          color: isFilled
+            ? 'var(--dc-tab-icon-active, var(--mantine-color-white))'
+            : `var(--dc-tab-icon, var(--mantine-color-${iconColor}-6))`,
           flexShrink: 0,
         }}
       />
@@ -443,7 +541,12 @@ const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <Stack gap="sm" h="100%" justify="space-between">
+    <Stack
+      gap="sm"
+      h="100%"
+      justify="space-between"
+      className="dc-sidebar-inner"
+    >
       {/* Top region — centered, grey back link to match Dash sidebar */}
       <Stack gap="sm" align="stretch">
         <Anchor
@@ -453,9 +556,11 @@ const Sidebar: React.FC<SidebarProps> = ({
           underline="hover"
           ta="center"
           c="dimmed"
-          className="depictio-chrome-link"
+          className="depictio-chrome-link dc-sidebar-back"
+          aria-label="Back to Dashboards"
         >
-          ← Back to Dashboards
+          <Icon icon="mdi:arrow-left" width={16} className="dc-sidebar-back-icon" />
+          <span className="dc-sidebar-back-label">Back to Dashboards</span>
         </Anchor>
         <Divider />
       </Stack>
@@ -472,7 +577,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         onScrollPositionChange={rememberTabScroll}
       >
         <Stack gap={4}>
-          <Text c="dimmed" size="xs" tt="uppercase" fw={700} mb={4}>
+          <Text c="dimmed" size="xs" tt="uppercase" fw={700} mb={4} className="dc-sidebar-heading">
             Tabs
           </Text>
           {tabs.length === 0 && (
@@ -526,6 +631,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                           fw={700}
                           pl="xs"
                           truncate="end"
+                          className="dc-sidebar-heading"
                           style={{ minWidth: 0 }}
                         >
                           {section.group}
@@ -660,7 +766,7 @@ const Sidebar: React.FC<SidebarProps> = ({
         server, profile. AuthModeBadge sits above the avatar to surface the
         active server mode (Demo / Public / Single User), matching
         `depictio/dash/layouts/sidebar.py:create_sidebar_footer`. */}
-      <Stack gap="xs" align="center">
+      <Stack gap="xs" align="center" className="dc-sidebar-footer">
         {/* Dashboard logo — centered, right above the footer divider.
             Falls through to the instance logo, then to nothing.
 
@@ -677,10 +783,18 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* No attribution here — the dashboard's single slot for it is the
             header, and carrying it in both places showed it twice. */}
         <Divider w="100%" />
-        <ThemeToggle />
-        <ServerStatusBadge />
-        <AuthModeBadge />
-        <ProfileBadge />
+        <div className="dc-sidebar-footer-item dc-sidebar-theme">
+          <ThemeToggle />
+        </div>
+        <div className="dc-sidebar-footer-item dc-sidebar-status">
+          <ServerStatusBadge />
+        </div>
+        <div className="dc-sidebar-footer-item dc-sidebar-auth">
+          <AuthModeBadge />
+        </div>
+        <div className="dc-sidebar-footer-item dc-sidebar-profile">
+          <ProfileBadge />
+        </div>
       </Stack>
     </Stack>
   );

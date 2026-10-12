@@ -765,6 +765,12 @@ class InteractiveLiteComponent(BaseLiteComponent):
         "ungrouped components, hidden for components inside a 'group' for higher "
         "compaction. Set explicitly to True/False to override.",
     )
+    show_mark_labels: bool | None = Field(
+        default=None,
+        description="Slider / RangeSlider only: whether the tick marks carry their value "
+        "labels. Omitted (or True) labels every tick, as before; False keeps the ticks "
+        "and drops the labels. Has no effect when 'show_marks' hides the ticks.",
+    )
     show_histogram: bool | None = Field(
         default=None,
         description="RangeSlider only: draw the column's histogram above the slider so the "

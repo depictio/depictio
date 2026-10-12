@@ -15,6 +15,7 @@ import type { MonitoringIngestionStep } from 'depictio-react-core';
 import { compactCount, formatDuration } from './format';
 import { activeStepIndex, orderSteps } from './runs';
 import { statusColor } from './tokens';
+import { useTone } from './useTone';
 
 /** Human labels for the counter keys the CLI emits. Unknown keys fall back to
  *  their raw name with underscores stripped, so a new counter shows up
@@ -60,6 +61,7 @@ function stepIcon(status: string): string {
 }
 
 const CounterChips: React.FC<{ counters?: Record<string, number> | null }> = ({ counters }) => {
+  const tone = useTone();
   if (!counters) return null;
   const entries = Object.entries(counters).filter(([, v]) => v != null);
   if (entries.length === 0) return null;
@@ -70,7 +72,9 @@ const CounterChips: React.FC<{ counters?: Record<string, number> | null }> = ({ 
           key={key}
           size="xs"
           variant="light"
-          color={COUNTER_COLORS[key] ?? 'gray'}
+          color={tone(COUNTER_COLORS[key] ?? 'gray')}
+          // A count is quiet text; only a failure keeps its dot.
+          className={key === 'files_failed' ? undefined : 'gp-tag-plain'}
         >
           {compactCount(value)} {COUNTER_LABELS[key] ?? key.replace(/_/g, ' ')}
         </Badge>
@@ -83,6 +87,7 @@ export const IngestionStepTimeline: React.FC<{
   steps?: MonitoringIngestionStep[];
   currentStep?: string | null;
 }> = ({ steps, currentStep }) => {
+  const tone = useTone();
   if (!steps || steps.length === 0) {
     return (
       <Text size="xs" c="dimmed">
@@ -127,7 +132,7 @@ export const IngestionStepTimeline: React.FC<{
                 )}
                 {step.job_id && (
                   <Tooltip label={`Offloaded as job ${step.job_id}`} withArrow>
-                    <Badge size="xs" variant="light" color="cyan">
+                    <Badge size="xs" variant="light" color={tone('cyan')}>
                       offloaded
                     </Badge>
                   </Tooltip>

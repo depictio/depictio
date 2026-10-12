@@ -116,3 +116,69 @@ export function compactCount(n?: number | null): string {
   if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`;
   return `${(n / 1_000_000).toFixed(1)}M`;
 }
+
+const OPENERS = '{[(';
+const CLOSERS = '}])';
+
+/**
+ * Pretty prints a JSON document or a Python repr (a task's args, its result,
+ * a log line ending in a dict) by its brackets alone: no parse, so single
+ * quotes, `None`, `True` and a truncated tail all survive. Text that does not
+ * open on a bracket, or end on one after a prefix (`loaded: {...}`), comes
+ * back unchanged.
+ */
+export function prettyRepr(text: string, indent = '  '): string {
+  const src = text.trim();
+  const start = src.search(/[[{(]/);
+  if (start < 0) return text;
+  if (start > 0 && !(/[{[]/.test(src[start]) && /[}\]]$/.test(src))) return text;
+
+  let out = '';
+  let depth = 0;
+  let quote: string | null = null;
+  // Right after a line break the source's own spacing is dropped.
+  let fresh = false;
+  const breakLine = () => {
+    out += `\n${indent.repeat(depth)}`;
+    fresh = true;
+  };
+  for (let i = start; i < src.length; i++) {
+    const c = src[i];
+    if (quote) {
+      out += c;
+      if (c === '\\' && i + 1 < src.length) out += src[++i];
+      else if (c === quote) quote = null;
+      continue;
+    }
+    if (fresh && /\s/.test(c)) continue;
+    fresh = false;
+    if (c === "'" || c === '"') {
+      quote = c;
+      out += c;
+    } else if (OPENERS.includes(c)) {
+      const rest = src.slice(i + 1).trimStart();
+      if (rest && CLOSERS.includes(rest[0])) {
+        // An empty container stays on one line: `{}`, `[]`, `()`.
+        out += c + rest[0];
+        i = src.indexOf(rest[0], i + 1);
+      } else {
+        depth += 1;
+        out += c;
+        breakLine();
+      }
+    } else if (CLOSERS.includes(c)) {
+      depth = Math.max(0, depth - 1);
+      out = out.trimEnd();
+      breakLine();
+      out += c;
+      fresh = false;
+    } else if (c === ',') {
+      out += ',';
+      breakLine();
+    } else {
+      out += c;
+    }
+  }
+  const head = src.slice(0, start).trimEnd();
+  return head ? `${head}\n${out}` : out;
+}

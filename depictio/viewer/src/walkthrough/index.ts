@@ -4,3 +4,4 @@ export { dispatchWalkthroughRestart } from './useWalkthrough';
 export { buildPublicExplorerWalkthrough } from './steps/publicExplorer';
 export { authBuilderWalkthrough } from './steps/authBuilder';
 export type { WalkthroughDefinition, WalkthroughStep } from './types';
+export { useTourLauncher } from './availability';

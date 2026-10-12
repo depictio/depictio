@@ -1,5 +1,5 @@
 import { Loader, Stack, Text } from '@mantine/core';
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { createTemporaryUser, getAnonymousSession, persistSession } from 'depictio-react-core';
 
 import AuthBackground from './components/AuthBackground';
@@ -10,9 +10,18 @@ import LoginForm from './components/LoginForm';
 import PublicAccessGate from './components/PublicAccessGate';
 import RegisterForm from './components/RegisterForm';
 import { useAuthMode } from './hooks/useAuthMode';
+import { withAuthPreview } from './preview';
 import './styles/auth.css';
 
 import { postAuthDestination } from './postAuthTarget';
+import { useGlassPages } from '../chrome/variants/glass/pages';
+import {
+  AuthThemeKey,
+  GlassAuthBackground,
+  GlassAuthCard,
+  GlassAuthWait,
+} from '../chrome/variants/glass/pages/GlassAuth';
+import { useBranding } from '../branding';
 
 
 type View = 'login' | 'register' | 'oauth-callback' | 'magic-callback';
@@ -27,8 +36,11 @@ function detectView(pathname: string): View {
 export default function AuthApp() {
   const initialView = useMemo<View>(() => detectView(window.location.pathname), []);
   const [view, setView] = useState<View>(initialView);
-  const { loading, status, error } = useAuthMode();
+  const { loading, status: served, error } = useAuthMode();
+  const status = useMemo(() => withAuthPreview(served), [served]);
   const [autoSessionError, setAutoSessionError] = useState<string | null>(null);
+  const glass = useGlassPages();
+  const branding = useBranding();
 
   // Auto-redirect on /auth load. Three cases:
   // 1. Single-user mode — always fetch a fresh admin session and persist it
@@ -81,6 +93,100 @@ export default function AuthApp() {
   }, [loading, status, view]);
 
   const handleSuccess = () => window.location.assign(postAuthDestination());
+
+  if (glass) {
+    const appName = branding?.app_name || 'depictio';
+    // The password form goes only when another door is open (Google or SSO).
+    const showCredentials =
+      !(status?.password_login_disabled ?? false) ||
+      !(status?.google_oauth_enabled || status?.saml_enabled);
+    let card: React.ReactNode;
+    if (view === 'oauth-callback') card = <GoogleOAuthCallback />;
+    else if (view === 'magic-callback') card = <MagicLinkCallback />;
+    else if (loading) {
+      card = (
+        <GlassAuthCard title={`Opening ${appName}`}>
+          <GlassAuthWait text="Checking how this instance signs people in." />
+        </GlassAuthCard>
+      );
+    } else if (error) {
+      card = (
+        <GlassAuthCard title={`${appName} could not start`} lede="The server did not answer the sign-in check.">
+          <p className="gp-auth-error" role="alert">{error}</p>
+        </GlassAuthCard>
+      );
+    } else if (status?.is_public_mode && status?.public_access_code_required) {
+      card = (
+        <GlassAuthCard
+          title="Enter the access code"
+          lede="This instance is open to anyone with its access code. You continue as a guest, no account needed."
+        >
+          <PublicAccessGate onSuccess={handleSuccess} />
+        </GlassAuthCard>
+      );
+    } else if (status?.is_single_user_mode || status?.is_public_mode) {
+      card = (
+        <GlassAuthCard title={status.is_single_user_mode ? 'Starting your session' : 'Starting a guest session'}>
+          {autoSessionError ? (
+            <p className="gp-auth-error" role="alert">{autoSessionError}</p>
+          ) : (
+            <GlassAuthWait
+              text={status.is_single_user_mode ? 'Signing you in to this single-user instance.' : 'Creating a temporary guest account.'}
+            />
+          )}
+        </GlassAuthCard>
+      );
+    } else if (view === 'register' && !status?.registration_disabled) {
+      card = (
+        <GlassAuthCard
+          title="Create your account"
+          lede="Keep your dashboards and projects in one place."
+          foot={
+            <>
+              <span>Already have an account?</span>
+              <button type="button" className="gp-auth-link" onClick={() => setView('login')} data-testid="open-login-form">
+                Sign in
+              </button>
+            </>
+          }
+        >
+          <RegisterForm onSwitchToLogin={() => setView('login')} onSuccess={handleSuccess} />
+        </GlassAuthCard>
+      );
+    } else {
+      card = (
+        <GlassAuthCard
+          title="Sign in"
+          lede="Open your dashboards and their projects."
+          foot={
+            !status?.registration_disabled && showCredentials ? (
+              <>
+                <span>New here?</span>
+                <button type="button" className="gp-auth-link" onClick={() => setView('register')} data-testid="open-register-form">
+                  Create an account
+                </button>
+              </>
+            ) : undefined
+          }
+        >
+          <LoginForm
+            googleEnabled={status?.google_oauth_enabled ?? false}
+            samlEnabled={status?.saml_enabled ?? false}
+            samlLabel={status?.saml_login_label}
+            passwordLoginDisabled={status?.password_login_disabled ?? false}
+            onSuccess={handleSuccess}
+          />
+        </GlassAuthCard>
+      );
+    }
+    return (
+      <>
+        <GlassAuthBackground />
+        <AuthThemeKey />
+        <div className="auth-page-content">{card}</div>
+      </>
+    );
+  }
 
   return (
     <>

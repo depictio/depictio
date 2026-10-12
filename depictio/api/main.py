@@ -432,8 +432,9 @@ if _VIEWER_DIST.is_dir() and _VIEWER_ASSETS.is_dir() and _VIEWER_INDEX.is_file()
 
     # /profile and /cli-agents → React-based replacements for the
     # Dash /profile and /cli_configs management pages. Same SPA bundle;
-    # main.tsx detects the path prefix and renders <ProfileApp/> or
-    # <CliAgentsApp/>. Coexists with the Dash routes during rollout.
+    # main.tsx detects the path prefix and renders <ProfileApp/>. /cli-agents is
+    # served the same way and redirects client-side to /profile#cli-agents.
+    # Coexists with the Dash routes during rollout.
     @app.get("/profile")
     async def _serve_profile_spa_root() -> FileResponse:
         return _spa_index()

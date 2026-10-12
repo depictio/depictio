@@ -167,6 +167,9 @@ export {
   InteractiveFrame,
   InteractiveTitle,
   defaultInteractiveTitle,
+  interactiveAccent,
+  interactiveAccentRaw,
+  interactiveIcon,
   interactiveTitle,
 } from './components/interactive/frame';
 
@@ -210,7 +213,9 @@ export type { InteractiveGroup } from './utils/groupInteractive';
 export {
   EmptyBar,
   FilterStrip,
+  FilterStripControl,
   FilterStripSection,
+  isMemberActive as isFilterMemberActive,
   SectionFilterBar,
 } from './components/interactive/strip/FilterStrip';
 export type {
@@ -452,7 +457,13 @@ export {
   renderMultiQC,
   renderMultiQCGeneralStats,
   fetchServerStatus,
+  fetchServerInfo,
+  fetchVersionCheckAdmin,
+  updateVersionCheckAdmin,
+  resetVersionCheckAdmin,
+  runVersionCheckAdmin,
   fetchPublicConfig,
+  onPublicConfig,
   fetchCurrentUser,
   updateTab,
   deleteTab,
@@ -497,6 +508,7 @@ export {
   // Instance branding (admin panel)
   fetchBrandingAdmin,
   updateBrandingAdmin,
+  updateInstanceLook,
   resetBrandingAdmin,
   fetchBrandPresets,
   resolveBrandTheme,
@@ -508,10 +520,13 @@ export {
   createTemporaryUser,
   getAnonymousSession,
   startGoogleOAuth,
+  samlLoginUrl,
   handleGoogleCallback,
   exchangeMagicToken,
   persistSession,
   clearSession,
+  AUTH_SESSION_EVENT,
+  currentSessionId,
   validateSession,
   authFetch,
   refreshAccessToken,
@@ -599,6 +614,9 @@ export {
   // Profile + CLI tokens
   fetchCurrentUserFull,
   editPassword,
+  fetchMyAvatarBlob,
+  uploadMyAvatar,
+  deleteMyAvatar,
   listLongLivedTokens,
   createLongLivedToken,
   deleteLongLivedToken,
@@ -820,6 +838,7 @@ export {
   BRAND_PALETTES,
   brandAccent,
   BrandingContext,
+  LOGO_PALETTES,
   brandCssVariablesResolver,
   buildDepictioTheme,
   depictioTheme,
@@ -841,6 +860,9 @@ export type {
   LogoMode,
   TintMode,
 } from './brandTheme';
+
+// Dashboard chrome style: role-based buttons, swappable at runtime.
+export * from './chrome';
 
 // Brand theme editor + live preview, shared by the /admin Branding panel and
 // the per-dashboard appearance panel — the two levels edit the same model, so
@@ -886,6 +908,9 @@ export type {
   TableResponse,
   JBrowseSessionResponse,
   ServerStatusResponse,
+  ServerInfo,
+  VersionCheckBlock,
+  VersionCheckAdmin,
   PublicConfigResponse,
   CurrentUser,
   UpdateTabPayload,
@@ -926,6 +951,7 @@ export type {
   // Auth types
   AuthMode,
   AuthStatusResponse,
+  AvatarInfo,
   SessionPayload,
   RegisterResult,
   GoogleCallbackResult,

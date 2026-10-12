@@ -7,7 +7,7 @@ import { useAvailableSet, useFunnelState } from '../../availableValues';
 import ComponentSkeleton from '../ComponentSkeleton';
 import { orderCategoricalOptions } from './categoricalOptions';
 import { FunnelAvailabilityBadge, FunnelOptionMarker } from './funnelDecorations';
-import { InteractiveFrame, InteractiveTitle } from './frame';
+import { InteractiveFrame, InteractiveTitle, interactiveAccentRaw } from './frame';
 import { useUniqueValues } from './useInteractiveData';
 
 /**
@@ -135,7 +135,7 @@ const SegmentedControlRenderer: React.FC<{
         data={data}
         value={selectedValue ?? data[0]?.value}
         onChange={handleChange}
-        color={metadata.icon_color || undefined}
+        color={interactiveAccentRaw(metadata)}
         // One step below the panel's shared control size, deliberately. Every
         // other control is a single input; a segmented control is N labels
         // side by side, so at the same token it carries several times the ink

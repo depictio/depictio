@@ -8,11 +8,12 @@
  *     testUser's password. The Cypress spec was describe.skip'd precisely
  *     because a mid-test failure left the shared password changed; a
  *     throwaway user makes the test idempotent and retry-safe.
- *   - Edit Password is a modal on /profile in the React viewer
- *     (EditPasswordModal.tsx), enabled only in standard auth mode.
+ *   - Password is an inline form in the "password" section of the Account
+ *     settings page (/profile#password, PasswordForm.tsx), enabled only in
+ *     standard auth mode.
  *
- * Only runs in standard mode: the button is disabled in single-user, public
- * and demo modes (ProfileApp.buttonStates).
+ * Only runs in standard mode: the form is disabled in single-user, public
+ * and demo modes (ProfileApp.actionStates).
  */
 
 import { test, expect, getAuthMode, apiLogin, loginStatus, seedTokenInStorage, API_URL, API_PREFIX } from "@fixtures/auth";
@@ -45,15 +46,12 @@ test.describe("Edit Password", () => {
     const tokens = await apiLogin(request, email, OLD_PASSWORD);
     tokens.email = email;
     await seedTokenInStorage(page, tokens);
-    await page.goto("/profile");
+    // The hash opens the Password section.
+    await page.goto("/profile#password");
 
-    const editBtn = page.locator("[data-testid='edit-password-button']");
-    await expect(editBtn).toBeVisible({ timeout: 15_000 });
-    await expect(editBtn).toBeEnabled();
-    await editBtn.click();
-
-    const modal = page.locator("[data-testid='edit-password-modal']");
-    await expect(modal).toBeVisible();
+    const modal = page.locator("[data-testid='password-form']");
+    await expect(modal).toBeVisible({ timeout: 15_000 });
+    await expect(modal.locator("[data-testid='save-password-btn']")).toBeEnabled();
 
     // Client-side validation: mismatching confirmation.
     await modal.locator("[data-testid='old-password']").fill(OLD_PASSWORD);
@@ -95,11 +93,10 @@ test.describe("Edit Password", () => {
     const tokens = await apiLogin(request, email, OLD_PASSWORD);
     tokens.email = email;
     await seedTokenInStorage(page, tokens);
-    await page.goto("/profile");
+    await page.goto("/profile#password");
 
-    await page.locator("[data-testid='edit-password-button']").click();
-    const modal = page.locator("[data-testid='edit-password-modal']");
-    await expect(modal).toBeVisible();
+    const modal = page.locator("[data-testid='password-form']");
+    await expect(modal).toBeVisible({ timeout: 15_000 });
 
     await modal.locator("[data-testid='old-password']").fill(OLD_PASSWORD);
     await modal.locator("[data-testid='new-password']").fill(OLD_PASSWORD);

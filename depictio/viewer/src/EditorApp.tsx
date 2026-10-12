@@ -30,11 +30,9 @@ import React, {
 import {
   ActionIcon,
   Anchor,
-  AppShell,
   Badge,
   Button,
   Center,
-  Drawer,
   Group,
   Text,
   Loader,
@@ -55,7 +53,7 @@ import { useFilterPanelOpen } from './hooks/useFilterPanelOpen';
 import { FILTER_PANEL_WIDTH_VAR, useFilterPanelWidth } from './hooks/useFilterPanelWidth';
 import { useCurrentUser } from './hooks/useCurrentUser';
 import { isDashboardOwner } from './lib/dashboardOwnership';
-import FilterPanelResizer, { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
+import { FILTER_PANEL_RESIZER_WIDTH } from './components/FilterPanelResizer';
 import Inspector from './chrome/inspector/Inspector';
 import { useInspectorChrome } from './chrome/inspector/useInspectorChrome';
 import InspectorProviders from './chrome/inspector/InspectorProviders';
@@ -159,8 +157,12 @@ import GroupingHeaderControl, {
 import SectionsModal from './components/sections/SectionsModal';
 import { applySectionOp, groupWith, sectionsFor } from './components/sections/sectionMutations';
 import type { SectionKind, SectionOp } from './components/sections/sectionMutations';
-import { Header, Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal } from './chrome';
+import { Sidebar, RunParametersHost, SettingsDrawer, TabIntro, TabModal } from './chrome';
+import type { HeaderAction } from './chrome/Header';
+import ShellHost from './chrome/shell/ShellHost';
+import type { FilterPanelOptions } from './chrome/shell/types';
 import type { TabDefaults, TabModalSubmitPayload } from './chrome';
+import { useChromeVariant } from './chrome/variants';
 import { useTabGroupActions } from './chrome/useTabGroupActions';
 import ComponentVersionModal from './versions/ComponentVersionModal';
 import DataVersionPanel from './versions/DataVersionPanel';
@@ -1743,6 +1745,8 @@ const EditorApp: React.FC = () => {
     () => tabSiblings.find((d) => !d.parent_dashboard_id) || null,
     [tabSiblings],
   );
+  // The reader's chrome style (Glass or Classic, see chrome/variants).
+  useChromeVariant();
 
   const handleResetAllFilters = useCallback(() => {
     setFilters([]);
@@ -2523,450 +2527,303 @@ const EditorApp: React.FC = () => {
     [dashboardId, applyDashboard, refreshTabList],
   );
 
-  return (
+  // The page's regions, handed to the active chrome style's Shell (see
+  // chrome/shell/types.ts), which decides where each one goes.
+  const ready = Boolean(dashboard) && !loading && !error;
+  const headerActions: HeaderAction[] = [];
+  if (dashboard) {
+    headerActions.push({
+      id: 'analysis',
+      group: 'read',
+      node: (
+        <GroupingHeaderControl
+          groupCount={groupsApi.groups.length}
+          colorBy={groupsApi.colorBy}
+          opened={analysisOpen}
+          onOpenedChange={handleAnalysisOpenChange}
+          armed={analysisArmed}
+          onToggle={handleAnalysisToggle}
+          pushesContent={!isNarrow}
+        >
+          {groupsSection}
+        </GroupingHeaderControl>
+      ),
+    });
+  }
+  if (realtimeEnabled) {
+    headerActions.push({
+      id: 'realtime',
+      group: 'read',
+      node: (
+        <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
+          <RealtimeIndicator
+            status={realtime.status}
+            mode={realtimeMode}
+            paused={realtimePaused}
+            pendingUpdate={realtime.pendingUpdate}
+            onModeChange={persistRealtimeMode}
+            onPausedChange={setRealtimePaused}
+            onAcknowledgePending={() => {
+              realtime.acknowledgePending();
+              triggerRealtimeRefresh();
+            }}
+            journal={journal}
+            onClearJournal={clearJournal}
+            onHighlightBatch={handleHighlightBatch}
+            onClearHighlight={handleClearHighlight}
+            activeHighlightKey={activeHighlight?.batchKey}
+          />
+        </span>
+      ),
+    });
+  }
+  const guideEntry =
+      guideSettings.enabled && dashboard
+        ? {
+            open: guide.open,
+            href: guide.href,
+            onOpen: openGuideFromSidebar,
+            onClose: closeGuideFromSidebar,
+          }
+        : undefined;
+  // Docked: the authoring column (drag, overlays, section menus). Elsewhere
+  // (the phone drawer, a layout's popover): the reading form — drag-reordering
+  // needs a stable panel width to lay its grid out against.
+  const filterPanel = (opts?: FilterPanelOptions) =>
+    !dashboard ? null : opts?.docked ? (
+      <FilterPanel
+        components={leftComponents}
+        allMetadata={summaryMetadata}
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        onResetAllFilters={handleResetAllFilters}
+        layoutData={dashboard.left_panel_layout_data}
+        filterSections={panelFilterSections}
+        readOnlySections={readOnlyPanelSections}
+        renderSectionActions={renderPanelSectionAction}
+        dashboardId={dashboardId}
+        stateScopeId={panelScopeId}
+        headerActions={<MapPanelControl panel={mapPanel} />}
+        // No refreshTick: the editor threads no realtime refresh
+        // counter into any of its grids, so the left panel matches
+        // RightComponentGrid rather than inventing state here.
+        editMode
+        renderItemOverlay={renderFilterItemOverlay}
+        onLayoutChange={handleLeftLayoutChange}
+        collapsed={!filterPanelOpened}
+        onToggleCollapsed={toggleFilterPanel}
+        groupSummaryRows={groupSummaryRows}
+        footer={
+          <MapPanelDock
+            panel={mapPanel}
+            // Docked maps render data: include group filters (the
+            // tab's; a section bar's stay with its section).
+            filters={tabFilters}
+            onFilterChange={handleFilterChange}
+            renderEditActions={renderMapPanelEditActions}
+          />
+        }
+      />
+    ) : (
+      <FilterPanel
+        components={leftComponents}
+        allMetadata={summaryMetadata}
+        filters={filters}
+        onFilterChange={handleFilterChange}
+        onResetAllFilters={handleResetAllFilters}
+        layoutData={dashboard.left_panel_layout_data}
+        filterSections={panelFilterSections}
+        dashboardId={dashboardId}
+        groupSummaryRows={groupSummaryRows}
+        stateScopeId={panelScopeId}
+        headerActions={<MapPanelControl panel={mapPanel} />}
+      />
+    );
+  const boot = (
     <>
-    {/* Renderers read their pin from here, as in the viewer's preview. */}
-    <DataVersionProvider asOfVersionId={asOfVersionId} pins={dataPins} dashboardId={dashboardId}>
-    <InspectorProviders control={inspectorControl}>
-    {/* Tier-2 viz controls an author touches here are written back onto the
-        component's config; the dashboard-wide default decides where every
-        advanced-viz tile draws them unless the tile states its own. */}
-    <AdvancedVizConfigDraftProvider value={handleVizConfigDraft}>
-    <AdvancedVizPlacementDefaultProvider value={dashboard?.advanced_viz_controls}>
-    <SaveGroupContext.Provider value={saveGroupApi}>
-    {/* Same scoping as the viewer, so an editor sees the override they are
-        editing without it escaping into the rest of the app. */}
-    <BrandScope theme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}>
-    {/* The viewer's `category_colors` scope, so a filter bar's chips take the
-        colours readers will see. */}
-    <CategoryColorsContext.Provider value={dashboard}>
-    {/* Tab links in text resolve here too, so the canvas shows them as the
-        viewer does rather than as plain text. */}
-    <TabLinkProvider tabs={tabSiblings} mode="edit">
-    <AppShell
-      header={{ height: 50 }}
-      navbar={{
-        width: 250,
-        breakpoint: 'sm',
-        collapsed: { mobile: !mobileOpened, desktop: !desktopOpened },
-      }}
-      padding={0}
-      transitionDuration={300}
-      aside={inspectorAside}
-      transitionTimingFunction="ease"
-    >
-      <AppShell.Header data-tour-id="header-title">
-        <Header
-          dashboardId={dashboardId}
-          dashboard={dashboard}
-          activeTab={activeTab}
-          parentTab={parentTab}
-          mobileOpened={mobileOpened}
-          desktopOpened={desktopOpened}
-          onToggleMobile={toggleMobile}
-          onToggleDesktop={toggleDesktop}
-          onOpenSettings={() => openSettingsAt()}
-          onOpenFilters={isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined}
-          filterCount={countActiveFilters(filters) + groupSummaryRows.length}
-          onOpenSearch={dashboard ? openSearch : undefined}
-          cardsLoading={cardsLoading}
-          mode="edit"
-          onAddComponent={handleAddComponent}
-          onAddSection={handleAddSection}
-          onSave={handleForceSave}
-          isOwner={isOwner}
-          // Undefined rather than an empty fragment when realtime is off:
-          // the header rules this slot off from the action buttons, and an
-          // empty group would leave a divider with nothing beside it.
-          rightExtras={
-            dashboard || realtimeEnabled ? (
-            <>
-              {dashboard && (
-                <GroupingHeaderControl
-                  groupCount={groupsApi.groups.length}
-                  colorBy={groupsApi.colorBy}
-                  opened={analysisOpen}
-                  onOpenedChange={handleAnalysisOpenChange}
-                  armed={analysisArmed}
-                  onToggle={handleAnalysisToggle}
-                  pushesContent={!isNarrow}
-                >
-                  {groupsSection}
-                </GroupingHeaderControl>
-              )}
-              {realtimeEnabled && (
-                <span data-tour-id="realtime-indicator" style={{ display: 'inline-flex' }}>
-                  <RealtimeIndicator
-                    status={realtime.status}
-                    mode={realtimeMode}
-                    paused={realtimePaused}
-                    pendingUpdate={realtime.pendingUpdate}
-                    onModeChange={persistRealtimeMode}
-                    onPausedChange={setRealtimePaused}
-                    onAcknowledgePending={() => {
-                      realtime.acknowledgePending();
-                      triggerRealtimeRefresh();
-                    }}
-                    journal={journal}
-                    onClearJournal={clearJournal}
-                    onHighlightBatch={handleHighlightBatch}
-                    onClearHighlight={handleClearHighlight}
-                    activeHighlightKey={activeHighlight?.batchKey}
-                  />
-                </span>
-              )}
-            </>
-            ) : undefined
-          }
+      {/* Louder here than in the viewer by consequence: this surface saves,
+          and a chart edited against data you did not realise was historical
+          is the mistake worth preventing. Saving still writes only layout
+          and component config — never data — but the point is that you know
+          what you were looking at. */}
+      {timeTravelling && (
+        <DataVersionBanner
+          pinned={pinnedLabels}
+          asOfLabel={asOf?.label}
+          collections={dataVersionStatus.collections}
+          statusError={dataVersionStatus.error}
+          currentDataOnly={currentDataOnlyCount}
+          onClear={clearDataVersions}
         />
-      </AppShell.Header>
-
-      <AppShell.Navbar p="md" data-tour-id="sidebar">
-        <Sidebar
-          tabs={tabSiblings}
-          activeId={dashboardId}
-          mode="edit"
-          onAddTab={() => openCreateTabModal()}
-          onEditTab={openEditTabModal}
-          onDeleteTab={handleDeleteTab}
-          onMoveTab={handleMoveTab}
-          onRenameGroup={tabGroupActions.onRenameGroup}
-          onMoveGroup={tabGroupActions.onMoveGroup}
-          onAddTabToGroup={tabGroupActions.onAddTabToGroup}
-          onUngroup={tabGroupActions.onUngroup}
-          onNewGroup={tabGroupActions.onNewGroup}
-          onMoveTabToGroup={tabGroupActions.onMoveTabToGroup}
-          brandTheme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}
-          guide={
-            guideSettings.enabled && dashboard
-              ? {
-                  open: guide.open,
-                  href: guide.href,
-                  onOpen: openGuideFromSidebar,
-                  onClose: closeGuideFromSidebar,
-                }
-              : undefined
-          }
-        />
-      </AppShell.Navbar>
-
-      <AppShell.Main
+      )}
+      {loading && (
+        <Group p="lg">
+          <Loader size="sm" />
+          <Text>Loading dashboard…</Text>
+        </Group>
+      )}
+      {error && (
+        <Text c="red" p="lg">
+          {error}
+        </Text>
+      )}
+    </>
+  );
+  const canvas =
+    ready && dashboard ? (
+      <Box
+        data-tour-id="editor-grid"
+        data-testid="dashboard-content"
+        // Under the Guide: kept mounted for when it closes; the filter
+        // panel stays beside it (see App.tsx).
+        aria-hidden={guide.open || undefined}
         style={{
-          height: 'calc(100vh - 50px)',
-          // The Analysis panel is a Drawer, not an AppShell slot (the single
-          // `aside` belongs to the inspector), so nothing offsets the content
-          // for it and it would sit on top of the rightmost tiles — the ones
-          // a user opens it to lasso a group out of. Pad by exactly its width
-          // and let the grid re-measure (see ANALYSIS_PANEL_TOGGLE_EVENT).
-          // Not on a narrow viewport, where the panel is ~92vw and padding
-          // would leave no dashboard at all: there it overlays, as a drawer.
-          paddingRight: analysisOpen && !isNarrow ? ANALYSIS_PANEL_WIDTH_PX : 0,
-          transition: 'padding-right 250ms ease',
+          visibility: guide.open ? 'hidden' : undefined,
+          // The same page width as the viewer, so the author lays the
+          // tab out at the width its readers get. Padding goes here
+          // rather than as `px`/`py` props: Mantine writes those as
+          // paddingLeft/Right, which beat this paddingInline.
+          padding: 4,
+          ...(contentMaxWidth !== null
+            ? {
+                paddingInline: `max(4px, calc((100% - ${contentMaxWidth}px) / 2))`,
+                transition: 'padding 200ms ease',
+              }
+            : null),
+          height: '100%',
+          minWidth: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          // Content font-size preference — scales the dashboard tiles
+          // below, never the surrounding chrome (header, sidebar, panel).
+          ...contentScaleStyle,
         }}
       >
-        {/* Louder here than in the viewer by consequence: this surface saves,
-            and a chart edited against data you did not realise was historical
-            is the mistake worth preventing. Saving still writes only layout
-            and component config — never data — but the point is that you know
-            what you were looking at. */}
-        {timeTravelling && (
-          <DataVersionBanner
-            pinned={pinnedLabels}
-            asOfLabel={asOf?.label}
-            collections={dataVersionStatus.collections}
-            statusError={dataVersionStatus.error}
-            currentDataOnly={currentDataOnlyCount}
-            onClear={clearDataVersions}
-          />
-        )}
-        {loading && (
-          <Group p="lg">
-            <Loader size="sm" />
-            <Text>Loading dashboard…</Text>
-          </Group>
-        )}
-        {error && (
-          <Text c="red" p="lg">
-            {error}
-          </Text>
-        )}
-        {dashboard && !loading && !error && (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              height: '100%',
-              width: '100%',
-              overflow: 'hidden',
-            }}
-          >
-          <div
-            ref={filterPanelLayoutRef}
-            // Cast for the custom property — see the same note in App.tsx.
-            style={{
-              // Written directly by a drag, so the panel edge doesn't wait on a
-              // render — see the same note in App.tsx.
-              [FILTER_PANEL_WIDTH_VAR]: `${
-                filterPanelOpened ? filterPanelWidth : FILTER_PANEL_RAIL_WIDTH
-              }px`,
-              display: 'grid',
-              // Panel | drag handle | content, the same three tracks the viewer
-              // uses. The track count stays at three whatever the panel's
-              // state, because `grid-template-columns` only animates between
-              // templates with matching track counts.
-              gridTemplateColumns: isNarrow
-                ? '1fr'
-                : `var(${FILTER_PANEL_WIDTH_VAR}) ` +
-                  `${filterPanelOpened ? FILTER_PANEL_RESIZER_WIDTH : 0}px 1fr`,
-              // Off while dragging — see the same note in App.tsx.
-              transition: filterPanelResizing
-                ? 'none'
-                : 'grid-template-columns 300ms ease',
-              flex: 1,
-              minHeight: 0,
-              width: '100%',
-              gap: 4,
-              overflow: 'hidden',
-            } as React.CSSProperties}
-          >
-            {!isNarrow && (
-              <Box
-                px={4}
-                py={4}
-                style={{
-                  // The panel scrolls its own filter list, so this wrapper must
-                  // not scroll too — otherwise the docked map would scroll away
-                  // with the filters instead of staying pinned.
-                  height: '100%',
-                  minWidth: 0,
-                  overflow: 'hidden',
-                }}
-              >
-                <FilterPanel
-                  components={leftComponents}
-                  allMetadata={summaryMetadata}
-                  filters={filters}
-                  onFilterChange={handleFilterChange}
-                  onResetAllFilters={handleResetAllFilters}
-                  layoutData={dashboard.left_panel_layout_data}
-                  filterSections={panelFilterSections}
-                  readOnlySections={readOnlyPanelSections}
-                  renderSectionActions={renderPanelSectionAction}
-                  dashboardId={dashboardId}
-                  stateScopeId={panelScopeId}
-                  headerActions={<MapPanelControl panel={mapPanel} />}
-                  // No refreshTick: the editor threads no realtime refresh
-                  // counter into any of its grids, so the left panel matches
-                  // RightComponentGrid rather than inventing state here.
-                  editMode
-                  renderItemOverlay={renderFilterItemOverlay}
-                  onLayoutChange={handleLeftLayoutChange}
-                  collapsed={!filterPanelOpened}
-                  onToggleCollapsed={toggleFilterPanel}
-                  groupSummaryRows={groupSummaryRows}
-                  footer={
-                    <MapPanelDock
-                      panel={mapPanel}
-                      // Docked maps render data: include group filters (the
-                      // tab's; a section bar's stay with its section).
-                      filters={tabFilters}
-                      onFilterChange={handleFilterChange}
-                      renderEditActions={renderMapPanelEditActions}
-                    />
-                  }
-                />
-              </Box>
-            )}
-            {!isNarrow && (
-              <FilterPanelResizer
-                onPointerDown={beginFilterPanelResize}
-                onNudge={nudgeFilterPanelWidth}
-                collapsed={!filterPanelOpened}
-              />
-            )}
-            <Box
-              data-tour-id="editor-grid"
-              data-testid="dashboard-content"
-              // Under the Guide: kept mounted for when it closes; the filter
-              // panel stays beside it (see App.tsx).
-              aria-hidden={guide.open || undefined}
-              style={{
-                visibility: guide.open ? 'hidden' : undefined,
-                // The same page width as the viewer, so the author lays the
-                // tab out at the width its readers get. Padding goes here
-                // rather than as `px`/`py` props: Mantine writes those as
-                // paddingLeft/Right, which beat this paddingInline.
-                padding: 4,
-                ...(contentMaxWidth !== null
-                  ? {
-                      paddingInline: `max(4px, calc((100% - ${contentMaxWidth}px) / 2))`,
-                      transition: 'padding 200ms ease',
-                    }
-                  : null),
-                height: '100%',
-                minWidth: 0,
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                // Content font-size preference — scales the dashboard tiles
-                // below, never the surrounding chrome (header, sidebar, panel).
-                ...contentScaleStyle,
-              }}
-            >
-              {/* Same placement as the viewer: the tab's description leads
-                  the canvas, ahead of any foreign pinned section. */}
-              <TabIntro dashboard={dashboard} activeTab={activeTab} />
-              <RightComponentGrid
-                beforeSections={topSectionsHost}
-                dashboardId={dashboardId!}
-                cardComponents={cardComponents}
-                otherComponents={otherComponents}
-                barComponents={barComponents}
-                layoutData={dashboard.right_panel_layout_data}
-                gridSections={dashboard.grid_sections}
-                tileMoveSections={tileMoveSections}
-                filters={combinedFilters}
-                controlFilters={filters}
-                filterScopes={filterScopes}
-                onResetFilters={handleResetFilterIndices}
-                renderStripItemOverlay={renderFilterItemOverlay}
-                groupRender={groupRender}
-                onFilterChange={handleFilterChange}
-                cardValues={cardValues}
-                cardSecondaryValues={cardSecondaryValues}
-                cardsLoading={cardsLoading}
-                onLayoutChange={handleRightLayoutChange}
-                onDeleteComponent={handleDeleteComponent}
-                onDuplicateComponent={handleDuplicateComponent}
-                copyTargets={copyTargets}
-                onCopyToTab={handleCopyToTab}
-                onHighlightOnTab={handleHighlightOnTab}
-                onAddComponent={handleAddComponent}
-                activeHighlight={activeHighlight}
-                onMoveToSection={handleMoveToSection}
-                renderSectionActions={renderGridSectionAction}
-                onComponentFontScale={handleComponentFontScale}
-                onTileFixed={handleTileFixed}
-                onResetFit={handleResetFit}
-                autofit={dashboard?.autofit !== false}
-                refreshTick={plotThemeTick}
-                onOpenComponentHistory={openComponentHistory}
-              />
-              {bottomGridSections.length > 0 && (
-                <div>
-                  <PersistentSectionsHost
-                    sections={bottomGridSections}
-                    familyId={crossTab.familyId}
-                    slot="bottom"
-                    filters={filters}
-                    filterScopes={filterScopes}
-                    onResetBarFilters={handleResetFilterIndices}
-                    onFilterChange={handleFilterChange}
-                    groupRender={groupRender}
-                    bulkOptions={groupsApi.bulkOptions}
-                    renderSectionActions={renderPersistentSectionAction}
-                    autofit={dashboard?.autofit !== false}
-                  />
-                </div>
-              )}
-            </Box>
-          </div>
-          {/* Mirrors the viewer's footer strip so `placement: 'top'` controls
-              sit where they will actually render, instead of appearing in the
-              left column only while editing. */}
-          {topComponents.length > 0 && (
-            <Box
-              px="md"
-              py={6}
-              style={{
-                flexShrink: 0,
-                width: '100%',
-                borderTop: '1px solid var(--mantine-color-default-border)',
-                background: 'var(--mantine-color-body)',
-              }}
-            >
-              <Box style={contentScaleStyle}>
-                <TopPanel
-                  components={topComponents}
-                  filters={filters}
-                  onFilterChange={handleFilterChange}
-                />
-              </Box>
-            </Box>
-          )}
-          </div>
-        )}
-        {/* Narrow screens: the panel the grid no longer has room for. Not in
-            `editMode` — drag-reordering needs a stable panel width to lay its
-            grid out against, and a transient drawer on a phone is neither the
-            place nor the input device for authoring. */}
-        {dashboard && isNarrow && (
-          <Drawer
-            opened={filterDrawerOpened}
-            onClose={closeFilterDrawer}
-            position="left"
-            size="min(320px, 85vw)"
-            title="Filters"
-          >
-            <FilterPanel
-              components={leftComponents}
-              allMetadata={summaryMetadata}
+        {/* Same placement as the viewer: the tab's description leads
+            the canvas, ahead of any foreign pinned section. */}
+        <TabIntro dashboard={dashboard} activeTab={activeTab} />
+        <RightComponentGrid
+          beforeSections={topSectionsHost}
+          dashboardId={dashboardId!}
+          cardComponents={cardComponents}
+          otherComponents={otherComponents}
+          barComponents={barComponents}
+          layoutData={dashboard.right_panel_layout_data}
+          gridSections={dashboard.grid_sections}
+          tileMoveSections={tileMoveSections}
+          filters={combinedFilters}
+          controlFilters={filters}
+          filterScopes={filterScopes}
+          onResetFilters={handleResetFilterIndices}
+          renderStripItemOverlay={renderFilterItemOverlay}
+          groupRender={groupRender}
+          onFilterChange={handleFilterChange}
+          cardValues={cardValues}
+          cardSecondaryValues={cardSecondaryValues}
+          cardsLoading={cardsLoading}
+          onLayoutChange={handleRightLayoutChange}
+          onDeleteComponent={handleDeleteComponent}
+          onDuplicateComponent={handleDuplicateComponent}
+          copyTargets={copyTargets}
+          onCopyToTab={handleCopyToTab}
+          onHighlightOnTab={handleHighlightOnTab}
+          onAddComponent={handleAddComponent}
+          activeHighlight={activeHighlight}
+          onMoveToSection={handleMoveToSection}
+          renderSectionActions={renderGridSectionAction}
+          onComponentFontScale={handleComponentFontScale}
+          onTileFixed={handleTileFixed}
+          onResetFit={handleResetFit}
+          autofit={dashboard?.autofit !== false}
+          refreshTick={plotThemeTick}
+          onOpenComponentHistory={openComponentHistory}
+        />
+        {bottomGridSections.length > 0 && (
+          <div>
+            <PersistentSectionsHost
+              sections={bottomGridSections}
+              familyId={crossTab.familyId}
+              slot="bottom"
               filters={filters}
+              filterScopes={filterScopes}
+              onResetBarFilters={handleResetFilterIndices}
               onFilterChange={handleFilterChange}
-              onResetAllFilters={handleResetAllFilters}
-              layoutData={dashboard.left_panel_layout_data}
-              filterSections={panelFilterSections}
-              dashboardId={dashboardId}
-              groupSummaryRows={groupSummaryRows}
-              stateScopeId={panelScopeId}
-              headerActions={<MapPanelControl panel={mapPanel} />}
+              groupRender={groupRender}
+              bulkOptions={groupsApi.bulkOptions}
+              renderSectionActions={renderPersistentSectionAction}
+              autofit={dashboard?.autofit !== false}
             />
-          </Drawer>
+          </div>
         )}
-        {/* Fixed furniture above the Guide's layer, hidden with the canvas. */}
-        <div style={guide.open ? { visibility: 'hidden' } : undefined}>
-          {dashboard && dashboardId && !inspectorEnabled && (
-            <NotesFooter
-              dashboardId={dashboardId}
-              initialContent={(dashboard.notes_content as string) ?? ''}
-              permissions={dashboard.permissions as DashboardPermissions | undefined}
-              // A notes save records a version too, outside `saveStatus`.
-              onSaved={reloadVersions}
-            />
-          )}
-          {dashboard && dashboardId && (
-            <MapPanelSurface
-              panel={mapPanel}
-              // Floating maps render data: include group filters (the tab's).
-              filters={tabFilters}
-              onFilterChange={handleFilterChange}
-              renderEditActions={renderMapPanelEditActions}
-            />
-          )}
-        </div>
-        {guide.open && guideModel && dashboard && dashboardId && (
-          <DashboardGuide
-            model={guideModel}
+      </Box>
+    ) : null;
+  // Mirrors the viewer's footer strip so `placement: 'top'` controls sit where
+  // they will actually render, instead of appearing in the left column only
+  // while editing.
+  const topStrip =
+    ready && topComponents.length > 0 ? (
+      <Box
+        px="md"
+        py={6}
+        style={{
+          flexShrink: 0,
+          width: '100%',
+          borderTop: '1px solid var(--mantine-color-default-border)',
+          background: 'var(--mantine-color-body)',
+        }}
+      >
+        <Box style={contentScaleStyle}>
+          <TopPanel
+            components={topComponents}
+            filters={filters}
+            onFilterChange={handleFilterChange}
+          />
+        </Box>
+      </Box>
+    ) : null;
+  const overlays = (
+    <>
+      {/* Fixed furniture above the Guide's layer, hidden with the canvas. */}
+      <div style={guide.open ? { visibility: 'hidden' } : undefined}>
+        {dashboard && dashboardId && !inspectorEnabled && (
+          <NotesFooter
             dashboardId={dashboardId}
-            dashboard={dashboard}
-            components={editorComponents}
-            tabs={tabSiblings}
-            persistentSections={crossTab.persistentSections}
-            dashboardName={parentTab?.title || dashboard.title || 'Dashboard'}
-            tabName={guideModel.tabs.current?.label ?? dashboard.title ?? 'the tab'}
-            intro={guideSettings.intro}
-            mode="edit"
-            onClose={guide.closeGuide}
-            onOpenYourView={() => openSettingsAt('view')}
+            initialContent={(dashboard.notes_content as string) ?? ''}
+            permissions={dashboard.permissions as DashboardPermissions | undefined}
+            // A notes save records a version too, outside `saveStatus`.
+            onSaved={reloadVersions}
           />
         )}
-      </AppShell.Main>
-
-      {inspectorEnabled && (
-        <AppShell.Aside p={0}>
-          <Inspector dashboard={dashboard} dashboardId={dashboardId} onNotesSaved={reloadVersions} />
-        </AppShell.Aside>
+        {dashboard && dashboardId && (
+          <MapPanelSurface
+            panel={mapPanel}
+            // Floating maps render data: include group filters (the tab's).
+            filters={tabFilters}
+            onFilterChange={handleFilterChange}
+            renderEditActions={renderMapPanelEditActions}
+          />
+        )}
+      </div>
+      {guide.open && guideModel && dashboard && dashboardId && (
+        <DashboardGuide
+          model={guideModel}
+          dashboardId={dashboardId}
+          dashboard={dashboard}
+          components={editorComponents}
+          tabs={tabSiblings}
+          persistentSections={crossTab.persistentSections}
+          dashboardName={parentTab?.title || dashboard.title || 'Dashboard'}
+          tabName={guideModel.tabs.current?.label ?? dashboard.title ?? 'the tab'}
+          intro={guideSettings.intro}
+          mode="edit"
+          onClose={guide.closeGuide}
+          onOpenYourView={() => openSettingsAt('view')}
+        />
       )}
-
+    </>
+  );
+  const outside = (
+    <>
       <SettingsDrawer
         opened={settingsOpened}
         onClose={closeSettings}
@@ -3084,7 +2941,114 @@ const EditorApp: React.FC = () => {
         tabNames={tabNames}
         currentTabName={activeTab ? tabDisplayName(activeTab) : undefined}
       />
-    </AppShell>
+    </>
+  );
+
+  return (
+    <>
+    {/* Renderers read their pin from here, as in the viewer's preview. */}
+    <DataVersionProvider asOfVersionId={asOfVersionId} pins={dataPins} dashboardId={dashboardId}>
+    <InspectorProviders control={inspectorControl}>
+    {/* Tier-2 viz controls an author touches here are written back onto the
+        component's config; the dashboard-wide default decides where every
+        advanced-viz tile draws them unless the tile states its own. */}
+    <AdvancedVizConfigDraftProvider value={handleVizConfigDraft}>
+    <AdvancedVizPlacementDefaultProvider value={dashboard?.advanced_viz_controls}>
+    <SaveGroupContext.Provider value={saveGroupApi}>
+    {/* Same scoping as the viewer, so an editor sees the override they are
+        editing without it escaping into the rest of the app. */}
+    <BrandScope theme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}>
+    {/* The viewer's `category_colors` scope, so a filter bar's chips take the
+        colours readers will see. */}
+    <CategoryColorsContext.Provider value={dashboard}>
+    {/* Tab links in text resolve here too, so the canvas shows them as the
+        viewer does rather than as plain text. */}
+    <TabLinkProvider tabs={tabSiblings} mode="edit">
+    <ShellHost
+      mode="edit"
+      isNarrow={Boolean(isNarrow)}
+      ready={ready}
+      headerProps={{
+        dashboardId,
+        dashboard,
+        activeTab,
+        parentTab,
+        mobileOpened,
+        desktopOpened,
+        onToggleMobile: toggleMobile,
+        onToggleDesktop: toggleDesktop,
+        onOpenSettings: () => openSettingsAt(),
+        onOpenFilters: isNarrow && leftComponents.length > 0 ? openFilterDrawer : undefined,
+        filterCount: countActiveFilters(filters) + groupSummaryRows.length,
+        onOpenSearch: dashboard ? openSearch : undefined,
+        cardsLoading,
+        mode: 'edit',
+        onAddComponent: handleAddComponent,
+        onAddSection: handleAddSection,
+        onSave: handleForceSave,
+        isOwner,
+        extraActions: headerActions,
+      }}
+      nav={{
+        node: (
+        <Sidebar
+          tabs={tabSiblings}
+          activeId={dashboardId}
+          mode="edit"
+          onAddTab={() => openCreateTabModal()}
+          onEditTab={openEditTabModal}
+          onDeleteTab={handleDeleteTab}
+          onMoveTab={handleMoveTab}
+          onRenameGroup={tabGroupActions.onRenameGroup}
+          onMoveGroup={tabGroupActions.onMoveGroup}
+          onAddTabToGroup={tabGroupActions.onAddTabToGroup}
+          onUngroup={tabGroupActions.onUngroup}
+          onNewGroup={tabGroupActions.onNewGroup}
+          onMoveTabToGroup={tabGroupActions.onMoveTabToGroup}
+          brandTheme={dashboard?.brand_theme ?? dashboard?.inherited_brand_theme}
+          guide={guideEntry}
+        />
+        ),
+        tabs: tabSiblings,
+        activeId: dashboardId,
+        guide: guideEntry,
+        mobileOpened,
+        desktopOpened,
+        toggleMobile,
+        toggleDesktop,
+      }}
+      boot={boot}
+      canvas={canvas}
+      topStrip={topStrip}
+      filters={{
+        members: leftComponents,
+        values: filters,
+        onChange: handleFilterChange,
+        reset: handleResetAllFilters,
+        count: countActiveFilters(filters) + groupSummaryRows.length,
+        panel: filterPanel,
+        docked: {
+          opened: filterPanelOpened,
+          toggle: toggleFilterPanel,
+          width: filterPanelWidth,
+          widthVar: FILTER_PANEL_WIDTH_VAR,
+          layoutRef: filterPanelLayoutRef,
+          resizing: filterPanelResizing,
+          beginResize: beginFilterPanelResize,
+          nudge: nudgeFilterPanelWidth,
+        },
+        drawer: { opened: filterDrawerOpened, open: openFilterDrawer, close: closeFilterDrawer },
+      }}
+      overlays={overlays}
+      outside={outside}
+      inspector={{
+        enabled: inspectorEnabled,
+        node: <Inspector dashboard={dashboard} dashboardId={dashboardId} onNotesSaved={reloadVersions} />,
+        aside: inspectorAside,
+      }}
+      analysis={{ open: analysisOpen, widthPx: ANALYSIS_PANEL_WIDTH_PX }}
+      guideOpen={guide.open}
+    />
     </TabLinkProvider>
     </CategoryColorsContext.Provider>
     </BrandScope>

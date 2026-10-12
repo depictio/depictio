@@ -52,9 +52,9 @@ export function groupingActiveStep(selectableCount: number, hasSelection: boolea
 /** Step 1's description: how many tiles here can feed a group, or why none can. */
 export function selectionCapableSummary(count: number): string {
   if (count <= 0) {
-    return 'No tile on this dashboard emits selections yet — a scatter needs its lasso enabled, a table its row selection.';
+    return "No tile here can select yet: enable a scatter's lasso or a table's row selection.";
   }
-  return `${count} tile${count === 1 ? '' : 's'} here can. While Analysis is on, each one is outlined and carries the group marker in its corner.`;
+  return `${count} tile${count === 1 ? '' : 's'} here, outlined while Analysis is on.`;
 }
 
 export interface PendingSelectionPreview {

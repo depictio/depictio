@@ -26,8 +26,9 @@ import type {
   ViewMode,
 } from './hooks/useDashboardViewPrefs';
 import { emptyDashboardFilters } from './hooks/useDashboardViewPrefs';
-import { useBrandAccents } from 'depictio-react-core';
+import { useListingAccents } from '../lib/useListingAccents';
 import ShareViewButton from '../components/listing/ShareViewButton';
+import GlassTray from '../chrome/variants/glass/pages/GlassTray';
 import CardDisplayMenu from './CardDisplayMenu';
 
 export type FilterOption = { value: string; label: string };
@@ -54,6 +55,9 @@ export interface DashboardsToolbarProps {
   setCardsPerRow: (c: CardsPerRow) => void;
   setCardBadges: (b: CardBadge[]) => void;
   clearFilters: () => void;
+  /** The table view's display menu, shown in the slot the thumbnails' Card
+   *  display menu takes. */
+  tableDisplay?: React.ReactNode;
 }
 
 interface ViewOption {
@@ -161,7 +165,7 @@ const FilterPopover: React.FC<{
   workflowOptions,
   setFilters,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('dashboards');
   const activeCount =
     prefs.filters.projects.length +
     prefs.filters.owners.length +
@@ -297,8 +301,9 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
   setCardsPerRow,
   setCardBadges,
   clearFilters,
+  tableDisplay,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('dashboards');
   // Sort selector is meaningless in Table view (column headers handle sort).
   const showSort = prefs.view !== 'table';
   // Card layout options only shape the thumbnail cards; Table has its own
@@ -375,7 +380,7 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
 
   return (
     <Stack gap="xs" mb="md">
-      <Group gap="xs" wrap="nowrap" align="center">
+      <Group gap="xs" wrap="nowrap" align="center" className="dc-list-toolbar">
         <TextInput
           placeholder="Search dashboards…"
           value={prefs.search}
@@ -418,60 +423,64 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
           />
         )}
 
-        <Tooltip
-          label={
-            pinDisabled
-              ? 'Pinning is disabled in public mode'
-              : prefs.onlyPinned
-                ? 'Show all dashboards'
-                : `Show favorites only${pinnedCount ? ` (${pinnedCount})` : ''}`
-          }
-          withinPortal
-        >
-          <ActionIcon
-            variant={prefs.onlyPinned ? 'light' : 'default'}
-            color={prefs.onlyPinned ? 'yellow' : undefined}
-            size="lg"
-            radius="md"
-            onClick={() => setOnlyPinned(!prefs.onlyPinned)}
-            disabled={pinDisabled || (pinnedCount === 0 && !prefs.onlyPinned)}
-            aria-label="Toggle favorites filter"
-            aria-pressed={prefs.onlyPinned}
+        <GlassTray>
+          <Tooltip
+            label={
+              pinDisabled
+                ? 'Pinning is disabled in public mode'
+                : prefs.onlyPinned
+                  ? 'Show all dashboards'
+                  : `Show favorites only${pinnedCount ? ` (${pinnedCount})` : ''}`
+            }
+            withinPortal
           >
-            <Icon
-              icon={prefs.onlyPinned ? 'mdi:star' : 'mdi:star-outline'}
-              width={18}
-            />
-          </ActionIcon>
-        </Tooltip>
+            <ActionIcon
+              variant={prefs.onlyPinned ? 'light' : 'default'}
+              color={prefs.onlyPinned ? 'yellow' : undefined}
+              size="lg"
+              radius="md"
+              onClick={() => setOnlyPinned(!prefs.onlyPinned)}
+              disabled={pinDisabled || (pinnedCount === 0 && !prefs.onlyPinned)}
+              aria-label="Toggle favorites filter"
+              aria-pressed={prefs.onlyPinned}
+            >
+              <Icon
+                icon={prefs.onlyPinned ? 'mdi:star' : 'mdi:star-outline'}
+                width={18}
+              />
+            </ActionIcon>
+          </Tooltip>
 
-        <FilterPopover
-          prefs={prefs}
-          projectOptions={projectOptions}
-          ownerOptions={ownerOptions}
-          templateOptions={templateOptions}
-          workflowOptions={workflowOptions}
-          setFilters={setFilters}
-        />
-
-        <ShareViewButton
-          describes={
-            hasAnyActive
-              ? `this filtered view (${matchingCount} dashboard${matchingCount === 1 ? '' : 's'})`
-              : 'the full dashboard list'
-          }
-        />
-
-        {showCardDisplay && (
-          <CardDisplayMenu
-            cardsPerRow={prefs.cardsPerRow}
-            cardBadges={prefs.cardBadges}
-            onCardsPerRowChange={setCardsPerRow}
-            onCardBadgesChange={setCardBadges}
+          <FilterPopover
+            prefs={prefs}
+            projectOptions={projectOptions}
+            ownerOptions={ownerOptions}
+            templateOptions={templateOptions}
+            workflowOptions={workflowOptions}
+            setFilters={setFilters}
           />
-        )}
 
-        <ViewPicker value={prefs.view} onChange={setView} />
+          <ShareViewButton
+            describes={
+              hasAnyActive
+                ? `this filtered view (${matchingCount} dashboard${matchingCount === 1 ? '' : 's'})`
+                : 'the full dashboard list'
+            }
+          />
+
+          {showCardDisplay && (
+            <CardDisplayMenu
+              cardsPerRow={prefs.cardsPerRow}
+              cardBadges={prefs.cardBadges}
+              onCardsPerRowChange={setCardsPerRow}
+              onCardBadgesChange={setCardBadges}
+            />
+          )}
+
+          {prefs.view === 'table' && tableDisplay}
+
+          <ViewPicker value={prefs.view} onChange={setView} />
+        </GlassTray>
       </Group>
 
       {showFilterChips && activeFilterChips.length > 0 && (

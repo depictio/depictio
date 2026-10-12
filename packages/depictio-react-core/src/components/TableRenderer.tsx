@@ -1028,6 +1028,7 @@ const TableRenderer: React.FC<TableRendererProps> = ({
       p="sm"
       withBorder
       radius="md"
+      className="dc-tile dc-tile--table"
       style={{
         flex: 1,
         minHeight: 0,

@@ -70,6 +70,7 @@ project_storage_collection = db[settings.mongodb.collections.project_storage_col
 app_logs_collection = db[settings.mongodb.collections.app_logs_collection]
 instance_settings_collection = db[settings.mongodb.collections.instance_settings_collection]
 branding_assets_collection = db[settings.mongodb.collections.branding_assets_collection]
+user_avatars_collection = db[settings.mongodb.collections.user_avatars_collection]
 telemetry_collection = db[settings.mongodb.collections.telemetry_collection]
 comment_threads_collection = db[settings.mongodb.collections.comment_threads_collection]
 cli_agents_collection = db[settings.mongodb.collections.cli_agents_collection]

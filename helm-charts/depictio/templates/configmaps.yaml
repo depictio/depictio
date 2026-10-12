@@ -105,6 +105,19 @@ data:
   DEPICTIO_TELEMETRY_MEMORY_LIMIT: {{ .Values.backend.env.DEPICTIO_TELEMETRY_MEMORY_LIMIT | default .Values.backend.resources.limits.memory | quote }}
   DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS: {{ .Values.backend.env.DEPICTIO_TELEMETRY_INCLUDE_USAGE_METRICS | default "true" | quote }}
   DEPICTIO_TELEMETRY_DEBUG: {{ .Values.backend.env.DEPICTIO_TELEMETRY_DEBUG | default "false" | quote }}
+  # Release check (admins are told when a newer Depictio exists). Each key is
+  # rendered only when set: an unset ENABLED leaves the /admin toggle usable, and
+  # any value forces it and locks the toggle. `hasKey`, not `with`, for the
+  # boolean, since `with` would skip a literal `false`.
+  {{- if hasKey .Values.backend.env "DEPICTIO_VERSION_CHECK_ENABLED" }}
+  DEPICTIO_VERSION_CHECK_ENABLED: {{ .Values.backend.env.DEPICTIO_VERSION_CHECK_ENABLED | quote }}
+  {{- end }}
+  {{- with .Values.backend.env.DEPICTIO_VERSION_CHECK_INTERVAL_HOURS }}
+  DEPICTIO_VERSION_CHECK_INTERVAL_HOURS: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.backend.env.DEPICTIO_VERSION_CHECK_REPOSITORY }}
+  DEPICTIO_VERSION_CHECK_REPOSITORY: {{ . | quote }}
+  {{- end }}
   # Which view /dashboards opens in for someone who never picked one, and the
   # geometry of the thumbnails it shows. See .env.example.
   DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW: {{ .Values.backend.env.DEPICTIO_VIEWER_DASHBOARDS_DEFAULT_VIEW | default "table" | quote }}

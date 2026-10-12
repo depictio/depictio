@@ -33,6 +33,9 @@ export interface DepictioRangeSliderProps {
   restrict_to_marks?: boolean;
   /** When false, suppress tick marks for a denser look. Defaults to true. */
   show_marks?: boolean;
+  /** When false, keep the tick marks but drop their value labels. Defaults to
+   *  true; moot when `show_marks` is false. */
+  show_mark_labels?: boolean;
   /** How a value is spelled on the drag tooltip and on any mark label this
    *  component derives itself. Callers that already have a formatter should pass
    *  it (the viewer's `RangeSliderRenderer` has `formatSliderValue`, the same
@@ -72,6 +75,7 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
   marks: explicitMarks,
   restrict_to_marks = false,
   show_marks = true,
+  show_mark_labels = true,
   format_value,
   compact = false,
   bare = false,
@@ -124,14 +128,25 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
         ? explicitMarks.map((m) => ({ value: m.value }))
         : undefined;
     }
-    if (explicitMarks) return explicitMarks;
+    if (explicitMarks) {
+      return show_mark_labels ? explicitMarks : explicitMarks.map((m) => ({ value: m.value }));
+    }
     const n = Math.max(2, marks_number);
     const stepSize = (safeMax - safeMin) / (n - 1);
     return Array.from({ length: n }, (_, i) => {
       const v = safeMin + stepSize * i;
-      return { value: v, label: format(v) };
+      return show_mark_labels ? { value: v, label: format(v) } : { value: v };
     });
-  }, [safeMin, safeMax, marks_number, show_marks, explicitMarks, restrict_to_marks, format]);
+  }, [
+    safeMin,
+    safeMax,
+    marks_number,
+    show_marks,
+    show_mark_labels,
+    explicitMarks,
+    restrict_to_marks,
+    format,
+  ]);
 
   const displayTitle =
     title ||
@@ -158,7 +173,7 @@ const DepictioRangeSlider: React.FC<DepictioRangeSliderProps> = ({
   const stackGap = compact ? 2 : 6;
   // Mark labels hang below the track, so a compact slider showing them needs
   // the room it otherwise gives away.
-  const sliderMb = compact ? (show_marks ? 'sm' : 0) : 'xs';
+  const sliderMb = compact ? (show_marks && show_mark_labels ? 'sm' : 0) : 'xs';
   const slider = (
     <RangeSlider
       // Pulls the first and last mark labels inside the track. The rule lives in

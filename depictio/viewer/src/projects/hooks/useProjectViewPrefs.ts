@@ -54,11 +54,15 @@ export const PROJECT_SCOPE_PARAMS = [
   'pinned',
 ] as const;
 
+/** A fresh browser's table density, which the Table display menu's Reset
+ *  returns to. */
+export const DEFAULT_DENSITY: Density = 'cozy';
+
 const DEFAULT_PREFS: ProjectViewPrefs = {
   search: '',
   filters: emptyProjectFilters(),
   onlyPinned: false,
-  density: 'cozy',
+  density: DEFAULT_DENSITY,
 };
 
 function loadPrefs(): ProjectViewPrefs {

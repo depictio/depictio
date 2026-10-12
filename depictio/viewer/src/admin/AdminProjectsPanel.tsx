@@ -3,6 +3,7 @@ import {
   Accordion,
   Alert,
   Anchor,
+  Badge,
   Center,
   Group,
   List,
@@ -11,11 +12,16 @@ import {
   Text,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { FolderKanban, Globe, LayoutDashboard, Lock } from 'lucide-react';
 
 import { listAllProjects, listAllDashboards } from 'depictio-react-core';
 import type { AdminProject, AdminDashboard } from 'depictio-react-core';
 
+import { STROKE, useGlassPages } from '../chrome/variants/glass/pages';
+import Facts from './Facts';
+
 const AdminProjectsPanel: React.FC = () => {
+  const glass = useGlassPages();
   const [projects, setProjects] = useState<AdminProject[]>([]);
   const [dashboards, setDashboards] = useState<AdminDashboard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,130 +127,209 @@ const AdminProjectsPanel: React.FC = () => {
   }
 
   return (
-    <Accordion radius="md" variant="separated" multiple>
+    <Accordion radius="md" variant="separated" multiple className={glass ? 'ga-rows' : undefined}>
       {sortedProjects.map((project) => {
         const projectId = project.id ?? project._id ?? project.name;
         const ownerEmail = project.permissions?.owners?.[0]?.email ?? 'Unknown';
         const viewerCount = project.permissions?.viewers?.length ?? 0;
         const projectDashboards =
           dashboardsByProject.get(String(projectId)) ?? [];
+        const tabCount = projectDashboards.reduce((n, d) => n + 1 + d.children.length, 0);
+        const workflowSystem =
+          project.workflow_system && project.workflow_system !== 'none'
+            ? project.workflow_system
+            : null;
+        const viewerEntries = project.permissions?.viewers ?? [];
         return (
           <Accordion.Item key={String(projectId)} value={String(projectId)}>
             <Accordion.Control>
-              <Stack gap={4} style={{ width: '100%' }}>
-                <Text fw={500} size="lg" truncate>
-                  {project.name}
-                </Text>
-                <List
-                  size="sm"
-                  spacing={2}
-                  c="dimmed"
-                  listStyleType="disc"
-                  withPadding
-                >
-                  <List.Item>
-                    Visibility: {project.is_public ? 'Public' : 'Private'}
-                  </List.Item>
-                  {project.workflow_system && project.workflow_system !== 'none' && (
+              {glass ? (
+                <Group gap="sm" wrap="nowrap">
+                  <FolderKanban
+                    size={17}
+                    strokeWidth={STROKE}
+                    className="ga-row-icon"
+                    style={{ color: 'var(--mantine-color-logoTeal-filled)' }}
+                    aria-hidden
+                  />
+                  <Stack gap={1} style={{ flex: 1, minWidth: 0 }}>
+                    <Text fw={550} size="sm" truncate>
+                      {project.name}
+                    </Text>
+                    <Text size="xs" c="dimmed" truncate>
+                      {[
+                        workflowSystem,
+                        projectDashboards.length === 0
+                          ? 'No dashboards'
+                          : `${projectDashboards.length} ${
+                              projectDashboards.length === 1 ? 'dashboard' : 'dashboards'
+                            }${tabCount !== projectDashboards.length ? `, ${tabCount} tabs` : ''}`,
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </Text>
+                  </Stack>
+                  <Badge
+                    color="gray"
+                    size="sm"
+                    leftSection={
+                      project.is_public ? (
+                        <Globe size={12} strokeWidth={STROKE} />
+                      ) : (
+                        <Lock size={12} strokeWidth={STROKE} />
+                      )
+                    }
+                  >
+                    {project.is_public ? 'Public' : 'Private'}
+                  </Badge>
+                </Group>
+              ) : (
+                <Stack gap={4} style={{ width: '100%' }}>
+                  <Text fw={500} size="lg" truncate>
+                    {project.name}
+                  </Text>
+                  <List
+                    size="sm"
+                    spacing={2}
+                    c="dimmed"
+                    listStyleType="disc"
+                    withPadding
+                  >
                     <List.Item>
-                      Workflow system: {project.workflow_system}
+                      Visibility: {project.is_public ? 'Public' : 'Private'}
                     </List.Item>
-                  )}
-                  <List.Item>
-                    Dashboards:{' '}
-                    {projectDashboards.length === 0
-                      ? '0'
-                      : `${projectDashboards.length} (` +
-                        projectDashboards
-                          .reduce(
-                            (n, d) => n + 1 + d.children.length,
-                            0,
-                          )
-                          .toString() +
-                        ' tabs)'}
-                  </List.Item>
-                </List>
-              </Stack>
+                    {workflowSystem && (
+                      <List.Item>
+                        Workflow system: {workflowSystem}
+                      </List.Item>
+                    )}
+                    <List.Item>
+                      Dashboards:{' '}
+                      {projectDashboards.length === 0
+                        ? '0'
+                        : `${projectDashboards.length} (${tabCount} tabs)`}
+                    </List.Item>
+                  </List>
+                </Stack>
+              )}
             </Accordion.Control>
             <Accordion.Panel>
-              <Stack gap="xs">
-                <Group gap="xs">
-                  <Text fw="bold" size="sm">
-                    Project ID:
-                  </Text>
-                  <Text size="sm">{String(projectId)}</Text>
-                </Group>
-                <Group gap="xs">
-                  <Text fw="bold" size="sm">
-                    Owner:
-                  </Text>
-                  <Text size="sm">{ownerEmail}</Text>
-                </Group>
-                {project.description && (
-                  <Group gap="xs" align="flex-start">
-                    <Text fw="bold" size="sm">
-                      Description:
-                    </Text>
-                    <Text size="sm" style={{ flex: 1 }}>
-                      {project.description}
-                    </Text>
-                  </Group>
-                )}
-                <Group gap="xs" align="flex-start">
-                  <Text fw="bold" size="sm">
-                    Viewers:
-                  </Text>
-                  {viewerCount === 0 ? (
-                    <Text size="sm">None</Text>
-                  ) : (
-                    <List size="sm" style={{ flex: 1 }}>
-                      {(project.permissions?.viewers ?? []).map((v, i) => (
-                        <List.Item key={`${v.email ?? i}`}>{v.email ?? '*'}</List.Item>
-                      ))}
-                    </List>
-                  )}
-                </Group>
-                <Group gap="xs" align="flex-start">
-                  <Text fw="bold" size="sm">
-                    Dashboards:
-                  </Text>
-                  {projectDashboards.length === 0 ? (
-                    <Text size="sm" c="dimmed">
-                      None
-                    </Text>
-                  ) : (
-                    <List size="sm" style={{ flex: 1 }}>
-                      {projectDashboards.map((entry) => (
-                        <List.Item key={entry.main.dashboard_id}>
-                          <Anchor
-                            href={`/dashboard/${entry.main.dashboard_id}`}
-                            size="sm"
-                          >
-                            {entry.main.title ??
-                              entry.main.main_tab_name ??
-                              entry.main.dashboard_id}
-                          </Anchor>
-                          {entry.children.length > 0 && (
-                            <List size="xs" withPadding mt={4}>
+              <Facts
+                items={[
+                  { label: 'Project ID', value: String(projectId) },
+                  { label: 'Owner', value: ownerEmail },
+                  ...(project.description
+                    ? [
+                        {
+                          label: 'Description',
+                          top: true,
+                          value: (
+                            <Text size="sm" style={{ flex: 1 }}>
+                              {project.description}
+                            </Text>
+                          ),
+                        },
+                      ]
+                    : []),
+                  {
+                    label: 'Viewers',
+                    top: true,
+                    value:
+                      viewerCount === 0 ? (
+                        glass ? 'None' : <Text size="sm">None</Text>
+                      ) : glass ? (
+                        <Stack gap={2}>
+                          {viewerEntries.map((v, i) => (
+                            <Text key={`${v.email ?? i}`} size="sm">
+                              {v.email ?? '*'}
+                            </Text>
+                          ))}
+                        </Stack>
+                      ) : (
+                        <List size="sm" style={{ flex: 1 }}>
+                          {viewerEntries.map((v, i) => (
+                            <List.Item key={`${v.email ?? i}`}>{v.email ?? '*'}</List.Item>
+                          ))}
+                        </List>
+                      ),
+                  },
+                  {
+                    label: 'Dashboards',
+                    top: true,
+                    value:
+                      projectDashboards.length === 0 ? (
+                        <Text size="sm" c="dimmed">
+                          None
+                        </Text>
+                      ) : glass ? (
+                        <Stack gap={4}>
+                          {projectDashboards.map((entry) => (
+                            <Stack key={entry.main.dashboard_id} gap={2}>
+                              <Group gap={6} wrap="nowrap">
+                                <LayoutDashboard
+                                  size={14}
+                                  strokeWidth={STROKE}
+                                  style={{ color: 'var(--mantine-color-logoOrange-filled)' }}
+                                  aria-hidden
+                                />
+                                <Anchor
+                                  href={`/dashboard/${entry.main.dashboard_id}`}
+                                  size="sm"
+                                  truncate
+                                >
+                                  {entry.main.title ??
+                                    entry.main.main_tab_name ??
+                                    entry.main.dashboard_id}
+                                </Anchor>
+                              </Group>
                               {entry.children.map((child) => (
-                                <List.Item key={child.dashboard_id}>
-                                  <Anchor
-                                    href={`/dashboard/${child.dashboard_id}`}
-                                    size="xs"
-                                    c="dimmed"
-                                  >
-                                    {child.title ?? child.dashboard_id}
-                                  </Anchor>
-                                </List.Item>
+                                <Anchor
+                                  key={child.dashboard_id}
+                                  href={`/dashboard/${child.dashboard_id}`}
+                                  size="xs"
+                                  c="dimmed"
+                                  pl={20}
+                                >
+                                  {child.title ?? child.dashboard_id}
+                                </Anchor>
                               ))}
-                            </List>
-                          )}
-                        </List.Item>
-                      ))}
-                    </List>
-                  )}
-                </Group>
-              </Stack>
+                            </Stack>
+                          ))}
+                        </Stack>
+                      ) : (
+                        <List size="sm" style={{ flex: 1 }}>
+                          {projectDashboards.map((entry) => (
+                            <List.Item key={entry.main.dashboard_id}>
+                              <Anchor
+                                href={`/dashboard/${entry.main.dashboard_id}`}
+                                size="sm"
+                              >
+                                {entry.main.title ??
+                                  entry.main.main_tab_name ??
+                                  entry.main.dashboard_id}
+                              </Anchor>
+                              {entry.children.length > 0 && (
+                                <List size="xs" withPadding mt={4}>
+                                  {entry.children.map((child) => (
+                                    <List.Item key={child.dashboard_id}>
+                                      <Anchor
+                                        href={`/dashboard/${child.dashboard_id}`}
+                                        size="xs"
+                                        c="dimmed"
+                                      >
+                                        {child.title ?? child.dashboard_id}
+                                      </Anchor>
+                                    </List.Item>
+                                  ))}
+                                </List>
+                              )}
+                            </List.Item>
+                          ))}
+                        </List>
+                      ),
+                  },
+                ]}
+              />
             </Accordion.Panel>
           </Accordion.Item>
         );

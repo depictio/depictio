@@ -22,6 +22,8 @@ export interface UseTableColumnsResult<K extends string> {
   allColumns: ColumnDef<K>[];
   toggle: (key: K) => void;
   reset: () => void;
+  /** Turns every column on. */
+  showAll: () => void;
   /** True when the current selection differs from the defaults. */
   isCustomized: boolean;
 }
@@ -94,6 +96,7 @@ export function useTableColumns<K extends string>(
   );
 
   const reset = useCallback(() => setSelected(defaults), [defaults]);
+  const showAll = useCallback(() => setSelected(columns.map((c) => c.key)), [columns]);
 
   const isCustomized = useMemo(() => {
     if (selected.length !== defaults.length) return true;
@@ -101,5 +104,13 @@ export function useTableColumns<K extends string>(
     return selected.some((k) => !d.has(k));
   }, [selected, defaults]);
 
-  return { visibleColumns, isVisible, allColumns: columns, toggle, reset, isCustomized };
+  return {
+    visibleColumns,
+    isVisible,
+    allColumns: columns,
+    toggle,
+    reset,
+    showAll,
+    isCustomized,
+  };
 }
