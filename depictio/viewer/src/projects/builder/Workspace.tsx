@@ -14,18 +14,26 @@ import { useMediaQuery } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
 
-import { builderSuggest, findBuilderDc, shortenFolder, useBrandAccents } from 'depictio-react-core';
+import {
+  builderSuggest,
+  findBuilderDc,
+  isStorePath,
+  isTrackFilePath,
+  shortenFolder,
+  useBrandAccents,
+} from 'depictio-react-core';
 import type { BuilderAction, BuilderRootSpec, BuilderState, BuilderSuggestion } from 'depictio-react-core';
 
 import { RunFileScope, useRunFilePreview } from '../fromRun/FilePreview';
 import { useBuilderCapabilities } from './BuilderCapabilitiesContext';
 import { CollectionEditor } from './collections/CollectionEditor';
-import { applySuggestion, dcFormFromExisting, newDcForm } from './collections/dcForm';
+import { applySuggestion, dcFormFromExisting, newDcForm, withManifest } from './collections/dcForm';
 import { dcTypeUnavailableReason } from './collections/dcTypes';
 import type { DcFormState } from './collections/dcForm';
 import { matchResultOf, useBuilderMatch } from './collections/useBuilderMatch';
 import { FilePane } from './files/FilePane';
 import { FileTree } from './files/FileTree';
+import type { TreePickKind } from './files/FileTree';
 import { clampPanel, ResizeHandle } from './layout/ResizeHandle';
 import { joinRoot } from './paths';
 import { WorkflowEditor } from './workflows/WorkflowEditor';
@@ -97,6 +105,9 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
 
   const stateRef = useRef(state);
   stateRef.current = state;
+  /** Entries the tree said are stores (`*.zarr` folders). */
+  const storePaths = useRef<Set<string>>(new Set());
+  const isStore = useCallback((path: string) => storePaths.current.has(path) || isStorePath(path), []);
   const activeWorkflow = state.workflows.find((w) => w.id === state.activeWorkflowId) ?? state.workflows[0];
 
   // The form follows the selected workflow while it is a new collection, and
@@ -147,7 +158,9 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeFile, pickedKey, rootKey]);
 
-  const preview = useRunFilePreview(activeFile ? joinRoot(root.data_root, activeFile) : null);
+  // A store is never previewed: `/suggest` describes it instead.
+  const activeIsStore = activeFile ? isStore(activeFile) : false;
+  const preview = useRunFilePreview(activeFile && !activeIsStore ? joinRoot(root.data_root, activeFile) : null);
   const columns =
     preview.status === 'ready' && preview.preview.format === 'table' ? preview.preview.columns : [];
 
@@ -184,15 +197,19 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
   activeFileRef.current = activeFile;
 
   const activate = useCallback(
-    (path: string) => {
+    (path: string, kind: TreePickKind = 'file') => {
+      if (kind === 'store') storePaths.current.add(path);
       // Clicking the file already open keeps the collection being edited.
       if (path === activeFileRef.current) return;
       setActiveFile(path);
       setPicked(new Set([path]));
       setSuggestion(null);
-      // Editing a saved collection: the file is only previewed (its path
-      // field offers to use it). Otherwise it starts a new collection.
+      // A genomic tracks collection waiting for its downloaded manifest
+      // takes the picked file as it. Editing a saved collection: the file is
+      // only previewed (its path field offers to use it). Otherwise it starts
+      // a new collection.
       setForm((f) => {
+        if (f?.awaitingManifest) return withManifest(f, path);
         if (f && f.originalTag !== null) return f;
         return newDcForm(stateRef.current, path, stateRef.current.activeWorkflowId, capabilitiesRef.current);
       });
@@ -201,9 +218,10 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
   );
 
   const togglePick = useCallback(
-    (path: string) => {
+    (path: string, kind: TreePickKind = 'file') => {
+      if (kind === 'store') storePaths.current.add(path);
       if (!activeFile) {
-        activate(path);
+        activate(path, kind);
         return;
       }
       setPicked((prev) => {
@@ -326,8 +344,10 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
       )}
       <FilePane
         activeFile={activeFile}
+        store={activeIsStore}
         preview={preview}
         suggestion={suggestion}
+        suggesting={suggesting}
         examples={picked.size}
         workflowName={activeWorkflow?.name || 'the workflow'}
       />
@@ -346,6 +366,18 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
           onRefreshMatch={remote ? () => setMatchRefresh((n) => n + 1) : undefined}
           remote={remote}
           columns={columns}
+          manifest={{
+            root,
+            trackFiles: [...picked].filter(isTrackFilePath).sort(),
+            onUseManifest: (path) => {
+              setForm((f) => (f ? withManifest(f, path) : f));
+              setActiveFile(path);
+              setPicked(new Set([path]));
+              setSuggestion(null);
+            },
+            onAwaitManifest: () => setForm((f) => (f ? { ...f, awaitingManifest: true } : f)),
+            onFilesChanged: () => setTreeRefresh((n) => n + 1),
+          }}
         />
       )}
     </Stack>

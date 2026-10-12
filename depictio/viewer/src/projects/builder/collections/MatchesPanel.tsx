@@ -1,7 +1,9 @@
 /**
- * What a collection would ingest: how many files, the first of them (each
- * marked when its schema differs from the first file's), whether they agree
- * on a schema, indexes not found, run folders, and the server's warnings.
+ * What a collection would ingest: how many files (or stores, for zarr
+ * bioimages and SpatialData tables), the first of them (each marked when its
+ * schema differs from the first file's), whether they agree on a schema,
+ * indexes not found, run folders, a genomic tracks manifest's checks, and
+ * the server's warnings.
  */
 import React from 'react';
 import {
@@ -19,7 +21,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import { useBrandAccents } from 'depictio-react-core';
-import type { BuilderMatchResult, BuilderSchemaMismatch } from 'depictio-react-core';
+import type { BuilderMatchResult, BuilderSchemaMismatch, BuilderTracksCheck } from 'depictio-react-core';
 
 import { matchResultOf } from './useBuilderMatch';
 import type { MatchState } from './useBuilderMatch';
@@ -40,14 +42,93 @@ function agreementText(result: BuilderMatchResult): string {
   return `All ${result.count} files share one schema.`;
 }
 
+/** A list of paths under a one-line heading, as an alert. */
+const PathList: React.FC<{ color: string; title: string; paths: string[]; testId: string }> = ({
+  color,
+  title,
+  paths,
+  testId,
+}) =>
+  paths.length ? (
+    <Alert color={color} variant="light" p="xs" icon={<Icon icon="mdi:alert" width={14} />} data-testid={testId}>
+      <Text size="xs" fw={600} mb={2}>
+        {title}
+      </Text>
+      <ScrollArea.Autosize mah={96} type="auto">
+        <Stack gap={0}>
+          {paths.map((p) => (
+            <Text key={p} size="xs" ff="monospace" c="dimmed">
+              {p}
+            </Text>
+          ))}
+        </Stack>
+      </ScrollArea.Autosize>
+    </Alert>
+  ) : null;
+
+/** What `/match` checked of a genomic tracks manifest. */
+const TracksChecks: React.FC<{ tracks: BuilderTracksCheck }> = ({ tracks }) => {
+  const accent = useBrandAccents();
+  const absolute = tracks.absolute_uris ?? [];
+  const clean =
+    !tracks.missing_uri_column &&
+    !tracks.unknown_format.length &&
+    !tracks.duplicate_uris.length &&
+    !tracks.missing_files.length &&
+    !tracks.missing_indexes.length &&
+    !absolute.length;
+  return (
+    <Stack gap={6} data-testid="builder-matches-tracks">
+      <Group gap={6} wrap="nowrap">
+        <Icon
+          icon={clean ? 'mdi:check-circle' : 'mdi:playlist-check'}
+          width={15}
+          color={clean ? `var(--mantine-color-${accent.secondary}-6)` : 'var(--mantine-color-dimmed)'}
+        />
+        <Text size="xs" fw={600}>
+          Manifest: {tracks.rows.toLocaleString()} track{tracks.rows === 1 ? '' : 's'}
+          {tracks.truncated ? ' (the first ones checked)' : ''}
+        </Text>
+      </Group>
+      {tracks.missing_uri_column && (
+        <Alert color="red" variant="light" p="xs" icon={<Icon icon="mdi:alert-circle-outline" width={14} />}>
+          <Text size="xs">The manifest has no file column by that name: pick the column holding each track.</Text>
+        </Alert>
+      )}
+      <PathList
+        color="red"
+        title="Absolute paths: ingestion does not keep them inside the data root"
+        paths={absolute}
+        testId="builder-matches-tracks-absolute"
+      />
+      <PathList color="yellow" title="Files not found" paths={tracks.missing_files} testId="builder-matches-tracks-missing" />
+      <PathList
+        color="yellow"
+        title="Indexes not found"
+        paths={tracks.missing_indexes}
+        testId="builder-matches-tracks-missing-indexes"
+      />
+      <PathList color="yellow" title="Listed twice" paths={tracks.duplicate_uris} testId="builder-matches-tracks-duplicates" />
+      {tracks.unknown_format.length > 0 && (
+        <Text size="xs" c="yellow.8">
+          Unknown formats: {tracks.unknown_format.join(', ')}
+        </Text>
+      )}
+    </Stack>
+  );
+};
+
 export const MatchesPanel: React.FC<{
   state: MatchState;
   /** Ask again with nothing changed; offered on S3 roots. */
   onRefresh?: () => void;
-}> = ({ state, onRefresh }) => {
+  /** The matches are stores, when the answer does not say. */
+  stores?: boolean;
+}> = ({ state, onRefresh, stores = false }) => {
   const accent = useBrandAccents();
   const result = matchResultOf(state);
   const loading = state.status === 'loading';
+  const noun = result?.stores ?? stores ? 'store' : 'file';
 
   if (state.status === 'idle') {
     return (
@@ -74,7 +155,8 @@ export const MatchesPanel: React.FC<{
             data-testid="builder-matches-count"
             data-count={result.count}
           >
-            {result.count.toLocaleString()} file{result.count === 1 ? '' : 's'}
+            {result.count.toLocaleString()} {noun}
+            {result.count === 1 ? '' : 's'}
             {result.truncated ? '+' : ''}
           </Badge>
         )}
@@ -195,6 +277,8 @@ export const MatchesPanel: React.FC<{
           index next to {result.missing_indexes.length === 1 ? 'it' : 'them'}.
         </Text>
       )}
+
+      {result?.tracks && <TracksChecks tracks={result.tracks} />}
 
       {result?.warnings.map((w) => (
         <Group key={w} gap={6} wrap="nowrap" align="flex-start">

@@ -58,6 +58,7 @@ import {
   S3_WALK_REASON,
 } from './dcTypes';
 import {
+  matchesStores,
   suggestedType,
   suggestionDiffers,
   withGlob,
@@ -68,7 +69,9 @@ import {
 } from './dcForm';
 import type { DcFormState } from './dcForm';
 import { PropsForm } from './forms';
+import type { ManifestTools } from './forms';
 import { MatchesPanel } from './MatchesPanel';
+import { matchResultOf } from './useBuilderMatch';
 import type { MatchState } from './useBuilderMatch';
 import { WildcardsEditor } from './WildcardsEditor';
 
@@ -89,6 +92,8 @@ interface CollectionEditorProps {
   remote: boolean;
   /** The previewed file's columns. */
   columns: string[];
+  /** A genomic tracks collection's manifest helpers. */
+  manifest: Omit<ManifestTools, 'tag' | 'readsTrackFile' | 'awaiting' | 'mode'>;
 }
 
 /** Why the collection cannot be saved yet; null when it can. */
@@ -165,6 +170,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
   onRefreshMatch,
   remote,
   columns,
+  manifest,
 }) => {
   const accent = useBrandAccents();
   const mode = useBuilderMode();
@@ -178,6 +184,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
   const target = state.workflows.find((w) => w.id === form.workflowId) ?? state.workflows[0];
   const blocker = saveBlocker(state, form, remote, capabilities);
   const tables = tableTags(state, form.originalTag);
+  const matchResult = matchResultOf(match);
   const typeReason = (type: BuilderDcType) => dcTypeUnavailableReason(type, remote, capabilities);
 
   const offered = offeredDcTypes(capabilities);
@@ -187,6 +194,12 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
     label: DC_TYPE_META[type].label,
     disabled: Boolean(typeReason(type)) && dc.type !== type,
   }));
+  // A genomic manifest's columns come from `/match`; anything else's from
+  // the preview.
+  const formColumns =
+    dc.type === 'genomic_tracks' && matchResult?.tracks?.columns.length
+      ? matchResult.tracks.columns
+      : columns;
 
   return (
     <Paper withBorder radius="md" p="md" data-testid="builder-dc-editor" data-editing={editing || undefined}>
@@ -470,19 +483,26 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
           </>
         )}
 
-        <MatchesPanel state={match} onRefresh={onRefreshMatch} />
+        <MatchesPanel state={match} onRefresh={onRefreshMatch} stores={matchesStores(dc)} />
 
         <Divider label={`${DC_TYPE_META[dc.type].label} settings`} labelPosition="left" />
         <PropsForm
           props={dc.props}
           onChange={(props) => onChange({ ...form, dc: { ...dc, props } })}
           context={{
-            columns,
+            columns: formColumns,
             remote,
             tables,
             capabilities,
             mode,
             store: suggestion?.store ?? null,
+            manifest: {
+              ...manifest,
+              mode,
+              tag: dc.tag,
+              readsTrackFile: dc.mode === 'single' && Boolean(dc.path && isTrackFilePath(dc.path)),
+              awaiting: Boolean(form.awaitingManifest),
+            },
           }}
         />
 

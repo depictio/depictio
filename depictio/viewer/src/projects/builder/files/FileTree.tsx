@@ -4,6 +4,8 @@
  * starts a collection from it; its checkbox adds it as another example of the
  * same collection, which generalises the suggested pattern.
  *
+ * A `*.zarr` folder is a store: one leaf, never opened, picked like a file.
+ *
  * Two highlights: the files the collection being edited matches (live, a
  * tinted row) and the files saved collections claimed (their tag as a
  * badge). Rows never truncate: long names scroll sideways.
@@ -28,6 +30,9 @@ import type { BuilderRootSpec, BuilderTreeEntry, BuilderTreeListing } from 'depi
 import { fileSize } from '../../fromRun/fileSize';
 import { ancestorFolders } from '../paths';
 
+/** What a picked entry is: a file, or a store (a `*.zarr` folder). */
+export type TreePickKind = 'file' | 'store';
+
 type FolderState =
   | { status: 'loading' }
   | { status: 'error'; error: string; code: string | null }
@@ -43,8 +48,8 @@ interface FileTreeProps {
   matched: Set<string>;
   /** File → tag of the saved collection that claimed it. */
   claimed: Map<string, string>;
-  onActivate: (path: string) => void;
-  onTogglePick: (path: string) => void;
+  onActivate: (path: string, kind: TreePickKind) => void;
+  onTogglePick: (path: string, kind: TreePickKind) => void;
   /** A refusal the page can act on (a private bucket's details). */
   onError?: (code: string | null) => void;
 }
@@ -188,7 +193,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
     return (
       <>
         {entries.map((entry) =>
-          entry.is_dir ? (
+          entry.is_dir && !entry.store ? (
             <Box key={entry.path}>
               <DirRow entry={entry} depth={depth} open={expanded.has(entry.path)} onToggle={toggle} />
               {expanded.has(entry.path) && renderFolder(entry.path, depth + 1)}
@@ -256,10 +261,14 @@ const FileRow: React.FC<{
   matched: boolean;
   tag: string | null;
   accent: string;
-  onActivate: (path: string) => void;
-  onTogglePick: (path: string) => void;
+  onActivate: (path: string, kind: TreePickKind) => void;
+  onTogglePick: (path: string, kind: TreePickKind) => void;
 }> = ({ entry, depth, active, picked, matched, tag, accent, onActivate, onTogglePick }) => {
-  const size = fileSize(entry.size);
+  const kind: TreePickKind = entry.store ? 'store' : 'file';
+  const size = kind === 'store' ? null : fileSize(entry.size);
+  let icon = 'mdi:file-outline';
+  if (kind === 'store') icon = 'mdi:cube-outline';
+  if (tag) icon = 'mdi:database-check';
   return (
     <Group
       gap={6}
@@ -279,7 +288,7 @@ const FileRow: React.FC<{
             : undefined,
       }}
       data-testid="builder-tree-item"
-      data-kind="file"
+      data-kind={kind}
       data-path={entry.path}
       data-active={active || undefined}
       data-matched={matched || undefined}
@@ -289,15 +298,15 @@ const FileRow: React.FC<{
         <Checkbox
           size="xs"
           checked={picked}
-          onChange={() => onTogglePick(entry.path)}
+          onChange={() => onTogglePick(entry.path, kind)}
           aria-label={`Use ${entry.name} as an example`}
           data-testid="builder-tree-pick"
         />
       </Tooltip>
-      <UnstyledButton onClick={() => onActivate(entry.path)} style={NOWRAP} data-testid="builder-tree-file">
+      <UnstyledButton onClick={() => onActivate(entry.path, kind)} style={NOWRAP} data-testid="builder-tree-file">
         <Group gap={4} wrap="nowrap">
           <Icon
-            icon={tag ? 'mdi:database-check' : 'mdi:file-outline'}
+            icon={icon}
             width={14}
             color={tag ? `var(--mantine-color-${accent}-6)` : 'var(--mantine-color-dimmed)'}
           />
@@ -308,6 +317,11 @@ const FileRow: React.FC<{
             <Text size="xs" c="dimmed" style={NOWRAP}>
               {size}
             </Text>
+          )}
+          {kind === 'store' && (
+            <Badge size="xs" variant="light" color="gray" radius="sm" tt="none" style={{ flexShrink: 0 }}>
+              store
+            </Badge>
           )}
         </Group>
       </UnstyledButton>
