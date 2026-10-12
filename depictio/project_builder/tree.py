@@ -1,72 +1,42 @@
-"""Directory tree listing for the Project Builder file picker (left column)."""
+"""One folder level of a data root, for the builder's file tree."""
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
 
-from depictio.project_builder.paths import rel_to_root, safe_resolve
+from depictio.cli.cli.utils.data_root import DataRoot
+from depictio.models.local_access import is_hidden_name
+from depictio.project_builder.errors import BuilderRefused
+from depictio.project_builder.roots import confine_rel
 
-# Suffixes the Project Builder can preview + bind (tabular). Others are still listed so
-# the user sees the whole run, just flagged as non-previewable.
-PREVIEWABLE_SUFFIXES = {".csv", ".tsv", ".txt", ".parquet", ".feather"}
-
-# Noise directories never worth showing in a run tree.
-_IGNORED_DIRS = {
-    ".git",
-    "__pycache__",
-    "node_modules",
-    ".venv",
-    ".depictio",
-    ".ipynb_checkpoints",
-    ".pytest_cache",
-}
+# More entries than this in one folder and the listing says ``truncated``.
+MAX_ENTRIES = 1000
 
 
-def _node(root: Path, path: Path, depth: int, max_depth: int) -> dict[str, Any]:
-    is_dir = path.is_dir()
-    node: dict[str, Any] = {
-        "name": path.name,
-        "path": rel_to_root(root, path),
-        "type": "dir" if is_dir else "file",
-    }
-    if is_dir:
-        node["children"] = _list_dir(root, path, depth + 1, max_depth) if depth < max_depth else []
-    else:
-        node["previewable"] = path.suffix.lower() in PREVIEWABLE_SUFFIXES
-        try:
-            node["size"] = path.stat().st_size
-        except OSError:
-            node["size"] = None
-    return node
+def list_folder(root: DataRoot, rel: str = "") -> dict[str, Any]:
+    """The entries directly inside folder ``rel`` of ``root``, folders first.
 
-
-def _list_dir(root: Path, directory: Path, depth: int, max_depth: int) -> list[dict[str, Any]]:
-    try:
-        entries = sorted(
-            directory.iterdir(),
-            key=lambda p: (p.is_file(), p.name.lower()),  # dirs first, then files
-        )
-    except OSError:
-        return []
-    children: list[dict[str, Any]] = []
-    for entry in entries:
-        if entry.name.startswith(".") and entry.is_dir():
-            continue
-        if entry.is_dir() and entry.name in _IGNORED_DIRS:
-            continue
-        children.append(_node(root, entry, depth, max_depth))
-    return children
-
-
-def build_tree(root: Path, rel: str = "", max_depth: int = 12) -> dict[str, Any]:
-    """Return a nested tree rooted at ``root/rel`` (defaults to the Project Builder root)."""
-    target = safe_resolve(root, rel)
-    if target.is_file():
-        return _node(root, target, depth=max_depth, max_depth=max_depth)
+    Hidden like every other listing of a data root: dot-names and the noise
+    folders (``is_hidden_name``). Lazy by design: a tree is expanded one folder
+    at a time, so an S3 prefix or a home folder is never walked whole for it.
+    """
+    rel = confine_rel(rel)
+    if rel and not root.exists(rel):
+        raise BuilderRefused(404, f"'{rel}' is not a folder of the data root.", "folder_missing")
+    entries = [entry for entry in root.children(rel) if not is_hidden_name(entry.name)]
+    shown = entries[:MAX_ENTRIES]
     return {
-        "name": target.name or str(target),
-        "path": rel_to_root(root, target),
-        "type": "dir",
-        "children": _list_dir(root, target, depth=0, max_depth=max_depth),
+        "path": rel,
+        "entries": [
+            {
+                "name": entry.name,
+                "path": f"{rel}/{entry.name}" if rel else entry.name,
+                "is_dir": entry.is_dir,
+                "size": entry.size,
+            }
+            for entry in shown
+        ],
+        "truncated": len(entries) > MAX_ENTRIES or root.truncated,
+        "is_remote": root.is_remote,
+        "root_label": root.location,
     }

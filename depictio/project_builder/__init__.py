@@ -1,21 +1,22 @@
-"""Depictio Project Builder — host-side, service-free authoring backend.
+"""Depictio Project Builder: define a project's data collections from a folder.
 
-``depictio project-builder <dir>`` launches a standalone uvicorn app (no Mongo/Redis/
-Celery/S3) that serves the Project Builder SPA plus the ``/project-builder/*`` authoring API. The
-gesture is *point at a folder → associate file(s) to Data Collections → create a
-project*: picked files become Data Collections whose scan glob/regex is inferred
-by config-by-example, producing a validated ``project.yaml`` importable via
-``depictio run``.
+For a folder no shipped template recognises. The user browses a data root (a
+folder on the server's disk under ``depictio local``, or an ``s3://`` prefix),
+picks files, and groups data collections (scan rule, type, properties) under
+workflows. The result is an ad-hoc template relative to ``{DATA_ROOT}``: the
+server creates the project from it through ``POST /projects/from_run``, and
+``depictio ingest <dir|s3://…> --template <bundle>`` runs the same file.
 
-Scope stops at the data setup — dashboards are authored later, in the editor of a
-real deployment, after ``depictio run`` imports the project.
+Two front doors share this package:
 
-Everything here reuses depictio's existing Dash-free, service-free primitives:
-``preview_file`` (polars preview), ``match_run_dir`` (recognition) and the real
-``DataCollection`` model (per-DC validation). No module in this package may import
-``depictio.api.main`` (it pulls Beanie/Mongo).
+- the main API (``projects_endpoints/builder.py``), authenticated, with the
+  run-folder dialog's confinement (``LocalDataPolicy``, loopback, admin);
+- ``depictio project-builder <dir>`` (``standalone.py``), a thin no-Mongo
+  server for one folder that writes the template bundle into it.
+
+Everything is asked of a :class:`~depictio.cli.cli.utils.data_root.DataRoot`,
+so a local folder and an ``s3://`` prefix answer alike, and the files a data
+collection is shown to match are the ones the scan itself picks
+(``template_preview.scan_dc_hits``). Only ``routes.py`` and ``standalone.py``
+import FastAPI: the rest runs on a CLI-only install.
 """
-
-from depictio.project_builder.paths import safe_resolve
-
-__all__ = ["safe_resolve"]

@@ -18,6 +18,8 @@ from fnmatch import translate
 from pathlib import Path
 from typing import Any, Literal
 
+from pydantic import BaseModel, Field
+
 from depictio.cli.cli.utils.data_root import (
     DataRoot,
     LocalDataRoot,
@@ -314,6 +316,112 @@ def _preview_scan_dc(
     return DataCollectionPreview(
         tag=tag, kind="scan", mode=mode or None, location=root.url(""), matched=0, optional=optional
     )
+
+
+# ── wire shapes ──────────────────────────────────────────────────────────────
+# The rows above as POST /projects/from_run reports them, here rather than with
+# the route so a server without Mongo (the Project Builder's standalone mode)
+# reports a plan in the very same shape.
+
+
+class FromRunRecipeSource(BaseModel):
+    """What one source of a recipe found under the data root.
+
+    The wire shape of ``template_preview.RecipeSourcePreview``: ``kind`` is
+    ``collection`` for a source read from another data collection, ``file``
+    for a glob or a path, and ``url`` for a URL outside the data root, which
+    is read at ingest and so is neither found nor missing here (``found`` is
+    None).
+    """
+
+    ref: str
+    kind: Literal["file", "collection", "url"]
+    pattern: str | None = None
+    dc_ref: str | None = None
+    optional: bool = False
+    matched: int = 0
+    samples: list[str] = Field(default_factory=list)
+    found: bool | None = None
+    found_in: str | None = None
+
+
+class FromRunRecipePreview(BaseModel):
+    """The recipe a data collection is built with, and what each of its sources found."""
+
+    name: str
+    summary: str | None = None
+    sources: list[FromRunRecipeSource] = Field(default_factory=list)
+
+
+class FromRunDCPreview(BaseModel):
+    """What one data collection would find under the data root.
+
+    The wire shape of ``template_preview.DataCollectionPreview``: ``status`` is
+    one of ``ok`` / ``empty`` / ``missing`` / ``pruned`` and ``kind`` is
+    ``scan`` or ``recipe``. ``rule`` is what a scanning collection looks for,
+    as the template wrote it, ``samples`` the first few locations it matched,
+    ``found_in`` the deepest folder (relative to the data root) holding every
+    location it matched, and ``recipe`` is set for a recipe collection.
+    """
+
+    data_collection_tag: str
+    kind: str
+    mode: str | None = None
+    location: str = ""
+    matched: int = 0
+    missing_sources: list[str] = Field(default_factory=list)
+    optional: bool = False
+    status: str = "ok"
+    rule: str | None = None
+    samples: list[str] = Field(default_factory=list)
+    found_in: str | None = None
+    recipe: FromRunRecipePreview | None = None
+
+
+def report_recipe(recipe) -> FromRunRecipePreview | None:
+    """A ``template_preview.RecipePreview`` in the report's shape, None for none."""
+    if recipe is None:
+        return None
+    return FromRunRecipePreview(
+        name=recipe.name,
+        summary=recipe.summary,
+        sources=[
+            FromRunRecipeSource(
+                ref=source.ref,
+                kind=source.kind,
+                pattern=source.pattern,
+                dc_ref=source.dc_ref,
+                optional=source.optional,
+                matched=source.matched,
+                samples=list(source.samples),
+                found=source.found,
+                found_in=source.found_in,
+            )
+            for source in recipe.sources
+        ],
+    )
+
+
+def report_rows(preview_rows) -> list[FromRunDCPreview]:
+    """``template_preview.DataCollectionPreview`` rows in the report's shape, one per tag."""
+    rows = {
+        row.tag: FromRunDCPreview(
+            data_collection_tag=row.tag,
+            kind=row.kind,
+            mode=row.mode,
+            location=row.location,
+            matched=row.matched,
+            missing_sources=list(row.missing_sources),
+            optional=row.optional,
+            status=row.status,
+            rule=row.rule,
+            samples=list(row.samples),
+            found_in=row.found_in,
+            recipe=report_recipe(row.recipe),
+        )
+        for row in preview_rows
+    }
+    return list(rows.values())
 
 
 def _override_binding(override: Any, attribute: str) -> str | None:

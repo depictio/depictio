@@ -1,41 +1,47 @@
-"""Lightweight, RO-Crate-flavoured workflow metadata extraction from a repo URL.
+"""Workflow metadata from a repository URL, to pre-fill the builder's workflow editor.
 
-The Project Builder runs locally, so given a public repository URL it best-effort fetches a
-few small files and merges what it finds — ``name``, ``engine``, ``version``,
-``catalog`` (fed into the project.yaml) plus ``description`` / ``author`` /
-``license`` / ``homepage`` (shown to the user, not stored) — to pre-fill the
-workflow editor. Everything is optional: a fetch failure just yields whatever was
-gathered (manual entry always works). Sources, in priority order:
+Best effort, and GitHub only: a few small files at fixed URLs built from the
+``github.com/<owner>/<repo>`` the user pasted, never the URL itself, so the
+server never fetches an address a user chose. Sources, in priority order:
 
-1. **RO-Crate** — ``ro-crate-metadata.json`` at the repo root (the "RO-Crate like"
-   part): the root data entity's name/version/description/license/author + a
-   workflow entity's ``programmingLanguage`` → engine.
-2. **Nextflow** — ``nextflow.config`` ``manifest {}`` block (name/version/
-   description/author/homePage).
-3. **GitHub API** — repo name/description/homepage/license as a last resort.
+1. **RO-Crate**: ``ro-crate-metadata.json`` at the repository root (name,
+   version, description, license, author, and the workflow's language as engine);
+2. **Nextflow**: the ``manifest {}`` block of ``nextflow.config``, read by the
+   parser run-info detection uses (``models.models.nextflow.parse_manifest_block``);
+3. **GitHub API**: the repository's name, description, homepage and license.
 
-Parsing is split from fetching so the parsers stay unit-testable without a network.
+nf-core pipelines also get their logo, inlined as a ``data:`` URI. Fetching is
+injected: on the server every request goes through the remote-fetch gateway
+(``remote_fetch.fetch_validated_*``: host policy, redirects, size cap), from
+the CLI through its direct counterparts. Any failure only means fewer fields.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import re
+from collections.abc import Callable
 from typing import Any
 from urllib.parse import urlparse
 
-_TIMEOUT = 6
+from depictio.models.models.nextflow import parse_manifest_block
+
+TextGetter = Callable[[str], str]
+BytesGetter = Callable[[str], bytes]
 
 # Workflow engines depictio actually supports (those with brand logos/handling)
 # plus python; used to normalise an extracted engine name onto a known value.
 # Anything else falls through lower-cased rather than being dropped.
 KNOWN_ENGINES = ["nextflow", "snakemake", "galaxy", "python"]
+# "r" is matched whole: as a substring it would claim "nextflow" or "galaxy".
+_WHOLE_WORD_ENGINES = ["r"]
 
 
 def _github_owner_repo(url: str) -> tuple[str | None, str | None]:
     """(owner, repo) for a github.com URL, else (None, None)."""
     parsed = urlparse(url)
-    if "github.com" not in parsed.netloc:
+    if (parsed.hostname or "").lower() not in ("github.com", "www.github.com"):
         return None, None
     parts = [p for p in parsed.path.split("/") if p]
     if len(parts) < 2:
@@ -49,6 +55,9 @@ def _normalise_engine(name: str | None) -> str | None:
     low = name.strip().lower()
     for known in KNOWN_ENGINES:
         if known in low:
+            return known
+    for known in _WHOLE_WORD_ENGINES:
+        if re.search(rf"\b{known}\b", low):
             return known
     return low or None
 
@@ -120,59 +129,59 @@ def parse_ro_crate(data: dict[str, Any]) -> dict[str, Any]:
 
 
 def parse_nextflow_config(text: str) -> dict[str, Any]:
-    """Extract manifest fields from a Nextflow ``manifest {}`` block. Engine=nextflow."""
-    out: dict[str, Any] = {"engine": "nextflow"}
-    block_match = re.search(r"manifest\s*\{(.*?)\}", text, re.DOTALL)
-    block = block_match.group(1) if block_match else text
-    for key, field in (
-        ("name", "name"),
-        ("version", "version"),
-        ("description", "description"),
-        ("author", "author"),
-        ("homePage", "homepage"),
-    ):
-        m = re.search(rf"\b{key}\s*=\s*['\"]([^'\"]*)['\"]", block)
-        if m and m.group(1):
-            out[field] = m.group(1).strip()
-    return out
+    """The ``manifest {}`` fields of a ``nextflow.config``; the engine is Nextflow."""
+    return {"engine": "nextflow", **parse_manifest_block(text)}
 
 
-def _http_get(url: str) -> str | None:
-    """Best-effort GET returning decoded text, or None on any failure."""
-    import urllib.request
-
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "depictio-project-builder"})
-        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:  # noqa: S310 — http(s) only
-            if getattr(resp, "status", 200) != 200:
-                return None
-            return resp.read().decode("utf-8", "replace")
-    except Exception:  # noqa: BLE001 — offline / 404 / bad host all fall back to manual entry
-        return None
-
-
+_MAX_TEXT_BYTES = 512 * 1024
 _MAX_LOGO_BYTES = 1_000_000
 
 
-def _http_get_data_uri(url: str, mime: str = "image/png") -> str | None:
-    """Best-effort GET of a small image, returned as a ``data:`` URI (or None).
+def default_getters() -> tuple[TextGetter, BytesGetter]:
+    """The gateway on a server, the direct reads from the CLI (``depictio project-builder``)."""
+    from depictio.api.v1 import remote_fetch
 
-    Inlining keeps the fetched logo self-contained in the single-file Project Builder and
-    avoids the browser making its own cross-origin request."""
-    import base64
-    import urllib.request
+    if remote_fetch.is_server_context():
+        return (
+            lambda url: remote_fetch.fetch_validated_text(url, max_bytes=_MAX_TEXT_BYTES),
+            lambda url: remote_fetch.fetch_validated_bytes(url, max_bytes=_MAX_LOGO_BYTES),
+        )
+    return (
+        remote_fetch.direct_fetch_text,
+        lambda url: remote_fetch.direct_fetch_bytes(url, max_bytes=_MAX_LOGO_BYTES),
+    )
 
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "depictio-project-builder"})
-        with urllib.request.urlopen(req, timeout=_TIMEOUT) as resp:  # noqa: S310 — http(s) only
-            if getattr(resp, "status", 200) != 200:
-                return None
-            data = resp.read(_MAX_LOGO_BYTES + 1)
-            if not data or len(data) > _MAX_LOGO_BYTES:
-                return None
-            return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
-    except Exception:  # noqa: BLE001 — best-effort; a missing logo just isn't shown
-        return None
+
+class _Fetcher:
+    """Best-effort reads: None on any failure, and whether the gateway refused one."""
+
+    def __init__(self, get_text: TextGetter, get_bytes: BytesGetter):
+        self._get_text = get_text
+        self._get_bytes = get_bytes
+        self.blocked = False
+
+    def _failed(self, url: str, exc: Exception) -> None:
+        from depictio.api.v1.remote_fetch import RemoteFetchFailed, RemoteURLRejected
+
+        if isinstance(exc, RemoteURLRejected) and not isinstance(exc, RemoteFetchFailed):
+            self.blocked = True
+
+    def text(self, url: str) -> str | None:
+        try:
+            return self._get_text(url)
+        except Exception as exc:  # noqa: BLE001 - offline, 404, refused: fewer fields
+            self._failed(url, exc)
+            return None
+
+    def data_uri(self, url: str, mime: str = "image/png") -> str | None:
+        try:
+            data = self._get_bytes(url)
+        except Exception as exc:  # noqa: BLE001 - a missing logo just is not shown
+            self._failed(url, exc)
+            return None
+        if not data or len(data) > _MAX_LOGO_BYTES:
+            return None
+        return f"data:{mime};base64,{base64.b64encode(data).decode('ascii')}"
 
 
 def _merge(dst: dict[str, Any], src: dict[str, Any]) -> None:
@@ -198,18 +207,31 @@ def _clean_description(text: str, limit: int = 280) -> str:
     return s
 
 
-def fetch_workflow_metadata(url: str) -> dict[str, Any]:
+def fetch_workflow_metadata(
+    url: str,
+    *,
+    get_text: TextGetter | None = None,
+    get_bytes: BytesGetter | None = None,
+) -> dict[str, Any]:
     """Best-effort workflow metadata from a repository URL.
 
     Returns ``{repository_url, name?, engine?, version?, catalog?, description?,
-    author?, license?, homepage?, sources: [...]}``. Never raises on network
-    problems — ``sources`` is empty when nothing was found.
+    author?, license?, homepage?, logo_light?, logo_dark?, sources: [...],
+    blocked}``. Never raises on network problems: ``sources`` is empty when
+    nothing was found, and ``blocked`` says the server's remote policy refused
+    a request (an operator decision, not an outage). Only github.com
+    repositories are read.
     """
+    if get_text is None or get_bytes is None:
+        default_text, default_bytes = default_getters()
+        get_text = get_text or default_text
+        get_bytes = get_bytes or default_bytes
+    fetch = _Fetcher(get_text, get_bytes)
     url = (url or "").strip()
     if not url:
         raise ValueError("repository url is required")
-    if not re.match(r"^(https?|git)://", url):
-        raise ValueError("repository url must start with http(s):// or git://")
+    if not re.match(r"^https?://", url):
+        raise ValueError("The repository URL must start with https://.")
 
     result: dict[str, Any] = {"repository_url": url}
     sources: list[str] = []
@@ -226,7 +248,7 @@ def fetch_workflow_metadata(url: str) -> dict[str, Any]:
     raw_base = f"https://raw.githubusercontent.com/{owner}/{repo}/HEAD" if owner and repo else None
 
     if raw_base:
-        crate = _http_get(f"{raw_base}/ro-crate-metadata.json")
+        crate = fetch.text(f"{raw_base}/ro-crate-metadata.json")
         if crate:
             try:
                 meta = parse_ro_crate(json.loads(crate))
@@ -237,13 +259,13 @@ def fetch_workflow_metadata(url: str) -> dict[str, Any]:
                 pass
 
         if any(k not in result for k in ("name", "version", "description", "author", "homepage")):
-            config = _http_get(f"{raw_base}/nextflow.config")
+            config = fetch.text(f"{raw_base}/nextflow.config")
             if config:
                 _merge(result, parse_nextflow_config(config))
                 sources.append("nextflow.config")
 
     if owner and repo and any(k not in result for k in ("name", "description", "homepage")):
-        api = _http_get(f"https://api.github.com/repos/{owner}/{repo}")
+        api = fetch.text(f"https://api.github.com/repos/{owner}/{repo}")
         if api:
             try:
                 gh = json.loads(api)
@@ -266,10 +288,10 @@ def fetch_workflow_metadata(url: str) -> dict[str, Any]:
     # nf-core pipelines ship their own logo in the repo assets; fetch both theme
     # variants and inline them so the Project Builder can show the actual pipeline brand.
     if raw_base and owner and owner.lower() == "nf-core" and repo:
-        light = _http_get_data_uri(f"{raw_base}/docs/images/nf-core-{repo}_logo_light.png")
-        dark = _http_get_data_uri(f"{raw_base}/docs/images/nf-core-{repo}_logo_dark.png")
+        light = fetch.data_uri(f"{raw_base}/docs/images/nf-core-{repo}_logo_light.png")
+        dark = fetch.data_uri(f"{raw_base}/docs/images/nf-core-{repo}_logo_dark.png")
         if light or dark:
-            result["logo"] = light or dark
+            result["logo_light"] = light or dark
             result["logo_dark"] = dark or light
             sources.append("logo")
 
@@ -279,4 +301,5 @@ def fetch_workflow_metadata(url: str) -> dict[str, Any]:
         result["description"] = _clean_description(result["description"])
 
     result["sources"] = sources
+    result["blocked"] = fetch.blocked
     return result
