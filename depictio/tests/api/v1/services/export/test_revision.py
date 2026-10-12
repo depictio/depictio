@@ -72,8 +72,9 @@ class TestRevision:
 
     def test_moves_when_the_data_is_reingested(self) -> None:
         ledger = {"version_id": "v1", "seq": 3, "content_hash": "aaa"}
-        assert _revision(ledger=ledger, data_hash="h1")["revision"] != (
-            _revision(ledger=ledger, data_hash="h2")["revision"]
+        assert (
+            _revision(ledger=ledger, data_hash="h1")["revision"]
+            != (_revision(ledger=ledger, data_hash="h2")["revision"])
         )
 
     def test_a_family_without_a_ledger_entry_hashes_its_stored_content(self) -> None:
