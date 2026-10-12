@@ -506,13 +506,23 @@ def _md_table(headers: list[str], rows: list[list[str]]) -> str:
     return "\n".join(out) + "\n"
 
 
-# The four things worth asking a pipeline maintainer, in the order a reply is
-# worth acting on. Naming them is what lets an answer file itself: a reply that
-# says "Moved: the parquet is under multiqc_data/ again since 3.25" is already
-# a ticket, where "looks off to me" is a conversation that has to be had first.
+# What is worth asking a pipeline maintainer, in the order a reply is worth
+# acting on. Naming them is what lets an answer file itself: a reply that says
+# "Moved: the parquet is under multiqc_data/ again since 3.25" is already a
+# ticket, where "looks off to me" is a conversation that has to be had first.
+#
+# Four of these are shared word for word with the dashboard feedback form at
+# .github/ISSUE_TEMPLATE/dashboard_feedback.yml, so a report that arrives
+# through a dashboard header and one that arrives through a review thread sort
+# into the same pile. The two lists diverge by exactly one entry each, and the
+# difference is the audience. "Moved" is here because a maintainer is the one
+# person who knows their pipeline moved a path; the form asks instead about the
+# empty panel that a reader actually sees, because making a reader guess at the
+# cause is how a bucket ends up never being picked.
 ASK_BUCKETS = (
-    ("Wrong", "a number or a plot is incorrect or misleading"),
+    ("Wrong number", "a value or a figure does not match the run"),
     ("Missing", "something you always look at is not here"),
+    ("Hard to read", "the panel is right, but the scale, colours or labels mislead"),
     ("Moved", "an output path changed and the template is reading the old one"),
     ("Conventions", "it breaks a house rule this pipeline has for presenting results"),
 )
@@ -553,19 +563,20 @@ def _scanned_paths(facts: PipelineFacts, limit: int = 6) -> list[str]:
 
 
 def _checklist(facts: PipelineFacts) -> str:
-    """The two-minute version: five claims to tick, no prose required.
+    """The two-minute version: one claim to tick per ask, no prose required.
 
     A volunteer maintainer will not write three paragraphs, and a round that
     only accepts paragraphs gets no replies at all. Each box is phrased so that
     ticking it is approval: an unticked box is the finding, and it points at
-    exactly one of the four asks below.
+    exactly one of the asks below.
     """
     return (
         "### The two-minute version\n\n"
         "Tick what holds. Whatever you leave unticked is the useful part, and the "
         "heading under it says what to tell me.\n\n"
-        "- [ ] **Wrong**: nothing on it is incorrect or misleading\n"
+        "- [ ] **Wrong number**: nothing on it is incorrect or misleading\n"
         "- [ ] **Missing**: nothing I would always look at is absent\n"
+        "- [ ] **Hard to read**: no scale, colour or label on it misleads\n"
         f"- [ ] **Moved**: it reads the paths nf-core/{facts.pipeline} publishes today\n"
         "- [ ] **Conventions**: it does not break how this pipeline's results are "
         "normally presented\n"
@@ -574,7 +585,7 @@ def _checklist(facts: PipelineFacts) -> str:
 
 
 def _review_questions(facts: PipelineFacts) -> str:
-    """The four asks, each quoting this template's own content back.
+    """The asks, each quoting this template's own content back.
 
     Every one names something specific the reader can check, so answering is a
     correction rather than an essay, and the bucket name doubles as the label
@@ -592,12 +603,19 @@ def _review_questions(facts: PipelineFacts) -> str:
         "### What to tell me\n\n",
         "Lead with the word, so I know what I am looking at. Any one of these is "
         "worth a reply on its own.\n\n",
-        f"**Wrong.** The headline numbers are {quoted_cards}. A metric that is subtly "
+        f"**Wrong number.** The headline numbers are {quoted_cards}. A metric that is subtly "
         "wrong for your pipeline is the most expensive thing to leave in, so please be "
         "blunt. This is the one that blocks the template.\n\n",
         f"**Missing.** The tabs are {quoted_tabs}. I am after the one plot or table you "
         "open first when you debug a run, whether or not MultiQC already has it.\n\n",
     ]
+
+    lines.append(
+        "**Hard to read.** A panel whose number is right but whose presentation misleads: "
+        "a bar chart whose axis does not start at zero, a colourway that implies an order "
+        "the categories do not have, a legend that has to be decoded before the plot can be. "
+        "Cheap to fix, and expensive to leave in, because a plot is read as fact.\n\n"
+    )
 
     lines.append("**Moved.** It reads these out of a run:\n\n")
     if paths:
@@ -638,8 +656,8 @@ def _where_it_goes(facts: PipelineFacts, discussion_url: str | None) -> str:
         f"Reply here, or in the nf-core Slack `#{facts.pipeline}` channel, whichever is "
         f"less friction. Slack replies get copied into {thread} with attribution, because "
         "Slack scrolls away and this does not.\n\n"
-        "- **Wrong** and **Moved** are fixed in the template before it ships, and I link "
-        "the commit back here.\n"
+        "- **Wrong number**, **Hard to read** and **Moved** are fixed in the template "
+        "before it ships, and I link the commit back here.\n"
         "- **Missing** and **Conventions** become issues linked to this thread, so you "
         "can see whether they moved.\n"
         "- Either way you get a reply here saying what happened. Nothing is collected "
@@ -770,7 +788,7 @@ def render_slack(
     This is the message that actually reaches a maintainer: nf-core maintainers
     live in Slack, and one that only says "the real content is over there" costs
     a click and loses most of its readers. So it carries the three links and the
-    four asks itself, and a reply in-thread is a complete answer. The discussion
+    asks itself, and a reply in-thread is a complete answer. The discussion
     is where those replies are copied so they survive Slack's scrollback.
 
     Slack link syntax is ``<url|label>`` and bold is ``*single asterisks*``;
@@ -823,8 +841,13 @@ def render_slack(
 def _asks_table() -> str:
     """What each named ask turns into, so the round's promise is written down once."""
     outcomes = {
-        "Wrong": "Fixed in the template before it ships; the commit is linked back to the thread",
+        "Wrong number": (
+            "Fixed in the template before it ships; the commit is linked back to the thread"
+        ),
         "Missing": "An issue linked to the thread, so the asker can see whether it moved",
+        "Hard to read": (
+            "Fixed in the template, and checked against the other pipelines drawing the same panel"
+        ),
         "Moved": "A template scan fix, plus a check of whether other pipelines read the same path",
         "Conventions": "An issue, and a note in the template's docs page about the rule",
     }
@@ -877,10 +900,11 @@ def render_epic(
 
     body = [
         "## nf-core template review round\n\n",
-        f"{len(all_facts)} pipelines, one discussion each, all asking the same five-box "
-        "checklist: are the numbers right, do the tabs cover what matters, are the file "
-        "paths still current, would you point a user here, would you link it from the "
-        "pipeline docs.\n\n",
+        f"{len(all_facts)} pipelines, one discussion each, all asking the same "
+        f"{len(ASK_BUCKETS) + 1}-box "
+        "checklist: are the numbers right, do the tabs cover what matters, does anything "
+        "on it mislead, are the file paths still current, does it follow how this pipeline "
+        "presents results, and would you link it from the pipeline's own docs.\n\n",
         f"**{len(ready)} of {len(all_facts)} threads open.**\n\n",
         _md_table(
             ["Pipeline", "Version", "PR", "Dashboard", "Docs", "Thread", "Contacted", "Answered"],
@@ -912,7 +936,7 @@ def render_epic(
             "| This issue | The state of the round, and the link to every change that came "
             "out of it | A discussion is a conversation, not a status board |\n\n"
             "### What each kind of reply turns into\n\n"
-            "The four asks are named in every thread so an answer files itself.\n\n",
+            "Every ask is named in every thread, so an answer files itself.\n\n",
             _asks_table(),
             "\n_Generated by `scripts/nfcore_outreach.py`. Regenerate it rather than "
             "editing cells._\n",
