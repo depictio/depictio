@@ -34,11 +34,12 @@ from depictio.api.v1.configs.config import settings
 # WebAssembly with fetch() on an inlined data: URL. Refused, every read fails
 # with "Failed to fetch" after the index loads. A data: URL never leaves the
 # page, so allowing it opens no new destination.
-_BASE_CONNECT_SRC = (
-    "'self' data: ws: wss: "
-    "https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com "
-    "https://tile.openstreetmap.org"
+#: The basemap CDNs alone, also what an offline map embed may reach
+#: (``services/export/embed.py::build_embed_csp``).
+BASEMAP_CONNECT_SRC = (
+    "https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://tile.openstreetmap.org"
 )
+_BASE_CONNECT_SRC = f"'self' data: ws: wss: {BASEMAP_CONNECT_SRC}"
 
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 

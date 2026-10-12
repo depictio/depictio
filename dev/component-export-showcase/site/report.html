@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amplicon surveillance of surface water — Swedish Pathogens Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/shared.css">
+<link rel="stylesheet" href="/report.css">
+<script src="/vendor/plotly.min.js"></script>
+</head>
+<body class="pp">
+
+<nav class="sitenav" id="sitenav"></nav>
+
+<!-- Portal masthead: white, sticky, two logos separated by a hairline rule. -->
+<header class="pp-header">
+  <div class="pp-container pp-header-inner">
+    <div class="pp-logos">
+      <img class="pp-logo" src="/vendor/pp-logo.svg" alt="Swedish Pathogens Portal">
+      <span class="pp-divider" aria-hidden="true"></span>
+      <img class="pp-logo pp-logo-sll" src="/vendor/scilifelab-logo.svg" alt="SciLifeLab">
+    </div>
+    <nav class="pp-nav" aria-label="Main navigation">
+      <span class="pp-nav-item">Dashboards</span>
+      <span class="pp-nav-item">Data Management</span>
+      <span class="pp-nav-item">Outbreaks</span>
+      <span class="pp-nav-item">Topics</span>
+      <span class="pp-nav-item">About</span>
+    </nav>
+  </div>
+</header>
+
+<!-- The portal's gradient section band, dark-blue → mid-blue → teal. -->
+<div class="pp-band">
+  <div class="pp-container"><h2>Dashboards</h2></div>
+</div>
+
+<main class="pp-container pp-main" id="main-content">
+
+  <h3 class="pp-title">Amplicon surveillance of surface water — SLU-SEEC</h3>
+
+  <p class="pp-notice">
+    <strong>Demonstration page.</strong> Not an official Swedish Pathogens Portal
+    page. It reproduces the portal's dashboard layout, and every figure and every
+    control below is backed by Depictio's component-export API instead of the
+    portal's own Django views.
+  </p>
+
+  <!-- Tab strip: the current tab is a span, siblings are links, as the portal
+       renders it. -->
+  <div class="pp-tabs">
+    <a href="/qc-report" class="pp-tab">Overview</a>
+    <a href="/versioning" class="pp-tab">Methodology</a>
+    <span class="pp-tab pp-tab-current">Community composition</span>
+    <a href="/example-limited" class="pp-tab">Taxonomic flow</a>
+    <a href="/gallery" class="pp-tab">All components</a>
+  </div>
+
+  <h4>Quantitative data analysis</h4>
+  <p>
+    Here you can find plots generated from the data collected at sampling sites.
+    The plots can be re-generated using the interactive inputs below. Kindly refer
+    to the <a href="/versioning">Methodology</a> page for more information.
+  </p>
+
+  <!-- The portal's three-column grey control deck. Each control is bound to a
+       Depictio interactive component read from the export manifest. -->
+  <div id="plot-filters" class="pp-filters"></div>
+
+  <div class="pp-filter-meta">
+    <div id="active-filters" class="pp-chips"></div>
+    <div id="plot-filters-req"></div>
+  </div>
+
+  <section class="pp-panel" data-slot="quant">
+    <div class="pp-stage"></div>
+    <div class="pp-panel-foot">
+      <span class="pp-status">loading…</span>
+    </div>
+    <div class="pp-req"></div>
+  </section>
+
+  <h4>Qualitative composition per sample</h4>
+  <p>
+    The figure displays the composition of each individual sample. Taxa below the
+    retention threshold are pooled; empty columns indicate samples with no
+    assigned reads.
+  </p>
+
+  <section class="pp-panel" data-slot="stacked">
+    <div class="pp-stage"></div>
+    <div class="pp-panel-foot">
+      <span class="pp-status">loading…</span>
+    </div>
+    <div class="pp-req"></div>
+  </section>
+
+  <h4>Taxonomic hierarchy and flow</h4>
+  <p>
+    The same survey read two further ways. Both are server-side figure builders,
+    so what arrives is a finished specification rather than a request for this
+    browser to compute one.
+  </p>
+
+  <div class="pp-panel-pair">
+    <section class="pp-panel" data-slot="sunburst">
+      <div class="pp-stage pp-stage-short"></div>
+      <div class="pp-panel-foot">
+        <span class="pp-status">loading…</span>
+      </div>
+      <div class="pp-req"></div>
+    </section>
+
+    <section class="pp-panel" data-slot="sankey">
+      <div class="pp-stage pp-stage-short"></div>
+      <div class="pp-panel-foot">
+        <span class="pp-status">loading…</span>
+      </div>
+      <div class="pp-req"></div>
+    </section>
+  </div>
+
+  <h4>Using Depictio's own control instead</h4>
+  <p>
+    The controls above were rebuilt in this site's idiom from the manifest's
+    filter contract. The alternative is to embed Depictio's real widget as
+    <code>format=html</code> and listen for what it posts out. Both paths end at
+    the same <code>filters=</code> array on the export URL, so a host chooses how
+    much of Depictio's interface it adopts, not whether it can use the data.
+  </p>
+
+  <div class="pp-embed">
+    <div id="embedded-control"></div>
+    <div id="embedded-control-req"></div>
+  </div>
+
+  <h4>How the binding works</h4>
+  <p>
+    Each control names a <em>column</em>, and the export manifest publishes which
+    interactive component drives which column, along with its option list. So the
+    deck is never hard-coded against the data: if a column has no control on the
+    dashboard, the deck omits it rather than rendering a widget that filters
+    nothing. A filter is only sent to figures whose data collection actually has
+    that column, because this dashboard spans several collections and a filter
+    naming <code>habitat</code> is meaningless to the taxonomy table. When a
+    filter reaches nothing, the response says so and the panel reports it.
+  </p>
+
+</main>
+
+<footer class="pp-footer">
+  <div class="pp-container pp-footer-inner">
+    <div>
+      <img class="pp-logo-footer" src="/vendor/pp-logo-footer.svg" alt="Swedish Pathogens Portal">
+      <p>
+        Demonstration of Depictio component export in a third-party page.
+        Not affiliated with SciLifeLab or the Swedish Pathogens Portal.
+      </p>
+    </div>
+    <nav class="pp-footer-links">
+      <a href="/">Index</a><span aria-hidden="true">·</span>
+      <a href="/qc-report">QC report</a><span aria-hidden="true">·</span>
+      <a href="/example-limited">Limitations</a><span aria-hidden="true">·</span>
+      <a href="/versioning">Versioning</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="/shared.js"></script>
+<script src="/report.js"></script>
+</body>
+</html>

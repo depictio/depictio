@@ -3418,6 +3418,14 @@ export interface AuthStatusResponse {
    *  bucket name is ever sent here. Older backends omit it: treat absent as
    *  `false`. */
   remote_browse_enabled?: boolean;
+  /** The component export API answers (`DEPICTIO_FASTAPI_EMBED_ENABLED`), so
+   *  every tile offers "Export / embed". Older backends omit it: treat absent
+   *  as `false`. */
+  embed_enabled?: boolean;
+  /** At least one site may frame an embed (a non-empty
+   *  `DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS`). The origins themselves are not
+   *  sent. False means an `<iframe>` of an embed is refused by its own CSP. */
+  embed_framing_enabled?: boolean;
 }
 
 /** Session payload persisted to localStorage['local-store'] on successful auth.
@@ -7325,4 +7333,87 @@ export async function restoreComponentFromVersion(
   );
   if (!res.ok) await throwHttpDetailError(res, 'Failed to restore component');
   return (await res.json()) as RestoreComponentResult;
+}
+
+// ---- component export (`/export/...`) ---------------------------------------
+//
+// Serves one component to another site, as a Plotly spec (`json`) or as a
+// self-contained offline page (`html`). Only answers when the server has it on
+// (`AuthStatusResponse.embed_enabled`).
+
+export type ComponentExportFormat = 'json' | 'html';
+
+/** One entry of `GET /export/dashboards/{id}/components`. */
+export interface ComponentExportManifestEntry {
+  component_id: string;
+  component_type: string;
+  viz_kind?: string | null;
+  title: string;
+  formats: ComponentExportFormat[];
+  /** Why there is no Plotly spec for this component, when there is none. */
+  json_unavailable_reason?: string;
+  /** Why there is no offline page for this component, when there is none. */
+  html_unavailable_reason?: string;
+}
+
+/** What each component of a dashboard can be exported as. */
+export async function fetchExportManifest(
+  dashboardId: string,
+): Promise<ComponentExportManifestEntry[]> {
+  const res = await authFetch(`${API_BASE}/export/dashboards/${dashboardId}/components`);
+  if (!res.ok) throw new Error(`Failed to load what this dashboard can export: ${res.status}`);
+  return res.json();
+}
+
+export interface ComponentExportParams {
+  format: ComponentExportFormat;
+  theme: 'light' | 'dark';
+  filters?: InteractiveFilter[];
+  controls?: Record<string, unknown>;
+}
+
+/**
+ * The viewer's filters, cut to what the export reads, so a URL with a filter
+ * stays readable and short.
+ *
+ * A filter in the viewer carries its control's whole description twice (top
+ * level and `metadata`) plus nulls. The render path reads `column_name`,
+ * `interactive_component_type`, `value` and `filter_expr`; link resolution
+ * reads `dc_id` and `source` at either level, and `selection_column` only
+ * under `metadata`, so that one key keeps its nesting.
+ */
+export function compactExportFilters(filters: InteractiveFilter[]): Record<string, unknown>[] {
+  return filters.map((f) => {
+    const meta = (f.metadata ?? {}) as Record<string, unknown>;
+    const out: Record<string, unknown> = { index: f.index, value: f.value };
+    const pick = (key: string) => (f as unknown as Record<string, unknown>)[key] ?? meta[key];
+    for (const key of ['column_name', 'interactive_component_type', 'dc_id', 'source', 'filter_expr']) {
+      const value = pick(key);
+      if (value !== undefined && value !== null && value !== '') out[key] = value;
+    }
+    if (meta.selection_column) out.metadata = { selection_column: meta.selection_column };
+    return out;
+  });
+}
+
+/**
+ * Path, from the site root, of one component's export. The SPA and the API
+ * share an origin, so prefixing `window.location.origin` makes it absolute.
+ */
+export function componentExportPath(
+  dashboardId: string,
+  componentId: string,
+  params: ComponentExportParams,
+): string {
+  const query = new URLSearchParams({ format: params.format, theme: params.theme });
+  if (params.filters && params.filters.length > 0) {
+    query.set('filters', JSON.stringify(compactExportFilters(params.filters)));
+  }
+  if (params.controls && Object.keys(params.controls).length > 0) {
+    query.set('controls', JSON.stringify(params.controls));
+  }
+  return (
+    `${API_BASE}/export/dashboards/${encodeURIComponent(dashboardId)}` +
+    `/components/${encodeURIComponent(componentId)}?${query}`
+  );
 }

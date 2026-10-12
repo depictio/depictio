@@ -280,7 +280,7 @@ export {
   useCategoryPalette,
 } from './hooks/useCategoryColors';
 export { extractLayoutItems, stripBoxPrefix } from './utils/leftPanelLayout';
-export { countActiveFilters } from './activeFilters';
+export { activeFiltersFor, countActiveFilters } from './activeFilters';
 export {
   PANEL_TOGGLE_EVENTS,
   SIDEBAR_TOGGLE_EVENT,
@@ -358,6 +358,11 @@ export {
   CommentsButton,
   CommentsControlProvider,
   useCommentsControl,
+  ExportButton,
+  ChromeSourceProvider,
+  ComponentExportControlProvider,
+  useChromeSource,
+  useComponentExportControl,
   actionsFor,
   canDuplicate,
   wrapWithChrome,
@@ -369,7 +374,10 @@ export {
 export type {
   ComponentChromeProps,
   ChromeAction,
+  ChromeSource,
   CommentsControl,
+  ComponentExportControl,
+  ComponentExportTarget,
   EditMenuStyleKey,
   InspectorControl,
   LoadAllState,
@@ -411,6 +419,15 @@ export type {
   CommentCounts,
   PublishedAnnotation,
   ListThreadsOptions,
+} from './api';
+
+// Component export: what each component of a dashboard can be served as, and
+// the URL that serves it (`/export/...`, on when `embed_enabled`).
+export { fetchExportManifest, componentExportPath, compactExportFilters } from './api';
+export type {
+  ComponentExportFormat,
+  ComponentExportManifestEntry,
+  ComponentExportParams,
 } from './api';
 
 // API surface — fetchers, payload types, filter types

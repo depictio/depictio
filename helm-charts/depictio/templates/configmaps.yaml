@@ -141,6 +141,11 @@ data:
   DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES | default "524288000" | quote }}
   DEPICTIO_REMOTE_TIMEOUT_S: {{ .Values.backend.env.DEPICTIO_REMOTE_TIMEOUT_S | default "30" | quote }}
   DEPICTIO_REMOTE_MAX_REDIRECTS: {{ .Values.backend.env.DEPICTIO_REMOTE_MAX_REDIRECTS | default "3" | quote }}
+  # Component export / embed API (/depictio/api/v1/export). Off by default:
+  # serving embeds relaxes X-Frame-Options and CSP frame-ancestors on that path.
+  # Backend only — the worker never serves these routes.
+  DEPICTIO_FASTAPI_EMBED_ENABLED: {{ .Values.backend.env.DEPICTIO_FASTAPI_EMBED_ENABLED | default "false" | quote }}
+  DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS: {{ .Values.backend.env.DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS | default "" | quote }}
   # S3 storage configuration.
   # NOTE: DEPICTIO_S3_ROOT_USER and DEPICTIO_S3_ROOT_PASSWORD (and their
   # legacy DEPICTIO_MINIO_* names) are

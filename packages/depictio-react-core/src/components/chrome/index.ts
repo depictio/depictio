@@ -17,6 +17,18 @@ export type { InspectorControl } from './InspectorContext';
 export { default as CommentsButton } from './CommentsButton';
 export { CommentsControlProvider, useCommentsControl } from './CommentsContext';
 export type { CommentsControl } from './CommentsContext';
+export { default as ExportButton } from './ExportButton';
+export {
+  ChromeSourceProvider,
+  ComponentExportControlProvider,
+  useChromeSource,
+  useComponentExportControl,
+} from './ExportContext';
+export type {
+  ChromeSource,
+  ComponentExportControl,
+  ComponentExportTarget,
+} from './ExportContext';
 export { default as DownloadButton } from './DownloadButton';
 export { default as ResetButton } from './ResetButton';
 export { default as ClearSelectionButton } from './ClearSelectionButton';

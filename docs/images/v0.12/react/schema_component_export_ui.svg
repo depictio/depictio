@@ -1,0 +1,219 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="640" viewBox="0 0 1240 640">
+  <rect width="1240" height="640" fill="#ffffff"/>
+  <text x="46.0" y="52.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="25" fill="#1e1e1e" text-anchor="start" font-weight="normal">Export from the tile</text>
+  <text x="46.0" y="78.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#5c5c5c" text-anchor="start" font-weight="normal">the action builds the URL in the mode you pick; the export API serves it</text>
+  <rect x="46.0" y="112.0" width="360.0" height="300.0" rx="6" fill="#ffffff"/>
+  <path d="M46.1,111.9 C167.4,113.4 287.3,110.7 406.0,111.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M45.2,111.3 C165.0,111.8 285.1,111.9 406.3,111.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M406.5,112.1 C406.0,212.7 405.5,310.6 406.3,412.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M406.1,112.3 C407.5,211.6 406.8,311.6 405.7,411.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M406.2,411.5 C285.9,412.7 166.3,411.8 45.5,411.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M405.3,411.6 C287.0,411.0 164.8,410.7 46.1,412.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M46.4,412.1 C45.5,311.6 45.3,211.4 45.6,111.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M46.1,412.7 C46.9,312.7 47.1,211.2 46.1,112.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M45.6,140.2 C165.5,140.8 285.3,139.9 406.1,140.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <circle cx="62.0" cy="126.0" r="5" fill="#ff8787"/>
+  <circle cx="78.0" cy="126.0" r="5" fill="#ffd43b"/>
+  <circle cx="94.0" cy="126.0" r="5" fill="#69db7c"/>
+  <rect x="62.0" y="156.0" width="150.0" height="110.0" rx="6" fill="#ebfbee"/>
+  <path d="M62.4,155.8 C113.0,157.4 162.1,157.6 212.8,155.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M62.7,156.7 C111.0,154.6 161.9,155.0 211.5,155.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M211.6,155.9 C212.1,191.6 212.1,230.3 212.6,265.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M212.3,155.9 C211.5,193.9 213.0,230.6 212.3,266.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M212.4,266.1 C162.4,265.2 111.3,265.7 62.1,266.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M212.5,265.6 C160.7,266.4 111.5,266.2 62.7,265.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M62.0,265.9 C62.2,229.5 61.2,192.9 62.3,155.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M61.5,266.3 C61.6,230.2 60.9,193.8 61.5,155.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="228.0" y="156.0" width="162.0" height="110.0" rx="6" fill="#e7f5ff"/>
+  <path d="M228.3,156.1 C281.8,154.7 336.6,155.9 390.1,156.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M228.6,156.0 C281.4,157.3 334.7,157.2 390.4,156.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M389.7,156.7 C390.3,192.0 389.4,228.9 389.7,265.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M389.6,155.6 C389.7,193.7 389.9,229.5 389.3,265.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M389.9,265.4 C335.2,267.1 282.0,264.8 228.1,265.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M390.8,266.2 C337.1,265.2 283.1,265.2 227.3,266.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M227.3,266.4 C227.3,228.9 226.9,193.7 227.8,156.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M227.5,266.8 C227.3,228.0 229.3,193.2 228.7,155.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="62.0" y="282.0" width="328.0" height="112.0" rx="6" fill="#fff9db"/>
+  <path d="M62.0,282.3 C169.8,282.4 279.5,282.7 390.1,282.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M61.4,281.3 C172.4,282.3 281.0,281.4 390.6,281.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M390.6,281.9 C389.8,318.7 390.4,356.8 389.8,394.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M390.8,282.8 C390.8,320.7 389.4,357.9 389.4,393.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M390.4,394.4 C281.5,395.1 169.9,393.7 62.1,393.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M390.5,394.1 C280.4,392.6 170.7,393.8 61.9,393.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M62.5,394.1 C61.4,357.2 61.8,318.3 62.7,282.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M62.8,394.3 C62.4,356.4 62.3,320.7 61.9,281.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M245.6,189.9 C246.5,211.2 245.8,232.0 246.4,254.2" fill="none" stroke="#1e1e1e" stroke-width="1.3" stroke-linecap="round"/>
+  <path d="M246.1,253.7 C287.0,254.3 327.0,253.5 368.1,254.0" fill="none" stroke="#1e1e1e" stroke-width="1.3" stroke-linecap="round"/>
+  <circle cx="264.3" cy="234.8" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="282.6" cy="218.8" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="297.2" cy="225.2" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="313.1" cy="209.2" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="331.4" cy="212.4" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="349.7" cy="199.6" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="294.0" cy="172.0" r="6" fill="#ffffff" stroke="#adb5bd" stroke-width="1.4"/>
+  <circle cx="314.0" cy="172.0" r="6" fill="#ffffff" stroke="#adb5bd" stroke-width="1.4"/>
+  <circle cx="334.0" cy="172.0" r="6" fill="#ffffff" stroke="#adb5bd" stroke-width="1.4"/>
+  <rect x="349.0" y="161.0" width="22.0" height="22.0" rx="6" fill="#e7f5ff"/>
+  <path d="M348.4,161.2 C356.5,159.8 362.3,160.9 370.7,161.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M348.8,161.8 C357.1,161.3 363.8,160.0 370.6,160.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M371.7,160.2 C371.0,168.5 371.9,175.0 371.5,183.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M371.3,160.4 C372.3,167.2 371.6,177.1 371.7,183.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M371.5,183.4 C362.4,184.0 355.0,181.7 349.7,183.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M371.2,183.6 C363.7,182.3 356.6,184.6 348.5,183.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M348.5,182.3 C349.7,174.3 350.0,167.3 349.3,160.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M349.1,183.1 C350.5,174.1 350.0,169.2 349.5,161.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="360.0" y="177.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#1e1e1e" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.6">{}</tspan></text>
+  <text x="226.0" y="438.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">every tile, while the API is on</text>
+  <text x="226.0" y="458.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">(<tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="11.4">embed_enabled</tspan> on /auth/me/optional)</text>
+  <rect x="470.0" y="100.0" width="392.0" height="398.0" rx="6" fill="#ffffff"/>
+  <path d="M470.0,100.6 C599.5,100.9 730.9,100.3 861.9,100.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M470.5,99.5 C599.3,99.4 731.9,100.4 862.5,100.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M862.2,99.9 C860.9,231.5 862.3,366.9 862.0,498.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M862.5,100.5 C862.1,232.8 862.3,366.7 861.6,498.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M861.4,498.0 C732.4,498.7 602.1,499.3 469.8,497.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M861.6,497.8 C731.3,499.5 601.5,496.7 470.6,497.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M470.1,498.8 C468.9,365.5 469.2,231.2 470.4,100.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M469.9,497.3 C468.9,365.5 470.4,233.5 470.7,99.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="488.0" y="132.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="start" font-weight="bold">Export / embed</text>
+  <text x="488.0" y="164.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="start" font-weight="normal">Mode</text>
+  <rect x="488.0" y="174.0" width="178.0" height="32.0" rx="6" fill="#ebfbee"/>
+  <path d="M487.3,173.9 C548.1,173.9 607.6,173.5 666.0,174.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M487.5,174.6 C547.0,174.5 606.3,174.7 666.7,173.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M666.4,174.4 C667.1,185.6 666.6,194.1 666.2,206.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M665.7,174.0 C667.4,185.1 667.4,194.2 666.0,206.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M665.8,206.4 C607.1,206.4 547.7,207.4 488.2,205.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M665.7,205.3 C606.2,204.9 545.8,205.5 488.0,205.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M487.6,205.4 C489.4,196.2 488.5,185.8 488.2,173.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M487.3,206.2 C489.6,195.1 489.2,183.9 488.3,173.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="666.0" y="174.0" width="178.0" height="32.0" rx="6" fill="#ffffff"/>
+  <path d="M666.8,173.4 C726.7,175.5 785.3,175.5 844.4,174.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M666.6,173.3 C726.1,173.5 784.8,174.3 843.8,173.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M843.4,173.9 C844.9,183.4 842.6,194.1 844.6,205.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M844.4,173.9 C842.7,185.2 843.5,195.6 844.4,206.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M843.7,206.0 C785.8,206.8 726.6,206.8 666.4,206.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M844.2,205.3 C785.4,207.1 726.4,206.1 666.0,206.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M666.6,206.3 C667.3,196.4 665.8,183.8 665.5,173.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M666.1,206.4 C667.2,195.6 664.8,186.2 666.5,173.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="577.0" y="195.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Plotly spec (JSON)</text>
+  <text x="755.0" y="195.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#1e1e1e" text-anchor="middle" font-weight="normal">Embeddable page (HTML)</text>
+  <text x="488.0" y="228.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#5c5c5c" text-anchor="start" font-weight="normal">a mode the component lacks is greyed, with the reason</text>
+  <text x="488.0" y="260.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#1e1e1e" text-anchor="start" font-weight="normal">Theme  light | dark</text>
+  <rect x="670.0" y="246.0" width="34.0" height="18.0" rx="6" fill="#4dabf7"/>
+  <path d="M670.5,245.4 C681.4,245.0 693.0,245.8 703.5,245.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M669.5,246.5 C679.7,245.7 694.1,247.2 703.6,245.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M703.5,245.5 C704.4,251.3 703.0,256.7 704.7,263.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M703.8,246.4 C704.1,251.1 704.7,256.4 703.2,263.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M704.6,263.6 C692.1,263.9 681.7,262.7 670.4,263.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M703.4,263.3 C691.4,263.0 680.0,263.2 670.6,264.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M669.3,264.3 C670.0,258.0 671.0,250.5 669.2,246.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M669.7,264.1 C670.4,259.1 668.4,251.7 669.3,246.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <circle cx="695.0" cy="255.0" r="6" fill="#ffffff" stroke="#1e1e1e" stroke-width="1.4"/>
+  <text x="714.0" y="260.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#1e1e1e" text-anchor="start" font-weight="normal">current filters (2)</text>
+  <text x="488.0" y="298.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#1e1e1e" text-anchor="start" font-weight="bold">URL   curl   plotly.js   &lt;iframe&gt;</text>
+  <path d="M488.2,306.2 C498.5,306.0 508.2,306.3 518.0,305.8" fill="none" stroke="#1e1e1e" stroke-width="2.4" stroke-linecap="round"/>
+  <rect x="488.0" y="318.0" width="356.0" height="88.0" rx="6" fill="#f1f3f5"/>
+  <path d="M488.8,318.2 C607.6,319.1 726.0,317.4 843.7,318.5" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M488.6,317.8 C605.8,317.2 726.6,316.6 844.1,318.3" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M843.6,317.9 C845.3,346.4 842.7,376.7 843.4,405.3" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M843.4,318.5 C844.2,345.9 843.3,376.3 844.6,405.3" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M844.4,406.7 C726.3,405.0 607.4,404.6 487.6,405.5" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M844.6,406.4 C724.8,407.2 607.6,404.9 488.7,406.8" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M488.1,405.6 C486.9,377.4 486.5,346.3 487.5,317.8" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M488.4,405.5 C487.9,378.0 488.3,347.5 488.5,318.4" fill="none" stroke="#adb5bd" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="500.0" y="344.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#1e1e1e" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.6">https://…/depictio/api/v1/export/</tspan></text>
+  <text x="500.0" y="364.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#1e1e1e" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.6">  dashboards/{id}/components/{cid}</tspan></text>
+  <text x="500.0" y="384.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#1e1e1e" text-anchor="start" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.6">  ?format=json&amp;theme=light&amp;filters=…</tspan></text>
+  <rect x="750.0" y="426.0" width="94.0" height="30.0" rx="6" fill="#e7f5ff"/>
+  <path d="M749.9,426.2 C782.3,425.8 812.8,424.6 844.7,426.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M750.3,425.7 C780.8,426.8 813.8,427.5 844.6,425.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M843.5,425.5 C844.2,435.9 845.2,446.4 843.3,456.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M843.5,426.0 C844.9,435.6 843.1,446.2 843.7,455.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M844.7,455.4 C813.3,455.2 780.8,456.2 749.7,455.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M844.4,455.9 C812.1,456.0 782.4,455.0 750.1,456.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M750.5,456.2 C750.3,445.0 750.4,435.7 749.9,426.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M749.3,456.4 C749.0,444.4 748.8,436.6 749.3,425.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="648.0" y="426.0" width="90.0" height="30.0" rx="6" fill="#ffffff"/>
+  <path d="M648.4,425.8 C678.4,424.5 707.8,427.6 738.7,426.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M648.4,426.3 C679.0,425.5 707.6,426.6 737.4,425.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M737.4,425.8 C737.4,435.1 736.8,446.8 737.2,456.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M738.4,426.5 C738.4,434.6 739.4,447.6 738.3,455.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M738.1,455.8 C707.3,455.2 676.5,456.4 648.4,455.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M738.0,456.4 C707.3,454.8 677.2,457.1 648.6,456.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M648.6,456.3 C647.6,447.5 646.7,435.7 647.8,426.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M648.2,456.5 C648.8,446.7 647.3,436.6 648.0,426.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="797.0" y="446.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#1e1e1e" text-anchor="middle" font-weight="bold">Copy</text>
+  <text x="693.0" y="446.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#1e1e1e" text-anchor="middle" font-weight="normal">Open</text>
+  <text x="488.0" y="484.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#5c5c5c" text-anchor="start" font-weight="normal">private project → <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.6">Bearer $DEPICTIO_TOKEN</tspan></text>
+  <path d="M374.2,171.7 C403.5,176.8 431.6,182.8 461.0,189.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M373.5,171.8 C403.8,179.3 430.8,184.4 459.9,190.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M460.0,189.9 C456.4,186.3 453.1,184.1 449.6,181.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M460.2,189.9 C455.8,191.3 450.8,192.5 446.1,193.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="930.0" y="112.0" width="264.0" height="150.0" rx="6" fill="#ffffff"/>
+  <path d="M929.9,111.5 C1016.6,110.6 1105.5,111.6 1193.6,111.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M929.3,111.2 C1017.3,111.2 1106.0,112.8 1193.9,112.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1194.5,112.5 C1194.4,161.6 1195.5,212.6 1193.3,261.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1194.7,112.2 C1194.9,161.7 1195.3,210.6 1193.9,262.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1193.4,261.7 C1106.1,261.9 1017.0,262.9 929.3,261.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1193.2,261.9 C1105.4,260.5 1017.9,261.5 929.7,261.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M930.8,261.6 C930.1,211.5 928.6,163.4 930.3,112.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M929.9,261.3 C929.2,212.1 929.2,161.3 929.6,112.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M930.3,139.9 C1018.4,139.7 1106.8,139.7 1194.3,140.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <circle cx="946.0" cy="126.0" r="5" fill="#ff8787"/>
+  <circle cx="962.0" cy="126.0" r="5" fill="#ffd43b"/>
+  <circle cx="978.0" cy="126.0" r="5" fill="#69db7c"/>
+  <path d="M956.2,158.3 C956.6,186.1 955.8,215.1 955.7,243.9" fill="none" stroke="#1e1e1e" stroke-width="1.3" stroke-linecap="round"/>
+  <path d="M955.8,243.9 C1023.5,243.3 1091.4,243.3 1160.3,244.1" fill="none" stroke="#1e1e1e" stroke-width="1.3" stroke-linecap="round"/>
+  <circle cx="986.6" cy="218.2" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="1017.2" cy="196.7" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="1041.7" cy="205.3" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="1068.2" cy="183.8" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="1098.8" cy="188.1" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="1129.4" cy="170.9" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <text x="1062.0" y="284.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">JSON: drawn by the host's plotly.js</text>
+  <rect x="930.0" y="340.0" width="264.0" height="150.0" rx="6" fill="#ffffff"/>
+  <path d="M929.6,339.2 C1018.8,339.5 1105.4,339.7 1193.6,340.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M929.3,340.0 C1016.6,340.0 1105.1,340.8 1194.4,339.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1194.5,340.6 C1192.9,391.2 1192.5,441.4 1194.6,489.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1194.6,339.7 C1194.4,389.9 1194.3,439.6 1194.1,489.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1194.8,490.4 C1104.6,491.2 1017.5,489.6 929.4,490.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M1194.7,490.2 C1105.9,490.3 1017.3,489.3 930.1,490.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M929.4,489.7 C930.8,439.0 930.9,389.9 930.8,340.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M930.4,490.1 C931.3,440.0 930.4,389.7 929.8,340.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M929.8,368.0 C1018.0,367.3 1106.5,367.4 1193.8,368.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <circle cx="946.0" cy="354.0" r="5" fill="#ff8787"/>
+  <circle cx="962.0" cy="354.0" r="5" fill="#ffd43b"/>
+  <circle cx="978.0" cy="354.0" r="5" fill="#69db7c"/>
+  <rect x="948.0" y="380.0" width="228.0" height="96.0" rx="6" fill="#f3f0ff"/>
+  <path d="M947.3,379.6 C1023.8,380.1 1100.5,380.6 1175.4,379.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M947.4,380.4 C1023.9,381.1 1098.4,381.0 1176.6,380.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M1176.3,380.7 C1176.2,410.6 1175.3,443.8 1176.6,475.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M1176.0,380.1 C1174.8,412.5 1175.1,444.3 1175.8,476.7" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M1175.4,476.2 C1099.3,475.6 1022.9,475.3 947.2,475.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M1176.5,476.2 C1101.0,477.1 1023.5,476.8 948.2,476.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M948.0,476.1 C947.4,443.5 947.2,411.1 947.5,379.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M948.5,476.1 C946.5,443.1 946.9,412.4 948.2,379.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round" stroke-dasharray="9 7"/>
+  <path d="M969.8,394.1 C969.3,415.7 970.4,436.1 970.2,457.7" fill="none" stroke="#1e1e1e" stroke-width="1.3" stroke-linecap="round"/>
+  <path d="M969.7,457.9 C1029.8,457.8 1090.1,458.5 1150.3,457.7" fill="none" stroke="#1e1e1e" stroke-width="1.3" stroke-linecap="round"/>
+  <circle cx="997.0" cy="438.8" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="1024.0" cy="422.8" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="1045.6" cy="429.2" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="1069.0" cy="413.2" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="1096.0" cy="416.4" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <circle cx="1123.0" cy="403.6" r="3.5" fill="#4dabf7" stroke="#1e1e1e" stroke-width="1"/>
+  <text x="1062.0" y="512.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">HTML: an <tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="12.3">&lt;iframe&gt;</tspan>, or a file</text>
+  <text x="1062.0" y="532.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="middle" font-weight="normal">framing needs the site in</text>
+  <text x="1062.0" y="550.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#5c5c5c" text-anchor="middle" font-weight="normal"><tspan font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace" font-size="10.6">DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS</tspan></text>
+  <path d="M869.9,189.1 C885.4,190.1 903.8,187.9 920.3,186.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M869.7,189.6 C886.4,190.7 903.3,187.6 920.2,187.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M920.1,186.7 C915.0,184.1 911.3,182.5 907.3,181.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M920.2,186.7 C917.0,189.1 911.6,191.5 907.8,194.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M869.6,402.1 C886.8,404.6 904.7,409.2 919.9,415.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M870.4,402.6 C885.3,407.0 902.0,409.1 919.2,414.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M919.5,415.2 C916.0,412.0 912.2,409.6 910.0,405.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M920.4,415.3 C916.1,415.4 911.5,417.3 906.7,418.6" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <circle cx="32.0" cy="574.0" r="4" fill="#adb5bd" stroke="#adb5bd" stroke-width="1.4"/>
+  <text x="46.0" y="578.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="start" font-weight="normal">not on a JBrowse tile, nor while a past version is shown: the API serves the live one</text>
+  <circle cx="32.0" cy="596.0" r="4" fill="#adb5bd" stroke="#adb5bd" stroke-width="1.4"/>
+  <text x="46.0" y="600.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="start" font-weight="normal">a highlight or a cross-tab section exports the component it shows, from its own tab</text>
+  <text x="1194.0" y="600.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="13" fill="#5c5c5c" text-anchor="end" font-weight="normal">off by default: DEPICTIO_FASTAPI_EMBED_ENABLED</text>
+</svg>
