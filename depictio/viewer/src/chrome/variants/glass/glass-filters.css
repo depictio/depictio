@@ -233,15 +233,24 @@
   border-color: color-mix(in srgb, var(--gl-fg) 24%, transparent) !important;
 }
 :root[data-chrome='glass'][data-chrome] :is(.hy-drawer, .hy-sheet) :is(.depictio-section-content, [data-tour-id='filter-panel'] > .mantine-InputWrapper-root) .mantine-Input-input:is(:focus, :focus-within) {
-  border-color: var(--gl-accent) !important;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gl-accent) 16%, transparent) !important;
+  border-color: var(--gl-ctl, var(--gl-accent)) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gl-ctl, var(--gl-accent)) 16%, transparent) !important;
 }
 
 /* ------------------------------------------- select fields, selected state */
 
 /* The chosen values ride in one row of pills (the field never grows taller,
  * and the placeholder steps aside once there is one); the clear button is a
- * quiet square; the options mark the chosen ones with a check alone. */
+ * quiet square; the options mark the chosen ones with a check alone.
+ *
+ * Pills, checks and the focus ring wear the component's own colour when it has
+ * one: the renderer sets `--depictio-control-accent` (and its readable ink) on
+ * the field and on the portalled dropdown, and `--gl-ctl` resolves it there,
+ * on the element that carries it, falling back to the page accent. */
+:root[data-chrome='glass'] :is(.mantine-MultiSelect-root, .mantine-MultiSelect-dropdown, .mantine-Select-root, .mantine-Select-dropdown) {
+  --gl-ctl: var(--depictio-control-accent, var(--gl-accent));
+  --gl-ctl-fg: var(--depictio-control-accent-fg, var(--gl-accent-fg));
+}
 :root[data-chrome='glass'] .mantine-MultiSelect-pillsList {
   flex-wrap: nowrap !important;
   overflow: hidden;
@@ -259,9 +268,9 @@
   height: 22px;
   padding-inline: 8px 3px;
   border-radius: 7px;
-  background: var(--gl-accent-soft) !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 22%, transparent);
-  color: var(--gl-accent-fg) !important;
+  background: color-mix(in srgb, var(--gl-ctl) 12%, transparent) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-ctl) 24%, transparent);
+  color: var(--gl-ctl-fg) !important;
   font-size: 12px;
   font-weight: 600;
 }
@@ -275,7 +284,7 @@
 }
 :root[data-chrome='glass'] .mantine-MultiSelect-pill .mantine-Pill-remove:hover {
   opacity: 1;
-  background: color-mix(in srgb, var(--gl-accent) 20%, transparent);
+  background: color-mix(in srgb, var(--gl-ctl) 20%, transparent);
 }
 :root[data-chrome='glass'] :is(.mantine-MultiSelect-section, .mantine-Select-section) .mantine-CloseButton-root {
   width: 20px;
@@ -314,7 +323,7 @@
   background: transparent !important;
 }
 :root[data-chrome='glass'] :is(.mantine-Combobox-option, .mantine-Select-option)[data-checked] svg {
-  color: var(--gl-accent-fg);
+  color: var(--gl-ctl-fg, var(--gl-accent-fg));
 }
 :root[data-chrome='glass'] .mantine-MultiSelect-option {
   position: relative;
@@ -336,8 +345,8 @@
     border-color 120ms ease;
 }
 :root[data-chrome='glass'] .mantine-MultiSelect-option[data-checked]::before {
-  border-color: var(--gl-accent);
-  background: var(--gl-accent);
+  border-color: var(--gl-ctl);
+  background: var(--gl-ctl);
 }
 /* Mantine's check, set into the filled box. */
 :root[data-chrome='glass'] .mantine-MultiSelect-option svg {
