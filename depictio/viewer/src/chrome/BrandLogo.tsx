@@ -19,6 +19,9 @@ interface BrandLogoProps {
   style?: React.CSSProperties;
   /** Forwarded to the rendered `<img>` so tests can target a specific slot. */
   testId?: string;
+  /** The depictio rose moves its petals at rest, not only on hover (the
+   *  sign-in card). A custom logo never moves. */
+  live?: boolean;
 }
 
 /**
@@ -46,6 +49,7 @@ export default function BrandLogo({
   height,
   style,
   testId,
+  live,
 }: BrandLogoProps) {
   const instance = useBranding();
   const colorScheme = useComputedColorScheme('light');
@@ -78,6 +82,7 @@ export default function BrandLogo({
         dark={isDark}
         style={style}
         testId={testId}
+        live={live}
       />
     );
   }

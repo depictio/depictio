@@ -1,6 +1,7 @@
 import { Anchor, Button, Divider, Group, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
 import { useState } from 'react';
-import { loginUser, persistSession, startGoogleOAuth } from 'depictio-react-core';
+import { KeyRound } from 'lucide-react';
+import { loginUser, persistSession, samlLoginUrl, startGoogleOAuth } from 'depictio-react-core';
 
 import { useGlassPages } from '../../chrome/variants/glass/pages';
 
@@ -8,6 +9,10 @@ const EMAIL_RE = /^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$/;
 
 interface Props {
   googleEnabled: boolean;
+  /** SAML SSO login enabled (e.g. EMBL Keycloak). */
+  samlEnabled?: boolean;
+  /** Label for the SAML button, e.g. "Sign in with EMBL". */
+  samlLabel?: string;
   /** Email + password sign-in is disabled on this instance, leaving Google as
    *  the only door in. The credentials form is hidden rather than shown and
    *  rejected, since /auth/login answers 403 to every attempt. */
@@ -21,6 +26,8 @@ interface Props {
 
 export default function LoginForm({
   googleEnabled,
+  samlEnabled = false,
+  samlLabel,
   passwordLoginDisabled = false,
   onSwitchToRegister,
   onSuccess,
@@ -36,7 +43,7 @@ export default function LoginForm({
   // Mirrors the server-side guard: hiding the credentials form is only safe
   // while there is another way in, so a deployment that sets the flag without
   // configuring OAuth keeps its password form instead of a dead card.
-  const showCredentials = !passwordLoginDisabled || !googleEnabled;
+  const showCredentials = !passwordLoginDisabled || !(googleEnabled || samlEnabled);
 
   async function handleSubmit() {
     if (!canSubmit) return;
@@ -75,7 +82,7 @@ export default function LoginForm({
       onClick={handleGoogleClick}
       leftSection={
         <img
-          src="https://www.google.com/favicon.ico"
+          src={`${import.meta.env.BASE_URL}logos/google_g.svg`}
           alt=""
           width={18}
           height={18}
@@ -87,11 +94,31 @@ export default function LoginForm({
     </Button>
   );
 
-  // Glass: one column, the commit full width, the register switch in the
-  // card's foot (AuthApp).
+  // Glass: one column. The identity providers lead (an institution's SSO
+  // first, then Google), the email form follows under an "or", and the
+  // register switch sits in the card's foot (AuthApp).
   if (glass) {
+    const providers = samlEnabled || googleEnabled;
     return (
       <>
+        {providers && (
+          <div className="gp-auth-providers">
+            {samlEnabled && (
+              <Button
+                id="saml-login-button"
+                data-testid="saml-login-button"
+                variant="default"
+                fullWidth
+                leftSection={<KeyRound size={18} strokeWidth={1.8} aria-hidden />}
+                onClick={() => window.location.assign(samlLoginUrl('/dashboards'))}
+              >
+                {samlLabel || 'Sign in with SSO'}
+              </Button>
+            )}
+            {googleEnabled && googleButton('Sign in with Google', 'default')}
+          </div>
+        )}
+        {providers && showCredentials && <div className="gp-auth-or">or with your email</div>}
         {showCredentials && (
           <>
             <TextInput
@@ -131,16 +158,6 @@ export default function LoginForm({
           >
             Sign in
           </Button>
-        )}
-        {googleEnabled && (
-          <>
-            {showCredentials ? (
-              <div className="gp-auth-or">or</div>
-            ) : (
-              <p className="gp-auth-note">This instance signs in with Google.</p>
-            )}
-            {googleButton('Sign in with Google', 'default')}
-          </>
         )}
       </>
     );
@@ -223,7 +240,7 @@ export default function LoginForm({
             onClick={handleGoogleClick}
             leftSection={
               <img
-                src="https://www.google.com/favicon.ico"
+                src={`${import.meta.env.BASE_URL}logos/google_g.svg`}
                 alt=""
                 width={18}
                 height={18}

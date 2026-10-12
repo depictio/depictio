@@ -1,6 +1,7 @@
 /**
- * The sign-in page under Glass: one paper card over a calm field of
- * triangles, the petals of the depictio rose drifting slowly away from it.
+ * The sign-in page under Glass: one paper card over a field of triangles,
+ * the petals of the depictio rose drifting away from it, while the rose on
+ * the card keeps moving its petals.
  */
 import React from 'react';
 import { useReducedMotion } from 'motion/react';
@@ -39,7 +40,7 @@ const AuthBrand: React.FC = () => {
   }
   return (
     <div className="gp-auth-brand">
-      <BrandLogo height={72} width="auto" />
+      <BrandLogo height={72} width="auto" live />
     </div>
   );
 };
@@ -114,10 +115,13 @@ interface Petal {
   rot: number;
   hue: string;
   outline: boolean;
-  dx: number;
-  dy: number;
+  /** Swing on each axis (px) and its half period (s). */
+  ax: number;
+  ay: number;
+  tx: number;
+  ty: number;
+  /** Tilt each way (deg), carried by the vertical swing. */
   spin: number;
-  dur: number;
   delay: number;
   enter: number;
 }
@@ -136,7 +140,7 @@ function petals(): Petal[] {
     const x = cx + Math.cos(a) * rx;
     const y = cy + Math.sin(a) * ry;
     const size = 12 + Math.round(hash(i, 2) * 26);
-    const drift = 14 + hash(i, 3) * 22;
+
     out.push({
       x,
       y,
@@ -145,11 +149,14 @@ function petals(): Petal[] {
       rot: (a * 180) / Math.PI + 90 + (hash(i, 4) - 0.5) * 40,
       hue: HUES[i % HUES.length],
       outline: i % 3 === 1,
-      dx: Math.cos(a) * drift,
-      dy: Math.sin(a) * drift,
-      spin: (hash(i, 5) - 0.5) * 16,
-      dur: 26 + hash(i, 6) * 22,
-      delay: -hash(i, 7) * 30,
+      // Two slow swings, one per axis and each at its own pace: together they
+      // trace a smooth, never-repeating float with no stops.
+      ax: 14 + hash(i, 3) * 18,
+      ay: 14 + hash(i, 8) * 18,
+      tx: 6 + hash(i, 6) * 5,
+      ty: 7.5 + hash(i, 9) * 5,
+      spin: 4 + hash(i, 5) * 8,
+      delay: -hash(i, 7) * 12,
       enter: 120 + i * 28,
     });
   }
@@ -176,23 +183,33 @@ export const GlassAuthBackground: React.FC = () => {
               style={{ animationDelay: `${p.enter}ms` } as React.CSSProperties}
             >
               <g
-                className="gp-petal"
+                className="gp-petal-x"
                 style={
                   {
-                    '--dx': `${p.dx.toFixed(1)}px`,
-                    '--dy': `${p.dy.toFixed(1)}px`,
-                    '--spin': `${p.spin.toFixed(1)}deg`,
-                    animationDuration: `${p.dur.toFixed(1)}s`,
-                    animationDelay: `${p.delay.toFixed(1)}s`,
+                    '--ax': `${p.ax.toFixed(1)}px`,
+                    animationDuration: `${p.tx.toFixed(2)}s`,
+                    animationDelay: `${p.delay.toFixed(2)}s`,
                   } as React.CSSProperties
                 }
               >
-                <path
-                  d={petalPath(p.size)}
-                  transform={`rotate(${p.rot.toFixed(1)})`}
-                  className={p.outline ? 'gp-petal-line' : 'gp-petal-fill'}
-                  style={{ ['--hue' as string]: p.hue } as React.CSSProperties}
-                />
+                <g
+                  className="gp-petal-y"
+                  style={
+                    {
+                      '--ay': `${p.ay.toFixed(1)}px`,
+                      '--spin': `${p.spin.toFixed(1)}deg`,
+                      animationDuration: `${p.ty.toFixed(2)}s`,
+                      animationDelay: `${(p.delay * 0.7).toFixed(2)}s`,
+                    } as React.CSSProperties
+                  }
+                >
+                  <path
+                    d={petalPath(p.size)}
+                    transform={`rotate(${p.rot.toFixed(1)})`}
+                    className={p.outline ? 'gp-petal-line' : 'gp-petal-fill'}
+                    style={{ ['--hue' as string]: p.hue } as React.CSSProperties}
+                  />
+                </g>
               </g>
             </g>
           </g>

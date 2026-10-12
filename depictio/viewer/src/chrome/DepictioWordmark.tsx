@@ -49,6 +49,8 @@ interface DepictioWordmarkProps {
   dark: boolean;
   style?: React.CSSProperties;
   testId?: string;
+  /** The petals move at rest, not only on hover. */
+  live?: boolean;
 }
 
 /**
@@ -74,6 +76,7 @@ const DepictioWordmark: React.FC<DepictioWordmarkProps> = ({
   dark,
   style,
   testId,
+  live,
 }) => {
   const imgRef = useRef<HTMLImageElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -142,7 +145,11 @@ const DepictioWordmark: React.FC<DepictioWordmarkProps> = ({
       />
       {overlay && (
         <DepictioRose
-          mode={hovered ? 'petals' : 'logo'}
+          mode={live || hovered ? 'petals' : 'logo'}
+          // At rest it keeps moving, so it moves slower and rests longer
+          // than the hover's quick answer.
+          speed={live && !hovered ? 0.55 : undefined}
+          hold={live && !hovered ? 2.4 : undefined}
           size={overlay.side}
           label=""
           style={{

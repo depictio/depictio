@@ -33,24 +33,39 @@
 :root[data-mantine-color-scheme='dark'] .gp-petal-line {
   stroke-opacity: 0.5;
 }
-.gp-petal {
+.gp-petal-x,
+.gp-petal-y {
   transform-box: fill-box;
   transform-origin: center;
-  animation-name: gp-petal-drift;
   animation-iteration-count: infinite;
   animation-direction: alternate;
-  animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+  animation-timing-function: cubic-bezier(0.37, 0, 0.63, 1);
+}
+.gp-petal-x {
+  animation-name: gp-petal-x;
+}
+.gp-petal-y {
+  animation-name: gp-petal-y;
 }
 /* Shed by the rose: each petal eases out from nearer the card on arrival. */
 .gp-petal-enter {
   animation: gp-petal-in 1400ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
-@keyframes gp-petal-drift {
+/* Sine-like swings, one per axis, at different paces. */
+@keyframes gp-petal-x {
   from {
-    transform: translate(0, 0) rotate(0deg);
+    transform: translateX(calc(var(--ax) * -1));
   }
   to {
-    transform: translate(var(--dx), var(--dy)) rotate(var(--spin));
+    transform: translateX(var(--ax));
+  }
+}
+@keyframes gp-petal-y {
+  from {
+    transform: translateY(calc(var(--ay) * -1)) rotate(calc(var(--spin) * -1));
+  }
+  to {
+    transform: translateY(var(--ay)) rotate(var(--spin));
   }
 }
 @keyframes gp-petal-in {
@@ -63,11 +78,11 @@
     transform: none;
   }
 }
-.gp-auth-bg[data-motion='off'] :is(.gp-petal, .gp-petal-enter) {
+.gp-auth-bg[data-motion='off'] :is(.gp-petal-x, .gp-petal-y, .gp-petal-enter) {
   animation: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  .gp-auth-bg :is(.gp-petal, .gp-petal-enter) {
+  .gp-auth-bg :is(.gp-petal-x, .gp-petal-y, .gp-petal-enter) {
     animation: none !important;
   }
 }
@@ -124,6 +139,7 @@
 }
 .gp-auth-head {
   margin-bottom: 22px;
+  text-align: center;
 }
 .gp-auth-title {
   margin: 0;
@@ -219,6 +235,12 @@
   flex: 1;
   height: 1px;
   background: var(--gl-hair);
+}
+/* The identity providers, stacked above the email form. */
+.gp-auth-providers {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 .gp-auth-note {
   margin: 0;

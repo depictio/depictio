@@ -514,6 +514,7 @@ export {
   createTemporaryUser,
   getAnonymousSession,
   startGoogleOAuth,
+  samlLoginUrl,
   handleGoogleCallback,
   exchangeMagicToken,
   persistSession,

@@ -10,6 +10,7 @@ import LoginForm from './components/LoginForm';
 import PublicAccessGate from './components/PublicAccessGate';
 import RegisterForm from './components/RegisterForm';
 import { useAuthMode } from './hooks/useAuthMode';
+import { withAuthPreview } from './preview';
 import './styles/auth.css';
 
 import { postAuthDestination } from './postAuthTarget';
@@ -35,7 +36,8 @@ function detectView(pathname: string): View {
 export default function AuthApp() {
   const initialView = useMemo<View>(() => detectView(window.location.pathname), []);
   const [view, setView] = useState<View>(initialView);
-  const { loading, status, error } = useAuthMode();
+  const { loading, status: served, error } = useAuthMode();
+  const status = useMemo(() => withAuthPreview(served), [served]);
   const [autoSessionError, setAutoSessionError] = useState<string | null>(null);
   const glass = useGlassPages();
   const branding = useBranding();
@@ -94,7 +96,10 @@ export default function AuthApp() {
 
   if (glass) {
     const appName = branding?.app_name || 'depictio';
-    const showCredentials = !(status?.password_login_disabled ?? false) || !(status?.google_oauth_enabled ?? false);
+    // The password form goes only when another door is open (Google or SSO).
+    const showCredentials =
+      !(status?.password_login_disabled ?? false) ||
+      !(status?.google_oauth_enabled || status?.saml_enabled);
     let card: React.ReactNode;
     if (view === 'oauth-callback') card = <GoogleOAuthCallback />;
     else if (view === 'magic-callback') card = <MagicLinkCallback />;
@@ -135,7 +140,7 @@ export default function AuthApp() {
       card = (
         <GlassAuthCard
           title="Create your account"
-          lede={`An account keeps your dashboards and projects on ${appName}.`}
+          lede="Keep your dashboards and projects in one place."
           foot={
             <>
               <span>Already have an account?</span>
@@ -151,8 +156,8 @@ export default function AuthApp() {
     } else {
       card = (
         <GlassAuthCard
-          title={`Sign in to ${appName}`}
-          lede="Open your dashboards and the projects behind them."
+          title="Sign in"
+          lede="Open your dashboards and their projects."
           foot={
             !status?.registration_disabled && showCredentials ? (
               <>
@@ -166,6 +171,8 @@ export default function AuthApp() {
         >
           <LoginForm
             googleEnabled={status?.google_oauth_enabled ?? false}
+            samlEnabled={status?.saml_enabled ?? false}
+            samlLabel={status?.saml_login_label}
             passwordLoginDisabled={status?.password_login_disabled ?? false}
             onSuccess={handleSuccess}
           />
