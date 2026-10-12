@@ -457,6 +457,7 @@ export {
   renderMultiQCGeneralStats,
   fetchServerStatus,
   fetchPublicConfig,
+  onPublicConfig,
   fetchCurrentUser,
   updateTab,
   deleteTab,
@@ -501,6 +502,7 @@ export {
   // Instance branding (admin panel)
   fetchBrandingAdmin,
   updateBrandingAdmin,
+  updateInstanceLook,
   resetBrandingAdmin,
   fetchBrandPresets,
   resolveBrandTheme,

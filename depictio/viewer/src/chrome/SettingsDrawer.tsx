@@ -8,7 +8,6 @@ import {
   Drawer,
   FileButton,
   Group,
-  Radio,
   SegmentedControl,
   Stack,
   Switch,
@@ -23,7 +22,6 @@ import {
   BrandThemePreview,
   isEmptyBrandTheme,
   useBrandScopeAttributes,
-  useChromeStyle,
   useResolvedBrandTheme,
   Z_LAYERS,
   type BrandTheme,
@@ -43,7 +41,6 @@ import { useBranding } from '../branding';
 import { useFeedbackLink } from '../feedback';
 import { useUiScalePref } from '../hooks/useUiScalePref';
 import { CONTENT_WIDTHS, type ContentWidth, useContentWidthPref } from '../hooks/useContentWidthPref';
-import { CHROME_VARIANTS, writeChromePref } from './variants';
 
 /** Client-side mirror of the server's upload cap (routes.py). */
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
@@ -215,28 +212,15 @@ const FontSizeBlock: React.FC = () => {
   );
 };
 
-/** The look of the app: Glass (the default) or Classic. Kept in this
- *  browser; a `?chrome=` link overrides it for the rest of the session. */
-const ChromeStyleBlock: React.FC = () => {
-  const active = useChromeStyle();
-  return (
-    <Field label="Look" testId="chrome-style-section">
-      <Radio.Group value={active.id} onChange={(value) => writeChromePref(value)}>
-        <Stack gap="xs">
-          {CHROME_VARIANTS.map((v) => (
-            <Radio
-              key={v.id}
-              value={v.id}
-              label={v.name}
-              description={v.tagline}
-              data-testid={`chrome-style-${v.id}`}
-            />
-          ))}
-        </Stack>
-      </Radio.Group>
-    </Field>
-  );
-};
+/** Where the app's look went: it is the reader's, not the dashboard's. */
+const ChromeStyleNote: React.FC = () => (
+  <Text size="xs" c="dimmed" data-testid="chrome-style-section">
+    Look: set in your{' '}
+    <Anchor href="/profile" size="xs">
+      profile
+    </Anchor>
+  </Text>
+);
 
 /** The reader's own page width (Full / Wide / Comfortable / Compact). Lives
  *  here only: a header button for it was one more control in a bar that
@@ -956,7 +940,7 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
         <Stack gap="lg">
           <FontSizeBlock />
           <PageWidthBlock />
-          <ChromeStyleBlock />
+          <ChromeStyleNote />
         </Stack>
       ),
     },

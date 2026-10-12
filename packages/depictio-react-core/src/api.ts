@@ -2528,6 +2528,9 @@ export interface PublicConfigResponse {
    *  materialised and defaults made explicit, so the client never re-derives
    *  a palette. Empty-ish object on an unbranded deployment. */
   branding?: BrandTheme;
+  /** The instance's default chrome style id (set by an admin); null means the
+   *  built-in default. Absent on a backend that predates it. */
+  default_chrome?: string | null;
   /** Opt-in feedback link for dashboard headers. `url` is a template the SPA
    *  fills with what the reader is looking at ({project}, {dashboard}, {tab},
    *  {url}); absent or disabled on a deployment that set none. */
@@ -2538,11 +2541,27 @@ export interface PublicConfigResponse {
   };
 }
 
+let publicConfigSeen: PublicConfigResponse | null = null;
+const publicConfigListeners = new Set<(config: PublicConfigResponse) => void>();
+
+/** Calls `callback` with the public config once it has loaded (at once, if it
+ *  already has), so a module that loads after the boot fetch still sees it. */
+export function onPublicConfig(callback: (config: PublicConfigResponse) => void): () => void {
+  publicConfigListeners.add(callback);
+  if (publicConfigSeen) callback(publicConfigSeen);
+  return () => {
+    publicConfigListeners.delete(callback);
+  };
+}
+
 export async function fetchPublicConfig(): Promise<PublicConfigResponse> {
   try {
     const res = await fetch(`${API_BASE}/utils/public-config`, { cache: 'no-cache' });
     if (!res.ok) return {};
-    return await res.json();
+    const config: PublicConfigResponse = await res.json();
+    publicConfigSeen = config;
+    publicConfigListeners.forEach((listener) => listener(config));
+    return config;
   } catch {
     // Optional configuration. An older backend without this route, or a network
     // blip, must not stop the app from starting.
@@ -3221,6 +3240,9 @@ export async function saveDashboardNotes(
  *  app sees — derived figure colors included. */
 export interface AdminBrandingState {
   overrides: BrandTheme;
+  /** The instance's default chrome style id, or null for the built-in one.
+   *  Saved apart from the brand theme (see `updateInstanceLook`). */
+  default_chrome?: string | null;
   env_defaults: BrandTheme;
   effective: BrandTheme;
 }
@@ -3248,6 +3270,18 @@ export async function updateBrandingAdmin(theme: BrandTheme): Promise<AdminBrand
     body: JSON.stringify(theme),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to save branding settings');
+  return res.json();
+}
+
+/** Set the instance's default chrome style (null = the built-in default). */
+export async function updateInstanceLook(
+  defaultChrome: string | null,
+): Promise<AdminBrandingState> {
+  const res = await authFetch(`${API_BASE}/utils/branding/look`, {
+    method: 'PUT',
+    body: JSON.stringify({ default_chrome: defaultChrome }),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to save the default look');
   return res.json();
 }
 

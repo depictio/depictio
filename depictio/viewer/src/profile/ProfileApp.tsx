@@ -29,6 +29,7 @@ import {
 } from 'depictio-react-core';
 
 import { AppSidebar } from '../chrome';
+import AppearanceCard from './AppearanceCard';
 import EditPasswordModal from './EditPasswordModal';
 import { brandColors } from './colors';
 import { usePageTitle } from '../branding';
@@ -113,7 +114,7 @@ const ProfileApp: React.FC = () => {
   const states = buttonStates(status);
 
   const body = (
-    <>
+    <Stack gap="lg">
       {loading ? (
         <Center mih={300}>
           <Loader />
@@ -227,7 +228,8 @@ const ProfileApp: React.FC = () => {
           </SimpleGrid>
         </Paper>
       )}
-    </>
+      {!loading && <AppearanceCard />}
+    </Stack>
   );
 
   const modals = (

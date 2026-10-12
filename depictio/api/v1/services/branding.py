@@ -116,12 +116,52 @@ def set_brand_theme_overrides(theme: Optional[BrandTheme]) -> BrandTheme:
     deployment defaults" looks like.
     """
     payload = (theme or BrandTheme()).model_dump(exclude_none=True)
+    doc: dict[str, Any] = {}
     if payload:
-        _get_collection().replace_one({"_id": _DOC_ID}, {"theme": payload}, upsert=True)
+        doc["theme"] = payload
+    # The document also holds the default look, which this panel field saves separately.
+    default_chrome = get_default_chrome()
+    if default_chrome:
+        doc["default_chrome"] = default_chrome
+    if doc:
+        _get_collection().replace_one({"_id": _DOC_ID}, doc, upsert=True)
     else:
         _get_collection().delete_one({"_id": _DOC_ID})
     invalidate_branding_cache()
     return get_effective_brand_theme(use_cache=False)
+
+
+def get_default_chrome() -> Optional[str]:
+    """The instance's default chrome style id, or ``None`` (the viewer then shows Glass).
+
+    Never raises, like the effective theme: an unreachable store means no
+    default, and a stored id the viewer no longer knows is ignored client-side.
+    """
+    try:
+        doc = _get_collection().find_one({"_id": _DOC_ID}) or {}
+    except Exception as exc:
+        logger.warning(f"Default look unavailable: {exc}")
+        return None
+    value = doc.get("default_chrome")
+    return value if isinstance(value, str) and value else None
+
+
+def set_default_chrome(chrome: Optional[str]) -> None:
+    """Set (or clear, with ``None``) the instance's default chrome style.
+
+    Touches only its own key, so the brand theme saved in the same document is
+    left alone; a document left empty is deleted, like in
+    ``set_brand_theme_overrides``.
+    """
+    if chrome:
+        _get_collection().update_one(
+            {"_id": _DOC_ID}, {"$set": {"default_chrome": chrome}}, upsert=True
+        )
+        return
+    _get_collection().update_one({"_id": _DOC_ID}, {"$unset": {"default_chrome": ""}})
+    doc = _get_collection().find_one({"_id": _DOC_ID})
+    if doc is not None and set(doc) <= {"_id"}:
+        _get_collection().delete_one({"_id": _DOC_ID})
 
 
 def patch_brand_theme_overrides(patch: dict[str, Any]) -> BrandTheme:
@@ -425,6 +465,8 @@ __all__ = [
     "store_logo_asset",
     "env_brand_theme",
     "get_brand_theme_overrides",
+    "get_default_chrome",
+    "set_default_chrome",
     "get_effective_brand_theme",
     "instance_settings_collection",
     "invalidate_branding_cache",

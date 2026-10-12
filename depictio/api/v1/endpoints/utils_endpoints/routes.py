@@ -34,7 +34,7 @@ from depictio.api.v1.endpoints.utils_endpoints.process_data_collections import (
     process_initial_data_collections,
 )
 from depictio.api.v1.s3 import s3_client
-from depictio.models.models.branding import BrandTheme, resolve_brand_theme
+from depictio.models.models.branding import BrandTheme, InstanceLook, resolve_brand_theme
 from depictio.models.models.users import UserBeanie
 from depictio.version import get_version
 
@@ -137,7 +137,10 @@ async def public_config():
     GA measurement ID is already visible in the page's network traffic once
     injected, so exposing it changes nothing.
     """
-    from depictio.api.v1.services.branding import resolve_effective_brand_theme
+    from depictio.api.v1.services.branding import (
+        get_default_chrome,
+        resolve_effective_brand_theme,
+    )
 
     ga = settings.google_analytics
     return {
@@ -165,6 +168,9 @@ async def public_config():
         # added for. A store that is down still degrades to env defaults
         # inside get_effective_brand_theme rather than failing the request.
         "branding": resolve_effective_brand_theme(use_cache=False).model_dump(exclude_none=True),
+        # Instance default chrome style (Glass / Classic), set from the admin
+        # Branding panel; null means Glass. A reader's own pick overrides it.
+        "default_chrome": get_default_chrome(),
         # Opt-in "give feedback" link (off unless a deployment points it
         # somewhere). The URL is a template the SPA fills with what the reader
         # is looking at; it is already public config, since anyone who can open
@@ -198,11 +204,13 @@ def _branding_admin_view() -> dict:
     from depictio.api.v1.services.branding import (
         env_brand_theme,
         get_brand_theme_overrides,
+        get_default_chrome,
         resolve_effective_brand_theme,
     )
 
     return {
         "overrides": get_brand_theme_overrides().model_dump(exclude_none=True),
+        "default_chrome": get_default_chrome(),
         "env_defaults": env_brand_theme().model_dump(exclude_none=True),
         "effective": resolve_effective_brand_theme(use_cache=False).model_dump(exclude_none=True),
     }
@@ -267,12 +275,26 @@ async def put_branding_admin(theme: BrandTheme, current_user=Depends(get_current
     return _branding_admin_view()
 
 
+@utils_endpoint_router.put("/branding/look")
+async def put_branding_look(look: InstanceLook, current_user=Depends(get_current_user)):
+    """Set the instance's default chrome style (``null`` = Glass)."""
+    _require_admin(current_user)
+    from depictio.api.v1.services.branding import set_default_chrome
+
+    set_default_chrome(look.default_chrome)
+    logger.info(
+        f"Default look set to {look.default_chrome!r} by {getattr(current_user, 'email', '?')}"
+    )
+    return _branding_admin_view()
+
+
 @utils_endpoint_router.delete("/branding")
 async def delete_branding_admin(current_user=Depends(get_current_user)):
     """Clear every override — the deployment's env defaults apply again."""
     _require_admin(current_user)
-    from depictio.api.v1.services.branding import set_brand_theme_overrides
+    from depictio.api.v1.services.branding import set_brand_theme_overrides, set_default_chrome
 
+    set_default_chrome(None)
     set_brand_theme_overrides(None)
     logger.info(f"Branding overrides reset by {getattr(current_user, 'email', '?')}")
     return _branding_admin_view()

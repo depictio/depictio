@@ -38,6 +38,24 @@ PALETTE_NAME_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 TintMode = Literal["accent", "full"]
 LogoMode = Literal["inherit", "none", "custom"]
 
+#: The viewer's chrome styles (``id`` of each style in the SPA's registry).
+#: Glass is the look when none is chosen.
+ChromeStyleId = Literal["glass", "base"]
+
+
+class InstanceLook(BaseModel):
+    """The instance-wide default chrome style, set from the /admin Branding panel.
+
+    Kept apart from ``BrandTheme``: a dashboard carries a ``BrandTheme`` too,
+    and the app's chrome is not something one dashboard can restyle. ``None``
+    means Glass. Each reader can still pick their own look in their profile.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    default_chrome: Optional[ChromeStyleId] = None
+
+
 #: How many categorical colors a derived colorway carries. Matches the length
 #: of the stock ``mantine_light`` colorway so a branded instance doesn't
 #: suddenly wrap sooner than an unbranded one.
