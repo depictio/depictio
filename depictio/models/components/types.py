@@ -95,6 +95,9 @@ AdvancedVizKind = Literal[
     # is how a QC table with a dozen columns is read as a whole.
     "record_card",
     "parallel_coordinates",
+    # Multiscale OME-Zarr image (NGFF 0.4) from a `bioimage` DC, with an
+    # optional cell-points overlay from a table DC.
+    "bioimage_viewer",
 ]
 
 # Map visualization types

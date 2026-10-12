@@ -15,6 +15,7 @@ export const DC_TYPE_ICON: Record<string, { icon: string; color: string; label: 
   geojson: { icon: 'mdi:map-marker-radius-outline', color: 'grape', label: 'GeoJSON' },
   map: { icon: 'mdi:map-marker-radius-outline', color: 'grape', label: 'Map' },
   phylogeny: { icon: 'mdi:graph-outline', color: 'grape', label: 'Phylo tree' },
+  bioimage: { icon: 'mdi:microscope', color: 'pink', label: 'Bioimage' },
 };
 
 /** Geomap is NOT a sibling of the types above: DCTableCoordinatesConfig

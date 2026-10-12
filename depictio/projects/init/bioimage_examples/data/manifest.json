@@ -1,0 +1,60 @@
+{
+  "args": {
+    "bleach": 0.08,
+    "chunk": 256,
+    "clevel": 5,
+    "clusters": 4,
+    "compressor": "zlib",
+    "drift": [
+      6,
+      8
+    ],
+    "frame_interval": 60.0,
+    "levels": 3,
+    "sample_crop": 256,
+    "seed": 1086,
+    "spot_spacing": 14.0,
+    "timepoints": 5,
+    "tissue_threshold": 0.85,
+    "volume_channels": "0,2",
+    "volume_crop": 192,
+    "volume_origin": [
+      96,
+      96
+    ],
+    "z_step": 2
+  },
+  "generator": "dev/bioimage/make_examples.py",
+  "stores": [
+    {
+      "bytes": 1638249,
+      "rows": 2088,
+      "store": "kidney_2d.zarr"
+    },
+    {
+      "bytes": 910490,
+      "rows": 1246,
+      "store": "ihc_spatial.zarr"
+    },
+    {
+      "bytes": 2809293,
+      "rows": 621,
+      "store": "kidney_3d_timelapse.zarr"
+    },
+    {
+      "bytes": 34295,
+      "rows": 54,
+      "store": "multi_sample/sample_A.zarr"
+    },
+    {
+      "bytes": 36213,
+      "rows": 47,
+      "store": "multi_sample/sample_B.zarr"
+    },
+    {
+      "bytes": 40106,
+      "rows": 89,
+      "store": "multi_sample/sample_C.zarr"
+    }
+  ]
+}
