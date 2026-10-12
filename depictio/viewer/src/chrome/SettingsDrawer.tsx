@@ -615,28 +615,31 @@ const BrandingBlock: React.FC<{
       </Field>
 
       {customising && (
-        <>
-          <BrandThemeForm
-            scope="dashboard"
-            value={value}
-            defaults={instance}
-            onChange={emit}
-            logoSlot={
-              onUploadLogo ? (
-                <LogoBlock
-                  theme={value}
-                  instanceHasLogo={!!instance?.logo_url}
-                  onChangeMode={(mode) => emit({ ...value, logo_mode: mode })}
-                  onUpload={onUploadLogo}
-                />
-              ) : undefined
-            }
-          />
-          <Divider />
-          <Field label="Preview" description="How the dashboard looks with these settings.">
-            <BrandThemePreview theme={resolved} compact />
-          </Field>
-        </>
+        <BrandThemeForm
+          scope="dashboard"
+          collapsible
+          value={value}
+          defaults={instance}
+          onChange={emit}
+          logoSlot={
+            onUploadLogo ? (
+              <LogoBlock
+                theme={value}
+                instanceHasLogo={!!instance?.logo_url}
+                onChangeMode={(mode) => emit({ ...value, logo_mode: mode })}
+                onUpload={onUploadLogo}
+              />
+            ) : undefined
+          }
+          previewSlot={
+            <Stack gap={6}>
+              <Text size="xs" c="dimmed">
+                How the dashboard looks with these settings.
+              </Text>
+              <BrandThemePreview theme={resolved} compact />
+            </Stack>
+          }
+        />
       )}
     </Stack>
   );
