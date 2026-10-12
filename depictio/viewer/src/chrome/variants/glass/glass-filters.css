@@ -239,9 +239,9 @@
 
 /* ------------------------------------------- select fields, selected state */
 
-/* The chosen values ride in one row of pills (the field never grows taller);
- * the clear button is a quiet square; the options mark the chosen ones with
- * the accent and a check. */
+/* The chosen values ride in one row of pills (the field never grows taller,
+ * and the placeholder steps aside once there is one); the clear button is a
+ * quiet square; the options mark the chosen ones with a check alone. */
 :root[data-chrome='glass'] .mantine-MultiSelect-pillsList {
   flex-wrap: nowrap !important;
   overflow: hidden;
@@ -251,12 +251,16 @@
 :root[data-chrome='glass'] .mantine-MultiSelect-inputField {
   min-width: 3ch !important;
 }
+:root[data-chrome='glass'] .mantine-MultiSelect-pillsList:has(.mantine-MultiSelect-pill) .mantine-MultiSelect-inputField::placeholder {
+  color: transparent;
+}
 :root[data-chrome='glass'] .mantine-MultiSelect-pill {
   flex: none;
   height: 22px;
   padding-inline: 8px 3px;
   border-radius: 7px;
-  background: color-mix(in srgb, var(--gl-accent) 14%, transparent) !important;
+  background: var(--gl-accent-soft) !important;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gl-accent) 22%, transparent);
   color: var(--gl-accent-fg) !important;
   font-size: 12px;
   font-weight: 600;
@@ -298,16 +302,16 @@
   background: var(--gl-hover) !important;
   color: var(--gl-fg) !important;
 }
-/* A picked option reads at a glance: a tinted row in the accent, its text in
- * full ink, and (a multi-select being a checklist) a filled box where the
- * others show an empty one. */
+/* A picked option reads at a glance by its mark alone: a filled box (a
+ * multi-select being a checklist) or the accent check, and its text in full
+ * ink. No row tint, so several picks never stack into a block of colour and
+ * the hover well stays the one moving highlight. */
 :root[data-chrome='glass'] :is(.mantine-Combobox-option, .mantine-MultiSelect-option, .mantine-Select-option)[data-checked] {
-  background: var(--gl-accent-soft) !important;
   color: var(--gl-fg) !important;
   font-weight: 600;
 }
-:root[data-chrome='glass'] :is(.mantine-Combobox-option, .mantine-MultiSelect-option, .mantine-Select-option)[data-checked]:is([data-combobox-selected], :hover) {
-  background: color-mix(in srgb, var(--gl-accent) 22%, transparent) !important;
+:root[data-chrome='glass'] :is(.mantine-Combobox-option, .mantine-MultiSelect-option, .mantine-Select-option)[data-checked]:not([data-combobox-selected], :hover) {
+  background: transparent !important;
 }
 :root[data-chrome='glass'] :is(.mantine-Combobox-option, .mantine-Select-option)[data-checked] svg {
   color: var(--gl-accent-fg);
