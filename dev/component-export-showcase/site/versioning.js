@@ -20,10 +20,11 @@ const FILTER_DEMO = {
   control: 'MultiSelect',
 };
 
-/* The three cases roc_pr_curve serves from one component. */
+/* The three cases the benchmark's sweep view (pr_benchmark, view: roc) serves
+   from one component. */
 const MODE_DEMO = {
-  dashboard: 'bench_roc',
-  component: 'roc-demo-viz',
+  dashboard: 'bench_pr',
+  component: 'pr-sweep',
   modes: [
     ['pr', 'PR curve'],
     ['roc', 'ROC'],

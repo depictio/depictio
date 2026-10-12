@@ -23,20 +23,17 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from bson import ObjectId
 from fastapi import HTTPException
 
-from depictio.api.v1.configs.config import settings
 from depictio.api.v1.configs.logging_init import logger
 from depictio.api.v1.services.export.bundle import json_safe
 from depictio.api.v1.services.export.capabilities import (
     ExportFormat,
-    advanced_viz_json_source,
-    formats_for,
+    component_formats,
+    component_json_source,
+    component_unsupported_reason,
     resolve_viz_kind,
-    unsupported_reason,
 )
-from depictio.api.v1.services.export.delta_location import init_data_for
 
 
 class ExportUnsupported(HTTPException):
@@ -106,76 +103,57 @@ def _normalise_figure(fig: Any) -> dict[str, Any]:
     return {"data": list(fig_dict.get("data") or []), "layout": layout}
 
 
-async def _figure_spec(component: dict, filter_metadata: list[dict], theme: str) -> dict[str, Any]:
-    """Figure component — reuses the exact Celery task the viewer render uses."""
-    from depictio.api.v1.celery_dispatch import offload_or_run, should_offload_render
-    from depictio.api.v1.celery_tasks import build_figure_preview as build_figure_preview_task
-    from depictio.models.models.base import convert_objectid_to_str
+async def _figure_spec(
+    dashboard_id: Any,
+    component_id: str,
+    filters: list[dict],
+    theme: str,
+    current_user: Any,
+    access_token: str | None,
+) -> dict[str, Any]:
+    """Figure component — the render endpoint the viewer itself calls.
 
-    dc_config = component.get("dc_config") or {}
-    mode = component.get("mode", "ui")
-    metadata = {
-        "wf_id": str(component.get("wf_id")),
-        "dc_id": str(component.get("dc_id")),
-        "dc_config": convert_objectid_to_str(dc_config),
-        "visu_type": component.get("visu_type", "scatter"),
-        "dict_kwargs": component.get("dict_kwargs") or {},
-        "mode": mode,
-        "code_content": component.get("code_content", ""),
-        # Selection highlighting is a viewer interaction; an export is a snapshot.
-        "selection_enabled": False,
-        "selection_column": component.get("selection_column"),
-    }
-    try:
-        size_bytes = int(dc_config.get("size_bytes") or 0)
-    except (TypeError, ValueError):
-        size_bytes = 0
+    Calling the handler rather than rebuilding its payload is what keeps an
+    exported figure identical to the tile: the figure and section style, the
+    family's category colours, the brand theme, the point cap and region
+    scoping are all applied there, and each was added after this export first
+    shipped. A second copy of that payload would have missed every one.
+    """
+    from fastapi import Response
 
-    result = await offload_or_run(
-        build_figure_preview_task,
-        ({"metadata": metadata, "filter_metadata": filter_metadata, "theme": theme},),
-        offload=should_offload_render(
-            force=settings.celery.offload_rendering,
-            code_mode=(mode == "code"),
-            size_bytes=size_bytes,
-            threshold_bytes=settings.celery.offload_size_threshold_bytes,
-        ),
-        label=f"export_figure dc={component.get('dc_id')}",
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import render_figure_endpoint
+
+    result = await render_figure_endpoint(
+        dashboard_id=dashboard_id,
+        component_id=component_id,
+        request={"filters": filters, "theme": theme},
+        # Absorbs the X-Celery-Path diagnostic header, meaningless to an export.
+        response=Response(),
+        current_user=current_user,
+        access_token=access_token,
     )
     return _normalise_figure(result.get("figure"))
 
 
 def _map_spec(
-    component: dict, filter_metadata: list[dict], theme: str, access_token: str | None
+    dashboard_id: Any,
+    component_id: str,
+    filters: list[dict],
+    theme: str,
+    current_user: Any,
+    access_token: str | None,
 ) -> dict[str, Any]:
-    """Map component — same call the render_map endpoint makes."""
-    import plotly.io as pio
+    """Map component — the render endpoint the viewer itself calls (category colours included)."""
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import render_map_endpoint
 
-    from depictio.api.v1.deltatables_utils import load_deltatable_lite
-    from depictio.api.v1.services.map.render import render_map
-
-    if "mantine_light" not in pio.templates or "mantine_dark" not in pio.templates:
-        from depictio.api.v1.services.figure.mantine_templates import ensure_mantine_templates
-
-        ensure_mantine_templates()
-
-    wf_id = component.get("wf_id")
-    dc_id = component.get("dc_id")
-    df = load_deltatable_lite(
-        workflow_id=ObjectId(str(wf_id)),
-        data_collection_id=str(dc_id),
-        metadata=filter_metadata or None,
-        init_data=init_data_for(dc_id, component.get("dc_config") or {}),
-    )
-    fig, _ = render_map(
-        df=df,
-        trigger_data=component,
-        theme=theme,
-        existing_metadata=None,
-        active_selection_values=None,
+    result = render_map_endpoint(
+        dashboard_id=dashboard_id,
+        component_id=component_id,
+        request={"filters": filters, "theme": theme},
+        current_user=current_user,
         access_token=access_token,
     )
-    return _normalise_figure(fig)
+    return _normalise_figure(result.get("figure"))
 
 
 def _multiqc_spec(
@@ -279,31 +257,18 @@ def _general_stats_spec(
     return _normalise_figure(figure)
 
 
-def _celery_advanced_viz_spec(component: dict, filter_metadata: list[dict], kind: str) -> Any:
+def _celery_advanced_viz_spec(
+    component: dict, filter_metadata: list[dict], kind: str, access_token: str | None
+) -> Any:
     """Run an already-server-side advanced-viz compute inline and return its figure.
 
     ``complex_heatmap`` / ``upset_plot`` / ``sankey`` have Celery tasks that already
-    emit ``{"figure": {...}}``; the live viewer reaches them through a
-    dispatch+poll pair, which an export cannot use. Running the task body directly
-    gives the same result synchronously.
+    emit ``{"figure": {...}}``; see ``services/export/compute.py`` for why the
+    payload is prepared through the dispatch route's own helpers.
     """
-    from depictio.api.v1 import celery_tasks
+    from depictio.api.v1.services.export.compute import run_compute
 
-    task_by_kind = {
-        "complex_heatmap": celery_tasks.compute_complex_heatmap,
-        "upset_plot": celery_tasks.compute_upset,
-        "sankey": celery_tasks.compute_sankey,
-    }
-    task = task_by_kind[kind]
-
-    config = component.get("config") or {}
-    payload = {
-        **config,
-        "wf_id": str(component.get("wf_id")),
-        "dc_id": str(component.get("dc_id")),
-        "filter_metadata": filter_metadata,
-    }
-    result = task.run(payload)
+    result = run_compute(kind, component, filter_metadata, access_token)
     if not isinstance(result, dict) or "figure" not in result:
         raise HTTPException(
             status_code=500,
@@ -315,29 +280,58 @@ def _celery_advanced_viz_spec(component: dict, filter_metadata: list[dict], kind
 def _python_advanced_viz_spec(
     component: dict,
     filter_metadata: list[dict],
-    kind: str,
-    theme: str,
+    current_user: Any,
+    access_token: str | None,
     controls: dict[str, Any] | None = None,
+    theme: str = "light",
 ) -> dict[str, Any]:
-    """Build an advanced-viz figure from a registered Python builder.
+    """Build an advanced-viz figure from its registered Python builder(s).
 
     ``controls`` is the intra-viz state the live renderer keeps in the browser —
-    the ROC/PR/threshold tab, a normalisation mode, a top-N. Without it an export
-    can only ever produce the persisted default, so a component that presents
-    three cases in the dashboard would be reduced to one on the way out.
+    the view, a normalisation mode, a top-N. Without it an export can only ever
+    produce the persisted default, so a component that presents three cases in
+    the dashboard would be reduced to one on the way out.
+
+    The view decides the builder (``services/advanced_viz/views.py``): a
+    ``volcano`` on its MA view is drawn by the MA builder, and a ``pr_benchmark``
+    on ``both`` by two builders whose traces are overlaid.
     """
     from depictio.api.v1.services.advanced_viz.data import load_tidy_columns
     from depictio.api.v1.services.advanced_viz.figure_registry import build, required_columns
+    from depictio.api.v1.services.advanced_viz.views import plan_for
 
-    config = component.get("config") or {}
-    columns = required_columns(kind, config)
+    plan = plan_for(component, controls)
+    if plan is None:  # pragma: no cover - guarded by component_formats
+        raise HTTPException(status_code=422, detail="Component names no advanced_viz kind.")
+
+    wf_id, dc_id = plan.source or (str(component.get("wf_id")), str(component.get("dc_id")))
+    columns = list(
+        dict.fromkeys(c for name in plan.builders for c in required_columns(name, plan.config))
+    )
     tidy = load_tidy_columns(
-        wf_id=str(component.get("wf_id")),
-        dc_id=str(component.get("dc_id")),
+        wf_id=wf_id,
+        dc_id=dc_id,
         columns=columns,
         filter_metadata=filter_metadata,
+        current_user=current_user,
+        access_token=access_token,
+        viz_kind=plan.kind,
     )
-    return build(kind, config=config, rows=tidy["rows"], theme=theme, controls=controls)
+
+    spec: dict[str, Any] = {"data": [], "layout": {}}
+    for position, name in enumerate(plan.builders):
+        part = build(
+            name,
+            config=plan.config,
+            rows=tidy["rows"],
+            theme=theme,
+            controls=plan.controls.get(name, {}),
+        )
+        spec["data"].extend(part.get("data") or [])
+        if position == 0:
+            # The first builder owns the axes; an overlay only adds traces.
+            spec["layout"] = part.get("layout") or {}
+    return spec
 
 
 async def build_plotly_export(
@@ -361,17 +355,19 @@ async def build_plotly_export(
     """
     component_type = component.get("component_type") or ""
     viz_kind = resolve_viz_kind(component.get("viz_kind"))
-    supported = formats_for(component_type, viz_kind)
+    supported = component_formats(component, controls)
 
     if ExportFormat.JSON not in supported:
-        source = advanced_viz_json_source(viz_kind) if component_type == "advanced_viz" else None
+        source = (
+            component_json_source(component, controls) if component_type == "advanced_viz" else None
+        )
         # A kind whose builder simply hasn't been written yet is a 501 (temporary,
         # and HTML works now); anything else is inherent to the type, so 422.
         temporary = component_type == "advanced_viz" and source == "client_only"
         raise ExportUnsupported(
             status_code=501 if temporary else 422,
             code="kind_not_ported" if temporary else "unsupported_export",
-            message=unsupported_reason(component_type, viz_kind) or "Export not supported.",
+            message=component_unsupported_reason(component, controls) or "Export not supported.",
             component_type=component_type,
             viz_kind=viz_kind,
             supported_formats=sorted(f.value for f in supported),
@@ -383,20 +379,22 @@ async def build_plotly_export(
     filter_metadata = _build_filter_metadata(filters)
 
     if component_type == "figure":
-        spec = await _figure_spec(component, filter_metadata, theme)
+        spec = await _figure_spec(
+            dashboard_id, component_id, filters, theme, current_user, access_token
+        )
     elif component_type == "map":
-        spec = _map_spec(component, filter_metadata, theme, access_token)
+        spec = _map_spec(dashboard_id, component_id, filters, theme, current_user, access_token)
     elif component_type == "multiqc":
         spec = _multiqc_spec(dashboard_id, component_id, filters, theme, current_user, component)
     elif component_type == "advanced_viz":
-        source = advanced_viz_json_source(viz_kind)
+        source = component_json_source(component, controls)
         if source == "celery":
             spec = _normalise_figure(
-                _celery_advanced_viz_spec(component, filter_metadata, str(viz_kind))
+                _celery_advanced_viz_spec(component, filter_metadata, str(viz_kind), access_token)
             )
         else:
             spec = _python_advanced_viz_spec(
-                component, filter_metadata, str(viz_kind), theme, controls
+                component, filter_metadata, current_user, access_token, controls, theme
             )
     else:  # pragma: no cover - guarded by the formats_for check above
         raise ExportUnsupported(

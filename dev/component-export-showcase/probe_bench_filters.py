@@ -17,10 +17,10 @@ import urllib.request
 
 API = "http://localhost:8102/depictio/api/v1"
 
-PR = ("6a6a671b2b176f56bdcf5f2e", "pr-demo-viz")
-ROC = ("6a6a671b2b176f56bdcf5f30", "roc-demo-viz")
-CM = ("6a6a671b2b176f56bdcf5f2c", "cm-demo-viz")
-CI = ("6a6a671b2b176f56bdcf5f2a", "ci-demo-precision")
+PR = ("6a6a671b2b176f56bdcf5f2e", "pr-points")
+ROC = ("6a6a671b2b176f56bdcf5f30", "pr-sweep")
+CM = ("6a6a671b2b176f56bdcf5f2c", "cm-matrix")
+CI = ("6a6a671b2b176f56bdcf5f2a", "ci-precision")
 
 CASES = [
     ("pr · no filter", PR, None, None),

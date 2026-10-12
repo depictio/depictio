@@ -144,3 +144,65 @@ class TestFilterOptionShapes:
             )
             is None
         )
+
+
+# --- per-component formats (views, GenomeSpy, interaction-driven kinds) -------
+
+
+def _av_component(viz_kind: str, **config) -> dict:
+    return {
+        "component_type": "advanced_viz",
+        "viz_kind": viz_kind,
+        "config": {"viz_kind": viz_kind, **config},
+    }
+
+
+class TestComponentFormats:
+    def test_the_view_decides_json_for_a_survivor(self) -> None:
+        """dot_plot has no builder; its enrichment view has one."""
+        from depictio.api.v1.services.export.capabilities import component_formats
+
+        dotplot = _av_component("dot_plot")
+        enrichment = _av_component("dot_plot", view="enrichment")
+        assert ExportFormat.JSON not in component_formats(dotplot)
+        assert ExportFormat.JSON in component_formats(enrichment)
+        assert ExportFormat.JSON in component_formats(dotplot, {"view": "enrichment"})
+
+    def test_retired_kind_exports_as_its_view(self) -> None:
+        from depictio.api.v1.services.export.capabilities import component_formats
+
+        assert ExportFormat.JSON in component_formats(_av_component("enrichment"))
+        assert ExportFormat.JSON in component_formats(_av_component("roc_pr_curve"))
+
+    @pytest.mark.parametrize("kind", ["genome_view", "contact_map", "group_compare"])
+    def test_kinds_the_offline_bundle_cannot_serve_have_no_html(self, kind: str) -> None:
+        from depictio.api.v1.services.export.capabilities import (
+            component_formats,
+            component_html_unavailable_reason,
+        )
+
+        component = _av_component(kind)
+        assert ExportFormat.HTML not in component_formats(component)
+        assert component_html_unavailable_reason(component)
+
+    def test_a_genomespy_view_has_no_html_but_the_plotly_view_does(self) -> None:
+        from depictio.api.v1.services.export.capabilities import (
+            component_formats,
+            component_html_unavailable_reason,
+        )
+
+        locus = _av_component("coverage_track", view="locus")
+        track = _av_component("coverage_track", view="track")
+        assert ExportFormat.HTML not in component_formats(locus)
+        assert "GenomeSpy" in (component_html_unavailable_reason(locus) or "")
+        assert ExportFormat.HTML in component_formats(track)
+
+    def test_highlight_exports_nothing_and_points_at_its_source(self) -> None:
+        from depictio.api.v1.services.export.capabilities import (
+            component_formats,
+            component_html_unavailable_reason,
+        )
+
+        highlight = {"component_type": "highlight", "source_component": "fig-1"}
+        assert component_formats(highlight) == frozenset()
+        assert "source" in (component_html_unavailable_reason(highlight) or "")

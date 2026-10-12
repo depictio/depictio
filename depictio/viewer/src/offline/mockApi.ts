@@ -155,7 +155,19 @@ export async function bulkComputeCards(
 // ---- interactive (keyed by dc_id) -----------------------------------------
 
 export async function fetchUniqueValues(dcId: string, columnName: string): Promise<string[]> {
-  return need(DATA().unique, `${dcId}::${columnName}`, 'unique-values');
+  const data = DATA();
+  const key = `${dcId}::${columnName}`;
+  if (key in data.unique) return data.unique[key];
+  // Advanced-viz renderers ask for the levels of a column they were also
+  // shipped (a colour-by, a group, a taxon rank). Derive them from those rows
+  // rather than fail: the payload already holds the answer, and the real
+  // `fetchUniqueValues` would fetch from inside a bundle whose CSP forbids it.
+  const tidy = data.advancedVizData[dcId] as { rows?: Record<string, unknown[]> } | undefined;
+  const column = tidy?.rows?.[columnName];
+  if (Array.isArray(column)) {
+    return Array.from(new Set(column.filter((v) => v != null).map(String))).sort();
+  }
+  return need(data.unique, key, 'unique-values');
 }
 
 export async function fetchColumnRange(dcId: string, columnName: string) {
@@ -178,6 +190,12 @@ export async function fetchSpecs(dcId: string): Promise<Record<string, unknown>>
  */
 export async function fetchPolarsSchema(dcId: string): Promise<Record<string, string>> {
   return DATA().schemas?.[dcId] ?? {};
+}
+
+/** The map's "download data" button. There is no server to download from, so
+ *  say that instead of letting the real api fetch and be refused by the CSP. */
+export async function fetchMapData(..._args: unknown[]): Promise<never> {
+  throw new Error('Downloading map data is not available in an offline page.');
 }
 
 // ---- image / multiqc (keyed by component id) ------------------------------
