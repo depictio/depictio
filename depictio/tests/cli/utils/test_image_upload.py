@@ -332,6 +332,65 @@ class TestCollectionUpload:
         assert "'[b]imgs': 1 uploaded, 0 already in storage;" in printed()
 
 
+class TestNoBucketFolder:
+    """A collection with a folder to upload but nowhere to upload it to says so by name."""
+
+    @staticmethod
+    def _without_folder(local_images_path, s3_base_folder, tag="sample_images"):
+        # Plain attributes: the model itself refuses this pair in a CLI context, but a
+        # collection stored before that rule (or built by a server) still reaches here.
+        return SimpleNamespace(
+            data_collection_tag=tag,
+            id="650a1b2c3d4e5f6a7b8c9d10",
+            config=SimpleNamespace(
+                type="image",
+                dc_specific_properties=SimpleNamespace(
+                    image_column="image_path",
+                    s3_base_folder=s3_base_folder,
+                    local_images_path=str(local_images_path),
+                    supported_formats=[".png"],
+                ),
+            ),
+        )
+
+    @pytest.mark.parametrize("missing", [None, ""])
+    def test_the_message_names_the_collection_and_a_folder_in_the_servers_bucket(
+        self, images_dir, cli_config, missing
+    ):
+        dc = self._without_folder(images_dir, missing)
+        with patch.object(image_upload, "s3_client") as client:
+            with pytest.raises(ImageUploadError) as exc:
+                upload_collection_images(dc, cli_config)
+        assert str(exc.value) == (
+            "'sample_images': no s3_base_folder to upload the images to. Set it to a folder in "
+            f"the server's bucket, e.g. s3://{BUCKET}/images/sample_images"
+        )
+        # Nothing was listed or uploaded: it is refused before storage is reached.
+        client.assert_not_called()
+
+    def test_it_is_an_upload_error_not_a_crash_on_a_missing_value(self, images_dir, cli_config):
+        """Before, `parse_s3_folder(None)` raised an AttributeError."""
+        dc = self._without_folder(images_dir, None)
+        with pytest.raises(ImageUploadError):
+            upload_collection_images(dc, cli_config)
+
+    def test_the_example_follows_the_collections_tag_and_the_servers_bucket(self, images_dir):
+        config = SimpleNamespace(s3_storage=SimpleNamespace(bucket="other-bucket"))
+        dc = self._without_folder(images_dir, None, tag="scans")
+        with pytest.raises(ImageUploadError, match="e.g. s3://other-bucket/images/scans$"):
+            upload_collection_images(dc, config)
+
+    def test_a_collection_that_has_one_still_uploads(self, images_dir, cli_config):
+        s3 = FakeS3()
+        dc = self._without_folder(images_dir, FOLDER)
+        with (
+            patch.object(image_upload, "s3_client", return_value=s3),
+            patch.object(image_upload, "_referenced_images", return_value=None),
+        ):
+            result = upload_collection_images(dc, cli_config)
+        assert result["uploaded"] == 3
+
+
 class TestWhichCollections:
     def test_only_image_collections_with_a_local_path(self, images_dir):
         with_path = _collection(images_dir)
