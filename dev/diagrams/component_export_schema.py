@@ -1,253 +1,77 @@
 #!/usr/bin/env python3
-"""Render the component-export schema as a hand-drawn SVG (+ PNG).
+"""Render the component-export schemas as hand-drawn SVGs (+ PNGs).
 
-The diagram summarises what a caller gets from the export endpoint: one component,
-one URL, and two formats whose coverage differs on purpose. It is generated rather
-than drawn so it can be corrected in a diff when the flow changes.
+Two diagrams:
 
-The look is Excalidraw's: every stroke is drawn twice along a jittered bezier, and
-the text uses Virgil (Excalidraw's font). Jitter comes from a fixed seed, so
-re-running produces a byte-identical file instead of a spurious diff.
+* *component_export* — what a caller gets from the export endpoint: one
+  component, one URL, two formats whose coverage differs on purpose, and the
+  revision that tells a host when to fetch again.
+* *component_export_ui* — the way in from the dashboard: the tile's
+  "Export / embed" action, the dialog that picks the mode, and the two pages
+  the link ends up on.
 
-Unlike its sibling `watch_trigger_schema.py`, this one **inlines Virgil** from the
-copy already vendored at ``depictio/viewer/src/assets/fonts/Virgil.ttf`` as a base64
-``@font-face``. Relying on a locally installed Virgil GS means the SVG silently
-renders in whatever cursive the fallback list finds — on a machine without the font
-(CI, a container) the result does not look hand-drawn at all. Embedding costs ~150 KB
-and makes the file portable.
-
-The ``Sketch`` primitives are duplicated from `watch_trigger_schema.py` on purpose:
-that module is not on `main` yet, and importing across two open branches would make
-this diagram depend on an unmerged one. Once both have landed they should be lifted
-into a shared `dev/diagrams/_sketch.py`.
+Generated rather than drawn so a change in the flow shows up as a diff. The
+primitives and glyphs are the shared ones in ``sketch.py`` (Excalidraw's look,
+Virgil inlined into the PNG, a fixed seed so re-running is byte-identical).
 
 Usage:
     python dev/diagrams/component_export_schema.py --out docs/images/v0.12/react/schema
-    # writes <out>_component_export.svg and, unless --no-png, .png
+    # writes <out>_component_export.{svg,png} and <out>_component_export_ui.{svg,png}
 """
 
 from __future__ import annotations
 
-import asyncio
-import base64
-import math
-import random
-from dataclasses import dataclass
+import sys
 from pathlib import Path
-from xml.sax.saxutils import escape
 
 import typer
 
+sys.path.insert(0, str(Path(__file__).parent))
+
+from sketch import (  # noqa: E402
+    BLUE,
+    BLUE_INK,
+    DIM,
+    GREEN,
+    GREY,
+    LIGHT_GREY,
+    RED,
+    VIOLET,
+    WHITE,
+    YELLOW,
+    Box,
+    Sketch,
+    browser,
+    write,
+)
+
 app = typer.Typer(add_completion=False)
 
-# Excalidraw's default palette: near-black ink, pastel fills.
-INK = "#1e1e1e"
-DIM = "#5c5c5c"
-RED = "#c92a2a"
-BLUE = "#e7f5ff"
-YELLOW = "#fff9db"
-GREEN = "#ebfbee"
-VIOLET = "#f3f0ff"
-ORANGE = "#ffe8cc"
-
-FONT = "Virgil, Virgil GS, Excalifont, Comic Sans MS, Bradley Hand, cursive"
-
-REPO_ROOT = Path(__file__).resolve().parents[2]
-VIRGIL_TTF = REPO_ROOT / "depictio" / "viewer" / "src" / "assets" / "fonts" / "Virgil.ttf"
-
-W, H = 1240, 620
+W, H = 1240, 640
 
 
-@dataclass(frozen=True)
-class Box:
-    x: float
-    y: float
-    w: float
-    h: float
-    fill: str
-    title: str
-    lines: tuple[str, ...] = ()
-
-    @property
-    def cx(self) -> float:
-        return self.x + self.w / 2
-
-    @property
-    def cy(self) -> float:
-        return self.y + self.h / 2
-
-    @property
-    def right(self) -> float:
-        return self.x + self.w
-
-    @property
-    def bottom(self) -> float:
-        return self.y + self.h
+def _elbow(s: Sketch, points: list[tuple[float, float]]) -> None:
+    """A right-angled connector whose last leg carries the arrowhead."""
+    s.curve(points[:-1], colour="#1e1e1e")
+    (x1, y1), (x2, y2) = points[-2], points[-1]
+    s.arrow(x1, y1, x2, y2)
 
 
-class Sketch:
-    """Accumulates SVG fragments drawn with a hand-drawn wobble."""
-
-    def __init__(self, seed: int = 11) -> None:
-        self._rng = random.Random(seed)
-        self._parts: list[str] = []
-
-    # -- primitives ---------------------------------------------------------
-
-    def _jitter(self, amount: float) -> float:
-        return self._rng.uniform(-amount, amount)
-
-    def _wobble(self, x1: float, y1: float, x2: float, y2: float, amount: float) -> str:
-        """One stroke as a cubic bezier whose control points wander off the line.
-
-        Bending the curve rather than displacing the endpoints is what keeps a
-        rectangle's corners meeting while its edges still bow.
-        """
-        cx1 = x1 + (x2 - x1) / 3 + self._jitter(amount)
-        cy1 = y1 + (y2 - y1) / 3 + self._jitter(amount)
-        cx2 = x1 + 2 * (x2 - x1) / 3 + self._jitter(amount)
-        cy2 = y1 + 2 * (y2 - y1) / 3 + self._jitter(amount)
-        sx, sy = x1 + self._jitter(amount / 2), y1 + self._jitter(amount / 2)
-        ex, ey = x2 + self._jitter(amount / 2), y2 + self._jitter(amount / 2)
-        return f"M{sx:.1f},{sy:.1f} C{cx1:.1f},{cy1:.1f} {cx2:.1f},{cy2:.1f} {ex:.1f},{ey:.1f}"
-
-    def line(
-        self,
-        x1: float,
-        y1: float,
-        x2: float,
-        y2: float,
-        *,
-        width: float = 1.7,
-        colour: str = INK,
-        amount: float = 2.0,
-        dashed: bool = False,
-        passes: int = 2,
-    ) -> None:
-        dash = ' stroke-dasharray="9 7"' if dashed else ""
-        for _ in range(passes):
-            d = self._wobble(x1, y1, x2, y2, amount)
-            self._parts.append(
-                f'<path d="{d}" fill="none" stroke="{colour}" stroke-width="{width}" '
-                f'stroke-linecap="round"{dash}/>'
-            )
-
-    def rect(self, box: Box) -> None:
-        # Fill first, as a plain rounded rect: a wobbling fill edge reads as a
-        # smudge, while a wobbling outline on top of it reads as a pen stroke.
-        self._parts.append(
-            f'<rect x="{box.x:.1f}" y="{box.y:.1f}" width="{box.w:.1f}" height="{box.h:.1f}" '
-            f'rx="6" fill="{box.fill}"/>'
-        )
-        corners = [
-            (box.x, box.y, box.right, box.y),
-            (box.right, box.y, box.right, box.bottom),
-            (box.right, box.bottom, box.x, box.bottom),
-            (box.x, box.bottom, box.x, box.y),
-        ]
-        for x1, y1, x2, y2 in corners:
-            self.line(x1, y1, x2, y2, amount=1.6)
-
-    def arrow(
-        self,
-        x1: float,
-        y1: float,
-        x2: float,
-        y2: float,
-        *,
-        dashed: bool = False,
-        colour: str = INK,
-    ) -> None:
-        self.line(x1, y1, x2, y2, dashed=dashed, colour=colour)
-        angle = math.atan2(y2 - y1, x2 - x1)
-        for sign in (1, -1):
-            head = angle + sign * math.radians(28)
-            self.line(
-                x2,
-                y2,
-                x2 - 14 * math.cos(head),
-                y2 - 14 * math.sin(head),
-                amount=1.0,
-                colour=colour,
-                passes=1,
-            )
-
-    def elbow(
-        self,
-        points: list[tuple[float, float]],
-        *,
-        colour: str = INK,
-    ) -> None:
-        """A multi-segment run with a single arrowhead on the final leg.
-
-        The fork out of the endpoint box needs to go sideways then up/down; one
-        straight arrow would cut diagonally across the annotations.
-        """
-        for (x1, y1), (x2, y2) in zip(points[:-2], points[1:-1]):
-            self.line(x1, y1, x2, y2, colour=colour, amount=1.4)
-        (px, py), (qx, qy) = points[-2], points[-1]
-        self.arrow(px, py, qx, qy, colour=colour)
-
-    def text(
-        self,
-        x: float,
-        y: float,
-        content: str,
-        *,
-        size: float = 16,
-        colour: str = INK,
-        anchor: str = "middle",
-        weight: str = "normal",
-    ) -> None:
-        self._parts.append(
-            f'<text x="{x:.1f}" y="{y:.1f}" font-family="{FONT}" font-size="{size}" '
-            f'fill="{colour}" text-anchor="{anchor}" font-weight="{weight}">'
-            f"{escape(content)}</text>"
-        )
-
-    def box(self, box: Box) -> None:
-        self.rect(box)
-        self.text(box.cx, box.y + 27, box.title, size=18, weight="bold")
-        for i, line in enumerate(box.lines):
-            self.text(box.cx, box.y + 51 + i * 21, line, size=14, colour=DIM)
-
-    def svg(self) -> str:
-        body = "\n  ".join(self._parts)
-        return (
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" '
-            f'viewBox="0 0 {W} {H}">\n'
-            f"  {_font_face()}\n"
-            f'  <rect width="{W}" height="{H}" fill="#ffffff"/>\n  {body}\n</svg>\n'
-        )
+def _scatter(s: Sketch, x: float, y: float, w: float, h: float) -> None:
+    """A tiny plot: axes and a handful of points, the figure a spec draws."""
+    s.line(x, y, x, y + h, amount=0.8, width=1.3, passes=1)
+    s.line(x, y + h, x + w, y + h, amount=0.8, width=1.3, passes=1)
+    for fx, fy in ((0.15, 0.7), (0.3, 0.45), (0.42, 0.55), (0.55, 0.3), (0.7, 0.35), (0.85, 0.15)):
+        s.dot(x + fx * w, y + fy * h, 3.5, fill=BLUE_INK, width=1)
 
 
-def _font_face() -> str:
-    """Inline Virgil so the SVG renders identically without a local install.
-
-    Falls back to a bare ``<defs/>`` when the vendored TTF is missing, in which case
-    the font stack in ``FONT`` still applies — the drawing renders, just not in
-    Excalidraw's handwriting.
-    """
-    if not VIRGIL_TTF.exists():
-        return "<defs/>"
-    b64 = base64.b64encode(VIRGIL_TTF.read_bytes()).decode()
-    return (
-        "<defs><style>@font-face{font-family:'Virgil';"
-        f"src:url(data:font/ttf;base64,{b64}) format('truetype');}}</style></defs>"
-    )
-
-
-def build() -> str:
-    s = Sketch()
-
-    s.text(46, 52, "One component, two ways out", size=25, anchor="start")
-    s.text(
+def formats_schema() -> Sketch:
+    s = Sketch(W, H, seed=11)
+    s.heading(
         46,
-        78,
+        52,
+        "One component, two ways out",
         "the same URL returns a Plotly spec, or a page that needs nothing to render",
-        size=15,
-        colour=DIM,
-        anchor="start",
     )
 
     component = Box(
@@ -266,9 +90,12 @@ def build() -> str:
         104,
         YELLOW,
         "GET /export/…/{cid}",
-        ("?format=json | html", "&theme= &filters=", "existing viewer permission"),
+        (
+            "`?format=json|html`",
+            "`&theme= &filters= &controls=`",
+            "anonymous: public projects only",
+        ),
     )
-
     spec = Box(
         706,
         104,
@@ -276,19 +103,9 @@ def build() -> str:
         92,
         GREEN,
         "format=json",
-        ("Python builds the figure", "{data, layout, config, meta}"),
+        ("the viewer's own render path", "`{data, layout, config, meta}`"),
     )
-    consumer = Box(
-        986,
-        104,
-        208,
-        92,
-        GREEN,
-        "your plotly.js",
-        ("figure · map · multiqc", "+ 6 advanced-viz kinds"),
-    )
-
-    page = Box(
+    page_box = Box(
         706,
         408,
         232,
@@ -297,132 +114,281 @@ def build() -> str:
         "format=html",
         ("the real React renderer,", "inlined into one file"),
     )
-    iframe = Box(
-        986,
-        408,
-        208,
-        92,
-        ORANGE,
-        "iframe, any site",
-        ("9 of 10 types —", "all but jbrowse"),
-    )
-
-    for b in (component, endpoint, spec, consumer, page, iframe):
+    for b in (component, endpoint, spec, page_box):
         s.box(b)
 
-    s.arrow(component.right + 8, component.cy, endpoint.x - 10, endpoint.cy)
+    # The two consumers, drawn as pages rather than named.
+    host = browser(s, 986, 92, 208, 120)
+    _scatter(s, host.x + 22, host.y + 42, host.w - 52, host.h - 58)
+    s.text(host.cx, host.y - 12, "your page, your plotly.js", size=14, colour=DIM)
+    framed = browser(s, 986, 396, 208, 120)
+    s.frame(framed.x + 16, framed.y + 38, framed.w - 32, framed.h - 50, dashed=True, fill=VIOLET)
+    s.text(framed.cx, framed.y + 84, "`<iframe>`", size=14)
+    s.text(framed.cx, framed.y - 12, "any allow-listed site", size=14, colour=DIM)
 
-    # The fork. Sideways out of the endpoint, then up to json / down to html.
+    s.arrow(component.right + 8, component.cy, endpoint.x - 10, endpoint.cy)
     fork_x = endpoint.right + 34
-    s.elbow(
+    _elbow(
+        s,
         [
             (endpoint.right + 8, endpoint.cy),
             (fork_x, endpoint.cy),
             (fork_x, spec.cy),
             (spec.x - 10, spec.cy),
-        ]
+        ],
     )
-    s.elbow(
+    _elbow(
+        s,
         [
             (endpoint.right + 8, endpoint.cy),
             (fork_x, endpoint.cy),
-            (fork_x, page.cy),
-            (page.x - 10, page.cy),
-        ]
+            (fork_x, page_box.cy),
+            (page_box.x - 10, page_box.cy),
+        ],
     )
+    s.arrow(spec.right + 8, spec.cy, host.x - 10, spec.cy)
+    s.arrow(page_box.right + 8, page_box.cy, framed.x - 10, page_box.cy)
 
-    s.arrow(spec.right + 8, spec.cy, consumer.x - 10, consumer.cy)
-    s.arrow(page.right + 8, page.cy, iframe.x - 10, iframe.cy)
-
-    # Which format a given component supports is a question with an answer.
-    # Set below the endpoint box and broken in two so it stays clear of the fork's
-    # vertical leg at fork_x — one long line would run straight through it.
+    # Coverage, under each format: what works, and in red what does not yet.
     s.text(
-        endpoint.x,
-        endpoint.bottom + 42,
-        "ask …/components first —",
-        size=14,
-        colour=DIM,
-        anchor="start",
+        706, 228, "figure · map · multiqc · 12 of 35 advanced-viz kinds", size=13, anchor="start"
     )
-    s.text(
-        endpoint.x,
-        endpoint.bottom + 63,
-        "it lists the formats each one supports",
-        size=14,
-        colour=DIM,
-        anchor="start",
-    )
-
-    # The gap in the json format, in the reference's red-for-what-does-not-work.
     s.text(
         706,
-        232,
-        "12 advanced-viz kinds still build in the browser",
-        size=14,
+        248,
+        "the other 23 build in the browser → 501 + html_url",
+        size=13,
         colour=RED,
         anchor="start",
     )
-    s.text(706, 252, "→ 501, with the html_url that does work", size=13, colour=RED, anchor="start")
-
-    # The property that makes the html format worth having.
+    s.text(706, 532, "every type but jbrowse · zero network calls", size=13, anchor="start")
     s.text(
         706,
-        542,
-        "zero network calls — opens straight from file://",
+        552,
+        "no page: genome view, contact map, group compare",
+        size=13,
+        colour=RED,
+        anchor="start",
+    )
+
+    # Discovery and freshness, below the endpoint, clear of the fork's leg.
+    s.text(
+        endpoint.x,
+        endpoint.bottom + 40,
+        "ask …/components first: it lists",
         size=14,
         colour=DIM,
+        anchor="start",
+    )
+    s.text(
+        endpoint.x,
+        endpoint.bottom + 60,
+        "the formats each one has, and why not",
+        size=14,
+        colour=DIM,
+        anchor="start",
+    )
+    s.frame(endpoint.x, endpoint.bottom + 84, 286, 112, fill=LIGHT_GREY)
+    s.text(
+        endpoint.x + 14,
+        endpoint.bottom + 108,
+        "revision = definition + data",
+        size=15,
+        anchor="start",
+        weight="bold",
+    )
+    s.text(
+        endpoint.x + 14,
+        endpoint.bottom + 130,
+        "version ledger `content_hash`",
+        size=13,
+        colour=DIM,
+        anchor="start",
+    )
+    s.text(
+        endpoint.x + 14,
+        endpoint.bottom + 150,
+        "+ each collection's aggregation hash",
+        size=13,
+        colour=DIM,
+        anchor="start",
+    )
+    s.text(
+        endpoint.x + 14,
+        endpoint.bottom + 176,
+        "`ETag` → 304 · `?expect_revision=` → 409",
+        size=13,
         anchor="start",
     )
 
     s.text(
         W - 46,
-        H - 26,
-        "off by default — DEPICTIO_FASTAPI_EMBED_ENABLED",
+        H - 22,
+        "off by default: DEPICTIO_FASTAPI_EMBED_ENABLED",
         size=14,
         colour=DIM,
         anchor="end",
     )
+    return s
 
-    return s.svg()
+
+def _tile_row(s: Sketch, x: float, y: float, *, export_on: bool) -> float:
+    """The hover row of a tile: a few plain icons, then the export one. Returns its x."""
+    for i in range(3):
+        s.dot(x + i * 20, y, 6, fill=WHITE, colour=GREY)
+    ex = x + 3 * 20 + 6
+    if export_on:
+        s.frame(ex - 11, y - 11, 22, 22, fill=BLUE)
+        s.text(ex, y + 5, "`{}`", size=12)
+    return ex
 
 
-async def _render_png(svg_path: Path, png_path: Path, chromium_path: str | None) -> None:
-    from playwright.async_api import async_playwright
+def ui_schema() -> Sketch:
+    s = Sketch(W, H, seed=23)
+    s.heading(
+        46,
+        52,
+        "Export from the tile",
+        "the action builds the URL in the mode you pick; the export API serves it",
+    )
 
-    async with async_playwright() as p:
-        launch: dict = {"executable_path": chromium_path} if chromium_path else {}
-        browser = await p.chromium.launch(**launch)
-        page = await browser.new_page(viewport={"width": W, "height": H}, device_scale_factor=2)
-        await page.goto(svg_path.resolve().as_uri())
-        await page.wait_for_timeout(400)  # let the handwriting font load
-        await page.screenshot(path=str(png_path))
-        await browser.close()
+    # -- the dashboard, a tile hovered ------------------------------------------
+    dash = browser(s, 46, 112, 360, 300)
+    tiles = (
+        (dash.x + 16, dash.y + 44, 150, 110, GREEN),
+        (dash.x + 182, dash.y + 44, 162, 110, BLUE),
+        (dash.x + 16, dash.y + 170, 328, 112, YELLOW),
+    )
+    for tx, ty, tw, th, fill in tiles:
+        s.frame(tx, ty, tw, th, fill=fill)
+    hovered = tiles[1]
+    _scatter(s, hovered[0] + 18, hovered[1] + 34, hovered[2] - 40, hovered[3] - 46)
+    export_x = _tile_row(s, hovered[0] + 66, hovered[1] + 16, export_on=True)
+    s.text(dash.cx, dash.bottom + 26, "every tile, while the API is on", size=14, colour=DIM)
+    s.text(dash.cx, dash.bottom + 46, "(`embed_enabled` on /auth/me/optional)", size=13, colour=DIM)
+
+    # -- the dialog -------------------------------------------------------------
+    modal = Box(470, 100, 392, 398, WHITE, "")
+    s.rect(modal)
+    s.text(modal.x + 18, modal.y + 32, "Export / embed", size=18, anchor="start", weight="bold")
+    s.text(modal.x + 18, modal.y + 64, "Mode", size=13, anchor="start", colour=DIM)
+    json_seg = Box(modal.x + 18, modal.y + 74, 178, 32, GREEN, "")
+    html_seg = Box(json_seg.right, modal.y + 74, 178, 32, WHITE, "")
+    s.rect(json_seg)
+    s.rect(html_seg)
+    s.text(json_seg.cx, json_seg.y + 21, "Plotly spec (JSON)", size=13, weight="bold")
+    s.text(html_seg.cx, html_seg.y + 21, "Embeddable page (HTML)", size=13)
+    s.text(
+        modal.x + 18,
+        modal.y + 128,
+        "a mode the component lacks is greyed, with the reason",
+        size=12,
+        anchor="start",
+        colour=DIM,
+    )
+
+    s.text(modal.x + 18, modal.y + 160, "Theme  light | dark", size=13, anchor="start")
+    toggle = Box(modal.x + 200, modal.y + 146, 34, 18, BLUE_INK, "")
+    s.rect(toggle)
+    s.dot(toggle.right - 9, toggle.cy, 6, fill=WHITE)
+    s.text(toggle.right + 10, modal.y + 160, "current filters (2)", size=13, anchor="start")
+
+    s.text(
+        modal.x + 18,
+        modal.y + 198,
+        "URL   curl   plotly.js   <iframe>",
+        size=13,
+        anchor="start",
+        weight="bold",
+    )
+    s.line(
+        modal.x + 18, modal.y + 206, modal.x + 48, modal.y + 206, width=2.4, passes=1, amount=0.5
+    )
+    code = Box(modal.x + 18, modal.y + 218, 356, 88, LIGHT_GREY, "")
+    s.rect(code, colour=GREY)
+    s.text(code.x + 12, code.y + 26, "`https://…/depictio/api/v1/export/`", size=12, anchor="start")
+    s.text(
+        code.x + 12, code.y + 46, "`  dashboards/{id}/components/{cid}`", size=12, anchor="start"
+    )
+    s.text(
+        code.x + 12, code.y + 66, "`  ?format=json&theme=light&filters=…`", size=12, anchor="start"
+    )
+    copy = Box(modal.right - 112, modal.y + 326, 94, 30, BLUE, "")
+    opener = Box(modal.right - 214, modal.y + 326, 90, 30, WHITE, "")
+    s.rect(copy)
+    s.rect(opener)
+    s.text(copy.cx, copy.y + 20, "Copy", size=13, weight="bold")
+    s.text(opener.cx, opener.y + 20, "Open", size=13)
+    s.text(
+        modal.x + 18,
+        modal.y + 384,
+        "private project → `Bearer $DEPICTIO_TOKEN`",
+        size=12,
+        anchor="start",
+        colour=DIM,
+    )
+
+    s.arrow(export_x + 14, hovered[1] + 16, modal.x - 10, json_seg.cy)
+
+    # -- where the link ends up ---------------------------------------------------
+    host = browser(s, 930, 112, 264, 150)
+    _scatter(s, host.x + 26, host.y + 46, host.w - 60, host.h - 64)
+    s.text(host.cx, host.bottom + 22, "JSON: drawn by the host's plotly.js", size=14, colour=DIM)
+    framed = browser(s, 930, 340, 264, 150)
+    s.frame(framed.x + 18, framed.y + 40, framed.w - 36, framed.h - 54, dashed=True, fill=VIOLET)
+    _scatter(s, framed.x + 40, framed.y + 54, framed.w - 84, framed.h - 86)
+    s.text(framed.cx, framed.bottom + 22, "HTML: an `<iframe>`, or a file", size=14, colour=DIM)
+    s.text(framed.cx, framed.bottom + 42, "framing needs the site in", size=13, colour=DIM)
+    s.text(
+        framed.cx,
+        framed.bottom + 60,
+        "`DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS`",
+        size=12,
+        colour=DIM,
+    )
+
+    s.arrow(modal.right + 8, json_seg.cy, host.x - 10, host.cy)
+    s.arrow(modal.right + 8, code.cy + 40, framed.x - 10, framed.cy)
+
+    # What the action deliberately is not offered on, and what it exports instead.
+    s.dot(32, H - 66, 4, fill=GREY, colour=GREY)
+    s.text(
+        46,
+        H - 62,
+        "not on a JBrowse tile, nor while a past version is shown: the API serves the live one",
+        size=13,
+        colour=DIM,
+        anchor="start",
+    )
+    s.dot(32, H - 44, 4, fill=GREY, colour=GREY)
+    s.text(
+        46,
+        H - 40,
+        "a highlight or a cross-tab section exports the component it shows, from its own tab",
+        size=13,
+        colour=DIM,
+        anchor="start",
+    )
+    s.text(
+        W - 46,
+        H - 40,
+        "off by default: DEPICTIO_FASTAPI_EMBED_ENABLED",
+        size=13,
+        colour=DIM,
+        anchor="end",
+    )
+    return s
 
 
 @app.command()
 def main(
     out: Path = typer.Option(
-        Path("docs/images/v0.12/react/schema"),
-        "--out",
-        help="Output prefix; '_component_export.svg' / '.png' are appended.",
+        Path("docs/images/v0.12/react/schema"), "--out", help="Output path stem"
     ),
-    png: bool = typer.Option(True, "--png/--no-png", help="Also rasterise via Playwright."),
-    chromium_path: str = typer.Option(
-        None,
-        "--chromium-path",
-        help="Chromium binary to rasterise with. Defaults to Playwright's own lookup.",
-    ),
+    png: bool = typer.Option(True, "--png/--no-png", help="Also render a PNG"),
 ) -> None:
-    """Write the schema SVG (and PNG) under --out."""
-    svg_path = out.with_name(f"{out.name}_component_export.svg")
-    svg_path.parent.mkdir(parents=True, exist_ok=True)
-    svg_path.write_text(build(), encoding="utf-8")
-    typer.echo(f"→ {svg_path}")
-    if png:
-        png_path = svg_path.with_suffix(".png")
-        asyncio.run(_render_png(svg_path, png_path, chromium_path))
-        typer.echo(f"→ {png_path}")
+    write(formats_schema(), out, "component_export", png=png)
+    write(ui_schema(), out, "component_export_ui", png=png)
 
 
 if __name__ == "__main__":
