@@ -136,7 +136,8 @@ To embed:
 
 Off by default because serving embeds necessarily relaxes framing protections on
 that path. Both keys are wired through the backend Helm ConfigMap
-(`backend.env.DEPICTIO_FASTAPI_EMBED_*`), both compose files and `.env.example`.
+(`backend.env.DEPICTIO_FASTAPI_EMBED_*`), both compose files and `.env.example`,
+and `depictio local up` passes them through from the shell that starts it.
 
 ## Access control
 
