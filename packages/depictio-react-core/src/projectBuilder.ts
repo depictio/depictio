@@ -37,6 +37,12 @@ export const BUILDER_DC_TYPES: readonly BuilderDcType[] = [
   'phylogeny',
 ];
 
+/** Types that read exactly one file (the server refuses a scan for them). */
+export const SINGLE_FILE_DC_TYPES: ReadonlySet<BuilderDcType> = new Set<BuilderDcType>([
+  'geojson',
+  'phylogeny',
+]);
+
 export type BuilderScanMode = 'single' | 'recursive';
 
 export interface BuilderTableProps {
@@ -744,6 +750,16 @@ export function validateBuilderState(
     if (!props || props.kind !== dc.type) {
       warn('dc_props_reset', `“${label}” will use the default ${dc.type} settings.`, extra);
       continue;
+    }
+    if (dc.mode === 'recursive' && SINGLE_FILE_DC_TYPES.has(dc.type)) {
+      error('single_file_type_scanned', `“${label}” reads one file: a ${dc.type} collection cannot scan.`, extra);
+    }
+    if (props.kind === 'image' && options.remote) {
+      error(
+        'image_remote',
+        `“${label}” is an image collection: its images are uploaded from a folder on this computer, not an S3 prefix.`,
+        extra,
+      );
     }
     if (props.kind === 'indexed_file' && options.remote) {
       error(

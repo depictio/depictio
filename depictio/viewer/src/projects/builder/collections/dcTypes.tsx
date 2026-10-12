@@ -23,6 +23,9 @@ export function dcTypeUnavailableReason(type: BuilderDcType, remote: boolean): s
   if (type === 'indexed_file' && remote) {
     return "Indexed files can't be read from S3 yet; use a local folder";
   }
+  if (type === 'image' && remote) {
+    return 'Images are uploaded from a folder on this computer; use a local folder';
+  }
   return null;
 }
 

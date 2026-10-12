@@ -171,8 +171,13 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
     setSuggestion(null);
   }, []);
 
+  const activeFileRef = useRef<string | null>(null);
+  activeFileRef.current = activeFile;
+
   const activate = useCallback(
     (path: string) => {
+      // Clicking the file already open keeps the collection being edited.
+      if (path === activeFileRef.current) return;
       setActiveFile(path);
       setPicked(new Set([path]));
       setSuggestion(null);

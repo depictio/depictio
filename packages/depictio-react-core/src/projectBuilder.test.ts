@@ -243,6 +243,39 @@ describe('validation', () => {
       'indexed_file_remote',
     ]);
   });
+
+  it('refuses images on an s3 root only', () => {
+    let state = builderReducer(initialBuilderState(), { type: 'project/patch', patch: { name: 'P' } });
+    state = builderReducer(state, {
+      type: 'dc/save',
+      workflowId: 'wf-0',
+      dc: {
+        tag: 'cells',
+        type: 'image',
+        mode: 'single',
+        path: 'cells.csv',
+        props: { kind: 'image', format: 'csv', image_column: 'path' },
+      },
+    });
+    expect(validateBuilderState(state, { remote: false })).toEqual([]);
+    expect(validateBuilderState(state, { remote: true }).map((i) => i.code)).toEqual(['image_remote']);
+  });
+
+  it('refuses a scan for a type that reads one file', () => {
+    let state = builderReducer(initialBuilderState(), { type: 'project/patch', patch: { name: 'P' } });
+    state = builderReducer(state, {
+      type: 'dc/save',
+      workflowId: 'wf-0',
+      dc: {
+        tag: 'tree',
+        type: 'phylogeny',
+        mode: 'recursive',
+        regex: '^tree\\.nwk$',
+        props: { kind: 'phylogeny', format: 'newick' },
+      },
+    });
+    expect(validateBuilderState(state).map((i) => i.code)).toEqual(['single_file_type_scanned']);
+  });
 });
 
 describe('what is sent', () => {

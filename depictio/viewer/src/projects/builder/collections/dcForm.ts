@@ -4,6 +4,7 @@
  * hand (a suggestion never overwrites those).
  */
 import {
+  SINGLE_FILE_DC_TYPES,
   defaultDcProps,
   globToRegex,
   regexToGlob,
@@ -79,11 +80,13 @@ function propsForType(dc: BuilderDcDraft, type: BuilderDcType): BuilderDcProps {
 
 export function withType(form: DcFormState, type: BuilderDcType): DcFormState {
   if (form.dc.type === type) return form;
-  return {
-    ...form,
-    dc: { ...form.dc, type, props: propsForType(form.dc, type) },
-    touched: { ...form.touched, type: true },
-  };
+  const dc: BuilderDcDraft = { ...form.dc, type, props: propsForType(form.dc, type) };
+  // A GeoJSON or a tree is one file: a scan would be refused.
+  if (SINGLE_FILE_DC_TYPES.has(type) && dc.mode === 'recursive') {
+    dc.mode = 'single';
+    if (!dc.path?.trim()) dc.path = form.dc.path ?? null;
+  }
+  return { ...form, dc, touched: { ...form.touched, type: true } };
 }
 
 /** Switch scan mode. Recursive starts from the suggested pattern, else from

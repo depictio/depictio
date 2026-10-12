@@ -26,7 +26,13 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import { BUILDER_DC_TYPES, isTagTaken, tableTags, useBrandAccents } from 'depictio-react-core';
+import {
+  BUILDER_DC_TYPES,
+  SINGLE_FILE_DC_TYPES,
+  isTagTaken,
+  tableTags,
+  useBrandAccents,
+} from 'depictio-react-core';
 import type { BuilderDcType, BuilderState, BuilderSuggestion } from 'depictio-react-core';
 
 import { DisabledReason, GatedButton } from '../../../components/settings/SettingsSections';
@@ -238,7 +244,11 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
             value={dc.mode}
             data={[
               { value: 'single', label: 'One file' },
-              { value: 'recursive', label: 'Scan (pattern)' },
+              {
+                value: 'recursive',
+                label: 'Scan (pattern)',
+                disabled: SINGLE_FILE_DC_TYPES.has(dc.type),
+              },
             ]}
             onChange={(v) => onChange(withMode(form, v === 'recursive' ? 'recursive' : 'single', suggestion, activeFile))}
             data-testid="builder-dc-mode"

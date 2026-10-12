@@ -39,6 +39,8 @@ const S1_REGEX = String.raw`^(?:[^/]+/)*S1\.tsv$`;
 const QUANT_REGEX = String.raw`^quant/S[^/]*\.tsv$`;
 const SAMPLES_REGEX = String.raw`^(?:[^/]+/)*samples\.csv$`;
 const TREE_REGEX = String.raw`^(?:[^/]+/)*tree\.nwk$`;
+/** Valid in the browser, refused by Python's `re`: a variable-width look-behind. */
+const LOOKBEHIND_REGEX = String.raw`^quant/(?<=q\w+/)S\d+\.tsv$`;
 
 type Json = Record<string, unknown>;
 type StubAnswer = { status?: number; json: unknown };
@@ -163,6 +165,16 @@ function matchFor(collection: Json): Json {
     });
   }
   if (regex === TREE_REGEX) return matched({ regex, files: ["tree.nwk"], count: 1 });
+  if (regex === LOOKBEHIND_REGEX) {
+    // What the browser's own regex engine would match: the server is what refuses it.
+    return matched({
+      regex,
+      files: ["quant/S1.tsv", "quant/S2.tsv", "quant/S3.tsv"],
+      count: 3,
+      schema: COUNTS_SCHEMA,
+      consistent: true,
+    });
+  }
   return matched({ regex });
 }
 
@@ -404,9 +416,9 @@ function plan(root: string): Json {
   };
 }
 
-/** `/template`'s refusal of a phylogeny set to scan for files. */
-const TREE_REFUSAL = {
-  detail: "'tree': a phylogeny collection reads one file (single scan).",
+/** `/template`'s refusal of a regex Python cannot compile, word for word. */
+const REGEX_REFUSAL = {
+  detail: "'quant': invalid regex (look-behind requires fixed-width pattern).",
   code: "inline_template_invalid",
 };
 
@@ -790,7 +802,7 @@ test.describe("Project Builder", () => {
     loginAsAdmin,
     page,
   }) => {
-    const calls = await stubBuilder(page, DATA_ROOT, () => ({ status: 422, json: TREE_REFUSAL }));
+    const calls = await stubBuilder(page, DATA_ROOT, () => ({ status: 422, json: REGEX_REFUSAL }));
 
     await loginAsAdmin();
     await page.goto("/projects/build");
@@ -798,24 +810,29 @@ test.describe("Project Builder", () => {
     await byTestId(page, "builder-project-name").fill(PROJECT_NAME);
     await byTestId(page, "builder-next").click();
 
-    // The suggestion types the Newick file as a phylogeny.
+    // A tree is one file: the page does not offer to scan for it.
     await pickFile(page, "tree.nwk");
     await expect(byTestId(page, "builder-dc-type")).toHaveValue("Phylogeny");
     await expect(byTestId(page, "file-preview-text")).toContainText("((S1:0.1,S2:0.2)");
+    await expect(byTestId(page, "builder-dc-mode").locator("input[value='recursive']")).toBeDisabled();
 
-    // A scan is what the server will not take for a phylogeny.
+    // A regex the browser compiles and the server's Python does not.
+    await pickFile(page, "quant/S1.tsv");
+    await byTestId(page, "builder-dc-tag").fill("quant");
     await byTestId(page, "builder-dc-mode").getByText("Scan (pattern)").click();
-    await expect(byTestId(page, "builder-dc-regex")).toHaveValue(TREE_REGEX);
-    await expectMatches(page, 1);
+    await byTestId(page, "builder-dc-regex").fill(LOOKBEHIND_REGEX);
+    await expectMatches(page, 3);
     await byTestId(page, "builder-add-dc").click();
-    await expect(page.locator("[data-testid='builder-dc-card'][data-tag='tree']")).toBeVisible();
+    await expect(page.locator("[data-testid='builder-dc-card'][data-tag='quant']")).toBeVisible();
 
     await byTestId(page, "builder-next").click();
     const error = byTestId(page, "builder-template-error");
-    await expect(error).toContainText(TREE_REFUSAL.detail);
+    await expect(error).toContainText(REGEX_REFUSAL.detail);
     await expect(error).toContainText("The server refused the draft");
     expect(calls.template.at(-1)?.draft).toMatchObject({
-      workflows: [{ data_collections: [{ tag: "tree", type: "phylogeny", mode: "recursive" }] }],
+      workflows: [
+        { data_collections: [{ tag: "quant", mode: "recursive", regex: LOOKBEHIND_REGEX }] },
+      ],
     });
 
     // Nothing to preview or create from.
