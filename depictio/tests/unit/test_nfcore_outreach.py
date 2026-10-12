@@ -184,13 +184,20 @@ def test_dashboard_url_falls_back_to_the_list_without_a_map(
     assert (url, deep) == ("https://d/1", True)
 
 
-def test_discussion_body_asks_the_three_questions(nfo: ModuleType, template_dir: Path) -> None:
+def test_discussion_body_leads_with_a_checklist(nfo: ModuleType, template_dir: Path) -> None:
     facts = nfo.collect_facts("demoseq", "1.2.0", projects_dir=template_dir)
     body = nfo.render_discussion(facts, "https://demo.example.org", "https://docs/{pipeline}/", {})
 
-    assert "**1. Is any of this wrong or misleading?**" in body
-    assert "**2. What do you always look at that is not here?**" in body
-    assert "**3. Which real runs would this not fit?**" in body
+    # Five boxes, answerable without typing — a round that only accepts prose
+    # gets no replies from volunteer maintainers.
+    assert body.count("\n- [ ] ") == 5
+    assert "nf-core/demoseq writes them" in body
+    # And the checklist comes before the reference tables it is a summary of.
+    assert body.index("### The two-minute version") < body.index("<details>")
+
+    assert "**Is anything wrong or misleading?**" in body
+    assert "**What do you always look at that is not here?**" in body
+    assert "**Which real runs would this not fit?**" in body
     # Questions quote this template's own content back, which is what makes
     # them answerable rather than rhetorical.
     assert "`Samples`" in body
