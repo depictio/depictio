@@ -13,10 +13,10 @@ the render path finds that.
 
 Three properties are load-bearing, and each cost something to learn:
 
-* `probe_component` never raises. Every probe body runs inside one try/except
-  and an unexpected exception becomes a returned message. A probe that raised
-  would abort the whole generation over one component the generator was about
-  to report on and repair anyway.
+* `probe_verdict` never raises (nor `probe_component`, its thinner view). Every
+  probe body runs inside one try/except and an unexpected exception becomes a
+  returned message. A probe that raised would abort the whole generation over
+  one component the generator was about to report on and repair anyway.
 * Every probe calls the render path IN PROCESS. It never issues an HTTP request
   back at this API. The AI package already documents why on `init_data_for_dc`
   in context.py: a self-call made from inside a request handler cannot be
@@ -38,10 +38,13 @@ import asyncio
 import logging
 from collections.abc import Callable, Coroutine
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
 
 from bson import ObjectId
+
+from depictio.api.v1.endpoints.ai_endpoints.schemas import CheckStatus
 
 logger = logging.getLogger(__name__)
 
@@ -88,8 +91,33 @@ _LIST_CONFIG_KEYS: tuple[str, ...] = (
 )
 
 
-def probe_component(component: dict[str, Any], ctx: Any | None, user: Any) -> str | None:
-    """None when the component renders (or has no cheap probe), else a short reason.
+@dataclass(frozen=True)
+class ProbeVerdict:
+    """What the render check learned about one component, skips included.
+
+    `probe_component` collapses this to "a reason, or None", which is all the
+    repair prompt needs. The reviewer needs more: a component can answer None
+    because it rendered, because its type has no cheap probe, or because it
+    has no collection to render against, and showing all three as a pass
+    claims a check that never ran. `detail` carries the finding when the
+    status is ``failed`` and the reason for the skip otherwise.
+
+    `status` is the `CheckStatus` of the AI schemas: the probe is one of the
+    gates the run records, and its verdict is copied into a `ComponentCheck`
+    unchanged.
+    """
+
+    status: CheckStatus
+    detail: str = ""
+
+    @property
+    def finding(self) -> str | None:
+        """The reason the component does not render, or None."""
+        return self.detail if self.status == "failed" else None
+
+
+def probe_verdict(component: dict[str, Any], ctx: Any | None, user: Any) -> ProbeVerdict:
+    """Run the render check on one component and say which of the three it is.
 
     `component` is the filled lite component dict, as the generator holds it
     after `validate_component`: `component_type` plus that type's own fields.
@@ -98,25 +126,24 @@ def probe_component(component: dict[str, Any], ctx: Any | None, user: Any) -> st
     requesting user object, passed to the route bodies in place of the
     dependency FastAPI would have injected.
 
-    A probe answering None means "nothing here says this component is broken",
-    never "this component is perfect": several types have no probe, and the
-    probes that exist read one row. That asymmetry is the point. A false
-    negative costs a broken tile the generator would have shipped anyway; a
-    false positive would throw away a component that renders.
+    A ``passed`` verdict means "nothing here says this component is broken",
+    never "this component is perfect": the probes read one row. That asymmetry
+    is the point. A false negative costs a broken tile the generator would have
+    shipped anyway; a false positive would throw away a component that renders.
     """
     component_type = str((component or {}).get("component_type") or "")
     if component_type in NO_PROBE_TYPES:
-        return None
+        return ProbeVerdict("skipped", f"{component_type} has no cheap in-process render check")
     probe = _PROBES.get(component_type)
     if probe is None:
         # An unknown type, or one the generator learns to emit before this
         # module learns to probe it. Silence is the safe answer.
-        return None
+        return ProbeVerdict("skipped", f"no render check is written for '{component_type}'")
     if ctx is None or not getattr(ctx, "data_collection_id", None):
         # Nothing to probe against: every probe below reads a data collection.
-        return None
+        return ProbeVerdict("skipped", "no data collection to render against")
     try:
-        return probe(component, ctx, user)
+        reason = probe(component, ctx, user)
     except Exception as exc:  # noqa: BLE001, the contract is that this never raises
         logger.warning(
             "dashboard probe: %s component %r failed: %s",
@@ -125,7 +152,17 @@ def probe_component(component: dict[str, Any], ctx: Any | None, user: Any) -> st
             exc,
             exc_info=True,
         )
-        return _reason(component_type, exc)
+        reason = _reason(component_type, exc)
+    return ProbeVerdict("failed", reason) if reason else ProbeVerdict("passed")
+
+
+def probe_component(component: dict[str, Any], ctx: Any | None, user: Any) -> str | None:
+    """None when the component renders (or has no cheap probe), else a short reason.
+
+    The repair prompt's view of `probe_verdict`: a skip and a pass are both
+    "nothing to report" to a model being asked to fix something.
+    """
+    return probe_verdict(component, ctx, user).finding
 
 
 def _reason(component_type: str, exc: BaseException) -> str:
@@ -222,15 +259,18 @@ def _probe_figure(component: dict[str, Any], ctx: Any, user: Any) -> str | None:
     It projects to the bound columns and caps the rows it loads, and its Delta
     read goes through the same Redis-backed cache the dashboard will hit.
 
-    One gap worth naming: a code-mode figure whose code raises does not raise
-    here. `build_figure_preview` catches it and returns a figure carrying the
-    error as an annotation, because that is how the builder's Code-mode status
-    alert learns what went wrong. Such a figure renders, so this probe passes
-    it; catching it would mean teaching the probe to read annotations.
+    A code-mode figure whose code raises does not raise here either:
+    `build_figure_preview` catches it and returns an error figure, because that
+    is how the builder's Code-mode status alert learns what went wrong. It does
+    not swallow it though, it pulls the message out of the annotation and puts
+    it on ``metadata.error`` (celery_tasks.py) for that alert to read. Reading
+    the same field is what makes code mode a gate here rather than a blind
+    spot: it is the one binding `check_against_schema` cannot see, since a code
+    figure carries no `dict_kwargs` to check.
     """
     from depictio.api.v1.celery_tasks import build_figure_preview
 
-    build_figure_preview(
+    result = build_figure_preview(
         {
             "metadata": {
                 "component_type": "figure",
@@ -245,7 +285,9 @@ def _probe_figure(component: dict[str, Any], ctx: Any, user: Any) -> str | None:
             "theme": "light",
         }
     )
-    return None
+    metadata = (result or {}).get("metadata") or {}
+    error = metadata.get("error")
+    return error or None
 
 
 def _probe_advanced_viz(component: dict[str, Any], ctx: Any, user: Any) -> str | None:

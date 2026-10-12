@@ -941,6 +941,8 @@ export type {
   StoredMetadata,
   TextValueSpec,
   DashboardData,
+  DashboardAICheck,
+  DashboardAIComponentChecks,
   DashboardAIGeneration,
   FilterSectionSpec,
   CategoryColors,

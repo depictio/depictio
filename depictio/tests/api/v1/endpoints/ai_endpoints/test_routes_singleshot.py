@@ -179,6 +179,111 @@ class TestComponentFromPrompt:
         )
         assert r.status_code == 422
 
+    def test_an_aggregation_the_real_column_cannot_take_is_repaired(
+        self, client, patch_context, monkeypatch
+    ):
+        """The schema check the generator runs, on this route at last.
+
+        The lite model already refuses `average` on a `column_type: object`
+        card, so the case only the collection can catch is the one where the
+        model declares a type the column does not have: `average` on
+        `float64` is a perfectly good card, and `variety` is a String. Before
+        this route ran `check_against_schema`, that tile reached the builder
+        and failed when it was drawn.
+        """
+        bad = VALID_CARD_YAML.replace("aggregation: count", "aggregation: average").replace(
+            "column_type: object", "column_type: float64"
+        )
+        calls = _patch_completion(monkeypatch, [bad, VALID_CARD_YAML])
+        r = client.post(
+            "/ai/component-from-prompt",
+            json={
+                "data_collection_id": "6" * 24,
+                "prompt": "average variety",
+                "component_type": "card",
+            },
+        )
+        assert r.status_code == 200
+        # The repair spends one of the two attempts rather than adding one.
+        assert r.json()["validation_attempts"] == 2
+        assert r.json()["parsed"]["aggregation"] == "count"
+        # And the model was told what was wrong in the schema check's words.
+        repair = calls[1][-1]["content"]
+        assert "Schema check failed" in repair
+        assert "column_type='float64' but 'variety' is stored as 'object'" in repair
+
+    def test_a_tile_the_envelope_refuses_is_repaired_not_a_500(
+        self, client, patch_context, monkeypatch
+    ):
+        """`schema_error` re-validates inside a dashboard, which can itself refuse.
+
+        The tile passed `validate_single` on its own; assembling it into a
+        dashboard is stricter and can raise. That is one more thing to hand
+        back to the model, not an unhandled error out of the handler.
+        """
+        raised: list[int] = []
+
+        def refuse_once(component, ctx):
+            if not raised:
+                raised.append(1)
+                raise ValueError("component 0 is not a dashboard component")
+            return None
+
+        monkeypatch.setattr(
+            "depictio.api.v1.endpoints.ai_endpoints.routes.schema_error", refuse_once
+        )
+        calls = _patch_completion(monkeypatch, [VALID_CARD_YAML, VALID_CARD_YAML])
+        r = client.post(
+            "/ai/component-from-prompt",
+            json={
+                "data_collection_id": "6" * 24,
+                "prompt": "count of samples",
+                "component_type": "card",
+            },
+        )
+        assert r.status_code == 200
+        assert r.json()["validation_attempts"] == 2
+        assert "ValueError: component 0 is not a dashboard component" in calls[1][-1]["content"]
+
+    def test_a_figure_that_would_draw_nothing_is_repaired(self, client, patch_context, monkeypatch):
+        """The substance check: a figure with no bindings validates and draws an empty plot."""
+        empty = (
+            "component_type: figure\n"
+            "workflow_tag: wf\n"
+            "data_collection_tag: dc\n"
+            "visu_type: scatter\n"
+        )
+        good = empty + "dict_kwargs:\n  x: sepal_length\n  y: sepal_length\n"
+        calls = _patch_completion(monkeypatch, [empty, good])
+        r = client.post(
+            "/ai/component-from-prompt",
+            json={
+                "data_collection_id": "6" * 24,
+                "prompt": "scatter",
+                "component_type": "figure",
+            },
+        )
+        assert r.status_code == 200
+        assert r.json()["validation_attempts"] == 2
+        assert "dict_kwargs is empty" in calls[1][-1]["content"]
+
+    def test_a_column_that_is_not_there_exhausts_the_attempts(
+        self, client, patch_context, monkeypatch
+    ):
+        """Both attempts spent on the same bad column ends in 422, not a saved tile."""
+        bad = VALID_CARD_YAML.replace("column_name: variety", "column_name: nope")
+        _patch_completion(monkeypatch, [bad])
+        r = client.post(
+            "/ai/component-from-prompt",
+            json={
+                "data_collection_id": "6" * 24,
+                "prompt": "count of nope",
+                "component_type": "card",
+            },
+        )
+        assert r.status_code == 422
+        assert "Column 'nope' not found" in r.json()["detail"]
+
     def test_llm_error_is_502(self, client, patch_context, monkeypatch):
         def boom(messages, **kwargs):
             raise RuntimeError("provider down")

@@ -134,10 +134,22 @@ def patch_dashboard_context(monkeypatch) -> dict:
 
 
 def _data_ctx(dc_id: str) -> DataContext:
+    """The sampled context of one collection.
+
+    Its columns are a superset of the polars schema `patch_schema` serves for
+    the same collection, because in production both describe one Delta table:
+    `build_data_context` summarises every column of the frame it loads. The
+    two fixtures have to agree, or the schema check the suggestion route now
+    runs would reject the very bindings the ranker just offered.
+    """
     if dc_id == PHYSICAL_ID:
         columns = [
             ColumnSummary(name="bill_length_mm", dtype="Float64", null_pct=0.0, nunique=100),
             ColumnSummary(name="species", dtype="String", null_pct=0.0, nunique=3),
+            *(
+                ColumnSummary(name=name, dtype=dtype, null_pct=0.0, nunique=100)
+                for name, dtype in DE_SCHEMA.items()
+            ),
         ]
         sample = [{"bill_length_mm": 39.1, "species": "Adelie"}]
         tag = "physical_features"
@@ -419,6 +431,42 @@ class TestAuto:
         volcano = r.json()["suggestions"][0]
         assert volcano["origin"] == "llm"
         assert volcano["component"]["config"]["viz_kind"] == "volcano"
+
+    def test_a_card_on_a_column_that_is_not_there_is_dropped(self, client, stack, monkeypatch):
+        """The schema check, on the suggestion route.
+
+        A suggestion has no repair round: an invalid one is dropped the way an
+        ungrammatical one already was, and the answer stands on whatever
+        survives. `nope` is not a column of physical_features, which only the
+        collection can say.
+        """
+        ghost = {
+            **CARD_ITEM,
+            "title": "Ghost count",
+            "component": {**CARD_ITEM["component"], "column_name": "nope"},
+        }
+        _patch_completion(monkeypatch, [_answer(ghost, CARD_ITEM)])
+        r = _post(client, n=4)
+        assert r.status_code == 200, r.text
+        titles = [s["title"] for s in r.json()["suggestions"]]
+        assert "Ghost count" not in titles
+        assert "Species count" in titles
+
+    def test_a_card_whose_declared_type_is_wrong_is_dropped(self, client, stack, monkeypatch):
+        """The case the lite model cannot see: a real column, a type it does not have."""
+        mistyped = {
+            **CARD_ITEM,
+            "title": "Mistyped",
+            "component": {
+                "aggregation": "average",
+                "column_name": "species",
+                "column_type": "float64",
+            },
+        }
+        _patch_completion(monkeypatch, [_answer(mistyped, CARD_ITEM)])
+        r = _post(client, n=4)
+        assert r.status_code == 200, r.text
+        assert "Mistyped" not in [s["title"] for s in r.json()["suggestions"]]
 
     def test_figures_get_python_code(self, client, stack, monkeypatch):
         _patch_completion(monkeypatch, [_answer(FIGURE_ITEM)])

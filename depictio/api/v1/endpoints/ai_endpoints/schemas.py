@@ -413,6 +413,35 @@ or the token / wall-clock budget ran out before it was filled).
 """
 
 
+CheckLayer = Literal["model", "style", "substance", "schema", "render"]
+"""The gates one filled component passes, named after what actually runs.
+
+``model``: `DashboardDataLite.from_yaml`, the loader `depictio-cli dashboard
+import` uses. ``style``: `component_style.sanitize_style`. ``substance``:
+`dashboard_validate.substance_error`. ``schema``:
+`dashboard_validate.check_against_schema`, the only gate that reads the
+collection. ``render``: `dashboard_probe.probe_verdict`.
+"""
+
+CheckStatus = Literal["passed", "failed", "skipped"]
+"""How one gate answered.
+
+``skipped`` is its own state on purpose. A gate can decline to run (a `text`
+component has no table to check columns against, four types have no cheap
+render probe, a code-mode figure binds no columns statically, the probe itself
+can break) and reporting any of those as ``passed`` would claim a check that
+never happened.
+"""
+
+
+class ComponentCheck(BaseModel):
+    """One gate's verdict on one component."""
+
+    layer: CheckLayer
+    status: CheckStatus
+    detail: str = Field(default="", description="The finding when failed, the reason when skipped")
+
+
 class GeneratedComponentEvent(BaseModel):
     """Payload of one `component` stream event, emitted once per planned component."""
 
@@ -422,6 +451,13 @@ class GeneratedComponentEvent(BaseModel):
     status: GeneratedComponentStatus
     attempts: int = 1
     error: str | None = None
+    checks: list[ComponentCheck] = Field(
+        default_factory=list,
+        description="Which gates the component went through, in the order they ran",
+    )
+    repair: str | None = Field(
+        default=None, description="The finding the successful repair round corrected"
+    )
 
 
 class GeneratedDashboardEvent(BaseModel):

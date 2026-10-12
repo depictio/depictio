@@ -85,6 +85,7 @@ export type {
 } from './hooks';
 
 export type {
+  AIComponentChecks,
   AIGenerationInfo,
   AISectionRationale,
   AIStreamEvent,
@@ -97,6 +98,10 @@ export type {
   BudgetSpent,
   BudgetTick,
   Finding,
+  CheckLayer,
+  CheckStatus,
+  ComponentCheck,
+  RecordedCheck,
   ComponentFromPromptRequest,
   ComponentFromPromptResponse,
   ComponentSuggestion,

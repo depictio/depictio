@@ -563,7 +563,21 @@ def build_contract() -> Sketch:
     s.text(1288, 470, "the answer, in the CLI's own YAML grammar", size=12, colour=DIM)
 
     # -- what the answer has to pass --------------------------------------
-    s.text(880, 470, "what the answer has to pass", size=15, weight="bold")
+    s.text(880, 440, "what the answer has to pass", size=15, weight="bold")
+    s.text(
+        880,
+        460,
+        "generate-dashboard, component-from-prompt, suggest-components",
+        size=12,
+        colour=DIM,
+    )
+    s.text(
+        880,
+        478,
+        "in that order of depth: only the generator reaches the probe",
+        size=12,
+        colour=DIM,
+    )
     s.document(1350, 500, 190, 130, fill=YELLOW)
     s.text(1445, 530, "the answer", size=14, weight="bold")
     scribble(s, 1376, 552, (132, 98, 114, 80), gap=17)
@@ -615,13 +629,13 @@ def build_contract() -> Sketch:
     s.arrow(575, 672, 575, 700)
     s.box(
         Box(
-            455,
+            375,
             700,
-            240,
+            320,
             118,
             GREEN,
             "the render probe",
-            ("the real render path,", "in process, never HTTP"),
+            ("the real render path, in process", "text, image, map, multiqc: not probed"),
         )
     )
     s.arrow(699, 759, 745, 759)

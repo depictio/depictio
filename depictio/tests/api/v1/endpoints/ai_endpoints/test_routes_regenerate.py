@@ -28,6 +28,7 @@ from fastapi.testclient import TestClient
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.ai_endpoints import dashboard_gen, generations, llm_client
 from depictio.api.v1.endpoints.ai_endpoints.dashboard_plan import normalize_plan, parse_plan
+from depictio.api.v1.endpoints.ai_endpoints.dashboard_probe import ProbeVerdict
 from depictio.api.v1.endpoints.ai_endpoints.dashboard_validate import validate_envelope
 from depictio.api.v1.endpoints.ai_endpoints.routes import ai_endpoint_router
 from depictio.api.v1.endpoints.user_endpoints.routes import get_current_user
@@ -288,6 +289,8 @@ class Draft:
         self.permission = True
         self.run: generations.GenerationRun | None = run_record()
         self.runs: list[generations.GenerationRun] = []
+        self.probe_errors: dict[str, str] = {}
+        self.probed: list[str] = []
         self.history_limit: int | None = None
 
         async def fake_context(project_id, user, dc_ids=None, *, max_collections=6):
@@ -307,6 +310,16 @@ class Draft:
             self.history_limit = limit
             return self.runs[:limit]
 
+        # The render check a regenerated tile now goes through, faked like the
+        # generator's: the real probe reads the data. A tag in `probe_errors`
+        # answers with that reason, and the tile is not written back.
+        def fake_probe(component, ctx_, user):
+            tag = str(component.get("tag") or "")
+            self.probed.append(tag)
+            error = self.probe_errors.get(tag)
+            return ProbeVerdict("failed", error) if error else ProbeVerdict("passed")
+
+        monkeypatch.setattr(dashboard_gen, "probe_verdict", fake_probe)
         monkeypatch.setattr(dashboard_gen, "build_project_data_context", fake_context)
         monkeypatch.setattr(
             dashboard_gen, "compose_offers_for_project", lambda doc: {"modules": []}
@@ -437,14 +450,53 @@ class TestRegenerateComponent:
         for tag, snapshot in others.items():
             assert json.dumps(draft.component(tag), default=str) == snapshot
 
-    def test_only_that_position_and_the_timestamp_are_written(self, client, draft, monkeypatch):
+    def test_only_that_position_the_timestamp_and_its_checks_are_written(
+        self, client, draft, monkeypatch
+    ):
         position = draft.position_of("sepal_scatter")
         regenerate(client, monkeypatch, RecordingLLM(ANSWERS), draft, "sepal_scatter")
         (query, update) = draft.dashboards.updates[-1]
         assert query == {"dashboard_id": ObjectId(DASHBOARD_ID)}
-        assert set(update["$set"]) == {f"stored_metadata.{position}", "last_saved_ts"}
+        # One write, and dotted: the rest of the document and the rest of the
+        # `ai_generation` stamp (its sections, its reviewed list) are untouched.
+        assert set(update["$set"]) == {
+            f"stored_metadata.{position}",
+            "ai_generation.checks",
+            "last_saved_ts",
+        }
         assert isinstance(update["$set"]["last_saved_ts"], str)
         assert update["$set"]["last_saved_ts"] != "2026-01-01 00:00:00"
+        # The refilled tile carries the gates it just went through, the render
+        # check among them: a regenerated tile is held to what a generated
+        # one is held to.
+        rows = update["$set"]["ai_generation.checks"]
+        assert [r["tag"] for r in rows] == ["sepal_scatter"]
+        assert [(c["layer"], c["status"]) for c in rows[0]["checks"]] == [
+            ("model", "passed"),
+            ("style", "passed"),
+            ("substance", "passed"),
+            ("schema", "passed"),
+            ("render", "passed"),
+        ]
+
+    def test_a_regenerated_tile_that_will_not_render_is_not_written_back(
+        self, client, draft, monkeypatch
+    ):
+        draft.probe_errors = {"sepal_scatter": "duplicate column"}
+        before = json.dumps(draft.component("sepal_scatter"), default=str)
+        events = regenerate(client, monkeypatch, RecordingLLM(ANSWERS), draft, "sepal_scatter")
+        assert "sepal_scatter" in draft.probed
+        # The stored tile survives: refusing the new one is the whole point.
+        assert json.dumps(draft.component("sepal_scatter"), default=str) == before
+        assert _one(events, "error")["detail"] == "no component could be regenerated"
+        component = _components(events)["sepal_scatter"]
+        assert component["status"] == "dropped"
+        assert component["error"] == "render: duplicate column"
+        assert component["checks"][-1] == {
+            "layer": "render",
+            "status": "failed",
+            "detail": "duplicate column",
+        }
 
     def test_the_events_carry_the_new_component(self, client, draft, monkeypatch):
         position = draft.position_of("sepal_scatter")
@@ -653,6 +705,29 @@ class TestRegenerateSection:
         assert draft.component("sepal_scatter")["dict_kwargs"]["x"] == "petal.length"
         assert _one(events, "regenerated")["section"] == "Measurements"
         assert [t for t, _ in events][-1] == "done"
+
+    def test_only_the_tiles_written_back_are_stamped(self, client, draft, monkeypatch):
+        """A tile that fails a gate keeps its stored version, so it keeps its record.
+
+        The failing tile is still reported on the stream, which is live
+        feedback on the attempt. Stamping it would say "render: failed" about
+        the component the dashboard still holds, which renders fine.
+        """
+        draft.probe_errors = {"petal_box": "duplicate column"}
+        before = json.dumps(draft.component("petal_box"), default=str)
+        events = regenerate_section(client, monkeypatch, RecordingLLM(ANSWERS), "Measurements")
+
+        components = _components(events)
+        assert components["sepal_scatter"]["status"] == "ok"
+        assert components["petal_box"]["status"] == "dropped"
+        assert components["petal_box"]["checks"][-1]["status"] == "failed"
+        assert json.dumps(draft.component("petal_box"), default=str) == before
+
+        # The section's other tiles were written and are stamped; the one that
+        # kept its stored version is absent rather than stamped as failing.
+        tags = [r["tag"] for r in draft.dashboards.last_set["ai_generation.checks"]]
+        assert "sepal_scatter" in tags
+        assert "petal_box" not in tags
 
     def test_a_filter_section_re_lays_the_left_panel(self, client, draft, monkeypatch):
         regenerate_section(client, monkeypatch, RecordingLLM(ANSWERS), "Cohort")
@@ -962,12 +1037,20 @@ class TestHelpers:
         planned = dashboard_gen.planned_for(
             {"component_type": "text", "title": "T"}, tag="h", plan=None
         )
-        component, error = dashboard_gen.validate_answer(
+        component, error, checks = dashboard_gen.validate_answer(
             _y(component_type="text", title="Cohort", order=3, body="Headline"), planned, None
         )
         assert error is None
         assert component["tag"] == "h"
         assert component["body"] == "Headline"
+        # A text tile has no collection, so two of the four gates decline to
+        # run and say why rather than reporting a pass they did not earn.
+        assert [(c.layer, c.status) for c in checks] == [
+            ("model", "passed"),
+            ("style", "skipped"),
+            ("substance", "passed"),
+            ("schema", "skipped"),
+        ]
 
     def test_fill_intent_appends_the_instruction(self):
         ctx = iris_context().collections[0]

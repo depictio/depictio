@@ -258,7 +258,9 @@
   <path d="M1445.0,495.5 C1447.8,491.2 1449.6,487.4 1451.1,484.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M1445.3,495.9 C1443.5,491.9 1440.8,487.3 1438.9,483.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <text x="1288.0" y="470.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the answer, in the CLI's own YAML grammar</text>
-  <text x="880.0" y="470.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">what the answer has to pass</text>
+  <text x="880.0" y="440.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="15" fill="#1e1e1e" text-anchor="middle" font-weight="bold">what the answer has to pass</text>
+  <text x="880.0" y="460.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#5c5c5c" text-anchor="middle" font-weight="normal">generate-dashboard, component-from-prompt, suggest-components</text>
+  <text x="880.0" y="478.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="12" fill="#5c5c5c" text-anchor="middle" font-weight="normal">in that order of depth: only the generator reaches the probe</text>
   <path d="M1350.0,500.0 L1540.0,500.0 L1540.0,619.0 L1540.0,619.0 L1530.5,622.4 L1521.0,625.5 L1511.5,627.9 L1502.0,629.5 L1492.5,630.0 L1483.0,629.5 L1473.5,627.9 L1464.0,625.5 L1454.5,622.4 L1445.0,619.0 L1435.5,615.6 L1426.0,612.5 L1416.5,610.1 L1407.0,608.5 L1397.5,608.0 L1388.0,608.5 L1378.5,610.1 L1369.0,612.5 L1359.5,615.6 L1350.0,619.0 Z" fill="#fff9db" stroke="none"/>
   <path d="M1349.6,499.6 C1414.2,501.3 1476.0,498.7 1539.4,499.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M1350.6,499.4 C1413.5,501.0 1476.5,501.3 1540.1,499.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
@@ -371,18 +373,18 @@
   <path d="M574.5,671.1 C574.5,681.5 574.5,692.0 575.1,700.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M575.0,700.0 C577.8,696.3 580.2,692.6 581.2,687.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M574.9,700.5 C573.0,695.0 571.0,691.1 568.0,687.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <rect x="455.0" y="700.0" width="240.0" height="118.0" rx="6" fill="#ebfbee"/>
-  <path d="M455.5,700.6 C534.8,699.0 615.7,698.4 695.5,699.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M454.7,699.9 C534.3,700.5 615.0,699.7 695.3,700.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <rect x="375.0" y="700.0" width="320.0" height="118.0" rx="6" fill="#ebfbee"/>
+  <path d="M375.5,700.6 C481.5,699.0 589.0,698.4 695.5,699.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M374.7,699.9 C481.0,700.5 588.4,699.7 695.3,700.5" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M695.1,699.8 C696.3,738.3 694.3,778.5 694.5,817.3" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M695.6,700.8 C694.4,739.2 696.5,780.0 695.7,818.2" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M694.7,818.1 C616.0,816.6 535.6,818.3 455.7,818.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M694.2,817.5 C615.5,817.4 534.5,819.2 455.3,817.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M454.9,818.0 C453.7,779.2 454.6,739.6 455.1,699.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <path d="M454.4,818.6 C453.8,777.6 456.2,739.5 454.6,699.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
-  <text x="575.0" y="727.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">the render probe</text>
-  <text x="575.0" y="751.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the real render path,</text>
-  <text x="575.0" y="772.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">in process, never HTTP</text>
+  <path d="M694.7,818.1 C589.3,816.6 482.2,818.3 375.7,818.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M694.2,817.5 C588.8,817.4 481.2,819.2 375.3,817.9" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M374.9,818.0 C373.7,779.2 374.6,739.6 375.1,699.8" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <path d="M374.4,818.6 C373.8,777.6 376.2,739.5 374.6,699.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
+  <text x="535.0" y="727.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="18" fill="#1e1e1e" text-anchor="middle" font-weight="bold">the render probe</text>
+  <text x="535.0" y="751.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">the real render path, in process</text>
+  <text x="535.0" y="772.0" font-family="Virgil GS, Virgil, Excalifont, Comic Sans MS, Bradley Hand, cursive" font-size="14" fill="#5c5c5c" text-anchor="middle" font-weight="normal">text, image, map, multiqc: not probed</text>
   <path d="M698.5,759.1 C714.5,758.0 729.6,759.2 744.2,759.0" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M698.9,759.7 C714.7,757.3 729.3,757.3 745.1,759.4" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
   <path d="M744.6,759.3 C741.4,756.0 737.7,755.1 732.5,752.1" fill="none" stroke="#1e1e1e" stroke-width="1.7" stroke-linecap="round"/>
