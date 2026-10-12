@@ -53,6 +53,9 @@ def template_dir(tmp_path: Path) -> Path:
                         {"name": "SAMPLESHEET_FILE", "description": "Path to it, when omitted"},
                         {"name": "SKIP_QC", "description": "For a --skip_qc run (--var SKIP_QC)"},
                     ],
+                    "conditional": [
+                        {"if_var_present": "SKIP_QC", "remove_dc_tags": ["counts"]},
+                    ],
                 },
                 "workflows": [
                     {
@@ -162,14 +165,20 @@ def test_data_collections_name_the_paths_a_run_must_publish(
     assert by_tag["derived"]["reads"] == "`demo/thing.py`"
 
 
-def test_route_vars_keeps_pipeline_flags_and_drops_path_overrides(nfo: ModuleType) -> None:
-    optional = [
-        ("SAMPLESHEET_FILE", "Path to it, when omitted"),
-        ("SKIP_QC", "For a --skip_qc run (--var SKIP_QC)"),
-    ]
-    # `--var` alone is the depictio CLI flag every description mentions, so it
-    # must not be what makes a variable look like a pipeline route.
-    assert nfo._route_vars(optional) == [("SKIP_QC", "For a --skip_qc run (--var SKIP_QC)")]
+def test_route_vars_come_from_the_template_not_the_prose(
+    nfo: ModuleType, template_dir: Path
+) -> None:
+    """Only a variable the template gates a route on is a route.
+
+    `SAMPLESHEET_FILE` is a path override whose description happens to name a
+    pipeline flag, so any guess from the prose picks it up. Asking a maintainer
+    which routes are missing while quoting a path override at them wastes the
+    question, so the answer is read off `template.conditional`.
+    """
+    facts = nfo.collect_facts("demoseq", "1.2.0", projects_dir=template_dir)
+
+    assert [name for name, _ in facts.route_vars] == ["SKIP_QC"]
+    assert "SAMPLESHEET_FILE" in [name for name, _ in facts.optional_vars]
 
 
 def test_dashboard_url_falls_back_to_the_list_without_a_map(
@@ -191,13 +200,19 @@ def test_discussion_body_leads_with_a_checklist(nfo: ModuleType, template_dir: P
     # Five boxes, answerable without typing — a round that only accepts prose
     # gets no replies from volunteer maintainers.
     assert body.count("\n- [ ] ") == 5
-    assert "nf-core/demoseq writes them" in body
+    assert "nf-core/demoseq publishes today" in body
     # And the checklist comes before the reference tables it is a summary of.
     assert body.index("### The two-minute version") < body.index("<details>")
 
-    assert "**Is anything wrong or misleading?**" in body
-    assert "**What do you always look at that is not here?**" in body
-    assert "**Which real runs would this not fit?**" in body
+    # Each box names the ask it points at, so an unticked one files itself.
+    for name, _gloss in nfo.ASK_BUCKETS:
+        assert f"- [ ] **{name}**" in body
+        assert f"**{name}.**" in body
+
+    # The "Moved" ask quotes the paths a run must publish, which is the most
+    # concrete thing a maintainer can check.
+    assert "{DATA_ROOT}/c.tsv" in body
+    assert "### Where your answer goes" in body
     # Questions quote this template's own content back, which is what makes
     # them answerable rather than rhetorical.
     assert "`Samples`" in body

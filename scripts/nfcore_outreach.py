@@ -81,9 +81,6 @@ PR_BRANCH_MARKER = "nfcore-templates-"
 MAX_QUOTED_CARDS = 8
 MAX_QUOTED_TOOLS = 12
 
-# A pipeline flag named in a variable description ("mirrors --skip_multiqc").
-_FLAG_RE = re.compile(r"--[a-z][a-z0-9_]*")
-
 
 # ---------------------------------------------------------------------------
 # Facts, read out of the shipped template
@@ -116,6 +113,7 @@ class PipelineFacts:
     description: str
     required_vars: list[tuple[str, str]] = field(default_factory=list)
     optional_vars: list[tuple[str, str]] = field(default_factory=list)
+    route_vars: list[tuple[str, str]] = field(default_factory=list)
     dashboards: list[DashboardFacts] = field(default_factory=list)
     data_collections: list[dict[str, Any]] = field(default_factory=list)
     catalog_tools: list[str] = field(default_factory=list)
@@ -166,20 +164,30 @@ def _variables(template: dict) -> tuple[list[tuple[str, str]], list[tuple[str, s
     return required, optional
 
 
-def _route_vars(optional: list[tuple[str, str]]) -> list[tuple[str, str]]:
-    """The optional variables that stand for a pipeline route, not a path override.
+def _route_vars(template: dict) -> list[tuple[str, str]]:
+    """The variables that switch the template onto a different pipeline route.
 
-    A route variable's description names the pipeline flag it mirrors
-    (``--skip_multiqc``, ``--skip_alignment``), which is what makes the set
-    answerable: "which of your users' parameter combinations are missing here?".
-    A plain path override like ``SAMPLESHEET_FILE`` names none, and asking about
-    it only muddies the question.
+    Read off ``template.conditional``, whose ``if_var_present`` entries are the
+    template's own statement of which variables change what it renders. That is
+    the exact answer, where guessing from the prose is not: a plain path
+    override like ``SAMPLESHEET_FILE`` often names a pipeline flag in its
+    description (``--input``) without being a route at all, and asking a
+    maintainer which routes are missing while quoting one at them wastes the
+    question.
     """
-    return [
-        (name, description)
-        for name, description in optional
-        if [flag for flag in _FLAG_RE.findall(description) if flag != "--var"]
-    ]
+    block = _template_block(template)
+    gated = {
+        str(rule.get("if_var_present"))
+        for rule in (block.get("conditional") or [])
+        if isinstance(rule, dict) and rule.get("if_var_present")
+    }
+    if not gated:
+        return []
+    described = {
+        str(var.get("name", "")): str(var.get("description", "")).strip()
+        for var in (block.get("variables") or [])
+    }
+    return [(name, described.get(name, "")) for name in sorted(gated)]
 
 
 def _sections(node: dict) -> list[str]:
@@ -352,6 +360,7 @@ def collect_facts(
         description=str(block.get("description") or "").strip(),
         required_vars=required,
         optional_vars=optional,
+        route_vars=_route_vars(template),
         dashboards=dashboards,
         data_collections=_data_collections(template),
         catalog_tools=sorted(tools),
@@ -497,62 +506,145 @@ def _md_table(headers: list[str], rows: list[list[str]]) -> str:
     return "\n".join(out) + "\n"
 
 
+# The four things worth asking a pipeline maintainer, in the order a reply is
+# worth acting on. Naming them is what lets an answer file itself: a reply that
+# says "Moved: the parquet is under multiqc_data/ again since 3.25" is already
+# a ticket, where "looks off to me" is a conversation that has to be had first.
+ASK_BUCKETS = (
+    ("Wrong", "a number or a plot is incorrect or misleading"),
+    ("Missing", "something you always look at is not here"),
+    ("Moved", "an output path changed and the template is reading the old one"),
+    ("Conventions", "it breaks a house rule this pipeline has for presenting results"),
+)
+
+
+def _readable_pattern(raw: str) -> str:
+    """A scan regex, quoted back as a path a human reads rather than parses.
+
+    ``.*\\.deseq2\\.results\\.tsv$`` is precise and unreadable, and the anchors
+    and escaping carry nothing a maintainer checking "did this file move?"
+    needs. The template keeps the regex; this is only how it is shown.
+    """
+    out = raw.strip("`")
+    for token, replacement in (("\\.", "."), (".*", ""), ("$", ""), ("^", "")):
+        out = out.replace(token, replacement)
+    return out
+
+
+def _scanned_paths(facts: PipelineFacts, limit: int = 6) -> list[str]:
+    """The paths the template expects the run to publish, for the "Moved" ask.
+
+    The most concrete thing a maintainer can check in ten seconds, and the one
+    that silently breaks every template when a release reorganises its output.
+    Exact filenames lead: a pattern is a weaker claim about where a file lives,
+    so it is listed after and marked as one.
+    """
+    exact = [
+        f"`{_readable_pattern(row['reads'])}`"
+        for row in facts.data_collections
+        if row["how"] == "scanned file" and row["reads"] != "-"
+    ]
+    patterns = [
+        f"`{_readable_pattern(row['reads'])}` (matched anywhere under the run directory)"
+        for row in facts.data_collections
+        if row["how"] == "scanned pattern" and row["reads"] != "-"
+    ]
+    return (exact + patterns)[:limit]
+
+
 def _checklist(facts: PipelineFacts) -> str:
     """The two-minute version: five claims to tick, no prose required.
 
-    A volunteer maintainer will not write three paragraphs, and a review round
-    that only accepts paragraphs gets no replies at all. Every item is a claim
-    about this template that the person reading it is uniquely able to confirm
-    or refuse, so an unticked box is a finding on its own and the whole thing
-    can be answered without typing a word.
+    A volunteer maintainer will not write three paragraphs, and a round that
+    only accepts paragraphs gets no replies at all. Each box is phrased so that
+    ticking it is approval: an unticked box is the finding, and it points at
+    exactly one of the four asks below.
     """
     return (
         "### The two-minute version\n\n"
-        "Tick what is true. An unticked box tells me as much as a ticked one, so "
-        "please leave the ones you are not sure about alone.\n\n"
-        "- [ ] The headline numbers on the first tab are correct\n"
-        "- [ ] The tabs cover what I would want to see for a run of this pipeline\n"
-        f"- [ ] The files it reads are still where nf-core/{facts.pipeline} writes them\n"
-        "- [ ] I would point a user of this pipeline at this dashboard\n"
-        "- [ ] I would be happy for it to be linked from the pipeline's own docs\n\n"
+        "Tick what holds. Whatever you leave unticked is the useful part, and the "
+        "heading under it says what to tell me.\n\n"
+        "- [ ] **Wrong**: nothing on it is incorrect or misleading\n"
+        "- [ ] **Missing**: nothing I would always look at is absent\n"
+        f"- [ ] **Moved**: it reads the paths nf-core/{facts.pipeline} publishes today\n"
+        "- [ ] **Conventions**: it does not break how this pipeline's results are "
+        "normally presented\n"
+        "- [ ] **Go**: I would be happy for it to be linked from the pipeline's own docs\n\n"
     )
 
 
 def _review_questions(facts: PipelineFacts) -> str:
-    """Three questions grounded in this template's own content.
+    """The four asks, each quoting this template's own content back.
 
-    For anyone who wants to say more than the checklist allows. Each one quotes
-    something specific back — the headline numbers, the tab outline, the routes
-    the variables cover — so answering is a correction rather than an essay.
+    Every one names something specific the reader can check, so answering is a
+    correction rather than an essay, and the bucket name doubles as the label
+    the answer gets filed under.
     """
     cards = facts.card_titles[:MAX_QUOTED_CARDS]
     tabs = [t.title for t in facts.tabs if t.title]
-    routes = [name for name, _ in _route_vars(facts.optional_vars)]
+    routes = [name for name, _ in facts.route_vars]
+    paths = _scanned_paths(facts)
 
     quoted_cards = ", ".join(f"`{c}`" for c in cards) if cards else "_(none shown)_"
     quoted_tabs = ", ".join(f"`{t}`" for t in tabs) if tabs else "_(none declared)_"
-    quoted_routes = ", ".join(f"`{r}`" for r in routes) if routes else ""
 
     lines = [
-        "### If you have more than two minutes\n\n",
-        f"**Is anything wrong or misleading?** The headline numbers are {quoted_cards}. "
-        "A metric that is subtly wrong for your pipeline is the most expensive thing to "
-        "leave in, so please be blunt.\n\n",
-        f"**What do you always look at that is not here?** The tabs are {quoted_tabs}. "
-        "I am after the one plot or table you open first when you debug a run, whether "
-        "or not it is in MultiQC.\n\n",
+        "### What to tell me\n\n",
+        "Lead with the word, so I know what I am looking at. Any one of these is "
+        "worth a reply on its own.\n\n",
+        f"**Wrong.** The headline numbers are {quoted_cards}. A metric that is subtly "
+        "wrong for your pipeline is the most expensive thing to leave in, so please be "
+        "blunt. This is the one that blocks the template.\n\n",
+        f"**Missing.** The tabs are {quoted_tabs}. I am after the one plot or table you "
+        "open first when you debug a run, whether or not MultiQC already has it.\n\n",
     ]
-    if quoted_routes:
+
+    lines.append("**Moved.** It reads these out of a run:\n\n")
+    if paths:
+        lines += [f"- {path}\n" for path in paths]
         lines.append(
-            f"**Which real runs would this not fit?** It was told about {quoted_routes}. "
-            "Which parameter combinations that your users actually run are missing?\n\n"
+            "\nIf a recent release moved any of them, that one line saves the template "
+            "from breaking silently on every future run.\n\n"
         )
     else:
+        lines.append("_(everything is computed from files the recipes resolve themselves)_\n\n")
+
+    lines.append(
+        "**Conventions.** Anything this pipeline's community treats as the right way to "
+        "present these results that the dashboard gets wrong: a normalisation that is "
+        "always applied, a scale that is always log, a comparison that is never drawn. "
+        "Those are the rules we cannot read off the output files."
+    )
+    if routes:
+        quoted_routes = ", ".join(f"`{r}`" for r in routes)
         lines.append(
-            "**Which real runs would this not fit?** It assumes a default-profile run. "
-            "Which parameter combinations do your users run that would break that?\n\n"
+            f" It was told about {quoted_routes}; if your users routinely run something "
+            "else, that belongs here too."
         )
+    lines.append("\n\n")
     return "".join(lines)
+
+
+def _where_it_goes(facts: PipelineFacts, discussion_url: str | None) -> str:
+    """Say where an answer lands, so replying does not feel like shouting into a void.
+
+    Three surfaces with one job each. Naming them is also the answer to "where
+    do I go to see what came of this?", which is the question that decides
+    whether someone bothers a second time.
+    """
+    thread = f"[this thread]({discussion_url})" if discussion_url else "this thread"
+    return (
+        "### Where your answer goes\n\n"
+        f"Reply here, or in the nf-core Slack `#{facts.pipeline}` channel, whichever is "
+        f"less friction. Slack replies get copied into {thread} with attribution, because "
+        "Slack scrolls away and this does not.\n\n"
+        "- **Wrong** and **Moved** are fixed in the template before it ships, and I link "
+        "the commit back here.\n"
+        "- **Missing** and **Conventions** become issues linked to this thread, so you "
+        "can see whether they moved.\n"
+        "- Either way you get a reply here saying what happened. Nothing is collected "
+        "and then quietly dropped.\n\n"
+    )
 
 
 def render_discussion(
@@ -561,6 +653,7 @@ def render_discussion(
     docs_url_template: str,
     urls: dict[str, str],
     image_base: str = "",
+    discussion_url: str | None = None,
 ) -> str:
     """The GitHub Discussion body.
 
@@ -646,7 +739,7 @@ def render_discussion(
         )
     parts.append("\n</details>\n\n")
 
-    routes = _route_vars(facts.optional_vars)
+    routes = facts.route_vars
     if routes:
         parts.append(
             "<details>\n<summary><b>Runs it adapts to</b>: the pipeline routes it was "
@@ -660,41 +753,84 @@ def render_discussion(
         )
         parts.append("\n</details>\n\n")
 
-    parts.append(
-        "---\n\n"
-        "**What happens to your answer.** Anything concrete becomes an issue linked back "
-        "to this thread; anything that changes a panel goes into the template and the docs "
-        "page is regenerated from it. Either way I reply here, so you can see where it "
-        f"landed. If a thread is not your thing, the nf-core Slack `#{facts.pipeline}` "
-        "channel works too and I will bring it back here.\n"
-    )
+    parts.append("---\n\n")
+    parts.append(_where_it_goes(facts, discussion_url))
     return "".join(parts)
 
 
 def render_slack(
     facts: PipelineFacts,
     instance: str,
+    docs_url_template: str,
     urls: dict[str, str],
     discussion_url: str | None,
 ) -> str:
-    """The Slack draft. Short, one link, one ask — it competes with a busy channel."""
+    """The Slack draft, in mrkdwn, carrying the whole ask.
+
+    This is the message that actually reaches a maintainer: nf-core maintainers
+    live in Slack, and one that only says "the real content is over there" costs
+    a click and loses most of its readers. So it carries the three links and the
+    four asks itself, and a reply in-thread is a complete answer. The discussion
+    is where those replies are copied so they survive Slack's scrollback.
+
+    Slack link syntax is ``<url|label>`` and bold is ``*single asterisks*``;
+    this is deliberately not markdown.
+    """
     live, deep = dashboard_url(facts, instance, urls)
-    if not deep:
-        live = f'{live} (the "{project_tag(facts)}" project)'
-    where = discussion_url or "<discussion URL once created>"
+    docs = docs_url_template.format(pipeline=facts.pipeline, version=facts.version)
     tabs = ", ".join(t.title for t in facts.tabs if t.title)
-    return (
-        f"<!-- post in the nf-core Slack, #{facts.pipeline} -->\n\n"
-        f"Hi :wave: We build Depictio, an open-source dashboard layer for pipeline output, "
-        f"and we have put together a dashboard for nf-core/{facts.pipeline} {facts.version} "
-        f"straight from the AWS megatest run.\n\n"
-        f"It is live here, no login: {live}\n"
-        f"Tabs: {tabs}\n\n"
-        f"Before we call it done we would rather hear from the people who know this pipeline: "
-        f"is anything on it wrong, what do you always look at that is missing, and which "
-        f"parameter combinations would break it? Three questions, spelled out here: {where}\n\n"
-        f"Any answer, however short, is worth more than none. Happy to demo it live if that "
-        f"is easier.\n"
+    cards = ", ".join(facts.card_titles[:4])
+    paths = [p.strip("`") for p in _scanned_paths(facts, limit=3)]
+    where = "the project list" if not deep else "no login needed"
+
+    lines = [
+        f"<!-- post in the nf-core Slack, #{facts.pipeline} -->\n\n",
+        ":wave: Hi! We build "
+        "<https://github.com/depictio/depictio|Depictio>, an open-source dashboard layer "
+        f"for pipeline output. We have built one for *nf-core/{facts.pipeline} "
+        f"{facts.version}* straight from the AWS megatest run, and before calling it done "
+        "we would rather hear from the people who know this pipeline.\n\n",
+        "*Have a look*\n",
+        f"- <{live}|Open the dashboard> ({where}). Tabs: {tabs}\n",
+        f"- <{docs}|What it reads and how it is built>\n",
+    ]
+    if facts.pr:
+        lines.append(f"- <{facts.pr['url']}|The template source>\n")
+    if discussion_url:
+        lines.append(f"- <{discussion_url}|The GitHub discussion>, if a thread suits better\n")
+    lines.append("\n*What would help most*, any one of these is worth a reply:\n")
+    for name, gloss in ASK_BUCKETS:
+        lines.append(f"- *{name}*: {gloss}\n")
+    lines.append("\n")
+
+    if cards:
+        lines.append(f"To make that concrete: the headline numbers are {cards}")
+        if paths:
+            lines.append(f", and it reads `{paths[0]}` out of a run")
+        lines.append(". If any of that is off, that is the reply I am hoping for.\n\n")
+    lines.append(
+        "And the go/no-go: would you be happy for this to be linked from the pipeline's "
+        "own docs?\n\n"
+    )
+    lines.append(
+        "Anything you say here gets copied into the GitHub thread with attribution, so it "
+        "does not scroll away, and I reply there with what changed. Happy to demo it live "
+        "if that is easier.\n"
+    )
+    return "".join(lines)
+
+
+def _asks_table() -> str:
+    """What each named ask turns into, so the round's promise is written down once."""
+    outcomes = {
+        "Wrong": "Fixed in the template before it ships; the commit is linked back to the thread",
+        "Missing": "An issue linked to the thread, so the asker can see whether it moved",
+        "Moved": "A template scan fix, plus a check of whether other pipelines read the same path",
+        "Conventions": "An issue, and a note in the template's docs page about the rule",
+    }
+    return _md_table(
+        ["Reply", "What it means", "What it turns into"],
+        [[f"**{name}**", gloss, outcomes[name]] for name, gloss in ASK_BUCKETS],
     )
 
 
@@ -760,14 +896,27 @@ def render_epic(
         body.append(
             f"\nStill blocked on one of the above: {', '.join(f'`{p}`' for p in sorted(set(blocked)))}.\n"
         )
-    body.append(
-        "\n### How a reply gets handled\n\n"
-        "1. Anything concrete becomes an issue linked back to the thread.\n"
-        "2. Anything that changes a panel goes into the template YAML, and the docs page "
-        "is regenerated from it.\n"
-        "3. The thread is answered either way, so nobody wonders whether it landed.\n\n"
-        "_Generated by `scripts/nfcore_outreach.py`. Regenerate it rather than editing "
-        "cells._\n"
+    body.extend(
+        [
+            "\n### Where each thing lives\n\n"
+            "Three surfaces, one job each. The split is what stops feedback from being "
+            "collected and then lost.\n\n"
+            "| Surface | Its job | Why not somewhere else |\n"
+            "|---|---|---|\n"
+            "| The pipeline's nf-core Slack channel | Reaching the maintainers, and carrying "
+            "the whole ask so a reply in-thread is a complete answer | It is where they "
+            "already are; a message that only links elsewhere loses most of its readers |\n"
+            "| One GitHub discussion per pipeline | The durable record: every reply, Slack "
+            "ones copied in with attribution, and what changed because of them | Slack "
+            "scrolls away and is not readable by anyone outside the workspace |\n"
+            "| This issue | The state of the round, and the link to every change that came "
+            "out of it | A discussion is a conversation, not a status board |\n\n"
+            "### What each kind of reply turns into\n\n"
+            "The four asks are named in every thread so an answer files itself.\n\n",
+            _asks_table(),
+            "\n_Generated by `scripts/nfcore_outreach.py`. Regenerate it rather than "
+            "editing cells._\n",
+        ]
     )
     return "".join(body)
 
@@ -926,7 +1075,7 @@ def cmd_outreach(args: argparse.Namespace) -> int:
     for facts, title, body in bundles:
         (out_dir / f"{facts.pipeline}.md").write_text(f"<!-- title: {title} -->\n\n{body}")
         (out_dir / f"{facts.pipeline}.slack.md").write_text(
-            render_slack(facts, args.instance, urls, discussions.get(facts.pipeline))
+            render_slack(facts, args.instance, args.docs_url, urls, discussions.get(facts.pipeline))
         )
     (out_dir / "EPIC.md").write_text(
         render_epic(all_facts, args.instance, args.docs_url, urls, discussions)
