@@ -45,7 +45,17 @@ from depictio.tests.cli.s3_stubs import (
 
 PREFIX = "/depictio/api/v1/projects/builder"
 LOOPBACK = "http://localhost:8058"
-BUILDER_PATHS = ("tree", "suggest", "match", "tracks_manifest", "template", "metadata")
+BUILDER_PATHS = (
+    "tree",
+    "suggest",
+    "match",
+    "tracks_manifest",
+    "runs_regex",
+    "runs_overview",
+    "template",
+    "from_template",
+    "metadata",
+)
 
 
 def _user(is_admin: bool = True) -> UserBase:
@@ -335,7 +345,10 @@ ROUTE_BODIES = {
     "suggest": {"root": {"data_root": "/nowhere"}, "path": "a.csv"},
     "match": {"root": {"data_root": "/nowhere"}, "collection": SHEET},
     "tracks_manifest": {"root": {"data_root": "/nowhere"}, "files": ["a.bam"]},
+    "runs_regex": {"root": {"data_root": "/nowhere"}},
+    "runs_overview": {"root": {"data_root": "/nowhere"}, "runs_regex": "^run_\\d+$"},
     "template": {"draft": _draft(SHEET)},
+    "from_template": {"template_id": "nf-core/viralrecon/latest"},
     "metadata": {"repo_url": "https://github.com/nf-core/rnaseq"},
 }
 
