@@ -7166,10 +7166,14 @@ async function commentsJson<T>(res: Response, prefix: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-/** Whether the current user may read and write comments on this dashboard.
- *  Resolves `{can_comment: false}` rather than throwing on 401/403/404, so a
- *  viewer simply sees no comments UI. */
-export async function fetchCommentAccess(dashboardId: string): Promise<{ can_comment: boolean }> {
+/** Whether the current user may read and write comments on this dashboard,
+ *  and whether they may also moderate (resolve threads, publish annotations,
+ *  review proposals). `can_moderate` is absent from an older API, where every
+ *  commenter is an editor. Resolves `{can_comment: false}` rather than
+ *  throwing on 401/403/404, so a viewer simply sees no comments UI. */
+export async function fetchCommentAccess(
+  dashboardId: string,
+): Promise<{ can_comment: boolean; can_moderate?: boolean }> {
   const res = await authFetch(`${COMMENTS_BASE}/access/${enc(dashboardId)}`);
   if (res.status === 401 || res.status === 403 || res.status === 404) return { can_comment: false };
   return commentsJson(res, 'Failed to check comment access');

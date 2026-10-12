@@ -1367,6 +1367,26 @@ class DashboardVersionsConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="DEPICTIO_DASHBOARD_VERSIONS_")
 
 
+class CommentsConfig(BaseSettings):
+    """Who may use the comment threads of a dashboard.
+
+    Threads are internal to a project's editors and owners by default: the
+    discussion can name people and unreleased results. A showcase instance
+    wants the opposite: reviewers who can open a dashboard should be able to
+    comment on it without being able to edit it.
+    """
+
+    viewers_can_comment: bool = Field(
+        default=False,
+        description="Let anyone with viewer access to a project read and write its comment "
+        "threads. They still cannot resolve or reopen a thread, edit or publish an "
+        "annotation, or see an agent's proposals; those stay with editors and owners. "
+        "Anonymous visitors never comment (outside single-user mode).",
+    )
+
+    model_config = SettingsConfigDict(env_prefix="DEPICTIO_COMMENTS_")
+
+
 class IngestionConfig(BaseSettings):
     """Server-side limits and opt-ins for the data-ingestion path.
 
@@ -2253,6 +2273,7 @@ class Settings(BaseSettings):
     events: EventsConfig = Field(default_factory=EventsConfig)
     monitoring: MonitoringConfig = Field(default_factory=MonitoringConfig)
     dashboard_versions: DashboardVersionsConfig = Field(default_factory=DashboardVersionsConfig)
+    comments: CommentsConfig = Field(default_factory=CommentsConfig)
     ingestion: IngestionConfig = Field(default_factory=IngestionConfig)
     jobs: JobsConfig = Field(default_factory=JobsConfig)
     dashboard_yaml: DashboardYAMLConfig = Field(default_factory=DashboardYAMLConfig)

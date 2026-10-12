@@ -383,6 +383,10 @@ backend:
     DEPICTIO_GOOGLE_ANALYTICS_ENABLED: "false"
     DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: "G-XXXXXXXXXX"
 
+    # Let viewers read and write comment threads (editors and owners only otherwise).
+    # They still cannot resolve a thread, publish an annotation or review an agent's proposal.
+    DEPICTIO_COMMENTS_VIEWERS_CAN_COMMENT: "false"
+
     # Dashboard YAML Sync Feature (disabled by default in K8s)
     # When enabled, dashboards are synced to/from YAML files for version control
     # Requires writable persistent storage mounted at /app/dashboards

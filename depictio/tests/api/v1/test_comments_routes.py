@@ -176,6 +176,131 @@ class TestAccess:
 
 
 # ---------------------------------------------------------------------------
+# Viewers may comment (DEPICTIO_COMMENTS_VIEWERS_CAN_COMMENT)
+# ---------------------------------------------------------------------------
+@pytest.fixture
+def open_world(world):
+    with patch.object(settings.comments, "viewers_can_comment", True):
+        yield world
+
+
+class TestViewersCanComment:
+    def test_default_is_off(self):
+        assert settings.comments.viewers_can_comment is False
+
+    def test_access_says_comment_but_not_moderate(self, open_world):
+        v = run(cr.get_comment_access(open_world.main, current_user=open_world.viewer))
+        assert v.can_comment and not v.can_moderate
+        e = run(cr.get_comment_access(open_world.main, current_user=open_world.editor))
+        assert e.can_comment and e.can_moderate
+
+    @pytest.mark.parametrize("who", ["anonymous", "none"])
+    def test_anonymous_and_no_session_still_cannot(self, open_world, who):
+        user = None if who == "none" else getattr(open_world, who)
+        assert not run(cr.get_comment_access(open_world.main, current_user=user)).can_comment
+        if user is not None:
+            with pytest.raises(HTTPException) as e:
+                create(open_world, user)
+            assert status_of(e) == 403
+
+    def test_a_stranger_to_the_project_cannot(self, open_world):
+        with pytest.raises(HTTPException) as e:
+            create(open_world, _user())
+        assert status_of(e) == 403
+
+    def test_viewer_opens_a_thread_and_replies(self, open_world):
+        t = create(open_world, open_world.viewer)
+        assert t.status == "open" and t.created_by.user_id == str(open_world.viewer.id)
+        r = run(cr.add_comment(t.id, CommentCreate(body="more"), current_user=open_world.viewer))
+        assert [c.body for c in r.comments] == ["hello", "more"]
+        assert [x.id for x in listing(open_world, open_world.viewer)] == [t.id]
+
+    def test_viewer_sees_an_editors_thread(self, open_world):
+        t = create(open_world, open_world.editor)
+        assert [x.id for x in listing(open_world, open_world.viewer)] == [t.id]
+
+    def test_viewer_edits_only_their_own_comment(self, open_world):
+        t = create(open_world, open_world.editor)
+        with pytest.raises(HTTPException) as e:
+            run(
+                cr.edit_comment(
+                    t.id,
+                    t.comments[0].id,
+                    CommentUpdate(body="x"),
+                    current_user=open_world.viewer,
+                )
+            )
+        assert status_of(e) == 403
+
+    def test_viewer_deletes_their_own_thread_not_an_editors(self, open_world):
+        mine = create(open_world, open_world.viewer)
+        theirs = create(open_world, open_world.editor)
+        with pytest.raises(HTTPException) as e:
+            run(cr.delete_thread(theirs.id, current_user=open_world.viewer))
+        assert status_of(e) == 403
+        run(cr.delete_thread(mine.id, current_user=open_world.viewer))
+
+    def test_viewer_cannot_resolve_or_edit_an_annotation(self, open_world):
+        t = create(open_world, open_world.viewer)
+        with pytest.raises(HTTPException) as e:
+            run(
+                cr.update_thread(
+                    t.id, ThreadUpdate(status="resolved"), current_user=open_world.viewer
+                )
+            )
+        assert status_of(e) == 403
+        run(cr.update_thread(t.id, ThreadUpdate(status="resolved"), current_user=open_world.editor))
+
+    def test_viewer_cannot_publish_an_annotation(self, open_world):
+        with pytest.raises(HTTPException) as e:
+            create(open_world, open_world.viewer, annotation={**RANGE, "published": True})
+        assert status_of(e) == 403
+        t = create(open_world, open_world.viewer, annotation=RANGE)
+        assert t.annotation is not None and t.annotation.published is False
+        with pytest.raises(HTTPException) as e:
+            run(
+                cr.update_thread(
+                    t.id,
+                    ThreadUpdate(annotation={"published": True}),
+                    current_user=open_world.viewer,
+                )
+            )
+        assert status_of(e) == 403
+
+    def test_viewer_cannot_act_for_an_agent_or_review(self, open_world):
+        with pytest.raises(HTTPException) as e:
+            create(open_world, open_world.viewer, annotation=RANGE, agent=BOT)
+        assert status_of(e) == 403
+        proposal = create(open_world, open_world.editor, annotation=RANGE, agent=BOT)
+        with pytest.raises(HTTPException) as e:
+            run(
+                cr.review_thread(
+                    proposal.id, ThreadReview(decision="accepted"), current_user=open_world.viewer
+                )
+            )
+        assert status_of(e) == 404
+
+    def test_proposals_and_rejections_are_invisible_to_a_viewer(self, open_world):
+        proposal = create(open_world, open_world.editor, annotation=RANGE, agent=BOT)
+        assert listing(open_world, open_world.viewer) == []
+        assert listing(open_world, open_world.viewer, status="proposed") == []
+        counts = run(cr.count_threads(open_world.main, current_user=open_world.viewer))
+        assert counts == {"open": {}, "proposed": {}}
+        with pytest.raises(HTTPException) as e:
+            run(
+                cr.add_comment(proposal.id, CommentCreate(body="x"), current_user=open_world.viewer)
+            )
+        assert status_of(e) == 404
+        # The editor still sees it.
+        assert [x.id for x in listing(open_world, open_world.editor)] == [proposal.id]
+
+    def test_off_means_off(self, world):
+        with pytest.raises(HTTPException) as e:
+            create(world, world.viewer)
+        assert status_of(e) == 403
+
+
+# ---------------------------------------------------------------------------
 # Threads
 # ---------------------------------------------------------------------------
 class TestThreads:

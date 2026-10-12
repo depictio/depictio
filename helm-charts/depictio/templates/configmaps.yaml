@@ -137,6 +137,9 @@ data:
   {{- else }}
   DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID: {{ .Values.backend.env.DEPICTIO_GOOGLE_ANALYTICS_TRACKING_ID | default "G-XXXXXXXXXX" | quote }}
   {{- end }}
+  # Comment threads are for editors and owners unless this is "true": then anyone
+  # with viewer access to a project can read and write them (not moderate).
+  DEPICTIO_COMMENTS_VIEWERS_CAN_COMMENT: {{ .Values.backend.env.DEPICTIO_COMMENTS_VIEWERS_CAN_COMMENT | default "false" | quote }}
   # YAML Dashboard Sync configuration (disabled for K8s by default)
   DEPICTIO_DASHBOARD_YAML_ENABLED: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_ENABLED | default "false" | quote }}
   DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START: {{ .Values.backend.env.DEPICTIO_DASHBOARD_YAML_WATCHER_AUTO_START | default "false" | quote }}
