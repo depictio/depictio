@@ -14,6 +14,7 @@ import importlib
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from depictio.api.v1.configs.settings_models import AIConfig
 
@@ -44,6 +45,60 @@ class TestAIConfigDefaults:
     def test_key_never_in_repr(self):
         config = AIConfig(api_key="sk-secret-value")  # type: ignore[arg-type]
         assert "sk-secret-value" not in repr(config)
+
+    def test_dashboard_generation_is_off_by_default_with_its_limits(self):
+        config = AIConfig()
+        assert config.generate_dashboard_enabled is False
+        assert config.generate_max_components == 16
+        assert config.generate_max_sections == 4
+        assert config.generate_max_tokens_total == 150_000
+        assert config.generate_max_wall_clock_s == 180
+        assert config.generate_max_repairs_per_component == 1
+        assert config.generate_max_collections == 6
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("generate_max_components", 0),
+            ("generate_max_components", 41),
+            ("generate_max_sections", 0),
+            ("generate_max_sections", 9),
+            ("generate_max_tokens_total", 999),
+            ("generate_max_wall_clock_s", 9),
+            ("generate_max_repairs_per_component", -1),
+            ("generate_max_repairs_per_component", 4),
+            ("generate_max_collections", 0),
+            ("generate_max_collections", 13),
+        ],
+    )
+    def test_generation_knobs_are_bounded(self, field: str, value: int):
+        with pytest.raises(ValidationError):
+            AIConfig(**{field: value})
+
+    @pytest.mark.parametrize(
+        ("field", "value"),
+        [
+            ("generate_max_components", 1),
+            ("generate_max_components", 40),
+            ("generate_max_sections", 8),
+            ("generate_max_tokens_total", 1_000),
+            ("generate_max_wall_clock_s", 10),
+            ("generate_max_repairs_per_component", 0),
+            ("generate_max_repairs_per_component", 3),
+            ("generate_max_collections", 12),
+        ],
+    )
+    def test_generation_knob_bounds_are_inclusive(self, field: str, value: int):
+        assert getattr(AIConfig(**{field: value}), field) == value
+
+    def test_generation_env_override(self, monkeypatch):
+        monkeypatch.setenv("DEPICTIO_AI_GENERATE_DASHBOARD_ENABLED", "true")
+        monkeypatch.setenv("DEPICTIO_AI_GENERATE_MAX_COMPONENTS", "8")
+        monkeypatch.setenv("DEPICTIO_AI_GENERATE_MAX_COLLECTIONS", "2")
+        config = AIConfig()
+        assert config.generate_dashboard_enabled is True
+        assert config.generate_max_components == 8
+        assert config.generate_max_collections == 2
 
 
 def _reload_router_with(ai_enabled: bool):
@@ -108,9 +163,10 @@ class TestStatusFeatureFlags:
         payload = response.json()
         assert payload["status"] == "online"
         features = payload["features"]
-        # Default config: AI off, so both flags are false.
+        # Default config: AI off, so every AI flag is false.
         assert features["ai"] is False
         assert features["ai_user_keys"] is False
+        assert features["ai_generate_dashboard"] is False
 
     def test_user_keys_flag_requires_ai_enabled(self):
         """`ai_user_keys` must never be true while `ai` is false."""
@@ -127,3 +183,30 @@ class TestStatusFeatureFlags:
             assert features["ai_user_keys"] is False
         finally:
             settings.ai.enabled, settings.ai.allow_user_keys = original
+
+    @pytest.mark.parametrize(
+        ("ai_enabled", "generate_enabled", "expected"),
+        [
+            (False, False, False),
+            (False, True, False),
+            (True, False, False),
+            (True, True, True),
+        ],
+    )
+    def test_generate_dashboard_flag_needs_both_switches(
+        self, ai_enabled: bool, generate_enabled: bool, expected: bool
+    ):
+        """`ai_generate_dashboard` is true only when AI and the generation opt-in are both on."""
+        from depictio.api.v1.configs.config import settings
+
+        original = (settings.ai.enabled, settings.ai.generate_dashboard_enabled)
+        settings.ai.enabled, settings.ai.generate_dashboard_enabled = ai_enabled, generate_enabled
+        try:
+            from depictio.api.main import app
+
+            client = TestClient(app)
+            features = client.get("/depictio/api/v1/utils/status").json()["features"]
+            assert features["ai_generate_dashboard"] is expected
+            assert features["ai"] is ai_enabled
+        finally:
+            settings.ai.enabled, settings.ai.generate_dashboard_enabled = original

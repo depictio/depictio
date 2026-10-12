@@ -1092,6 +1092,13 @@ async def save_dashboard(
     # save None over it, and a duplicate round-trips its source's key, which would
     # make the next refresh of that source pick either copy.
     save_payload.pop("source_key", None)
+    # `ai_generation` is stamped by the AI generator and flipped only by its
+    # promote route. The client round-trips the whole document (the model
+    # defaults the field to None), so leaving it in the payload would let any
+    # autosave clear a draft flag, or forge one on a hand-made dashboard.
+    # Dropped from the `$set` on update, the stored value survives untouched;
+    # dropped on insert, a client-created dashboard is never born a draft.
+    save_payload.pop("ai_generation", None)
 
     if existing_dashboard:
         project_id = existing_dashboard.get("project_id")
@@ -7823,6 +7830,61 @@ def import_dashboard_yaml_content(
             detail="You don't have permission to create dashboards in this project.",
         )
 
+    return _persist_lite_dashboard(
+        lite,
+        project_id,
+        current_user,
+        overwrite=overwrite,
+        keep_existing=keep_existing,
+        source_key=source_key,
+        keep_titles=keep_titles,
+        main_title=main_title,
+        parent_source_key=parent_source_key,
+    )
+
+
+def _persist_lite_dashboard(
+    lite: DashboardDataLite,
+    project_id: PyObjectId,
+    current_user: User,
+    *,
+    overwrite: bool = False,
+    keep_existing: bool = False,
+    source_key: str | None = None,
+    keep_titles: bool = False,
+    main_title: str | None = None,
+    parent_source_key: str | None = None,
+    extra_fields: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Persist a validated single-tab ``DashboardDataLite`` into ``project_id``.
+
+    The persistence tail shared by the YAML import and the AI dashboard
+    generator: parent-tab wiring, the title collision rules (409 unless
+    ``overwrite``), ``to_full()``, project-driven visibility, ids and
+    timestamps, version and permissions, tag resolution and self-adapting
+    pruning, model validation (400), version capture and the insert or
+    replace.
+
+    Callers own the gates: auth mode, project resolution and the editor
+    permission check all happen before this is called. Synchronous (pymongo);
+    async callers run it through a thread.
+
+    Args:
+        lite: The parsed dashboard.
+        project_id: Target project, already permission-checked.
+        current_user: Becomes the owner of a new dashboard.
+        overwrite: Replace an existing dashboard with the same title instead
+            of raising 409.
+        keep_existing, source_key, keep_titles, main_title, parent_source_key:
+            The YAML import's own options (see ``import_dashboard_yaml_content``).
+        extra_fields: Top-level fields merged into the document right before
+            model validation (e.g. ``{"ai_generation": {...}}``). Keys
+            override whatever the pipeline wrote under the same name.
+
+    Returns:
+        The import payload: ``success``, ``updated``, ``status``, ``message``,
+        ``dashboard_id``, ``title``, ``project_id``, ``dash_url``.
+    """
     # A child tab's parent first: the dashboard this import replaces is then one
     # of the parent's tabs, as a main one is a main dashboard.
     parent_dashboard = None
@@ -7897,6 +7959,13 @@ def import_dashboard_yaml_content(
             (existing_dashboard or {}).get("category_colors"),
         ),
     )
+
+    # Server-side provenance (the AI generator's `ai_generation` stamp) rides
+    # in here. Merged last so it can never be shadowed by anything `to_full()`
+    # or the helper chain wrote, and validated by the model like every other
+    # field.
+    if extra_fields:
+        dashboard_dict.update(extra_fields)
 
     try:
         dashboard = DashboardData.from_mongo(dashboard_dict)

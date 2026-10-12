@@ -69,6 +69,7 @@ ingestion_runs_collection = db[settings.mongodb.collections.ingestion_runs_colle
 project_storage_collection = db[settings.mongodb.collections.project_storage_collection]
 ai_summaries_collection = db[settings.mongodb.collections.ai_summaries_collection]
 ai_analyses_collection = db[settings.mongodb.collections.ai_analyses_collection]
+ai_generations_collection = db[settings.mongodb.collections.ai_generations_collection]
 app_logs_collection = db[settings.mongodb.collections.app_logs_collection]
 instance_settings_collection = db[settings.mongodb.collections.instance_settings_collection]
 branding_assets_collection = db[settings.mongodb.collections.branding_assets_collection]

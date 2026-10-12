@@ -633,6 +633,21 @@ export interface FilterSectionSpec {
 /** Column name → categorical value → CSS colour. See `categoryColors.ts`. */
 export type CategoryColors = Record<string, Record<string, string>>;
 
+/** Provenance stamped on a dashboard the AI generated whole (see
+ *  POST /ai/generate-dashboard). Mirrors AIGenerationInfo in
+ *  depictio/models/models/dashboards.py. `draft` until the owner promotes
+ *  it from the editor banner; the autosave path never writes this field,
+ *  only the promote route changes it. */
+export interface DashboardAIGeneration {
+  status: 'draft' | 'promoted';
+  model: string;
+  prompt: string;
+  /** ISO timestamp of the run. */
+  generated_at: string;
+  run_id: string;
+  warnings: string[];
+}
+
 export interface DashboardData {
   _id?: string;
   dashboard_id?: string;
@@ -690,6 +705,8 @@ export interface DashboardData {
   /** Present only when a past version was requested. Carries everything the
    *  read-only banner needs, so previewing costs one request, not two. */
   preview?: DashboardPreviewInfo;
+  /** Present only on AI-generated dashboards; null or absent otherwise. */
+  ai_generation?: DashboardAIGeneration | null;
   [key: string]: unknown;
 }
 
@@ -4040,6 +4057,9 @@ export interface DashboardListEntry extends DashboardSummary {
   permissions?: DashboardPermissions;
   /** Some endpoints stamp this; matches the YAML/seed origin. */
   template_origin?: string;
+  /** Present only on AI-generated dashboards (the list projection carries
+   *  it so the card can flag a draft). */
+  ai_generation?: DashboardAIGeneration | null;
   /** Shape can drift slightly per backend version — keep it permissive. */
   [key: string]: unknown;
 }
