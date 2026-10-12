@@ -1,11 +1,11 @@
 /**
- * Live preview of one AI figure suggestion inside the "Add with AI" modal.
+ * Live preview of one AI figure suggestion on the Describe step.
  *
- * The depictio-react-ai package has no plotting dependency, so it exposes a
- * `renderSuggestionPreview` slot and the viewer fills it with this component:
- * the suggestion's (visu_type, dict_kwargs) is shaped into the same in-flight
- * metadata the builder uses and rendered through POST /figure/preview, so the
- * user sees the actual plot on the actual data before picking a suggestion.
+ * The depictio-react-ai package has no plotting dependency, so the viewer
+ * renders the suggestion itself: its (visu_type, dict_kwargs) is shaped into
+ * the same in-flight metadata the builder uses and rendered through
+ * POST /figure/preview, under the dashboard filters the builder previews
+ * apply, so the user sees the actual plot on the actual data before picking.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Loader, Stack, Text } from '@mantine/core';
@@ -13,28 +13,33 @@ import { useComputedColorScheme } from '@mantine/core';
 import Plot from 'react-plotly.js';
 import { previewFigure } from 'depictio-react-core';
 import type { FigureResponse } from 'depictio-react-core';
-import type { AvailableDataCollection, PlotSuggestion } from 'depictio-react-ai';
+import type { PlotSuggestion } from 'depictio-react-ai';
+import { useBuilderPreviewFilters } from '../useBuilderPreviewFilters';
 
 const PLOT_HEIGHT = 240;
 
 interface Props {
   suggestion: PlotSuggestion;
-  dc: AvailableDataCollection;
+  dcId: string;
+  wfId: string | null;
+  dashboardId: string | null;
 }
 
-const AISuggestionPreview: React.FC<Props> = ({ suggestion, dc }) => {
+const AISuggestionPreview: React.FC<Props> = ({ suggestion, dcId, wfId, dashboardId }) => {
   const [figure, setFigure] = useState<FigureResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const reqId = useRef(0);
   const colorScheme = useComputedColorScheme('light');
+  const previewFilters = useBuilderPreviewFilters();
 
   const inputKey = JSON.stringify({
-    dcId: dc.dcId,
-    wfId: dc.wfId,
+    dcId,
+    wfId,
     visuType: suggestion.visu_type,
     dictKwargs: suggestion.dict_kwargs,
     colorScheme,
+    filters: previewFilters,
   });
 
   useEffect(() => {
@@ -45,13 +50,15 @@ const AISuggestionPreview: React.FC<Props> = ({ suggestion, dc }) => {
       metadata: {
         index: 'ai-suggestion-preview',
         component_type: 'figure',
-        wf_id: dc.wfId,
-        dc_id: dc.dcId,
+        wf_id: wfId ?? undefined,
+        dc_id: dcId,
         mode: 'ui',
         visu_type: suggestion.visu_type,
         dict_kwargs: suggestion.dict_kwargs,
         code_content: null,
       },
+      filters: previewFilters,
+      dashboard_id: dashboardId ?? undefined,
       theme: colorScheme,
     })
       .then((res) => {

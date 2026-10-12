@@ -1,12 +1,16 @@
 /**
- * AI fill modal — sparkle button companion on the component builder.
+ * AI fill modal, the sparkle button companion on the component builder.
  *
- * The user is already in the builder with a component type + data
- * collection selected. They type a natural-language prompt; the modal
- * calls /ai/component-from-prompt; on success it hands the validated
- * dict to the host via `onApply`. The host (viewer) drops the dict
- * into `useBuilderStore.config` — the existing per-type builder + live
+ * The user is already in the builder with a component type selected and,
+ * for every type but `text`, a data collection. They type a natural-language
+ * prompt; the modal calls /ai/component-from-prompt; on success it hands the
+ * validated dict to the host via `onApply`. The host (viewer) drops the dict
+ * into `useBuilderStore.config` and the existing per-type builder + live
  * preview do everything else.
+ *
+ * `text` is the one type without a data collection: `dataCollectionId` is
+ * null and the request carries the dashboard id (added by the hook) so the
+ * model still has the dashboard as context.
  *
  * The modal stays open after a successful apply so the user can iterate
  * ("now color it by sample") without losing context, but the host can
@@ -30,7 +34,7 @@ import { Icon } from '@iconify/react';
 
 import { useComponentFromPrompt } from '../hooks';
 import { useAISession } from '../store';
-import { AI_ICON } from '../icons';
+import { AI_COLOR, AI_ICON, aiColorVar } from '../icons';
 import type {
   ComponentFromPromptResponse,
   ComponentType,
@@ -41,7 +45,8 @@ interface Props {
   onClose: () => void;
   dashboardId: string;
   componentType: ComponentType;
-  dataCollectionId: string;
+  /** Null only for `text`, which has no data collection to read from. */
+  dataCollectionId: string | null;
   /** Current StoredMetadata when revising an existing component. When
    *  set, the prompt is sent as a revision request rather than a fresh
    *  build. */
@@ -75,8 +80,9 @@ const AiFillModal: React.FC<Props> = ({
   const [showYaml, setShowYaml] = useState(false);
   const hasCreds = Boolean(session.llmKey) || serverKeyAvailable;
 
+  const needsDataCollection = componentType !== 'text';
   const canSend = Boolean(
-    prompt.trim() && hasCreds && dataCollectionId && !pending,
+    prompt.trim() && hasCreds && (dataCollectionId || !needsDataCollection) && !pending,
   );
 
   async function send() {
@@ -108,7 +114,7 @@ const AiFillModal: React.FC<Props> = ({
           <Icon
             icon={AI_ICON}
             width={18}
-            color="var(--mantine-color-violet-6)"
+            color={aiColorVar(6)}
           />
           <Text fw={600}>
             AI fill — {componentType}
@@ -129,7 +135,7 @@ const AiFillModal: React.FC<Props> = ({
             Set an LLM API key from the dashboard settings drawer to use AI fill.
           </Alert>
         )}
-        {!dataCollectionId && (
+        {needsDataCollection && !dataCollectionId && (
           <Alert color="yellow" variant="light">
             Pick a data collection in the previous step first.
           </Alert>
@@ -204,7 +210,7 @@ const AiFillModal: React.FC<Props> = ({
             </Button>
             <Button
               variant="filled"
-              color="violet"
+              color={AI_COLOR}
               leftSection={<Icon icon={AI_ICON} width={14} />}
               onClick={() => void send()}
               disabled={!canSend}

@@ -10,17 +10,13 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-VisuType = Literal[
-    "scatter",
-    "bar",
-    "line",
-    "histogram",
-    "box",
-    "violin",
-    "heatmap",
-]
+from depictio.models.components.constants import VISU_TYPES
+
+# Derived from the one visu_type list the lite model validates against, so a
+# suggestion the LLM is allowed to make is always one the figure accepts.
+VisuType = Literal[*VISU_TYPES]
 
 
 class PlotSuggestion(BaseModel):
@@ -53,15 +49,52 @@ class SuggestFiguresResponse(BaseModel):
     suggestions: list[PlotSuggestion]
 
 
+# Every component type the builder offers. The prompt sheets, the YAML
+# examples and the request validator are keyed on this Literal.
 ComponentType = Literal[
     "figure",
     "card",
     "interactive",
     "table",
+    "text",
     "image",
     "multiqc",
     "map",
+    "advanced_viz",
 ]
+
+
+class RoutedCollection(BaseModel):
+    """A data collection the router considered, resolved to its ids.
+
+    The router speaks in tags (that is what the inventory shows it); the
+    client needs ids to load the collection, so both are returned.
+    """
+
+    data_collection_id: str
+    data_collection_tag: str
+    workflow_id: str
+    workflow_tag: str | None = None
+
+
+RoutingSource = Literal["user", "single", "auto"]
+"""Who decided the component type and data collection of a request.
+
+``user``: both were pinned in the request, nothing was routed.
+``single``: the type was pinned and exactly one collection fitted it, so
+the collection was picked without an LLM call.
+``auto``: the router LLM call chose the type and/or the collection.
+"""
+
+
+class RoutingInfo(BaseModel):
+    """How the server settled the component type and data collection."""
+
+    source: RoutingSource
+    reason: str | None = None
+    # Other plausible collections the router named, resolved against the
+    # inventory. Empty when none were named (and always for "user").
+    alternatives: list[RoutedCollection] = Field(default_factory=list)
 
 
 class ComponentFromPromptResponse(BaseModel):
@@ -71,6 +104,11 @@ class ComponentFromPromptResponse(BaseModel):
     `DashboardDataLite.from_yaml(...)` and hand the React side both the
     raw YAML (for "show your work") and the validated dict the builder
     store consumes.
+
+    `component_type` is the type actually generated, which is the routed
+    one when the request left it open. `data_collection_id` /
+    `workflow_id` name the collection the component was generated
+    against (None for `text`), and `routing` says who chose them.
     """
 
     component_type: ComponentType
@@ -78,6 +116,9 @@ class ComponentFromPromptResponse(BaseModel):
     parsed: dict[str, Any]
     explanation: str = ""
     validation_attempts: int = 1
+    data_collection_id: str | None = None
+    workflow_id: str | None = None
+    routing: RoutingInfo | None = None
 
 
 class ExecutionStep(BaseModel):
@@ -268,16 +309,43 @@ class SuggestFiguresRequest(BaseModel):
 class ComponentFromPromptRequest(BaseModel):
     """Body for `/ai/component-from-prompt`.
 
+    The prompt comes first; `component_type` and `data_collection_id` are
+    optional pins. Whatever is left open is routed server-side from the
+    dashboard's project inventory before generation, which is why
+    `dashboard_id` is required as soon as either one is None (a `text`
+    request with a pinned type is the exception: it has no data source,
+    and only uses `dashboard_id` to describe the tiles it will sit next
+    to). A non-text type with a data collection is the fully pinned case
+    and generates exactly as before.
+
     `current` is set in the "modify existing component" flow — when the
     user clicks the AI fill button on an already-loaded component, we
     pass its current StoredMetadata so the LLM produces a revision
     rather than a fresh component.
     """
 
-    data_collection_id: str
+    data_collection_id: str | None = None
+    dashboard_id: str | None = None
     prompt: str = Field(min_length=1, max_length=2000)
-    component_type: ComponentType
+    component_type: ComponentType | None = None
     current: dict[str, Any] | None = None
+
+    @property
+    def needs_routing(self) -> bool:
+        """True when the server has to pick the type and/or the collection."""
+        return self.component_type is None or (
+            self.data_collection_id is None and self.component_type != "text"
+        )
+
+    @model_validator(mode="after")
+    def _dashboard_required_for_routing(self) -> "ComponentFromPromptRequest":
+        if self.needs_routing and not self.dashboard_id:
+            raise ValueError(
+                "dashboard_id is required when component_type or data_collection_id is left "
+                "for the server to choose (pin both to skip routing; only component_type='text' "
+                "needs no data_collection_id)"
+            )
+        return self
 
 
 class AnalyzeRequest(BaseModel):

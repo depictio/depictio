@@ -82,6 +82,7 @@ import {
   renderTable,
 } from 'depictio-react-core';
 import {
+  AI_COLOR,
   AI_ICON,
   AIAnalyzePanel,
   AIKeySection,
@@ -2015,7 +2016,7 @@ const App: React.FC = () => {
                     data-testid="ai-filters-chip"
                     size="compact-xs"
                     variant="light"
-                    color="violet"
+                    color={AI_COLOR}
                     leftSection={<Icon icon="mdi:filter-outline" width={12} />}
                     rightSection={<Icon icon="mdi:close" width={12} />}
                     onClick={handleClearAIFilters}
@@ -2029,7 +2030,7 @@ const App: React.FC = () => {
                     data-testid="ai-figure-overrides-chip"
                     size="compact-xs"
                     variant="light"
-                    color="violet"
+                    color={AI_COLOR}
                     leftSection={<Icon icon="mdi:chart-scatter-plot" width={12} />}
                     rightSection={<Icon icon="mdi:close" width={12} />}
                     onClick={handleClearAIFigureOverrides}
@@ -2048,7 +2049,7 @@ const App: React.FC = () => {
                   data-testid="ai-summarize-all"
                   size="compact-xs"
                   variant="subtle"
-                  color="violet"
+                  color={AI_COLOR}
                   leftSection={<Icon icon={AI_ICON} width={12} />}
                   loading={aiSummarizingAll}
                   onClick={() => void handleSummarizeAll()}

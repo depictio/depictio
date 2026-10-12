@@ -331,6 +331,10 @@
   width: 100%;
   max-width: 880px;
 }
+:root[data-chrome='glass'] .bgl-choice-grid:has(> :nth-child(3)) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 1240px;
+}
 :root[data-chrome='glass'] .bgl-choice-note {
   display: flex;
   align-items: center;
@@ -402,7 +406,8 @@
   translate: 3px 0;
 }
 @media (max-width: 47.99em) {
-  :root[data-chrome='glass'] .bgl-choice-grid {
+  :root[data-chrome='glass'] .bgl-choice-grid,
+  :root[data-chrome='glass'] .bgl-choice-grid:has(> :nth-child(3)) {
     grid-template-columns: minmax(0, 1fr);
   }
   :root[data-chrome='glass'] .bgl-source {

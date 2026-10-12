@@ -11,13 +11,17 @@ goal is to guarantee that:
 
 from __future__ import annotations
 
+from typing import get_args
+
 import pytest
 from pydantic import ValidationError
 
 from depictio.api.v1.endpoints.ai_endpoints import component_yaml
+from depictio.api.v1.endpoints.ai_endpoints.schemas import ComponentType
 
 # ---------------------------------------------------------------------------
-# Happy path — one minimal valid YAML for each of the 7 component types
+# Happy path: one minimal valid YAML for each data-bound component type
+# (text has no workflow / data collection and is covered separately)
 # ---------------------------------------------------------------------------
 
 
@@ -66,6 +70,17 @@ HAPPY_PATH_FIXTURES: dict[str, str] = {
         "lat_column: lat\n"
         "lon_column: lon\n"
     ),
+    "advanced_viz": (
+        "component_type: advanced_viz\n"
+        "workflow_tag: wf\n"
+        "data_collection_tag: dc\n"
+        "viz_kind: volcano\n"
+        "config:\n"
+        "  viz_kind: volcano\n"
+        "  feature_id_col: gene_id\n"
+        "  effect_size_col: log2FoldChange\n"
+        "  significance_col: padj\n"
+    ),
 }
 
 
@@ -76,6 +91,20 @@ def test_validate_single_happy_path(component_type: str) -> None:
     assert result["component_type"] == component_type
     assert result["workflow_tag"] == "wf"
     assert result["data_collection_tag"] == "dc"
+
+
+def test_happy_path_fixtures_cover_every_data_bound_type() -> None:
+    assert set(HAPPY_PATH_FIXTURES) | {"text"} == set(get_args(ComponentType))
+
+
+def test_validate_single_text_needs_no_data_source() -> None:
+    result = component_yaml.validate_single(
+        "component_type: text\ntitle: Overview\norder: 2\nbody: Two figures and a table.\n"
+    )
+    assert result["component_type"] == "text"
+    assert result["order"] == 2
+    assert result["body"] == "Two figures and a table."
+    assert result["workflow_tag"] == ""
 
 
 # ---------------------------------------------------------------------------
@@ -116,6 +145,36 @@ def test_validate_single_unknown_component_type() -> None:
     yaml_text = "component_type: gizmo\nworkflow_tag: wf\ndata_collection_tag: dc\n"
     with pytest.raises((ValidationError, ValueError)):
         component_yaml.validate_single(yaml_text)
+
+
+def test_untyped_dict_error_names_every_component_type() -> None:
+    """The retry prompt lists the accepted types; it must be the full set."""
+    yaml_text = "component_type: gizmo\nworkflow_tag: wf\ndata_collection_tag: dc\n"
+    with pytest.raises(ValueError) as exc_info:
+        component_yaml.validate_single(yaml_text)
+    msg = str(exc_info.value)
+    names = get_args(ComponentType)
+    assert len(names) == 9
+    for name in names:
+        assert name in msg
+
+
+def test_validate_single_advanced_viz_bad_role_reports_the_field() -> None:
+    """An unknown config key is a per-field error, not an "untyped dict"."""
+    yaml_text = (
+        "component_type: advanced_viz\n"
+        "workflow_tag: wf\n"
+        "data_collection_tag: dc\n"
+        "viz_kind: volcano\n"
+        "config:\n"
+        "  viz_kind: volcano\n"
+        "  foo_col: gene_id\n"
+    )
+    with pytest.raises((ValidationError, ValueError)) as exc_info:
+        component_yaml.validate_single(yaml_text)
+    msg = component_yaml.format_validation_error_for_llm(exc_info.value)
+    assert "foo_col" in msg
+    assert "untyped dict" not in msg
 
 
 def test_validate_single_invalid_yaml_grammar() -> None:

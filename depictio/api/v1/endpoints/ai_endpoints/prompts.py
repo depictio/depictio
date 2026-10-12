@@ -5,35 +5,31 @@ Kept in one place so prompt iteration is decoupled from route handlers.
 
 from __future__ import annotations
 
-from typing import Literal, get_args
+from collections.abc import Callable
+from functools import cache
+from typing import cast, get_args
+
+from pydantic import BaseModel
 
 from depictio.api.v1.configs.config import settings
 from depictio.api.v1.endpoints.ai_endpoints.context import (
+    COMPONENT_DC_TYPES,
     DashboardContext,
     DashboardDataContext,
     DataContext,
+    ProjectInventory,
 )
 from depictio.api.v1.endpoints.ai_endpoints.executor import grammar_block
-from depictio.api.v1.endpoints.ai_endpoints.schemas import AnalyzeMode
+from depictio.api.v1.endpoints.ai_endpoints.schemas import AnalyzeMode, ComponentType
 from depictio.models.components.constants import (
     AGGREGATION_COMPATIBILITY,
     INTERACTIVE_COMPATIBILITY,
     MAP_STYLES,
     MAP_TYPES,
+    MAX_INTERACTIVE_GROUP_SIZE,
     VISU_TYPES,
 )
 from depictio.models.components.lite import CardLiteComponent
-
-ComponentType = Literal[
-    "figure",
-    "card",
-    "interactive",
-    "table",
-    "image",
-    "multiqc",
-    "map",
-]
-
 
 # ---------------------------------------------------------------------------
 # Component-from-prompt: per-type constraint sheets + YAML examples
@@ -66,7 +62,97 @@ def _interactive_lines() -> str:
     )
 
 
-_CONSTRAINT_SHEETS: dict[str, str] = {
+# How many ranked kinds the advanced_viz sheet lists: the confident ones up to
+# MAX_ADVANCED_VIZ_KINDS, or the best FALLBACK_ADVANCED_VIZ_KINDS when nothing
+# reaches the recommended score. Candidate columns per role are capped too.
+MAX_ADVANCED_VIZ_KINDS = 6
+FALLBACK_ADVANCED_VIZ_KINDS = 3
+MAX_ROLE_CANDIDATES = 4
+
+
+@cache
+def _viz_config_models() -> dict[str, type[BaseModel]]:
+    """viz_kind -> its config model, read off the ``VizConfig`` union."""
+    from depictio.models.components.advanced_viz.configs import VizConfig
+
+    union = get_args(VizConfig)[0]
+    return {model.model_fields["viz_kind"].default: model for model in get_args(union)}
+
+
+def _advanced_viz_sheet(data_ctx: DataContext | None) -> str:
+    """ADVANCED_VIZ sheet, ranked against the columns of the request's DC.
+
+    Eighteen kinds with a dozen config keys each would drown the prompt, so
+    the sheet is generated per request from the same scorer that drives the
+    builder's "Recommended" picker: the confident kinds (score at or above
+    RECOMMENDED_SCORE), or the best few when nothing reaches it. Every role
+    is printed under the exact config key the renderer reads
+    (``role_config_key`` covers the list-typed exceptions), with the columns
+    the ranker already matched to it. The kind's remaining config keys are
+    listed by name because the config models forbid unknown keys.
+    """
+    from depictio.models.components.advanced_viz.catalog import role_config_key
+    from depictio.models.components.advanced_viz.schemas import (
+        RECOMMENDED_SCORE,
+        role_dtype_specs,
+        suggest_viz_kinds,
+    )
+
+    schema = {c.name: c.dtype for c in data_ctx.columns} if data_ctx else {}
+    ranked = suggest_viz_kinds(schema, dc_type=data_ctx.dc_type if data_ctx else None)
+    picks = [s for s in ranked if s.score >= RECOMMENDED_SCORE][:MAX_ADVANCED_VIZ_KINDS]
+    if not picks:
+        picks = ranked[:FALLBACK_ADVANCED_VIZ_KINDS]
+
+    lines = [
+        "ADVANCED_VIZ: domain-specific plot. Required: viz_kind, config.",
+        "config.viz_kind must repeat viz_kind. Choose ONE kind below (ranked by fit to",
+        "the DATASET SCHEMA) and bind each role to a column under the exact config key",
+        "shown. config accepts ONLY the keys listed for that kind; unknown keys are",
+        "rejected. Leave optional settings out unless the user asks for them.",
+    ]
+    for suggestion in picks:
+        kind = suggestion.viz_kind
+        lines.append(f"- viz_kind: {kind} (fit {suggestion.score:.2f})")
+        role_keys: set[str] = set()
+        for role, spec in role_dtype_specs(kind).items():
+            key = role_config_key(kind, role)
+            role_keys.add(key)
+            need = "required" if spec["required"] else "optional"
+            dtypes = "|".join(cast("list[str]", spec["dtypes"]))
+            line = f"    config.{key}: {need} column ({dtypes})"
+            description = str(spec["description"] or "").strip()
+            if description:
+                line += f". {description}"
+            candidates = (suggestion.role_candidates.get(role) or [])[:MAX_ROLE_CANDIDATES]
+            if candidates:
+                line += f" Candidates: {', '.join(candidates)}."
+            lines.append(line)
+        model = _viz_config_models().get(kind)
+        if model is not None:
+            fields = model.model_fields
+            required = [
+                f"{name} ({info.description})" if info.description else name
+                for name, info in fields.items()
+                if info.is_required() and name not in role_keys
+            ]
+            optional = [
+                name
+                for name, info in fields.items()
+                if not info.is_required() and name != "viz_kind" and name not in role_keys
+            ]
+            if required:
+                lines.append(f"    required settings: {'; '.join(required)}")
+            if optional:
+                lines.append(f"    optional settings: {', '.join(optional)}")
+        if suggestion.unmet_roles:
+            lines.append(f"    no compatible column for: {', '.join(suggestion.unmet_roles)}")
+    return "\n".join(lines)
+
+
+# One sheet per component type. Most are static text; a callable is rendered
+# per request against the DataContext (None for types with no data source).
+_CONSTRAINT_SHEETS: dict[str, str | Callable[[DataContext | None], str]] = {
     "figure": (
         f"FIGURE: Plotly Express chart. Required: visu_type, dict_kwargs.\n"
         f"  visu_type ∈ {{{', '.join(VISU_TYPES)}}}\n"
@@ -92,12 +178,22 @@ _CONSTRAINT_SHEETS: dict[str, str] = {
         f"{_interactive_lines()}\n"
         "Timeline requires timescale ∈ (year, month, day, hour, minute).\n"
         "Optional: filter_expr, placement (left|top — only Timeline supports top),\n"
-        "group (≤ 3 components share a group), title, icon_name."
+        f"group (≤ {MAX_INTERACTIVE_GROUP_SIZE} components share a group), title, icon_name."
     ),
     "table": (
         "TABLE: tabular view of the DC. Optional: columns (list of column names to show),\n"
         "page_size (default 10), sortable, filterable, row_selection_enabled +\n"
         "row_selection_column (selecting rows filters other components)."
+    ),
+    "text": (
+        "TEXT: narrative tile, a heading plus one paragraph. It has no data source:\n"
+        "do NOT emit workflow_tag or data_collection_tag.\n"
+        "  title: the heading text.\n"
+        "  body: ONE paragraph. Only inline **bold**, *italic* and `code` are rendered;\n"
+        "  no lists, no headings, no links, no line breaks.\n"
+        "  order: heading level 1-6 (default 1; 2-3 for a section, 4-6 for a note).\n"
+        "  alignment ∈ {left, center, right} (default left).\n"
+        "  vertical_alignment ∈ {top, center, bottom} (default center)."
     ),
     "image": (
         "IMAGE: thumbnail grid from an image-path column. Required: image_column.\n"
@@ -119,6 +215,7 @@ _CONSTRAINT_SHEETS: dict[str, str] = {
         f"map_style ∈ {{{', '.join(MAP_STYLES)}}}. Optional: color_column, size_column,\n"
         "hover_columns, text_column, opacity, size_max, title."
     ),
+    "advanced_viz": _advanced_viz_sheet,
 }
 
 
@@ -155,6 +252,14 @@ workflow_tag: <workflow_tag from context>
 data_collection_tag: <data_collection_tag from context>
 columns: []
 """,
+    "text": """\
+component_type: text
+title: <heading>
+order: 3
+alignment: left
+vertical_alignment: top
+body: <one paragraph>
+""",
     "image": """\
 component_type: image
 workflow_tag: <workflow_tag from context>
@@ -176,11 +281,26 @@ map_type: scatter_map
 lat_column: <numeric column>
 lon_column: <numeric column>
 """,
+    "advanced_viz": """\
+component_type: advanced_viz
+workflow_tag: <workflow_tag from context>
+data_collection_tag: <data_collection_tag from context>
+viz_kind: volcano
+config:
+  viz_kind: volcano
+  feature_id_col: <string column>
+  effect_size_col: <float column>
+  significance_col: <float column>
+  significance_threshold: 0.05
+  effect_threshold: 1.0
+""",
 }
 
 
-def _constraint_sheet(component_type: ComponentType) -> str:
-    return _CONSTRAINT_SHEETS[component_type]
+def _constraint_sheet(component_type: ComponentType, data_ctx: DataContext | None) -> str:
+    """The constraint sheet for one type; rendered per request when it is data-driven."""
+    sheet = _CONSTRAINT_SHEETS[component_type]
+    return sheet(data_ctx) if callable(sheet) else sheet
 
 
 def _example_yaml(component_type: ComponentType) -> str:
@@ -200,16 +320,24 @@ def _data_tags_block(ctx: DataContext) -> str:
 
 
 def component_from_prompt_messages(
-    ctx: DataContext,
+    ctx: DataContext | None,
     prompt: str,
     component_type: ComponentType,
     current: dict | None = None,
+    *,
+    dashboard_block: str | None = None,
 ) -> list[dict]:
     """System + user messages for the /ai/component-from-prompt endpoint.
 
     `current` is set in the "modify existing component" flow — we
     include its YAML representation so the LLM can produce a revision
     rather than a from-scratch component.
+
+    `ctx` is None for a component with no data source (text). The dataset
+    sections are then replaced by `dashboard_block`, a summary of what is
+    already on the dashboard, so the model writes text that fits the tiles
+    it will sit next to. With a data source, `dashboard_block` is optional
+    extra context and the prompt is otherwise unchanged.
     """
     mode_note = "REVISE an existing component" if current else "CREATE a new component"
 
@@ -225,15 +353,18 @@ def component_from_prompt_messages(
             "Modify the fields the user asked to change. Preserve everything else.\n"
         )
 
-    system = f"""You are filling a single Depictio dashboard component for the user.
-You will {mode_note} of type "{component_type}".
-
-OUTPUT FORMAT — strict:
-- Emit ONE YAML mapping describing the component.
-- No prose, no Markdown fences, no comments — YAML only.
-- Use the workflow_tag and data_collection_tag from CONTEXT verbatim.
-
-CONTEXT:
+    # Always present for a type with no data source (it is then the only
+    # context there is); opt-in extra context for the data-driven types.
+    if dashboard_block or ctx is None:
+        dashboard_section = (
+            "\nDASHBOARD COMPONENTS (already on the dashboard):\n"
+            f"{dashboard_block or '(no dashboard context available)'}\n"
+        )
+    else:
+        dashboard_section = ""
+    if ctx is not None:
+        tags_rule = "- Use the workflow_tag and data_collection_tag from CONTEXT verbatim."
+        context_section = f"""CONTEXT:
 {ctx.metadata_block()}
 
 DATA SOURCE TAGS (use these literally):
@@ -244,19 +375,154 @@ DATASET SCHEMA:
 
 SAMPLE ROWS:
 {ctx.sample_block()}
+{dashboard_section}"""
+        columns_rule = "- Reference only column names that appear in DATASET SCHEMA."
+    else:
+        tags_rule = (
+            "- Do not emit workflow_tag or data_collection_tag: this type has no data source."
+        )
+        context_section = (
+            "CONTEXT:\n"
+            "This component has no data source. It is a narrative tile on a dashboard.\n"
+            f"{dashboard_section}"
+        )
+        columns_rule = (
+            "- Describe what CONTEXT says is on the dashboard; do not invent numbers or columns."
+        )
 
+    system = f"""You are filling a single Depictio dashboard component for the user.
+You will {mode_note} of type "{component_type}".
+
+OUTPUT FORMAT — strict:
+- Emit ONE YAML mapping describing the component.
+- No prose, no Markdown fences, no comments — YAML only.
+{tags_rule}
+
+{context_section}
 COMPONENT CONSTRAINTS:
-{_constraint_sheet(component_type)}
+{_constraint_sheet(component_type, ctx)}
 
 EXAMPLE SHAPE FOR component_type="{component_type}":
 ```yaml
 {_example_yaml(component_type)}```
 {current_block}
 RULES:
-- Reference only column names that appear in DATASET SCHEMA.
+{columns_rule}
 - Match user intent literally: if they ask for "histogram of x", emit a histogram
   with that x — do not add color/facet/size unless they explicitly asked.
 - The YAML must be valid against the Depictio Lite schema for the chosen type.
+"""
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": prompt},
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Component routing: prompt -> (component_type, data_collection_tag)
+# ---------------------------------------------------------------------------
+
+# What each type is and when a user's wording calls for it, which is the
+# question the router answers. The constraint sheets say how to *fill* a type
+# and are far too long for the router, so this is its own short description.
+_ROUTING_HINTS: dict[str, str] = {
+    "figure": (
+        "Plotly Express chart. Use for a generic chart (scatter, bar, box, "
+        "histogram, line, violin) of a table."
+    ),
+    "card": (
+        "single aggregated statistic. Use for one headline number (count, mean, "
+        "sum, min, max), optionally with a breakdown."
+    ),
+    "interactive": (
+        "filter control. Use for a widget (select, slider, date range) that "
+        "narrows the other tiles."
+    ),
+    "table": "tabular view. Use for the raw rows of a collection.",
+    "text": (
+        "narrative tile, a heading plus one paragraph. Use for prose only "
+        "(title, introduction, note). Never needs a data collection."
+    ),
+    "image": "thumbnail grid. Use for a gallery from an image-path column.",
+    "multiqc": "one MultiQC report plot. Use for QC metrics per sample.",
+    "map": (
+        "tile-based map. Use for points or regions on a geographic map "
+        "(needs latitude/longitude columns)."
+    ),
+    "advanced_viz": (
+        "domain-specific plot. Use for a bioinformatics figure: volcano, MA, "
+        "Manhattan, PCA/UMAP embedding, enrichment dot plot, complex heatmap, "
+        "phylogenetic tree."
+    ),
+}
+
+
+def _type_lines(allowed_types: list[ComponentType]) -> str:
+    lines = []
+    for t in allowed_types:
+        fits = sorted(COMPONENT_DC_TYPES.get(t, frozenset()))
+        fits_note = (
+            f" Fits collections of type: {', '.join(fits)}." if fits else " Uses no collection."
+        )
+        lines.append(f"- {t}: {_ROUTING_HINTS[t]}{fits_note}")
+    return "\n".join(lines)
+
+
+ROUTE_ANSWER_SHAPE = """{
+  "component_type": "<one of the allowed types>",
+  "data_collection_tag": "<one tag from INVENTORY, or null for text>",
+  "reason": "<one sentence>",
+  "alternatives": ["<other plausible tags from INVENTORY, at most 3>"]
+}"""
+
+
+def route_component_messages(
+    prompt: str,
+    inventory: ProjectInventory,
+    allowed_types: list[ComponentType],
+    pinned_type: ComponentType | None = None,
+    pinned_dc_tag: str | None = None,
+) -> list[dict]:
+    """System + user messages for the routing call.
+
+    The model sees one line per allowed component type (what it is, when
+    to use it, which collection types fit) and one line per collection of
+    the project (tag, type, on-dashboard marker, description, columns),
+    then names the type and the tag as strict JSON. A pinned type or tag
+    is stated as fixed so the model only fills in the other half.
+    """
+    pins = []
+    if pinned_type:
+        pins.append(f'- component_type is fixed to "{pinned_type}". Return it unchanged.')
+    if pinned_dc_tag:
+        pins.append(f'- data_collection_tag is fixed to "{pinned_dc_tag}". Return it unchanged.')
+    pins_block = ("\nPINNED BY THE USER:\n" + "\n".join(pins) + "\n") if pins else ""
+
+    project = f" of project {inventory.project_name!r}" if inventory.project_name else ""
+    system = f"""You route a dashboard-component request: given the user's wording, pick the
+component type to build and the data collection to build it on. You do not
+build the component.
+
+COMPONENT TYPES (allowed answers):
+{_type_lines(allowed_types)}
+
+INVENTORY (data collections{project}; "on dashboard" = already used by this dashboard):
+{inventory.text_block()}
+{pins_block}
+RULES:
+- Pick exactly one component_type and, unless it is text, exactly one
+  data_collection_tag copied verbatim from INVENTORY.
+- Prefer collections marked "on dashboard" unless the request clearly needs
+  another one (it names columns or a subject only another collection has).
+- text never needs a collection: set data_collection_tag to null.
+- The collection's type must fit the component type (see the type lines).
+- alternatives lists other collections that could also serve the request
+  (tags from INVENTORY only, none of them the chosen one). Empty when none.
+- reason is one short sentence the user will read.
+
+Respond with valid JSON of the form:
+{ROUTE_ANSWER_SHAPE}
+Do not wrap the JSON in markdown fences.
 """
     return [
         {"role": "system", "content": system},
@@ -289,7 +555,7 @@ Respond with valid JSON of the form:
 
 Each PlotSuggestion follows this schema:
 {{
-    "visu_type": "scatter|bar|line|histogram|box|violin|heatmap",
+    "visu_type": "{"|".join(VISU_TYPES)}",
     "dict_kwargs": {{"x": "column_name", "y": "column_name", ...}},
     "title": "Chart title",
     "explanation": "Why this plot is useful"

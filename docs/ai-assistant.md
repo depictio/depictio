@@ -51,17 +51,44 @@ four user-facing flows:
      silently-matched-everything filter visible. Reports persist in the
      `ai_analyses` Mongo collection (derived artifacts, never written to
      the dashboard) and past runs reload from the modal's history pane.
-4. **Component from a prompt** — *Add component → With AI…* in the editor
-   takes a component type, a data collection and a prompt, has the LLM emit
-   YAML in the exact grammar `depictio-cli dashboard import` consumes,
-   validates it through `DashboardDataLite.from_yaml` (with one
-   feedback-and-retry round), and lands you on the builder's Design step
-   with the live preview rendering. An *AI fill / Refine with AI* button
-   inside the Design step iterates on the current component.
-   For figures the modal also offers a **Suggestions** mode: the LLM
-   proposes a few plots grounded in the data collection's actual columns
-   (title, rationale, display-only Python) and picking one lands in the
-   same Design-step hand-off — no prompt required.
+4. **Component from a prompt**: in the editor, *Add → Component* opens the
+   Add-component page, whose chooser has three tiles: *Manual*, *Catalog*
+   and, when the feature is on, *Describe with AI*. The AI tile is prompt
+   first: its stepper has two steps, **Describe** and Component Design,
+   with no Component Type grid and no Data Source step (the manual path
+   keeps both). On Describe you type what the component should show; the
+   component type and the data collection both default to **Auto**. Left
+   on Auto, the assistant picks them from the prompt and the project's data
+   collections, preferring the ones already on the dashboard, and says why.
+   Either can be pinned instead: the type is a row of tiles (Auto plus the
+   nine types: figure, card, interactive, table, multiqc, image, map, text,
+   advanced_viz) and the collection a row of chips (Auto plus the
+   dashboard's own collections, with the rest of the project behind an
+   *N other collections in the project* fold). A one-line summary under
+   each says what will be used. `text` needs no collection: the chips are
+   dimmed and inert, the summary reads *Not needed for text*, and the
+   prompt is answered with the dashboard itself as context.
+   *Generate* sends the prompt plus whatever was pinned; the LLM emits YAML
+   in the exact grammar `depictio-cli dashboard import` consumes, the
+   server validates it through `DashboardDataLite.from_yaml` (with one
+   feedback-and-retry round), and the builder lands on Component Design
+   with the live preview rendering. A routing notice there names the type
+   and collection that were used, with the assistant's reason when it
+   chose them; *Back* returns to Describe with both pinned to those values,
+   so a wrong guess costs one change and a regenerate. On Design a *Refine
+   with AI* button iterates on the current component (it reads *AI fill*
+   while the config is still empty).
+   For figures, once a collection is resolvable (pinned, or the dashboard
+   uses exactly one), the Describe step also offers a **Suggestions**
+   mode: the LLM proposes a few plots grounded in the collection's actual
+   columns (title, rationale, display-only Python) and *Use this* takes the
+   same hand-off into Component Design, no prompt required.
+   `advanced_viz` proposals are grounded on the kinds the chosen data
+   collection supports, so the model cannot pick a visualization the data
+   cannot feed.
+   Components authored this way carry an `ai_source` provenance mark,
+   shown as a small badge in the editor, the same way catalog components
+   carry `catalog_source`.
 
 ## Enabling
 
@@ -108,9 +135,19 @@ other read (`get_user_or_anonymous` + project-viewer permission checks):
 
 - `GET /ai/health` — configured model + key posture (no key material).
 - `POST /ai/suggest-figures` — data-grounded figure suggestions (the
-  *Suggestions* mode of the Add-with-AI modal).
+  *Suggestions* mode of the Describe step, figures only).
 - `POST /ai/component-from-prompt` — YAML component generation +
-  validation (2 attempts).
+  validation (2 attempts), behind *Generate*, *Use this* and *Refine with
+  AI*. `component_type` and `data_collection_id` are optional: a `null`
+  asks the server to route it from the prompt, and `dashboard_id` is
+  required whenever either is routed (the candidates are the dashboard's
+  project collections, those already on the dashboard preferred). The
+  response carries the validated component plus `data_collection_id`,
+  `workflow_id` and `routing` (`source` is `user` when both were pinned,
+  `single` when the collection was the only candidate, `auto` when the
+  model chose; with a `reason` and the `alternatives` it considered). For
+  `text`, `data_collection_id` and `workflow_id` are `null` and `routing`
+  may be `null`.
 - `POST /ai/resolve-filters` — single-shot NL → validated filter plan.
 - `POST /ai/analyze` — streaming (SSE over chunked POST). `mode` picks the
   loop: `mutate` (default) is the short ReAct loop with dashboard actions,

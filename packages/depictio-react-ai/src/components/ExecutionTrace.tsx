@@ -11,6 +11,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
+import { AI_COLOR, aiColorVar } from '../icons';
 
 import { formatPolarsCode } from '../formatPolars';
 import type { ExecutionStep } from '../types';
@@ -204,7 +205,7 @@ const ExecutionTrace: React.FC<Props> = ({ steps, defaultOpen = false }) => {
                   {step.code && (
                     <FoldableCode
                       label="Polars"
-                      color="violet"
+                      color={AI_COLOR}
                       content={formatPolarsCode(step.code)}
                     />
                   )}

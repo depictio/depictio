@@ -18,7 +18,7 @@ import {
 import { Icon } from '@iconify/react';
 
 import { useAnalyze } from '../hooks';
-import { AI_ICON } from '../icons';
+import { AI_COLOR, AI_ICON, aiColorVar } from '../icons';
 import MarkdownLite from './MarkdownLite';
 import { useAISession, useAIStore } from '../store';
 import type { AIChatMessage } from '../store';
@@ -153,11 +153,11 @@ const AIAnalyzePanel: React.FC<Props> = ({
       radius="md"
       p="xs"
       mb="xs"
-      style={{ borderColor: 'var(--mantine-color-violet-3)' }}
+      style={{ borderColor: aiColorVar(3) }}
     >
       <Stack gap="xs">
         <Group gap="xs" align="center" wrap="nowrap">
-          <Icon icon={AI_ICON} width={18} color="var(--mantine-color-violet-6)" />
+          <Icon icon={AI_ICON} width={18} color={aiColorVar(6)} />
           <Text size="sm" fw={600}>
             Ask the dashboard
           </Text>
@@ -183,7 +183,7 @@ const AIAnalyzePanel: React.FC<Props> = ({
                 <Button
                   size="compact-xs"
                   variant="light"
-                  color="violet"
+                  color={AI_COLOR}
                   leftSection={<Icon icon={AI_ICON} width={14} />}
                   onClick={() => setAnalysisOpen(true)}
                 >
@@ -238,7 +238,7 @@ const AIAnalyzePanel: React.FC<Props> = ({
         <Group gap="xs" align="center" wrap="wrap">
           <SegmentedControl
             size="xs"
-            color="violet"
+            color={AI_COLOR}
             value={promptMode}
             onChange={(v) => setPromptMode(v as AnalyzeMode)}
             data={[
@@ -280,7 +280,7 @@ const AIAnalyzePanel: React.FC<Props> = ({
           <Button
             size="sm"
             variant="filled"
-            color="violet"
+            color={AI_COLOR}
             leftSection={<Icon icon={AI_ICON} width={14} />}
             onClick={() => void send()}
             disabled={session.pending || !prompt.trim() || !hasCreds}
@@ -336,7 +336,7 @@ const AIAnalyzePanel: React.FC<Props> = ({
                         <Badge
                           size="xs"
                           variant="light"
-                          color={ex.mode === 'mutate' ? 'grape' : 'violet'}
+                          color={ex.mode === 'mutate' ? 'grape' : AI_COLOR}
                           style={{ flexShrink: 0 }}
                         >
                           {ex.mode === 'mutate' ? 'Update' : 'Interpret'}
@@ -372,7 +372,7 @@ const AIAnalyzePanel: React.FC<Props> = ({
                             <Button
                               size="compact-xs"
                               variant="light"
-                              color={isApplied ? 'teal' : 'violet'}
+                              color={isApplied ? 'teal' : AI_COLOR}
                               style={{
                                 flexShrink: 0,
                                 ...(isApplied ? { cursor: 'default' as const } : {}),
