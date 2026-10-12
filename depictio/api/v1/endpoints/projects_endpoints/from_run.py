@@ -1032,7 +1032,7 @@ def _create_project_from_inline_template(
     """
     from depictio.cli.cli.utils.template_preview import preview_data_root
     from depictio.project_builder.errors import BuilderRefused
-    from depictio.project_builder.plan import check_project, resolve_inline
+    from depictio.project_builder.plan import check_project, declared_variables, resolve_inline
     from depictio.project_builder.validate import validate_inline_template
 
     try:
@@ -1062,7 +1062,7 @@ def _create_project_from_inline_template(
         template_id=template_metadata.template_id,
         data_root=root.location,
         detected_runs=list(preview.detected_runs),
-        resolved_variables=dict(preview.resolved_variables),
+        resolved_variables=declared_variables(preview.resolved_variables, template_metadata),
         data_collections=_report_rows(preview.data_collections),
         pruned_optional_dcs=list(preview.pruned_optional_dcs),
         truncated=preview.truncated,

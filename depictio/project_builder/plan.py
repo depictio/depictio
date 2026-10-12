@@ -54,6 +54,17 @@ def check_project(config: dict[str, Any]) -> None:
         raise BuilderRefused(422, f"{where}: {first.get('msg')}", INVALID) from exc
 
 
+def declared_variables(resolved: dict[str, str], metadata) -> dict[str, str]:
+    """The resolved variables an ad-hoc template declares (``DATA_ROOT``).
+
+    Resolution also fills generic defaults (``GROUP_COL``, ``METADATA_ID_COL``)
+    that only a catalogue template's dashboards read; reporting them would
+    offer settings the builder's template has no use for.
+    """
+    names = {variable.name for variable in metadata.variables}
+    return {name: value for name, value in resolved.items() if name in names}
+
+
 def plan_inline(
     template: dict[str, Any], root: DataRoot, *, project_name: str | None = None
 ) -> dict[str, Any]:
@@ -71,7 +82,7 @@ def plan_inline(
         "detected_template": None,
         "data_root": root.location,
         "detected_runs": list(preview.detected_runs),
-        "resolved_variables": dict(preview.resolved_variables),
+        "resolved_variables": declared_variables(preview.resolved_variables, metadata),
         "data_collections": [row.model_dump() for row in report_rows(preview.data_collections)],
         "dashboards": [],
         "pruned_optional_dcs": list(preview.pruned_optional_dcs),

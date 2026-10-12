@@ -18,10 +18,16 @@ export function parseTemplate(project: ProjectListEntry): ParsedTemplate | null 
   return parseTemplateOrigin(project.template_origin);
 }
 
+/** The source of the templates the Project Builder makes (``custom/<name>``):
+ *  defined for one project, so no docs page exists for them. */
+export const BUILDER_TEMPLATE_SOURCE = 'custom';
+
 /** Build the depictio-docs page URL for a parsed template. Pattern:
  *  ``https://depictio.github.io/depictio-docs/stable/pipeline-templates/{source}/{repo}/``
- *  Falls back to the templates index when there's no repo segment. */
-export function templateDocsUrl(parsed: ParsedTemplate): string {
+ *  Falls back to the templates index when there's no repo segment; null for a
+ *  Project Builder template, which has no page. */
+export function templateDocsUrl(parsed: ParsedTemplate): string | null {
+  if (parsed.source.toLowerCase() === BUILDER_TEMPLATE_SOURCE) return null;
   const base = 'https://depictio.github.io/depictio-docs/stable/pipeline-templates';
   if (parsed.source && parsed.repo) {
     return `${base}/${parsed.source}/${parsed.repo}/`;
@@ -74,6 +80,7 @@ const TEMPLATE_SOURCES: Record<string, SourceMeta> = {
   iwc: { color: 'grape', Logo: IwcLogo, initials: 'IW' },
   bioconda: { color: 'teal', initials: 'BC' },
   depictio: { color: 'grape', initials: 'DE' },
+  [BUILDER_TEMPLATE_SOURCE]: { color: 'teal', initials: 'PB' },
 };
 
 function sourceMeta(source: string): SourceMeta {
@@ -165,7 +172,7 @@ export const TemplateChip: React.FC<{
         {parsed.full}
       </Text>
       <Text size="xs" c="dimmed">
-        Open Depictio docs
+        {docsUrl ? 'Open Depictio docs' : 'Defined with the Project Builder'}
       </Text>
     </Stack>
   );
@@ -207,16 +214,20 @@ export const TemplateChip: React.FC<{
       closeDelay={120}
       events={{ hover: true, focus: true, touch: false }}
     >
-      <Anchor
-        href={docsUrl}
-        target="_blank"
-        rel="noreferrer"
-        underline="never"
-        onClick={(e) => e.stopPropagation()}
-        style={{ display: 'inline-flex', alignItems: 'center' }}
-      >
-        {chip}
-      </Anchor>
+      {docsUrl ? (
+        <Anchor
+          href={docsUrl}
+          target="_blank"
+          rel="noreferrer"
+          underline="never"
+          onClick={(e) => e.stopPropagation()}
+          style={{ display: 'inline-flex', alignItems: 'center' }}
+        >
+          {chip}
+        </Anchor>
+      ) : (
+        <Box style={{ display: 'inline-flex', alignItems: 'center' }}>{chip}</Box>
+      )}
     </Tooltip>
   );
 };

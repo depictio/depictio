@@ -2203,14 +2203,20 @@ const ProjectHeader: React.FC<{
               Template:
             </Text>
             <TemplateChip parsed={tmpl} verbose />
-            <Anchor
-              href={templateDocsUrl(tmpl)}
-              target="_blank"
-              rel="noreferrer"
-              size="sm"
-            >
-              View documentation →
-            </Anchor>
+            {templateDocsUrl(tmpl) ? (
+              <Anchor
+                href={templateDocsUrl(tmpl) ?? undefined}
+                target="_blank"
+                rel="noreferrer"
+                size="sm"
+              >
+                View documentation →
+              </Anchor>
+            ) : (
+              <Text size="sm" c="dimmed">
+                Defined with the Project Builder
+              </Text>
+            )}
           </Group>
         )}
         {project.name && (
