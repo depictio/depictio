@@ -45,7 +45,7 @@ import IngestionResultTable from './IngestionResultTable';
 import { useStepSettling } from './hooks/useStepSettling';
 import { KIND_ACCENT, kindBadgeProps, PROJECT_KINDS } from './projectTypes';
 import type { ProjectKind } from './projectTypes';
-import { DisabledReason, GatedButton } from '../components/settings/SettingsSections';
+import { DisabledReason } from '../components/settings/SettingsSections';
 import { RunFolderTab } from './fromRun';
 import type { RunCreatedContext } from './fromRun';
 
@@ -905,7 +905,6 @@ export const ManifestCreatedModal: React.FC<{
   const accent = useBrandAccents();
   const dashboardId =
     report?.dashboards.find((d) => d.success && d.dashboard_id)?.dashboard_id ?? null;
-  const openDashboardReason = dashboardId ? null : 'No dashboard was imported for this project.';
 
   return (
     <Modal
@@ -939,21 +938,35 @@ export const ManifestCreatedModal: React.FC<{
           <Stack gap={6} align="flex-end">
             <Group justify="flex-end" gap="xs">
               <Button variant="default" onClick={onClose} data-testid="manifest-created-stay">
-                Stay on projects
+                Close
               </Button>
-              <GatedButton
-                color={accent.secondary}
-                leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
-                reason={openDashboardReason}
-                onClick={() => {
-                  if (dashboardId) window.location.assign(`/dashboard/${dashboardId}`);
-                }}
-                data-testid="manifest-created-open-dashboard"
-              >
-                Open dashboard
-              </GatedButton>
+              {dashboardId ? (
+                <Button
+                  color={accent.secondary}
+                  leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
+                  onClick={() => window.location.assign(`/dashboard/${dashboardId}`)}
+                  data-testid="manifest-created-open-dashboard"
+                >
+                  Open dashboard
+                </Button>
+              ) : (
+                report.project_id && (
+                  <Button
+                    color={accent.secondary}
+                    leftSection={<Icon icon="mdi:folder-open-outline" width={16} />}
+                    onClick={() => window.location.assign(`/projects/${report.project_id}`)}
+                    data-testid="manifest-created-open-project"
+                  >
+                    Open the project
+                  </Button>
+                )
+              )}
             </Group>
-            <DisabledReason reason={openDashboardReason} />
+            {!dashboardId && (
+              <Text size="xs" c="dimmed" ta="right">
+                No dashboard was imported: the project page lists its collections and ingestion.
+              </Text>
+            )}
           </Stack>
         </Stack>
       )}

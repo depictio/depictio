@@ -159,7 +159,8 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                   {dataRoot}
                 </Text>
               </Stack>
-              <Button color={accent.secondary}
+              <Button
+                color={accent.secondary}
                 variant="subtle"
                 size="compact-sm"
                 leftSection={<Icon icon="mdi:pencil-outline" width={14} />}

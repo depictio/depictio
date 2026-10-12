@@ -307,17 +307,17 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
 
   const tree = (
     <div ref={treePanelRef} tabIndex={-1} style={{ outline: 'none' }} data-testid="builder-tree-panel">
-    <FileTree
-      root={root}
-      refreshKey={treeRefresh}
-      activeFile={activeFile}
-      picked={picked}
-      matched={matched}
-      claimed={claimed}
-      onActivate={activate}
-      onTogglePick={togglePick}
-      onError={onRootError}
-    />
+      <FileTree
+        root={root}
+        refreshKey={treeRefresh}
+        activeFile={activeFile}
+        picked={picked}
+        matched={matched}
+        claimed={claimed}
+        onActivate={activate}
+        onTogglePick={togglePick}
+        onError={onRootError}
+      />
     </div>
   );
 
@@ -382,10 +382,9 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
     chosen: chosenStage,
     workflowDescribed,
   });
-  const disabledStages: Partial<Record<GuideStage, string>> = {
-    ...(focused ? {} : { define: 'Click a file in the tree first.' }),
-    ...(totalDcs === 0 ? { review: 'Add a data collection first.' } : {}),
-  };
+  const disabledStages: Partial<Record<GuideStage, string>> = {};
+  if (!focused) disabledStages.define = 'Click a file in the tree first.';
+  if (totalDcs === 0) disabledStages.review = 'Add a data collection first.';
   const guide = (compact: boolean) => (
     <GuideStrip
       stage={stage}

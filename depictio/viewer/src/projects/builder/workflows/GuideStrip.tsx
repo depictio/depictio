@@ -83,6 +83,9 @@ export const GuideStrip: React.FC<{
         // reader moved on knowing it: the defaults are a start, not an answer.
         const done = step.stage === 'workflow' ? (workflowDescribed || at > 1) && at > 0 : index < at;
         const current = index === at;
+        let state = 'next';
+        if (done) state = 'done';
+        else if (current) state = 'current';
         const reason = disabled[step.stage] ?? null;
         const hint =
           step.stage === 'workflow' && !workflowDescribed && at > 0 && !done
@@ -97,7 +100,7 @@ export const GuideStrip: React.FC<{
               if (!reason) onSelect(step.stage);
             }}
             data-testid={`builder-guide-${step.stage}`}
-            data-state={done ? 'done' : current ? 'current' : 'next'}
+            data-state={state}
             style={{
               display: 'flex',
               gap: 'var(--mantine-spacing-xs)',

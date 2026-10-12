@@ -142,7 +142,7 @@ def manifest_for(
     if sample_regex:
         try:
             compiled = re.compile(sample_regex)
-        except re.error as exc:
+        except (re.error, OverflowError, RecursionError) as exc:
             raise BuilderRefused(
                 422, f"Invalid sample regex: {exc}", "sample_regex_invalid"
             ) from exc

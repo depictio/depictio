@@ -138,7 +138,8 @@ export const RunPreviewStep: React.FC<RunPreviewStepProps> = ({
           <Stack gap="xs" align="flex-start">
             <Text size="sm">{error}</Text>
             {onGiveBucketDetails && (
-              <Button color={accent.secondary}
+              <Button
+                color={accent.secondary}
                 size="sm"
                 variant="light"
                 leftSection={<Icon icon="mdi:cloud-lock-outline" width={14} />}

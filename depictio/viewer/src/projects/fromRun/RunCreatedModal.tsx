@@ -27,7 +27,6 @@ import { Icon } from '@iconify/react';
 import { useBrandAccents } from 'depictio-react-core';
 import type { DetectedTemplate, FromRunReport, ManifestRefreshReport } from 'depictio-react-core';
 
-import { DisabledReason, GatedButton } from '../../components/settings/SettingsSections';
 import IngestionResultTable from '../IngestionResultTable';
 import {
   formatElapsed,
@@ -206,7 +205,6 @@ export const RunCreatedModal: React.FC<{
 
   const dashboardId =
     report?.dashboards.find((d) => d.success && d.dashboard_id)?.dashboard_id ?? null;
-  const noDashboardReason = dashboardId ? null : 'No dashboard was imported for this project.';
 
   // The watcher stops on a terminal report or when it gives up (`error`);
   // either way the outcome is read from the rows, so a give-up with rows
@@ -301,26 +299,36 @@ export const RunCreatedModal: React.FC<{
           <Stack gap={4}>
             <Group justify="flex-end" gap="xs">
               <Button variant="default" onClick={onClose} data-testid="run-created-stay">
-                Stay on projects
+                Close
               </Button>
-              <GatedButton
-                color={accent.secondary}
-                leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
-                reason={noDashboardReason}
-                onClick={() => {
-                  if (dashboardId) window.location.assign(`/dashboard/${dashboardId}`);
-                }}
-                data-testid="run-created-open-dashboard"
-              >
-                Open dashboard
-              </GatedButton>
+              {dashboardId ? (
+                <Button
+                  color={accent.secondary}
+                  leftSection={<Icon icon="mdi:view-dashboard-outline" width={16} />}
+                  onClick={() => window.location.assign(`/dashboard/${dashboardId}`)}
+                  data-testid="run-created-open-dashboard"
+                >
+                  Open dashboard
+                </Button>
+              ) : (
+                report.project_id && (
+                  <Button
+                    color={accent.secondary}
+                    leftSection={<Icon icon="mdi:folder-open-outline" width={16} />}
+                    onClick={() => window.location.assign(`/projects/${report.project_id}`)}
+                    data-testid="run-created-open-project"
+                  >
+                    Open the project
+                  </Button>
+                )
+              )}
             </Group>
-            {noDashboardReason && (
-              <Group justify="flex-end">
-                <DisabledReason reason={noDashboardReason} icon="mdi:information-outline" />
-              </Group>
+            {!dashboardId && (
+              <Text size="xs" c="dimmed" ta="right" data-testid="run-created-no-dashboard">
+                No dashboard was imported: the project page lists its collections and ingestion.
+              </Text>
             )}
-            {!noDashboardReason && state === 'running' && (
+            {dashboardId && state === 'running' && (
               <Text size="xs" c="dimmed" ta="right" data-testid="run-created-dashboard-hint">
                 Ingestion is still running: the dashboard fills in as collections finish.
               </Text>

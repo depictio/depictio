@@ -257,7 +257,8 @@ const LinksSection: React.FC<LinksSectionProps> = ({
         </UnstyledButton>
         <Group gap="xs" wrap="nowrap">
           <Tooltip label={disabledTip} disabled={canMutate}>
-            <Button color={accent.secondary}
+            <Button
+              color={accent.secondary}
               data-testid="add-link-btn"
               leftSection={<Icon icon="mdi:plus" width={16} />}
               onClick={openCreate}

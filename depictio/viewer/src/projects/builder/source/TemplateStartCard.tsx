@@ -12,7 +12,7 @@ import { Icon } from '@iconify/react';
 import { useBrandAccents } from 'depictio-react-core';
 import type { TemplateInfo } from 'depictio-react-core';
 
-import { ITEM_KINDS } from '../../fromRun/NextStepChoice';
+import { ITEM_KINDS, LeftOutList } from '../../fromRun/NextStepChoice';
 import { plural } from '../../fromRun/plural';
 import type { TemplateStart } from './useTemplateStart';
 
@@ -45,6 +45,9 @@ export const TemplateStartCard: React.FC<TemplateStartCardProps> = ({
   const title = template?.name ?? templateId;
   const pipeline = detected?.pipeline ?? null;
   const version = detected?.version ?? null;
+  const headline = pipeline
+    ? `Recognised ${pipeline}${version ? ` ${version}` : ''}`
+    : 'A template fits this folder';
 
   if (state.status === 'loaded') {
     const { carried, dropped } = state.result;
@@ -91,14 +94,7 @@ export const TemplateStartCard: React.FC<TemplateStartCardProps> = ({
                 {showDropped ? 'Hide' : 'Show'} what was left out
               </Anchor>
               <Collapse in={showDropped}>
-                <Stack gap={2} data-testid="builder-template-dropped">
-                  {[...lost, ...notCarried].map((item, i) => (
-                    <Text key={`${item.kind}-${item.tag ?? i}`} size="xs" c="dimmed">
-                      {item.tag ? `${item.tag}: ` : ''}
-                      {item.reason}
-                    </Text>
-                  ))}
-                </Stack>
+                <LeftOutList items={[...lost, ...notCarried]} testId="builder-template-dropped" />
               </Collapse>
             </>
           )}
@@ -117,7 +113,7 @@ export const TemplateStartCard: React.FC<TemplateStartCardProps> = ({
           </ThemeIcon>
           <Stack gap={2}>
             <Text size="sm" fw={600}>
-              {pipeline ? `Recognised ${pipeline}${version ? ` ${version}` : ''}` : 'A template fits this folder'}
+              {headline}
             </Text>
             <Text size="sm" c="dimmed">
               Depictio has a template for it{title ? `: ${title}` : ''}. Start the draft from it, or keep

@@ -192,6 +192,8 @@ export function useTemplateStart(options: {
   }, [ready, root, engine, handoff, dispatch, state.status]);
 
   const dismiss = useCallback(() => {
+    // Starting over leaves a pristine draft: the engine is read again for it.
+    engineSetFor.current = null;
     setState({ status: 'idle' });
     setKeptSavedDraft(false);
   }, []);

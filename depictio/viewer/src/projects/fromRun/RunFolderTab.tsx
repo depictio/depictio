@@ -127,6 +127,8 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
   const [inspectTarget, setInspectTarget] = useState('');
   const [detection, setDetection] = useState<DetectionState>({ status: 'idle' });
   const [choice, setChoice] = useState<Choice>(NO_CHOICE);
+  /** The reader chose to pick the template themselves (kept across steps). */
+  const [chooseMyself, setChooseMyself] = useState(false);
   /** What to do with the folder once a template is known (see `NextStepChoice`). */
   const [nextStep, setNextStep] = useState<NextStep>('use');
   const [projectName, setProjectName] = useState('');
@@ -409,7 +411,8 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
 
   const handlePipelineChange = (key: string | null) => {
     if (!key) {
-      setChoice(NO_CHOICE);
+      // Back to detection: the template read from the folder, if any.
+      setChoice(detectedId ? { templateId: detectedId, from: 'detected' } : NO_CHOICE);
       return;
     }
     const picked = groups.flatMap((g) => g.pipelines).find((p) => p.key === key);
@@ -698,6 +701,8 @@ const RunFolderTab: React.FC<RunFolderTabProps> = ({
               closestTemplateId={detected?.match === 'closest' ? detectedId : null}
               pipelineDetected={Boolean(pipeline && detectedPipeline && pipeline.key === detectedPipeline.key)}
               versionDetected={Boolean(choice.templateId && choice.templateId === detectedId)}
+              forced={chooseMyself}
+              onForcedChange={setChooseMyself}
               onPipelineChange={handlePipelineChange}
               onVersionChange={(templateId) => setChoice({ templateId, from: 'user' })}
               error={templatesError}

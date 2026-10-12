@@ -45,6 +45,14 @@ import { CATALOG_OPTIONS, ENGINE_OPTIONS, engineLabel, WorkflowLogo } from './Wo
 
 const MONO = { input: { fontFamily: 'var(--mantine-font-family-monospace)' } };
 
+function runsRegexDescription(detected: BuilderRunsRegex | null, regex: string | null | undefined): string {
+  if (!detected?.regex || detected.regex !== regex) {
+    return 'Which top-level folders are runs, as a regex on the folder name';
+  }
+  const left = detected.skipped.length ? ` (not: ${detected.skipped.join(', ')})` : '';
+  return `Read from the folders: ${detected.runs.length} of ${detected.folders} are runs${left}`;
+}
+
 interface WorkflowEditorProps {
   state: BuilderState;
   workflow: BuilderWorkflowState;
@@ -57,24 +65,25 @@ interface WorkflowEditorProps {
 
 export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ state, workflow, root, focusRequest = 0, onChange }) => {
   const accent = useBrandAccents();
-  // Folded for the lone default workflow: a single-workflow project never
-  // has to look at it.
   // Open until a collection exists: a new workflow is what the reader has to
   // look at first. Folded once it has collections, to leave room for them.
   const [open, setOpen] = useState(state.workflows.length > 1 || workflow.data_collections.length === 0);
   const [fetching, setFetching] = useState(false);
+  const [detecting, setDetecting] = useState(false);
+  // What the last reading of the folders found, shown under the field.
+  const [detected, setDetected] = useState<BuilderRunsRegex | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!focusRequest) return;
     setOpen(true);
     rootRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }, [focusRequest]);
-  const [detecting, setDetecting] = useState(false);
-  // What the last reading of the folders found, shown under the field.
-  const [detected, setDetected] = useState<BuilderRunsRegex | null>(null);
   const repoUrl = (workflow.repository_url ?? '').trim();
   const nameClash = isWorkflowNameTaken(state, workflow.name, workflow.id);
   const nameEmpty = !workflow.name.trim();
+  let nameError: string | undefined;
+  if (nameEmpty) nameError = 'Give the workflow a name.';
+  else if (nameClash) nameError = 'Another workflow already uses this name.';
 
   const fetchMeta = useCallback(async () => {
     if (!repoUrl) return;
@@ -191,7 +200,7 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ state, workflow,
               description="Unique within the project"
               value={workflow.name}
               onChange={(e) => onChange({ name: e.currentTarget.value })}
-              error={nameEmpty ? 'Give the workflow a name.' : nameClash ? 'Another workflow already uses this name.' : undefined}
+              error={nameError}
               data-testid="builder-workflow-name"
             />
             <Select
@@ -242,14 +251,8 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ state, workflow,
             {workflow.structure === 'sequencing-runs' && (
               <TextInput
                 label="Runs regex"
-              withAsterisk
-                description={
-                  detected?.regex && detected.regex === workflow.runs_regex
-                    ? `Read from the folders: ${detected.runs.length} of ${detected.folders} are runs${
-                        detected.skipped.length ? ` (not: ${detected.skipped.join(', ')})` : ''
-                      }`
-                    : 'Which top-level folders are runs, as a regex on the folder name'
-                }
+                withAsterisk
+                description={runsRegexDescription(detected, workflow.runs_regex)}
                 value={workflow.runs_regex ?? ''}
                 onChange={(e) => onChange({ runs_regex: e.currentTarget.value })}
                 error={!workflow.runs_regex?.trim() ? 'Say which folders are runs.' : undefined}
@@ -363,7 +366,6 @@ export const WorkflowEditor: React.FC<WorkflowEditorProps> = ({ state, workflow,
                 }}
               />
             </SimpleGrid>
-
           </OptionalBlock>
         </Stack>
       </Collapse>

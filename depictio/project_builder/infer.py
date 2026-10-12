@@ -19,6 +19,7 @@ from typing import Any
 from depictio.cli.cli.utils.compose import TABULAR, glob_regex, match_files, slug
 from depictio.cli.cli.utils.data_root import DataRoot
 from depictio.models.local_access import is_multiqc_output
+from depictio.project_builder import tree
 from depictio.project_builder.errors import BuilderRefused
 from depictio.project_builder.roots import confine_rel
 from depictio.project_builder.stores import describe_store, is_ome_tiff, is_store_name
@@ -231,12 +232,37 @@ def _under_run(rel: str, runs_regex: str | None) -> str | None:
         try:
             if not re.match(runs_regex, parts[0]):
                 return None
-        except re.error:
+        except (re.error, OverflowError, RecursionError):
             return None
     return "/".join(parts[1:])
 
 
-def _sample_glob(inside: str) -> str:
+def _is_sample_folder(root: DataRoot, run: str, parts: tuple[str, ...], index: int) -> bool:
+    """Whether the folder ``parts[index]`` of a run's file is a sample (one per
+    sample, named in the file) rather than a fixed part of the layout.
+
+    A file named after its folder is ambiguous: ``<sample>/<sample>.tsv`` repeats
+    per sample, ``counts/counts.tsv`` does not. The siblings of the folder say
+    which: a sample's siblings hold the same file under their own name.
+    """
+    folder, name = parts[index], parts[-1]
+    if PurePosixPath(name).name.split(".", 1)[0] != folder:
+        return True
+    parent = "/".join((run, *parts[:index]))
+    try:
+        siblings = [e["name"] for e in tree.list_folder(root, parent)["entries"] if e["is_dir"]]
+    except BuilderRefused:
+        return False
+    for sibling in siblings[:5]:
+        if sibling == folder:
+            continue
+        twin = "/".join((parent, sibling, *parts[index + 1 : -1], name.replace(folder, sibling, 1)))
+        if root.exists(twin):
+            return True
+    return False
+
+
+def _sample_glob(root: DataRoot, run: str, inside: str) -> str:
     """The glob for one file of a run, a sample's name read as the part that varies.
 
     A folder of the path whose name is part of the file's name (a sample:
@@ -246,7 +272,7 @@ def _sample_glob(inside: str) -> str:
     path = PurePosixPath(inside)
     name = path.name
     for index, folder in enumerate(path.parts[:-1]):
-        if len(folder) >= 3 and folder in name:
+        if len(folder) >= 3 and folder in name and _is_sample_folder(root, run, path.parts, index):
             parts = list(path.parts)
             parts[index] = "*"
             parts[-1] = name.replace(folder, "*")
@@ -323,7 +349,7 @@ def suggest(
     elif dc_type == "multiqc" and not scan_others:
         glob = scan_rel
     elif inside is not None and not scan_others:
-        glob = _sample_glob(inside)
+        glob = _sample_glob(root, PurePosixPath(rel).parts[0], inside)
     else:
         glob = anti_unify([scan_rel, *scan_others])
     recursive = bool(scan_others) or inside is not None or dc_type in ("indexed_file", "multiqc")
@@ -339,13 +365,13 @@ def suggest(
             {"tool_id": match.tool_id, "output_id": match.output_id, "renders": match.renders}
         )
 
+    in_run = inside is not None
+    glob_varies = bool(scan_others) or (in_run and "*" in PurePosixPath(glob).name)
+    tag = _tag_for_glob(glob, rel, runs=in_run) if glob_varies else _tag_for(rel, runs=in_run)
+
     return {
         "path": rel,
-        "tag": (
-            _tag_for_glob(glob, rel, runs=inside is not None)
-            if scan_others or (inside is not None and "*" in PurePosixPath(glob).name)
-            else _tag_for(rel, runs=inside is not None)
-        ),
+        "tag": tag,
         "type": dc_type,
         "mode": "recursive" if recursive else "single",
         "glob": glob,
@@ -357,6 +383,6 @@ def suggest(
         "store": store,
         "tracks": tracks,
         "path_wildcard": path_wildcard(glob) if scan_others else None,
-        "in_run": inside is not None,
+        "in_run": in_run,
         "warnings": warnings,
     }

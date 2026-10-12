@@ -360,7 +360,8 @@ const StorageForm: React.FC<{
         <Button variant="default" size="xs" onClick={onCancel} disabled={saving}>
           Cancel
         </Button>
-        <Button color={accent.secondary}
+        <Button
+          color={accent.secondary}
           size="xs"
           data-testid="storage-save-button"
           leftSection={<Icon icon="mdi:content-save-outline" width={14} />}
@@ -545,7 +546,8 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
         <ConnectionDetails config={config} />
         <Stack gap={6}>
           <Group gap="xs">
-            <GatedButton color={accent.secondary}
+            <GatedButton
+              color={accent.secondary}
               size="xs"
               variant="light"
               data-testid="storage-test-button"
@@ -556,7 +558,8 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
             >
               Test connection
             </GatedButton>
-            <GatedButton color={accent.secondary}
+            <GatedButton
+              color={accent.secondary}
               size="xs"
               variant="light"
               data-testid="storage-edit-button"
@@ -641,7 +644,8 @@ const StoragePanel: React.FC<StoragePanelProps> = ({ projectId, canManage }) => 
         </EmptyState>
         <Stack gap={6}>
           <Group>
-            <GatedButton color={accent.secondary}
+            <GatedButton
+              color={accent.secondary}
               size="xs"
               data-testid="storage-configure-button"
               leftSection={<Icon icon="mdi:plus" width={14} />}

@@ -155,7 +155,8 @@ export const DetectionCard: React.FC<DetectionCardProps> = ({
           />
           {onUseDetected && detectedId && templateId && templateId !== detectedId && (
             <Group>
-              <Button color={accent.secondary}
+              <Button
+                color={accent.secondary}
                 size="sm"
                 variant="light"
                 leftSection={<Icon icon="mdi:auto-fix" width={14} />}

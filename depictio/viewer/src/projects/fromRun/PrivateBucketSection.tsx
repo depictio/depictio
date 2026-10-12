@@ -272,7 +272,8 @@ export const PrivateBucketSection: React.FC<PrivateBucketSectionProps> = ({
 
             <Stack gap={6}>
               <Group gap="sm" wrap="wrap">
-                <GatedButton color={accent.secondary}
+                <GatedButton
+                  color={accent.secondary}
                   size="sm"
                   variant="light"
                   leftSection={<Icon icon="mdi:connection" width={14} />}

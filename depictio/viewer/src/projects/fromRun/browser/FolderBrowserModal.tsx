@@ -398,6 +398,9 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
         onKeyDown={(event) => {
           // As in a file explorer: Alt+Left goes back, Alt+Right forward.
           if (!event.altKey) return;
+          // Option+Arrow moves by word in a text field: leave it to the field.
+          const tag = (event.target as HTMLElement).tagName;
+          if (tag === 'INPUT' || tag === 'TEXTAREA') return;
           if (event.key === 'ArrowLeft' && canBack) {
             event.preventDefault();
             walk(history.index - 1);
@@ -553,7 +556,8 @@ const FolderBrowserModal: React.FC<FolderBrowserModalProps> = ({
             <Button variant="default" onClick={onClose} data-testid="browse-cancel">
               Cancel
             </Button>
-            <GatedButton color={accent.secondary}
+            <GatedButton
+              color={accent.secondary}
               leftSection={<Icon icon="mdi:folder-check-outline" width={16} />}
               reason={selectReason}
               onClick={confirm}

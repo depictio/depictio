@@ -42,6 +42,21 @@ export type NextStep = 'use' | 'edit' | 'scratch';
 /** Dropped items named by their tag, not as a feature of the template. */
 export const ITEM_KINDS: ReadonlySet<string> = new Set(['collection', 'link', 'option']);
 
+/** What the builder cannot carry over from a template, one line each. */
+export const LeftOutList: React.FC<{ items: BuilderTemplateDraft['dropped']; testId: string }> = ({
+  items,
+  testId,
+}) => (
+  <Stack gap={2} data-testid={testId}>
+    {items.map((item, i) => (
+      <Text key={`${item.kind}-${item.tag ?? i}`} size="xs" c="dimmed">
+        {item.tag ? `${item.tag}: ` : ''}
+        {item.reason}
+      </Text>
+    ))}
+  </Stack>
+);
+
 interface NextStepChoiceProps {
   value: NextStep;
   onChange: (value: NextStep) => void;
@@ -250,14 +265,7 @@ const Detail: React.FC<{
               {showLeftOut ? 'Hide' : 'Show'} what is left out
             </Anchor>
             <Collapse in={showLeftOut}>
-              <Stack gap={2} data-testid="run-next-left-out">
-                {leftOut.map((item, i) => (
-                  <Text key={`${item.kind}-${item.tag ?? i}`} size="xs" c="dimmed">
-                    {item.tag ? `${item.tag}: ` : ''}
-                    {item.reason}
-                  </Text>
-                ))}
-              </Stack>
+              <LeftOutList items={leftOut} testId="run-next-left-out" />
             </Collapse>
           </>
         )}

@@ -10,9 +10,9 @@
  * any); the search for run folders below it (a button in the header, its hits
  * listed once it ran); and its contents, one list, folders first, each folder
  * one click from opening and each file one click from its first rows. Once a
- * search ran, its hits (`RunSearchResults`)
- * come before the contents, which fold under a toggle. A folder in a private
- * bucket is read, and searched, with its connection details.
+ * search ran, its hits (`RunSearchResults`) come before the contents, which
+ * fold under a toggle. A folder in a private bucket is read, and searched,
+ * with its connection details.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
@@ -158,7 +158,8 @@ const RunRecords: React.FC<{
                 </Stack>
                 <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
                   {isInfo && runInfo && (
-                    <Button color={accent.secondary}
+                    <Button
+                      color={accent.secondary}
                       size="compact-sm"
                       variant="light"
                       leftSection={<Icon icon={previewOpen ? 'mdi:eye-off-outline' : 'mdi:eye-outline'} width={14} />}
@@ -275,81 +276,81 @@ const ContentsList: React.FC<{
   }
   return (
     <RunFileScope dataRoot={result.location} storage={storage}>
-    <Stack gap="xs">
-      {total > FILTER_FROM && (
-        <TextInput
-          size="xs"
-          placeholder="Filter by name"
-          leftSection={<Icon icon="mdi:magnify" width={14} />}
-          value={query}
-          onChange={(e) => setQuery(e.currentTarget.value)}
-          data-testid="browse-detail-contents-filter"
-        />
-      )}
-      <Paper withBorder radius="md">
-        <ScrollArea.Autosize mah={420} type="auto" offsetScrollbars>
-          <Stack gap={0} py={4}>
-            {shownFolders.length > 0 && (
-              <Stack gap={0} data-testid="browse-detail-folders">
-                {shownFolders.map((name) => (
-                  <NavLink
-                    key={name}
-                    component="button"
-                    type="button"
-                    onClick={() => onOpen(name)}
-                    py={4}
-                    label={
-                      <Text size="sm" ff="monospace" truncate>
-                        {name}
-                      </Text>
-                    }
-                    leftSection={<Icon icon="mdi:folder-outline" width={16} />}
-                    rightSection={
-                      <Group gap={6} wrap="nowrap">
-                        {RECORD_FOLDERS.has(name) && (
-                          <Badge
-                            size="xs"
-                            variant="light"
-                            color="green"
-                            radius="sm"
-                            tt="none"
-                            leftSection={<MarkerIcon marker={name} size={10} />}
-                          >
-                            run record
-                          </Badge>
-                        )}
-                        <Icon icon="mdi:chevron-right" width={14} />
-                      </Group>
-                    }
-                    aria-label={`Open ${name}`}
-                    data-testid="browse-detail-folder"
-                    data-name={name}
-                  />
-                ))}
-              </Stack>
-            )}
-            {shownFolders.length > 0 && shownFiles.length > 0 && <Divider my={4} />}
-            {shownFiles.length > 0 && (
-              <Stack gap={0} data-testid="browse-detail-files">
-                {shownFiles.map((name) => (
-                  <FileEntry key={name} folder={result.location} name={name} />
-                ))}
-              </Stack>
-            )}
-            {shownFolders.length + shownFiles.length === 0 && (
-              <Text size="sm" c="dimmed" px="sm" py={4}>
-                Nothing here matches &ldquo;{query.trim()}&rdquo;.
-              </Text>
-            )}
-          </Stack>
-        </ScrollArea.Autosize>
-      </Paper>
-      {listed > total && (
-        <Text size="xs" c="dimmed">
-          The first {total} of {plural(listed, 'entry', 'entries')}.
-        </Text>
-      )}
-    </Stack>
+      <Stack gap="xs">
+        {total > FILTER_FROM && (
+          <TextInput
+            size="xs"
+            placeholder="Filter by name"
+            leftSection={<Icon icon="mdi:magnify" width={14} />}
+            value={query}
+            onChange={(e) => setQuery(e.currentTarget.value)}
+            data-testid="browse-detail-contents-filter"
+          />
+        )}
+        <Paper withBorder radius="md">
+          <ScrollArea.Autosize mah={420} type="auto" offsetScrollbars>
+            <Stack gap={0} py={4}>
+              {shownFolders.length > 0 && (
+                <Stack gap={0} data-testid="browse-detail-folders">
+                  {shownFolders.map((name) => (
+                    <NavLink
+                      key={name}
+                      component="button"
+                      type="button"
+                      onClick={() => onOpen(name)}
+                      py={4}
+                      label={
+                        <Text size="sm" ff="monospace" truncate>
+                          {name}
+                        </Text>
+                      }
+                      leftSection={<Icon icon="mdi:folder-outline" width={16} />}
+                      rightSection={
+                        <Group gap={6} wrap="nowrap">
+                          {RECORD_FOLDERS.has(name) && (
+                            <Badge
+                              size="xs"
+                              variant="light"
+                              color="green"
+                              radius="sm"
+                              tt="none"
+                              leftSection={<MarkerIcon marker={name} size={10} />}
+                            >
+                              run record
+                            </Badge>
+                          )}
+                          <Icon icon="mdi:chevron-right" width={14} />
+                        </Group>
+                      }
+                      aria-label={`Open ${name}`}
+                      data-testid="browse-detail-folder"
+                      data-name={name}
+                    />
+                  ))}
+                </Stack>
+              )}
+              {shownFolders.length > 0 && shownFiles.length > 0 && <Divider my={4} />}
+              {shownFiles.length > 0 && (
+                <Stack gap={0} data-testid="browse-detail-files">
+                  {shownFiles.map((name) => (
+                    <FileEntry key={name} folder={result.location} name={name} />
+                  ))}
+                </Stack>
+              )}
+              {shownFolders.length + shownFiles.length === 0 && (
+                <Text size="sm" c="dimmed" px="sm" py={4}>
+                  Nothing here matches &ldquo;{query.trim()}&rdquo;.
+                </Text>
+              )}
+            </Stack>
+          </ScrollArea.Autosize>
+        </Paper>
+        {listed > total && (
+          <Text size="xs" c="dimmed">
+            The first {total} of {plural(listed, 'entry', 'entries')}.
+          </Text>
+        )}
+      </Stack>
     </RunFileScope>
   );
 };

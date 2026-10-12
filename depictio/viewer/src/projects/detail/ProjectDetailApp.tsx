@@ -1805,7 +1805,8 @@ const CreateDataCollectionModal: React.FC<{
                     {multiqcDropzone.files.length === 1 ? '' : 's'} ·{' '}
                     {(multiqcDropzone.totalBytes / (1024 * 1024)).toFixed(1)} MB
                   </Text>
-                  <Button color={accent.secondary}
+                  <Button
+                    color={accent.secondary}
                     size="xs"
                     variant="subtle"
                     onClick={multiqcDropzone.clear}

@@ -155,6 +155,18 @@ const METATYPE_OPTIONS = [
   { value: 'Aggregate', label: 'Aggregate' },
 ];
 
+/** What the chosen way of finding files means, for the hint under the switch. */
+function modeHint(mode: DcFormState['dc']['mode'], inRuns: boolean): string {
+  if (mode === 'single') {
+    return inRuns
+      ? 'One file at a fixed path from the data root. For a file that repeats in every run, use Scan.'
+      : 'This collection is the one file below, at a fixed path.';
+  }
+  return inRuns
+    ? 'Every file matching the pattern below, searched inside each run: the pattern starts from the run folder.'
+    : 'This collection is every file whose name matches the pattern below, in each run or sample folder: one scan covers them all.';
+}
+
 export const CollectionEditor: React.FC<CollectionEditorProps> = ({
   state,
   form,
@@ -171,13 +183,17 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
   manifest,
 }) => {
   const accent = useBrandAccents();
-  const inRuns = state.workflows.find((w) => w.id === form.workflowId)?.structure === 'sequencing-runs';
+  const workflow = state.workflows.find((w) => w.id === form.workflowId);
+  const inRuns = workflow?.structure === 'sequencing-runs';
   const mode = useBuilderMode();
   const { capabilities } = useBuilderCapabilities();
   const { dc } = form;
   const editing = form.originalTag !== null;
   const tagClash = isTagTaken(state, dc.tag, form.originalTag);
-  const target = state.workflows.find((w) => w.id === form.workflowId) ?? state.workflows[0];
+  let tagError: string | undefined;
+  if (tagClash) tagError = 'Another collection already uses this tag.';
+  else if (!dc.tag.trim()) tagError = 'Required';
+  const target = workflow ?? state.workflows[0];
   const blocker = saveBlocker(state, form, remote, capabilities);
   const tables = tableTags(state, form.originalTag);
   const matchResult = matchResultOf(match);
@@ -248,7 +264,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
               onChange({ ...form, dc: { ...dc, tag: e.currentTarget.value }, touched: { ...form.touched, tag: true } })
             }
             leftSection={<Icon icon="mdi:tag-outline" width={16} />}
-            error={tagClash ? 'Another collection already uses this tag.' : !dc.tag.trim() ? 'Required' : undefined}
+            error={tagError}
             spellCheck={false}
             data-testid="builder-dc-tag"
           />
@@ -368,13 +384,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
             data-testid="builder-dc-mode"
           />
           <Text size="xs" c="dimmed" data-testid="builder-dc-mode-hint">
-            {dc.mode === 'single'
-              ? inRuns
-                ? 'One file at a fixed path from the data root. For a file that repeats in every run, use Scan.'
-                : 'This collection is the one file below, at a fixed path.'
-              : inRuns
-                ? 'Every file matching the pattern below, searched inside each run: the pattern starts from the run folder.'
-                : 'This collection is every file whose name matches the pattern below, in each run or sample folder: one scan covers them all.'}
+            {modeHint(dc.mode, inRuns)}
             {SINGLE_FILE_DC_TYPES.has(dc.type) ? ' This type is always one file.' : ''}
           </Text>
         </Stack>
@@ -514,30 +524,30 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
             checked={Boolean(dc.optional)}
             onChange={(e) => onChange({ ...form, dc: { ...dc, optional: e.currentTarget.checked } })}
           />
-            {dc.mode === 'recursive' && (
-              <Group grow align="flex-start">
-                <NumberInput
-                  label="Max depth"
-                  description="Folder levels to descend (blank: no limit)"
-                  value={dc.max_depth ?? ''}
-                  onChange={(v) => onChange({ ...form, dc: { ...dc, max_depth: typeof v === 'number' ? v : null } })}
-                  min={0}
-                  allowDecimal={false}
-                  disabled={remote}
-                />
-                <TagsInput
-                  label="Ignore"
-                  description="Globs of paths to skip (Enter to add)"
-                  value={dc.ignore ?? []}
-                  onChange={(ignore) => onChange({ ...form, dc: { ...dc, ignore } })}
-                  placeholder="work/*, *.tmp"
-                  disabled={remote}
-                />
-              </Group>
-            )}
-            {dc.mode === 'recursive' && remote && (
-              <DisabledReason reason={S3_WALK_REASON} icon="mdi:information-outline" />
-            )}
+          {dc.mode === 'recursive' && (
+            <Group grow align="flex-start">
+              <NumberInput
+                label="Max depth"
+                description="Folder levels to descend (blank: no limit)"
+                value={dc.max_depth ?? ''}
+                onChange={(v) => onChange({ ...form, dc: { ...dc, max_depth: typeof v === 'number' ? v : null } })}
+                min={0}
+                allowDecimal={false}
+                disabled={remote}
+              />
+              <TagsInput
+                label="Ignore"
+                description="Globs of paths to skip (Enter to add)"
+                value={dc.ignore ?? []}
+                onChange={(ignore) => onChange({ ...form, dc: { ...dc, ignore } })}
+                placeholder="work/*, *.tmp"
+                disabled={remote}
+              />
+            </Group>
+          )}
+          {dc.mode === 'recursive' && remote && (
+            <DisabledReason reason={S3_WALK_REASON} icon="mdi:information-outline" />
+          )}
         </OptionalBlock>
 
         <Group justify="flex-end" gap="xs">

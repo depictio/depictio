@@ -1,9 +1,10 @@
 """The builder's HTTP routes, one factory for both servers.
 
 ``build_builder_router(opener)`` declares ``/capabilities``, ``/tree``,
-``/suggest``, ``/runs_regex``, ``/runs_overview``, ``/match``, ``/tracks_manifest``, ``/template``,
-``/from_template`` (a shipped template as a draft) and ``/metadata``; what differs between the main API and the standalone server is
-how a request's root is opened, so that is the injected dependency, and what
+``/suggest``, ``/runs_regex``, ``/runs_overview``, ``/match``, ``/tracks_manifest``,
+``/template``, ``/from_template`` (a shipped template as a draft) and ``/metadata``;
+what differs between the main API and the standalone server is how a request's root
+is opened, so that is the injected dependency, and what
 the instance can do (``capabilities``), which each passes in. The main API's
 opener (``projects_endpoints/builder.py``)
 authenticates and confines like the run-folder dialog; the standalone one

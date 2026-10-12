@@ -51,7 +51,7 @@ def _runs(root: DataRoot, structure: str, runs_regex: str | None) -> list[str]:
         raise BuilderRefused(400, "Sequencing runs need a runs regex.", "runs_regex_missing")
     try:
         re.compile(runs_regex)
-    except re.error as exc:
+    except (re.error, OverflowError, RecursionError) as exc:
         raise BuilderRefused(400, f"Invalid runs regex: {exc}", "runs_regex_invalid") from exc
     return root.runs(runs_regex)
 

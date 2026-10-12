@@ -61,16 +61,18 @@ _DERIVED_KEYS = frozenset({"source", "sources", "transform", "recipe", "join", "
 # Collection-level keys that are bookkeeping, not content.
 _IGNORED_DC_KEYS = frozenset({"id", "data_collection_tag", "description", "optional", "config"})
 
-_TYPE_BY_NAME: dict[str, str] = {
-    "table": "table",
-    "multiqc": "multiqc",
-    "image": "image",
-    "indexed_file": "indexed_file",
-    "geojson": "geojson",
-    "phylogeny": "phylogeny",
-    "genomic_tracks": "genomic_tracks",
-    "bioimage": "bioimage",
-}
+_TYPES = frozenset(
+    {
+        "table",
+        "multiqc",
+        "image",
+        "indexed_file",
+        "geojson",
+        "phylogeny",
+        "genomic_tracks",
+        "bioimage",
+    }
+)
 
 _TABLE_KEYS = frozenset(
     {
@@ -153,7 +155,7 @@ def _root_relative(value: Any, what: str) -> str:
         raise _Unsupported(f"{what} is a URL ({value}), which the builder does not read")
     rel = value[len(DATA_ROOT) :] if value.startswith(DATA_ROOT) else value
     rel = rel.strip("/")
-    found = {name for name in _PLACEHOLDER.findall(rel)}
+    found = set(_PLACEHOLDER.findall(rel))
     if found:
         names = ", ".join("{" + name + "}" for name in sorted(found))
         raise _Unsupported(
@@ -374,10 +376,14 @@ def _probe(dc: DcDraft) -> str | None:
     return None
 
 
-def _collection(raw: Any) -> tuple[DcDraft | None, str | None, list[str]]:
-    """``(draft, tag, lost)`` for one template collection, or a reason it cannot be carried."""
+def _text_or_none(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _collection(raw: Any) -> tuple[DcDraft, str, list[str]]:
+    """``(draft, tag, lost)`` for one template collection; raises :class:`_Unsupported`
+    with the reason when it cannot be carried."""
     lost: list[str] = []
-    tag = None
     if not isinstance(raw, dict):
         raise _Unsupported("it is not a mapping")
     tag = str(raw.get("data_collection_tag") or "").strip()
@@ -399,15 +405,14 @@ def _collection(raw: Any) -> tuple[DcDraft | None, str | None, list[str]]:
     if extra_keys:
         raise _Unsupported(f"it sets {_names(extra_keys)}, which the builder has no field for")
     type_name = str(config.get("type") or "")
-    dc_type = _TYPE_BY_NAME.get(type_name.lower())
-    if dc_type is None:
+    dc_type = type_name.lower()
+    if dc_type not in _TYPES:
         raise _Unsupported(f"its type {type_name!r} is not one the builder offers")
     scan = _scan(config, dc_type)
     props, metatype = _props(dc_type, config, scan, lost)
-    description = raw.get("description")
     dc = DcDraft(
         tag=tag,
-        description=description if isinstance(description, str) and description else None,
+        description=_text_or_none(raw.get("description")),
         type=dc_type,  # ty: ignore[invalid-argument-type]
         optional=bool(raw.get("optional", False)),
         metatype=metatype,  # ty: ignore[invalid-argument-type]
@@ -497,13 +502,11 @@ def _link_draft(raw: Any, by_tag: dict[str, DcDraft]) -> tuple[LinkDraft | None,
     ):  # the builder's own default
         resolver = None
     field = config.get("target_field")
-    default_field = (
-        "sample_name"
-        if target_dc.type == "multiqc"
-        else target_dc.props.sample_column
-        if isinstance(target_dc.props, GenomicTracksProps)
-        else None
-    )
+    default_field = None
+    if target_dc.type == "multiqc":
+        default_field = "sample_name"
+    elif isinstance(target_dc.props, GenomicTracksProps):
+        default_field = target_dc.props.sample_column
     try:
         link = LinkDraft(
             source_tag=str(source),
@@ -570,7 +573,6 @@ def template_to_draft(raw: dict[str, Any], *, template_id: str) -> dict[str, Any
             tag = str(tag).strip() if tag else None
             try:
                 dc, tag, lost = _collection(raw_dc)
-                assert dc is not None and tag is not None
                 if tag in by_tag:
                     raise _Unsupported("another collection already has this tag")
                 if len(by_tag) >= MAX_DATA_COLLECTIONS:
@@ -672,20 +674,19 @@ def template_to_draft(raw: dict[str, Any], *, template_id: str) -> dict[str, Any
 
     draft = ProjectDraft(
         name=name,
-        description=description if isinstance(description, str) and description else None,
+        description=_text_or_none(description),
         is_public=bool(raw.get("is_public", False)),
         realtime=bool(realtime),
         data_management_platform_project_url=_project_url(raw),
         workflows=workflows,
         links=links,
     )
-    collections = len(by_tag)
-    editable = collections > 0
+    editable = bool(by_tag)
     return {
         "template_id": template_id,
         "title": str(raw["name"]) if raw.get("name") else None,
         "draft": draft.model_dump(mode="json", exclude_none=True),
-        "carried": {"workflows": len(workflows), "collections": collections, "links": len(links)},
+        "carried": {"workflows": len(workflows), "collections": len(by_tag), "links": len(links)},
         "dropped": dropped,
         "editable": editable,
         "reason": None

@@ -160,7 +160,8 @@ const ExportTemplatePanel: React.FC<ExportTemplatePanelProps> = ({
         </Alert>
       )}
       <Stack gap={6} align="flex-end">
-        <GatedButton color={accent.secondary}
+        <GatedButton
+          color={accent.secondary}
           data-testid="export-template-submit"
           leftSection={<Icon icon="mdi:package-down" width={16} />}
           onClick={handleExport}

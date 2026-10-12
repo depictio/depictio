@@ -5,6 +5,7 @@ import {
   Alert,
   Anchor,
   Badge,
+  Button,
   Card,
   Center,
   Code,
@@ -13,6 +14,8 @@ import {
   Group,
   Loader,
   Paper,
+  ScrollArea,
+  Select,
   SimpleGrid,
   Stack,
   Switch,
@@ -173,15 +176,34 @@ const InlineMeta: React.FC<{ icon: string; label: string; value?: string | null 
   </Group>
 );
 
-/** Expandable file list for one identified data collection. Lazily fetches the
- *  registered files the first time the row is expanded and shows their full
- *  paths (falling back to filename when no location was recorded). */
-/** Lazily fetches and lists a DC's registered file paths. Rendered only when its
- *  details row is expanded, so the fetch happens on demand. */
+/** Files drawn at a time, then 'Show more': a collection can hold thousands. */
+const FILES_PAGE = 100;
+
+/** The folder every path starts with (whole segments only), '' when they share none. */
+function commonFolder(paths: string[]): string {
+  if (paths.length === 0) return '';
+  let prefix = paths[0].split('/').slice(0, -1);
+  for (const path of paths) {
+    const parts = path.split('/');
+    let i = 0;
+    while (i < prefix.length && i < parts.length - 1 && prefix[i] === parts[i]) i += 1;
+    prefix = prefix.slice(0, i);
+    if (prefix.length === 0) break;
+  }
+  return prefix.length ? `${prefix.join('/')}/` : '';
+}
+
+/** Lazily fetches a DC's registered files (when its row is expanded) and lists
+ *  them for a collection of any size: paths shortened by the folder they all
+ *  share (shown once, copyable), a filter, a run picker when files come from
+ *  several runs, and a bounded list that draws a page at a time. */
 const DcFileList: React.FC<{ dcId: string | null; tag: string }> = ({ dcId, tag }) => {
   const [files, setFiles] = useState<RegisteredFile[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
+  const [run, setRun] = useState<string | null>(null);
+  const [shown, setShown] = useState(FILES_PAGE);
 
   useEffect(() => {
     if (!dcId) return;
@@ -196,9 +218,32 @@ const DcFileList: React.FC<{ dcId: string | null; tag: string }> = ({ dcId, tag 
     };
   }, [dcId]);
 
+  const entries = useMemo(
+    () =>
+      (files ?? []).map((f) => ({
+        path: f.file_location || f.filename || '(unnamed)',
+        run: f.run_tag ?? null,
+        size: f.filesize ?? null,
+      })),
+    [files],
+  );
+  const base = useMemo(() => commonFolder(entries.map((e) => e.path)), [entries]);
+  const runs = useMemo(
+    () => [...new Set(entries.map((e) => e.run).filter((r): r is string => Boolean(r)))].sort(),
+    [entries],
+  );
+  const matching = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return entries.filter(
+      (e) => (!run || e.run === run) && (!q || e.path.toLowerCase().includes(q)),
+    );
+  }, [entries, query, run]);
+
+  useEffect(() => setShown(FILES_PAGE), [query, run]);
+
   if (!dcId) return null;
   return (
-    <Stack gap={2}>
+    <Stack gap="xs" data-testid="ingestion-dc-files">
       {loading && <Loader size="xs" />}
       {error && (
         <Text size="xs" c="red">
@@ -211,17 +256,88 @@ const DcFileList: React.FC<{ dcId: string | null; tag: string }> = ({ dcId, tag 
         </Text>
       )}
       {files && files.length > 0 && (
-        <Stack gap={2}>
-          {files.map((f, i) => (
-            <Code
-              key={`${f.file_location ?? f.filename ?? i}`}
-              block
-              style={{ fontSize: 11, overflowWrap: 'anywhere' }}
+        <>
+          <Group gap="xs" wrap="wrap" justify="space-between">
+            <Text size="xs" c="dimmed" data-testid="ingestion-dc-files-count">
+              {matching.length === entries.length
+                ? `${entries.length.toLocaleString()} file${entries.length === 1 ? '' : 's'}`
+                : `${matching.length.toLocaleString()} of ${entries.length.toLocaleString()} files`}
+              {runs.length > 1 ? ` in ${runs.length} runs` : ''}
+            </Text>
+            {(entries.length > 8 || runs.length > 1) && (
+              <Group gap="xs" wrap="nowrap">
+                {runs.length > 1 && (
+                  <Select
+                    size="xs"
+                    w={160}
+                    placeholder="All runs"
+                    data={runs}
+                    value={run}
+                    onChange={setRun}
+                    clearable
+                    searchable
+                    aria-label="Filter by run"
+                  />
+                )}
+                <TextInput
+                  size="xs"
+                  w={200}
+                  placeholder="Filter by path"
+                  leftSection={<Icon icon="mdi:magnify" width={14} />}
+                  value={query}
+                  onChange={(e) => setQuery(e.currentTarget.value)}
+                  aria-label="Filter files by path"
+                />
+              </Group>
+            )}
+          </Group>
+          {base && (
+            <Group gap={4} wrap="nowrap" style={{ minWidth: 0 }}>
+              <Icon icon="mdi:folder-outline" width={13} />
+              <Tooltip label={base} withArrow multiline maw={420}>
+                <Text size="xs" ff="monospace" c="dimmed" truncate style={{ minWidth: 0 }}>
+                  {base}
+                </Text>
+              </Tooltip>
+              <CopyButton value={base} timeout={1500}>
+                {({ copied, copy }) => (
+                  <ActionIcon variant="subtle" color={copied ? 'teal' : 'gray'} size="xs" onClick={copy}>
+                    <Icon icon={copied ? 'mdi:check' : 'mdi:content-copy'} width={13} />
+                  </ActionIcon>
+                )}
+              </CopyButton>
+            </Group>
+          )}
+          {matching.length === 0 ? (
+            <Text size="xs" c="dimmed">
+              No file matches.
+            </Text>
+          ) : (
+            <ScrollArea.Autosize mah={320} type="auto" offsetScrollbars>
+              <Stack gap={0}>
+                {matching.slice(0, shown).map((e, i) => (
+                  <Tooltip key={`${e.path}-${i}`} label={e.path} withArrow multiline maw={520} openDelay={400}>
+                    <Text size="xs" ff="monospace" py={2} truncate>
+                      {e.path.startsWith(base) ? e.path.slice(base.length) : e.path}
+                    </Text>
+                  </Tooltip>
+                ))}
+              </Stack>
+            </ScrollArea.Autosize>
+          )}
+          {matching.length > shown && (
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              color="gray"
+              w="fit-content"
+              onClick={() => setShown((n) => n + FILES_PAGE)}
+              data-testid="ingestion-dc-files-more"
             >
-              {f.file_location || f.filename || '(unnamed)'}
-            </Code>
-          ))}
-        </Stack>
+              Show {Math.min(FILES_PAGE, matching.length - shown)} more ({(matching.length - shown).toLocaleString()} left)
+            </Button>
+          )}
+        </>
       )}
     </Stack>
   );

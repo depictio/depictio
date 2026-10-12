@@ -482,7 +482,8 @@ export const GenomicTracksForm: React.FC<{
             rightSectionWidth={100}
             rightSectionPointerEvents="all"
             rightSection={
-              <Button color={accent.secondary}
+              <Button
+                color={accent.secondary}
                 size="compact-xs"
                 variant="subtle"
                 onClick={() =>

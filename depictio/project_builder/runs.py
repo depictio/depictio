@@ -120,15 +120,21 @@ def regex_for(names: list[str]) -> tuple[str | None, list[str]]:
     return (regex, covered) if len(covered) == len(members) else (None, [])
 
 
-def suggest_runs_regex(root: DataRoot) -> dict[str, Any]:
-    """The runs regex for the first-level folders of ``root``, with the runs it
-    matches and the folders it leaves out."""
+def _first_level_folders(root: DataRoot) -> tuple[list[str], bool]:
+    """``(visible first-level folder names, listing truncated)`` of ``root``."""
     listing = tree.list_folder(root, "")
     folders = sorted(
         entry["name"]
         for entry in listing["entries"]
         if entry["is_dir"] and not is_hidden_name(entry["name"])
     )
+    return folders, bool(listing["truncated"])
+
+
+def suggest_runs_regex(root: DataRoot) -> dict[str, Any]:
+    """The runs regex for the first-level folders of ``root``, with the runs it
+    matches and the folders it leaves out."""
+    folders, truncated = _first_level_folders(root)
     regex, runs = regex_for(folders)
     matched = set(runs)
     skipped = [name for name in folders if name not in matched]
@@ -137,7 +143,7 @@ def suggest_runs_regex(root: DataRoot) -> dict[str, Any]:
         "runs": runs,
         "folders": len(folders),
         "skipped": skipped[:MAX_SKIPPED_SHOWN],
-        "truncated": bool(listing["truncated"]),
+        "truncated": truncated,
     }
 
 
@@ -192,17 +198,12 @@ def _runs_in_the_root(root: DataRoot, runs_regex: str | None) -> tuple[list[str]
         raise BuilderRefused(400, "Sequencing runs need a runs regex.", "runs_regex_missing")
     try:
         re.compile(runs_regex)
-    except re.error as exc:
+    except (re.error, OverflowError, RecursionError) as exc:
         raise BuilderRefused(400, f"Invalid runs regex: {exc}", "runs_regex_invalid") from exc
-    listing = tree.list_folder(root, "")
-    folders = sorted(
-        entry["name"]
-        for entry in listing["entries"]
-        if entry["is_dir"] and not is_hidden_name(entry["name"])
-    )
+    folders, truncated = _first_level_folders(root)
     runs = root.runs(runs_regex)
     taken = set(runs)
-    return runs, [name for name in folders if name not in taken], bool(listing["truncated"])
+    return runs, [name for name in folders if name not in taken], truncated
 
 
 def overview(root: DataRoot, runs_regex: str | None) -> dict[str, Any]:

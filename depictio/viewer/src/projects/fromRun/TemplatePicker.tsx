@@ -19,7 +19,7 @@
  *
  * Detection fills both and marks each "Detected" until the reader changes it.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   Button,
   Combobox,
@@ -56,6 +56,10 @@ interface TemplatePickerProps {
   closestTemplateId?: string | null;
   pipelineDetected: boolean;
   versionDetected: boolean;
+  /** The reader switched to choosing; detection never switches it back. Held by
+   *  the parent so it survives a step change (the stepper unmounts the step). */
+  forced: boolean;
+  onForcedChange: (forced: boolean) => void;
   onPipelineChange: (key: string | null) => void;
   onVersionChange: (templateId: string) => void;
   error?: string | null;
@@ -267,13 +271,13 @@ export const TemplatePicker: React.FC<TemplatePickerProps> = ({
   closestTemplateId = null,
   pipelineDetected,
   versionDetected,
+  forced,
+  onForcedChange,
   onPipelineChange,
   onVersionChange,
   error,
 }) => {
   const accent = useBrandAccents();
-  /** The reader switched to choosing; detection never switches it back. */
-  const [forced, setForced] = useState(false);
   const byKey = useMemo(() => {
     const map = new Map<string, RunPipeline>();
     for (const group of groups) for (const p of group.pipelines) map.set(p.key, p);
@@ -385,19 +389,18 @@ export const TemplatePicker: React.FC<TemplatePickerProps> = ({
             ]}
             onChange={(value) => {
               if (value === 'auto') {
-                setForced(false);
+                onForcedChange(false);
                 onPipelineChange(null);
               } else {
-                setForced(true);
+                onForcedChange(true);
               }
             }}
             data-testid="run-template-mode"
           />
         </Group>
 
-        {manual ? (
-          fields
-        ) : pipeline ? (
+        {manual && fields}
+        {!manual && pipeline && (
           <Group gap="sm" wrap="nowrap" align="flex-start" data-testid="run-template-detected">
             <TemplateSourceLogo source={pipeline.source} size={28} />
             <Stack gap={4} style={{ minWidth: 0 }}>
@@ -437,14 +440,15 @@ export const TemplatePicker: React.FC<TemplatePickerProps> = ({
               )}
             </Stack>
           </Group>
-        ) : (
+        )}
+        {!manual && !pipeline && (
           <Group gap="sm" wrap="nowrap" align="center" data-testid="run-template-none">
             <Icon icon="mdi:help-circle-outline" width={20} style={{ flexShrink: 0 }} />
             <Text size="sm" c="dimmed" style={{ flex: 1 }}>
               No template recognised for this folder. Choose one yourself, or build the data collections in the
               Project Builder.
             </Text>
-            <Button size="xs" variant="light" color={accent.secondary} onClick={() => setForced(true)}>
+            <Button size="xs" variant="light" color={accent.secondary} onClick={() => onForcedChange(true)}>
               Choose myself
             </Button>
           </Group>

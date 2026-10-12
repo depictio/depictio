@@ -19,6 +19,13 @@ type State =
   | { status: 'ready'; overview: BuilderRunsOverview }
   | { status: 'error'; message: string };
 
+/** The overview a state holds, or the last one while a new read is under way. */
+function shownOverview(state: State): BuilderRunsOverview | null {
+  if (state.status === 'ready') return state.overview;
+  if (state.status === 'loading') return state.previous;
+  return null;
+}
+
 function useRunsOverview(root: BuilderRootSpec, regex: string): State {
   const [state, setState] = useState<State>({ status: 'idle' });
   const location = root.data_root;
@@ -31,10 +38,7 @@ function useRunsOverview(root: BuilderRootSpec, regex: string): State {
       return undefined;
     }
     const controller = new AbortController();
-    setState((prev) => ({
-      status: 'loading',
-      previous: prev.status === 'ready' ? prev.overview : prev.status === 'loading' ? prev.previous : null,
-    }));
+    setState((prev) => ({ status: 'loading', previous: shownOverview(prev) }));
     const timer = window.setTimeout(() => {
       builderRunsOverview(root, trimmed, { signal: controller.signal })
         .then((overview) => {
@@ -53,6 +57,26 @@ function useRunsOverview(root: BuilderRootSpec, regex: string): State {
   }, [location, storageKey, regex]);
 
   return state;
+}
+
+type RunsLayout = 'none' | 'consistent' | 'mixed';
+
+const LAYOUT_BADGE: Record<RunsLayout, { color: string; icon: string }> = {
+  none: { color: 'red', icon: 'mdi:alert-circle-outline' },
+  consistent: { color: 'green', icon: 'mdi:check' },
+  mixed: { color: 'yellow', icon: 'mdi:alert-outline' },
+};
+
+function layoutLabel(layout: RunsLayout, overview: BuilderRunsOverview): string {
+  const total = overview.runs_read;
+  switch (layout) {
+    case 'none':
+      return 'No folder matches the regex';
+    case 'consistent':
+      return `Same layout in ${overview.runs_total === total ? 'every run' : `the ${total} runs read`}`;
+    case 'mixed':
+      return `${overview.deviating_total} of ${total} runs differ`;
+  }
 }
 
 const Chips: React.FC<{ names: string[]; total: number; dimmed?: boolean }> = ({ names, total, dimmed }) => (
@@ -83,7 +107,7 @@ export const RunsPanel: React.FC<{ root: BuilderRootSpec; regex: string }> = ({ 
       </Alert>
     );
   }
-  const overview = state.status === 'ready' ? state.overview : state.previous;
+  const overview = shownOverview(state);
   if (!overview) {
     return (
       <Group gap={6} data-testid="builder-runs-panel" data-state="loading">
@@ -96,7 +120,10 @@ export const RunsPanel: React.FC<{ root: BuilderRootSpec; regex: string }> = ({ 
   }
   const loading = state.status === 'loading';
   const none = overview.runs_total === 0;
-  const uniform = !none && overview.deviating_total === 0;
+  let layout: RunsLayout = 'mixed';
+  if (none) layout = 'none';
+  else if (overview.deviating_total === 0) layout = 'consistent';
+  const badge = LAYOUT_BADGE[layout];
   const total = overview.runs_read;
 
   return (
@@ -106,7 +133,7 @@ export const RunsPanel: React.FC<{ root: BuilderRootSpec; regex: string }> = ({ 
       p="sm"
       style={{ opacity: loading ? 0.6 : 1 }}
       data-testid="builder-runs-panel"
-      data-state={none ? 'none' : uniform ? 'consistent' : 'mixed'}
+      data-state={layout}
     >
       <Stack gap="xs">
         <Group gap="xs" wrap="wrap">
@@ -124,18 +151,12 @@ export const RunsPanel: React.FC<{ root: BuilderRootSpec; regex: string }> = ({ 
             ml="auto"
             size="sm"
             variant="light"
-            color={none ? 'red' : uniform ? 'green' : 'yellow'}
+            color={badge.color}
             tt="none"
-            leftSection={
-              <Icon icon={none ? 'mdi:alert-circle-outline' : uniform ? 'mdi:check' : 'mdi:alert-outline'} width={12} />
-            }
+            leftSection={<Icon icon={badge.icon} width={12} />}
             data-testid="builder-runs-status"
           >
-            {none
-              ? 'No folder matches the regex'
-              : uniform
-                ? `Same layout in ${overview.runs_total === total ? 'every run' : `the ${total} runs read`}`
-                : `${overview.deviating_total} of ${total} runs differ`}
+            {layoutLabel(layout, overview)}
           </Badge>
         </Group>
 

@@ -385,6 +385,49 @@ class TestSuggestInRuns:
         assert answer["glob"] == "*/counts/*.dat"
         assert answer["tag"] == "counts"
 
+    @pytest.fixture
+    def self_named_root(self, tmp_path):
+        from depictio.cli.cli.utils.data_root import LocalDataRoot
+
+        from ..s3_stubs import write_tree
+
+        files = {}
+        for run in ("run_1", "run_2"):
+            files[f"{run}/counts/counts.tsv"] = b"id\tv\n1\t2\n"
+            files[f"{run}/qc/qc.log"] = b"ok\n"
+        return LocalDataRoot(str(write_tree(tmp_path / "root", files)))
+
+    @pytest.fixture
+    def sample_named_root(self, tmp_path):
+        from depictio.cli.cli.utils.data_root import LocalDataRoot
+
+        from ..s3_stubs import write_tree
+
+        files = {
+            f"{run}/{sample}/{sample}.tsv": b"id\tv\n1\t2\n"
+            for run in ("run_1", "run_2")
+            for sample in ("alpha", "bravo")
+        }
+        return LocalDataRoot(str(write_tree(tmp_path / "root", files)))
+
+    def test_a_file_named_after_a_fixed_folder_stays_literal(self, self_named_root):
+        answer = infer.suggest(
+            self_named_root, "run_1/counts/counts.tsv", runs=True, runs_regex=r"^run_\d+$"
+        )
+        assert answer["glob"] == "**/counts.tsv"
+
+    def test_a_file_named_after_its_sample_folder_becomes_a_wildcard(self, sample_named_root):
+        answer = infer.suggest(
+            sample_named_root, "run_1/alpha/alpha.tsv", runs=True, runs_regex=r"^run_\d+$"
+        )
+        assert answer["glob"] == "*/*.tsv"
+
+    def test_a_huge_repeat_count_in_the_runs_regex_is_not_a_crash(self, self_named_root):
+        answer = infer.suggest(
+            self_named_root, "run_1/counts/counts.tsv", runs=True, runs_regex="a{4294967296}"
+        )
+        assert answer["in_run"] is False
+
     def test_ticked_files_generalise_inside_the_run(self, runs_root):
         answer = infer.suggest(
             runs_root,

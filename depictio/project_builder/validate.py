@@ -224,7 +224,7 @@ def _check_wildcards(wildcards: Any, pattern: str, where: str) -> None:
             raise _refuse(f"{where}: the wildcard {name!r} needs a regex.")
         try:
             compiled = re.compile(regex)
-        except re.error as exc:
+        except (re.error, OverflowError, RecursionError) as exc:
             raise _refuse(f"{where}: invalid regex for the wildcard {name!r} ({exc}).") from exc
         if compiled.groupindex:
             raise _refuse(f"{where}: the wildcard {name!r} regex may not name groups.")
@@ -241,7 +241,7 @@ def _check_regex(pattern: Any, where: str) -> None:
         raise _refuse(f"{where}: a recursive scan needs a regex.")
     try:
         re.compile(pattern)
-    except re.error as exc:
+    except (re.error, OverflowError, RecursionError) as exc:
         raise _refuse(f"{where}: invalid regex ({exc}).") from exc
 
 
@@ -421,7 +421,7 @@ def _check_properties(config: dict, dc_type: str, where: str, *, remote: bool) -
     if dc_type == "indexed_file" and properties.get("sample_regex"):
         try:
             compiled = re.compile(properties["sample_regex"])
-        except re.error as exc:
+        except (re.error, OverflowError, RecursionError) as exc:
             raise _refuse(f"{where}: invalid sample_regex ({exc}).") from exc
         if "sample" not in compiled.groupindex:
             raise _refuse(
