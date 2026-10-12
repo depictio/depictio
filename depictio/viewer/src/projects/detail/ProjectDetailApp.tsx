@@ -31,8 +31,21 @@ import { AgGridReact } from 'ag-grid-react';
 import 'ag-grid-community/styles/ag-grid.css';
 import 'ag-grid-community/styles/ag-theme-alpine.css';
 import type { ColDef } from 'ag-grid-community';
-import { GlassPage, useGlassPages } from '../../chrome/variants/glass/pages';
-import { ClipboardCheck, Database, Settings, ShieldCheck } from 'lucide-react';
+import { GlassPage, STROKE, useGlassPages } from '../../chrome/variants/glass/pages';
+import '../../chrome/variants/glass/pages/project-detail.css';
+import {
+  Check,
+  ClipboardCheck,
+  Database,
+  GitBranch,
+  HardDrive,
+  Layers,
+  Settings,
+  ShieldCheck,
+  Table2,
+  Workflow,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 import { notifications } from '@mantine/notifications';
 import {
@@ -223,6 +236,24 @@ function workflowLabel(wf: WorkflowShape): string {
     (wf._id ?? wf.id) as string ||
     'workflow'
   );
+}
+
+/** What the page below the workflows is scoped to: the selected workflow, the
+ *  only one there is, or all of them. */
+function workflowScope(
+  workflows: WorkflowShape[],
+  selectedId: string | null,
+): { label: string; count: number } | null {
+  if (workflows.length === 0) return null;
+  const wf =
+    workflows.length === 1
+      ? workflows[0]
+      : workflows.find((w) => (w._id ?? w.id) === selectedId);
+  if (wf) return { label: workflowLabel(wf), count: wf.data_collections?.length ?? 0 };
+  return {
+    label: 'All workflows',
+    count: workflows.reduce((n, w) => n + (w.data_collections?.length ?? 0), 0),
+  };
 }
 
 function engineDescription(wf: WorkflowShape): string | null {
@@ -494,6 +525,7 @@ const ProjectDetailApp: React.FC = () => {
                 workflows={workflows}
                 templateSource={parseTemplate(project)?.source.toLowerCase() || null}
                 selectedWorkflowId={selectedWorkflowId}
+                scope={workflowScope(workflows, selectedWorkflowId)}
                 onSelect={(id) => {
                   setSelectedWorkflowId(id);
                   setSelectedDcId(null);
@@ -504,6 +536,11 @@ const ProjectDetailApp: React.FC = () => {
             <Stack gap="lg">
               <DataCollectionsManagerSection
                 projectType={projectType}
+                scopeLabel={
+                  projectType === 'advanced'
+                    ? (workflowScope(workflows, selectedWorkflowId)?.label ?? null)
+                    : null
+                }
                 stats={stats}
                 dataCollections={dataCollections}
                 selectedDcId={selectedDcId}
@@ -565,15 +602,15 @@ const ProjectDetailApp: React.FC = () => {
                   className="dc-project-tabs"
                 >
                   {glass ? (
-                    // Glass: the switch for everything below, as two cards
-                    // centred under the workflows, each saying what it holds.
-                    <Tabs.List mb="md" justify="center">
+                    // Glass: the page's switch, two equal halves across the
+                    // content width, each saying what it holds.
+                    <Tabs.List mb="xl">
                       <Tabs.Tab
                         value="overview"
                         className="dc-project-tab"
                         leftSection={
                           <span className="dc-project-tab-icon">
-                            <Database size={20} strokeWidth={1.9} aria-hidden />
+                            <Database size={20} strokeWidth={STROKE} aria-hidden />
                           </span>
                         }
                       >
@@ -588,7 +625,7 @@ const ProjectDetailApp: React.FC = () => {
                         className="dc-project-tab"
                         leftSection={
                           <span className="dc-project-tab-icon">
-                            <ClipboardCheck size={20} strokeWidth={1.9} aria-hidden />
+                            <ClipboardCheck size={20} strokeWidth={STROKE} aria-hidden />
                           </span>
                         }
                       >
@@ -626,7 +663,7 @@ const ProjectDetailApp: React.FC = () => {
                           value={ingestionView}
                           onChange={(v: string) => setIngestionView(v as 'report' | 'history')}
                           data={[
-                            { value: 'report', label: 'Report' },
+                            { value: 'report', label: 'Latest run' },
                             { value: 'history', label: 'History' },
                           ]}
                         />
@@ -2248,6 +2285,24 @@ const DeleteDataCollectionModal: React.FC<{
   );
 };
 
+/** Basic / Advanced as one calm tag: the kind is the icon, never a hue. */
+const ProjectTypeTag: React.FC<{
+  projectType: 'basic' | 'advanced';
+  size?: 'sm' | 'md';
+}> = ({ projectType, size = 'sm' }) => {
+  const Glyph = projectType === 'advanced' ? Workflow : Table2;
+  return (
+    <Badge
+      variant="light"
+      color="gray"
+      size={size}
+      leftSection={<Glyph size={12} strokeWidth={2} aria-hidden />}
+    >
+      {projectType === 'advanced' ? 'Advanced' : 'Basic'}
+    </Badge>
+  );
+};
+
 const ProjectHeader: React.FC<{
   project: ProjectListEntry;
   projectType: 'basic' | 'advanced';
@@ -2265,9 +2320,7 @@ const ProjectHeader: React.FC<{
             <Text size="sm" c="dimmed" fw={600}>
               Type
             </Text>
-            <Badge color={projectType === 'advanced' ? 'orange' : 'cyan'} variant="light" size="md">
-              {projectType === 'advanced' ? 'Advanced' : 'Basic'}
-            </Badge>
+            <ProjectTypeTag projectType={projectType} size="md" />
             <Text size="sm" c="dimmed" visibleFrom="sm">
               {projectType === 'advanced'
                 ? 'CLI-driven, with workflows and pipelines'
@@ -2279,7 +2332,7 @@ const ProjectHeader: React.FC<{
               <Text size="sm" c="dimmed" fw={600}>
                 Template
               </Text>
-              <TemplateChip parsed={tmpl} verbose />
+              <TemplateChip parsed={tmpl} verbose plain />
               <Anchor href={templateDocsUrl(tmpl)} target="_blank" rel="noreferrer" size="sm" fw={600}>
                 Documentation
               </Anchor>
@@ -2385,9 +2438,116 @@ const WorkflowsPanel: React.FC<{
    *  redundant engine badge. */
   templateSource: string | null;
   selectedWorkflowId: string | null;
+  /** What the content below is scoped to (Glass draws the link to it). */
+  scope: { label: string; count: number } | null;
   onSelect: (id: string | null) => void;
-}> = ({ workflows, templateSource, selectedWorkflowId, onSelect }) => {
+}> = ({ workflows, templateSource, selectedWorkflowId, scope, onSelect }) => {
+  const glass = useGlassPages();
   const brandImage = templateSource ? WORKFLOW_BRAND_IMAGE[templateSource] : undefined;
+  if (glass) {
+    // A lone workflow is the scope whether or not it was clicked, so it
+    // always shows as selected and cannot be toggled off.
+    const only = workflows.length === 1;
+    return (
+      <section className="pd-workflows" aria-label="Workflows">
+        <div className="pd-section-head">
+          <GitBranch size={18} strokeWidth={STROKE} aria-hidden />
+          <Title order={4}>Workflows</Title>
+          <span className="pd-count">{workflows.length}</span>
+          {!only && (
+            <span className="pd-hint">
+              {selectedWorkflowId
+                ? 'The data collections below are scoped to the selected workflow.'
+                : 'Pick one to scope the data collections below.'}
+            </span>
+          )}
+          {selectedWorkflowId && !only && (
+            <Button
+              variant="subtle"
+              color="gray"
+              size="compact-xs"
+              ml="auto"
+              onClick={() => onSelect(null)}
+            >
+              Show all
+            </Button>
+          )}
+        </div>
+        <div className="pd-wf-grid" role="group" aria-label="Workflow">
+          {workflows.map((wf) => {
+            const id = (wf._id ?? wf.id) as string;
+            const isSelected = only || id === selectedWorkflowId;
+            const dcCount = wf.data_collections?.length ?? 0;
+            const engine = engineDescription(wf);
+            const toggle = () => {
+              if (!only) onSelect(isSelected ? null : id);
+            };
+            return (
+              <div
+                key={id}
+                className="pd-wf-card"
+                data-selected={isSelected || undefined}
+                role="button"
+                tabIndex={0}
+                aria-pressed={isSelected}
+                aria-disabled={only || undefined}
+                onClick={toggle}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    toggle();
+                  }
+                }}
+              >
+                <span className="pd-wf-chip">
+                  {brandImage ? (
+                    <img
+                      src={`${import.meta.env.BASE_URL}logos/workflows/${brandImage}`}
+                      alt=""
+                      width={22}
+                      height={22}
+                    />
+                  ) : (
+                    <Workflow size={20} strokeWidth={STROKE} aria-hidden />
+                  )}
+                </span>
+                <span className="pd-wf-body">
+                  <span className="pd-wf-name">{workflowLabel(wf)}</span>
+                  <span className="pd-wf-meta">
+                    {[
+                      wf.version ? `Version ${wf.version}` : null,
+                      !brandImage && engine ? engine : null,
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || 'Workflow'}
+                  </span>
+                  <span className="pd-wf-meta">
+                    <Database size={13} strokeWidth={STROKE} aria-hidden />
+                    {dcCount} data collection{dcCount === 1 ? '' : 's'}
+                  </span>
+                </span>
+                <span className="pd-wf-mark" aria-hidden>
+                  {isSelected && <Check size={13} strokeWidth={3} />}
+                </span>
+                {isSelected && <span className="pd-wf-selected">Selected</span>}
+              </div>
+            );
+          })}
+        </div>
+        {scope && (
+          <div className="pd-scope" role="status">
+            <span className="pd-scope-label">
+              <GitBranch size={14} strokeWidth={STROKE} aria-hidden />
+              <b>{scope.label}</b>
+              <span>
+                {scope.count} data collection{scope.count === 1 ? '' : 's'}
+              </span>
+            </span>
+          </div>
+        )}
+      </section>
+    );
+  }
   return (
     <Stack gap="md">
       <Group gap="xs">
@@ -2497,6 +2657,9 @@ const WorkflowsPanel: React.FC<{
 
 const DataCollectionsManagerSection: React.FC<{
   projectType: 'basic' | 'advanced';
+  /** The workflow the list is scoped to (advanced projects), named in the
+   *  Glass header. */
+  scopeLabel?: string | null;
   stats: DcStats;
   dataCollections: DataCollectionShape[];
   selectedDcId: string | null;
@@ -2516,6 +2679,7 @@ const DataCollectionsManagerSection: React.FC<{
   onCreate: () => void;
 }> = ({
   projectType,
+  scopeLabel,
   stats,
   dataCollections,
   selectedDcId,
@@ -2529,6 +2693,99 @@ const DataCollectionsManagerSection: React.FC<{
   onCreate,
 }) => {
   const accent = useBrandAccents();
+  const glass = useGlassPages();
+  if (glass) {
+    const n = dataCollections.length;
+    return (
+      <Paper withBorder radius="md" p="md" className="pd-manager">
+        <Group justify="space-between" wrap="nowrap" gap="sm">
+          <UnstyledButton
+            onClick={onToggle}
+            style={{ flex: 1, minWidth: 0 }}
+            aria-expanded={opened}
+          >
+            <div className="pd-manager-title">
+              <Title order={4}>
+                {scopeLabel ? `${scopeLabel} data collections` : 'Data collections'}
+              </Title>
+              <span className="pd-hint">
+                {n} data collection{n === 1 ? '' : 's'}
+                {scopeLabel ? ` in ${scopeLabel}` : ''}
+              </span>
+            </div>
+          </UnstyledButton>
+          <Group gap="xs" wrap="nowrap">
+            <Button
+              data-testid="create-dc-btn"
+              size="xs"
+              leftSection={<Icon icon="mdi:plus" width={16} />}
+              disabled={!canMutate}
+              onClick={() => {
+                if (!opened) onToggle();
+                onCreate();
+              }}
+              title={
+                canMutate ? 'Create a new data collection' : 'Owner permission required'
+              }
+            >
+              Create Data Collection
+            </Button>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={onToggle}
+              aria-label={opened ? 'Collapse data collections' : 'Expand data collections'}
+            >
+              <Icon icon={opened ? 'mdi:chevron-up' : 'mdi:chevron-down'} width={22} />
+            </ActionIcon>
+          </Group>
+        </Group>
+        <Collapse in={opened}>
+          <ScrollArea.Autosize mah={640} type="auto" offsetScrollbars pt="md">
+            <Stack gap="md" pr="sm">
+              <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+                <StatCard glassIcon={Database} label="Total collections" primary={String(stats.total)} secondary="Data collections" />
+                <StatCard
+                  glassIcon={Layers}
+                  label="Collection types"
+                  primaryDual={[
+                    { count: stats.aggregate, label: 'Aggregate', color: 'var(--gl-accent)' },
+                    { count: stats.metadata, label: 'Metadata', color: 'var(--gl-faint)' },
+                  ]}
+                />
+                <StatCard
+                  glassIcon={HardDrive}
+                  label="Total storage"
+                  primary={formatBytes(stats.totalBytes)}
+                  secondary={
+                    stats.totalBytes > 0
+                      ? `${n} collection${n === 1 ? '' : 's'}`
+                      : 'No size info yet'
+                  }
+                />
+              </SimpleGrid>
+              <Paper withBorder radius="md" p="md">
+                <Group gap="xs" mb="xs">
+                  <Title order={5}>Data collections</Title>
+                  <span className="pd-count">{n}</span>
+                </Group>
+                <DataCollectionsTable
+                  projectType={projectType}
+                  dataCollections={dataCollections}
+                  selectedDcId={selectedDcId}
+                  canMutate={canMutate}
+                  onSelect={onSelect}
+                  onRename={onRename}
+                  onDelete={onDelete}
+                  onManage={onManage}
+                />
+              </Paper>
+            </Stack>
+          </ScrollArea.Autosize>
+        </Collapse>
+      </Paper>
+    );
+  }
   return (
     /* Header mirrors the Cross-DC links section (LinksSection.tsx): Paper,
        clickable title area, then the primary action and the chevron as an
@@ -2654,18 +2911,44 @@ const DataCollectionsManagerSection: React.FC<{
 };
 
 const StatCard: React.FC<{
-  icon: string;
-  iconColor: string;
+  icon?: string;
+  iconColor?: string;
+  /** Glass: a Lucide glyph in a small accent chip instead of a coloured icon. */
+  glassIcon?: LucideIcon;
   label: string;
   primary?: string;
   secondary?: string;
   primaryColor?: string;
   primaryDual?: Array<{ count: number; label: string; color: string }>;
-}> = ({ icon, iconColor, label, primary, secondary, primaryColor, primaryDual }) => (
+}> = ({ icon, iconColor, glassIcon: GlassGlyph, label, primary, secondary, primaryColor, primaryDual }) => GlassGlyph ? (
+  <Card withBorder radius="md" p="md" className="pd-stat">
+    <div className="pd-stat-head">
+      <span className="pd-stat-chip">
+        <GlassGlyph size={16} strokeWidth={STROKE} />
+      </span>
+      <span className="pd-stat-label">{label}</span>
+    </div>
+    {primary && <div className="pd-stat-value">{primary}</div>}
+    {primaryDual && (
+      <div className="pd-stat-dual">
+        {primaryDual.map((p) => (
+          <div key={p.label}>
+            <div className="pd-stat-value">{p.count}</div>
+            <div className="pd-stat-sub">
+              <i style={{ background: p.color }} aria-hidden />
+              {p.label}
+            </div>
+          </div>
+        ))}
+      </div>
+    )}
+    {secondary && <div className="pd-stat-sub">{secondary}</div>}
+  </Card>
+) : (
   <Card withBorder radius="md" p="md">
     <Stack gap="xs" align="center">
       <Group gap={6}>
-        <Icon icon={icon} width={20} color={iconColor} />
+        {icon && <Icon icon={icon} width={20} color={iconColor} />}
         <Text fw={600}>{label}</Text>
       </Group>
       {primary && (
@@ -2753,6 +3036,7 @@ const DataCollectionsTable: React.FC<{
   onManage,
 }) => {
   const accent = useBrandAccents();
+  const glass = useGlassPages();
   const [filter, setFilter] = useState('');
   const [sortKey, setSortKey] = useState<DcSortKey>('tag');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
@@ -2884,7 +3168,11 @@ const DataCollectionsTable: React.FC<{
                 onClick={() => onSelect(isSelected ? null : id)}
                 style={{
                   cursor: 'pointer',
-                  background: isSelected ? 'var(--mantine-color-teal-light)' : undefined,
+                  background: isSelected
+                    ? glass
+                      ? 'var(--gl-accent-soft)'
+                      : 'var(--mantine-color-teal-light)'
+                    : undefined,
                 }}
               >
                 <Table.Td>
@@ -2925,7 +3213,7 @@ const DataCollectionsTable: React.FC<{
                       <ActionIcon
                         data-testid="manage-dc-btn"
                         variant="subtle"
-                        color={accent.secondary}
+                        color={glass ? 'gray' : accent.secondary}
                         size="sm"
                         disabled={!canMutate}
                         onClick={guard(() => onManage(dc))}
@@ -2940,7 +3228,7 @@ const DataCollectionsTable: React.FC<{
                     )}
                     <ActionIcon
                       variant="subtle"
-                      color="blue"
+                      color={glass ? 'gray' : 'blue'}
                       size="sm"
                       disabled={!canMutate}
                       onClick={guard(() => onRename(dc))}
@@ -3719,6 +4007,7 @@ const DetailRow: React.FC<{
 
 const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
   const accent = useBrandAccents();
+  const glass = useGlassPages();
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -3786,7 +4075,7 @@ const DataPreviewPanel: React.FC<{ dcId: string }> = ({ dcId }) => {
     }
     return (
       <Button
-        color={accent.secondary}
+        color={glass ? undefined : accent.secondary}
         variant="light"
         size="sm"
         onClick={handleLoad}
