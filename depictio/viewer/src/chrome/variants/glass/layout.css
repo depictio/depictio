@@ -805,24 +805,234 @@
 
 /* ------------------------------------------------------------------- dock */
 
-.hy-dock {
+/* The dock sits at one of four anchors (Dock.tsx). Each is positioned off the
+ * canvas box (`.hy-main`) and clear of the Analysis panel (`--gl-pad-r`), so
+ * the dock follows the canvas as the sidebar, the drawer and the panel come
+ * and go. The ghosts shown while dragging use the same rules. */
+.hy-anchor {
   position: absolute;
-  bottom: var(--gl-dock-gap);
+  transition:
+    left 250ms ease,
+    right 250ms ease;
+}
+/* Mid-move the dock is placed by a spring: no CSS transition on top of it. */
+.hy-anchor[data-moving] {
+  transition: none;
+}
+.hy-anchor[data-anchor='bottom-center'],
+.hy-anchor[data-anchor='top-center'] {
+  right: auto;
   left: calc((100% - var(--gl-pad-r, 0px)) / 2);
   translate: -50% 0;
+}
+.hy-anchor[data-anchor='bottom-left'],
+.hy-anchor[data-anchor='bottom-right'] {
+  translate: none;
+}
+.hy-anchor[data-anchor='bottom-left'] {
+  right: auto;
+  left: var(--gl-gutter);
+}
+.hy-anchor[data-anchor='bottom-right'] {
+  left: auto;
+  right: calc(var(--gl-pad-r, 0px) + var(--gl-gutter));
+}
+/* The notes button holds the foot's right corner: the dock stops short of it. */
+:root:has(.dc-notes-toggle) .hy-anchor[data-anchor='bottom-right'] {
+  right: calc(var(--gl-pad-r, 0px) + 78px);
+}
+.hy-anchor[data-anchor^='bottom'] {
+  top: auto;
+  bottom: var(--gl-dock-gap);
+}
+.hy-anchor[data-anchor='top-center'] {
+  top: var(--gl-dock-top);
+  bottom: auto;
+}
+/* At the head the dock is a bar above the canvas, not a float over it: the
+ * stage makes room for it and the foot needs no reserve. */
+.hy-shell {
+  --gl-dock-top: 10px;
+}
+.hy-shell[data-dock='top-center'] {
+  --gl-dock-reserve: 24px;
+}
+.hy-shell[data-dock='top-center'] .hy-stage {
+  padding-top: calc(var(--gl-dock-h) + var(--gl-dock-top));
+}
+
+.hy-dock {
   z-index: 40;
   display: flex;
   align-items: center;
   gap: 2px;
   padding: 6px;
+  max-width: calc(100% - 2 * var(--gl-gutter));
   border-radius: calc(var(--gl-float-radius) + 2px);
   background: var(--gl-float-bg);
   border: 1px solid var(--gl-float-line);
-  box-shadow: var(--gl-float-shadow);
+  /* A little more lift than the other floats: the dock is the page's one
+   * place for actions, and should read as a thing to reach for. */
+  box-shadow: var(--gl-float-shadow), 0 14px 28px -14px var(--gl-shade-b);
   -webkit-backdrop-filter: var(--gl-float-filter);
   backdrop-filter: var(--gl-float-filter);
-  transition: left 250ms ease;
 }
+.hy-dock[data-dragging] {
+  box-shadow: var(--gl-float-shadow), 0 22px 40px -16px var(--gl-shade-b);
+}
+/* Where a dragged dock can land. */
+.hy-dock-ghost {
+  z-index: 39;
+  box-sizing: border-box;
+  pointer-events: none;
+  border-radius: calc(var(--gl-float-radius) + 2px);
+  border: 1.5px dashed var(--gl-faint);
+  transition: background-color 140ms ease, border-color 140ms ease !important;
+}
+.hy-dock-ghost[data-near] {
+  border-color: var(--gl-accent);
+  background: color-mix(in srgb, var(--gl-accent) 10%, transparent);
+}
+
+/* The grip: a quiet handle at the dock's leading edge. */
+.hy-dock-grip {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 36px;
+  margin: 0 2px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--gl-faint);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    color 140ms ease,
+    background-color 140ms ease,
+    box-shadow 160ms ease;
+}
+.hy-dock-grip svg {
+  pointer-events: none;
+}
+.hy-dock-grip:hover,
+.hy-dock:hover .hy-dock-grip {
+  color: var(--gl-muted);
+}
+.hy-dock-grip:hover {
+  background: var(--gl-well);
+}
+.hy-dock-grip:focus-visible {
+  color: var(--gl-fg);
+  box-shadow: 0 0 0 2px var(--gl-ring);
+}
+.hy-dock[data-dragging] .hy-dock-grip {
+  cursor: grabbing;
+  color: var(--gl-accent-fg);
+}
+.hy-shell[data-density='compact'] .hy-dock-grip {
+  height: 30px;
+}
+
+/* ---------------------------------------------------- first-visit welcome */
+
+/* The first time a browser opens a dashboard: the keys name themselves, a
+ * halo pulses twice and a line says what the dock is for. Ends after a few
+ * seconds or at the first use (Dock.tsx, useDockIntro). */
+.hy-shell .hy-dock[data-labels] .hy-key--dock.hy-key--square {
+  width: auto;
+  padding-inline: 11px 15px;
+}
+.hy-dock[data-labels] .hy-key-peek {
+  display: inline;
+  animation: hy-peek 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.hy-dock[data-hint] {
+  animation: hy-dock-in 380ms ease-out both;
+}
+.hy-dock[data-hint]::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: hy-halo 1.5s ease-out 0.5s 2 both;
+}
+.hy-dock-hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  translate: -50% 0;
+  width: max-content;
+  max-width: min(340px, 90vw);
+  padding: 7px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--gl-float-line);
+  background: var(--gl-float-bg);
+  box-shadow: var(--gl-float-shadow);
+  color: var(--gl-muted);
+  font-size: 12.5px;
+  font-weight: 550;
+  line-height: 1.4;
+  text-align: center;
+  pointer-events: none;
+  animation:
+    hy-dock-in 420ms ease-out 0.15s both,
+    hy-hint-out 500ms ease 7.4s forwards;
+}
+.hy-dock[data-anchor='top-center'] .hy-dock-hint {
+  bottom: auto;
+  top: calc(100% + 10px);
+}
+.hy-dock[data-anchor='bottom-left'] .hy-dock-hint {
+  left: 0;
+  translate: none;
+  text-align: left;
+}
+.hy-dock[data-anchor='bottom-right'] .hy-dock-hint {
+  left: auto;
+  right: 0;
+  translate: none;
+  text-align: left;
+}
+@keyframes hy-dock-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes hy-hint-out {
+  to {
+    opacity: 0;
+  }
+}
+/* A ring that swells off the dock's edge and fades. */
+@keyframes hy-halo {
+  from {
+    box-shadow:
+      0 0 0 0 color-mix(in srgb, var(--gl-accent) 42%, transparent),
+      0 0 0 0 color-mix(in srgb, var(--gl-accent) 18%, transparent);
+  }
+  to {
+    box-shadow:
+      0 0 0 9px transparent,
+      0 0 26px 12px transparent;
+  }
+}
+/* The mode key (Edit, Save) keeps its name at rest: it is the page's one call
+ * to action. The name is a variable on its slot (Shell.tsx, Slot). */
+.hy-shell .hy-dock .hy-slot[data-hy-name] .hy-key--dock.hy-key--square {
+  width: auto;
+  padding-inline: 11px 15px;
+}
+.hy-dock .hy-slot[data-hy-name] .hy-key--dock::after {
+  content: var(--hy-name);
+}
+
 .hy-dock-sep {
   flex: none;
   width: 1px;
@@ -1450,9 +1660,13 @@
   .hy-top-brand,
   .hy-tablist-item,
   .hy-key,
-  .hy-dock {
+  .hy-anchor,
+  .hy-dock-grip {
     transition: none !important;
   }
+  .hy-dock[data-hint],
+  .hy-dock[data-hint]::before,
+  .hy-dock-hint,
   .hy-key-peek,
   :root[data-chrome='glass'] :is(
       .dc-analysis-panel,

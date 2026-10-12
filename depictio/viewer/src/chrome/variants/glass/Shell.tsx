@@ -18,7 +18,8 @@
  * an icon rail; the top bar says whose and where; the dock acts (search,
  * reading modes, the page's mode). A dock key that opens something stays
  * lit, with its name out, while that thing is open, and the panels it opens
- * float in beside it. Filters opens a drawer beside the sidebar that pushes
+ * float in beside it. The reader can move the dock (Dock.tsx: the foot's
+ * centre, left or right, or the head). Filters opens a drawer beside the sidebar that pushes
  * the canvas over.
  *
  * Below `sm` the sidebar becomes one bottom bar (Tabs, Filters, Search, More),
@@ -40,6 +41,7 @@ import {
 import { CONTENT_WIDTHS, useContentWidthPref } from '../../../hooks/useContentWidthPref';
 import type { HeaderAction } from '../../Header';
 import type { DashboardShellProps } from '../../shell/types';
+import { Dock } from './Dock';
 import { STROKE } from './icons';
 import {
   DrawerHead,
@@ -51,6 +53,7 @@ import {
   ThemeTile,
   TopBar,
 } from './parts';
+import { useDockAnchor } from './useDockPlacement';
 import './layout.css';
 
 /** The sidebar, open (names) and folded (the icon rail), and the top bar's
@@ -243,12 +246,24 @@ function useRootOffsets(vars: Record<string, string>): void {
   }, [key]);
 }
 
+/** The dock keeps the mode key (Edit, Save) named at rest, as the page's one
+ *  call to action; layout.css draws the name from this variable. */
+const DOCK_NAME: Record<string, string> = { edit: 'Edit', save: 'Save' };
+
 /** Wraps an action so CSS can find the key that opened a panel. */
-const Slot: React.FC<{ action: HeaderAction }> = ({ action }) => (
-  <span className="hy-slot" data-hy-slot={action.id}>
-    {action.node}
-  </span>
-);
+const Slot: React.FC<{ action: HeaderAction; named?: boolean }> = ({ action, named }) => {
+  const name = named ? DOCK_NAME[action.id] : undefined;
+  return (
+    <span
+      className="hy-slot"
+      data-hy-slot={action.id}
+      data-hy-name={name ? '' : undefined}
+      style={name ? ({ '--hy-name': `"${name}"` } as React.CSSProperties) : undefined}
+    >
+      {action.node}
+    </span>
+  );
+};
 
 /** The dock's clusters: find | read | author + mode (the primary last). */
 const OFF_DOCK = new Set(['filters', 'settings', 'feedback']);
@@ -288,7 +303,11 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
   const reduce = useReducedMotion();
   const sideTheme = useFacing('right', 'right-start');
   const topTheme = useFacing('bottom', 'bottom-end');
-  const dockTheme = useFacing('top', 'top');
+  // The dock's tooltips and menus open toward the canvas: up from the foot,
+  // down from the head.
+  const [dockAt, setDockAt] = useDockAnchor();
+  const dockFacing = dockAt === 'top-center' ? 'bottom' : 'top';
+  const dockTheme = useFacing(dockFacing, dockFacing);
   const showing = useOpenSurfaces();
   const drawerCard = React.useRef<HTMLDivElement>(null);
   useMenusBeside(drawerCard);
@@ -406,6 +425,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
       data-mode={mode}
       data-side={sideOpen ? 'open' : 'folded'}
       data-density={dense ? 'compact' : undefined}
+      data-dock={dockAt}
       data-panel={filtersOpen ? 'filters' : undefined}
       data-hy-showing={showing || undefined}
       style={shellStyle}
@@ -548,7 +568,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
           className="hy-stage"
           style={{
             paddingRight: padR,
-            transition: reduce ? 'none' : 'padding-right 250ms ease',
+            transition: reduce ? 'none' : 'padding-right 250ms ease, padding-top 250ms ease',
           }}
         >
           {boot}
@@ -558,18 +578,18 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
 
         {ready && clusters.length > 0 && (
           <MantineThemeContext.Provider value={dockTheme}>
-            <nav className="hy-dock" aria-label="Dashboard actions">
+            <Dock anchor={dockAt} onAnchor={setDockAt}>
               {clusters.map((c, i) => (
                 <React.Fragment key={c.key}>
                   {i > 0 && <span className="hy-dock-sep" aria-hidden />}
                   <ChromeButtonGroup group={c.key}>
                     {c.actions.map((a) => (
-                      <Slot key={a.id} action={a} />
+                      <Slot key={a.id} action={a} named />
                     ))}
                   </ChromeButtonGroup>
                 </React.Fragment>
               ))}
-            </nav>
+            </Dock>
           </MantineThemeContext.Provider>
         )}
         {overlays}
