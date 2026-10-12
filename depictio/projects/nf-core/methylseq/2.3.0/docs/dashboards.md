@@ -83,7 +83,7 @@ reads kept, then Bismark's alignment rates, deduplication, cytosine methylation 
 M-bias picker. Collapsed: the other FastQC panels with the trimmed read lengths, and Bismark's
 strand alignment with the four Qualimap BamQC panels. A bisulfite library fails the FastQC
 sequence content and GC checks by design, because converting unmethylated cytosines is the
-point. Its own sample filter reads the MultiQC report.
+point. The pinned sample filters narrow its panels.
 
 **Run QC.** Bismark's run summary (`bismark2summary`), alignment report and deduplication report,
 one row per library. Strip: read pairs analysed (with the share aligned, then kept after

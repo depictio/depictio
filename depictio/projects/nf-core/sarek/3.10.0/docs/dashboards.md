@@ -63,8 +63,8 @@ callers call few SNPs, so every Ts/Tv card and filter keeps `ts_tv > 0`.
 **MultiQC.** MultiQC panels only. Open: general statistics, fastp filtered reads, Samtools
 percent mapped, MarkDuplicates and the mosdepth cumulative coverage. Collapsed: the FastQC
 panels, the BQSR fit and insert sizes, the bcftools and VCFtools panels, and the SnpEff and
-VEP panels. Its own sample filter reads the MultiQC report, where a library carries a lane and
-a read suffix.
+VEP panels. The pinned sample filters narrow its panels, though the report names a library with a
+lane and a read suffix.
 
 **Coverage.** Strip: the depth over the intervals per sample (box plot), the median depth of
 an interval against a 20x floor, the depth across contigs (distribution) and the intervals

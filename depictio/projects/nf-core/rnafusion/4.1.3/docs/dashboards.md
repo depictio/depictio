@@ -67,7 +67,7 @@ then at most three open sections; tables and details follow, collapsed.
 histograms beside fastp's filtered reads, then STAR's alignment scores beside Picard's
 transcript region assignment. Collapsed: the post-trim FastQC quality scores (MultiQC
 anchors the second FastQC pass as `fastqc-1`), Picard's insert size and gene body coverage,
-and STAR's gene counts. Its own sample filter reads the MultiQC report.
+and STAR's gene counts. The pinned sample filters narrow its panels.
 
 **Caller Agreement.** Strip: distinct fusions (the 5' partners in most fusions ranked),
 calls split by how many callers agree (a ring), the median Fusion Indication Index (a box)

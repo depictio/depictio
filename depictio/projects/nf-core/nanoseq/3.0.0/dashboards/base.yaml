@@ -486,11 +486,6 @@ tabs:
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
-  filter_sections:
-  - name: MultiQC report
-    icon: mdi:file-document-outline
-    color: orange
-    description: Libraries as the MultiQC report names them
   grid_sections:
   - name: QC overview
     icon: mdi:chart-box-outline
@@ -518,20 +513,6 @@ tabs:
     tag: ns-mqc-intro
     index: mqc-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: interactive
-    workflow_tag: nanoseq
-    data_collection_tag: multiqc_data
-    interactive_component_type: MultiSelect
-    column_name: sample
-    column_type: object
-    display:
-      icon_name: mdi:test-tube
-      custom_color: teal
-    section: MultiQC report
-    tag: ns-mqc-filter-sample
-    index: mqc-sample-filter
-    title: Library
-    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: multiqc
     workflow_tag: nanoseq
     data_collection_tag: multiqc_data

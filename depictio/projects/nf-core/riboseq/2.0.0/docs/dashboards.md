@@ -65,8 +65,8 @@ at most three open sections; tables and details follow, collapsed.
 reads, counts and lengths after rRNA removal, the SortMeRNA rRNA share, the STAR summary and
 the Ribo-TISH frame and length panels. Collapsed: the Salmon fragment lengths, the raw
 quality histograms, lengths after trimming, the status checks after rRNA removal and the
-samtools mapping rate. Its filters read the MultiQC report and the read layout, so they work
-on a run without a design table.
+samtools mapping rate. The pinned sample filters narrow its panels, and its own read-layout filter
+reads the sample sheet, so both work on a run without a design table.
 
 **Ribo-seq QC.** Strip: P-sites assigned (a distribution over libraries), the median frame-0
 share in the CDS (a box plot), the lowest frame margin (a threshold at 20 points, warning

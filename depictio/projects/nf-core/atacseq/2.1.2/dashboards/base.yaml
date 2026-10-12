@@ -569,13 +569,6 @@ tabs:
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
-  # Tab-local: the read-level panels are keyed on the sequencing library, a
-  # finer grain than the sample every other tab works in.
-  filter_sections:
-  - name: Library scope
-    icon: mdi:test-tube
-    color: orange
-    description: The sequencing libraries behind the FastQC and Trim Galore panels
   grid_sections:
   - name: Run summary
     icon: mdi:view-dashboard-outline
@@ -605,20 +598,6 @@ tabs:
     tag: at-mqc-intro
     index: mqc-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: interactive
-    workflow_tag: atacseq
-    data_collection_tag: samplesheet
-    interactive_component_type: MultiSelect
-    column_name: sample
-    column_type: object
-    display:
-      icon_name: mdi:test-tube
-      custom_color: teal
-    section: Library scope
-    tag: at-mqc-filter-library
-    index: mqc-library-filter
-    title: Sequencing library
-    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: multiqc
     workflow_tag: atacseq
     data_collection_tag: multiqc_data

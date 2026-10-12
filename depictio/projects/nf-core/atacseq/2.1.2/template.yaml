@@ -840,7 +840,7 @@ workflows:
 
 links:
   # The library sheet reaches the read-level MultiQC panels on its own key
-  # (<sample>_T<n>), which is what the MultiQC tab's Library scope filter picks.
+  # (<sample>_T<n>).
   - source_dc_tag: "samplesheet"
     source_column: "sample"
     target_dc_tag: "multiqc_data"
