@@ -67,6 +67,7 @@ import type {
   VizSuggestionsResponse,
 } from 'depictio-react-core';
 import LinksSection from './LinksSection';
+import type { ProjectJoin } from './ConnectionsMap';
 import ManageDataCollectionModal, {
   type ManageDcType,
 } from './ManageDataCollectionModal';
@@ -78,7 +79,6 @@ import { useFolderDropzone } from '../../hooks/useFolderDropzone';
 
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { AppSidebar } from '../../chrome';
-// import JoinsGraph from './JoinsGraph'; // its render is hidden, see DataCollectionViewer
 import IngestionReportPanel from './IngestionReportPanel';
 import ProjectIngestionHistoryPanel from './ProjectIngestionHistoryPanel';
 import ProjectIngestionTrigger from './ProjectIngestionTrigger';
@@ -280,53 +280,6 @@ function flattenDataCollections(
   return workflows.flatMap((wf) => wf.data_collections ?? []);
 }
 
-/** Best-effort column extraction matching the Dash version's priority
- *  (depictio/dash/components/depictio_cytoscape_joins.py:948-989):
- *  last_aggregation.aggregation_columns_specs > config.columns
- *  > config.dc_specific_properties.columns_description (keys)
- *  > delta_table_schema (keys or field names). Falls back to []. */
-function extractColumns(dc: DataCollectionShape): string[] {
-  // Priority 1: aggregation_columns_specs from the latest aggregation entry.
-  // For DCs ingested through the React table-create / append flow this is
-  // the only populated source — without it the cytoscape table-DC node
-  // renders an empty box.
-  const lastAggRaw = dc.last_aggregation;
-  const lastAgg = Array.isArray(lastAggRaw)
-    ? lastAggRaw[lastAggRaw.length - 1]
-    : lastAggRaw;
-  const specs = (lastAgg as
-    | { aggregation_columns_specs?: Array<{ name?: unknown }> }
-    | undefined)?.aggregation_columns_specs;
-  if (Array.isArray(specs) && specs.length > 0) {
-    const names = specs
-      .map((s) => (typeof s?.name === 'string' ? s.name : null))
-      .filter((n): n is string => !!n);
-    if (names.length > 0) return names;
-  }
-
-  const config = (dc.config ?? {}) as Record<string, unknown>;
-  const direct = config.columns;
-  if (Array.isArray(direct)) return direct.map(String);
-
-  const dcSpec = config.dc_specific_properties as
-    | { columns_description?: Record<string, unknown> }
-    | undefined;
-  if (dcSpec?.columns_description && typeof dcSpec.columns_description === 'object') {
-    return Object.keys(dcSpec.columns_description);
-  }
-
-  const schema = (dc as Record<string, unknown>).delta_table_schema;
-  if (schema && typeof schema === 'object' && !Array.isArray(schema)) {
-    return Object.keys(schema as Record<string, unknown>);
-  }
-  if (Array.isArray(schema)) {
-    return (schema as Array<Record<string, unknown>>)
-      .map((f) => (typeof f?.name === 'string' ? f.name : null))
-      .filter((n): n is string => !!n);
-  }
-  return [];
-}
-
 const ProjectDetailApp: React.FC = () => {
   const accent = useBrandAccents();
   const [project, setProject] = useState<ProjectListEntry | null>(null);
@@ -367,7 +320,7 @@ const ProjectDetailApp: React.FC = () => {
   const [settingsOpened, setSettingsOpened] = useState(false);
   /** Cross-DC links for this project. Fetched alongside the project doc and
    *  refreshed when the user creates / edits / deletes a link from the
-   *  Links section. Wired into the JoinsGraph for visualization. */
+   *  Links section. */
   const [projectLinks, setProjectLinks] = useState<DCLink[]>([]);
 
   const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
@@ -566,6 +519,9 @@ const ProjectDetailApp: React.FC = () => {
                   }))}
                   canMutate={canMutate}
                   onLinksChange={setProjectLinks}
+                  joins={
+                    ((project as Record<string, unknown>).joins as ProjectJoin[] | undefined) || []
+                  }
                 />
               )}
               <Box ref={dcViewerRef}>
@@ -3528,19 +3484,6 @@ const DataCollectionViewer: React.FC<{
 
         {isMultiQC && <MultiQCReportsCard dcId={dcId} />}
 
-        {/* "Data Collection Relationships" graph: hidden until the feature is revisited.
-        <JoinsGraph
-          dataCollections={allDataCollections.map((d) => ({
-            id: (d._id ?? d.id) as string,
-            tag: d.data_collection_tag || ((d._id ?? d.id) as string),
-            type: (d.config?.type as string | undefined) || 'unknown',
-            columns: extractColumns(d),
-          }))}
-          joins={joins}
-          links={links}
-          highlightDcId={dcId}
-        />
-        */}
       </Stack>
     </Paper>
   );

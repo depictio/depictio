@@ -67,9 +67,6 @@ importers:
       ag-grid-react:
         specifier: ^32.3.0
         version: 32.3.9(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
-      cytoscape:
-        specifier: ^3.29.0
-        version: 3.33.2
       dayjs:
         specifier: ^1.11.10
         version: 1.11.20
@@ -103,9 +100,6 @@ importers:
       react:
         specifier: ^18.3.0
         version: 18.3.1
-      react-cytoscapejs:
-        specifier: ^2.0.0
-        version: 2.0.0(cytoscape@3.33.2)(react@18.3.1)
       react-dom:
         specifier: ^18.3.0
         version: 18.3.1(react@18.3.1)
@@ -2496,10 +2490,6 @@ packages:
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
 
-  cytoscape@3.33.2:
-    resolution: {integrity: sha512-sj4HXd3DokGhzZAdjDejGvTPLqlt84vNFN8m7bGsOzDY5DyVcxIb2ejIXat2Iy7HxWhdT/N1oKyheJ5YdpsGuw==}
-    engines: {node: '>=0.10'}
-
   d3-array@1.2.4:
     resolution: {integrity: sha512-KHW6M86R+FUPYGb3R5XiYjXPq7VzwxZ22buHhAEVG5ztoEcZZMLov530mmccaqA1GghZArjQV46fuc8kUqhhHw==}
 
@@ -3731,12 +3721,6 @@ packages:
 
   raf@3.4.1:
     resolution: {integrity: sha512-Sq4CW4QhwOHE8ucn6J34MqtZCeWFP2aQSmrlroYgqAV1PjStIhJXxYuTgUIfkEk7zTLjmIjLmU5q+fbD1NnOJA==}
-
-  react-cytoscapejs@2.0.0:
-    resolution: {integrity: sha512-t3SSl1DQy7+JQjN+8QHi1anEJlM3i3aAeydHTsJwmjo/isyKK7Rs7oCvU6kZsB9NwZidzZQR21Vm2PcBLG/Tjg==}
-    peerDependencies:
-      cytoscape: ^3.2.19
-      react: '>=15.0.0'
 
   react-docgen-typescript@2.4.0:
     resolution: {integrity: sha512-ZtAp5XTO5HRzQctjPU0ybY0RRCQO19X/8fxn3w7y2VVTUbGHDKULPTL4ky3vB05euSgG5NpALhEhDPvQ56wvXg==}
@@ -6774,8 +6758,6 @@ snapshots:
 
   csstype@3.2.3: {}
 
-  cytoscape@3.33.2: {}
-
   d3-array@1.2.4: {}
 
   d3-array@3.2.4:
@@ -8175,12 +8157,6 @@ snapshots:
   raf@3.4.1:
     dependencies:
       performance-now: 2.1.0
-
-  react-cytoscapejs@2.0.0(cytoscape@3.33.2)(react@18.3.1):
-    dependencies:
-      cytoscape: 3.33.2
-      prop-types: 15.8.1
-      react: 18.3.1
 
   react-docgen-typescript@2.4.0(typescript@5.9.3):
     dependencies:

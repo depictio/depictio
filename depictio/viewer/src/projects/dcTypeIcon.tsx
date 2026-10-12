@@ -90,8 +90,9 @@ export const DcTypeIcon: React.FC<{
 }> = ({ type, size = 18, withTooltip = true }) => {
   const m = dcTypeMeta(type);
   // The brand-colour logo (#201637) vanishes on a dark page: dark mode gets
-  // the white one, switched by Mantine's lightHidden/darkHidden in CSS.
-  const logoStyle: React.CSSProperties = { objectFit: 'contain', display: 'block', flexShrink: 0 };
+  // the white one, switched by Mantine's lightHidden/darkHidden in CSS. No
+  // inline `display`: it would beat that class and show both logos.
+  const logoStyle: React.CSSProperties = { objectFit: 'contain', flexShrink: 0 };
   const el = m.isMultiqc ? (
     <>
       <Box
