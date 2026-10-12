@@ -3745,7 +3745,8 @@ export async function handleGoogleCallback(code: string, state: string): Promise
   const params = new URLSearchParams({ code, state });
   const res = await fetch(`${API_BASE}/auth/google/callback?${params.toString()}`);
   if (!res.ok) {
-    const detail = await res.text().catch(() => '');
+    // The API answers with a `{detail}` envelope; show its text, not the JSON.
+    const detail = await readErrorDetail(res);
     return { success: false, message: detail || `OAuth failed: ${res.status}`, session: null };
   }
   const body = (await res.json()) as {

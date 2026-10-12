@@ -1,4 +1,4 @@
-import { Anchor, Loader, Stack, Text } from '@mantine/core';
+import { Alert, Anchor, Loader, Stack, Text } from '@mantine/core';
 import { useEffect, useRef, useState } from 'react';
 import { handleGoogleCallback, persistSession } from 'depictio-react-core';
 import AuthCard from './AuthCard';
@@ -47,11 +47,13 @@ export default function GoogleOAuthCallback() {
   }, []);
 
   return (
-    <AuthCard heading="Signing you in…">
+    <AuthCard heading={error ? 'Sign-in failed' : 'Signing you in…'}>
       <Stack align="center" gap="md">
         {error ? (
           <>
-            <Text c="red" ta="center">{error}</Text>
+            <Alert color="red" variant="light" data-testid="oauth-callback-error" style={{ width: '100%' }}>
+              {error}
+            </Alert>
             <Anchor href="/auth">Back to sign-in</Anchor>
           </>
         ) : (
