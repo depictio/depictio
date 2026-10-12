@@ -253,7 +253,7 @@ def _reads_from(config: dict) -> tuple[str, str]:
     """
     if config.get("source") == "transformed":
         recipe = str((config.get("transform") or {}).get("recipe") or "")
-        return "computed", f"`{recipe}`" if recipe else "—"
+        return "computed", f"`{recipe}`" if recipe else "-"
     scan_parameters = (config.get("scan") or {}).get("scan_parameters") or {}
     if "filename" in scan_parameters:
         return "scanned file", f"`{scan_parameters['filename']}`"
@@ -262,7 +262,7 @@ def _reads_from(config: dict) -> tuple[str, str]:
         return "scanned pattern", f"`{pattern}`"
     if str(config.get("type", "")).lower() == "multiqc":
         return "MultiQC report", "the run's own `multiqc_data`"
-    return str(config.get("type") or "—"), "—"
+    return str(config.get("type") or "-"), "-"
 
 
 def _data_collections(template: dict) -> list[dict[str, Any]]:
@@ -582,8 +582,8 @@ def render_discussion(
     parts.append(f"[Docs]({docs_url})")
     if pr:
         draft = " (draft)" if pr.get("isDraft") else ""
-        parts.append(f" · [Template source]({pr['url']}){draft}")
-    parts.append(f" · `depictio/projects/nf-core/{facts.pipeline}/{facts.version}/`")
+        parts.append(f" | [Template source]({pr['url']}){draft}")
+    parts.append(f" | `depictio/projects/nf-core/{facts.pipeline}/{facts.version}/`")
     if facts.megatest_sha:
         root = f", run root `{facts.run_root}`" if facts.run_root else ""
         parts.append(
@@ -605,7 +605,7 @@ def render_discussion(
         _md_table(
             ["Tab", "What it is about", "Sections"],
             [
-                [t.title, t.subtitle or "—", ", ".join(t.sections) or "—"]
+                [t.title, t.subtitle or "-", ", ".join(t.sections) or "-"]
                 for t in facts.tabs
                 if t.title
             ],
@@ -655,7 +655,7 @@ def render_discussion(
         parts.append(
             _md_table(
                 ["Variable", "The route it covers"],
-                [[f"`{name}`", desc or "—"] for name, desc in routes],
+                [[f"`{name}`", desc or "-"] for name, desc in routes],
             )
         )
         parts.append("\n</details>\n\n")
@@ -723,12 +723,12 @@ def render_epic(
             [
                 f"**{facts.pipeline}**",
                 facts.version,
-                f"[#{pr['number']}]({pr['url']})" if pr else "—",
-                f"[open]({live})" if deep else "⚠ needs link",
+                f"[#{pr['number']}]({pr['url']})" if pr else "-",
+                f"[open]({live})" if deep else "**needs link**",
                 f"[page]({docs})",
-                f"[thread]({thread})" if thread else "⚠ not opened",
-                "☐",
-                "☐",
+                f"[thread]({thread})" if thread else "**not opened**",
+                "no",
+                "no",
             ]
         )
 
