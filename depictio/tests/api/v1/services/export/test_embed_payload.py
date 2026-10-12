@@ -213,3 +213,21 @@ class TestBundleInjection:
     def test_script_hashes_are_stable(self) -> None:
         html = "<script>console.log(1)</script>"
         assert _script_hashes(html) == _script_hashes(html)
+
+
+class TestEmbedCsp:
+    """The embed renders the viewer's own renderers, so it needs what they need."""
+
+    def test_webgl_and_workers_are_allowed(self) -> None:
+        from depictio.api.v1.services.export.embed import build_embed_csp
+
+        csp = build_embed_csp()
+        assert "'unsafe-eval'" in csp, "Plotly's WebGL traces compile at runtime"
+        assert "worker-src blob:" in csp, "maplibre parses tiles in blob: workers"
+
+    def test_only_a_map_may_reach_the_network_and_only_the_basemaps(self) -> None:
+        from depictio.api.v1.configs.security_headers import BASEMAP_CONNECT_SRC
+        from depictio.api.v1.services.export.embed import build_embed_csp
+
+        assert "connect-src 'none'" in build_embed_csp()
+        assert f"connect-src {BASEMAP_CONNECT_SRC};" in build_embed_csp(basemaps=True)

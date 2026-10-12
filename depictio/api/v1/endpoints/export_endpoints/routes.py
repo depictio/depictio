@@ -35,9 +35,10 @@ from depictio.api.v1.endpoints.user_endpoints.routes import (
 )
 from depictio.api.v1.services.export.capabilities import (
     ExportFormat,
-    formats_for,
+    component_formats,
+    component_html_unavailable_reason,
+    component_unsupported_reason,
     resolve_viz_kind,
-    unsupported_reason,
 )
 from depictio.api.v1.services.export.cors import apply_embed_cors, embed_cors_headers
 from depictio.api.v1.services.export.filter_binding import bind_filters
@@ -192,7 +193,7 @@ async def list_exportable_components(
     for component in dashboard_data.get("stored_metadata") or []:
         component_type = component.get("component_type") or ""
         viz_kind = resolve_viz_kind(component.get("viz_kind"))
-        supported = formats_for(component_type, viz_kind)
+        supported = component_formats(component)
         entry: dict[str, Any] = {
             "component_id": str(component.get("index")),
             "component_type": component_type,
@@ -202,7 +203,17 @@ async def list_exportable_components(
             "formats": sorted(f.value for f in supported),
         }
         if ExportFormat.JSON not in supported:
-            entry["json_unavailable_reason"] = unsupported_reason(component_type, viz_kind)
+            entry["json_unavailable_reason"] = component_unsupported_reason(component)
+        if ExportFormat.HTML not in supported:
+            entry["html_unavailable_reason"] = component_html_unavailable_reason(component)
+        if component_type == "highlight":
+            # A highlight draws another tab's component; that one is what a host
+            # should export. Named the way the highlight itself names it.
+            entry["source"] = {
+                "dashboard_id": component.get("source_dashboard_id"),
+                "tab": component.get("source_tab"),
+                "component": component.get("source_component"),
+            }
 
         # An interactive component IS the filter contract for its data
         # collection: the dashboard's own control, described well enough that a
@@ -418,6 +429,19 @@ async def _export_inner(
 
     if export_format is ExportFormat.HTML:
         from depictio.api.v1.services.export.embed import render_component_embed
+        from depictio.api.v1.services.export.plotly_export import ExportUnsupported
+
+        supported = component_formats(component, controls)
+        if ExportFormat.HTML not in supported:
+            component_type = component.get("component_type") or ""
+            raise ExportUnsupported(
+                status_code=422,
+                code="unsupported_export",
+                message=component_html_unavailable_reason(component) or "Cannot be embedded.",
+                component_type=component_type,
+                viz_kind=resolve_viz_kind(component.get("viz_kind")),
+                supported_formats=sorted(f.value for f in supported),
+            )
 
         html, csp = await render_component_embed(
             dashboard_doc=dashboard_data,

@@ -103,12 +103,23 @@ def _script_hashes(html: str) -> list[str]:
     return hashes
 
 
-def build_embed_csp() -> str:
+def build_embed_csp(*, basemaps: bool = False) -> str:
     """CSP for an embed response.
 
     ``connect-src 'none'`` is the interesting one: the bundle makes no network
     calls at all, so declaring that both hardens the page and proves the claim.
+    A map is the one exception (``basemaps``): maplibre fetches its style, glyphs
+    and vector tiles from the basemap CDNs, so a map embed may reach those and
+    nothing else, or it draws its legend over grey.
+
+    The rest follows the viewer's own policy (``configs/security_headers.py``),
+    for the same renderers: ``'unsafe-eval'`` because Plotly's WebGL traces
+    compile their draw commands at runtime (every volcano, Manhattan, dot plot,
+    QQ, lollipop and embedding), and ``worker-src blob:`` because maplibre parses
+    tiles in workers it starts from blob: URLs.
     """
+    from depictio.api.v1.configs.security_headers import BASEMAP_CONNECT_SRC
+
     origins = list(settings.fastapi.embed_allowed_origins)
     frame_ancestors = " ".join(origins) if origins else "'none'"
     if not origins:
@@ -116,22 +127,25 @@ def build_embed_csp() -> str:
             "export: DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS is empty — embeds render "
             "standalone but cannot be framed by any site."
         )
+    connect_src = BASEMAP_CONNECT_SRC if basemaps else "'none'"
+    img_src = f"data: blob: {BASEMAP_CONNECT_SRC}" if basemaps else "data: blob:"
     return (
         "default-src 'none'; "
-        "script-src {script_src}; "
+        "script-src {script_src} 'unsafe-eval'; "
+        "worker-src blob:; "
         "style-src 'unsafe-inline'; "
-        "img-src data: blob:; "
+        f"img-src {img_src}; "
         "font-src data:; "
-        "connect-src 'none'; "
+        f"connect-src {connect_src}; "
         f"frame-ancestors {frame_ancestors}; "
         "base-uri 'none'; "
         "form-action 'none'"
     )
 
 
-def _finalise_csp(html: str) -> str:
+def _finalise_csp(html: str, *, basemaps: bool = False) -> str:
     """Resolve the ``script-src`` placeholder against the served HTML."""
-    template = build_embed_csp()
+    template = build_embed_csp(basemaps=basemaps)
     if settings.fastapi.embed_csp_unsafe_inline:
         return template.format(script_src="'unsafe-inline'")
     hashes = _script_hashes(html)
@@ -180,6 +194,8 @@ def _add_map(data, dashboard_id, component_id, filters, theme, user, token) -> N
 
 
 def _add_table(data, dashboard_id, component_id, filters, user, token) -> None:
+    from fastapi import Response
+
     from depictio.api.v1.endpoints.dashboards_endpoints.routes import render_table_endpoint
 
     # The offline shim slices client-side from one block, so fetch the page the
@@ -188,6 +204,8 @@ def _add_table(data, dashboard_id, component_id, filters, user, token) -> None:
         dashboard_id=dashboard_id,
         component_id=component_id,
         request={"filters": filters, "start": 0, "limit": 1000},
+        # Absorbs the render's diagnostic headers, as in _add_figure.
+        response=Response(),
         current_user=user,
         access_token=token,
     )
@@ -264,22 +282,27 @@ def _add_multiqc(data, dashboard_id, component_id, component, filters, theme, us
     data[bucket][component_id] = result
 
 
+async def _dc_specs(real_dc_id: Any, user: Any) -> Any:
+    """Column specs (types, min/max) of a data collection, ``{}`` when unreadable."""
+    from depictio.api.v1.endpoints.deltatables_endpoints.routes import specs as fetch_specs
+
+    try:
+        return await fetch_specs(data_collection_id=real_dc_id, current_user=user)
+    except Exception as exc:
+        logger.warning("export: specs lookup failed for dc=%s: %s", real_dc_id, exc)
+        return {}
+
+
 async def _add_interactive(data, component, synthetic_dc_id, user) -> None:
     """Populate the value universe an interactive control needs to render.
 
     Keyed by the synthetic dc_id so a dashboard with several controls over the
     same data collection does not collide.
     """
-    from depictio.api.v1.endpoints.deltatables_endpoints.routes import specs as fetch_specs
-
     column = component.get("column_name")
     real_dc_id = component.get("dc_id")
 
-    specs: Any = {}
-    try:
-        specs = await fetch_specs(data_collection_id=real_dc_id, current_user=user)
-    except Exception as exc:
-        logger.warning("export: specs lookup failed for dc=%s: %s", real_dc_id, exc)
+    specs = await _dc_specs(real_dc_id, user)
     data["specs"][synthetic_dc_id] = specs
 
     if not column:
@@ -354,7 +377,9 @@ async def _add_dc_schema(data, component, synthetic_dc_id, user) -> None:
         logger.warning("export: schema lookup failed for dc=%s: %s", real_dc_id, exc)
 
 
-def _add_advanced_viz(data, component, synthetic_dc_id, filters, viz_kind, user) -> None:
+def _add_advanced_viz(
+    data, component, synthetic_dc_id, filters, viz_kind, user, access_token
+) -> None:
     """Precompute whatever the advanced-viz renderer would have fetched.
 
     Three shapes, matching the three fetch paths in mockApi.ts: ``compute`` for the
@@ -363,25 +388,16 @@ def _add_advanced_viz(data, component, synthetic_dc_id, filters, viz_kind, user)
     """
     from depictio.api.v1.endpoints.dashboards_endpoints.routes import _build_filter_metadata
     from depictio.api.v1.services.advanced_viz.data import load_tidy_columns
+    from depictio.api.v1.services.export.compute import COMPUTE_TASKS, run_compute
 
     config = component.get("config") or {}
     filter_metadata = _build_filter_metadata(filters)
     wf_id = str(component.get("wf_id"))
     real_dc_id = str(component.get("dc_id"))
 
-    celery_kinds = {
-        "complex_heatmap": "compute_complex_heatmap",
-        "upset_plot": "compute_upset",
-        "sankey": "compute_sankey",
-        "embedding": "compute_embedding",
-        "coverage_track": "compute_coverage_track",
-    }
-    if viz_kind in celery_kinds:
-        from depictio.api.v1 import celery_tasks
-
-        task = getattr(celery_tasks, celery_kinds[viz_kind])
-        data["compute"][synthetic_dc_id] = task.run(
-            {**config, "wf_id": wf_id, "dc_id": real_dc_id, "filter_metadata": filter_metadata}
+    if viz_kind in COMPUTE_TASKS:
+        data["compute"][synthetic_dc_id] = run_compute(
+            str(viz_kind), component, filter_metadata, access_token
         )
         return
 
@@ -401,6 +417,24 @@ def _add_advanced_viz(data, component, synthetic_dc_id, filters, viz_kind, user)
         except Exception as exc:
             logger.warning("export: newick load failed for dc=%s: %s", tree_dc_id, exc)
 
+    # A volcano opening on its MA view may read an MA table of its own. The
+    # renderer asks for it by its real id, which the embedded config keeps.
+    from depictio.api.v1.services.advanced_viz.figure_registry import required_columns
+    from depictio.api.v1.services.advanced_viz.views import plan_for
+
+    plan = plan_for(component)
+    if plan is not None and plan.source is not None:
+        ma_wf_id, ma_dc_id = plan.source
+        data["advancedVizData"][ma_dc_id] = load_tidy_columns(
+            wf_id=ma_wf_id,
+            dc_id=ma_dc_id,
+            columns=required_columns("ma", plan.config),
+            filter_metadata=filter_metadata,
+            current_user=user,
+            access_token=access_token,
+            viz_kind=plan.kind,
+        )
+
     columns = _advanced_viz_columns(config)
     if columns:
         data["advancedVizData"][synthetic_dc_id] = load_tidy_columns(
@@ -408,6 +442,9 @@ def _add_advanced_viz(data, component, synthetic_dc_id, filters, viz_kind, user)
             dc_id=real_dc_id,
             columns=columns,
             filter_metadata=filter_metadata,
+            current_user=user,
+            access_token=access_token,
+            viz_kind=viz_kind,
         )
 
 
@@ -477,13 +514,26 @@ async def build_component_embed_payload(
     elif component_type == "interactive":
         await _add_interactive(data, component, synthetic, current_user)
     elif component_type == "advanced_viz":
-        _add_advanced_viz(data, component, synthetic, filters, viz_kind, current_user)
+        _add_advanced_viz(data, component, synthetic, filters, viz_kind, current_user, access_token)
         # Several kinds read the DC schema on top of their tidy data. Fetched here
         # rather than inside _add_advanced_viz because it applies across kinds and
         # is independent of which of the three data shapes the kind uses.
         await _add_dc_schema(data, component, synthetic, current_user)
+        # Record cards, parallel coordinates and the phylogenetic summary read
+        # column types from the specs; the shim throws on a missing entry.
+        if component.get("dc_id"):
+            data["specs"][synthetic] = await _dc_specs(component.get("dc_id"), current_user)
     elif component_type == "text":
-        pass  # Renders entirely from metadata.
+        # Prose renders from metadata; live values (`{{name}}`, `{{param:KEY}}`)
+        # are computed with the cards, and the embed hands a text tile its entry
+        # from the same bucket a card reads. Without this the placeholders render
+        # empty.
+        from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
+            _text_has_live_values,
+        )
+
+        if _text_has_live_values(component):
+            _add_card(data, dashboard_id, component_id, filters, current_user, access_token)
     else:
         raise HTTPException(
             status_code=422,
@@ -543,4 +593,4 @@ async def render_component_embed(
             detail={"code": "bundle_unavailable", "message": str(exc)},
         ) from exc
 
-    return html, _finalise_csp(html)
+    return html, _finalise_csp(html, basemaps=component.get("component_type") == "map")

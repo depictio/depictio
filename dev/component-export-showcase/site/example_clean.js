@@ -32,7 +32,6 @@ const BENCH = {
   ci: 'bench_ci',
   confusion: 'bench_confusion',
   pr: 'bench_pr',
-  roc: 'bench_roc',
 };
 
 /* GHGA palette — the --mat-sys-* tokens compiled into data.ghga.de's
@@ -159,13 +158,13 @@ const SECTIONS = [
     id: 'bench',
     mount: 'panels-bench',
     controlsMount: 'controls-bench',
-    // Four dashboards, one data collection (plus the curve table). Taking the
-    // controls from the PR and ROC dashboards covers both.
-    controlSources: [{ dashboard: BENCH.pr }, { dashboard: BENCH.roc }],
+    // The PR tab holds both the operating points and the sweep (its `roc`
+    // view), with the controls for each, so it is the one control source.
+    controlSources: [{ dashboard: BENCH.pr }],
     panels: [
       {
         dashboard: BENCH.pr,
-        component: 'pr-demo-viz',
+        component: 'pr-points',
         dc: '646b0f3c1e4a2d7f8e5b8d60',
         kind: 'advanced_viz · pr_benchmark',
         title: 'Precision vs recall',
@@ -185,11 +184,11 @@ const SECTIONS = [
           which is also why the true-positive slider is worth having.</p>`,
       },
       {
-        dashboard: BENCH.roc,
-        component: 'roc-demo-viz',
+        dashboard: BENCH.pr,
+        component: 'pr-sweep',
         dc: '646b0f3c1e4a2d7f8e5b8d61',
         controls: { mode: 'roc' },
-        kind: 'advanced_viz · roc_pr_curve',
+        kind: 'advanced_viz · pr_benchmark (roc view)',
         title: 'ROC curve',
         span: 6,
         note:
@@ -205,11 +204,11 @@ const SECTIONS = [
           the part you care about.</p>`,
       },
       {
-        dashboard: BENCH.roc,
-        component: 'roc-demo-viz',
+        dashboard: BENCH.pr,
+        component: 'pr-sweep',
         dc: '646b0f3c1e4a2d7f8e5b8d61',
         controls: { mode: 'pr' },
-        kind: 'advanced_viz · roc_pr_curve',
+        kind: 'advanced_viz · pr_benchmark (roc view)',
         title: 'The same component, as a PR sweep',
         span: 6,
         note:
@@ -223,7 +222,7 @@ const SECTIONS = [
       },
       {
         dashboard: BENCH.confusion,
-        component: 'cm-demo-viz',
+        component: 'cm-matrix',
         dc: '646b0f3c1e4a2d7f8e5b8d60',
         kind: 'advanced_viz · confusion_matrix',
         title: 'Call outcomes per caller',
@@ -240,7 +239,7 @@ const SECTIONS = [
       },
       {
         dashboard: BENCH.ci,
-        component: 'ci-demo-precision',
+        component: 'ci-precision',
         dc: '646b0f3c1e4a2d7f8e5b8d60',
         kind: 'advanced_viz · metric_ci_bars',
         title: 'Precision, 95% confidence intervals',
@@ -256,7 +255,7 @@ const SECTIONS = [
       },
       {
         dashboard: BENCH.ci,
-        component: 'ci-demo-recall',
+        component: 'ci-recall',
         dc: '646b0f3c1e4a2d7f8e5b8d60',
         kind: 'advanced_viz · metric_ci_bars',
         title: 'Recall, 95% confidence intervals',

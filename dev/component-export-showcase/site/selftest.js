@@ -23,7 +23,6 @@ const VIRALRECON = 'viralrecon';
 const BENCH_PR = 'bench_pr';
 const BENCH_CI = 'bench_ci';
 const BENCH_CM = 'bench_confusion';
-const BENCH_ROC = 'bench_roc';
 
 const SAMPLES = ['SAMPLE_01', 'SAMPLE_02', 'SAMPLE_03'];
 const CALLERS = ['deepvariant', 'strelka2'];
@@ -58,19 +57,19 @@ const CASES = [
 
   // Benchmark section: columns that had no dashboard control until one was
   // added, so a host had no way to discover them.
-  { name: 'PR benchmark', dashboard: BENCH_PR, component: 'pr-demo-viz',
+  { name: 'PR benchmark', dashboard: BENCH_PR, component: 'pr-points',
     filter: multi('tool', CALLERS) },
-  { name: 'PR benchmark', dashboard: BENCH_PR, component: 'pr-demo-viz',
+  { name: 'PR benchmark', dashboard: BENCH_PR, component: 'pr-points',
     filter: range('fp', [95, 300]) },
-  { name: 'PR benchmark', dashboard: BENCH_PR, component: 'pr-demo-viz',
+  { name: 'PR benchmark', dashboard: BENCH_PR, component: 'pr-points',
     filter: range('tp', [18000, 18800]) },
-  { name: 'Confusion matrix', dashboard: BENCH_CM, component: 'cm-demo-viz',
+  { name: 'Confusion matrix', dashboard: BENCH_CM, component: 'cm-matrix',
     filter: range('fp', [95, 300]) },
-  { name: 'Precision CI', dashboard: BENCH_CI, component: 'ci-demo-precision',
+  { name: 'Precision CI', dashboard: BENCH_CI, component: 'ci-precision',
     filter: multi('tool', CALLERS) },
-  { name: 'Recall CI', dashboard: BENCH_CI, component: 'ci-demo-recall',
+  { name: 'Recall CI', dashboard: BENCH_CI, component: 'ci-recall',
     filter: multi('tool', CALLERS) },
-  { name: 'ROC curve', dashboard: BENCH_ROC, component: 'roc-demo-viz', controls: { mode: 'roc' },
+  { name: 'ROC curve', dashboard: BENCH_PR, component: 'pr-sweep', controls: { mode: 'roc' },
     filter: range('quality', [50, 100]) },
 ];
 
