@@ -304,19 +304,27 @@ def _python_advanced_viz_spec(
     if plan is None:  # pragma: no cover - guarded by component_formats
         raise HTTPException(status_code=422, detail="Component names no advanced_viz kind.")
 
-    wf_id, dc_id = plan.source or (str(component.get("wf_id")), str(component.get("dc_id")))
-    columns = list(
-        dict.fromkeys(c for name in plan.builders for c in required_columns(name, plan.config))
-    )
-    tidy = load_tidy_columns(
-        wf_id=wf_id,
-        dc_id=dc_id,
-        columns=columns,
-        filter_metadata=filter_metadata,
-        current_user=current_user,
-        access_token=access_token,
-        viz_kind=plan.kind,
-    )
+    if plan.kind == "embedding" and plan.config.get("compute_method"):
+        # Live mode: the coordinates do not exist until the dim-reduction runs,
+        # so compute them as the renderer would and draw from the result.
+        from depictio.api.v1.services.export.compute import embedding_rows, run_compute
+
+        result = run_compute("embedding", component, filter_metadata, access_token)
+        tidy = {"rows": embedding_rows(result or {}, plan.config)}
+    else:
+        wf_id, dc_id = plan.source or (str(component.get("wf_id")), str(component.get("dc_id")))
+        columns = list(
+            dict.fromkeys(c for name in plan.builders for c in required_columns(name, plan.config))
+        )
+        tidy = load_tidy_columns(
+            wf_id=wf_id,
+            dc_id=dc_id,
+            columns=columns,
+            filter_metadata=filter_metadata,
+            current_user=current_user,
+            access_token=access_token,
+            viz_kind=plan.kind,
+        )
 
     spec: dict[str, Any] = {"data": [], "layout": {}}
     for position, name in enumerate(plan.builders):

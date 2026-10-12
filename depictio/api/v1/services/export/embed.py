@@ -388,14 +388,14 @@ def _add_advanced_viz(
     """
     from depictio.api.v1.endpoints.dashboards_endpoints.routes import _build_filter_metadata
     from depictio.api.v1.services.advanced_viz.data import load_tidy_columns
-    from depictio.api.v1.services.export.compute import COMPUTE_TASKS, run_compute
+    from depictio.api.v1.services.export.compute import needs_compute, run_compute
 
     config = component.get("config") or {}
     filter_metadata = _build_filter_metadata(filters)
     wf_id = str(component.get("wf_id"))
     real_dc_id = str(component.get("dc_id"))
 
-    if viz_kind in COMPUTE_TASKS:
+    if needs_compute(viz_kind, config):
         data["compute"][synthetic_dc_id] = run_compute(
             str(viz_kind), component, filter_metadata, access_token
         )
@@ -416,6 +416,23 @@ def _add_advanced_viz(
             )
         except Exception as exc:
             logger.warning("export: newick load failed for dc=%s: %s", tree_dc_id, exc)
+        # The tip metadata is read from its own collection, by its real id
+        # (the renderer asks for `metadata_dc_id`); the component's own
+        # collection may be the tree itself, which has no rows to read.
+        metadata_dc_id = config.get("metadata_dc_id")
+        if metadata_dc_id:
+            columns = _advanced_viz_columns(config)
+            if columns:
+                data["advancedVizData"][str(metadata_dc_id)] = load_tidy_columns(
+                    wf_id=str(config.get("metadata_wf_id") or wf_id),
+                    dc_id=str(metadata_dc_id),
+                    columns=columns,
+                    filter_metadata=filter_metadata,
+                    current_user=user,
+                    access_token=access_token,
+                    viz_kind=viz_kind,
+                )
+        return
 
     # A volcano opening on its MA view may read an MA table of its own. The
     # renderer asks for it by its real id, which the embedded config keeps.

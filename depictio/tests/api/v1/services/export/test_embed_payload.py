@@ -129,6 +129,67 @@ class TestKeyingContract:
         assert payload["data"]["advancedVizData"][f"{tree_key}::newick"] == "(a,b);"
 
     @pytest.mark.asyncio
+    async def test_phylogenetic_tip_metadata_is_read_from_its_own_collection(self) -> None:
+        """The renderer asks for `metadata_dc_id`; the component's own DC may be
+        the tree, which has no rows (it answered 404 and took the page down)."""
+        component = _component(
+            "advanced_viz",
+            viz_kind="phylogenetic",
+            config={
+                "tree_dc_id": "507f1f77bcf86cd799439033",
+                "metadata_wf_id": "507f1f77bcf86cd799439066",
+                "metadata_dc_id": "507f1f77bcf86cd799439044",
+                "taxon_col": "taxon",
+                "color_col": "group",
+            },
+        )
+        with (
+            patch(
+                "depictio.api.v1.endpoints.advanced_viz_endpoints.routes.get_phylogeny_newick",
+                return_value="(a,b);",
+            ),
+            patch(
+                "depictio.api.v1.services.advanced_viz.data.load_tidy_columns",
+                return_value={"rows": {"taxon": ["a"], "group": ["x"]}},
+            ) as load,
+        ):
+            payload = await _build(component)
+
+        assert [c.kwargs["dc_id"] for c in load.call_args_list] == ["507f1f77bcf86cd799439044"]
+        assert "507f1f77bcf86cd799439044" in payload["data"]["advancedVizData"]
+
+    @pytest.mark.asyncio
+    async def test_a_precomputed_embedding_ships_rows_and_a_live_one_a_compute(self) -> None:
+        rows = {"rows": {"sample_id": ["s1"], "dim_1": [0.1], "dim_2": [0.2]}}
+        precomputed = _component(
+            "advanced_viz",
+            viz_kind="embedding",
+            config={"sample_id_col": "sample_id", "dim_1_col": "dim_1", "dim_2_col": "dim_2"},
+        )
+        live = _component(
+            "advanced_viz",
+            viz_kind="embedding",
+            config={"sample_id_col": "sample_id", "compute_method": "umap"},
+        )
+        with (
+            patch(
+                "depictio.api.v1.services.advanced_viz.data.load_tidy_columns",
+                return_value=rows,
+            ),
+            patch(
+                "depictio.api.v1.services.export.compute.run_compute",
+                return_value={"sample_ids": ["s1"], "dim_1": [0.1], "dim_2": [0.2]},
+            ) as compute,
+        ):
+            pre = await _build(precomputed)
+            assert compute.call_count == 0, "a precomputed embedding runs no dim-reduction"
+            assert pre["data"]["advancedVizData"]["embed::cmp-1"] == rows
+
+            on = await _build(live)
+        assert compute.call_count == 1
+        assert on["data"]["compute"]["embed::cmp-1"]["sample_ids"] == ["s1"]
+
+    @pytest.mark.asyncio
     async def test_unsupported_type_is_rejected(self) -> None:
         from fastapi import HTTPException
 
