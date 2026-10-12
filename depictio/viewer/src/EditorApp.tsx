@@ -3047,6 +3047,11 @@ const EditorApp: React.FC = () => {
           ) : undefined
         }
         initialSection={settingsSection}
+        extraSection={
+          aiEnabled && serverFeatures.ai_user_keys && dashboardId ? (
+            <AIKeySection dashboardId={dashboardId} />
+          ) : undefined
+        }
       />
       {/* Opens on a dashboard's `params:` links. */}
       <RunParametersHost dashboard={dashboard} />
@@ -3078,11 +3083,6 @@ const EditorApp: React.FC = () => {
         // to someone who could edit the dashboard anyway.
         canRestore={isOwner}
         onRestored={handleRestored}
-        extraSection={
-          aiEnabled && serverFeatures.ai_user_keys && dashboardId ? (
-            <AIKeySection dashboardId={dashboardId} />
-          ) : undefined
-        }
       />
 
       <TabModal

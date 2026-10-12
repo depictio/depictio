@@ -7,7 +7,12 @@ back to the server-side ``settings.ai.api_key`` when absent.
 The router is only registered when ``settings.ai.enabled`` is true (see
 ``depictio/api/v1/endpoints/routers.py``).
 
+* ``POST /ai/suggest-components``: typed suggestions for a dashboard
+  ("what would you add?"): ranked table candidates built from the data
+  (advanced_viz too when pinned) plus one LLM call for the other types,
+  every item validated like a CLI import (see ``suggest``).
 * ``POST /ai/suggest-figures`` — data-driven figure suggestions
+  (deprecated: superseded by suggest-components, kept for older clients)
 * ``POST /ai/component-from-prompt`` — prompt-driven typed component
   creation (any of the 9 builder types, text and advanced_viz included).
   Emits YAML validated through
@@ -46,6 +51,7 @@ from depictio.api.v1.endpoints.ai_endpoints import (
     prompts,
     routing,
 )
+from depictio.api.v1.endpoints.ai_endpoints import suggest as suggest_mod
 from depictio.api.v1.endpoints.ai_endpoints import summaries as summaries_mod
 from depictio.api.v1.endpoints.ai_endpoints.code_gen import figure_python_code
 from depictio.api.v1.endpoints.ai_endpoints.context import (
@@ -70,6 +76,8 @@ from depictio.api.v1.endpoints.ai_endpoints.schemas import (
     ResolveFiltersResponse,
     RoutingInfo,
     StreamEvent,
+    SuggestComponentsRequest,
+    SuggestComponentsResponse,
     SuggestFiguresRequest,
     SuggestFiguresResponse,
     SummariesResponse,
@@ -120,13 +128,49 @@ def _try_plot_suggestion(payload: dict) -> PlotSuggestion | None:
     return suggestion
 
 
-@ai_endpoint_router.post("/suggest-figures", response_model=SuggestFiguresResponse)
+@ai_endpoint_router.post("/suggest-components", response_model=SuggestComponentsResponse)
+async def suggest_components(
+    body: SuggestComponentsRequest,
+    current_user: User = Depends(get_user_or_anonymous),
+    user_api_key: str | None = Depends(_llm_key),
+) -> SuggestComponentsResponse:
+    """Typed suggestions for a dashboard: "what would you add to it?"
+
+    The dashboard's project inventory says which collections exist and
+    which component types they can back; its components say what is
+    already shown. `component_type` and `data_collection_id` are optional
+    pins. table suggestions are ranked deterministically from the data (so
+    is advanced_viz when it is the pinned type: no LLM call); the other
+    types come from one LLM call constrained to the legal spaces computed
+    server-side, which in Auto mode include the ranked advanced_viz kinds
+    with their config keys so the model can propose one when it is apt.
+    Every item is validated through the CLI's offline validator before it
+    is returned, so "Use this" lands a component the builder accepts.
+
+    See `suggest.suggest_components` for the error mapping (404 / 403 /
+    422 / 502).
+    """
+    return await suggest_mod.suggest_components(
+        body,
+        current_user,
+        user_api_key=user_api_key,
+        build_inventory=build_project_inventory,
+        build_dashboard_ctx=build_dashboard_context,
+        build_data_ctx=build_data_context,
+    )
+
+
+@ai_endpoint_router.post("/suggest-figures", response_model=SuggestFiguresResponse, deprecated=True)
 async def suggest_figures(
     body: SuggestFiguresRequest,
     current_user: User = Depends(get_user_or_anonymous),
     user_api_key: str | None = Depends(_llm_key),
 ) -> SuggestFiguresResponse:
     """Data-driven flow: propose N figures for a data collection.
+
+    Deprecated: `/ai/suggest-components` proposes figures and every other
+    type against the whole dashboard, and the viewer calls that instead.
+    Kept for older clients; no new behaviour goes here.
 
     Loads the DC, builds a schema/sample/metadata prompt, asks the LLM for a
     JSON envelope of suggestions, validates each through `PlotSuggestion`,

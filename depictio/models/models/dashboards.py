@@ -27,6 +27,7 @@ from pydantic import (
     ConfigDict,
     Field,
     ValidationError,
+    ValidationInfo,
     field_serializer,
     field_validator,
     model_validator,
@@ -602,7 +603,7 @@ class DashboardDataLite(BaseModel):
     }
 
     @model_validator(mode="after")
-    def validate_components_domain(self) -> "DashboardDataLite":
+    def validate_components_domain(self, info: ValidationInfo) -> "DashboardDataLite":
         """Re-validate components that fell through to dict due to union fallback.
 
         Pydantic's union resolution tries each variant left-to-right. When a typed
@@ -615,6 +616,10 @@ class DashboardDataLite(BaseModel):
                 # Already validated as a typed model — skip
                 continue
             comp_type = comp.get("component_type")
+            if comp_type == "advanced_viz" and (info.context or {}).get("stored_export"):
+                # Exporting a stored tile: its config may carry keys the model
+                # has retired, which the strict model would refuse to round-trip.
+                continue
             model_cls = self._COMPONENT_TYPE_MAP.get(comp_type or "")
             if model_cls is None:
                 # Unknown component_type — skip (no typed model to validate against)
@@ -1682,40 +1687,45 @@ class DashboardDataLite(BaseModel):
 
             lite_components.append(lite_comp)
 
-        return cls(
-            dashboard_id=dashboard_id,
-            title=dashboard_data.get("title", "Untitled Dashboard"),
-            subtitle=dashboard_data.get("subtitle", ""),
-            components=lite_components,
-            # Section presentation, so an exported dashboard keeps its accordion
-            # order, icons and default collapse rather than falling back to
-            # "declared nowhere, sorted by first appearance".
-            filter_sections=dashboard_data.get("filter_sections") or [],
-            grid_sections=dashboard_data.get("grid_sections") or [],
-            category_colors=dashboard_data.get("category_colors") or None,
-            funnel_filtering=bool(dashboard_data.get("funnel_filtering", True)),
-            filter_panel_default=dashboard_data.get("filter_panel_default") or "open",
-            content_width_default=dashboard_data.get("content_width_default") or "full",
-            show_tab_header=dashboard_data.get("show_tab_header", True) is not False,
-            show_guide=dashboard_data.get("show_guide", True) is not False,
-            guide_intro=dashboard_data.get("guide_intro") or "",
-            advanced_viz_controls=dashboard_data.get("advanced_viz_controls") or "popover",
-            autofit=bool(dashboard_data.get("autofit", True)),
-            brand_theme=cls._exportable_brand_theme(dashboard_data.get("brand_theme")),
-            # Tab fields
-            is_main_tab=dashboard_data.get("is_main_tab", True),
-            tab_order=dashboard_data.get("tab_order", 0),
-            main_tab_name=dashboard_data.get("main_tab_name"),
-            tab_icon=dashboard_data.get("tab_icon"),
-            tab_icon_color=dashboard_data.get("tab_icon_color"),
-            tab_group=dashboard_data.get("tab_group"),
-            # Dashboard display icon fields
-            icon=dashboard_data.get("icon"),
-            icon_color=dashboard_data.get("icon_color"),
-            icon_variant=dashboard_data.get("icon_variant"),
-            workflow_system=dashboard_data.get("workflow_system"),
-            # parent_dashboard_tag is not set here - it needs to be resolved separately
-            # during export by looking up the parent dashboard title
+        return cls.model_validate(
+            dict(
+                dashboard_id=dashboard_id,
+                title=dashboard_data.get("title", "Untitled Dashboard"),
+                subtitle=dashboard_data.get("subtitle", ""),
+                components=lite_components,
+                # Section presentation, so an exported dashboard keeps its accordion
+                # order, icons and default collapse rather than falling back to
+                # "declared nowhere, sorted by first appearance".
+                filter_sections=dashboard_data.get("filter_sections") or [],
+                grid_sections=dashboard_data.get("grid_sections") or [],
+                category_colors=dashboard_data.get("category_colors") or None,
+                funnel_filtering=bool(dashboard_data.get("funnel_filtering", True)),
+                filter_panel_default=dashboard_data.get("filter_panel_default") or "open",
+                content_width_default=dashboard_data.get("content_width_default") or "full",
+                show_tab_header=dashboard_data.get("show_tab_header", True) is not False,
+                show_guide=dashboard_data.get("show_guide", True) is not False,
+                guide_intro=dashboard_data.get("guide_intro") or "",
+                advanced_viz_controls=dashboard_data.get("advanced_viz_controls") or "popover",
+                autofit=bool(dashboard_data.get("autofit", True)),
+                brand_theme=cls._exportable_brand_theme(dashboard_data.get("brand_theme")),
+                # Tab fields
+                is_main_tab=dashboard_data.get("is_main_tab", True),
+                tab_order=dashboard_data.get("tab_order", 0),
+                main_tab_name=dashboard_data.get("main_tab_name"),
+                tab_icon=dashboard_data.get("tab_icon"),
+                tab_icon_color=dashboard_data.get("tab_icon_color"),
+                tab_group=dashboard_data.get("tab_group"),
+                # Dashboard display icon fields
+                icon=dashboard_data.get("icon"),
+                icon_color=dashboard_data.get("icon_color"),
+                icon_variant=dashboard_data.get("icon_variant"),
+                workflow_system=dashboard_data.get("workflow_system"),
+                # parent_dashboard_tag is not set here - it needs to be resolved separately
+                # during export by looking up the parent dashboard title
+            ),
+            # An export describes what is stored, so a tile config its model has
+            # since retired must still come out; only an import is held to it.
+            context={"stored_export": True},
         )
 
     @staticmethod

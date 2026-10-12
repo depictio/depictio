@@ -1,16 +1,14 @@
 """The YAML validator's chart list must match the one the builder offers.
 
-Two lists name the visualisations a figure may be: ``ALLOWED_VISUALIZATIONS``
-in the API's figure registry, which the builder dropdown is populated from at
-runtime, and ``VISU_TYPES`` in the model layer, which validates a YAML or CLI
-dashboard. They cannot be one constant — the model layer is shared with the CLI
-and must not import the API package — so they are a copy, and a copy drifts.
+``ALLOWED_VISUALIZATIONS`` lives in the model layer (``models/components/constants.py``),
+which the API's figure registry re-exports and the builder dropdown is populated
+from; ``VISU_TYPES``, what a YAML or CLI dashboard may declare, is built from it plus
+``heatmap``. They used to be two copies and drifted: ``VISU_TYPES`` stayed on the six
+types a since-deleted Dash module offered while the registry grew to twelve, so a
+violin built in the UI could not be written down in YAML.
 
-It already did. ``VISU_TYPES`` stayed on the six types a since-deleted Dash
-module offered while the registry grew to twelve, which meant a violin built in
-the UI could not be written down in YAML: the dashboard was rejected for
-declaring a chart the product renders. Nothing failed at the time, because
-nothing compared the two.
+These tests pin the relation between the two, so a type added to one list cannot
+silently stay out of the other again.
 """
 
 from depictio.api.v1.services.figure.definitions import (

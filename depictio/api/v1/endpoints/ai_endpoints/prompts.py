@@ -17,6 +17,7 @@ from depictio.api.v1.endpoints.ai_endpoints.context import (
     DashboardContext,
     DashboardDataContext,
     DataContext,
+    InventoryEntry,
     ProjectInventory,
 )
 from depictio.api.v1.endpoints.ai_endpoints.executor import grammar_block
@@ -531,11 +532,172 @@ Do not wrap the JSON in markdown fences.
 
 
 # ---------------------------------------------------------------------------
-# Kept legacy prompts for /ai/suggest-figures and /ai/analyze
+# Typed suggestions: "what would you add to this dashboard?"
+# ---------------------------------------------------------------------------
+
+SUGGESTION_ANSWER_SHAPE = """{
+  "suggestions": [
+    {
+      "component_type": "<one of the allowed types>",
+      "data_collection_tag": "<tag copied from a DATA COLLECTIONS heading, or null for text>",
+      "title": "<short noun phrase>",
+      "rationale": "<one or two sentences: why this component on this data>",
+      "component": {"<the type's fields, same keys as the YAML shapes, as JSON>": "..."}
+    }
+  ]
+}"""
+
+
+# advanced_viz, when the type is open: the per-collection LEGAL SPACES carry
+# the ranked kinds and their exact config keys (see suggest.advanced_viz_space_lines),
+# so the sheet only states the shape and the judgement the ranker cannot make.
+_ADVANCED_VIZ_SUGGEST_SHEET = (
+    "ADVANCED_VIZ: domain-specific plot. Required: viz_kind, config.\n"
+    "  config.viz_kind repeats viz_kind; config has exactly the keys listed for that\n"
+    "  kind in the collection's LEGAL SPACES (extra keys are rejected).\n"
+    "  Propose one only when the kind is what the data is about (a volcano needs\n"
+    "  effect sizes and p-values, a rarefaction curve needs sequencing depth), never\n"
+    "  because the column types happen to fit."
+)
+_ADVANCED_VIZ_SUGGEST_EXAMPLE = (
+    "component_type=advanced_viz (JSON):\n"
+    '{"viz_kind": "<kind from LEGAL SPACES>", '
+    '"config": {"viz_kind": "<same kind>", "<config key>": "<column>", ...}}'
+)
+
+
+def _suggest_collection_block(
+    entry: InventoryEntry,
+    ctx: DataContext | None,
+    spaces: list[str],
+) -> str:
+    """One collection for the suggestion prompt: metadata + schema + samples, or the inventory line."""
+    head = f"### data_collection_tag: {entry.data_collection_tag}"
+    if entry.on_dashboard:
+        head += " (on dashboard)"
+    if ctx is not None:
+        body = (
+            f"{ctx.metadata_block()}\n"
+            f"SCHEMA:\n{ctx.schema_block()}\n"
+            f"SAMPLE ROWS:\n{ctx.sample_block()}"
+        )
+    else:
+        body = entry.to_prompt_line()
+    if spaces:
+        space_block = "LEGAL SPACES (pick from these only):\n" + "\n".join(
+            f"  {line}" for line in spaces
+        )
+    else:
+        space_block = "LEGAL SPACES: (none of the allowed data types fits this collection)"
+    return f"{head}\n{body}\n{space_block}"
+
+
+def suggest_components_messages(
+    targets: list[InventoryEntry],
+    contexts_by_dc: dict[str, DataContext],
+    dashboard_ctx: DashboardContext,
+    llm_types: list[ComponentType],
+    spaces_by_dc: dict[str, list[str]],
+    n: int,
+) -> list[dict]:
+    """System + user messages for the LLM step of /ai/suggest-components.
+
+    The model sees what the dashboard already shows (so it does not repeat
+    it), each target collection with its legal component spaces computed
+    server-side, the constraint sheets of the types it may propose, and
+    answers strict JSON. table is never in `llm_types` (ranked
+    deterministically); advanced_viz is there only when the type is open,
+    with its ranked kinds and config keys inside the LEGAL SPACES.
+    """
+    collections = "\n\n".join(
+        _suggest_collection_block(
+            entry,
+            contexts_by_dc.get(entry.data_collection_id),
+            spaces_by_dc.get(entry.data_collection_id) or [],
+        )
+        for entry in targets
+    )
+    # advanced_viz carries its own sheet and a JSON (not YAML) example: its
+    # kinds live in the per-collection LEGAL SPACES, not in a static shape.
+    sheet_types = [t for t in llm_types if t not in ("advanced_viz", "table")]
+    sheet_list = [_constraint_sheet(t, None) for t in sheet_types]
+    example_list = [f"component_type={t}:\n```yaml\n{_example_yaml(t)}```" for t in sheet_types]
+    if "advanced_viz" in llm_types:
+        sheet_list.append(_ADVANCED_VIZ_SUGGEST_SHEET)
+        example_list.append(_ADVANCED_VIZ_SUGGEST_EXAMPLE)
+    sheets = "\n\n".join(sheet_list)
+    examples = "\n".join(example_list)
+    if len(llm_types) == 1:
+        mix_rule = f'- Every item has component_type "{llm_types[0]}".'
+    else:
+        mix_rule = (
+            "- Mix the component types: no type more than twice, and never the same "
+            "type on the same column twice."
+        )
+    if len(targets) > 1:
+        spread_rule = (
+            '- Prefer collections marked "on dashboard"; spread the items over the '
+            "collections when more than one fits."
+        )
+    elif targets:
+        spread_rule = (
+            f'- Every data item uses data_collection_tag "{targets[0].data_collection_tag}".'
+        )
+    else:
+        spread_rule = "- No data collection is in scope: describe the dashboard as it is."
+
+    system = f"""You propose new components for an existing Depictio dashboard. Look at what
+it already shows and at the data collections below, and propose {n} components
+that add information the dashboard does not show yet.
+
+DASHBOARD COMPONENTS (already on the dashboard; do not repeat them):
+{dashboard_ctx.components_block()}
+
+CURRENT FILTERS:
+{dashboard_ctx.filters_block()}
+
+DATA COLLECTIONS (in scope for the new components):
+{collections or "(no data collection in scope)"}
+
+ALLOWED COMPONENT TYPES: {", ".join(llm_types)}
+
+COMPONENT CONSTRAINTS:
+{sheets}
+
+FIELD SHAPES (emit the same keys as JSON inside "component"; the server fills
+component_type, workflow_tag and data_collection_tag):
+{examples}
+
+RULES:
+- Propose exactly {n} items, each a different idea. Anything DASHBOARD COMPONENTS
+  already shows counts as a repeat (same type on the same column).
+{mix_rule}
+{spread_rule}
+- Use only column names listed under the collection you pick. For card and
+  interactive, take column_type and aggregation / interactive_component_type
+  from that collection's LEGAL SPACES.
+- data_collection_tag is copied verbatim from the collection heading; null for text.
+- text describes what the dashboard shows; it never uses a collection and never
+  invents numbers.
+- title is a short noun phrase; rationale is one or two sentences the user reads.
+
+Respond with valid JSON of the form:
+{SUGGESTION_ANSWER_SHAPE}
+Do not wrap the JSON in markdown fences.
+"""
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": f"Suggest {n} components to add to this dashboard."},
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Kept legacy prompts for /ai/suggest-figures (deprecated) and /ai/analyze
 # ---------------------------------------------------------------------------
 
 
 def suggest_figures_messages(ctx: DataContext, n: int) -> list[dict]:
+    """Prompt of the deprecated /ai/suggest-figures route; the viewer uses suggest-components."""
     system = f"""You are a data visualization expert. Propose {n} distinct Plotly Express plots
 that surface the most useful patterns in this dataset. Favor variety
 (distribution, comparison, relationship) over slight variations of the same

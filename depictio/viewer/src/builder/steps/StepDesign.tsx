@@ -9,6 +9,7 @@ import { notifications } from '@mantine/notifications';
 import { fetchSpecs, upsertComponent } from 'depictio-react-core';
 import { useGlassPages } from '../../chrome/variants/glass/pages';
 import { AI_COLOR, AI_ICON, AiFillModal, useAIHealth } from 'depictio-react-ai';
+import type { ComponentType as AIComponentType } from 'depictio-react-ai';
 import { useServerStatus } from '../../hooks/useServerStatus';
 import { useBuilderStore } from '../store/useBuilderStore';
 import type { ColumnSpec } from '../store/useBuilderStore';
@@ -249,7 +250,7 @@ const StepDesign: React.FC = () => {
           opened={aiFillOpened}
           onClose={() => setAiFillOpened(false)}
           dashboardId={state.dashboardId}
-          componentType={state.componentType}
+          componentType={state.componentType as AIComponentType}
           dataCollectionId={state.dcId}
           current={currentForAiFill()}
           onApply={applyAiFill}
