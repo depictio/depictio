@@ -37,8 +37,7 @@ from depictio.api.v1.configs.config import settings
 #: The basemap CDNs alone, also what an offline map embed may reach
 #: (``services/export/embed.py::build_embed_csp``).
 BASEMAP_CONNECT_SRC = (
-    "https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com "
-    "https://tile.openstreetmap.org"
+    "https://basemaps.cartocdn.com https://*.basemaps.cartocdn.com https://tile.openstreetmap.org"
 )
 _BASE_CONNECT_SRC = f"'self' data: ws: wss: {BASEMAP_CONNECT_SRC}"
 
