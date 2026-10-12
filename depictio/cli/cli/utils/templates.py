@@ -935,8 +935,11 @@ def _placeholders_in(node: Any) -> set[str]:
     return set()
 
 
-def variable_users(template_id: str, names: list[str]) -> dict[str, list[str]]:
+def variable_users(template_id: str | dict[str, Any], names: list[str]) -> dict[str, list[str]]:
     """The data collections of template ``template_id`` each variable of ``names`` reaches.
+
+    ``template_id`` may also be an already-loaded template (a dict with its
+    ``template:`` section), as an inline template is: it is never on disk.
 
     A collection reaches ``NAME`` when its definition holds the placeholder
     ``{NAME}`` (a file it scans, a path a recipe source is pointed at), or when
@@ -948,7 +951,10 @@ def variable_users(template_id: str, names: list[str]) -> dict[str, list[str]]:
     Tags in the order the template declares its collections; one that only a
     conditional names, and the template does not declare, comes after them.
     """
-    raw_config = _load_yaml(str(locate_template(template_id)))
+    if isinstance(template_id, dict):
+        raw_config = copy.deepcopy(template_id)
+    else:
+        raw_config = _load_yaml(str(locate_template(template_id)))
     section = raw_config.pop("template", None) or {}
     switched: dict[str, list[str]] = {name: [] for name in names}
     for rule in section.get("conditional") or []:
@@ -1532,12 +1538,45 @@ def resolve_template(
     template_path = locate_template(template_id)
     logger.info(f"Loading template from: {template_path}")
     raw_config = _load_yaml(str(template_path))
+    return resolve_template_config(
+        raw_config,
+        template_dir=template_path.parent,
+        data_root=data_root,
+        project_name=project_name,
+        extra_vars=extra_vars,
+        provenance_files=provenance_files,
+        allow_missing_vars=allow_missing_vars,
+        CLI_config=CLI_config,
+        source=str(template_path),
+    )
 
+
+def resolve_template_config(
+    raw_config: dict[str, Any],
+    *,
+    template_dir: Path | None,
+    data_root: str | Path | DataRoot | None,
+    project_name: str | None = None,
+    extra_vars: dict[str, str] | None = None,
+    provenance_files: list[str] | None = None,
+    allow_missing_vars: bool = False,
+    CLI_config=None,
+    source: str = "<inline template>",
+) -> tuple[dict[str, Any], TemplateMetadata, TemplateOrigin, list[Path], dict[str, str]]:
+    """:func:`resolve_template` for a template already loaded: steps 2 to 11.
+
+    For a template that is not a file, such as the one the Project Builder
+    assembles and hands to ``POST /projects/from_run``. ``raw_config`` is
+    consumed (its ``template:`` section is popped), so pass a copy to keep it.
+    ``template_dir`` is where the template's dashboards are; None for a
+    template without a directory, which then may not declare any dashboard.
+    ``source`` names the template in errors.
+    """
     # 2. Extract and validate template metadata
     template_section = raw_config.pop("template", None)
     if template_section is None:
         raise ValueError(
-            f"YAML at {template_path} does not contain a 'template' section. "
+            f"YAML at {source} does not contain a 'template' section. "
             "This file is not a valid template."
         )
 
@@ -1647,12 +1686,15 @@ def resolve_template(
     removal_reasons: dict[str, str] = {}
 
     # 6. Apply conditional rules based on which optional vars were provided
-    template_dir = template_path.parent
+    if template_dir is None and (template_metadata.dashboards or template_metadata.conditional):
+        raise ValueError(
+            f"{source} has no directory, so it cannot declare dashboards or conditionals."
+        )
     resolved_config, conditional_dashboards, conditional_reasons = _apply_conditionals(
         resolved_config,
         template_metadata.conditional,
         provided_vars,
-        template_dir,
+        template_dir or Path("."),
         variables,
     )
     removal_reasons.update(conditional_reasons)
@@ -1748,7 +1790,7 @@ def resolve_template(
     # 11. Resolve dashboard YAML paths — conditional overrides template defaults
     active_dashboard_rels = conditional_dashboards or template_metadata.dashboards
     dashboard_paths: list[Path] = []
-    for rel_path in active_dashboard_rels:
+    for rel_path in active_dashboard_rels if template_dir is not None else ():
         abs_path = (template_dir / rel_path).resolve()
         if abs_path.is_file():
             dashboard_paths.append(abs_path)
