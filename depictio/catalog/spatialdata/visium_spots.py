@@ -56,12 +56,14 @@ from depictio.models.models.transforms import RecipeSource
 RAW_DC_TAG = "spatialdata_visium_spots_raw"
 INTEGRATED_DC_TAG = "spatialdata_visium_integrated_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(ref="spots", dc_ref=RAW_DC_TAG),
     RecipeSource(ref="integrated", dc_ref=INTEGRATED_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "spot_id": pl.Utf8,
     "spot_uid": pl.Utf8,
@@ -147,10 +149,7 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
         pl.col("_spot"),
         pl.col("x").cast(pl.Float64),
         pl.col("y").cast(pl.Float64),
-        *[
-            _pick(spots, cands, EXPECTED_SCHEMA[name]).alias(name)
-            for name, cands in _COLUMNS.items()
-        ],
+        *[_pick(spots, cands, OUTPUT_SCHEMA[name]).alias(name) for name, cands in _COLUMNS.items()],
     ).with_columns(_cluster_label(pl.col("cluster")).alias("cluster"))
     integrated = _integrated(sources.get("integrated"))
     if integrated is not None:
@@ -163,4 +162,4 @@ def transform(sources: dict[str, pl.DataFrame | None]) -> pl.DataFrame:
     result = result.rename({"_sample": "sample", "_spot": "spot_id"}).with_columns(
         pl.concat_str([pl.col("sample"), pl.col("spot_id")], separator=":").alias("spot_uid")
     )
-    return result.select(list(EXPECTED_SCHEMA)).sort(["sample", "spot_id"])
+    return result.select(list(OUTPUT_SCHEMA)).sort(["sample", "spot_id"])

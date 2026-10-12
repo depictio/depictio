@@ -38,9 +38,11 @@ from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "spatialdata_visium_genes_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [RecipeSource(ref="spots", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "spot_uid": pl.Utf8,
     "x": pl.Float64,
@@ -119,11 +121,11 @@ def transform(
         pl.concat_str([pl.col("sample"), pl.col("_spot")], separator=":").alias("spot_uid")
     )
     if not genes:
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
     long = base.unpivot(
         index=["sample", "spot_uid", "x", "y", "cluster"],
         on=genes,
         variable_name="gene",
         value_name="expression",
     )
-    return long.select(list(EXPECTED_SCHEMA)).sort(["gene", "sample", "spot_uid"])
+    return long.select(list(OUTPUT_SCHEMA)).sort(["gene", "sample", "spot_uid"])

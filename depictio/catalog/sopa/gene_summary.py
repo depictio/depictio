@@ -27,9 +27,11 @@ from depictio.models.models.transforms import RecipeSource
 #: Data-collection tag of the long per-cell expression (``sopa/gene_expression``).
 LONG_DC_TAG = "sopa_cell_genes_long"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [RecipeSource(ref="long", dc_ref=LONG_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "cluster": pl.Utf8,
     "gene": pl.Utf8,
     "mean_expression": pl.Float64,
@@ -55,6 +57,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             .alias("frac_expressing"),
             pl.len().cast(pl.Int64).alias("n_cells"),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort("gene", "cluster")
     )

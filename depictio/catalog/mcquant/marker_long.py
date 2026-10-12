@@ -31,9 +31,11 @@ from depictio.catalog.mcquant.cells import SOURCES as CELL_SOURCES
 from depictio.catalog.mcquant.cells import is_nuclear, load_cells
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = list(CELL_SOURCES)
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "segmenter": pl.Utf8,
     "cell_id": pl.Int64,
@@ -62,7 +64,7 @@ def transform(
     segmenter = ((params or {}).get("segmenter") or "").strip() or None
     frame, markers = load_cells(sources["quant"], segmenter)
     if frame.is_empty() or not markers:
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
     cap = _max_cells(params)
     # Stride per (sample, segmenter): ceil(n / cap), 1 when the sample fits.
     frame = (
@@ -84,4 +86,4 @@ def transform(
         pl.col("marker").replace_strict(nuclear, return_dtype=pl.Utf8).alias("marker_type"),
         pl.col("intensity").cast(pl.Float64),
         pl.col("intensity").cast(pl.Float64).clip(lower_bound=0.0).log1p().alias("log_intensity"),
-    ).select(*EXPECTED_SCHEMA)
+    ).select(*OUTPUT_SCHEMA)

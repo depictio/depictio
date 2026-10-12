@@ -6,3 +6,5 @@ description: >-
   imaging-based spatial transcriptomics).
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/mindagap/duplicatefinder
 homepage: https://github.com/ViriatoII/MindaGap
+stage: alignment
+biotools_url: null  # not linked to a bio.tools entry yet

@@ -49,12 +49,14 @@ NON_FEATURES = frozenset({"x", "y"})
 COLOUR_FEATURES = ("cell_area", "nucleus_area", "nucleus_dna_integrated", "cell_mito_mean")
 N_COMPONENTS = 3
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(ref="cells", dc_ref=CELLS_DC_TAG),
     RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "cell_id": pl.Utf8,
     "well_id": pl.Utf8,
     "well": pl.Utf8,
@@ -143,4 +145,4 @@ def transform(
             for i in range(N_COMPONENTS)
         ],
     )
-    return out.select([pl.col(name).cast(dtype) for name, dtype in EXPECTED_SCHEMA.items()])
+    return out.select([pl.col(name).cast(dtype) for name, dtype in OUTPUT_SCHEMA.items()])

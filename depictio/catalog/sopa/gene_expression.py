@@ -37,12 +37,14 @@ from depictio.models.models.transforms import RecipeSource
 RAW_DC_TAG = "sopa_cell_genes_raw"
 CELLS_DC_TAG = "sopa_cells"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(ref="genes", dc_ref=RAW_DC_TAG),
     RecipeSource(ref="cells", dc_ref=CELLS_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "cell_id": pl.Utf8,
     "cell_uid": pl.Utf8,
@@ -89,4 +91,4 @@ def transform(
             pl.lit(None, dtype=pl.Utf8).alias("cluster"),
             pl.lit(None, dtype=pl.Utf8).alias("cell_type"),
         )
-    return long.select(list(EXPECTED_SCHEMA)).sort("gene", "sample", "cell_id")
+    return long.select(list(OUTPUT_SCHEMA)).sort("gene", "sample", "cell_id")

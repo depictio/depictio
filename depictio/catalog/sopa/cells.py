@@ -61,9 +61,11 @@ from depictio.models.models.transforms import RecipeSource
 #: Data-collection tag the recipe reads (see the module docstring).
 RAW_DC_TAG = "sopa_cells_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [RecipeSource(ref="table", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "cell_id": pl.Utf8,
     "cell_uid": pl.Utf8,
@@ -95,7 +97,7 @@ def cell_uid(cell_id: str) -> pl.Expr:
 
 
 def normalise(df: pl.DataFrame) -> pl.DataFrame:
-    """The raw table folded onto ``EXPECTED_SCHEMA``."""
+    """The raw table folded onto ``OUTPUT_SCHEMA``."""
     if "sample" not in df.columns:
         raise ValueError("sopa cells: the table has no 'sample' column (not a spatialdata DC?)")
     cell_id = "cell_id" if "cell_id" in df.columns else "obs_id"

@@ -2,3 +2,7 @@ id: backsub
 name: Backsub
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/backsub
 homepage: https://github.com/SchapiroLabor/Background_subtraction
+description: >-
+  Subtracts the background (autofluorescence) cycles from the marker channels of a multiplexed image, channel by channel.
+stage: alignment
+biotools_url: null  # not linked to a bio.tools entry yet

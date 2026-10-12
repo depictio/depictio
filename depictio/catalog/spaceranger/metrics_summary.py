@@ -57,9 +57,11 @@ from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "spaceranger_metrics_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [RecipeSource(ref="metrics", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "assay": pl.Utf8,
     "spots_under_tissue": pl.Int64,
@@ -164,4 +166,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             "spaceranger_metrics: a row's source_path does not look like "
             "'<sample>/spaceranger/outs/metrics_summary.csv'"
         )
-    return result.select(list(EXPECTED_SCHEMA)).sort("sample")
+    return result.select(list(OUTPUT_SCHEMA)).sort("sample")

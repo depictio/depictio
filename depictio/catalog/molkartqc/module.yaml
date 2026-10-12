@@ -11,3 +11,5 @@ description: >-
   spatial transcriptomics run in nf-core/molkart.
 source_url: https://github.com/nf-core/molkart/blob/1.2.0/modules/local/molkartqc/main.nf
 homepage: https://github.com/nf-core/molkart/blob/1.2.0/bin/collect_QC.py
+stage: qc
+biotools_url: null  # not linked to a bio.tools entry yet

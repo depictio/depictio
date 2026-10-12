@@ -36,6 +36,7 @@ from depictio.models.models.transforms import RecipeSource
 
 SITES_DC_TAG = "cp-sites"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="platemap",
@@ -46,7 +47,8 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="sites", dc_ref=SITES_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "well_id": pl.Utf8,
     "plate": pl.Utf8,
     "well": pl.Utf8,
@@ -119,5 +121,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("well").str.extract(r"^([A-Za-z]+)", 1).alias("row"),
         pl.col("well").str.extract(r"(\d+)$", 1).cast(pl.Int64).alias("column"),
     )
-    head = [pl.col(name).cast(dtype) for name, dtype in EXPECTED_SCHEMA.items()]
+    head = [pl.col(name).cast(dtype) for name, dtype in OUTPUT_SCHEMA.items()]
     return hub.select(*head, *[pl.col(c) for c in design]).sort(["plate", "row", "column"])

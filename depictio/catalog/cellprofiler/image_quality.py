@@ -41,6 +41,7 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="images",
@@ -51,7 +52,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "site_id": pl.Utf8,
     "well_id": pl.Utf8,
     "plate": pl.Utf8,
@@ -139,6 +141,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             "site_id"
         ),
     )
-    return wide.select([pl.col(name).cast(dtype) for name, dtype in EXPECTED_SCHEMA.items()]).sort(
+    return wide.select([pl.col(name).cast(dtype) for name, dtype in OUTPUT_SCHEMA.items()]).sort(
         ["plate", "well", "site", "channel"]
     )

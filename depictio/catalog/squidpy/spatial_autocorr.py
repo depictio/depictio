@@ -55,9 +55,11 @@ from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "squidpy_svg_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [RecipeSource(ref="svg", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "gene": pl.Utf8,
     "gene_uid": pl.Utf8,
@@ -140,4 +142,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         .alias("significant"),
         significant.fill_null(False).cast(pl.Int64).alias("significant_flag"),
     )
-    return result.select(list(EXPECTED_SCHEMA)).sort(["sample", "rank"])
+    return result.select(list(OUTPUT_SCHEMA)).sort(["sample", "rank"])

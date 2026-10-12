@@ -22,14 +22,16 @@ from depictio.catalog.mcquant.cells import SOURCES as CELL_SOURCES
 from depictio.catalog.mcquant.cells import is_nuclear, load_cells
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = list(CELL_SOURCES)
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "marker": pl.Utf8,
     "marker_type": pl.Utf8,
 }
 # One column per sample; validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 
 def transform(
@@ -38,7 +40,7 @@ def transform(
     segmenter = ((params or {}).get("segmenter") or "").strip() or None
     frame, markers = load_cells(sources["quant"], segmenter)
     if frame.is_empty() or not markers:
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
     medians = frame.group_by("sample").agg(
         pl.col(m).fill_null(0.0).clip(lower_bound=0.0).log1p().median().alias(m) for m in markers
     )

@@ -23,6 +23,7 @@ from depictio.models.models.transforms import RecipeSource
 
 _SOURCE_PATH = "_source_path"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="centroids",
@@ -34,7 +35,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "core": pl.Int64,
     "y_centroid": pl.Float64,
@@ -56,5 +58,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             numbers.list.get(1, null_on_oob=True).cast(pl.Float64).alias("x_centroid"),
         )
         .with_columns((pl.int_range(pl.len()).over("sample") + 1).cast(pl.Int64).alias("core"))
-        .select(*EXPECTED_SCHEMA)
+        .select(*OUTPUT_SCHEMA)
     )

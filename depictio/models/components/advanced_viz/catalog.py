@@ -1153,7 +1153,7 @@ def output_schema(output: CatalogOutput) -> tuple[dict[str, str], str]:
     """``({column: dtype}, source)`` of a table output's bindable frame.
 
     The same precedence `catalog validate` grounds renders with: the fixture
-    (plus author-declared dtypes), else the recipe's ``EXPECTED_SCHEMA`` (names
+    (plus author-declared dtypes), else the recipe's ``OUTPUT_SCHEMA`` (names
     only, dtype ``""``), else the declared ``columns``. ``({}, "")`` when there
     is nothing to ground against. Raises when the fixture or recipe cannot be read.
     """

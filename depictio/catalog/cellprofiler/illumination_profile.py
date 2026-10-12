@@ -45,11 +45,13 @@ FUNCTION_GLOB = "**/illumination_correction/**/*_Illum*.npy"
 N_RINGS = 50
 _NAME = re.compile(r"^(?P<plate>.+?)_Illum(?P<channel>[A-Za-z0-9_]+)\.npy$")
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "series": pl.Utf8,
     "plate": pl.Utf8,
     "channel": pl.Utf8,
@@ -112,4 +114,4 @@ def transform(
             )
     if not rows:
         raise ValueError(f"no illumination function matching {FUNCTION_GLOB} under {root}")
-    return pl.DataFrame(rows, schema=EXPECTED_SCHEMA).sort(["plate", "channel", "distance"])
+    return pl.DataFrame(rows, schema=OUTPUT_SCHEMA).sort(["plate", "channel", "distance"])

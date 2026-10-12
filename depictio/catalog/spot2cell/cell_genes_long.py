@@ -31,6 +31,7 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="cellxgene",
@@ -41,7 +42,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "segmentation_method": pl.Utf8,
     "cell_id": pl.Int64,
@@ -116,6 +118,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.col("count").cast(pl.Int64),
         )
     )
-    return long.select(list(EXPECTED_SCHEMA)).sort(
+    return long.select(list(OUTPUT_SCHEMA)).sort(
         ["sample", "segmentation_method", "cell_id", "gene"]
     )

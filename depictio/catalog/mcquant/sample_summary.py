@@ -23,6 +23,7 @@ from depictio.catalog.mcquant.cells import SOURCES as CELL_SOURCES
 from depictio.catalog.mcquant.cells import load_cells
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = list(CELL_SOURCES)
 
 _FEATURES = [
@@ -34,7 +35,8 @@ _FEATURES = [
     "extent",
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "summary_id": pl.Utf8,
     "sample": pl.Utf8,
     "segmenter": pl.Utf8,
@@ -59,5 +61,5 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             pl.lit(len(markers), dtype=pl.Int64).alias("n_markers"),
         )
         .sort("sample", "segmenter")
-        .select(*EXPECTED_SCHEMA)
+        .select(*OUTPUT_SCHEMA)
     )

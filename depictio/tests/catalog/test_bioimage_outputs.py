@@ -92,7 +92,16 @@ def _viewer(**roles) -> dict:
 def _write_tool(root: Path, *outputs: dict, tool_id: str = "imgtool") -> Path:
     folder = root / tool_id
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / "module.yaml").write_text(yaml.safe_dump({"id": tool_id, "name": tool_id}))
+    (folder / "module.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "id": tool_id,
+                "name": tool_id,
+                "description": "A test tool.",
+                "homepage": "https://example.org",
+            }
+        )
+    )
     for out in outputs:
         (folder / f"{out['id']}.yaml").write_text(yaml.safe_dump(out, sort_keys=False))
     return folder

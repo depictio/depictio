@@ -18,19 +18,21 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(ref="cells", dc_ref="mc-cells-primary"),
     RecipeSource(ref="samples", dc_ref="samples", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "cell_uid": pl.Utf8,
     "sample": pl.Utf8,
     "condition": pl.Utf8,
     "dominant_marker": pl.Utf8,
 }
 # One column per marker; validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 #: Columns of the per-cell table that are not marker intensities.
 NOT_MARKERS = frozenset(

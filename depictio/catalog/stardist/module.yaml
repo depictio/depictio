@@ -5,3 +5,5 @@ description: >-
   pretrained 2D models; writes one integer label per nucleus.
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/stardist
 homepage: https://github.com/stardist/stardist
+stage: annotation
+biotools_url: null  # not linked to a bio.tools entry yet

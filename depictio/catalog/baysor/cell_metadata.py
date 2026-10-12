@@ -38,6 +38,7 @@ from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "sopa_cells_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [RecipeSource(ref="table", dc_ref=RAW_DC_TAG)]
 
 NUMERIC = (
@@ -51,7 +52,8 @@ NUMERIC = (
     "lifespan",
 )
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "cell_id": pl.Utf8,
     "cell_uid": pl.Utf8,
@@ -85,6 +87,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             *[_col(df, c, pl.Float64) for c in NUMERIC],
             _col(df, "cluster", pl.Utf8),
         )
-        .select(list(EXPECTED_SCHEMA))
+        .select(list(OUTPUT_SCHEMA))
         .sort("sample", "cell_id")
     )

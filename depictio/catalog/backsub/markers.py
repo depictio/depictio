@@ -25,6 +25,7 @@ from depictio.models.models.transforms import RecipeSource
 
 _SOURCE_PATH = "_source_path"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="markers",
@@ -35,7 +36,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "channel_number": pl.Int64,
     "cycle_number": pl.Int64,
@@ -73,4 +75,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         _col(df, "exposure", pl.Float64),
         _col(df, "background", pl.Utf8),
     ).with_columns(pl.col("background").is_not_null().alias("background_subtracted"))
-    return out.sort("sample", "channel_number").select(*EXPECTED_SCHEMA)
+    return out.sort("sample", "channel_number").select(*OUTPUT_SCHEMA)

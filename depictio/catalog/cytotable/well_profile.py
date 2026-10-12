@@ -88,12 +88,14 @@ CURATED_FEATURES: tuple[str, ...] = (
     "cell_neighbors",
 )
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(ref="cells", dc_ref=CELLS_DC_TAG),
     RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "well_id": pl.Utf8,
     "plate": pl.Utf8,
     "well": pl.Utf8,
@@ -165,8 +167,8 @@ def transform(
         wells = wells.with_columns(pl.lit(None, dtype=pl.Utf8).alias("group"))
     wells = wells.with_columns(pl.col("group").fill_null(fallback))
     wells = wells.with_columns([robust_z(f) for f in features])
-    head = [name for name in EXPECTED_SCHEMA if name not in features and name[2:] not in features]
+    head = [name for name in OUTPUT_SCHEMA if name not in features and name[2:] not in features]
     ordered = [*head, *features, *[f"z_{f}" for f in features]]
     return wells.select(
-        [pl.col(name).cast(EXPECTED_SCHEMA.get(name, pl.Float64)) for name in ordered]
+        [pl.col(name).cast(OUTPUT_SCHEMA.get(name, pl.Float64)) for name in ordered]
     ).sort(["plate", "row", "column"])

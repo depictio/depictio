@@ -32,9 +32,11 @@ from depictio.models.models.transforms import RecipeSource
 
 CELLS_DC_TAG = "cp-cells"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [RecipeSource(ref="cells", dc_ref=CELLS_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "site_id": pl.Utf8,
     "well_id": pl.Utf8,
     "plate": pl.Utf8,
@@ -57,6 +59,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         pl.col("nucleus_dna_integrated").median().alias("median_nucleus_dna"),
         pl.col("cell_neighbors").median().alias("median_neighbors"),
     )
-    return out.select([pl.col(name).cast(dtype) for name, dtype in EXPECTED_SCHEMA.items()]).sort(
+    return out.select([pl.col(name).cast(dtype) for name, dtype in OUTPUT_SCHEMA.items()]).sort(
         ["plate", "well", "site"]
     )

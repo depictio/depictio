@@ -67,12 +67,14 @@ CURATED_FEATURES: tuple[str, ...] = (
     "cell_neighbors",
 )
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(ref="cells", dc_ref=CELLS_DC_TAG),
     RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "cell_id": pl.Utf8,
     "well_id": pl.Utf8,
     "site_id": pl.Utf8,

@@ -50,6 +50,7 @@ from depictio.models.models.transforms import RecipeSource
 
 _SOURCE_PATH = "_source_path"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="quant",
@@ -60,7 +61,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "segmenter": pl.Utf8,
     "cell_id": pl.Int64,
@@ -79,7 +81,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "pc_2": pl.Float64,
 }
 # Marker columns are named by the run's marker sheet; validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 #: MCQUANT column -> output column, for everything that is not a marker.
 MORPHOLOGY: dict[str, str] = {
@@ -216,4 +218,4 @@ def transform(
         pl.Series("pc_1", pc1, dtype=pl.Float64),
         pl.Series("pc_2", pc2, dtype=pl.Float64),
     )
-    return frame.select(*EXPECTED_SCHEMA, *markers)
+    return frame.select(*OUTPUT_SCHEMA, *markers)

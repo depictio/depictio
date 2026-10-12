@@ -39,18 +39,20 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(ref="metrics", dc_ref="spaceranger_metrics_raw", optional=True),
     RecipeSource(ref="svg", dc_ref="squidpy_svg_raw", optional=True),
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "input_route": pl.Utf8,
 }
 # Design columns (GROUP_COL included) are run-dependent; validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 _RAN = "Space Ranger run by the pipeline"
 _GIVEN = "Space Ranger outs given"
@@ -107,5 +109,5 @@ def transform(
         hub = hub.with_columns(pl.lit(_NO_GROUP).alias(group_col))
     elif group_col:
         hub = hub.with_columns(pl.col(group_col).fill_null(_NO_GROUP))
-    head = list(EXPECTED_SCHEMA)
+    head = list(OUTPUT_SCHEMA)
     return hub.select(head + [c for c in hub.columns if c not in head]).sort("sample")

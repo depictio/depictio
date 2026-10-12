@@ -156,24 +156,6 @@ workflows:
             columns_description:
               "{METADATA_ID_COL}": "Sample identifier, as the run names its directories. Every other column is a design factor and is passed through."
 
-      - data_collection_tag: "samples"
-        description: "One row per sample: how it entered the pipeline and the design table's columns when given"
-        config:
-          type: "Table"
-          metatype: "Metadata"
-          source: "transformed"
-          transform:
-            recipe: "nf-core/spatialvi/samples.py"
-            params:
-              id_col: "{METADATA_ID_COL}"
-              group_col: "{GROUP_COL}"
-          dc_specific_properties:
-            format: "TSV"
-            columns_description:
-              "sample": "Sample identifier, the key every link joins on"
-              "input_route": "Whether the pipeline ran Space Ranger on the sample or was given its Space Ranger outs"
-              "{GROUP_COL}": "Design group the group filter reads (all samples when the design table lacks it)"
-
       # ----------------------------------------------------------------
       # MultiQC: FastQC, Space Ranger count and the per-sample spot
       # filtering statistics (custom content `quality_controls`).
@@ -319,6 +301,24 @@ workflows:
             format: "CSV"
             polars_kwargs:
               include_file_paths: "source_path"
+
+      - data_collection_tag: "samples"
+        description: "One row per sample: how it entered the pipeline and the design table's columns when given"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/spatialvi/samples.py"
+            params:
+              id_col: "{METADATA_ID_COL}"
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "sample": "Sample identifier, the key every link joins on"
+              "input_route": "Whether the pipeline ran Space Ranger on the sample or was given its Space Ranger outs"
+              "{GROUP_COL}": "Design group the group filter reads (all samples when the design table lacks it)"
 
       - data_collection_tag: "sv-svg-genes"
         optional: true

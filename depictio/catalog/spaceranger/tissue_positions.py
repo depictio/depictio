@@ -45,9 +45,11 @@ from depictio.models.models.transforms import RecipeSource
 
 RAW_DC_TAG = "spaceranger_tissue_positions_raw"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [RecipeSource(ref="positions", dc_ref=RAW_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "barcode": pl.Utf8,
     "spot_uid": pl.Utf8,
@@ -106,4 +108,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     result = result.with_columns(
         pl.concat_str([pl.col("sample"), pl.col("barcode")], separator=":").alias("spot_uid")
     )
-    return result.select(list(EXPECTED_SCHEMA)).sort(["sample", "array_row", "array_col"])
+    return result.select(list(OUTPUT_SCHEMA)).sort(["sample", "array_row", "array_col"])

@@ -28,6 +28,7 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="samplesheet",
@@ -38,7 +39,8 @@ SOURCES: list[RecipeSource] = [
     RecipeSource(ref="design", dc_ref="metadata", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample_id": pl.Utf8,
     "nuclear_image": pl.Utf8,
     "spot_table": pl.Utf8,
@@ -46,7 +48,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "has_membrane": pl.Utf8,
 }
 # Design columns are run-dependent; validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 SHEET_COLUMNS = ("nuclear_image", "spot_table", "membrane_image")
 #: design-table columns that are never a factor

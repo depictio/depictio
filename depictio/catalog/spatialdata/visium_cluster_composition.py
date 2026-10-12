@@ -26,9 +26,11 @@ from depictio.models.models.transforms import RecipeSource
 
 SPOTS_DC_TAG = "spatialdata_visium_spots"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [RecipeSource(ref="spots", dc_ref=SPOTS_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "clustering": pl.Utf8,
     "cluster": pl.Utf8,
@@ -75,6 +77,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
     spots = sources["spots"]
     parts = [p for c, lab in _CLUSTERINGS.items() if (p := _one(spots, c, lab)) is not None]
     if not parts:
-        return pl.DataFrame(schema=EXPECTED_SCHEMA)
-    out = pl.concat([p.select(list(EXPECTED_SCHEMA)) for p in parts])
+        return pl.DataFrame(schema=OUTPUT_SCHEMA)
+    out = pl.concat([p.select(list(OUTPUT_SCHEMA)) for p in parts])
     return out.sort(["clustering", "sample", "n_spots"], descending=[False, False, True])

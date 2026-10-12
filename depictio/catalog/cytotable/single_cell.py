@@ -102,6 +102,7 @@ FEATURES: dict[str, str] = {
     "Cells_Neighbors_NumberOfNeighbors_Adjacent": "cell_neighbors",
 }
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="sites",
@@ -112,7 +113,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "cell_id": pl.Utf8,
     "well_id": pl.Utf8,
     "site_id": pl.Utf8,
@@ -184,6 +186,6 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
             (pl.col("site_id") + "_" + pl.col("object_number").cast(pl.Utf8)).alias("cell_id"),
         )
     )
-    return frame.select([pl.col(name).cast(dtype) for name, dtype in EXPECTED_SCHEMA.items()]).sort(
+    return frame.select([pl.col(name).cast(dtype) for name, dtype in OUTPUT_SCHEMA.items()]).sort(
         ["plate", "well", "site", "object_number"]
     )

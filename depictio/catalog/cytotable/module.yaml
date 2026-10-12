@@ -20,3 +20,5 @@ source_url: https://github.com/nf-core/cellpainting/blob/40423f0d1da0dde52bd5f1f
 edam_topics:
   - http://edamontology.org/topic_3382 # Imaging
   - http://edamontology.org/topic_2229 # Cell biology
+stage: quantification
+biotools_url: null  # not linked to a bio.tools entry yet

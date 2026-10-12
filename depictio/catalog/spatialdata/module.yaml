@@ -34,3 +34,5 @@ description: >-
   store, with coordinate transformations between them.
 homepage: https://spatialdata.scverse.org
 source_url: https://github.com/nf-core/spatialvi/tree/dev/modules/local/sdata
+stage: quantification
+biotools_url: null  # not linked to a bio.tools entry yet

@@ -47,11 +47,13 @@ from depictio.models.models.transforms import RecipeSource
 
 SAMPLES_DC_TAG = "samples"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(ref="samples", dc_ref=SAMPLES_DC_TAG, optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "image_id": pl.Utf8,
     "image_path": pl.Utf8,
     "image_kind": pl.Utf8,
@@ -128,4 +130,4 @@ def transform(
     ]
     if not rows:
         raise ValueError(f"no CellProfiler overlay or outline PNG under {root}")
-    return pl.DataFrame(rows, schema=EXPECTED_SCHEMA).sort(["image_kind", "plate", "well", "site"])
+    return pl.DataFrame(rows, schema=OUTPUT_SCHEMA).sort(["image_kind", "plate", "well", "site"])

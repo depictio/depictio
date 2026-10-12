@@ -35,6 +35,7 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(
         ref="qc",
@@ -45,7 +46,8 @@ SOURCES: list[RecipeSource] = [
     ),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "segmentation_method": pl.Utf8,
     "total_cells": pl.Int64,
@@ -116,7 +118,7 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
         ).alias("labels_removed_percent"),
     )
     return (
-        frame.select(list(EXPECTED_SCHEMA))
+        frame.select(list(OUTPUT_SCHEMA))
         .unique(subset=["sample", "segmentation_method"], keep="last", maintain_order=True)
         .sort(["sample", "segmentation_method"])
     )

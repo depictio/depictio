@@ -32,9 +32,11 @@ from depictio.models.models.transforms import RecipeSource
 #: Data-collection tag of the normalised cell table (``sopa/cells``).
 CELLS_DC_TAG = "sopa_cells"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [RecipeSource(ref="cells", dc_ref=CELLS_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "annotation": pl.Utf8,
     "label": pl.Utf8,
@@ -93,4 +95,4 @@ def transform(sources: dict[str, pl.DataFrame]) -> pl.DataFrame:
                 "cluster",
             )
         ]
-    return pl.concat(parts).select(list(EXPECTED_SCHEMA)).sort("annotation", "rank", "sample")
+    return pl.concat(parts).select(list(OUTPUT_SCHEMA)).sort("annotation", "rank", "sample")

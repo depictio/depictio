@@ -18,3 +18,4 @@ description: >-
 homepage: https://squidpy.readthedocs.io
 source_url: https://github.com/nf-core/spatialvi/tree/dev/modules/local/squidpy
 biotools_url: https://bio.tools/squidpy
+stage: quantification

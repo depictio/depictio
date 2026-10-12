@@ -30,9 +30,11 @@ from depictio.models.models.transforms import RecipeSource
 
 WELLS_DC_TAG = "cp-wells"
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [RecipeSource(ref="wells", dc_ref=WELLS_DC_TAG)]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "plate_row": pl.Utf8,
     "plate": pl.Utf8,
     "row": pl.Utf8,

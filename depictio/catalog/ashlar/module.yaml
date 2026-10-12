@@ -2,3 +2,7 @@ id: ashlar
 name: ASHLAR
 nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/ashlar
 homepage: https://github.com/labsyspharm/ashlar
+description: >-
+  Stitches and registers the tiles and cycles of a multiplexed tissue image into one pyramidal OME-TIFF.
+stage: alignment
+biotools_url: null  # not linked to a bio.tools entry yet

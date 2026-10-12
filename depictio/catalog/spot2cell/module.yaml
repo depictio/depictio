@@ -17,3 +17,5 @@ description: >-
   transcriptomics run, written by nf-core/molkart.
 source_url: https://github.com/nf-core/molkart/blob/1.2.0/modules/local/spot2cell/main.nf
 homepage: https://github.com/nf-core/molkart/blob/1.2.0/bin/spot2cell.py
+stage: quantification
+biotools_url: null  # not linked to a bio.tools entry yet

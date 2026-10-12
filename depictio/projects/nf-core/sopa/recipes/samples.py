@@ -33,12 +33,14 @@ import polars as pl
 
 from depictio.models.models.transforms import RecipeSource
 
+# INPUT SCHEMA: the columns each source must contain, checked before transform().
 SOURCES: list[RecipeSource] = [
     RecipeSource(ref="cells", dc_ref="sopa_cells"),
     RecipeSource(ref="metadata", dc_ref="metadata", optional=True),
 ]
 
-EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
+# OUTPUT SCHEMA: the columns transform() returns, checked after it.
+OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {
     "sample": pl.Utf8,
     "condition": pl.Utf8,
     "n_cells": pl.Int64,
@@ -48,7 +50,7 @@ EXPECTED_SCHEMA: dict[str, type[pl.DataType]] = {
     "method": pl.Utf8,
 }
 # Extra design columns are run-dependent; validated dynamically.
-OPTIONAL_SCHEMA: dict[str, type[pl.DataType]] = {}
+OPTIONAL_OUTPUT_SCHEMA: dict[str, type[pl.DataType]] = {}
 
 #: ``GROUP_COL`` value the CLI sets when the run declares no group column.
 NO_GROUP_SENTINEL = "__no_group__"
@@ -72,7 +74,7 @@ def _design(
     if not factors:
         return None
     condition_col = group_col if group_col in factors else factors[0]
-    extras = [c for c in factors if c != condition_col and c not in EXPECTED_SCHEMA]
+    extras = [c for c in factors if c != condition_col and c not in OUTPUT_SCHEMA]
     table = metadata.select(
         pl.col(id_col).cast(pl.Utf8).str.strip_chars().alias("sample"),
         pl.col(condition_col).cast(pl.Utf8).alias("condition"),
@@ -103,4 +105,4 @@ def transform(
         hub = hub.join(table, on="sample", how="left").with_columns(
             pl.col("condition").fill_null(UNSPECIFIED)
         )
-    return hub.select([*EXPECTED_SCHEMA, *extras]).sort("condition", "sample")
+    return hub.select([*OUTPUT_SCHEMA, *extras]).sort("condition", "sample")

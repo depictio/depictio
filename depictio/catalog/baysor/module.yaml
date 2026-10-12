@@ -16,3 +16,5 @@ source_url: https://github.com/nf-core/sopa/tree/1.0.1/modules/local/patch_segme
 edam_topics:
   - http://edamontology.org/topic_3382 # Imaging
   - http://edamontology.org/topic_3308 # Transcriptomics
+stage: annotation
+biotools_url: null  # not linked to a bio.tools entry yet
