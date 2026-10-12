@@ -3,12 +3,18 @@
  * grouping its files into data collections.
  *
  * Every test drives the real UI against stubbed builder routes
- * (`/projects/builder/{tree,suggest,match,template}`), a stubbed file preview
- * and a stubbed `/projects/from_run`, like the run-folder spec: the value is
- * what the page shows and sends, and none of it needs a folder on the
- * runner's disk. The payloads are what the real backend answers for the same
- * folder (a `quant/S1..S3.tsv` scan, a `samples.csv` and a `tree.nwk`),
- * produced by `depictio/project_builder` itself.
+ * (`/projects/builder/{capabilities,tree,suggest,match,template}`), a stubbed
+ * file preview and a stubbed `/projects/from_run`, like the run-folder spec:
+ * the value is what the page shows and sends, and none of it needs a folder
+ * on the runner's disk. The payloads are what the real backend answers for
+ * the same folder (a `quant/S1..S3.tsv` scan, a `samples.csv` and a
+ * `tree.nwk`), produced by `depictio/project_builder` itself, in the shapes
+ * of the builder contract v2.
+ *
+ * `/capabilities` answers as a server without the genomic tracks and
+ * bioimage kinds (both listed unavailable, with their reason), real-time
+ * events on, and the v1 table formats plus xls: what the v1 tests ran
+ * against. The capability tests change one thing each.
  *
  * The standalone mode (`depictio project-builder <dir>`) is the same bundle
  * with a `depictio-mode` meta tag in its page: the last test injects it into
@@ -41,14 +47,59 @@ const SAMPLES_REGEX = String.raw`^(?:[^/]+/)*samples\.csv$`;
 const TREE_REGEX = String.raw`^(?:[^/]+/)*tree\.nwk$`;
 /** Valid in the browser, refused by Python's `re`: a variable-width look-behind. */
 const LOOKBEHIND_REGEX = String.raw`^quant/(?<=q\w+/)S\d+\.tsv$`;
+/** `runs/S1/counts.tsv` with `runs/S2/counts.tsv` ticked: the scan, and the
+ *  same scan with the varying folder as a `{sample}` wildcard. */
+const RUNS_REGEX = String.raw`^runs/[^/]+/counts\.tsv$`;
+const RUNS_PATTERN = String.raw`^runs/{sample}/counts\.tsv$`;
+const SAMPLE_WILDCARD = { name: "sample", regex: "[^/]+" };
 
 type Json = Record<string, unknown>;
 type StubAnswer = { status?: number; json: unknown };
 
 // ── Payloads ────────────────────────────────────────────────────────────────
 
+const GENOMIC_TRACKS_REASON = "Genomic tracks are not available on this server yet.";
+const BIOIMAGE_REASON = "Bioimages are not available on this server yet.";
+const EVENTS_OFF_REASON = "Real-time events are off on this server (DEPICTIO_EVENTS_ENABLED)";
+
+/** `GET /capabilities` of a server without the genomic tracks and bioimage
+ *  kinds, with real-time events on. */
+const CAPABILITIES = {
+  mode: "server",
+  dc_types: [
+    ...["table", "multiqc", "image", "indexed_file", "geojson", "phylogeny"].map((type) => ({
+      type,
+      available: true,
+      reason: null,
+    })),
+    { type: "genomic_tracks", available: false, reason: GENOMIC_TRACKS_REASON },
+    { type: "bioimage", available: false, reason: BIOIMAGE_REASON },
+  ],
+  table_formats: ["csv", "tsv", "parquet", "feather", "xls", "xlsx"],
+  reader_options: [
+    "separator",
+    "has_header",
+    "skip_rows",
+    "comment_prefix",
+    "null_values",
+    "quote_char",
+    "decimal_comma",
+  ],
+  link_target_types: ["table", "multiqc", "image"],
+  realtime: { events_enabled: true, reason: null },
+  genomic_tracks: null,
+  bioimage: null,
+};
+
+/** The same, served by `depictio project-builder`: realtime status unknown. */
+const STANDALONE_CAPABILITIES = {
+  ...CAPABILITIES,
+  mode: "standalone",
+  realtime: { events_enabled: null, reason: null },
+};
+
 function entry(path: string, isDir: boolean, size: number | null) {
-  return { name: path.split("/").pop() as string, path, is_dir: isDir, size };
+  return { name: path.split("/").pop() as string, path, is_dir: isDir, size, store: null };
 }
 
 /** `/tree` listings by folder, for `root`. */
@@ -75,7 +126,17 @@ function listings(root: string): Record<string, Json> {
 }
 
 function suggestion(overrides: Json): Json {
-  return { catalog: [], multiqc: false, format: null, separator: null, ...overrides };
+  return {
+    catalog: [],
+    multiqc: false,
+    format: null,
+    separator: null,
+    store: null,
+    tracks: null,
+    path_wildcard: null,
+    warnings: [],
+    ...overrides,
+  };
 }
 
 /** `/suggest` answers by `path|examples`. The server's tag for `quant/S1.tsv`
@@ -134,6 +195,8 @@ function matched(overrides: Json): Json {
     mismatches: [],
     missing_indexes: [],
     warnings: [],
+    stores: false,
+    tracks: null,
     ...overrides,
   };
 }
@@ -435,11 +498,25 @@ async function answer(route: Route, reply: StubAnswer): Promise<void> {
 }
 
 interface BuilderCalls {
+  capabilities: number;
   tree: Json[];
   suggest: Json[];
   match: Json[];
   template: Json[];
   preview: Json[];
+}
+
+/** What a test adds to, or changes in, the stubbed folder and server. */
+interface StubOptions {
+  capabilities?: Json;
+  /** More `/tree` listings, by folder (the top one replaces the default). */
+  listings?: Record<string, Json>;
+  /** More `/suggest` answers, by `path|examples`. */
+  suggestions?: Record<string, Json>;
+  /** More `/run_file_preview` answers, by location. */
+  previews?: Record<string, Json>;
+  /** A `/match` answer for a collection, before the default ones. */
+  match?: (collection: Json) => Json | null;
 }
 
 /** Stub the builder routes and the file preview for `root`; `template`
@@ -448,12 +525,18 @@ async function stubBuilder(
   page: Page,
   root: string,
   template: (body: Json) => StubAnswer = () => ({ json: TEMPLATE_RESULT }),
+  options: StubOptions = {},
 ): Promise<BuilderCalls> {
-  const calls: BuilderCalls = { tree: [], suggest: [], match: [], template: [], preview: [] };
-  const folders = listings(root);
-  const files = previews(root);
+  const calls: BuilderCalls = { capabilities: 0, tree: [], suggest: [], match: [], template: [], preview: [] };
+  const folders = { ...listings(root), ...(options.listings ?? {}) };
+  const files = { ...previews(root), ...(options.previews ?? {}) };
+  const suggestions = { ...SUGGESTIONS, ...(options.suggestions ?? {}) };
   const body = (route: Route) => (route.request().postDataJSON() ?? {}) as Json;
 
+  await page.route("**/api/v1/projects/builder/capabilities", async (route) => {
+    calls.capabilities += 1;
+    await answer(route, { json: options.capabilities ?? CAPABILITIES });
+  });
   await page.route("**/api/v1/projects/builder/tree", async (route) => {
     const b = body(route);
     calls.tree.push(b);
@@ -470,7 +553,7 @@ async function stubBuilder(
     const b = body(route);
     calls.suggest.push(b);
     const examples = ((b.examples as string[] | undefined) ?? []).slice().sort().join(",");
-    const known = SUGGESTIONS[`${b.path}|${examples}`];
+    const known = suggestions[`${b.path}|${examples}`];
     await answer(
       route,
       known
@@ -481,7 +564,8 @@ async function stubBuilder(
   await page.route("**/api/v1/projects/builder/match", async (route) => {
     const b = body(route);
     calls.match.push(b);
-    await answer(route, { json: matchFor(b.collection as Json) });
+    const collection = b.collection as Json;
+    await answer(route, { json: options.match?.(collection) ?? matchFor(collection) });
   });
   await page.route("**/api/v1/projects/builder/template", async (route) => {
     const b = body(route);
@@ -550,10 +634,20 @@ async function chooseRoot(page: Page, root: string): Promise<void> {
   await expect(byTestId(page, "builder-root-status")).toHaveAttribute("data-state", "ready");
 }
 
-/** Pick `path` in the tree (opening its folder first, if any). */
+/** Open every folder above `path` in the tree, outermost first. */
+async function openFolders(page: Page, path: string): Promise<void> {
+  const parts = path.split("/");
+  for (let i = 1; i < parts.length; i += 1) {
+    const folder = parts.slice(0, i).join("/");
+    const child = parts.slice(0, i + 1).join("/");
+    if ((await treeItem(page, child).count()) === 0) await treeItem(page, folder).click();
+    await expect(treeItem(page, child)).toBeVisible();
+  }
+}
+
+/** Pick `path` in the tree (opening its folders first, if any). */
 async function pickFile(page: Page, path: string): Promise<void> {
-  const folder = path.includes("/") ? path.split("/")[0] : null;
-  if (folder && (await treeItem(page, path).count()) === 0) await treeItem(page, folder).click();
+  await openFolders(page, path);
   await treeItem(page, path).locator("[data-testid='builder-tree-file']").click();
 }
 
@@ -844,6 +938,277 @@ test.describe("Project Builder", () => {
   });
 });
 
+// ── Capabilities, wildcards and links (contract v2) ─────────────────────────
+
+/** A folder whose samples are sub-folders: `runs/S1/counts.tsv`,
+ *  `runs/S2/counts.tsv`. */
+function runsFolder(root: string): StubOptions {
+  const listing = (path: string, entries: ReturnType<typeof entry>[]) => ({
+    path,
+    entries,
+    truncated: false,
+    is_remote: false,
+    root_label: root,
+  });
+  const counts = (sample: string) => ({
+    location: `${root}/runs/${sample}/counts.tsv`,
+    name: "counts.tsv",
+    size: 40,
+    format: "table",
+    columns: ["gene", "count"],
+    rows: [
+      ["g1", "10"],
+      ["g2", "4"],
+    ],
+    columns_total: 2,
+    rows_total: 2,
+    text: null,
+    truncated: false,
+    reason: null,
+    dtypes: { gene: "String", count: "Int64" },
+  });
+  return {
+    listings: {
+      "": listing("", [entry("runs", true, null)]),
+      runs: listing("runs", [entry("runs/S1", true, null), entry("runs/S2", true, null)]),
+      "runs/S1": listing("runs/S1", [entry("runs/S1/counts.tsv", false, 40)]),
+      "runs/S2": listing("runs/S2", [entry("runs/S2/counts.tsv", false, 40)]),
+    },
+    previews: {
+      [`${root}/runs/S1/counts.tsv`]: counts("S1"),
+      [`${root}/runs/S2/counts.tsv`]: counts("S2"),
+    },
+    suggestions: {
+      "runs/S1/counts.tsv|": suggestion({
+        path: "runs/S1/counts.tsv",
+        tag: "runs_counts",
+        type: "table",
+        mode: "single",
+        glob: "**/counts.tsv",
+        regex: String.raw`^(?:[^/]+/)*counts\.tsv$`,
+        format: "tsv",
+        separator: "\t",
+      }),
+      "runs/S1/counts.tsv|runs/S2/counts.tsv": suggestion({
+        path: "runs/S1/counts.tsv",
+        tag: "runs_counts",
+        type: "table",
+        mode: "recursive",
+        glob: "runs/*/counts.tsv",
+        regex: RUNS_REGEX,
+        format: "tsv",
+        separator: "\t",
+        path_wildcard: { pattern: RUNS_PATTERN, wildcards: [SAMPLE_WILDCARD] },
+      }),
+    },
+    match: (collection) => {
+      if (collection.mode === "single" && String(collection.path).startsWith("runs/")) {
+        return matched({
+          files: [collection.path],
+          count: 1,
+          schema: { gene: "String", count: "Int64" },
+          consistent: true,
+        });
+      }
+      if (collection.regex === RUNS_REGEX || collection.regex === RUNS_PATTERN) {
+        return matched({
+          regex: collection.regex,
+          files: ["runs/S1/counts.tsv", "runs/S2/counts.tsv"],
+          count: 2,
+          schema: { gene: "String", count: "Int64", ...(collection.wildcards ? { sample: "String" } : {}) },
+          consistent: true,
+        });
+      }
+      return null;
+    },
+  };
+}
+
+/** Pick an option of a Mantine select by its label. */
+async function selectOption(page: Page, testId: string, label: string): Promise<void> {
+  await byTestId(page, testId).click();
+  await page.getByRole("option", { name: label, exact: true }).click();
+}
+
+test.describe("Project Builder, capabilities", () => {
+  test.beforeEach(async ({ page }) => {
+    const { is_public_mode } = await getAuthMode();
+    test.skip(is_public_mode, "Project creation is not exercised in public mode.");
+    await mockTemplates(page);
+    await setRunFolderFlags(page, { local: true, remote: false });
+  });
+
+  test("realtime is off, with the reason, when the server has real-time events off", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    const calls = await stubBuilder(page, DATA_ROOT, undefined, {
+      capabilities: { ...CAPABILITIES, realtime: { events_enabled: false, reason: "DEPICTIO_EVENTS_ENABLED is off" } },
+    });
+
+    await loginAsAdmin();
+    await page.goto("/projects/build");
+    await chooseRoot(page, DATA_ROOT);
+
+    const realtime = byTestId(page, "builder-project-realtime");
+    await expect(realtime).toBeDisabled();
+    await expect(realtime).not.toBeChecked();
+    await expect(byTestId(page, "builder-project-realtime-reason")).toHaveText(EVENTS_OFF_REASON);
+    await expect(page.getByText("Live-update dashboards when new data is ingested")).toBeVisible();
+    expect(calls.capabilities, "the capabilities are read once").toBe(1);
+  });
+
+  test("a collection type the server lacks is offered disabled, with its reason", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    const calls = await stubBuilder(page, DATA_ROOT);
+
+    await loginAsAdmin();
+    await page.goto("/projects/build");
+    await chooseRoot(page, DATA_ROOT);
+    await byTestId(page, "builder-project-name").fill(PROJECT_NAME);
+    await byTestId(page, "builder-next").click();
+
+    await pickFile(page, "samples.csv");
+    await expect(byTestId(page, "builder-dc-tag")).toHaveValue("samples");
+    await byTestId(page, "builder-dc-type").click();
+
+    const optionOf = (type: string) =>
+      page
+        .getByRole("option")
+        .filter({ has: page.locator(`[data-testid='builder-dc-type-option'][data-type='${type}']`) });
+    const genomic = optionOf("genomic_tracks");
+    await expect(genomic).toHaveAttribute("data-combobox-disabled", "true");
+    await expect(genomic).toContainText("Genomic tracks");
+    await expect(genomic).toContainText(GENOMIC_TRACKS_REASON);
+    await expect(optionOf("bioimage")).toHaveAttribute("data-combobox-disabled", "true");
+    await expect(optionOf("bioimage")).toContainText(BIOIMAGE_REASON);
+    await expect(optionOf("table")).not.toHaveAttribute("data-combobox-disabled", "true");
+
+    // Clicking it changes nothing, and nothing of that type is ever asked for.
+    await genomic.click({ force: true });
+    await page.keyboard.press("Escape");
+    await expect(byTestId(page, "builder-dc-type")).toHaveValue("Table");
+    expect(
+      calls.match.filter((b) => (b.collection as Json).type === "genomic_tracks"),
+      "no match for an unavailable type",
+    ).toEqual([]);
+  });
+
+  test("the varying folder becomes a sample wildcard in one click, and the template draft carries it", async ({
+    loginAsAdmin,
+    page,
+  }) => {
+    const calls = await stubBuilder(page, DATA_ROOT, undefined, runsFolder(DATA_ROOT));
+
+    await loginAsAdmin();
+    await page.goto("/projects/build");
+    await chooseRoot(page, DATA_ROOT);
+    await byTestId(page, "builder-project-name").fill(PROJECT_NAME);
+    await byTestId(page, "builder-next").click();
+
+    await pickFile(page, "runs/S1/counts.tsv");
+    await expect(byTestId(page, "builder-dc-tag")).toHaveValue("runs_counts");
+    await byTestId(page, "builder-dc-tag").fill("counts");
+    await openFolders(page, "runs/S2/counts.tsv");
+    await treeItem(page, "runs/S2/counts.tsv").getByRole("checkbox").check();
+    await expect(byTestId(page, "builder-dc-glob")).toHaveValue("runs/*/counts.tsv");
+    await expect(byTestId(page, "builder-dc-regex")).toHaveValue(RUNS_REGEX);
+
+    // One click: the regex reads the folder into a `sample` column.
+    await byTestId(page, "builder-dc-use-path-wildcard").click();
+    await expect(byTestId(page, "builder-dc-regex")).toHaveValue(RUNS_PATTERN);
+    await expect(byTestId(page, "builder-dc-wildcard")).toHaveCount(1);
+    await expect(byTestId(page, "builder-dc-wildcard-name")).toHaveValue("sample");
+    await expect(byTestId(page, "builder-dc-wildcard-regex")).toHaveValue(SAMPLE_WILDCARD.regex);
+    await expect(byTestId(page, "builder-dc-wildcard-error")).toHaveCount(0);
+    await expect(byTestId(page, "builder-dc-use-path-wildcard")).toHaveCount(0);
+    await expectMatches(page, 2);
+    expect(calls.match.at(-1)?.collection).toMatchObject({
+      tag: "counts",
+      mode: "recursive",
+      regex: RUNS_PATTERN,
+      wildcards: [SAMPLE_WILDCARD],
+    });
+
+    await byTestId(page, "builder-add-dc").click();
+    await expect(page.locator("[data-testid='builder-dc-card'][data-tag='counts']")).toBeVisible();
+
+    await byTestId(page, "builder-next").click();
+    await expect(byTestId(page, "builder-review-yaml")).toBeVisible();
+    expect(calls.template.at(-1)).toEqual({
+      draft: {
+        name: PROJECT_NAME,
+        workflows: [
+          {
+            name: "main",
+            engine: "python",
+            structure: "flat",
+            data_collections: [
+              {
+                tag: "counts",
+                type: "table",
+                mode: "recursive",
+                regex: RUNS_PATTERN,
+                wildcards: [SAMPLE_WILDCARD],
+                props: { kind: "table", format: "tsv", separator: "\t" },
+              },
+            ],
+          },
+        ],
+      },
+      remote: false,
+    });
+  });
+
+  test("a link added on the review step is in the template draft", async ({ loginAsAdmin, page }) => {
+    const calls = await stubBuilder(page, DATA_ROOT);
+
+    await loginAsAdmin();
+    await page.goto("/projects/build");
+    await chooseRoot(page, DATA_ROOT);
+    await byTestId(page, "builder-project-name").fill(PROJECT_NAME);
+    await byTestId(page, "builder-next").click();
+    await addTwoCollections(page, calls);
+
+    await byTestId(page, "builder-next").click();
+    await expectTemplateShown(page);
+    expect(calls.template.at(-1)?.draft).not.toHaveProperty("links");
+
+    const links = byTestId(page, "builder-links");
+    await expect(links).toContainText("Links filter one collection from another on a dashboard");
+    await expect(links).toContainText("Joins and recipes are not available here");
+    await byTestId(page, "builder-link-add").click();
+    await expect(byTestId(page, "builder-link")).toHaveCount(1);
+
+    // samples.sample filters quant on its own sample column (both schemas
+    // were read when the collections were added).
+    await selectOption(page, "builder-link-source", "samples (Table)");
+    await selectOption(page, "builder-link-target", "quant (Table)");
+    await selectOption(page, "builder-link-source-column", "sample");
+    await expect(byTestId(page, "builder-link-target-field")).toHaveValue("sample");
+    await expect(byTestId(page, "builder-link-resolver")).toHaveValue("Direct: the same values");
+    await expect(byTestId(page, "builder-link-error")).toHaveCount(0);
+
+    const link = {
+      source_tag: "samples",
+      source_column: "sample",
+      target_tag: "quant",
+      resolver: "direct",
+      target_field: "sample",
+    };
+    await expect
+      .poll(() => (calls.template.at(-1)?.draft as Json | undefined)?.links)
+      .toEqual([link]);
+    expect(calls.template.at(-1)).toEqual({ draft: { ...EXPECTED_DRAFT, links: [link] }, remote: false });
+
+    // Removed again: the draft goes back to no links.
+    await byTestId(page, "builder-link-remove").click();
+    await expect.poll(() => (calls.template.at(-1)?.draft as Json | undefined)?.links).toBeUndefined();
+  });
+});
+
 // ── Standalone mode ─────────────────────────────────────────────────────────
 
 /** Serve `/projects/build` as `depictio project-builder` does: the SPA's own
@@ -874,13 +1239,24 @@ test.describe("Project Builder, standalone", () => {
     const BUNDLE = `${OUT_DIR}/template.yaml`;
     const INGEST = `depictio ingest ${DATA_ROOT} --template ${BUNDLE}`;
 
+    const WATCH = `depictio watch ${DATA_ROOT} --template ${BUNDLE}`;
+
     await serveStandalone(page);
     await page.route("**/api/v1/projects/builder/context", (route) =>
       route.fulfill({
-        json: { mode: "standalone", data_root: DATA_ROOT, out_dir: OUT_DIR, writable: true },
+        json: {
+          mode: "standalone",
+          data_root: DATA_ROOT,
+          out_dir: OUT_DIR,
+          writable: true,
+          ingest_command: INGEST,
+          watch_command: WATCH,
+        },
       }),
     );
-    const calls = await stubBuilder(page, DATA_ROOT);
+    const calls = await stubBuilder(page, DATA_ROOT, undefined, {
+      capabilities: STANDALONE_CAPABILITIES,
+    });
     const plans: Json[] = [];
     await page.route("**/api/v1/projects/builder/plan", async (route) => {
       plans.push((route.request().postDataJSON() ?? {}) as Json);
@@ -893,7 +1269,9 @@ test.describe("Project Builder, standalone", () => {
       await answer(
         route,
         b.overwrite
-          ? { json: { path: BUNDLE, yaml: TEMPLATE_YAML, ingest_command: INGEST } }
+          ? {
+              json: { path: BUNDLE, yaml: TEMPLATE_YAML, ingest_command: INGEST, watch_command: WATCH },
+            }
           : {
               status: 409,
               json: {
@@ -917,6 +1295,12 @@ test.describe("Project Builder, standalone", () => {
     await page.goto("/projects/build");
     await expect(byTestId(page, "builder-root-fixed")).toHaveText(DATA_ROOT);
     await expect(byTestId(page, "builder-root-input")).toHaveCount(0);
+    expect(calls.capabilities, "the capabilities are read once").toBe(1);
+    // No server to ask whether real-time events are on: offered, with a warning.
+    await expect(byTestId(page, "builder-project-realtime")).toBeEnabled();
+    await expect(byTestId(page, "builder-project-realtime-warning")).toContainText(
+      "Takes effect only on a server with real-time events on",
+    );
     await byTestId(page, "builder-project-name").fill(PROJECT_NAME);
     await byTestId(page, "builder-next").click();
 
@@ -940,6 +1324,8 @@ test.describe("Project Builder, standalone", () => {
 
     await expect(byTestId(page, "builder-written-path")).toHaveText(BUNDLE);
     await expect(byTestId(page, "builder-ingest-command")).toHaveText(INGEST);
+    // Not a realtime project: no watcher to run.
+    await expect(byTestId(page, "builder-watch-command")).toHaveCount(0);
     expect(writes.map((b) => b.overwrite)).toEqual([false, true]);
     expect(writes[1]?.template).toEqual(TEMPLATE);
 
