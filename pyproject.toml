@@ -191,6 +191,8 @@ exclude = [
   "projects/nf-core/**/*",
   "projects/nf-core/**/.db_seeds/*",
   "catalog/**/*",
+  # Agent-team profiles (roles and topics), loaded at runtime.
+  "agents/profiles/**/*",
   "cli/configs/**/*",
 ]
 

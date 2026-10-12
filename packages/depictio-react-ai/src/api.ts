@@ -15,6 +15,13 @@
 import { API_BASE, authFetch } from 'depictio-react-core';
 
 import type {
+  AgentProfile,
+  AgentRouteRequest,
+  AgentRouteResponse,
+  AgentRun,
+  AgentRunEvent,
+  AgentRunRequest,
+  AgentRunSummary,
   AIStreamEvent,
   AIStreamEventType,
   AnalysesResponse,
@@ -35,6 +42,11 @@ import type {
   SummarizeSectionRequest,
   SummarizeSectionResponse,
 } from './types';
+import { parseSSEFrame, splitSSEFrames } from './sse';
+import type { SSEFrame } from './sse';
+
+export { parseSSEFrame, splitSSEFrames };
+export type { SSEFrame };
 
 function llmKeyHeaders(llmKey: string | null | undefined): Record<string, string> {
   return llmKey ? { 'X-LLM-API-Key': llmKey } : {};
@@ -44,11 +56,13 @@ async function postJson<T>(
   path: string,
   body: unknown,
   llmKey: string | null | undefined,
+  signal?: AbortSignal,
 ): Promise<T> {
   const res = await authFetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...llmKeyHeaders(llmKey) },
     body: JSON.stringify(body),
+    signal,
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -142,6 +156,19 @@ export async function streamPost(
   llmKey: string | null | undefined,
   { onEvent, signal }: AIStreamHandlers,
 ): Promise<void> {
+  return streamSSE(path, body, llmKey, signal, (frame) => {
+    onEvent({ type: frame.type as AIStreamEventType, data: frame.data });
+  });
+}
+
+/** POST `body` and hand every SSE frame to `onFrame`, untyped. */
+async function streamSSE(
+  path: string,
+  body: unknown,
+  llmKey: string | null | undefined,
+  signal: AbortSignal | undefined,
+  onFrame: (frame: SSEFrame) => void,
+): Promise<void> {
   const res = await authFetch(`${API_BASE}${path}`, {
     method: 'POST',
     headers: {
@@ -168,21 +195,14 @@ export async function streamPost(
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
-
-    // SSE frames are separated by a blank line (\n\n).
-    let sep = buffer.indexOf('\n\n');
-    while (sep !== -1) {
-      const frame = buffer.slice(0, sep);
-      buffer = buffer.slice(sep + 2);
-      const parsed = parseFrame(frame);
-      if (parsed) onEvent(parsed);
-      sep = buffer.indexOf('\n\n');
-    }
+    const { frames, rest } = splitSSEFrames(buffer);
+    buffer = rest;
+    frames.forEach(onFrame);
   }
   // Flush any trailing frame (shouldn't happen if server closes cleanly).
   if (buffer.trim()) {
-    const parsed = parseFrame(buffer);
-    if (parsed) onEvent(parsed);
+    const parsed = parseSSEFrame(buffer.replace(/\r\n/g, '\n'));
+    if (parsed) onFrame(parsed);
   }
 }
 
@@ -305,25 +325,74 @@ export async function fetchGenerations(
   return Array.isArray(data) ? (data as GenerationSummary[]) : [];
 }
 
-function parseFrame(frame: string): AIStreamEvent | null {
-  let eventName: AIStreamEventType | null = null;
-  const dataLines: string[] = [];
-  for (const line of frame.split('\n')) {
-    if (line.startsWith('event:')) {
-      eventName = line.slice(6).trim() as AIStreamEventType;
-    } else if (line.startsWith('data:')) {
-      dataLines.push(line.slice(5).trimStart());
-    }
-    // Other SSE fields (id:, retry:) are ignored.
+// ---------- Agent-team runs ----------
+
+async function getJson<T>(path: string): Promise<T> {
+  const res = await authFetch(`${API_BASE}${path}`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`${path}: ${res.status} ${text || res.statusText}`);
   }
-  if (!eventName) return null;
-  let data: Record<string, unknown> = {};
-  if (dataLines.length) {
-    try {
-      data = JSON.parse(dataLines.join('\n')) as Record<string, unknown>;
-    } catch {
-      data = { raw: dataLines.join('\n') };
-    }
+  return (await res.json()) as T;
+}
+
+/** Roles and topic packs the server can staff a team with. */
+export async function fetchAgentProfiles(): Promise<AgentProfile[]> {
+  const data = await getJson<unknown>('/ai/agent-profiles');
+  return unwrapList<AgentProfile>(data, 'profiles');
+}
+
+/** Dry run of the router: the team a question would get, and why. */
+export function routeAgentRun(
+  body: AgentRouteRequest,
+  llmKey: string | null | undefined,
+  signal?: AbortSignal,
+): Promise<AgentRouteResponse> {
+  return postJson<AgentRouteResponse>('/ai/agent-runs/route', body, llmKey, signal);
+}
+
+export interface AgentRunStreamHandlers {
+  onEvent: (event: AgentRunEvent) => void;
+  signal?: AbortSignal;
+}
+
+/** Drive POST /ai/agent-runs and dispatch each SSE event to `onEvent`. The
+ *  route answers 404 while agent teams are off; that surfaces as a throw. */
+export function streamAgentRun(
+  body: AgentRunRequest,
+  llmKey: string | null | undefined,
+  { onEvent, signal }: AgentRunStreamHandlers,
+): Promise<void> {
+  return streamSSE('/ai/agent-runs', body, llmKey, signal, (frame) => {
+    onEvent(frame as unknown as AgentRunEvent);
+  });
+}
+
+/** Past runs on a dashboard, newest first. */
+export async function fetchAgentRuns(dashboardId: string): Promise<AgentRunSummary[]> {
+  const data = await getJson<unknown>(
+    `/ai/agent-runs?dashboard_id=${encodeURIComponent(dashboardId)}`,
+  );
+  return unwrapList<AgentRunSummary>(data, 'runs');
+}
+
+export function fetchAgentRun(runId: string): Promise<AgentRun> {
+  return getJson<AgentRun>(`/ai/agent-runs/${encodeURIComponent(runId)}`);
+}
+
+export async function cancelAgentRun(runId: string): Promise<void> {
+  const path = `/ai/agent-runs/${encodeURIComponent(runId)}/cancel`;
+  const res = await authFetch(`${API_BASE}${path}`, { method: 'POST' });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`${path}: ${res.status} ${text || res.statusText}`);
   }
-  return { type: eventName, data };
+}
+
+/** A bare list, or the same list under `key`: tolerated both ways so an
+ *  envelope change does not read as "nothing yet". */
+function unwrapList<T>(data: unknown, key: string): T[] {
+  if (Array.isArray(data)) return data as T[];
+  const wrapped = (data as Record<string, unknown> | null)?.[key];
+  return Array.isArray(wrapped) ? (wrapped as T[]) : [];
 }

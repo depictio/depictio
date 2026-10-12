@@ -25,6 +25,7 @@ import type { AIChatMessage } from '../store';
 import type { AnalyzeMode } from '../types';
 import ActionsPreview, { type ApplyActionsPayload } from './ActionsPreview';
 import AIAnalysisModal from './AIAnalysisModal';
+import AgentTeamPanel from './AgentTeamPanel';
 import ExecutionTrace from './ExecutionTrace';
 
 /** One prompt/answer round: the unit the transcript is grouped, folded
@@ -65,7 +66,15 @@ interface Props {
   /** Apply a resolved plan to the host's stores. When omitted,
    *  ActionsPreview becomes read-only. */
   onApplyActions?: (payload: ApplyActionsPayload) => void;
+  /** The server runs agent teams (`features.ai_agents` on /status): adds
+   *  the Team mode. Off, the mode is not offered at all. */
+  agentsEnabled?: boolean;
+  /** Opens the comments drawer on a thread an agent team wrote. */
+  onOpenThread?: (threadId: string) => void;
 }
+
+/** The prompt levels, plus the agent team when the server offers it. */
+type PanelMode = AnalyzeMode | 'team';
 
 /**
  * Always-visible analyze surface that lives at the top of the dashboard
@@ -82,6 +91,8 @@ const AIAnalyzePanel: React.FC<Props> = ({
   activeFilters,
   serverKeyAvailable = false,
   onApplyActions,
+  agentsEnabled = false,
+  onOpenThread,
 }) => {
   const session = useAISession(dashboardId);
   const reset = useAIStore((s) => s.reset);
@@ -90,6 +101,8 @@ const AIAnalyzePanel: React.FC<Props> = ({
   const [prompt, setPrompt] = useState('');
   const [open, setOpen] = useState(true);
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  // The report the analysis modal opens on (a team run's report link).
+  const [analysisReportId, setAnalysisReportId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   // The exchange whose plan currently shapes the dashboard. Single-valued
   // on purpose: applying any plan replaces the previous one wholesale, so
@@ -101,7 +114,10 @@ const AIAnalyzePanel: React.FC<Props> = ({
   // the server strips actions. 'mutate' (Update) may propose dashboard
   // changes the user can apply. Interpret is the default — asking a
   // question should never surface an Apply button unless requested.
-  const [promptMode, setPromptMode] = useState<AnalyzeMode>('analyze');
+  const [panelMode, setPanelMode] = useState<PanelMode>('analyze');
+  // The server can stop advertising agents (a flag flipped off): fall back.
+  const teamMode = agentsEnabled && panelMode === 'team';
+  const promptMode: AnalyzeMode = panelMode === 'team' ? 'analyze' : panelMode;
 
   const hasCreds = Boolean(session.llmKey) || serverKeyAvailable;
 
@@ -239,21 +255,37 @@ const AIAnalyzePanel: React.FC<Props> = ({
           <SegmentedControl
             size="xs"
             color={AI_COLOR}
-            value={promptMode}
-            onChange={(v) => setPromptMode(v as AnalyzeMode)}
+            value={teamMode ? 'team' : promptMode}
+            onChange={(v) => setPanelMode(v as PanelMode)}
             data={[
               { value: 'analyze', label: 'Interpret' },
               { value: 'mutate', label: 'Update dashboard' },
+              ...(agentsEnabled ? [{ value: 'team', label: 'Team' }] : []),
             ]}
             data-testid="ai-prompt-mode"
           />
           <Text size="xs" c="dimmed">
-            {promptMode === 'analyze'
-              ? 'Read-only: answers your question and shows the code it ran.'
-              : 'Proposes dashboard changes (filters, figure tweaks) you can apply.'}
+            {teamMode
+              ? 'A team of agents investigates, a skeptic checks each finding, and confirmed ones become proposed comments.'
+              : promptMode === 'analyze'
+                ? 'Read-only: answers your question and shows the code it ran.'
+                : 'Proposes dashboard changes (filters, figure tweaks) you can apply.'}
           </Text>
         </Group>
 
+        {teamMode && (
+          <AgentTeamPanel
+            dashboardId={dashboardId}
+            hasCreds={hasCreds}
+            onOpenThread={onOpenThread}
+            onOpenReport={(id) => {
+              setAnalysisReportId(id);
+              setAnalysisOpen(true);
+            }}
+          />
+        )}
+
+        {!teamMode && (
         <Group gap="xs" align="flex-start" wrap="nowrap">
           <Textarea
             placeholder={
@@ -288,8 +320,9 @@ const AIAnalyzePanel: React.FC<Props> = ({
             Ask
           </Button>
         </Group>
+        )}
 
-        {hasTranscript && (
+        {!teamMode && hasTranscript && (
             <ScrollArea.Autosize
               viewportRef={scrollRef}
               mah={420}
@@ -457,7 +490,11 @@ const AIAnalyzePanel: React.FC<Props> = ({
       <AIAnalysisModal
         dashboardId={dashboardId}
         opened={analysisOpen}
-        onClose={() => setAnalysisOpen(false)}
+        onClose={() => {
+          setAnalysisOpen(false);
+          setAnalysisReportId(null);
+        }}
+        initialReportId={analysisReportId}
         activeFilters={activeFilters}
       />
     </Paper>

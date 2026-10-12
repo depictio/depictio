@@ -83,6 +83,7 @@ cli_agents_collection = db[settings.mongodb.collections.cli_agents_collection]
 jobs_collection = db[settings.mongodb.collections.jobs_collection]
 agent_tool_calls_collection = db[settings.mongodb.collections.agent_tool_calls_collection]
 agent_quotas_collection = db[settings.mongodb.collections.agent_quotas_collection]
+ai_agent_runs_collection = db[settings.mongodb.collections.ai_agent_runs_collection]
 test_collection = db[settings.mongodb.collections.test_collection]
 
 

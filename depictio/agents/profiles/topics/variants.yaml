@@ -1,0 +1,66 @@
+# Variant calling results and variant benchmarking.
+id: variants
+kind: topic
+name: Variants
+version: 1
+description: Variant calls, allele frequencies, lineages and variant-calling benchmarks (precision, recall).
+applies_to:
+  template_ids:
+    - nf-core/sarek*
+    - nf-core/viralrecon*
+    - nf-core/variantbenchmarking*
+    - nf-core/raredisease*
+  catalog_modules:
+    - ivar
+    - ivar/*
+    - happy
+    - sompy
+    - truvari
+    - rtgtools
+    - wittyer
+    - svanalyzer
+    - nextclade
+    - pangolin
+  columns:
+    - chrom
+    - pos
+    - ref
+    - alt
+    - "*allele_freq*"
+    - "af"
+    - qual
+    - "*precision*"
+    - "*recall*"
+    - "*f1*"
+    - "*lineage*"
+    - "*clade*"
+    - "*mutation*"
+  keywords:
+    - variant
+    - variants
+    - mutation
+    - snp
+    - snv
+    - indel
+    - structural variant
+    - allele
+    - lineage
+    - clade
+    - benchmark
+    - precision
+    - recall
+context_md: |
+  Topic: variant calls and their benchmarks.
+  - Calls: counts per sample and per type (SNV, indel, SV); samples with unusually
+    many or few calls; allele frequency distribution (low-frequency calls can be
+    noise or mixtures).
+  - Positions: recurrent variants shared across samples, hotspots, and calls in
+    low-coverage regions.
+  - Lineages and clades: assignment per sample and samples with low-quality or
+    missing assignments.
+  - Benchmarks: precision, recall and F1 per variant type and region; which
+    stratum drives the errors; false positives versus false negatives.
+checks:
+  - Say which variant type and filter status a count covers.
+  - Keep precision and recall apart; do not summarise with F1 alone.
+tools: []

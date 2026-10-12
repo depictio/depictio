@@ -1,0 +1,58 @@
+# Sequencing quality control, as surfaced by MultiQC and the per-tool QC
+# modules of the catalog.
+id: qc_multiqc
+kind: topic
+name: Sequencing quality control
+version: 1
+description: Per-sample sequencing QC from MultiQC and QC tool outputs (reads, duplication, GC, mapping, coverage).
+applies_to:
+  catalog_modules:
+    - multiqc
+    - multiqc/*
+    - mosdepth
+    - preseq
+    - deeptools
+    - ataqv
+  component_types:
+    - multiqc
+  columns:
+    - "*total_sequences*"
+    - "*percent_duplicates*"
+    - "*percent_gc*"
+    - "*percent_mapped*"
+    - "*reads_mapped*"
+    - "*percent_trimmed*"
+    - "*adapter*"
+    - "*q30*"
+    - "*median_coverage*"
+    - "*mean_coverage*"
+    - "*insert_size*"
+  keywords:
+    - qc
+    - quality
+    - multiqc
+    - fastqc
+    - duplication
+    - duplicates
+    - adapter
+    - trimming
+    - mapping rate
+    - coverage
+    - gc content
+    - failed samples
+context_md: |
+  Topic: sequencing quality control.
+  - Compare every sample to the batch: read depth, duplication, GC content,
+    mapping rate, adapter content and coverage. A sample is suspicious when it
+    sits far from the others on one metric or moderately off on several.
+  - Metrics depend on the assay: high duplication is expected in amplicon and
+    low-input libraries, GC shifts can be biological. Say which reference the
+    comparison uses (batch median, group median).
+  - Check whether outlying samples cluster by a metadata group (lane, batch,
+    condition) before calling them failures.
+  - MultiQC components hold several modules and plots; get_component_data
+    returns the values of the one the component shows.
+checks:
+  - Name the samples, the metric and the batch reference value.
+  - Separate "fails a threshold" from "differs from the batch".
+tools: []

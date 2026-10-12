@@ -370,15 +370,15 @@ def build_team() -> Sketch:
         analysts.append(b)
         s.arrow(router.right, router.cy, b.x - 2, b.cy, colour=DIM)
     s.text(715, 120 - 6, "in parallel, one per topic", size=14, colour=DIM)
-    s.text(715, 500, "tools: `get_component_data`, `query_data`", size=14, colour=DIM)
+    s.text(715, 484, "tools: `get_component_data`, `query_data`", size=14, colour=DIM)
 
     skeptic = Box(900, 170, 200, 250, PINK, "skeptic", ())
     s.box(skeptic)
     for i, (label, fill) in enumerate(
-        (("confirmed", GREEN), ("weakened", YELLOW), ("refuted", WHITE))
+        (("confirmed", GREEN), ("weakened", YELLOW), ("refuted", WHITE), ("unverified", GREY))
     ):
-        s.chip(skeptic.cx, 240 + i * 52, label, fill=fill, w=130)
-    s.cross(skeptic.cx + 76, 344, size=8)
+        s.chip(skeptic.cx, 232 + i * 46, label, fill=fill, w=130)
+    s.cross(skeptic.cx + 76, 324, size=8)
     for b in analysts:
         s.arrow(
             b.right + 2, b.cy, skeptic.x - 2, skeptic.cy + (b.cy - skeptic.cy) * 0.5, colour=DIM
@@ -409,9 +409,11 @@ def build_team() -> Sketch:
     s.arrow(skeptic.cx - 30, skeptic.bottom, annot.cx, annot.y - 2)
     s.arrow(skeptic.cx, skeptic.bottom, quest.cx, quest.y - 2)
     s.arrow(skeptic.cx + 30, skeptic.bottom, rep.cx - 20, rep.y - 2, colour=DIM)
-    s.text(940, 492, "confirmed", size=14, weight="bold")
-    s.text(940, 512, "findings only", size=14, weight="bold")
-    s.text(1150, 480, "all verdicts", size=14, colour=DIM, anchor="start")
+    s.text(800, 510, "confirmed", size=14, weight="bold")
+    s.text(800, 530, "findings only", size=14, weight="bold")
+    s.text(1030, 492, "weakened", size=14, weight="bold", anchor="start")
+    s.text(1030, 512, "only", size=14, weight="bold", anchor="start")
+    s.text(1150, 470, "all verdicts", size=14, colour=DIM, anchor="start")
 
     # -- row 3: outputs and the human ----------------------------------------
     band = Box(690, 676, 670, 120, WHITE, "", ())
@@ -437,11 +439,29 @@ def build_team() -> Sketch:
     s.arrow(band.x - 2, review.cy, review.right + 2, review.cy)
 
     # -- the budget ledger --------------------------------------------------
-    s.text(40, 572, "`BudgetLedger`: one pool for the whole run", size=15, anchor="start")
+    s.text(40, 546, "`BudgetLedger`: one pool, one share per phase", size=15, anchor="start")
     s.gauge(40, 588, 580, 18, 0.62, fill=ORANGE)
-    s.line(40 + 580 * 0.85, 580, 40 + 580 * 0.85, 614, colour=RED, amount=0.6)
-    s.text(40 + 580 * 0.85, 632, "reserve for the reporter", size=13, colour=DIM)
-    s.text(40, 632, "spent", size=13, colour=DIM, anchor="start")
+    start = 0.0
+    for share, label in (
+        (0.45, "analysts"),
+        (0.25, "skeptic"),
+        (0.15, "writers"),
+        (0.15, "reporter"),
+    ):
+        mid = 40 + 580 * (start + share / 2)
+        s.text(mid, 632, label, size=13, colour=DIM)
+        s.text(mid, 650, f"{share:.0%}", size=13, colour=DIM)
+        start += share
+        if start < 1:
+            s.line(40 + 580 * start, 580, 40 + 580 * start, 614, colour=RED, amount=0.6)
+    s.text(
+        40,
+        570,
+        "a phase may not eat the next one's share; unused share rolls forward",
+        size=12,
+        colour=DIM,
+        anchor="start",
+    )
     return s
 
 

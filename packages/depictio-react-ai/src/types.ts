@@ -266,6 +266,44 @@ export interface AnalysisReport {
   narrative_md: string;
   budget_spent: BudgetSpent;
   warnings: string[];
+  /** Set on reports an agent wrote (the `create_report` tool, or the
+   *  reporter of an agent-team run); absent on `/ai/analyze` reports. */
+  agent?: ReportAgentInfo | null;
+  /** The agent's own findings, each tied to the tool calls behind it.
+   *  Empty or absent on `/ai/analyze` reports, which use `findings`. */
+  agent_findings?: AgentReportFinding[];
+  updated_at?: string | null;
+}
+
+/** Who wrote an agent report. `name` is `<role>/<topic>@<version>` for
+ *  agent-team runs, and `run_id` names the run. */
+export interface ReportAgentInfo {
+  name: string;
+  model?: string | null;
+  run_id?: string | null;
+  on_behalf_of?: string | null;
+}
+
+/** One item of evidence behind an agent finding: the tool call that showed
+ *  it (`call_id`), the query that ran and the values it returned. */
+export interface AgentReportEvidence {
+  note: string;
+  call_id?: string | null;
+  query?: string | null;
+  values?: Record<string, unknown> | unknown[] | null;
+}
+
+export interface AgentReportFinding {
+  title: string;
+  detail: string;
+  component_index?: string | null;
+  confidence: 'low' | 'medium' | 'high';
+  evidence: AgentReportEvidence[];
+  /** Not in the report schema today: read when a server attaches the
+   *  skeptic's verdict to the finding it judged. */
+  finding_id?: string | null;
+  verdict?: AgentVerdict | null;
+  verdict_reason?: string | null;
 }
 
 export interface AnalysesResponse {
@@ -601,4 +639,219 @@ export interface GenerationSummary {
 /** Answer of GET /ai/generations/{project_id} (GenerationsResponse). */
 export interface GenerationsResponse {
   generations: GenerationSummary[];
+}
+
+// ---------- Agent-team runs (/ai/agent-runs*) ----------
+
+/** One entry of GET /ai/agent-profiles: a role (analyst, skeptic, annotator,
+ *  questioner, reporter) or a topic pack (QC, differential expression...). */
+export interface AgentProfile {
+  id: string;
+  kind: 'role' | 'topic';
+  name: string;
+  version: string | number;
+  description: string;
+  applies_to_summary?: string | null;
+}
+
+/** One member of a team: `agent_id` is `<role>/<topic>@<version>`. */
+export interface AgentTeamMember {
+  agent_id: string;
+  role: string;
+  topic?: string | null;
+  /** Why the router picked it (matched template, columns, keywords...). */
+  reason?: string | null;
+}
+
+export interface AgentRouting {
+  method: 'rules' | 'llm' | 'fixed';
+  scores?: Record<string, unknown>;
+}
+
+/** Body of POST /ai/agent-runs/route (dry run: no LLM spend unless rules
+ *  tie or miss). */
+export interface AgentRouteRequest {
+  dashboard_id: string;
+  question: string;
+}
+
+export interface AgentRouteResponse {
+  team: AgentTeamMember[];
+  routing: AgentRouting;
+}
+
+/** Body of POST /ai/agent-runs. `team` overrides routing when set. */
+export interface AgentRunRequest {
+  dashboard_id: string;
+  question: string;
+  team?: string[];
+  budget_usd?: number;
+}
+
+/** The skeptic's verdict on a finding; `unverified` when it did not review
+ *  the finding before its budget ran out (not annotated, not questioned). */
+export type AgentVerdict = 'confirmed' | 'weakened' | 'refuted' | 'unverified';
+export type AgentRunStatus = 'running' | 'complete' | 'cancelled' | 'failed' | 'budget';
+export type AgentStatus = 'ok' | 'budget' | 'error';
+
+export interface AgentRunOutputs {
+  thread_ids: string[];
+  report_id?: string | null;
+  draft_ids: string[];
+}
+
+export interface AgentRunBudget {
+  spent_usd: number;
+  limit_usd: number;
+  tool_calls: number;
+  max_tool_calls?: number | null;
+}
+
+export interface AgentEvidenceRef {
+  call_id: string;
+  note: string;
+}
+
+/** SSE events of POST /ai/agent-runs, in stream order:
+ *  run_started, then per agent agent_started, (tool_call, tool_result)*,
+ *  finding*, agent_finished; the skeptic's verdicts, the annotator's and
+ *  questioner's thread_created, the reporter's report_created; budget ticks
+ *  throughout; run_finished, then done. `error` may appear at any point. */
+export type AgentRunEvent =
+  | {
+      type: 'run_started';
+      data: {
+        run_id: string;
+        team: (AgentTeamMember | string)[];
+        routing?: AgentRouting | null;
+        budget?: { limit_usd: number; max_tool_calls?: number | null } | null;
+      };
+    }
+  | { type: 'agent_started'; data: { agent_id: string; role: string; topic?: string | null } }
+  | {
+      type: 'tool_call';
+      data: { agent_id: string; call_id: string; tool: string; args?: unknown };
+    }
+  | {
+      type: 'tool_result';
+      data: {
+        agent_id: string;
+        call_id: string;
+        ok: boolean;
+        truncated?: boolean;
+        summary?: string | null;
+      };
+    }
+  | {
+      type: 'finding';
+      data: {
+        agent_id: string;
+        finding_id: string;
+        title: string;
+        detail?: string | null;
+        component_index?: string | null;
+        confidence: 'low' | 'medium' | 'high';
+        evidence: AgentEvidenceRef[];
+      };
+    }
+  | {
+      type: 'verdict';
+      data: { finding_id: string; verdict: AgentVerdict; reason?: string | null; agent_id?: string };
+    }
+  | {
+      type: 'thread_created';
+      data: {
+        agent_id: string;
+        thread_id: string;
+        kind: 'comment' | 'question';
+        component_index?: string | null;
+        finding_id?: string | null;
+      };
+    }
+  | { type: 'report_created'; data: { agent_id: string; report_id: string } }
+  | { type: 'budget'; data: AgentRunBudget }
+  | {
+      type: 'agent_finished';
+      data: {
+        agent_id: string;
+        status: AgentStatus;
+        summary?: string | null;
+        /** What the agent produced, by kind (findings, annotations, comments...). */
+        counts?: Record<string, number> | null;
+      };
+    }
+  | { type: 'error'; data: { detail: string; agent_id?: string | null } }
+  | {
+      type: 'run_finished';
+      data: { run_id: string; status: AgentRunStatus; outputs?: Partial<AgentRunOutputs> | null };
+    }
+  | { type: 'done'; data: Record<string, unknown> };
+
+export type AgentRunEventType = AgentRunEvent['type'];
+
+/** One row of GET /ai/agent-runs?dashboard_id=. Read loosely: `id` or
+ *  `run_id` names it (see `agentRunId`). */
+export interface AgentRunSummary {
+  id?: string;
+  run_id?: string;
+  dashboard_id: string;
+  question: string;
+  status: AgentRunStatus;
+  team?: (AgentTeamMember | string)[];
+  created_at: string;
+  finished_at?: string | null;
+  budget?: Partial<AgentRunBudget> | null;
+  outputs?: Partial<AgentRunOutputs> | null;
+}
+
+/** A tool call as a finished run records it. */
+export interface AgentToolCallRecord {
+  call_id: string;
+  tool: string;
+  args?: unknown;
+  ok?: boolean | null;
+  truncated?: boolean;
+  summary?: string | null;
+  error?: string | null;
+}
+
+/** A finding as a finished run records it, with the skeptic's verdict when
+ *  it has one and the threads written from it. */
+export interface AgentFindingRecord {
+  finding_id: string;
+  title: string;
+  detail?: string | null;
+  component_index?: string | null;
+  confidence: 'low' | 'medium' | 'high';
+  evidence: AgentEvidenceRef[];
+  verdict?: AgentVerdict | null;
+  verdict_reason?: string | null;
+  thread_ids?: string[];
+}
+
+export interface AgentRecord {
+  agent_id: string;
+  role?: string;
+  topic?: string | null;
+  status?: AgentStatus | 'running' | null;
+  summary?: string | null;
+  counts?: Record<string, number> | null;
+  tool_calls?: AgentToolCallRecord[];
+  findings?: AgentFindingRecord[];
+}
+
+/** GET /ai/agent-runs/{run_id}: the whole run. Everything past the summary
+ *  fields is optional so a leaner server still renders. */
+export interface AgentRun extends AgentRunSummary {
+  routing?: AgentRouting | null;
+  agents?: AgentRecord[];
+  verdicts?: { finding_id: string; verdict: AgentVerdict; reason?: string | null; agent_id?: string }[];
+  /** Threads the run wrote, with the finding each came from. */
+  threads?: {
+    thread_id: string;
+    kind?: 'comment' | 'question';
+    component_index?: string | null;
+    finding_id?: string | null;
+    agent_id?: string;
+  }[];
 }

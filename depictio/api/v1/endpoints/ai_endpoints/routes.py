@@ -1292,3 +1292,13 @@ async def list_generations(
     quote the prompts their author wrote.
     """
     return await asyncio.to_thread(dashboard_gen.list_generations, project_id, current_user, limit)
+
+
+# Agent-team runs (``/ai/agent-runs*``): their own module, 404 unless
+# ``settings.ai.agents_enabled``. Imported here so every mount of the AI router
+# (the API and the scope-coverage test alike) carries them.
+from depictio.api.v1.endpoints.ai_endpoints.agent_runs_routes import (  # noqa: E402
+    agent_runs_router,
+)
+
+ai_endpoint_router.include_router(agent_runs_router)

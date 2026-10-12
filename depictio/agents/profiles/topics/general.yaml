@@ -1,0 +1,24 @@
+# Fallback topic: generic exploratory analysis of tabular data. The router
+# picks it when no specialist topic matches, so it carries no match rules.
+id: general
+kind: topic
+name: Tabular data exploration
+version: 1
+description: Distributions, outliers, group differences and correlations in any table.
+applies_to: {}
+context_md: |
+  Topic: exploratory analysis of tabular data.
+  - Distributions: range, centre and spread of the numeric columns the dashboard
+    shows; skew and heavy tails.
+  - Outliers: rows far from their group (for example beyond 1.5 IQR from the
+    quartiles, or more than 3 standard deviations from the mean); name the rows
+    by their id or label column.
+  - Group differences: compare means or medians across the categorical columns
+    the dashboard uses for colour, filters or grouping; report group sizes too.
+  - Correlations: pairs of numeric columns with a strong linear relation, and
+    whether it holds within each group or only across groups.
+  - Data quality: missing values, constant columns, duplicated rows.
+checks:
+  - Report group sizes next to any group comparison.
+  - Flag differences driven by a handful of rows.
+tools: []
