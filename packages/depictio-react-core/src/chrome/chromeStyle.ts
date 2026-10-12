@@ -105,6 +105,9 @@ export interface ChromeButtonRenderProps
   /** A tooltip wraps this control (it names an icon-only action), so the
    *  button need not draw a hover label of its own. */
   hasTooltip: boolean;
+  /** The tooltip text when it is plain text, for a style that names the
+   *  control itself (`ChromeStyle.namesItself`) instead of a tooltip. */
+  tip?: string;
   /** The action group this control sits in (`ChromeButtonGroup`), if any. */
   group: string | null;
   href?: string;
@@ -168,6 +171,10 @@ export interface ChromeStyle {
   themeOverrides?: MantineThemeOverride;
   /** React slots a style may fill with its own components. */
   components?: ChromeStyleComponents;
+  /** Groups whose controls the style names on hover by itself (Glass's dock
+   *  draws one label that glides between its keys): `ChromeButton` wraps no
+   *  tooltip there and hands the text over as `tip`. */
+  namesItself?: (group: string | null) => boolean;
 }
 
 export const BASE_CHROME_ICONS: Record<ChromeIconName, string> = {

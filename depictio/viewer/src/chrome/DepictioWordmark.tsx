@@ -56,7 +56,8 @@ interface DepictioWordmarkProps {
  * live `<depictio-rose>` drawn exactly over it (the raster's own mark is
  * clipped away). At rest the element's `logo` mode paints the same static
  * mark, so nothing moves and nothing animates; resting the pointer on it for a
- * moment plays the fan, and leaving settles it back.
+ * moment sets its petals moving (the radii only, no fan), and leaving eases
+ * them back.
  *
  * The docs header does the same thing with the same element, so the mark
  * behaves alike wherever it appears.
@@ -141,7 +142,7 @@ const DepictioWordmark: React.FC<DepictioWordmarkProps> = ({
       />
       {overlay && (
         <DepictioRose
-          mode={hovered ? 'fan' : 'logo'}
+          mode={hovered ? 'petals' : 'logo'}
           size={overlay.side}
           label=""
           style={{

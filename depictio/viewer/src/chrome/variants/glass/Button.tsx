@@ -1,5 +1,4 @@
 import React from 'react';
-import { Tooltip } from '@mantine/core';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import type {
   ChromeButtonGroupRenderProps,
@@ -47,7 +46,7 @@ const SHORT: Partial<Record<ChromeIconName, string>> = {
 };
 
 /** Glass's dock keeps every key to its glyph; the mode keys are named in full
- *  by their tooltip. */
+ *  by its hover label. */
 const DOCK_TIP: Partial<Record<ChromeIconName, string>> = {
   edit: 'Edit dashboard',
   save: 'Save dashboard',
@@ -94,7 +93,8 @@ export const GlassButton = React.forwardRef<HTMLButtonElement, ChromeButtonRende
       active,
       iconOnly,
       collapse: _collapse,
-      hasTooltip,
+      hasTooltip: _hasTooltip,
+      tip,
       group,
       href,
       target,
@@ -215,9 +215,16 @@ export const GlassButton = React.forwardRef<HTMLButtonElement, ChromeButtonRende
       place === 'bar' && !showLabel && rightIcon && 'hy-key--menu',
       className,
     );
+    // The dock's gliding label (Dock.tsx) names a key in a word or two, not
+    // its tooltip's sentence, and shows the shortcut that sentence ends with
+    // ("Search this dashboard (⌘K)") as a key cap.
+    const dockKeys =
+      place === 'dock' ? tip?.match(/\(([^()]*(?:[⌘⌥⇧⌃]|Ctrl|Alt|Shift)[^()]*)\)\s*$/)?.[1] : undefined;
     const data = {
       'data-hy-place': place,
       'data-hy-look': look,
+      'data-tip': place === 'dock' ? ((iconSlot && DOCK_TIP[iconSlot]) ?? label) : undefined,
+      'data-tip-keys': dockKeys,
     };
 
     const lift = place === 'dock' ? -3 : place === 'top' ? -1 : 0;
@@ -250,7 +257,7 @@ export const GlassButton = React.forwardRef<HTMLButtonElement, ChromeButtonRende
       );
     }
     const B = motion.button as React.ElementType;
-    const button = (
+    return (
       <B
         ref={ref}
         type={type ?? 'button'}
@@ -263,12 +270,6 @@ export const GlassButton = React.forwardRef<HTMLButtonElement, ChromeButtonRende
       >
         {content}
       </B>
-    );
-    if (!dockMode || hasTooltip) return button;
-    return (
-      <Tooltip label={(iconSlot && DOCK_TIP[iconSlot]) ?? label} withArrow openDelay={300}>
-        {button}
-      </Tooltip>
     );
   },
 );

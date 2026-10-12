@@ -12,13 +12,19 @@
  * at the new one, and a translate that cancels the difference springs to
  * zero. A drag lands the same way, from wherever the pointer left it.
  *
+ * Hovering a key names it in one ink label that glides from key to key
+ * (useDockTip): it waits a beat before the first name, so passing over the
+ * dock shows nothing, then follows the pointer at once. Keys say what to
+ * show with `data-tip` (Button.tsx); a key already showing its name gets none.
+ *
  * The first time a browser opens a dashboard the dock introduces itself
  * (rises in, names its keys, pulses a halo twice, says what it is for); the
  * look is all CSS, keyed on `data-hint` / `data-labels`.
  */
 import React from 'react';
-import { Tooltip, VisuallyHidden } from '@mantine/core';
-import { animate, motion, useMotionValue, useReducedMotion } from 'motion/react';
+import { VisuallyHidden } from '@mantine/core';
+import { AnimatePresence, animate, motion, useMotionValue, useReducedMotion } from 'motion/react';
+import type { MotionValue } from 'motion/react';
 import { GripVertical } from 'lucide-react';
 
 import { STROKE } from './icons';
@@ -37,6 +43,11 @@ const RISE = { type: 'spring', stiffness: 220, damping: 26 } as const;
 /** Pointer travel before a press on the grip becomes a drag. */
 const DRAG_PX = 4;
 const ARROWS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'] as const;
+/** The hover label: a beat before the first name, a grace across the gaps
+ *  between keys, and a quick spring from one key to the next. */
+const TIP_IN_MS = 110;
+const TIP_OUT_MS = 140;
+const GLIDE = { type: 'spring', stiffness: 560, damping: 40, mass: 0.6 } as const;
 
 interface Point {
   left: number;
@@ -56,6 +67,131 @@ interface Press {
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), Math.max(lo, hi));
+
+/** A key that already shows its name: engaged (its name opened out), the
+ *  welcome's named keys, or Save. */
+const named = (el: HTMLElement) =>
+  !!el.closest('[data-hy-name]') ||
+  Array.from(el.querySelectorAll<HTMLElement>('.hy-key-label')).some((l) => l.offsetWidth > 0);
+
+/** The dock's hover label: which key it names, and where (its centre, in the
+ *  dock's own coordinates). `quiet` hides it (a drag, a move, the welcome). */
+function useDockTip(nav: React.RefObject<HTMLElement | null>, quiet: boolean) {
+  const reduce = useReducedMotion();
+  const x = useMotionValue(0);
+  const [text, setText] = React.useState<TipText | null>(null);
+  const on = React.useRef<HTMLElement | null>(null);
+  // The key just pressed: it is in use, so it is not named again until the
+  // pointer moves on.
+  const pressed = React.useRef<HTMLElement | null>(null);
+  const timer = React.useRef(0);
+
+  const hide = React.useCallback((now = false) => {
+    window.clearTimeout(timer.current);
+    const go = () => {
+      on.current = null;
+      setText(null);
+    };
+    if (now) go();
+    else timer.current = window.setTimeout(go, TIP_OUT_MS);
+  }, []);
+
+  const show = (el: HTMLElement, at = false) => {
+    const tip = el.dataset.tip;
+    if (quiet || !tip || el === pressed.current || named(el)) return hide();
+    window.clearTimeout(timer.current);
+    if (el === on.current) return;
+    const go = () => {
+      const n = nav.current;
+      if (!n) return;
+      const r = el.getBoundingClientRect();
+      const cx = r.left + r.width / 2 - n.getBoundingClientRect().left;
+      // From key to key it glides; the first name just appears there.
+      if (on.current && !reduce) animate(x, cx, GLIDE);
+      else x.set(cx);
+      on.current = el;
+      setText({ name: tip, keys: el.dataset.tipKeys });
+    };
+    if (on.current || at) go();
+    else timer.current = window.setTimeout(go, TIP_IN_MS);
+  };
+
+  const keyAt = (t: EventTarget | null) => {
+    const el = (t as Element | null)?.closest?.<HTMLElement>('[data-tip]') ?? null;
+    return el && nav.current?.contains(el) ? el : null;
+  };
+
+  React.useEffect(() => {
+    if (quiet) hide(true);
+  }, [quiet, hide]);
+  React.useEffect(() => () => window.clearTimeout(timer.current), []);
+
+  const handlers = {
+    onPointerOver: (e: React.PointerEvent) => {
+      if (e.pointerType === 'touch') return;
+      const el = keyAt(e.target);
+      if (el !== pressed.current) pressed.current = null;
+      if (el) show(el);
+      else hide();
+    },
+    onPointerLeave: () => {
+      pressed.current = null;
+      hide();
+    },
+    onPointerDownCapture: (e: React.PointerEvent) => {
+      pressed.current = keyAt(e.target);
+      hide(true);
+    },
+    onFocus: (e: React.FocusEvent) => {
+      const el = keyAt(e.target);
+      if (el && el.matches(':focus-visible')) show(el, true);
+    },
+    onBlur: () => hide(true),
+  };
+  return { text, x, handlers };
+}
+
+interface TipText {
+  name: string;
+  /** A shortcut, drawn as a key cap. */
+  keys?: string;
+}
+
+/** The label itself: it fades in where it first lands, then only its text
+ *  changes while it glides. */
+const DockTip: React.FC<{ text: TipText | null; x: MotionValue<number>; top: boolean }> = ({
+  text,
+  x,
+  top,
+}) => (
+  <AnimatePresence>
+    {text !== null && (
+      <motion.span
+        key="tip"
+        className="hy-dock-tip"
+        style={{ x }}
+        initial={{ opacity: 0, scale: 0.9, y: top ? -4 : 4 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.1 } }}
+        transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
+        aria-hidden
+      >
+        <AnimatePresence initial={false}>
+          <motion.span
+            key={text.name}
+            initial={{ opacity: 0, y: 3 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -3 }}
+            transition={{ duration: 0.12 }}
+          >
+            {text.name}
+            {text.keys && <kbd>{text.keys}</kbd>}
+          </motion.span>
+        </AnimatePresence>
+      </motion.span>
+    )}
+  </AnimatePresence>
+);
 
 export const Dock: React.FC<{
   anchor: DockAnchor;
@@ -87,6 +223,7 @@ export const Dock: React.FC<{
   // The names stay out until a move lands, or the dock would shrink under
   // the pointer that is carrying it.
   const labels = roomy && (intro.on || (began.current && moving));
+  const tip = useDockTip(nav, moving || intro.on);
 
   React.useEffect(() => {
     if (!intro.on || reduce) return;
@@ -289,24 +426,25 @@ export const Dock: React.FC<{
         // the names do not fold away between the press and the release.
         onClickCapture={intro.on ? intro.end : undefined}
         onKeyDownCapture={intro.on ? (e) => e.key !== 'Tab' && intro.end() : undefined}
+        {...tip.handlers}
       >
-        <Tooltip label="Drag to move, double-click to reset" withArrow openDelay={400} disabled={dragging}>
-          <button
-            type="button"
-            className="hy-dock-grip"
-            aria-label="Move the toolbar"
-            data-testid="dock-grip"
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onPointerCancel={onPointerCancel}
-            onKeyDown={onGripKey}
-            onDoubleClick={() => moveTo(DOCK_HOME)}
-          >
-            <GripVertical size={16} strokeWidth={STROKE} aria-hidden />
-          </button>
-        </Tooltip>
+        <button
+          type="button"
+          className="hy-dock-grip"
+          aria-label="Move the toolbar"
+          data-testid="dock-grip"
+          data-tip="Drag to move, double-click to reset"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerCancel}
+          onKeyDown={onGripKey}
+          onDoubleClick={() => moveTo(DOCK_HOME)}
+        >
+          <GripVertical size={16} strokeWidth={STROKE} aria-hidden />
+        </button>
         {children}
+        <DockTip text={tip.text} x={tip.x} top={top} />
         {intro.on && (
           <span className="hy-dock-hint" role="status">
             Search, analyse and edit from here. Drag the grip to move it.

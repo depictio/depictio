@@ -256,7 +256,7 @@ export const ProfileKey: React.FC = () => {
 
 /* -------------------------------------------------------------- top bar */
 
-/** Home: the real depictio logo (the rose fans on hover), or the instance's
+/** Home: the real depictio logo (the rose's petals move on hover), or the instance's
  *  own logo. */
 export const HomeMark: React.FC<{ height: number; href?: string }> = ({ height, href = '/dashboards' }) => {
   const mode = useBrandLogoMode();

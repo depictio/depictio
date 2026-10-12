@@ -1,7 +1,7 @@
 import { BASE_CHROME_STYLE } from 'depictio-react-core';
 import type { ChromeStyle } from 'depictio-react-core';
 
-import { GlassButton, GlassButtonGroup } from './Button';
+import { GlassButton, GlassButtonGroup, placeOf } from './Button';
 import { glassPlotly, glassPlotlyDefaults } from './plotly';
 import './glass.css';
 import './glass-filters.css';
@@ -44,6 +44,8 @@ const style: ChromeStyle = {
     Button: GlassButton,
     ButtonGroup: GlassButtonGroup,
   },
+  // The dock names its keys with one gliding label (Dock.tsx).
+  namesItself: (group) => placeOf(group) === 'dock',
 };
 
 export default style;

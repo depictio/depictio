@@ -351,7 +351,7 @@ export const ProfileRows: React.FC = () => {
 /* ----------------------------------------------------------------- top bar */
 
 /** Home. A dashboard leads with its own title, so under depictio's brand the
- *  bar keeps only the rose (fanning on hover) as the way home and credits
+ *  bar keeps only the rose (its petals moving on hover) as the way home and credits
  *  depictio on the right. A dashboard's or instance's own logo stays whole:
  *  it is that dashboard's identity. */
 const HomeMark: React.FC<{ home: string; height: number; markSize: number }> = ({
@@ -374,7 +374,7 @@ const HomeMark: React.FC<{ home: string; height: number; markSize: number }> = (
         onMouseLeave={() => setHovered(false)}
       >
         {markOnly ? (
-          <DepictioRose mode={hovered ? 'fan' : 'logo'} size={markSize} label="" />
+          <DepictioRose mode={hovered ? 'petals' : 'logo'} size={markSize} label="" />
         ) : (
           <BrandLogo height={height} width="auto" testId="glass-logo" />
         )}

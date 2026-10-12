@@ -246,9 +246,10 @@ function useRootOffsets(vars: Record<string, string>): void {
   }, [key]);
 }
 
-/** The dock keeps the mode key (Edit, Save) named at rest, as the page's one
- *  call to action; layout.css draws the name from this variable. */
-const DOCK_NAME: Record<string, string> = { edit: 'Edit', save: 'Save' };
+/** The dock keeps Save named at rest, as the editor's one call to action;
+ *  layout.css draws the name from this variable. Edit stays a glyph, named
+ *  by the dock's hover label like the other keys. */
+const DOCK_NAME: Record<string, string> = { save: 'Save' };
 
 /** Wraps an action so CSS can find the key that opened a panel. */
 const Slot: React.FC<{ action: HeaderAction; named?: boolean }> = ({ action, named }) => {

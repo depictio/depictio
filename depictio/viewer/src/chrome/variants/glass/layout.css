@@ -1023,14 +1023,74 @@
       0 0 26px 12px transparent;
   }
 }
-/* The mode key (Edit, Save) keeps its name at rest: it is the page's one call
- * to action. The name is a variable on its slot (Shell.tsx, Slot). */
+/* Save keeps its name at rest: it is the editor's one call to action. The
+ * name is a variable on its slot (Shell.tsx, Slot). */
 .hy-shell .hy-dock .hy-slot[data-hy-name] .hy-key--dock.hy-key--square {
   width: auto;
   padding-inline: 11px 15px;
 }
 .hy-dock .hy-slot[data-hy-name] .hy-key--dock::after {
   content: var(--hy-name);
+}
+
+/* The hover label: one bubble in ink that glides from key to key (Dock.tsx,
+ * useDockTip), on the side of the dock that faces the canvas. Its left edge
+ * is the hovered key's centre, set as a transform. */
+.hy-dock-tip {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  z-index: 1;
+  translate: -50% 0;
+  display: grid;
+  padding: 6px 10px;
+  border-radius: 9px;
+  background: var(--gl-fg);
+  color: var(--gl-paper);
+  box-shadow: 0 6px 18px -6px var(--gl-shade-b);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  white-space: nowrap;
+  pointer-events: none;
+  transform-origin: 50% 100%;
+}
+.hy-dock-tip::after {
+  content: '';
+  position: absolute;
+  left: calc(50% - 4px);
+  bottom: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 1px;
+  background: inherit;
+  rotate: 45deg;
+}
+.hy-dock-tip > span {
+  grid-area: 1 / 1;
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.hy-dock-tip kbd {
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--gl-paper) 20%, transparent);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+.hy-dock[data-anchor='top-center'] .hy-dock-tip {
+  bottom: auto;
+  top: calc(100% + 10px);
+  transform-origin: 50% 0;
+}
+.hy-dock[data-anchor='top-center'] .hy-dock-tip::after {
+  bottom: auto;
+  top: -3px;
 }
 
 .hy-dock-sep {

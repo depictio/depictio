@@ -107,6 +107,8 @@ export const ChromeButton = React.forwardRef<HTMLButtonElement, ChromeButtonProp
     const hasBadge = typeof badge === 'number' && badge > 0;
     const tip =
       tooltip === null ? null : (tooltip ?? (iconOnly || (collapse && narrow) ? label : null));
+    // The style names these itself, so a Mantine tooltip would say it twice.
+    const ownTip = style.namesItself?.(group ?? null) ?? false;
     const Custom = style.components?.Button;
     let control: React.ReactElement;
     if (Custom) {
@@ -121,7 +123,8 @@ export const ChromeButton = React.forwardRef<HTMLButtonElement, ChromeButtonProp
           data-collapse={collapse || undefined}
           data-group={group ?? undefined}
           aria-label={rest['aria-label'] ?? (iconOnly || collapse || children ? label : undefined)}
-          hasTooltip={Boolean(tip)}
+          hasTooltip={Boolean(tip) && !ownTip}
+          tip={typeof tip === 'string' ? tip : undefined}
           group={group}
           chromeRole={role}
           roleStyle={roleStyle}
@@ -195,7 +198,7 @@ export const ChromeButton = React.forwardRef<HTMLButtonElement, ChromeButtonProp
       );
     }
 
-    if (!tip) return control;
+    if (!tip || ownTip) return control;
     return (
       <Tooltip label={tip} withArrow openDelay={300} events={{ hover: true, focus: true, touch: false }}>
         {control}
