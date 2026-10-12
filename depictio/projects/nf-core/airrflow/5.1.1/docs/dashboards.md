@@ -66,7 +66,7 @@ reads it, then at most three open sections; tables and details follow, collapsed
 FastQC sequence counts, then fastp's per-base quality beside the FastQC quality histograms.
 Collapsed: per-sequence quality, GC, length, duplication, adapter content and the status
 checks. Amplicons of one receptor locus show high duplication and a narrow GC band by design.
-Its own sample filter reads the MultiQC report.
+The pinned sample filters narrow its panels.
 
 **Sequence Processing.** Strip: input reads, with the share kept through each pRESTO step
 (quality, pairing, UMI consensus, assembly, duplicates), and the reads per sample with their

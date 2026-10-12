@@ -66,8 +66,8 @@ length, miRTrace's read QC beside mirtop's isomiR read counts, then samtools' ma
 full width. Collapsed: the distinct isomiR sequences, the raw FastQC counts and adapter
 content, fastp's base quality, the post-trim FastQC status (MultiQC anchors the second FastQC
 pass as `fastqc-1`), the mean isomiR read counts and samtools' alignment statistics, one
-violin row per metric and too dense for a half-width tile. Its own sample filter reads the
-MultiQC report.
+violin row per metric and too dense for a half-width tile. The pinned sample filters
+narrow its panels.
 
 **Library QC.** miRTrace's view of every library. Strip: the median miRNA share of a library
 (a bar out of 100), the median rRNA share (a box), the reads on miRNAs (the deepest libraries ranked)

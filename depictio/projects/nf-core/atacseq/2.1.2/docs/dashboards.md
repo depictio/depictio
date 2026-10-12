@@ -90,8 +90,8 @@ sequence counts beside samtools percent mapped, then the deepTools fingerprint (
 per report on one slot), FRiP scores, peaks per library and featureCounts assignments
 (reprocessed report). Collapsed `QC details`: per-base quality, Trim Galore kept reads,
 Picard insert sizes (one tile per report on one slot) and duplicates, mapped reads per
-contig and the ataqv mapping quality (reprocessed report). Its own `Library scope` filter
-narrows the panels by sequencing library, read from the validated samplesheet.
+contig and the ataqv mapping quality (reprocessed report). The pinned sample filters narrow
+the panels, down to the sequencing libraries behind them.
 
 **ATAC quality.** Strip: TSS enrichment (box plot), the lowest share of reads in peaks
 (threshold at 20%), the mitochondrial fraction (box plot) and the duplicate fraction

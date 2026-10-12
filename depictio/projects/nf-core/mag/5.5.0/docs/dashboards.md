@@ -64,7 +64,7 @@ fastp reads kept and base quality side by side, then Bowtie 2 host and phiX remo
 NanoStat long-read yield at full width, one bar per library. Collapsed: long reads by quality and short-read insert sizes, then the QUAST, CheckM2 and
 GTDB-Tk panels that the next tabs draw in full. When a run publishes no `multiqc/`
 directory, the report is re-generated with `depictio.dev_scripts.multiqc_reprocess` from
-the run's raw outputs. Filter: the sample as the report names it.
+the run's raw outputs. The pinned sample filters narrow its panels.
 
 **Assembly.** Strip: assembled bases (by assembler), the median contig N50 (with its
 spread), contigs of at least 1 kbp (the largest assemblers first) and the longest contig

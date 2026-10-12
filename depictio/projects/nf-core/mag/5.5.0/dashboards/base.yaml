@@ -484,13 +484,6 @@ tabs:
   icon: /assets/images/workflows/nf-core.png
   icon_color: green
   workflow_system: nf-core
-  # Bound to multiqc_data: the report names reads, assemblies and bins its own
-  # way, and only its sample column reaches every panel.
-  filter_sections:
-  - name: MultiQC report
-    icon: mdi:file-document-outline
-    color: orange
-    description: Samples, assemblies and bins as the MultiQC report names them
   grid_sections:
   - name: QC overview
     icon: mdi:chart-box-outline
@@ -518,20 +511,6 @@ tabs:
     tag: mg-mqc-intro
     index: mqc-intro
     layout: {x: 0, y: 0, w: 8, h: 1}
-  - component_type: interactive
-    workflow_tag: mag
-    data_collection_tag: multiqc_data
-    interactive_component_type: MultiSelect
-    column_name: sample
-    column_type: object
-    display:
-      icon_name: mdi:flask-outline
-      custom_color: teal
-    section: MultiQC report
-    tag: mg-mqc-filter-sample
-    index: mqc-sample-filter
-    title: Sample
-    layout: {x: 0, y: 0, w: 1, h: 3}
   - component_type: multiqc
     workflow_tag: mag
     data_collection_tag: multiqc_data

@@ -1055,6 +1055,16 @@ links:
     description: "Filter the MultiQC panels by the libraries picked in the left panel"
     enabled: true
 
+  # Bcftools names its panels after the sample, not the library.
+  - source_dc_tag: "samples"
+    source_column: "sample_name"
+    target_dc_tag: "multiqc_data"
+    target_type: "multiqc"
+    link_config:
+      resolver: "sample_mapping"
+    description: "Filter the MultiQC panels named after the sample by the samples picked in the left panel"
+    enabled: true
+
   - source_dc_tag: "samples"
     source_column: "sample_id"
     target_dc_tag: "preseq_complexity_curve"

@@ -80,8 +80,8 @@ reads it, then at most three open sections; tables and details follow, collapsed
 **MultiQC.** MultiQC panels only. Open: general statistics, FastQC sequence counts and quality
 histograms, samtools flagstat and mapped reads per contig. Collapsed: the other FastQC panels,
 then the samtools percentages and XY counts. The NanoStat panels are left out: the Reads tab
-draws the NanoStat summary and its quality ladder from the data. Its own sample filter reads
-the MultiQC report.
+draws the NanoStat summary and its quality ladder from the data. The pinned sample filters
+narrow its panels.
 
 **Reads.** Strip: reads basecalled (with their distribution over the libraries), the median
 read length N50 (with its spread), the median mean read quality (libraries against Q10,

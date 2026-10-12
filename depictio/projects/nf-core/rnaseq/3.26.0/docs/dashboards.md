@@ -68,8 +68,8 @@ mapped, then the pipeline's own strandedness inference beside the featureCounts 
 composition. A library whose inferred strandedness disagrees with the sheet was quantified
 against the wrong library type. Collapsed: read quality (FastQC before and after trimming),
 alignment details (Picard duplicates, Salmon fragment lengths, read strand composition) and
-transcript QC (Qualimap gene body coverage, dupRadar, RSeQC inner distance). Its own sample
-filter reads the MultiQC report, whose library names carry read suffixes.
+transcript QC (Qualimap gene body coverage, dupRadar, RSeQC inner distance). The pinned sample
+filters narrow its panels, though the report's library names carry read suffixes.
 
 **Library QC.** Strip: reads received by STAR (split by condition), the uniquely mapped
 share on a 0 to 100 gauge, the duplication share with its spread and the exonic share with
