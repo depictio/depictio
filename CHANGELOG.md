@@ -3,6 +3,45 @@
 ### Docker Images 🐳
 
 ```plaintext
+ghcr.io/depictio/depictio:1.17.2
+ghcr.io/depictio/depictio:latest
+ghcr.io/depictio/depictio:stable
+ghcr.io/depictio/depictio:edge
+```
+
+
+<details>
+<summary>Click to expand the changelog for 1.17.2</summary>
+
+### Changes 📜
+
+#### Other Changes 📝
+
+* Bump version: 1.17.1 → 1.17.2 [f7b1fae91]
+* fix(comments): a temporary account cannot comment when viewers may [e20b75806]
+* test(templates): a pinned filter must reach the MultiQC panels [d64c92a36]
+* chore(templates): drop the tab-local MultiQC sample filters the pinned filters replace [a1827f1c0]
+* feat(scripts): report how many MultiQC names each hub id claims [0d670e92f]
+* fix(multiqc): pool every link of a source table and claim infix sample ids [f0bc3b0c4]
+* feat(comments): let viewers comment, behind an opt-in setting [52a858f7e]
+* fix(multiqc): scope the family lookup and cover its edges [6a423ea81]
+* fix(multiqc): let a pinned filter from another tab narrow the MultiQC panels [3ae7976a8]
+* fix(viewer): list every nf-core dashboard in the nf-core section [9df24f74c]
+* fix(viewer): show a readable message when Google sign-in is refused [9abbb5966]
+* chore(helm): track the EMBL showcases values file [9fa902b50]
+* fix(viewer): the open sidebar's foot centres its rows [70e5d2fb2]
+* Update CHANGELOG.md for v1.17.1 [7cb65175e]
+
+
+</details>
+
+### Documentation 📖
+
+For more details, please refer to the [documentation](https://depictio.github.io/depictio-docs/)
+
+### Docker Images 🐳
+
+```plaintext
 ghcr.io/depictio/depictio:1.17.1
 ghcr.io/depictio/depictio:latest
 ghcr.io/depictio/depictio:stable
