@@ -7,7 +7,7 @@ collections and so need no ingest to rebuild: ``advanced_viz_showcase``
 generates them into a temporary directory (``--out``) right before importing.
 All three used to keep their seeds as hand-written or Mongo-dumped JSON, which
 meant the shipped dashboards had no authorable source: adding a filter or a
-caption meant editing a MongoDB document. ``bioimage_examples`` (4) was
+caption meant editing a MongoDB document. ``bioimage_examples`` (7) was
 authored here from the start.
 
 The nf-core reference projects are NOT here, and should not be: their YAML

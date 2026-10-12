@@ -494,7 +494,7 @@ async def create_initial_dashboards(
             ),
             "static_dc_id": None,
         },
-        # Optional (see OPTIONAL_DATASETS): the four bioimage viewer tabs, main
+        # Optional (see OPTIONAL_DATASETS): the seven bioimage viewer tabs, main
         # tab first. Multi-DC (image + points + samples), so DC ids come from
         # the JSON.
         *(
@@ -508,7 +508,15 @@ async def create_initial_dashboards(
                 ),
                 "static_dc_id": None,
             }
-            for slug in ("fluorescence", "spatial", "volume", "multi_sample")
+            for slug in (
+                "fluorescence",
+                "spatial",
+                "volume",
+                "multi_sample",
+                "ome_tiff",
+                "spatialdata",
+                "ngff05",
+            )
         ),
     ]
 

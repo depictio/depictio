@@ -1,0 +1,648 @@
+{
+  "_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f15"
+  },
+  "description": null,
+  "flexible_metadata": null,
+  "hash": null,
+  "dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f15"
+  },
+  "version": 1,
+  "stored_metadata": [
+    {
+      "index": "omz-sh-text",
+      "component_type": "text",
+      "title": "NGFF 0.5, sharded",
+      "workflow_tag": "",
+      "data_collection_tag": "",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": null,
+      "dc_config": {},
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Stem cells",
+      "order": 3,
+      "alignment": "left",
+      "vertical_alignment": "top",
+      "body": "Vascular bundles and the outer ring of a lily of the valley stem, in three 12-bit fluorescence channels. The store is OME-Zarr NGFF 0.5 (zarr v3): each array packs its chunks into shard files, and the viewer reads a shard's index, then only the chunks it draws, with HTTP Range requests. Each point is a cell found between the walls; cells with bright Ch2 walls are called thick-walled. Lasso cells to filter the table and the cards.\n",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sh-card-count",
+      "component_type": "card",
+      "title": "Cells",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_sharded_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the sharded lily stem store",
+        "data_collection_tag": "lily_sharded_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Stem cells",
+      "aggregation": "count",
+      "column_name": "cell_id",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "vertical",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:counter",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sh-card-area",
+      "component_type": "card",
+      "title": "Lumen area (um2)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_sharded_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the sharded lily stem store",
+        "data_collection_tag": "lily_sharded_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Stem cells",
+      "aggregation": "median",
+      "column_name": "area_um2",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "histogram",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-histogram",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sh-card-wall-type",
+      "component_type": "card",
+      "title": "Wall type",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_sharded_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the sharded lily stem store",
+        "data_collection_tag": "lily_sharded_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Stem cells",
+      "aggregation": "nunique",
+      "column_name": "wall_type",
+      "column_type": "object",
+      "value": null,
+      "aggregations": null,
+      "filter_expr": null,
+      "secondary_layout": "donut",
+      "breakdown_col": "wall_type",
+      "top_n_count": 2,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-donut",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sh-card-ch4",
+      "component_type": "card",
+      "title": "Ch4 intensity",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_sharded_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the sharded lily stem store",
+        "data_collection_tag": "lily_sharded_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Stem cells",
+      "aggregation": "median",
+      "column_name": "mean_ch4",
+      "column_type": "float64",
+      "value": null,
+      "aggregations": [
+        "box_plot_stats"
+      ],
+      "filter_expr": null,
+      "secondary_layout": "box_plot",
+      "breakdown_col": null,
+      "top_n_count": 3,
+      "coverage_max": null,
+      "threshold_value": null,
+      "threshold_direction": "min",
+      "threshold_warn": null,
+      "attrition_cols": [],
+      "trend_col": null,
+      "icon_name": "mdi:chart-box-outline",
+      "title_font_size": "md",
+      "value_font_size": "xl",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sh-viewer",
+      "component_type": "advanced_viz",
+      "title": "Lily of the valley stem, 3 channels",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_sharded_image",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f0f"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Lily of the valley stem, 3-channel confocal fluorescence, 12-bit, OME-Zarr NGFF 0.5 with sharded arrays (512 x 512)",
+        "data_collection_tag": "lily_sharded_image",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f0f"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "Confocal section (1.24 um pixels) in an NGFF 0.5 store with sharded arrays. Points are cells, coloured by wall type.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Image",
+      "viz_kind": "bioimage_viewer",
+      "config": {
+        "viz_kind": "bioimage_viewer",
+        "image_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "image_dc_id": "646b0f3c1e4a2d7f8e5b8f0f",
+        "image_dc_tag": "lily_sharded_image",
+        "store": null,
+        "sample_wf_id": null,
+        "sample_dc_id": null,
+        "sample_dc_tag": null,
+        "sample_column": null,
+        "channels": [],
+        "show_scalebar": true,
+        "points_wf_id": "646b0f3c1e4a2d7f8e5b8f01",
+        "points_dc_id": "646b0f3c1e4a2d7f8e5b8f16",
+        "points_dc_tag": "lily_sharded_cells",
+        "cell_id_col": "cell_id",
+        "x_col": "x",
+        "y_col": "y",
+        "color_col": "wall_type",
+        "points_scale": 1.0,
+        "points_offset_x": 0.0,
+        "points_offset_y": 0.0,
+        "point_radius": 3.0,
+        "points_sample_col": "sample",
+        "selection_enabled": true
+      },
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sh-table",
+      "component_type": "table",
+      "title": "Cells",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_sharded_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the sharded lily stem store",
+        "data_collection_tag": "lily_sharded_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "description": "One row per cell. A lasso on the image narrows it to the cells inside.",
+      "title_size": "sm",
+      "title_align": "left",
+      "section": "Image",
+      "columns": [
+        "cell_id",
+        "area_um2",
+        "mean_ch1",
+        "mean_ch2",
+        "mean_ch4",
+        "wall_type"
+      ],
+      "page_size": 50,
+      "sortable": true,
+      "filterable": true,
+      "compact": false,
+      "row_selection_enabled": false,
+      "row_selection_column": null,
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sh-f-wall-type",
+      "component_type": "interactive",
+      "title": "Wall type",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_sharded_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the sharded lily stem store",
+        "data_collection_tag": "lily_sharded_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Cells",
+      "interactive_component_type": "MultiSelect",
+      "column_name": "wall_type",
+      "column_type": "object",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Cell filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:shape-outline",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sh-f-area",
+      "component_type": "interactive",
+      "title": "Lumen area (um2)",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_sharded_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the sharded lily stem store",
+        "data_collection_tag": "lily_sharded_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Cells",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "area_um2",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Cell filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:ruler",
+      "wf_tag": "python/bioimage_demo"
+    },
+    {
+      "index": "omz-sh-f-ch4",
+      "component_type": "interactive",
+      "title": "Ch4 intensity",
+      "workflow_tag": "python/bioimage_demo",
+      "data_collection_tag": "lily_sharded_cells",
+      "wf_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f01"
+      },
+      "dc_id": {
+        "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+      },
+      "dc_config": {
+        "type": null,
+        "metatype": null,
+        "description": "Plant cells segmented between the cell walls of the sharded lily stem store",
+        "data_collection_tag": "lily_sharded_cells",
+        "dc_specific_properties": null,
+        "_id": {
+          "$oid": "646b0f3c1e4a2d7f8e5b8f16"
+        }
+      },
+      "cols_json": {},
+      "parent_index": null,
+      "last_updated": "2026-05-12T00:00:00.000000",
+      "title_size": "md",
+      "title_align": "left",
+      "section": "Cells",
+      "interactive_component_type": "RangeSlider",
+      "column_name": "mean_ch4",
+      "column_type": "float64",
+      "value": null,
+      "default_state": null,
+      "filter_expr": null,
+      "placement": "left",
+      "group": "Cell filters",
+      "timescale": null,
+      "show_marks": null,
+      "icon_name": "mdi:gauge",
+      "wf_tag": "python/bioimage_demo"
+    }
+  ],
+  "tmp_children_data": [],
+  "stored_layout_data": [],
+  "stored_children_data": [],
+  "stored_edit_dashboard_mode_button": [],
+  "left_panel_layout_data": [
+    {
+      "i": "box-omz-sh-f-wall-type",
+      "x": 0,
+      "y": 0,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-sh-f-area",
+      "x": 0,
+      "y": 3,
+      "w": 1,
+      "h": 3,
+      "static": false
+    },
+    {
+      "i": "box-omz-sh-f-ch4",
+      "x": 0,
+      "y": 6,
+      "w": 1,
+      "h": 3,
+      "static": false
+    }
+  ],
+  "right_panel_layout_data": [
+    {
+      "i": "box-omz-sh-text",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 2,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-sh-card-count",
+      "x": 0,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-sh-card-area",
+      "x": 2,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-sh-card-wall-type",
+      "x": 4,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-sh-card-ch4",
+      "x": 6,
+      "y": 2,
+      "w": 2,
+      "h": 2,
+      "static": true
+    },
+    {
+      "i": "box-omz-sh-viewer",
+      "x": 0,
+      "y": 0,
+      "w": 8,
+      "h": 9,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    },
+    {
+      "i": "box-omz-sh-table",
+      "x": 0,
+      "y": 9,
+      "w": 8,
+      "h": 5,
+      "static": false,
+      "resizeHandles": [
+        "se",
+        "s",
+        "e",
+        "sw",
+        "w"
+      ]
+    }
+  ],
+  "buttons_data": {
+    "unified_edit_mode": true,
+    "add_components_button": {
+      "count": 0
+    }
+  },
+  "stored_add_button": {
+    "count": 0
+  },
+  "title": "NGFF 0.5 (sharded)",
+  "subtitle": "An OME-Zarr store in the zarr v3 layout, its chunks packed into shards",
+  "icon": "mdi:shape-outline",
+  "icon_color": "cyan",
+  "icon_variant": "filled",
+  "workflow_system": "python",
+  "notes_content": "",
+  "permissions": {
+    "owners": [
+      {
+        "_id": {
+          "$oid": "67658ba033c8b59ad489d7c7"
+        },
+        "description": null,
+        "flexible_metadata": null,
+        "hash": null,
+        "email": "admin@example.com",
+        "is_admin": true,
+        "is_anonymous": false,
+        "is_temporary": false,
+        "expiration_time": null
+      }
+    ],
+    "editors": [],
+    "viewers": []
+  },
+  "is_public": true,
+  "last_saved_ts": "2026-05-12 00:00:00",
+  "project_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "is_main_tab": false,
+  "parent_dashboard_id": {
+    "$oid": "646b0f3c1e4a2d7f8e5b8f00"
+  },
+  "tab_order": 6,
+  "main_tab_name": null,
+  "tab_icon": "mdi:shape-outline",
+  "tab_icon_color": "cyan",
+  "parent_dashboard_title": null,
+  "filter_sections": [
+    {
+      "name": "Cells",
+      "icon": "mdi:filter-variant",
+      "color": "cyan",
+      "description": "Narrows the cells drawn over the image, the table and the cards",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "grid_sections": [
+    {
+      "name": "Stem cells",
+      "icon": "mdi:counter",
+      "color": "cyan",
+      "description": "The segmented plant cells in numbers",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    },
+    {
+      "name": "Image",
+      "icon": "mdi:microscope",
+      "color": "cyan",
+      "description": "The three channels, with one point per cell; lasso points to filter the table",
+      "collapsed": false,
+      "persistent": false,
+      "pin": "top"
+    }
+  ],
+  "funnel_filtering": true,
+  "brand_theme": null
+}
