@@ -42,6 +42,7 @@ import {
 import type { AdminBackupEntry, BackupScheduleStatus } from 'depictio-react-core';
 
 import { formatDateTime } from '../lib/datetime';
+import { useQuietTags, useTone } from '../monitoring/useTone';
 import RestoreBackupModal from './RestoreBackupModal';
 import type { RestoreTarget } from './RestoreBackupModal';
 
@@ -112,6 +113,10 @@ const describeRetention = (draft: ScheduleDraft): string => {
  * destructive restore (see RestoreBackupModal for the safety rails).
  */
 const AdminBackupsPanel: React.FC = () => {
+  const tone = useTone();
+  // Card headings carry a neutral icon in Glass; Classic keeps its blue.
+  const quiet = useQuietTags();
+  const headIcon = quiet ? 'var(--gl-muted)' : 'var(--mantine-color-blue-6)';
   const [backups, setBackups] = useState<AdminBackupEntry[]>([]);
   const [schedule, setSchedule] = useState<BackupScheduleStatus | null>(null);
   /** Editable copy of the schedule; `schedule` stays the server's answer so the
@@ -587,7 +592,7 @@ const AdminBackupsPanel: React.FC = () => {
                             Badge's label rather than overflowing it, so it
                             renders as "RESTO…". */}
                         <Badge
-                          color="grape"
+                          color={tone('grape')}
                           variant="filled"
                           size="xs"
                           style={{ flexShrink: 0 }}
@@ -604,7 +609,7 @@ const AdminBackupsPanel: React.FC = () => {
                     <Text size="sm">{formatDateTime(b.created)}</Text>
                     {b.is_automatic && (
                       <Tooltip label="Taken by the backup scheduler">
-                        <Badge color="blue" variant="light" size="xs">
+                        <Badge color={tone('blue')} variant="light" size="xs">
                           auto
                         </Badge>
                       </Tooltip>
@@ -687,7 +692,7 @@ const AdminBackupsPanel: React.FC = () => {
           <Group justify="space-between" align="flex-start">
             <Stack gap={4} style={{ flex: '1 1 320px', minWidth: 0 }}>
               <Group gap="xs">
-                <Icon icon="mdi:database-export" width={20} color="var(--mantine-color-blue-6)" />
+                <Icon icon="mdi:database-export" width={20} color={headIcon} />
                 <Title order={5}>Create database backup</Title>
               </Group>
               <Text size="sm" c="dimmed">
@@ -751,7 +756,7 @@ const AdminBackupsPanel: React.FC = () => {
       <Card withBorder radius="md" p="lg">
         <Stack gap="md">
           <Group gap="xs">
-            <Icon icon="mdi:database-clock" width={20} color="var(--mantine-color-blue-6)" />
+            <Icon icon="mdi:database-clock" width={20} color={headIcon} />
             <Title order={5}>Backups on the server</Title>
           </Group>
           {renderList()}
@@ -765,11 +770,11 @@ const AdminBackupsPanel: React.FC = () => {
               out of the panel that needs a Save. */}
           <Group justify="space-between" align="center" wrap="nowrap">
             <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
-              <Icon icon="mdi:calendar-clock" width={20} color="var(--mantine-color-blue-6)" />
+              <Icon icon="mdi:calendar-clock" width={20} color={headIcon} />
               <Title order={5}>Automated backups</Title>
               {schedule && (
                 <Badge
-                  color={schedule.enabled ? 'teal' : 'gray'}
+                  color={schedule.enabled ? (quiet ? 'green' : 'teal') : 'gray'}
                   variant="light"
                   data-testid="backup-schedule-status"
                 >

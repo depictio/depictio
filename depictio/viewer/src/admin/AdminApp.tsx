@@ -14,9 +14,23 @@ import {
 } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { Icon } from '@iconify/react';
-import { ADMIN_TABS, adminUrl, parseAdminUrl } from 'depictio-react-core';
-import type { AdminRoute, AdminTab } from 'depictio-react-core';
-import { GlassPage, useGlassPages } from '../chrome/variants/glass/pages';
+import { ADMIN_TABS, MONITORING_PANES, adminUrl, parseAdminUrl } from 'depictio-react-core';
+import type { AdminRoute, AdminTab, MonitoringPane } from 'depictio-react-core';
+import {
+  ArchiveRestore,
+  Database,
+  Eye,
+  HeartPulse,
+  ListChecks,
+  Palette,
+  ScrollText,
+  Users,
+  Wrench,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { GlassPage, STROKE, useGlassPages } from '../chrome/variants/glass/pages';
+import { SECTION_ICON } from '../chrome/variants/glass/pages/GlassPage';
+import '../chrome/variants/glass/pages/admin.css';
 
 import { AppSidebar } from '../chrome';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -28,6 +42,59 @@ import AdminBackupsPanel from './AdminBackupsPanel';
 import AdminMaintenancePanel from './AdminMaintenancePanel';
 import AdminMonitoringPanel from './AdminMonitoringPanel';
 import { usePageTitle } from '../branding';
+
+/** A page of the Glass admin: a plain tab, or one of the Log & Task panes
+ *  (which the address bar names directly, `/admin/tasks`). */
+type AdminView = Exclude<AdminTab, 'monitoring'> | MonitoringPane;
+
+interface AdminNavItem {
+  view: AdminView;
+  label: string;
+  icon: LucideIcon;
+  /** Projects and Dashboards wear their section's colour, as in the sidebar. */
+  hue?: 'projects' | 'dashboards';
+  /** Hidden in public / demo mode, like the monitoring panes they open. */
+  trusted?: boolean;
+}
+
+interface AdminNavGroup {
+  label: string;
+  items: AdminNavItem[];
+}
+
+/** Who has access, what they made, what the instance has been doing, and how
+ *  it is set up: the four questions an admin comes with. */
+const NAV_GROUPS: AdminNavGroup[] = [
+  { label: 'People', items: [{ view: 'users', label: 'Users', icon: Users }] },
+  {
+    label: 'Content',
+    items: [
+      { view: 'projects', label: 'Projects', icon: SECTION_ICON.projects, hue: 'projects' },
+      { view: 'dashboards', label: 'Dashboards', icon: SECTION_ICON.dashboards, hue: 'dashboards' },
+    ],
+  },
+  {
+    label: 'Activity',
+    items: [
+      { view: 'tasks', label: 'Tasks', icon: ListChecks, trusted: true },
+      { view: 'ingestion', label: 'Ingestion', icon: Database, trusted: true },
+      { view: 'watchers', label: 'Watchers', icon: Eye, trusted: true },
+      { view: 'logs', label: 'Logs', icon: ScrollText, trusted: true },
+      { view: 'health', label: 'Health', icon: HeartPulse, trusted: true },
+    ],
+  },
+  {
+    label: 'Instance',
+    items: [
+      { view: 'branding', label: 'Branding', icon: Palette },
+      { view: 'backups', label: 'Backups', icon: ArchiveRestore, trusted: true },
+      { view: 'maintenance', label: 'Maintenance', icon: Wrench },
+    ],
+  },
+];
+
+const isPane = (view: string): view is MonitoringPane =>
+  (MONITORING_PANES as readonly string[]).includes(view);
 
 /** Remember the last tab, so a bare `/admin` reopens where the admin left off.
  *  A tab or pane named in the URL always wins. */
@@ -136,6 +203,71 @@ const AdminApp: React.FC = () => {
             </Button>
           </Stack>
         </Center>
+      );
+    }
+    if (glass) {
+      const view: AdminView = activeTab === 'monitoring' ? route.pane : activeTab;
+      const open = (next: string) =>
+        isPane(next)
+          ? navigate({ ...route, tab: 'monitoring', pane: next }, 'push')
+          : navigate({ ...route, tab: next as AdminTab }, 'push');
+      return (
+        <Tabs
+          value={view}
+          onChange={(v) => v && open(v)}
+          orientation="vertical"
+          variant="unstyled"
+          keepMounted={false}
+          className="ga-admin"
+        >
+          <Tabs.List className="ga-nav" aria-label="Administration">
+            {NAV_GROUPS.map((group) => {
+              const items = group.items.filter((item) => showMonitoring || !item.trusted);
+              if (items.length === 0) return null;
+              return (
+                <React.Fragment key={group.label}>
+                  <div className="ga-nav-group" role="presentation">
+                    {group.label}
+                  </div>
+                  {items.map(({ view: value, label, icon: NavIcon, hue }) => (
+                    <Tabs.Tab
+                      key={value}
+                      value={value}
+                      className="ga-tab"
+                      data-hue={hue}
+                      leftSection={<NavIcon size={17} strokeWidth={STROKE} aria-hidden />}
+                      data-testid={value === 'backups' ? 'admin-tab-backups' : undefined}
+                      // The Log & Task tab of old: the e2e suite and anyone
+                      // searching the docs still look for it by that name.
+                      aria-label={value === 'tasks' ? 'Log & Task: Tasks' : undefined}
+                    >
+                      {label}
+                    </Tabs.Tab>
+                  ))}
+                </React.Fragment>
+              );
+            })}
+          </Tabs.List>
+          <Tabs.Panel value={view} className="ga-content">
+            {view === 'users' && <AdminUsersPanel currentUserEmail={user.email} />}
+            {view === 'projects' && <AdminProjectsPanel />}
+            {view === 'dashboards' && <AdminDashboardsPanel />}
+            {view === 'branding' && <AdminBrandingPanel />}
+            {isPane(view) && (
+              <AdminMonitoringPanel
+                pane={route.pane}
+                onPaneChange={(pane) => navigate({ ...route, pane }, 'push')}
+                ingestionFilters={route.ingestion}
+                onIngestionFiltersChange={(ingestion) =>
+                  navigate({ ...route, ingestion }, 'replace')
+                }
+                showPaneSwitch={false}
+              />
+            )}
+            {view === 'backups' && <AdminBackupsPanel />}
+            {view === 'maintenance' && <AdminMaintenancePanel />}
+          </Tabs.Panel>
+        </Tabs>
       );
     }
     return (

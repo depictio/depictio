@@ -37,6 +37,7 @@ import { formatDateTimeVerbose } from '../lib/datetime';
 import { matchesQuery, parseTs, relTime } from './format';
 import { Field, IdRow, PaneHeader, PathTip, SearchInput } from './primitives';
 import { ACCORDION_CLASSNAMES, ACCORDION_STYLES, PANE_SCROLL_H } from './tokens';
+import { useTone } from './useTone';
 import { usePolling } from './usePolling';
 
 const AGENT_STATUS_COLORS: Record<string, string> = {
@@ -73,6 +74,7 @@ const AgentRow: React.FC<{ agent: MonitoringCliAgent; onTriggered: () => void }>
   agent,
   onTriggered,
 }) => {
+  const tone = useTone();
   const [requesting, setRequesting] = useState(false);
   const stale = isStale(agent);
   const active = agent.status === 'scanning' || agent.status === 'ingesting';
@@ -107,7 +109,7 @@ const AgentRow: React.FC<{ agent: MonitoringCliAgent; onTriggered: () => void }>
           <Badge
             size="xs"
             variant="light"
-            color={AGENT_STATUS_COLORS[agent.status] ?? 'gray'}
+            color={tone(AGENT_STATUS_COLORS[agent.status] ?? 'gray')}
             leftSection={active ? <Loader size={8} color="yellow" /> : undefined}
           >
             {agent.status}
@@ -124,7 +126,7 @@ const AgentRow: React.FC<{ agent: MonitoringCliAgent; onTriggered: () => void }>
             </Badge>
           )}
           {agent.mode && (
-            <Badge size="xs" variant="dot" color={agent.mode === 'full' ? 'orange' : 'blue'}>
+            <Badge size="xs" variant="dot" color={tone(agent.mode === 'full' ? 'orange' : 'blue')}>
               {agent.mode}
             </Badge>
           )}
@@ -137,7 +139,7 @@ const AgentRow: React.FC<{ agent: MonitoringCliAgent; onTriggered: () => void }>
               }
               withArrow
             >
-              <Badge size="xs" variant="light" color="grape">
+              <Badge size="xs" variant="light" color={tone('grape')}>
                 {agent.backend}
               </Badge>
             </Tooltip>

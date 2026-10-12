@@ -1,0 +1,183 @@
+/* Administration in Glass: a settings-style page. A section nav on the left
+ * (People, Content, Activity, Instance), the open section on the right. Every
+ * rule hangs off `.ga-admin`, which only the Glass render of AdminApp carries,
+ * so Classic keeps its tab row. */
+
+:root[data-chrome='glass'] .gp-main .ga-admin {
+  align-items: flex-start;
+  gap: 32px;
+}
+
+/* ------------------------------------------------------------ section nav */
+
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-nav.mantine-Tabs-list {
+  position: sticky;
+  top: 12px;
+  flex: none;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  width: 208px;
+  max-width: none;
+  padding: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  overflow: visible;
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-nav-group {
+  padding: 18px 12px 6px;
+  color: var(--gl-faint);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-nav-group:first-child {
+  padding-top: 2px;
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-tab.mantine-Tabs-tab {
+  justify-content: flex-start;
+  gap: 10px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: none;
+  box-shadow: none;
+  color: var(--gl-muted);
+  font-size: 13.5px;
+  font-weight: 550;
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-tab.mantine-Tabs-tab:hover:not([data-active]) {
+  background: var(--gl-well);
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-tab.mantine-Tabs-tab[data-active] {
+  background: var(--gl-accent-soft);
+  box-shadow: none;
+  color: var(--gl-fg);
+  font-weight: 650;
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-tab .mantine-Tabs-tabSection {
+  margin: 0;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-tab[data-active] .mantine-Tabs-tabSection {
+  color: var(--gl-accent-fg);
+}
+/* Projects and Dashboards keep the sidebar's colours, active or not. */
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-tab[data-hue='projects'] .mantine-Tabs-tabSection {
+  color: var(--mantine-color-logoTeal-filled);
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-tab[data-hue='dashboards'] .mantine-Tabs-tabSection {
+  color: var(--mantine-color-logoOrange-filled);
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-tab[data-hue='projects'][data-active] {
+  background: color-mix(in srgb, var(--mantine-color-logoTeal-filled) 12%, transparent);
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-tab[data-hue='dashboards'][data-active] {
+  background: color-mix(in srgb, var(--mantine-color-logoOrange-filled) 12%, transparent);
+}
+
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-content.mantine-Tabs-panel {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-top: 0;
+}
+
+/* On a phone the nav is a strip above the section, scrolling inside itself. */
+@media (max-width: 760px) {
+  :root[data-chrome='glass'] .gp-main .ga-admin {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+  :root[data-chrome='glass'] .gp-main .ga-admin .ga-nav.mantine-Tabs-list {
+    position: static;
+    flex-direction: row;
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  :root[data-chrome='glass'] .gp-main .ga-admin .ga-nav.mantine-Tabs-list::-webkit-scrollbar {
+    display: none;
+  }
+  :root[data-chrome='glass'] .gp-main .ga-admin .ga-nav-group {
+    display: none;
+  }
+  :root[data-chrome='glass'] .gp-main .ga-admin .ga-tab.mantine-Tabs-tab {
+    flex: none;
+    white-space: nowrap;
+  }
+}
+
+/* ----------------------------------------------------------- list sections */
+
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-rows .mantine-Accordion-control {
+  min-height: 56px;
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-row-icon {
+  flex: none;
+  color: var(--gl-muted);
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-row-foot {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--gl-hair);
+}
+
+/* Details as a definition list: muted terms, values in the ink. */
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-facts {
+  display: grid;
+  grid-template-columns: minmax(110px, 150px) minmax(0, 1fr);
+  gap: 8px 16px;
+  margin: 0;
+  padding: 2px 0 4px;
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-facts dt {
+  color: var(--gl-muted);
+  font-size: 13px;
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .ga-facts dd {
+  margin: 0;
+  min-width: 0;
+  color: var(--gl-fg);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 560px) {
+  :root[data-chrome='glass'] .gp-main .ga-admin .ga-facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+  :root[data-chrome='glass'] .gp-main .ga-admin .ga-facts dd {
+    margin-bottom: 8px;
+  }
+}
+
+/* ------------------------------------------------------ segmented controls */
+
+/* A well with a paper indicator, the selected label in the ink. No colour
+ * prop to keep in step: the accent is only the focus ring. */
+:root[data-chrome='glass'] .gp-main .ga-admin .mantine-SegmentedControl-root {
+  padding: 3px;
+  border-radius: 11px;
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .mantine-SegmentedControl-indicator {
+  border-radius: 8px;
+  background: var(--gl-paper);
+  box-shadow:
+    0 0 0 1px var(--gl-hair),
+    0 1px 2px var(--gl-shade-a);
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .mantine-SegmentedControl-label {
+  color: var(--gl-muted);
+  font-weight: 600;
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .mantine-SegmentedControl-label:hover:not([data-disabled], [data-active]) {
+  color: var(--gl-fg);
+}
+:root[data-chrome='glass'] .gp-main .ga-admin .mantine-SegmentedControl-label[data-active] {
+  color: var(--gl-fg);
+}

@@ -975,77 +975,6 @@
 :root[data-chrome='glass'] .gp-main .mantine-Tabs-panel {
   padding-top: 20px;
 }
-/* The project page's own tabs, under the workflows: two cards centred on the
- * page, an icon chip, a title and what the tab holds, the active one lit in
- * the accent. They read as the switch for everything that follows. */
-:root[data-chrome='glass'] .gp-main .dc-project-tabs .mantine-Tabs-list {
-  width: 100%;
-  overflow: visible;
-  gap: 14px;
-  padding: 0;
-  background: none;
-  box-shadow: none;
-}
-:root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab {
-  flex: 0 1 320px;
-  min-width: 0;
-  height: auto;
-  justify-content: flex-start;
-  gap: 14px;
-  padding: 14px 18px;
-  border-radius: 18px;
-  background: var(--gl-paper);
-  color: var(--gl-fg);
-  box-shadow: 0 0 0 1px var(--gl-hair), 0 1px 2px var(--gl-shade-a);
-  transition:
-    box-shadow 150ms ease,
-    background-color 150ms ease;
-}
-:root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab:hover {
-  background: var(--gl-paper);
-  box-shadow: 0 0 0 1px var(--gl-line), 0 4px 12px -6px var(--gl-shade-b);
-}
-:root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab[data-active] {
-  background: var(--gl-accent-soft);
-  color: var(--gl-fg);
-  box-shadow:
-    0 0 0 1.5px color-mix(in srgb, var(--gl-accent) 55%, transparent),
-    0 6px 16px -10px color-mix(in srgb, var(--gl-accent) 60%, transparent);
-}
-:root[data-chrome='glass'] .gp-main .dc-project-tabs .dc-project-tab .mantine-Tabs-tabLabel {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-  text-align: left;
-}
-.dc-project-tab-icon {
-  display: grid;
-  place-items: center;
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  background: var(--gl-well);
-  color: var(--gl-muted);
-}
-:root[data-chrome='glass'] .gp-main .dc-project-tab[data-active] .dc-project-tab-icon {
-  background: var(--gl-accent);
-  color: var(--mantine-primary-color-contrast);
-}
-.dc-project-tab-label {
-  font-size: 16px;
-  font-weight: 700;
-  line-height: 1.25;
-  letter-spacing: -0.01em;
-}
-.dc-project-tab-meta {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--gl-muted);
-}
-
 /* Tables: rows on the card, the head a soft rounded well. */
 :root[data-chrome='glass'] .gp-main .mantine-Table-table {
   --table-border-color: var(--gl-hair);
@@ -1053,9 +982,11 @@
   border-collapse: separate;
   border-spacing: 0;
 }
+/* The well laid on paper, so a sticky header stays opaque over the rows
+ * scrolling under it (the well alone is a translucent tint). */
 :root[data-chrome='glass'] .gp-main .mantine-Table-thead .mantine-Table-th {
   border-bottom: 0;
-  background: var(--gl-well);
+  background: linear-gradient(var(--gl-well), var(--gl-well)), var(--gl-paper);
   color: var(--gl-muted);
   font-size: 12.5px;
   font-weight: 650;
@@ -1107,6 +1038,61 @@
 }
 :root[data-chrome='glass'] .gp-main .mantine-Accordion-root[data-variant='contained'] .mantine-Accordion-item + .mantine-Accordion-item {
   border-top: 1px solid var(--gl-rim);
+}
+
+/* Monitoring feeds (tasks, ingestion runs, logs): one paper list with a
+ * hairline between rows, not a stack of cards, and the row's tags as a dot
+ * and a word without a chip, so a long feed reads like a log. */
+:root[data-chrome='glass'] .gp-main .depictio-monitoring-accordion.mantine-Accordion-root[data-variant] {
+  gap: 0;
+  /* A ring, not a border: the call site sets an inline `border: none`. */
+  box-shadow: 0 0 0 1px var(--gl-hair);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--gl-paper);
+}
+:root[data-chrome='glass'] .gp-main .depictio-monitoring-accordion.mantine-Accordion-root[data-variant] .mantine-Accordion-item {
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+}
+:root[data-chrome='glass'] .gp-main .depictio-monitoring-accordion.mantine-Accordion-root[data-variant] .mantine-Accordion-item + .mantine-Accordion-item {
+  border-top: 1px solid var(--gl-hair);
+}
+:root[data-chrome='glass'] .gp-main .depictio-monitoring-accordion.mantine-Accordion-root[data-variant] .mantine-Accordion-item[data-active] {
+  background: var(--gl-well);
+}
+:root[data-chrome='glass'] .gp-main .depictio-monitoring-accordion.mantine-Accordion-root[data-variant] .mantine-Accordion-control {
+  min-height: 34px;
+  padding-inline: 8px 12px;
+  border-radius: 0;
+}
+:root[data-chrome='glass'] .gp-main .depictio-monitoring-accordion.mantine-Accordion-root[data-variant] .mantine-Accordion-control .mantine-Badge-root {
+  justify-content: flex-start;
+  height: auto;
+  padding-inline: 0;
+  border: 0;
+  background: none;
+  color: var(--gl-muted);
+  font-size: 11.5px;
+}
+
+/* An open feed row: its code blocks are wells on the paper, capped in
+ * height (a task's result can run to thousands of lines). */
+:root[data-chrome='glass'] .gp-main .depictio-monitoring-accordion .mantine-Accordion-content {
+  padding: 4px 16px 14px 40px;
+}
+:root[data-chrome='glass'] .gp-main .depictio-monitoring-accordion .mantine-CodeHighlight-root {
+  max-height: 260px;
+  overflow: auto;
+  border-radius: 10px;
+  background: var(--gl-paper);
+  box-shadow: inset 0 0 0 1px var(--gl-hair);
+}
+:root[data-chrome='glass'] .gp-main .depictio-monitoring-accordion .mantine-CodeHighlight-code {
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 /* Code chips and dividers in the quiet palette. */

@@ -11,6 +11,8 @@ import React from 'react';
 import { Badge, Tooltip } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import { useTone } from './useTone';
+
 const TRIGGER_META: Record<string, { label: string; color: string; icon: string }> = {
   manual: { label: 'Manual', color: 'gray', icon: 'mdi:account' },
   watch: { label: 'Watch', color: 'grape', icon: 'mdi:eye-outline' },
@@ -23,12 +25,13 @@ export const TriggerBadge: React.FC<{
   reason?: string | null;
   size?: string;
 }> = ({ trigger, reason, size = 'xs' }) => {
+  const tone = useTone();
   const meta = TRIGGER_META[trigger || 'manual'] ?? TRIGGER_META.manual;
   const badge = (
     <Badge
       size={size}
       variant="light"
-      color={meta.color}
+      color={tone(meta.color)}
       leftSection={<Icon icon={meta.icon} width={10} />}
     >
       {meta.label}
