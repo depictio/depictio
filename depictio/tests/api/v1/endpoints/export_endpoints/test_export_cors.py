@@ -94,7 +94,10 @@ class TestEmbedPreflight:
     def test_etag_is_readable_by_the_page_that_must_echo_it(self, client):
         """Allowing the request header is useless if the response header is hidden."""
         response = _preflight(client, EMBEDDER)
-        assert response.headers["access-control-expose-headers"] == "ETag"
+        exposed = {h.strip() for h in response.headers["access-control-expose-headers"].split(",")}
+        assert {"ETag", "X-Depictio-Revision"} <= exposed, (
+            "a host pins with the revision, so it has to be able to read it"
+        )
 
     def test_response_varies_on_origin(self, client):
         """The answer is origin-dependent, so a shared cache must not reuse it."""

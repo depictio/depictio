@@ -6,15 +6,14 @@ same six lines: fetch the dashboard, pull ``project_id``, run
 ``index``. This module is that preamble, factored out so the export routes and
 the render routes agree on 404/403 semantics instead of drifting.
 
-``check_project_permission`` is deliberately *not* duplicated here — it is imported
-from the dashboards routes so there stays exactly one implementation.
+The 404/403 preamble itself is ``_viewable_dashboard`` from the dashboards routes,
+which the render routes use too, so there stays exactly one implementation.
 """
 
 from typing import Any
 
 from fastapi import HTTPException
 
-from depictio.api.v1.configs.logging_init import logger
 from depictio.models.models.base import PyObjectId
 from depictio.models.models.users import User
 
@@ -55,23 +54,12 @@ def resolve_dashboard_component(
             caller lacks ``viewer`` on the owning project.
     """
     # Imported here rather than at module scope: dashboards_endpoints.routes is a
-    # 4.9k-line module that imports a large part of the API, and a top-level import
+    # large module that imports a large part of the API, and a top-level import
     # would make this small helper a cycle risk for anything it pulls in.
-    from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
-        check_project_permission,
-        dashboards_collection,
-    )
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import _viewable_dashboard
 
-    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    if not dashboard_data:
-        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
-
+    dashboard_data = _viewable_dashboard(dashboard_id, current_user)
     project_id = dashboard_data.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
-        logger.info(
-            "export: permission denied for user=%s dashboard=%s", current_user.id, dashboard_id
-        )
-        raise HTTPException(status_code=403, detail="Permission denied.")
 
     component = find_component(dashboard_data.get("stored_metadata"), component_id)
     if component is None:
@@ -94,17 +82,7 @@ def resolve_dashboard(dashboard_id: PyObjectId, current_user: User) -> tuple[dic
 
     Used by the manifest route, which reports on every component at once.
     """
-    from depictio.api.v1.endpoints.dashboards_endpoints.routes import (
-        check_project_permission,
-        dashboards_collection,
-    )
+    from depictio.api.v1.endpoints.dashboards_endpoints.routes import _viewable_dashboard
 
-    dashboard_data = dashboards_collection.find_one({"dashboard_id": dashboard_id})
-    if not dashboard_data:
-        raise HTTPException(status_code=404, detail=f"Dashboard '{dashboard_id}' not found.")
-
-    project_id = dashboard_data.get("project_id")
-    if not project_id or not check_project_permission(project_id, current_user, "viewer"):
-        raise HTTPException(status_code=403, detail="Permission denied.")
-
-    return dashboard_data, project_id
+    dashboard_data = _viewable_dashboard(dashboard_id, current_user)
+    return dashboard_data, dashboard_data.get("project_id")

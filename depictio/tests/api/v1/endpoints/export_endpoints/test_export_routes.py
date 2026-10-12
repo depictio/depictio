@@ -73,6 +73,24 @@ DASHBOARD_DOC = {
 }
 
 
+@pytest.fixture(autouse=True)
+def revision_sources():
+    """Answer the two reads behind every export's revision.
+
+    The revision reads the version ledger and each collection's aggregation
+    hash; unanswered, every request waits out Mongo's server-selection timeout
+    twice before falling back.
+    """
+    with (
+        patch(
+            "depictio.api.v1.endpoints.dashboards_endpoints.version_store.latest_version",
+            return_value={"version_id": "v1", "seq": 1, "content_hash": "c1"},
+        ),
+        patch("depictio.api.v1.deltatables_utils._get_aggregation_hash", return_value="h1"),
+    ):
+        yield
+
+
 @pytest.fixture
 def user() -> User:
     return User(
@@ -320,6 +338,36 @@ class TestJsonExport:
         assert meta["theme"] == "dark"
         assert meta["filter_applied"] is False
         assert meta["generated_at"]
+        assert meta["view"] == "volcano"
+        assert meta["revision"] and meta["dashboard_version_id"] == "v1"
+
+    def test_revision_travels_in_a_header_and_pins_with_a_409(self, client, mongo):
+        component = _component(
+            "av-volcano",
+            "advanced_viz",
+            viz_kind="volcano",
+            config={"feature_id_col": "gene", "effect_size_col": "lfc", "significance_col": "p"},
+        )
+        collection, _ = mongo
+        collection.find_one.return_value = {**DASHBOARD_DOC, "stored_metadata": [component]}
+        rows = {"gene": ["a"], "lfc": [1.0], "p": [0.01]}
+
+        with patch(
+            "depictio.api.v1.services.advanced_viz.data.load_tidy_columns",
+            return_value={"rows": rows, "columns": list(rows), "row_count": 1},
+        ):
+            first = client.get(_url("av-volcano", format="json"))
+            revision = first.headers["X-Depictio-Revision"]
+            assert first.json()["meta"]["revision"] == revision
+
+            pinned = client.get(_url("av-volcano", format="json", expect_revision=revision))
+            assert pinned.status_code == 200
+
+            drifted = client.get(_url("av-volcano", format="json", expect_revision="stale"))
+        assert drifted.status_code == 409
+        detail = drifted.json()["detail"]
+        assert detail["code"] == "revision_mismatch"
+        assert detail["current_revision"] == revision
 
     def test_json_response_keeps_the_strict_security_headers(self, client, mongo):
         """Only the HTML embed is exempt; JSON must not be framable."""

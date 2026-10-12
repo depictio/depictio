@@ -34,11 +34,11 @@ function dashboardId(site, name) {
 }
 
 function exportUrl(apiBase, { dashboard, component, format = 'json', theme = 'light',
-                             filters = null, controls = null, expectVersion = null } = {}) {
+                             filters = null, controls = null, expectRevision = null } = {}) {
   const params = new URLSearchParams({ format, theme });
   if (filters && filters.length) params.set('filters', JSON.stringify(filters));
   if (controls && Object.keys(controls).length) params.set('controls', JSON.stringify(controls));
-  if (expectVersion != null) params.set('expect_version', String(expectVersion));
+  if (expectRevision != null) params.set('expect_revision', String(expectRevision));
   return `${apiBase}/export/dashboards/${dashboard}/components/${component}?${params}`;
 }
 
@@ -84,7 +84,7 @@ function requestDetails({ url, params = {}, meta = null, etag = null, label = 'R
   // is shown even when the caller passes no params.
   const provenance = meta
     ? [
-        ['dashboard', `v${meta.dashboard_version ?? '?'}`],
+        ['revision', meta.revision || '—'],
         ['saved', meta.last_saved_ts || '—'],
         ['contract', meta.export_contract || '—'],
         ['etag', etag || meta.etag || '—'],

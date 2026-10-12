@@ -62,9 +62,9 @@
           <td>Intra-viz state: which case a multi-view renderer shows, a normalisation mode, a top-N.</td>
         </tr>
         <tr>
-          <td><code>expect_version</code></td>
-          <td>integer</td>
-          <td>Pin. Answers <code>409</code> instead of silently serving a figure built from a newer dashboard.</td>
+          <td><code>expect_revision</code></td>
+          <td>string</td>
+          <td>Pin. Answers <code>409</code> instead of silently serving a figure whose definition or data changed since <code>meta.revision</code>.</td>
         </tr>
       </tbody>
     </table>
@@ -94,12 +94,13 @@
       </article>
 
       <article class="posture pinned">
-        <h3>Pin to a version</h3>
-        <p class="how"><code>?expect_version=7</code></p>
+        <h3>Pin to a revision</h3>
+        <p class="how"><code>?expect_revision=3f2a…</code></p>
         <p>
-          Fetch live, but fail loudly if the dashboard has moved past the version
-          you were built against. The <code>409</code> names both versions, so a
-          CI check can surface drift as a diff rather than a surprise.
+          Fetch live, but fail loudly if the component has moved past the revision
+          you were built against: an edit to the dashboard, or a re-ingest of its
+          data. The <code>409</code> names both revisions, so a CI check can
+          surface drift as a diff rather than a surprise.
         </p>
         <p class="cost">Correct for a report that cites specific numbers.</p>
       </article>
