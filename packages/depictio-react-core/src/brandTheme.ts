@@ -75,6 +75,27 @@ export const BRAND_PALETTES = {
   tertiary: 'brandTertiary',
 } as const;
 
+/**
+ * depictio's own orange and teal (`brandColors`, the palette the logo was
+ * drawn in) as Mantine palettes, so a page can wear them (Dashboards orange,
+ * Projects teal) rather than Mantine's stock `orange` / `teal`, which are
+ * other hues. Derived by `derive_palette` in
+ * `depictio/models/models/branding.py`, which puts the colour on shade 6, the
+ * shade a filled control paints with. Registered on every theme; a brand that
+ * sets its own secondary / tertiary takes over from them through
+ * `brandAccent`.
+ */
+export const LOGO_PALETTES = {
+  logoOrange: [
+    '#faf4f0', '#f4e3d6', '#f0d2ba', '#eec19b', '#eeaf7b',
+    '#f19d58', '#f68b33', '#f67306', '#cf5e01', '#a34a00',
+  ],
+  logoTeal: [
+    '#f2f7f7', '#d9eae8', '#beddda', '#a1d2cd', '#84c8c1',
+    '#64c0b6', '#45b8ac', '#399e94', '#2d847b', '#226962',
+  ],
+} as const satisfies Record<string, readonly string[]>;
+
 const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
 export function isHexColor(value: string | null | undefined): value is string {
@@ -200,7 +221,10 @@ const DEFAULT_FONT_FAMILY =
  */
 export function buildDepictioTheme(options: DepictioThemeOptions = {}) {
   const brand = options.brand ?? null;
-  const colors = brand ? paletteOverrides(brand) : {};
+  const colors: Record<string, MantineColorsTuple> = {
+    ...(LOGO_PALETTES as unknown as Record<string, MantineColorsTuple>),
+    ...(brand ? paletteOverrides(brand) : {}),
+  };
   const hasPrimary = !!colors[BRAND_PALETTES.primary];
   const primaryColor = hasPrimary
     ? BRAND_PALETTES.primary

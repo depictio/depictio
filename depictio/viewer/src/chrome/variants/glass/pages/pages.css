@@ -415,25 +415,38 @@
   height: 3px;
   margin: 0 0 0 -6px;
 }
+/* The instance's state, as two quiet lines that share one leading column:
+ * the live dot, then the mode (single user, public, demo) with its glyph. */
 .gp-side-foot {
   flex: none;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
   justify-content: center;
   gap: 8px;
   width: 100%;
   margin-top: 10px;
-  padding: 12px 10px;
+  padding: 12px 14px;
   border-radius: var(--gl-key-radius);
   background: var(--gl-well);
-  text-align: center;
+}
+.gp-side-foot > .gp-status,
+.gp-side-foot > .gp-mode {
+  display: grid;
+  grid-template-columns: 14px auto;
+  justify-content: start;
+  justify-items: center;
+  column-gap: 8px;
 }
 .gp-shell[data-side='folded'] .gp-side-foot {
+  align-items: center;
   width: 46px;
   height: 46px;
   padding: 0;
   gap: 0;
+}
+.gp-shell[data-side='folded'] .gp-side-foot > .gp-status {
+  display: flex;
 }
 .gp-status {
   display: flex;
@@ -506,13 +519,18 @@
   display: none;
 }
 .gp-mode {
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: var(--gl-accent-soft);
-  color: var(--gl-accent-fg);
-  font-size: 12px;
-  font-weight: 650;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--gl-muted);
+  font-size: 12.5px;
+  font-weight: 550;
   line-height: 1.2;
+  white-space: nowrap;
+}
+.gp-mode svg {
+  flex: none;
+  color: var(--gl-faint);
 }
 
 /* ------------------------------------------------------------------ main */
@@ -854,30 +872,55 @@
   padding-inline: 16px;
 }
 
-/* Pills: soft, in sentence case. A filled badge keeps its hue as a wash and
- * an ink; its icons follow the ink. */
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content) .mantine-Badge-root {
-  border-radius: 999px;
-  text-transform: none;
+/* Tags: a hairline chip on the paper, its hue reduced to a dot (or to the
+ * ink of its icon). Colour says what kind of thing it is; the chip stays as
+ * quiet as the rest of the page. `gp-tag-plain` drops the dot (a count). */
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root {
+  --gp-tag-dot: var(--badge-color);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  height: 22px;
+  padding-inline: 8px;
+  border: 1px solid var(--gl-hair);
+  border-radius: 7px;
+  background: var(--gl-paper);
+  box-shadow: none;
+  color: var(--gl-fg);
+  font-size: 12px;
+  font-weight: 550;
   letter-spacing: 0;
-  font-weight: 600;
+  text-transform: none;
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content) .mantine-Badge-root:is([data-variant='filled'], :not([data-variant])) {
-  background: color-mix(in srgb, var(--badge-bg) 14%, transparent);
-  color: light-dark(
-    color-mix(in oklab, var(--badge-bg) 72%, var(--mantine-color-black)),
-    color-mix(in oklab, var(--badge-bg) 52%, var(--mantine-color-white))
-  );
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--badge-bg) 22%, transparent);
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root:is([data-variant='filled'], :not([data-variant])) {
+  --gp-tag-dot: var(--badge-bg);
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content) .mantine-Badge-root:is([data-variant='filled'], :not([data-variant])) svg {
-  color: currentColor !important;
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root[data-variant='dot'] {
+  --gp-tag-dot: var(--badge-dot-color);
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content) .mantine-Badge-root[data-variant='light'] {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 14%, transparent);
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root:not(:has(> .mantine-Badge-section))::before {
+  content: '';
+  flex: none;
+  width: 7px;
+  height: 7px;
+  margin: 0;
+  border-radius: 50%;
+  background: var(--gp-tag-dot);
 }
-:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content) .mantine-Badge-root[data-variant='outline'] {
-  border-color: var(--gl-hair);
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-root.gp-tag-plain::before {
+  display: none;
+}
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-section {
+  margin: 0;
+}
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-section :is(svg, img) {
+  color: var(--gp-tag-dot) !important;
+}
+:root[data-chrome='glass'][data-gp-page] :is(.gp-shell, .mantine-Modal-content, .mantine-Popover-dropdown) .mantine-Badge-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Tabs: one paper strip, the open tab a raised pill. On a phone the strip
@@ -1134,8 +1177,6 @@
   color: currentColor !important;
 }
 :root[data-chrome='glass'] .gp-main [data-testid='dashboard-card'] .mantine-Badge-root {
-  height: 22px;
-  padding-inline: 8px;
   font-size: 11.5px;
 }
 /* The pin floats on the thumbnail as a small glass key. */

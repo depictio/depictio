@@ -824,6 +824,7 @@ export {
   BRAND_PALETTES,
   brandAccent,
   BrandingContext,
+  LOGO_PALETTES,
   brandCssVariablesResolver,
   buildDepictioTheme,
   depictioTheme,

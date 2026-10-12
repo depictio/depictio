@@ -20,11 +20,14 @@
  * The layout is CSS only (pages.css), so nothing re-renders on resize.
  */
 import React from 'react';
-import { Menu, Tooltip } from '@mantine/core';
+import { MantineThemeContext, Menu, Tooltip, useMantineTheme } from '@mantine/core';
+import type { MantineTheme } from '@mantine/core';
+import { BRAND_PALETTES, brandAccent, useBranding } from 'depictio-react-core';
 import {
   ChevronRight,
   Compass,
   FolderKanban,
+  Globe,
   Info,
   LayoutDashboard,
   LogIn,
@@ -60,15 +63,26 @@ export const SECTION_ICON: Record<SidebarSection, LucideIcon> = {
   'cli-agents': Compass,
 };
 
-/** The section's hue: its icon ink and the active row's tick. */
-const SECTION_TINT: Record<SidebarSection, string> = {
-  dashboards: 'var(--depictio-brand-tertiary)',
-  projects: 'var(--depictio-brand-secondary)',
-  admin: 'var(--depictio-brand-primary)',
-  about: 'var(--mantine-color-gray-6)',
-  profile: 'var(--depictio-brand-primary)',
-  'cli-agents': 'var(--mantine-color-violet-6)',
-};
+/**
+ * The section's Mantine palette: its icon ink, the active row's tick and, on
+ * Dashboards and Projects, every primary control of the page. The two take
+ * the logo's own petals (orange, teal) unless the instance brand sets its
+ * tertiary / secondary colour, which then wins.
+ */
+export function useSectionPalettes(): Record<SidebarSection, string> {
+  const brand = useBranding();
+  return React.useMemo(
+    () => ({
+      dashboards: brandAccent(brand, 'tertiary', 'logoOrange'),
+      projects: brandAccent(brand, 'secondary', 'logoTeal'),
+      admin: BRAND_PALETTES.primary,
+      about: 'gray',
+      profile: BRAND_PALETTES.primary,
+      'cli-agents': 'violet',
+    }),
+    [brand],
+  );
+}
 
 const SECTION_LABEL: Record<SidebarSection, string> = {
   dashboards: 'Dashboards',
@@ -79,8 +93,45 @@ const SECTION_LABEL: Record<SidebarSection, string> = {
   'cli-agents': 'CLI agents',
 };
 
-const tint = (section: SidebarSection) =>
-  ({ ['--gp-tint' as string]: SECTION_TINT[section] }) as React.CSSProperties;
+/** Sections whose page controls wear the section's colour, not the primary. */
+const OWN_TONE = new Set<SidebarSection>(['dashboards', 'projects']);
+
+const PRIMARY_VARS = [
+  ...Array.from({ length: 10 }, (_, i) => String(i)),
+  'filled',
+  'filled-hover',
+  'light',
+  'light-hover',
+  'light-color',
+] as const;
+
+/**
+ * Makes `palette` the primary colour of everything the page renders: a theme
+ * for the controls that resolve `theme.primaryColor`, and the root
+ * `--mantine-primary-color-*` variables for those that read them (portals
+ * included, which is why they go on <html>).
+ */
+function useSectionTone(section: SidebarSection, palette: string): MantineTheme {
+  const theme = useMantineTheme();
+  const own = OWN_TONE.has(section);
+  React.useEffect(() => {
+    if (!own) return undefined;
+    const root = document.documentElement.style;
+    for (const v of PRIMARY_VARS) {
+      root.setProperty(`--mantine-primary-color-${v}`, `var(--mantine-color-${palette}-${v})`);
+    }
+    return () => {
+      for (const v of PRIMARY_VARS) root.removeProperty(`--mantine-primary-color-${v}`);
+    };
+  }, [own, palette]);
+  return React.useMemo(
+    () => (own ? { ...theme, primaryColor: palette } : theme),
+    [own, palette, theme],
+  );
+}
+
+const tint = (palette: string) =>
+  ({ ['--gp-tint' as string]: `var(--mantine-color-${palette}-filled)` }) as React.CSSProperties;
 
 const SIDE_KEY = 'depictio-glass-pages-sidebar';
 
@@ -221,13 +272,14 @@ export const HomeMark: React.FC<{ height: number; href?: string }> = ({ height, 
 
 const TopBar: React.FC<{ section: SidebarSection; crumbs: Crumb[] }> = ({ section, crumbs }) => {
   const Icon = SECTION_ICON[section];
+  const palettes = useSectionPalettes();
   const trail: Crumb[] = [{ label: SECTION_LABEL[section], href: `/${section === 'admin' ? 'admin' : section}` }, ...crumbs];
   return (
     <header className="gp-top">
       <HomeMark height={44} />
       <span className="gp-top-rule" aria-hidden />
       <nav className="gp-trail" aria-label="You are here">
-        <span className="gp-trail-icon" style={tint(section)} aria-hidden>
+        <span className="gp-trail-icon" style={tint(palettes[section])} aria-hidden>
           <Icon size={20} strokeWidth={1.8} />
         </span>
         {trail.map((c, i) => {
@@ -270,6 +322,7 @@ const StatusFoot: React.FC<{ open: boolean }> = ({ open }) => {
   const ver = online && version ? `v${version}` : null;
   const label = ver ? `${main} · ${ver}` : main;
   const mode = isDemoMode ? 'Demo mode' : isPublicMode ? 'Public mode' : isSingleUserMode ? 'Single user mode' : null;
+  const ModeIcon = isDemoMode ? Compass : isPublicMode ? Globe : UserRound;
   // Folded to the rail, the dot stands for both lines: they move to its tooltip.
   const tip = mode ? `${label} · ${mode}` : label;
   return (
@@ -283,7 +336,12 @@ const StatusFoot: React.FC<{ open: boolean }> = ({ open }) => {
           </span>
         </div>
       </Tooltip>
-      {mode && open && <span className="gp-mode">{mode}</span>}
+      {mode && open && (
+        <span className="gp-mode">
+          <ModeIcon size={14} strokeWidth={STROKE} aria-hidden />
+          {mode}
+        </span>
+      )}
     </div>
   );
 };
@@ -294,6 +352,7 @@ const Sidebar: React.FC<{ section: SidebarSection; open: boolean; onToggle: () =
   onToggle,
 }) => {
   const entries = useAppNavEntries();
+  const palettes = useSectionPalettes();
   return (
     <nav className="gp-side" aria-label="Main" data-testid="app-sidebar">
       <div className="gp-side-head">
@@ -328,7 +387,7 @@ const Sidebar: React.FC<{ section: SidebarSection; open: boolean; onToggle: () =
                 data-active={active || undefined}
                 aria-current={active ? 'page' : undefined}
                 aria-label={entry.label}
-                style={tint(key)}
+                style={tint(palettes[key])}
               >
                 <span className="gp-row-icon">
                   <Icon size={20} strokeWidth={STROKE} aria-hidden />
@@ -348,6 +407,7 @@ const Sidebar: React.FC<{ section: SidebarSection; open: boolean; onToggle: () =
 /** The phone's bottom bar: the same entries, icon over name. */
 const PhoneBar: React.FC<{ section: SidebarSection }> = ({ section }) => {
   const entries = useAppNavEntries();
+  const palettes = useSectionPalettes();
   return (
     <nav className="gp-tabbar" aria-label="Main">
       {entries.map((entry) => {
@@ -361,7 +421,7 @@ const PhoneBar: React.FC<{ section: SidebarSection }> = ({ section }) => {
             className="gp-tabbar-key"
             data-active={active || undefined}
             aria-current={active ? 'page' : undefined}
-            style={tint(key)}
+            style={tint(palettes[key])}
           >
             <Icon size={20} strokeWidth={STROKE} aria-hidden />
             <span>{entry.key === 'admin' ? 'Admin' : entry.label}</span>
@@ -395,8 +455,11 @@ const GlassPage: React.FC<GlassPageProps> = ({
       return !v;
     });
   const Icon = SECTION_ICON[section];
+  const palettes = useSectionPalettes();
+  const pageTheme = useSectionTone(section, palettes[section]);
 
   return (
+    <MantineThemeContext.Provider value={pageTheme}>
     <div
       className="gp-shell"
       data-testid="app-shell"
@@ -408,7 +471,7 @@ const GlassPage: React.FC<GlassPageProps> = ({
       <main className="gp-main">
         <div className="gp-page">
           <div className="gp-head">
-            <span className="gp-head-icon" style={tint(section)} aria-hidden>
+            <span className="gp-head-icon" style={tint(palettes[section])} aria-hidden>
               <Icon size={22} strokeWidth={1.7} />
             </span>
             <div className="gp-head-text">
@@ -424,6 +487,7 @@ const GlassPage: React.FC<GlassPageProps> = ({
       </main>
       <PhoneBar section={section} />
     </div>
+    </MantineThemeContext.Provider>
   );
 };
 
