@@ -31,7 +31,11 @@ ALLOWED_REQUEST_HEADERS = "If-None-Match, If-Modified-Since, Content-Type, Accep
 
 #: Response headers JavaScript may read. Cross-origin responses expose only the
 #: CORS-safelisted set unless named here, so an unlisted ETag reads back as `null`.
-EXPOSED_RESPONSE_HEADERS = "ETag"
+#: The revision an HTML embed was built at: its body has no `meta` to read it
+#: from, and a host needs it to pin with `?expect_revision=`.
+REVISION_HEADER = "X-Depictio-Revision"
+
+EXPOSED_RESPONSE_HEADERS = f"ETag, {REVISION_HEADER}"
 
 #: Preflight cache lifetime. An embed's CORS answer is static, so re-asking on
 #: every conditional GET would defeat the point of revalidating cheaply.

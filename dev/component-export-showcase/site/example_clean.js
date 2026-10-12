@@ -606,7 +606,7 @@ function recordProvenance(meta) {
   state.provenance = meta;
   const rows = [
     ['source', new URL(state.apiBase).origin],
-    ['dashboard version', `v${meta.dashboard_version ?? '?'}`],
+    ['revision', meta.revision || '?'],
     ['dashboard saved', meta.last_saved_ts || '—'],
     ['export contract', meta.export_contract || '—'],
     ['etag', meta.etag || '—'],
@@ -622,7 +622,7 @@ function recordProvenance(meta) {
     { label: 'Indel F1', value: '0.9847', cls: '' },
     { label: 'Ti/Tv', value: '2.08', cls: '' },
     { label: 'Contamination', value: '0.4%', cls: 'pass' },
-    { label: 'Figures', value: `v${meta.dashboard_version ?? '?'} · live`, cls: '' },
+    { label: 'Figures', value: `${meta.revision ?? '?'} · live`, cls: '' },
   ]
     .map(
       (item) =>

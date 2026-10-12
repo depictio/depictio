@@ -334,6 +334,15 @@ def _python_advanced_viz_spec(
     return spec
 
 
+def _drawn_view(component: dict, controls: dict[str, Any] | None) -> str | None:
+    if component.get("component_type") != "advanced_viz":
+        return None
+    from depictio.api.v1.services.advanced_viz.views import plan_for
+
+    plan = plan_for(component, controls)
+    return plan.view if plan is not None else None
+
+
 async def build_plotly_export(
     *,
     dashboard_id: Any,
@@ -423,6 +432,8 @@ async def build_plotly_export(
                 "component_id": str(component_id),
                 "component_type": component_type,
                 "viz_kind": viz_kind,
+                # Which of a survivor kind's views was drawn (volcano / ma / qq, ...).
+                "view": _drawn_view(component, controls),
                 "title": component.get("title") or "",
                 "theme": theme,
                 "filter_applied": bool(filter_metadata),

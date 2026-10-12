@@ -35,13 +35,13 @@ const MODE_DEMO = {
 const SCENARIOS = [
   {
     title: 'Manuscript figure',
-    body: 'Freeze the spec into the repository beside the paper. Its provenance block records the dashboard version, so a reviewer can reproduce the exact state.',
+    body: 'Freeze the spec into the repository beside the paper. Its provenance block records the revision and the dashboard version it was built from, so a reviewer can reproduce the exact state.',
     uses: 'format=json · <em>committed</em>',
   },
   {
     title: 'Institutional report',
     body: 'Fetch live but pinned. A CI job that gets a 409 turns dashboard drift into a pull request instead of a silent change to a published number.',
-    uses: '<em>expect_version</em> · 409 in CI',
+    uses: '<em>expect_revision</em> · 409 in CI',
   },
   {
     title: 'Surveillance page',

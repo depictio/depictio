@@ -40,7 +40,11 @@ from depictio.api.v1.services.export.capabilities import (
     component_unsupported_reason,
     resolve_viz_kind,
 )
-from depictio.api.v1.services.export.cors import apply_embed_cors, embed_cors_headers
+from depictio.api.v1.services.export.cors import (
+    REVISION_HEADER,
+    apply_embed_cors,
+    embed_cors_headers,
+)
 from depictio.api.v1.services.export.filter_binding import bind_filters
 from depictio.api.v1.services.export.filter_options import filter_options
 from depictio.api.v1.services.export.plotly_export import build_plotly_export
@@ -83,18 +87,22 @@ def _require_embed_enabled() -> None:
 async def get_embed_user(
     token: Annotated[str | None, Depends(oauth2_scheme_optional)] = None,
 ) -> User:
-    """Resolve the caller, falling back to the anonymous user in every auth mode.
+    """Resolve the caller: the token's user, else a principal that reads public projects only.
 
-    ``get_user_or_anonymous`` only falls back to the anonymous identity when the
-    instance is in public or single-user mode, and otherwise raises 401 *before*
-    any project check runs. That would make embeds unusable on a normal multi-user
-    deployment, which is the main case they exist for.
+    ``get_user_or_anonymous`` is the wrong fallback here, in both directions:
 
-    This is not a new identity or a new token model: it reuses the same anonymous
-    user, and every route still calls ``check_project_permission(..., "viewer")``,
-    which returns ``project.is_public`` for anonymous callers. The effective
-    widening is therefore *public projects only* — private dashboards still require
-    a bearer token — and only on this router, only when ``embed_enabled``.
+    * on a multi-user deployment, the case embeds exist for, it raises 401
+      before any project check runs, because no anonymous user is stored;
+    * in single-user mode the stored anonymous user is an *admin*, and
+      ``check_project_permission`` lets an admin through before it ever looks
+      at ``is_public``. Every project on the instance would then be readable by
+      any page an allow-listed origin serves.
+
+    So an export caller without a valid token is always the same thing whatever
+    the mode: anonymous, not an admin. ``check_project_permission(..., "viewer")``
+    then answers ``project.is_public``, which is what the docs promise ("public
+    projects without a token, private ones need a bearer token"). A token keeps
+    its full rights, single-user admin included: that is an explicit credential.
     """
     if token is not None:
         try:
@@ -104,16 +112,26 @@ async def get_embed_user(
             # 401ing, so a stale token in an embedding page does not break a
             # public embed that would otherwise work.
             pass
+    return await public_only_principal()
 
+
+async def public_only_principal() -> User:
+    """The anonymous caller of an export: never an admin, so public projects only.
+
+    Reuses the stored anonymous user's id when there is one, so whatever keys a
+    cache or an audit line on the caller sees the same identity as elsewhere.
+    """
     from depictio.api.v1.endpoints.user_endpoints.routes import UserBeanie
+    from depictio.models.models.base import PyObjectId
 
-    anonymous = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
-    if anonymous is None:
-        raise HTTPException(
-            status_code=401,
-            detail=("Anonymous access is unavailable on this instance; supply a bearer token."),
-        )
-    return anonymous
+    stored = await UserBeanie.find_one({"email": settings.auth.anonymous_user_email})
+    return User.model_construct(
+        id=stored.id if stored is not None else PyObjectId(),
+        email=settings.auth.anonymous_user_email,
+        password="",
+        is_admin=False,
+        is_anonymous=True,
+    )
 
 
 def _parse_controls(raw: str | None) -> dict:
@@ -266,12 +284,12 @@ async def export_component(
             "the export renders the component's persisted default."
         ),
     ),
-    expect_version: int | None = Query(
+    expect_revision: str | None = Query(
         None,
         description=(
-            "Pin the dashboard version this caller was built against. If the "
-            "dashboard has moved on, answer 409 rather than silently serving "
-            "something different."
+            "Pin the revision this caller was built against (`meta.revision` of an "
+            "earlier export). If the component's definition or data has moved on, "
+            "answer 409 rather than silently serving something different."
         ),
     ),
     current_user: User = Depends(get_embed_user),
@@ -288,7 +306,7 @@ async def export_component(
         filters=_parse_filters(filters),
         current_user=current_user,
         access_token=access_token,
-        expect_version=expect_version,
+        expect_revision=expect_revision,
         controls=_parse_controls(controls),
     )
 
@@ -337,7 +355,7 @@ async def _export(
     filters: list[dict],
     current_user: User,
     access_token: str | None,
-    expect_version: int | None = None,
+    expect_revision: str | None = None,
     controls: dict | None = None,
 ) -> Any:
     """Shared body of the GET and POST export routes."""
@@ -351,7 +369,7 @@ async def _export(
             filters=filters,
             current_user=current_user,
             access_token=access_token,
-            expect_version=expect_version,
+            expect_revision=expect_revision,
             controls=controls,
         )
     except HTTPException as exc:
@@ -374,14 +392,14 @@ async def _export_inner(
     filters: list[dict],
     current_user: User,
     access_token: str | None,
-    expect_version: int | None = None,
+    expect_revision: str | None = None,
     controls: dict | None = None,
 ) -> Any:
     dashboard_data, component, _ = resolve_dashboard_component(
         dashboard_id, component_id, current_user
     )
 
-    revision = dashboard_revision(dashboard_data)
+    revision = dashboard_revision(dashboard_data, component)
 
     # A host builds `?filters=` from the manifest, which names columns, but the
     # MultiQC render path resolves a filter by the dashboard-internal `index`.
@@ -392,24 +410,26 @@ async def _export_inner(
 
     # Pin check first: a caller that asked for a specific version wants to hear
     # about drift, not receive a different figure with a 200.
-    if expect_version is not None and revision["dashboard_version"] != expect_version:
+    if expect_revision is not None and revision["revision"] != expect_revision:
         raise HTTPException(
             status_code=409,
             detail={
-                "code": "version_mismatch",
+                "code": "revision_mismatch",
                 "message": (
-                    f"Dashboard is at version {revision['dashboard_version']}, "
-                    f"caller expected {expect_version}. Drop expect_version to take "
-                    "the current figure, or re-pin after reviewing the change."
+                    f"Component is at revision {revision['revision']}, caller expected "
+                    f"{expect_revision}: its definition or its data changed since. Drop "
+                    "expect_revision to take the current figure, or re-pin after "
+                    "reviewing the change."
                 ),
-                "current_version": revision["dashboard_version"],
-                "expected_version": expect_version,
+                "current_revision": revision["revision"],
+                "expected_revision": expect_revision,
+                "dashboard_version_id": revision["dashboard_version_id"],
                 "last_saved_ts": revision["last_saved_ts"],
             },
         )
 
     etag = build_etag(
-        dashboard_doc=dashboard_data,
+        revision=revision["revision"],
         component_id=component_id,
         export_format=export_format.value,
         theme=theme,
@@ -423,6 +443,7 @@ async def _export_inner(
 
         not_modified = Response(status_code=304)
         not_modified.headers["ETag"] = etag
+        not_modified.headers[REVISION_HEADER] = revision["revision"]
         not_modified.headers["Cache-Control"] = _CACHE_CONTROL
         _apply_embed_cors(request, not_modified)
         return not_modified
@@ -459,6 +480,7 @@ async def _export_inner(
         response.headers["Content-Security-Policy"] = csp
         response.headers["Cache-Control"] = _CACHE_CONTROL
         response.headers["ETag"] = etag
+        response.headers[REVISION_HEADER] = revision["revision"]
         _apply_embed_cors(request, response)
         return response
 
@@ -493,5 +515,6 @@ async def _export_inner(
     response = JSONResponse(content=payload)
     response.headers["Cache-Control"] = _CACHE_CONTROL
     response.headers["ETag"] = etag
+    response.headers[REVISION_HEADER] = revision["revision"]
     _apply_embed_cors(request, response)
     return response
