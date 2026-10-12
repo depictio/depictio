@@ -288,18 +288,22 @@ workflows:
 
       - id: "646b0f3c1e4a2d7f8e5b8f0e"
         data_collection_tag: "skin_spatialdata_spots"
-        description: "Visium-like spots of the SpatialData store (its AnnData table, exported), with synthetic counts"
+        description: "Visium-like spots of the SpatialData store, read from its AnnData table, with synthetic counts"
         config:
           type: "Table"
           metatype: "Aggregate"
           scan:
             mode: "single"
             scan_parameters:
-              filename: "/app/depictio/projects/init/bioimage_examples/data/skin_spatialdata_spots.csv"
+              filename: "/app/depictio/projects/init/bioimage_examples/data/skin_spatialdata.zarr"
           dc_specific_properties:
-            format: "CSV"
-            polars_kwargs:
-              separator: ","
+            # Read straight from the store: obs columns, x/y from obsm["spatial"]
+            # converted to images/he pixels, and the four genes from X.
+            format: "spatialdata"
+            spatialdata:
+              table: "tables/table"
+              image: "images/he"
+              genes: ["gene_A", "gene_B", "gene_C", "gene_D"]
             columns_description:
               spot_id: "Spot identifier (instance key of the store's table)"
               sample: "Store the spot belongs to (skin_spatialdata)"
@@ -307,7 +311,7 @@ workflows:
               y: "Spot centre row, level-0 pixels"
               cluster: "k-means cluster on hematoxylin, eosin and nuclear density (C1 = most hematoxylin)"
               n_nuclei: "Nuclei of the store's points element under the spot"
-              total_counts: "Sum of the four synthetic gene counts"
+              total_counts: "Sum of the four synthetic gene counts (obs)"
               gene_A: "Synthetic count, follows hematoxylin"
               gene_B: "Synthetic count, follows eosin"
               gene_C: "Synthetic count, follows nuclear density"

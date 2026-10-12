@@ -2,7 +2,11 @@ import pytest
 from pydantic import ValidationError
 
 from depictio.api.v1.configs.custom_logging import format_pydantic
-from depictio.models.models.data_collections_types.table import DCTableConfig
+from depictio.models.models.data_collections import DataCollectionConfig
+from depictio.models.models.data_collections_types.table import (
+    DCTableConfig,
+    SpatialDataTableSource,
+)
 
 
 class TestDCTableConfig:
@@ -110,3 +114,84 @@ class TestDCTableConfig:
         assert config.polars_kwargs == {}
         assert config.keep_columns == []
         assert config.columns_description == {}
+
+
+class TestSpatialDataTableConfig:
+    """format "spatialdata": a table read from a SpatialData store."""
+
+    def test_defaults(self):
+        config = DCTableConfig(format="spatialdata", spatialdata={})  # type: ignore[invalid-argument-type]
+        assert config.spatialdata == SpatialDataTableSource()
+        assert config.spatialdata.table == "tables/table"
+        assert config.spatialdata.coordinates == "auto"
+        assert config.spatialdata.genes == []
+
+    def test_full_block(self):
+        source = SpatialDataTableSource(
+            table="tables/spots/",
+            image=" images/he",
+            coordinates="region",
+            genes=["gene_A", "gene_B"],
+            layer="counts",
+        )
+        assert source.table == "tables/spots"
+        assert source.image == "images/he"
+
+    def test_block_is_required(self):
+        with pytest.raises(ValidationError, match="needs a spatialdata block"):
+            DCTableConfig(format="spatialdata")
+
+    def test_block_is_rejected_for_other_formats(self):
+        with pytest.raises(ValidationError, match="only applies to format 'spatialdata'"):
+            DCTableConfig(format="csv", spatialdata=SpatialDataTableSource())
+
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("table", "tables"),
+            ("table", "images/he"),
+            ("table", "tables/a/b"),
+            ("table", "/tables/table"),
+            ("table", "tables/../x"),
+            ("image", "tables/table"),
+            ("image", "images/../../etc"),
+            ("layer", "layers/counts"),
+            ("layer", ".."),
+            ("coordinates", "centroid"),
+            ("genes", ["a", "a"]),
+            ("genes", [""]),
+            ("unknown", 1),
+        ],
+    )
+    def test_invalid_values(self, field, value):
+        with pytest.raises(ValidationError):
+            SpatialDataTableSource.model_validate({field: value})
+
+    def test_other_formats_serialise_without_the_field(self):
+        dumped = DCTableConfig(format="csv").model_dump()
+        assert "spatialdata" not in dumped
+        assert dumped == {
+            "format": "csv",
+            "polars_kwargs": {},
+            "keep_columns": [],
+            "columns_description": {},
+        }
+
+    def test_round_trips_through_the_dc_config(self):
+        config = DataCollectionConfig.model_validate(
+            {
+                "type": "table",
+                "scan": {"mode": "single", "scan_parameters": {"filename": "s.zarr"}},
+                "dc_specific_properties": {
+                    "format": "spatialdata",
+                    "spatialdata": {"image": "images/he", "genes": ["g1"]},
+                },
+            }
+        )
+        props = config.dc_specific_properties
+        assert isinstance(props, DCTableConfig)
+        assert props.spatialdata is not None and props.spatialdata.genes == ["g1"]
+        dumped = config.model_dump()["dc_specific_properties"]
+        assert dumped["spatialdata"]["image"] == "images/he"
+        again = DataCollectionConfig.model_validate(config.model_dump())
+        assert again.dc_specific_properties == props

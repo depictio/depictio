@@ -18,15 +18,15 @@ The store holds:
 * ``shapes/spots``: Visium-like circles on a hex grid over the tissue;
 * ``points/nuclei``: nuclei centres, detected on the hematoxylin channel;
 * ``tables/table``: an AnnData annotating ``spots`` (synthetic counts of four
-  genes, a cluster, the number of nuclei under each spot).
+  genes in ``X``; a cluster, the number of nuclei and the total counts in
+  ``obs``).
 
 Everything is written in spatialdata's default on-disk formats: zarr v3 (a
 ``zarr.json`` per node) with the image under ``images/he`` as NGFF 0.5 (its
 metadata under ``attributes.ome``). spatialdata 0.8 records the image's NGFF
 version as ``0.5-dev-spatialdata``, not ``0.5``: its coordinate systems go
-beyond the 0.5 specification. The spot table is also exported to
-``<store>_spots.csv``: that is what Depictio reads, the AnnData stays in the
-store for SpatialData users.
+beyond the 0.5 specification. Depictio reads the spot table straight from
+``tables/table`` (a ``format: spatialdata`` table DC); nothing is exported.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from make_examples import kmeans, write_csv  # noqa: E402
+from make_examples import kmeans  # noqa: E402
 
 STORE = "skin_spatialdata"
 IMAGE = "he"
@@ -161,6 +161,8 @@ def make_store(out: Path, args: argparse.Namespace) -> dict:
             "spot_id": spot_ids,
             "cluster": pd.Categorical(clusters),
             "n_nuclei": n_nuclei.astype(np.int32),
+            # What scanpy's QC metrics put in obs; Depictio reads it from here.
+            "total_counts": counts.sum(axis=1).astype(np.int32),
         },
         index=pd.Index(spot_ids),
     )
@@ -213,34 +215,6 @@ def make_store(out: Path, args: argparse.Namespace) -> dict:
             meta.write_text(text + "\n")
     _check_store(store, args.levels)
 
-    write_csv(
-        out / f"{STORE}_spots.csv",
-        [
-            "spot_id",
-            "sample",
-            "x",
-            "y",
-            "cluster",
-            "n_nuclei",
-            "total_counts",
-            *genes,
-        ],
-        [
-            [
-                sid,
-                STORE,
-                round(float(x), 2),
-                round(float(y), 2),
-                cl,
-                int(n),
-                int(row.sum()),
-                *(int(v) for v in row),
-            ]
-            for sid, (x, y), cl, n, row in zip(
-                spot_ids, spot_xy, clusters, n_nuclei, counts, strict=True
-            )
-        ],
-    )
     size = sum(f.stat().st_size for f in store.rglob("*") if f.is_file())
     return {
         "store": f"{STORE}.zarr",
