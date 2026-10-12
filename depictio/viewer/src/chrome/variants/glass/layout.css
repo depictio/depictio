@@ -308,6 +308,11 @@
 .hy-shell[data-side='folded'] :is(.hy-side-tools, .hy-side-foot) {
   align-items: center;
 }
+/* The open sidebar's foot (the server's state, the way home) centres its rows
+   instead of hanging them off the left edge like the navigation above. */
+.hy-shell:not([data-side='folded']) .hy-side-foot :is(.hy-status, .hy-row) {
+  justify-content: center;
+}
 /* The server's state at the sidebar's foot: a quiet row, smaller than the
    rows above it, that opens the server info popover. */
 .hy-status {
