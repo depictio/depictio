@@ -104,6 +104,9 @@ services:
       DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES: "${DEPICTIO_REMOTE_MAX_DOWNLOAD_BYTES:-524288000}"
       DEPICTIO_REMOTE_TIMEOUT_S: "${DEPICTIO_REMOTE_TIMEOUT_S:-30}"
       DEPICTIO_REMOTE_MAX_REDIRECTS: "${DEPICTIO_REMOTE_MAX_REDIRECTS:-3}"
+      # Component export / embed API, off by default; see .env.example.
+      DEPICTIO_FASTAPI_EMBED_ENABLED: "${DEPICTIO_FASTAPI_EMBED_ENABLED:-false}"
+      DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS: "${DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS:-}"
       # Anonymous installation telemetry — see .env.example and docs/telemetry.md.
       # Set DEPICTIO_TELEMETRY_ENABLED=false (or DO_NOT_TRACK=1) in .env to opt out.
       # The kind is stated rather than guessed: a Compose container and a Helm pod
