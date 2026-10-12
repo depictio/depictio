@@ -29,6 +29,9 @@ export const TILE_ACTION_STYLE = {
   group: { icon: 'mdi:select-group', label: 'Save selection as group' },
   inspect: { icon: 'mdi:dock-right', color: 'grape', label: 'Inspect' },
   catalog: { icon: 'mdi:hammer', color: 'violet', label: 'From the tools catalog' },
+  /** Export through the API: a Plotly spec or a self-contained page. Only
+   *  when the server's export API is on (`ComponentExportContext`). */
+  export: { icon: 'mdi:code-json', color: 'blue', label: 'Export / embed' },
   description: { icon: 'mdi:text-box-outline', color: 'teal', label: 'About this component' },
   metadata: { icon: 'mdi:information-outline', color: 'cyan', label: 'Component metadata' },
   fullscreen: { icon: 'mdi:fullscreen', color: 'indigo', label: 'Toggle fullscreen' },

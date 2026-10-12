@@ -692,6 +692,12 @@ async def get_current_user_info_optional(
         # folder. Only the flag, for the same reason: the bucket names are
         # listed by GET /projects/s3_dirs, to a signed-in user.
         "remote_browse_enabled": remote_browse_enabled(),
+        # Whether the component export API (`/export/...`) answers, which puts an
+        # "Export / embed" action on every tile. And whether any site may frame
+        # an embed: the allowlist itself is not sent, only that it is non-empty,
+        # so the dialog can warn that an iframe snippet would be refused.
+        "embed_enabled": bool(getattr(settings.fastapi, "embed_enabled", False)),
+        "embed_framing_enabled": bool(getattr(settings.fastapi, "embed_allowed_origins", None)),
     }
 
 
