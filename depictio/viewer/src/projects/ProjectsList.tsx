@@ -16,8 +16,9 @@ import { Icon } from '@iconify/react';
 import type { ProjectListEntry } from 'depictio-react-core';
 
 import ProjectsToolbar from './ProjectsToolbar';
-import ProjectTableView from './views/ProjectTableView';
-import { useProjectViewPrefs } from './hooks/useProjectViewPrefs';
+import ProjectTableView, { useProjectTableColumns } from './views/ProjectTableView';
+import TableDisplayMenu from '../components/TableDisplayMenu';
+import { DEFAULT_DENSITY, useProjectViewPrefs } from './hooks/useProjectViewPrefs';
 import { useProjectPins } from './hooks/useProjectPins';
 import { parseTemplate } from './template';
 import SharedViewBanner from '../components/listing/SharedViewBanner';
@@ -62,6 +63,7 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
     clearFilters,
   } = useProjectViewPrefs();
   const { pinnedIds, togglePin } = useProjectPins();
+  const tableColumns = useProjectTableColumns();
 
   // Template options for the filter popover, derived from the loaded projects
   // so the dropdown only offers pipelines actually present. Each source
@@ -271,6 +273,15 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
         setFilters={setFilters}
         setOnlyPinned={setOnlyPinned}
         clearFilters={clearFilters}
+        tableDisplay={
+          <TableDisplayMenu
+            section="projects"
+            density={prefs.density}
+            defaultDensity={DEFAULT_DENSITY}
+            onDensityChange={setDensity}
+            columns={tableColumns}
+          />
+        }
       />
 
       {showBanner && (
@@ -327,7 +338,7 @@ const ProjectsList: React.FC<ProjectsListProps> = ({
           pinnedIds={pinnedIds}
           pinDisabled={createDisabled}
           density={prefs.density}
-          onSetDensity={setDensity}
+          columns={tableColumns}
           onView={onView}
           onEdit={onEdit}
           onDelete={onDelete}

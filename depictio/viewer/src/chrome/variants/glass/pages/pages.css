@@ -1308,10 +1308,7 @@
 }
 /* Menus over the listing's cards: paper, opaque. */
 :root[data-chrome='glass'][data-gp-page] .mantine-Menu-dropdown {
-  background: light-dark(
-    color-mix(in srgb, var(--mantine-color-white) 92%, transparent),
-    color-mix(in srgb, var(--mantine-color-dark-6) 94%, transparent)
-  );
+  background: light-dark(var(--mantine-color-white), var(--mantine-color-dark-6));
 }
 
 /* Actions inside a panel are soft accent pills; the page's own primary (in

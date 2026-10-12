@@ -108,7 +108,7 @@ const CardDisplayMenu: React.FC<CardDisplayMenuProps> = ({
         <Menu.Label>Show on cards</Menu.Label>
         {CARD_BADGES.map((badge) => (
           <Menu.Item key={badge} onClick={() => toggleBadge(badge)}>
-            {/* Presentational, as in ColumnPicker: the row's onClick owns the
+            {/* Presentational, as in TableDisplayMenu: the row's onClick owns the
                 toggle, and swallowing the input's own click stops the label's
                 re-dispatched click from toggling a second time. */}
             <Checkbox

@@ -113,6 +113,10 @@ export const DASHBOARD_SCOPE_PARAMS = [
   'pinned',
 ] as const;
 
+/** A fresh browser's table density, which the Table display menu's Reset
+ *  returns to. */
+export const DEFAULT_DENSITY: Density = 'cozy';
+
 const DEFAULT_PREFS: DashboardViewPrefs = {
   view: 'table',
   viewChosen: false,
@@ -120,7 +124,7 @@ const DEFAULT_PREFS: DashboardViewPrefs = {
   sortBy: 'recent',
   search: '',
   filters: emptyDashboardFilters(),
-  density: 'cozy',
+  density: DEFAULT_DENSITY,
   onlyPinned: false,
   cardsPerRow: DEFAULT_CARDS_PER_ROW,
   cardsPerRowChosen: false,

@@ -42,6 +42,8 @@ export interface ProjectsToolbarProps {
   setFilters: (f: ProjectFilters) => void;
   setOnlyPinned: (b: boolean) => void;
   clearFilters: () => void;
+  /** The table's display menu (density and columns), last in the tray. */
+  tableDisplay?: React.ReactNode;
 }
 
 const TYPE_DATA = [
@@ -166,6 +168,7 @@ const ProjectsToolbar: React.FC<ProjectsToolbarProps> = ({
   setFilters,
   setOnlyPinned,
   clearFilters,
+  tableDisplay,
 }) => {
   const accent = useListingAccents('projects');
   const activeFilterChips: { key: string; label: string; onRemove: () => void }[] =
@@ -276,6 +279,8 @@ const ProjectsToolbar: React.FC<ProjectsToolbarProps> = ({
                 : 'the full project list'
             }
           />
+
+          {tableDisplay}
         </GlassTray>
       </Group>
 

@@ -24,8 +24,9 @@ import SharedViewBanner from '../components/listing/SharedViewBanner';
 import type { SharedViewScope } from '../components/listing/SharedViewBanner';
 import { listingUrl } from '../lib/listingUrl';
 import DashboardThumbnailView from './views/DashboardThumbnailView';
-import DashboardTableView from './views/DashboardTableView';
-import { useDashboardViewPrefs } from './hooks/useDashboardViewPrefs';
+import DashboardTableView, { useDashboardTableColumns } from './views/DashboardTableView';
+import TableDisplayMenu from '../components/TableDisplayMenu';
+import { DEFAULT_DENSITY, useDashboardViewPrefs } from './hooks/useDashboardViewPrefs';
 import type { ViewMode } from './hooks/useDashboardViewPrefs';
 import { useDashboardFilters } from './hooks/useDashboardFilters';
 import { useDashboardPinsAndRecents } from './hooks/useDashboardPinsAndRecents';
@@ -188,6 +189,8 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
     clearFilters,
   } = useDashboardViewPrefs(defaultView);
   const { pinnedIds, recents, togglePin } = useDashboardPinsAndRecents();
+  // Table mode always passes the section mapping, so Category is offered.
+  const tableColumns = useDashboardTableColumns(true);
 
   const filterCtx = useMemo(
     () => ({ projectNames, projectTemplates, currentUserEmail }),
@@ -601,6 +604,15 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
         setCardsPerRow={setCardsPerRow}
         setCardBadges={setCardBadges}
         clearFilters={clearFilters}
+        tableDisplay={
+          <TableDisplayMenu
+            section="dashboards"
+            density={prefs.density}
+            defaultDensity={DEFAULT_DENSITY}
+            onDensityChange={setDensity}
+            columns={tableColumns}
+          />
+        }
       />
 
       {showBanner && (
@@ -663,6 +675,7 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
           pinnedIds={pinnedIds}
           pinDisabled={pinDisabled}
           density={prefs.density}
+          columns={tableColumns}
           categoryById={categoryById}
           recents={recents}
           onView={onView}
@@ -671,7 +684,6 @@ const DashboardsList: React.FC<DashboardsListProps> = ({
           onDuplicate={onDuplicate}
           onExport={onExport}
           onTogglePin={togglePin}
-          onSetDensity={setDensity}
           onBulkExport={(ids) => {
             const targets = ids
               .map((id) => allGroupedById.get(id)?.parent)

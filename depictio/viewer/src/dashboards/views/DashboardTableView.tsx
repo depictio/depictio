@@ -26,8 +26,11 @@ import { isOwnedByEmail } from '../lib/splitDefaultSections';
 import { coerceString, isImagePath, resolveAssetUrl } from '../lib/format';
 import { WORKFLOW_COLOR_MAP, WORKFLOW_ICON_MAP } from '../lib/workflowIcons';
 import type { Density } from '../hooks/useDashboardViewPrefs';
-import ColumnPicker from '../../components/ColumnPicker';
-import { type ColumnDef, useTableColumns } from '../../lib/useTableColumns';
+import {
+  type ColumnDef,
+  type UseTableColumnsResult,
+  useTableColumns,
+} from '../../lib/useTableColumns';
 import {
   formatDateTime,
   formatDateTimeVerbose,
@@ -45,6 +48,9 @@ export interface DashboardTableViewProps {
   pinnedIds: Set<string>;
   pinDisabled: boolean;
   density: Density;
+  /** Column state, from `useDashboardTableColumns`. The listing owns it so
+   *  the toolbar's Table display menu and the table read the same choice. */
+  columns: UseTableColumnsResult<DashboardColumnKey>;
   /** When provided, a Category column is rendered (and made sortable) so the
    *  section the dashboard would have lived in is surfaced inline. */
   categoryById?: Map<string, CategoryInfo>;
@@ -58,12 +64,11 @@ export interface DashboardTableViewProps {
   onDuplicate: (d: DashboardListEntry) => void;
   onExport: (d: DashboardListEntry) => void;
   onTogglePin: (id: string) => void;
-  onSetDensity: (d: Density) => void;
   onBulkExport: (ids: string[]) => void;
   onBulkDelete: (ids: string[]) => void;
 }
 
-type ColumnKey =
+export type DashboardColumnKey =
   | 'title'
   | 'subtitle'
   | 'category'
@@ -83,7 +88,7 @@ type SortDir = 'asc' | 'desc';
 
 /** Column catalogue. Order here is the render order; `defaultVisible: false`
  *  keeps the extra metadata columns opt-in so the default table stays readable. */
-const ALL_COLUMNS: ColumnDef<ColumnKey>[] = [
+const ALL_COLUMNS: ColumnDef<DashboardColumnKey>[] = [
   { key: 'title', label: 'Title', alwaysVisible: true },
   { key: 'subtitle', label: 'Subtitle', defaultVisible: false },
   { key: 'category', label: 'Category' },
@@ -108,6 +113,22 @@ const ALL_COLUMNS: ColumnDef<ColumnKey>[] = [
 // stored selection verbatim, so a v1 selection would silently omit any column
 // added afterwards. The cost is one reset of per-browser column choices.
 const STORAGE_KEY = 'depictio.dashboards.tableColumns.v2';
+
+/**
+ * The dashboards table's column state. The Category column only makes sense
+ * when the listing supplies the section mapping; without it the column is
+ * dropped from the catalogue, so nobody can enable a column that would always
+ * render as "—".
+ */
+export function useDashboardTableColumns(
+  withCategory: boolean,
+): UseTableColumnsResult<DashboardColumnKey> {
+  const catalogue = useMemo(
+    () => (withCategory ? ALL_COLUMNS : ALL_COLUMNS.filter((c) => c.key !== 'category')),
+    [withCategory],
+  );
+  return useTableColumns<DashboardColumnKey>(STORAGE_KEY, catalogue);
+}
 
 interface Row {
   id: string;
@@ -138,7 +159,7 @@ function compareNullable(a: number | null, b: number | null, dir: SortDir): numb
   return mul * (a - b);
 }
 
-function compareRows(a: Row, b: Row, key: ColumnKey, dir: SortDir): number {
+function compareRows(a: Row, b: Row, key: DashboardColumnKey, dir: SortDir): number {
   const mul = dir === 'asc' ? 1 : -1;
   switch (key) {
     case 'title':
@@ -271,6 +292,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
   pinnedIds,
   pinDisabled,
   density,
+  columns,
   categoryById,
   recents,
   onView,
@@ -279,26 +301,17 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
   onDuplicate,
   onExport,
   onTogglePin,
-  onSetDensity,
   onBulkExport,
   onBulkDelete,
 }) => {
   const accent = useListingAccents('dashboards');
   const glass = useGlassPages();
   const projectInk = `var(--mantine-color-${useSectionPalettes().projects}-filled)`;
-  const [sortKey, setSortKey] = useState<ColumnKey>('modified');
+  const [sortKey, setSortKey] = useState<DashboardColumnKey>('modified');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  // The Category column only makes sense when the caller supplies the mapping;
-  // drop it from the picker entirely otherwise so users can't enable a column
-  // that would always render as "—".
-  const columnCatalogue = useMemo(
-    () => (categoryById ? ALL_COLUMNS : ALL_COLUMNS.filter((c) => c.key !== 'category')),
-    [categoryById],
-  );
-  const { visibleColumns, isVisible, allColumns, toggle, reset, isCustomized } =
-    useTableColumns<ColumnKey>(STORAGE_KEY, columnCatalogue);
+  const { visibleColumns, isVisible } = columns;
 
   const lastViewedById = useMemo(
     () => new Map(recents.map((e) => [e.id, e.ts])),
@@ -368,7 +381,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
     });
   }, [rows]);
 
-  const toggleSort = (key: ColumnKey) => {
+  const toggleSort = (key: DashboardColumnKey) => {
     if (key === sortKey) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
@@ -407,7 +420,7 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
 
   const verticalSpacing = density === 'compact' ? 4 : 'sm';
 
-  const renderCell = (r: Row, key: ColumnKey): React.ReactNode => {
+  const renderCell = (r: Row, key: DashboardColumnKey): React.ReactNode => {
     switch (key) {
       case 'title': {
         const icon = coerceString(r.dashboard.icon, 'mdi:view-dashboard');
@@ -629,37 +642,6 @@ const DashboardTableView: React.FC<DashboardTableViewProps> = ({
           </Group>
         </Group>
       )}
-
-      <Group justify="flex-end" px="sm" pt="xs" gap="xs">
-        <ColumnPicker
-          columns={allColumns}
-          isVisible={isVisible}
-          onToggle={toggle}
-          onReset={reset}
-          isCustomized={isCustomized}
-          visibleCount={visibleColumns.length}
-        />
-        <Tooltip label="Density" withinPortal>
-          <ActionIcon.Group>
-            <ActionIcon
-              variant={density === 'cozy' ? 'filled' : 'subtle'}
-              color={density === 'cozy' ? accent.tertiary : 'gray'}
-              onClick={() => onSetDensity('cozy')}
-              aria-label="Cozy density"
-            >
-              <Icon icon="mdi:format-line-spacing" width={16} />
-            </ActionIcon>
-            <ActionIcon
-              variant={density === 'compact' ? 'filled' : 'subtle'}
-              color={density === 'compact' ? accent.tertiary : 'gray'}
-              onClick={() => onSetDensity('compact')}
-              aria-label="Compact density"
-            >
-              <Icon icon="mdi:format-align-justify" width={16} />
-            </ActionIcon>
-          </ActionIcon.Group>
-        </Tooltip>
-      </Group>
 
       <Table.ScrollContainer minWidth={800}>
         <Table verticalSpacing={verticalSpacing} highlightOnHover>

@@ -55,6 +55,9 @@ export interface DashboardsToolbarProps {
   setCardsPerRow: (c: CardsPerRow) => void;
   setCardBadges: (b: CardBadge[]) => void;
   clearFilters: () => void;
+  /** The table view's display menu, shown in the slot the thumbnails' Card
+   *  display menu takes. */
+  tableDisplay?: React.ReactNode;
 }
 
 interface ViewOption {
@@ -298,6 +301,7 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
   setCardsPerRow,
   setCardBadges,
   clearFilters,
+  tableDisplay,
 }) => {
   const accent = useListingAccents('dashboards');
   // Sort selector is meaningless in Table view (column headers handle sort).
@@ -472,6 +476,8 @@ const DashboardsToolbar: React.FC<DashboardsToolbarProps> = ({
               onCardBadgesChange={setCardBadges}
             />
           )}
+
+          {prefs.view === 'table' && tableDisplay}
 
           <ViewPicker value={prefs.view} onChange={setView} />
         </GlassTray>
