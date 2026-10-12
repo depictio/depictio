@@ -45,8 +45,9 @@ test.describe("CLI Configurations", () => {
     await expect(yaml).toBeVisible({ timeout: 15_000 });
     await expect(yaml).toContainText("base_url");
 
-    // Close the display modal (Mantine default close button).
-    await page.locator(".mantine-Modal-close").click();
+    // Close the display modal. Not by `.mantine-Modal-close`: the create
+    // modal's own close button is still mounted while it fades out.
+    await page.locator("[data-testid='cli-config-done-btn']").click();
 
     // The new configuration appears in the list.
     await expect(page.locator("body")).toContainText(configName, {

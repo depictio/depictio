@@ -1,5 +1,16 @@
 import React, { useState } from 'react';
-import { Alert, Button, Code, Group, Modal, Stack, Title } from '@mantine/core';
+import {
+  Alert,
+  Box,
+  Button,
+  Code,
+  Group,
+  Modal,
+  ScrollArea,
+  Stack,
+  Text,
+  ThemeIcon,
+} from '@mantine/core';
 import { CodeHighlight } from '@mantine/code-highlight';
 import '@mantine/code-highlight/styles.css';
 import { Icon } from '@iconify/react';
@@ -7,7 +18,10 @@ import yaml from 'js-yaml';
 
 import type { CliAgentConfig } from 'depictio-react-core';
 
-import { brandColors } from '../profile/colors';
+import { SectionHeader } from '../components/settings/SettingsSections';
+
+/** Where the CLI looks for its configuration when no `--server` is given. */
+const DEFAULT_CONFIG_PATH = '~/.depictio/CLI.yaml';
 
 /** Copy text to clipboard with a fallback for non-secure contexts.
  *  navigator.clipboard requires a secure origin (HTTPS or localhost). When
@@ -38,18 +52,79 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+function downloadText(text: string, filename: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type: 'application/x-yaml' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/** "laptop · valid until 2027-10-12", from the token the config carries. */
+function summaryOf(config: CliAgentConfig): string | undefined {
+  const user = config.user as { token?: { name?: unknown; expire_datetime?: unknown } } | undefined;
+  const name = typeof user?.token?.name === 'string' ? user.token.name : null;
+  const expires =
+    typeof user?.token?.expire_datetime === 'string' ? user.token.expire_datetime.slice(0, 10) : null;
+  const parts = [name, expires && `valid until ${expires}`].filter(Boolean);
+  return parts.length ? parts.join(' · ') : undefined;
+}
+
+/** A bordered, rounded frame around a code block. */
+const CodeFrame: React.FC<{ children: React.ReactNode; 'data-testid'?: string }> = ({
+  children,
+  ...rest
+}) => (
+  <Box
+    bd="1px solid var(--mantine-color-default-border)"
+    style={{ borderRadius: 'var(--mantine-radius-md)', overflow: 'hidden' }}
+    {...rest}
+  >
+    {children}
+  </Box>
+);
+
+const Step: React.FC<{
+  n: number;
+  title: string;
+  description?: React.ReactNode;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}> = ({ n, title, description, actions, children }) => (
+  <Stack gap="xs">
+    <Group justify="space-between" wrap="nowrap" align="center">
+      <Group gap="sm" wrap="nowrap">
+        <ThemeIcon variant="light" radius="xl" size={26} fz="xs" fw={700}>
+          {n}
+        </ThemeIcon>
+        <Stack gap={0}>
+          <Text size="sm" fw={600}>
+            {title}
+          </Text>
+          {description && (
+            <Text size="xs" c="dimmed">
+              {description}
+            </Text>
+          )}
+        </Stack>
+      </Group>
+      {actions}
+    </Group>
+    {/* Under the title, past the number. */}
+    <Box pl={38}>{children}</Box>
+  </Stack>
+);
+
 interface DisplayTokenModalProps {
   opened: boolean;
   onClose: () => void;
   /** YAML-serialisable config returned by /auth/generate_agent_config.
-   *  When `null`, the modal renders an "unavailable" alert (matches the Dash
-   *  fallback path in `tokens_management.py:725-734`). */
+   *  When `null`, the modal renders an "unavailable" alert. */
   config: CliAgentConfig | null;
 }
 
-/** Mirrors the YAML config display modal in `tokens_management.py:418-429`
- *  + `_create_config_display`. Uses `@mantine/code-highlight` for syntax
- *  highlighting (Dash uses `dmc.CodeHighlight`). */
+/** Shows a new CLI configuration, once: save it, then check the connection. */
 const DisplayTokenModal: React.FC<DisplayTokenModalProps> = ({ opened, onClose, config }) => {
   const yamlText = config ? yaml.dump(config, { lineWidth: 120 }) : '';
   const [copied, setCopied] = useState(false);
@@ -63,63 +138,91 @@ const DisplayTokenModal: React.FC<DisplayTokenModalProps> = ({ opened, onClose, 
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} centered size="lg">
-      <Stack gap="md">
-        <Group gap="sm">
-          <Icon icon="mdi:check-circle" width={28} color={brandColors.green} />
-          <Title order={3} c={brandColors.green}>
-            Configuration Created Successfully
-          </Title>
-        </Group>
-
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      centered
+      size="lg"
+      title={
+        <SectionHeader
+          icon="mdi:check-circle-outline"
+          color="green"
+          title="Configuration created"
+          subtitle={config ? summaryOf(config) : undefined}
+        />
+      }
+    >
+      <Stack gap="lg">
         {!config ? (
           <Alert
             color="yellow"
-            icon={<Icon icon="mdi:alert" width={20} />}
-            title="Configuration Generated — CLI Config Unavailable"
+            variant="light"
+            icon={<Icon icon="mdi:alert" width={18} />}
+            title="CLI configuration unavailable"
           >
             Your token was created but the CLI configuration could not be retrieved.
             Please contact an administrator.
           </Alert>
         ) : (
           <>
-            <Alert
-              color="yellow"
-              icon={<Icon icon="mdi:alert" width={20} />}
-              title="Important"
-            >
-              Please copy the configuration and store it in a safe place, such as{' '}
-              <Code>~/.depictio/CLI.yaml</Code>. You will not be able to access this
-              configuration again once you close this dialog.
+            <Alert color="yellow" variant="light" icon={<Icon icon="mdi:eye-off-outline" width={18} />}>
+              Shown only once. It signs the CLI in as you: keep it private.
             </Alert>
 
-            <Group justify="space-between" align="center">
-              <span /> {/* spacer so the button right-aligns above the code block */}
-              <Button
-                size="xs"
-                variant="light"
-                leftSection={
-                  <Icon
-                    icon={copied ? 'mdi:check' : 'mdi:content-copy'}
-                    width={16}
-                  />
-                }
-                color={copied ? 'green' : 'blue'}
-                onClick={handleCopy}
-              >
-                {copied ? 'Copied' : 'Copy YAML'}
-              </Button>
-            </Group>
-            {/* Mantine's built-in copy button uses navigator.clipboard, which
-                only works in secure contexts. On http://0.0.0.0:8055 it
-                silently fails — disable it via withCopyButton={false} and
-                rely on the explicit "Copy YAML" button above which falls
-                back to document.execCommand('copy'). */}
-            <div data-testid="agent-config-yaml">
-              <CodeHighlight code={yamlText} language="yaml" withCopyButton={false} />
-            </div>
+            <Step
+              n={1}
+              title="Save it"
+              description={
+                <>
+                  As <Code>{DEFAULT_CONFIG_PATH}</Code>, the CLI&apos;s default
+                </>
+              }
+              actions={
+                <Group gap="xs" wrap="nowrap">
+                  <Button
+                    size="xs"
+                    variant="default"
+                    leftSection={<Icon icon="mdi:download" width={16} />}
+                    onClick={() => downloadText(yamlText, 'CLI.yaml')}
+                  >
+                    Download
+                  </Button>
+                  <Button
+                    size="xs"
+                    variant="default"
+                    leftSection={
+                      <Icon icon={copied ? 'mdi:check' : 'mdi:content-copy'} width={16} />
+                    }
+                    onClick={handleCopy}
+                  >
+                    {copied ? 'Copied' : 'Copy'}
+                  </Button>
+                </Group>
+              }
+            >
+              {/* Mantine's built-in copy button uses navigator.clipboard, which
+                  only works in secure contexts: the Copy button above falls back
+                  to document.execCommand('copy'). */}
+              <CodeFrame data-testid="agent-config-yaml">
+                <ScrollArea.Autosize mah={220} type="auto">
+                  <CodeHighlight code={yamlText} language="yaml" withCopyButton={false} />
+                </ScrollArea.Autosize>
+              </CodeFrame>
+            </Step>
+
+            <Step n={2} title="Check the connection" description="From the machine you saved it on">
+              <CodeFrame>
+                <CodeHighlight code="depictio config check" language="bash" withCopyButton={false} />
+              </CodeFrame>
+            </Step>
           </>
         )}
+
+        <Group justify="flex-end">
+          <Button onClick={onClose} data-testid="cli-config-done-btn">
+            Done
+          </Button>
+        </Group>
       </Stack>
     </Modal>
   );
