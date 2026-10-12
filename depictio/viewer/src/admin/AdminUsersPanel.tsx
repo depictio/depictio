@@ -10,9 +10,11 @@ import {
   SegmentedControl,
   Stack,
   Text,
+  useMantineTheme,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { Icon } from '@iconify/react';
+import { ShieldCheck, Trash2, UserRound } from 'lucide-react';
 
 import {
   listAllUsers,
@@ -21,7 +23,9 @@ import {
 } from 'depictio-react-core';
 import type { AdminUser } from 'depictio-react-core';
 
+import { STROKE, useGlassPages } from '../chrome/variants/glass/pages';
 import DeleteUserModal from './DeleteUserModal';
+import Facts from './Facts';
 
 interface AdminUsersPanelProps {
   /** Email of the signed-in admin — used to disable destructive self-actions. */
@@ -41,6 +45,8 @@ function formatTimestamp(value: unknown): string {
 }
 
 const AdminUsersPanel: React.FC<AdminUsersPanelProps> = ({ currentUserEmail }) => {
+  const glass = useGlassPages();
+  const primary = useMantineTheme().primaryColor;
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -149,105 +155,143 @@ const AdminUsersPanel: React.FC<AdminUsersPanelProps> = ({ currentUserEmail }) =
 
   return (
     <>
-      <Accordion radius="md" variant="separated" multiple>
+      <Accordion radius="md" variant="separated" multiple className={glass ? 'ga-rows' : undefined}>
         {sortedUsers.map((user) => {
           const userId = user.id ?? user._id;
           const isSelf =
             !!currentUserEmail && user.email?.toLowerCase() === currentUserEmail.toLowerCase();
+          const statusControl = (
+            <SegmentedControl
+              size="xs"
+              color={glass ? undefined : 'blue'}
+              value={user.is_admin ? 'True' : 'False'}
+              data={[
+                { label: 'Standard', value: 'False' },
+                { label: 'System Admin', value: 'True' },
+              ]}
+              disabled={isSelf}
+              onChange={(v) => handleToggleAdmin(user, v as 'True' | 'False')}
+            />
+          );
           return (
             <Accordion.Item key={String(userId)} value={String(userId)}>
               <Accordion.Control>
-                <Group justify="space-between" wrap="nowrap">
-                  <Text fw={500} size="lg" style={{ flex: 1, minWidth: 0 }} truncate>
-                    {user.email}
-                  </Text>
-                  <Group gap="xs">
-                    {isSelf && (
-                      <Badge color="orange" variant="light" size="sm" radius="sm">
-                        You
+                {glass ? (
+                  <Group gap="sm" wrap="nowrap">
+                    <UserRound size={17} strokeWidth={STROKE} className="ga-row-icon" aria-hidden />
+                    <Text fw={550} size="sm" style={{ flex: 1, minWidth: 0 }} truncate>
+                      {user.email}
+                    </Text>
+                    <Group gap={6} wrap="nowrap">
+                      {isSelf && (
+                        <Badge color="gray" size="sm" className="gp-tag-plain">
+                          You
+                        </Badge>
+                      )}
+                      {!user.is_active && (
+                        <Badge color="red" size="sm">
+                          Inactive
+                        </Badge>
+                      )}
+                      <Badge
+                        color={user.is_admin ? primary : 'gray'}
+                        size="sm"
+                        leftSection={
+                          user.is_admin ? <ShieldCheck size={12} strokeWidth={STROKE} /> : undefined
+                        }
+                        className={user.is_admin ? undefined : 'gp-tag-plain'}
+                      >
+                        {user.is_admin ? 'System admin' : 'User'}
                       </Badge>
-                    )}
-                    <Badge
-                      color={user.is_admin ? 'blue' : 'gray'}
-                      variant="light"
-                      size="md"
-                      radius="sm"
-                    >
-                      {user.is_admin ? 'System Admin' : 'User'}
-                    </Badge>
+                    </Group>
                   </Group>
-                </Group>
+                ) : (
+                  <Group justify="space-between" wrap="nowrap">
+                    <Text fw={500} size="lg" style={{ flex: 1, minWidth: 0 }} truncate>
+                      {user.email}
+                    </Text>
+                    <Group gap="xs">
+                      {isSelf && (
+                        <Badge color="orange" variant="light" size="sm" radius="sm">
+                          You
+                        </Badge>
+                      )}
+                      <Badge
+                        color={user.is_admin ? 'blue' : 'gray'}
+                        variant="light"
+                        size="md"
+                        radius="sm"
+                      >
+                        {user.is_admin ? 'System Admin' : 'User'}
+                      </Badge>
+                    </Group>
+                  </Group>
+                )}
               </Accordion.Control>
               <Accordion.Panel>
                 <Stack gap="xs">
-                  <Group gap="xs">
-                    <Text fw="bold" size="sm">
-                      User ID:
-                    </Text>
-                    <Text size="sm">{String(userId ?? '—')}</Text>
-                  </Group>
-                  <Group gap="xs">
-                    <Text fw="bold" size="sm">
-                      Registration date:
-                    </Text>
-                    <Text size="sm">{formatTimestamp(user.registration_date)}</Text>
-                  </Group>
-                  <Group gap="xs">
-                    <Text fw="bold" size="sm">
-                      Last login:
-                    </Text>
-                    <Text size="sm">{formatTimestamp(user.last_login)}</Text>
-                  </Group>
-                  <Group gap="xs">
-                    <Text fw="bold" size="sm">
-                      Account status:
-                    </Text>
-                    <Badge
-                      color={user.is_active ? 'green' : 'red'}
-                      variant="light"
-                      size="sm"
-                      radius="sm"
-                    >
-                      {user.is_active ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </Group>
-                  <Group gap="xs">
-                    <Text fw="bold" size="sm">
-                      Verified:
-                    </Text>
-                    <Text size="sm">{user.is_verified ? 'Yes' : 'No'}</Text>
-                  </Group>
-                  <Group gap="xs">
-                    <Text fw="bold" size="sm">
-                      User status:
-                    </Text>
-                    <SegmentedControl
-                      size="xs"
-                      color="blue"
-                      value={user.is_admin ? 'True' : 'False'}
-                      data={[
-                        { label: 'Standard', value: 'False' },
-                        { label: 'System Admin', value: 'True' },
-                      ]}
-                      disabled={isSelf}
-                      onChange={(v) => handleToggleAdmin(user, v as 'True' | 'False')}
-                    />
-                  </Group>
-                  <Group gap="xs" mt="sm">
-                    <Text fw="bold" size="sm">
-                      Actions:
-                    </Text>
-                    <Button
-                      color="red"
-                      variant="filled"
-                      size="xs"
-                      leftSection={<Icon icon="tabler:trash" width={14} />}
-                      disabled={isSelf}
-                      onClick={() => setDeleteTarget(user)}
-                    >
-                      Delete
-                    </Button>
-                  </Group>
+                  <Facts
+                    items={[
+                      { label: 'User ID', value: String(userId ?? '—') },
+                      {
+                        label: 'Registration date',
+                        value: formatTimestamp(user.registration_date),
+                      },
+                      { label: 'Last login', value: formatTimestamp(user.last_login) },
+                      {
+                        label: 'Account status',
+                        value: (
+                          <Badge
+                            color={user.is_active ? 'green' : 'red'}
+                            variant="light"
+                            size="sm"
+                            radius="sm"
+                          >
+                            {user.is_active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        ),
+                      },
+                      { label: 'Verified', value: user.is_verified ? 'Yes' : 'No' },
+                      ...(glass ? [] : [{ label: 'User status', value: statusControl }]),
+                    ]}
+                  />
+                  {glass ? (
+                    <Group justify="space-between" gap="sm" className="ga-row-foot">
+                      <Group gap="xs">
+                        <Text size="sm" c="dimmed">
+                          Role
+                        </Text>
+                        {statusControl}
+                      </Group>
+                      <Button
+                        color="red"
+                        variant="subtle"
+                        size="xs"
+                        leftSection={<Trash2 size={14} strokeWidth={STROKE} />}
+                        disabled={isSelf}
+                        title={isSelf ? 'You cannot delete your own account' : undefined}
+                        onClick={() => setDeleteTarget(user)}
+                      >
+                        Delete user
+                      </Button>
+                    </Group>
+                  ) : (
+                    <Group gap="xs" mt="sm">
+                      <Text fw="bold" size="sm">
+                        Actions:
+                      </Text>
+                      <Button
+                        color="red"
+                        variant="filled"
+                        size="xs"
+                        leftSection={<Icon icon="tabler:trash" width={14} />}
+                        disabled={isSelf}
+                        onClick={() => setDeleteTarget(user)}
+                      >
+                        Delete
+                      </Button>
+                    </Group>
+                  )}
                 </Stack>
               </Accordion.Panel>
             </Accordion.Item>

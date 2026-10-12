@@ -24,11 +24,18 @@ import {
   AdvancedVizInspectorProvider,
   AutofitScope,
   AvailableFilterValuesProvider,
+  ChromeSourceProvider,
+  ComponentExportControlProvider,
   DashboardLoadingProvider,
   InspectorProvider,
   SaveGroupContext,
 } from 'depictio-react-core';
-import type { InspectorControl, SaveGroupApi, StoredMetadata } from 'depictio-react-core';
+import type {
+  ComponentExportControl,
+  InspectorControl,
+  SaveGroupApi,
+  StoredMetadata,
+} from 'depictio-react-core';
 
 /** The namespace a Guide copy measures its content height under. */
 const GUIDE_AUTOFIT_SCOPE = 'guide:';
@@ -40,25 +47,36 @@ export interface GuideSandboxProps {
   saveGroup?: SaveGroupApi | null;
   /** The demo's own inspector, or none: the inspect action is then off. */
   inspector?: InspectorControl | null;
+  /** The demo's own export action, or none: the export action is then off. */
+  exporter?: ComponentExportControl | null;
   children: React.ReactNode;
 }
+
+/** Where a stand-in tile, drawn outside any `ComponentRenderer`, says it comes
+ *  from: enough for its chrome to draw the export action the list names. */
+const STAND_IN_SOURCE = { dashboardId: 'guide', filters: [] };
 
 export const GuideSandbox: React.FC<GuideSandboxProps> = ({
   metadata,
   saveGroup = null,
   inspector = null,
+  exporter = null,
   children,
 }) => (
   <DashboardLoadingProvider>
     <AutofitScope value={GUIDE_AUTOFIT_SCOPE}>
       <InspectorProvider value={inspector}>
-        <AdvancedVizInspectorProvider value={null}>
-          <SaveGroupContext.Provider value={saveGroup}>
-            <AvailableFilterValuesProvider dashboardMetadata={metadata}>
-              {children}
-            </AvailableFilterValuesProvider>
-          </SaveGroupContext.Provider>
-        </AdvancedVizInspectorProvider>
+        <ComponentExportControlProvider value={exporter}>
+          <ChromeSourceProvider value={STAND_IN_SOURCE}>
+            <AdvancedVizInspectorProvider value={null}>
+              <SaveGroupContext.Provider value={saveGroup}>
+                <AvailableFilterValuesProvider dashboardMetadata={metadata}>
+                  {children}
+                </AvailableFilterValuesProvider>
+              </SaveGroupContext.Provider>
+            </AdvancedVizInspectorProvider>
+          </ChromeSourceProvider>
+        </ComponentExportControlProvider>
       </InspectorProvider>
     </AutofitScope>
   </DashboardLoadingProvider>

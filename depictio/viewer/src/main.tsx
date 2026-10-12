@@ -46,7 +46,6 @@ const PermissionsApp = React.lazy(() => import('./projects/detail/PermissionsApp
 const AboutApp = React.lazy(() => import('./about/AboutApp'));
 const AdminApp = React.lazy(() => import('./admin/AdminApp'));
 const ProfileApp = React.lazy(() => import('./profile/ProfileApp'));
-const CliAgentsApp = React.lazy(() => import('./cli-agents/CliAgentsApp'));
 const CreateComponentPage = React.lazy(() => import('./builder/CreateComponentPage'));
 const EditComponentPage = React.lazy(() => import('./builder/EditComponentPage'));
 const ProjectBuilderPage = React.lazy(() => import('./projects/builder/ProjectBuilderPage'));
@@ -63,7 +62,7 @@ import {
   startSessionKeepAlive,
   validateSession,
 } from 'depictio-react-core';
-import { UiScaleContext } from 'depictio-react-core';
+import { UiScaleContext, useChromeStyle } from 'depictio-react-core';
 import BootSplash from './components/BootSplash';
 import { brandCssVariablesResolver, buildDepictioTheme } from './theme';
 import { readStoredScheme } from './hooks/useColorScheme';
@@ -122,7 +121,16 @@ function resolveTree(): React.ReactElement {
     return <ProfileApp />;
   }
   if (window.location.pathname.startsWith('/cli-agents')) {
-    return <CliAgentsApp />;
+    // CLI agents became a section of the account settings page. Rewrite the
+    // address before rendering so a refresh, bookmark or copied link stays on
+    // the new URL; replace (not push) so Back does not return to a redirect.
+    // The query string rides along (`?chrome=base`, `?no-walkthrough=1`).
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `/profile${window.location.search}#cli-agents`,
+    );
+    return <ProfileApp />;
   }
   const route = matchEditorRoute(window.location.pathname);
   if (!route) return <App />;
@@ -192,7 +200,11 @@ function ThemeRoot({
 }) {
   const { scale } = useUiScalePref();
   const branding = React.useSyncExternalStore(subscribeBranding, getBranding);
-  const theme = React.useMemo(() => buildDepictioTheme({ brand: branding }), [branding]);
+  const chrome = useChromeStyle().themeOverrides;
+  const theme = React.useMemo(
+    () => buildDepictioTheme({ brand: branding, chrome }),
+    [branding, chrome],
+  );
   const cssVariablesResolver = React.useMemo(
     () => brandCssVariablesResolver(branding),
     [branding],
@@ -380,7 +392,8 @@ if (STANDALONE_BUILDER) {
     </React.StrictMode>,
   );
 } else if (isBareRoot) {
-  window.location.replace('/dashboards');
+  // The query rides along so a `?chrome=` look-and-feel pick survives the hop.
+  window.location.replace(`/dashboards${window.location.search}`);
 } else {
   bootstrapPublicConfig();
   bootstrapSession().finally(() => {

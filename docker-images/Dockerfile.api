@@ -3,18 +3,20 @@
 # -----------------------------
 # Carries only what `depictio.api.main:app` needs at runtime: Python +
 # uv-installed deps. No Playwright (worker owns screenshots), no Dash assets.
-# The one Node artefact it needs is the single-file catalog-preview bundle
-# served by GET /catalog/output/{id}/preview-html, built in the stage below
-# and copied in — the runtime layer itself still carries no Node.
+# The only Node artefacts it needs are two single-file bundles, built in the
+# stage below and copied in — the runtime layer itself still carries no Node:
+#   catalog-preview.html  GET /catalog/output/{id}/preview-html
+#   embed.html            GET /export/dashboards/{id}/components/{cid}?format=html
 # -----------------------------
 
 # -----------------------------
-# catalog-preview bundle stage
+# offline bundle stage (catalog preview + component embed)
 # -----------------------------
-# `depictio/catalog/payload.py` injects the computed payload into a prebuilt
-# single-file HTML (`pnpm run build:catalog-preview`). It is gitignored build
-# output, so without this stage the released image ships without it and every
-# preview request 422s with "catalog-preview bundle not built".
+# `depictio/catalog/payload.py` and `services/export/embed.py` inject a computed
+# payload into prebuilt single-file HTMLs (`pnpm run build:catalog-preview`,
+# `pnpm run build:embed`). Both are gitignored build output, so without this
+# stage the released image ships without them: every preview request 422s with
+# "catalog-preview bundle not built", and every `format=html` export 503s.
 # Node/pnpm pins mirror docker-images/Dockerfile.viewer.
 FROM node:20-slim@sha256:2cf067cfed83d5ea958367df9f966191a942351a2df77d6f0193e162b5febfc0 AS catalog-preview-builder
 WORKDIR /build
@@ -36,7 +38,9 @@ COPY depictio/viewer ./depictio/viewer/
 # Same memory caps as the viewer build: sourcemaps off, heap capped at 4 GB
 # to leave cgroup headroom for native + worker stacks.
 RUN VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" \
-    pnpm --filter depictio-viewer build:catalog-preview
+    pnpm --filter depictio-viewer build:catalog-preview && \
+    VITE_NO_SOURCEMAP=true NODE_OPTIONS="--max-old-space-size=4096" \
+    pnpm --filter depictio-viewer build:embed
 
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim@sha256:e5b65587bce7de595f299855d7385fe7fca39b8a74baa261ba1b7147afa78e58 AS base
 
@@ -90,12 +94,17 @@ COPY --chown=depictio:depictio packages ./packages/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra server || uv sync --no-dev --extra server
 
-# Prebuilt catalog-preview bundle (one self-contained ~7 MB HTML). Copied after
-# the source layer so it lands on top of depictio/viewer/, and last-but-one so a
-# viewer edit does not invalidate the Python layers above.
+# Prebuilt offline bundles (self-contained HTMLs, several MB each). Copied after
+# the source layer so they land on top of depictio/viewer/, and last-but-one so a
+# viewer edit does not invalidate the Python layers above. Paths must match
+# TEMPLATE_PATH in depictio/catalog/payload.py and EMBED_TEMPLATE_PATH in
+# services/export/embed.py.
 COPY --from=catalog-preview-builder --chown=depictio:depictio \
     /build/depictio/viewer/dist-catalog-preview/catalog-preview.html \
     /app/depictio/viewer/dist-catalog-preview/catalog-preview.html
+COPY --from=catalog-preview-builder --chown=depictio:depictio \
+    /build/depictio/viewer/dist-embed/embed.html \
+    /app/depictio/viewer/dist-embed/embed.html
 
 COPY --chown=depictio:depictio docker-images/run_fastapi.sh /app/run_fastapi.sh
 RUN chmod +x /app/run_fastapi.sh

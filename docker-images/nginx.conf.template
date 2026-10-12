@@ -127,6 +127,28 @@ server {
         add_header Strict-Transport-Security $depictio_hsts always;
     }
 
+    # Component export / embed. Same reasoning as the preview-html block above,
+    # one step further: an embed must be frameable by other origins, so this
+    # location also omits X-Frame-Options. The server-level `add_header ...
+    # always` directives would otherwise apply here too, and multiple CSP
+    # headers are enforced as an INTERSECTION — so the backend could never
+    # loosen frame-ancestors on its own. Re-declaring the baseline headers here
+    # replaces the inherited set wholesale, so the backend's per-response CSP
+    # (frame-ancestors from DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS) survives.
+    location ~ ^/depictio/api/v[0-9]+/export/ {
+        set $upstream ${DEPICTIO_API_UPSTREAM}; proxy_pass http://$upstream;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_buffering off;
+        proxy_read_timeout 3600s;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()" always;
+        add_header Strict-Transport-Security $depictio_hsts always;
+    }
+
     # API + WebSocket. Upgrade headers cover the realtime events channel.
     # proxy_buffering off keeps SSE / chunked responses flowing without
     # nginx holding them until the buffer fills.

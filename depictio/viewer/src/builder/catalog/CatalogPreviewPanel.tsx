@@ -44,6 +44,7 @@ import {
 } from '../../catalog-shared/tileSnippet';
 import PreviewLoading from '../shared/PreviewLoading';
 import DataPreviewTable from '../data/DataPreviewTable';
+import { useCatalogGlass } from './useCatalogGlass';
 
 export type VizKinds = Map<string, AdvancedVizKindDescriptor>;
 
@@ -216,6 +217,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
   onAdd,
   onDirectAdd,
 }) => {
+  const { tone } = useCatalogGlass();
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [copied, setCopied] = useState(false);
   const [sourceOpen, setSourceOpen] = useState(false);
@@ -365,10 +367,11 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
         gap="sm"
         justify="space-between"
         wrap="nowrap"
+        className="bgl-cat-bar"
         style={{ borderBottom: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
       >
         <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
-          <Badge variant="dot" color="violet" size="sm" style={{ flexShrink: 0 }}>
+          <Badge variant="dot" color={tone} size="sm" style={{ flexShrink: 0 }}>
             {toolName}
           </Badge>
           <Text size="sm" fw={600} style={{ flexShrink: 0 }}>{matchTitle(match)}</Text>
@@ -466,7 +469,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
             <Popover position="bottom-end" withArrow shadow="md">
               <Popover.Target>
                 <Tooltip label="YAML reference" withArrow>
-                  <ActionIcon variant="subtle" color="violet" size="md" aria-label="Show use snippet">
+                  <ActionIcon variant="subtle" color={tone} size="md" aria-label="Show use snippet">
                     <Icon icon="mdi:code-tags" width={17} />
                   </ActionIcon>
                 </Tooltip>
@@ -480,7 +483,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
                     <Tooltip label={copied ? 'Copied!' : 'Copy'} withArrow>
                       <ActionIcon
                         variant="subtle"
-                        color={copied ? 'teal' : 'violet'}
+                        color={copied ? 'teal' : tone}
                         size="sm"
                         onClick={copyUse}
                         aria-label="Copy use snippet"
@@ -505,7 +508,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
 
           <Button
             size="xs"
-            color="violet"
+            color={tone}
             variant="filled"
             leftSection={<Icon icon="mdi:plus" width={15} />}
             data-testid="catalog-add"
@@ -520,7 +523,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
             <Tooltip label="Add, then open the Design step to customise" withArrow>
               <Button
                 size="xs"
-                color="violet"
+                color={tone}
                 variant="subtle"
                 leftSection={<Icon icon="mdi:pencil-plus-outline" width={15} />}
                 data-testid="catalog-edit-add"
@@ -539,6 +542,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
         py={6}
         gap={4}
         wrap="wrap"
+        className="bgl-cat-tabs"
         style={{
           borderBottom: '1px solid var(--mantine-color-default-border)',
           flexShrink: 0,
@@ -590,6 +594,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
         * `(100% - 12*(8-1)) / 8`, and `w` of them plus the margins between. */}
       <Box
         ref={setViewportEl}
+        className="bgl-cat-view"
         style={{
           flex: 1,
           minHeight: 0,
@@ -602,6 +607,7 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
         }}
       >
         <Box
+          className={isCard ? undefined : 'bgl-cat-frame'}
           style={{
             position: 'relative',
             width: `calc(((100% - ${GRID_MARGIN_X * (GRID_COLS - 1)}px) / ${GRID_COLS}) * ${box.w} + ${(box.w - 1) * GRID_MARGIN_X}px)`,
@@ -640,7 +646,10 @@ const CatalogPreviewPanel: React.FC<CatalogPreviewPanelProps> = ({
       {/* Source data — the rows the preview is an abstraction over. Closed by
         * default and only mounted when opened, so no request is made for a
         * collection the user never asks about. */}
-      <Box style={{ borderTop: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}>
+      <Box
+        className="bgl-cat-source"
+        style={{ borderTop: '1px solid var(--mantine-color-default-border)', flexShrink: 0 }}
+      >
         <UnstyledButton
           onClick={() => setSourceOpen((o) => !o)}
           w="100%"

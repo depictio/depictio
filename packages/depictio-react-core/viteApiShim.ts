@@ -7,9 +7,10 @@
  * real api and override only the functions it can answer — imports made *by*
  * the shim itself are let through so that re-export resolves.
  *
- * Two backend-less consumers use it, and they must not drift apart:
- *   depictio/viewer/vite.catalog-preview.config.ts → catalog-preview/mockApi.ts
- *      (looks up payloads Python precomputed into the bundle)
+ * Three backend-less consumers use it, and they must not drift apart:
+ *   depictio/viewer/vite.catalog-preview.config.ts → src/offline/mockApi.ts
+ *   depictio/viewer/vite.embed.config.ts           → src/offline/mockApi.ts
+ *      (both look up payloads Python precomputed into the bundle)
  *   packages/tool-studio/vite.config.ts            → src/api/studioApi.ts
  *      (computes them from the fixture in the browser)
  */

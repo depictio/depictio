@@ -24,12 +24,9 @@ import {
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
-import {
-  createProjectFromManifest,
-  listProjectTemplates,
-  useBrandAccents,
-  Z_LAYERS,
-} from 'depictio-react-core';
+import { createProjectFromManifest, listProjectTemplates, Z_LAYERS } from 'depictio-react-core';
+import { useListingAccents } from '../lib/useListingAccents';
+import { useGlassPages } from '../chrome/variants/glass/pages';
 import type {
   CreateProjectInput,
   CreateProjectResult,
@@ -99,7 +96,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
   privateBucketDisabledReason = null,
   builderDisabledReason = null,
 }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('projects');
   const [tab, setTab] = useState<Tab>('create');
   const [activeStep, setActiveStep] = useState(0);
   const [projectType, setProjectType] = useState<ProjectType | null>(null);
@@ -362,19 +359,19 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
           </Group>
         </Center>
 
-        {/* Pill-style tabs (Create New / Import / From Manifest) */}
+        {/* Pill-style tabs (Create new / Import / From manifest / From a run folder) */}
         <Tabs
           value={tab}
           onChange={(v) => setTab((v as Tab) || 'create')}
           variant="pills"
           color={accent.secondary}
         >
-          <Tabs.List justify="center">
+          <Tabs.List justify="center" className="dc-modal-modes">
             <Tabs.Tab
               value="create"
               leftSection={<Icon icon="mdi:plus" width={16} />}
             >
-              Create New
+              Create new
             </Tabs.Tab>
             <Tabs.Tab
               value="import"
@@ -386,7 +383,7 @@ const CreateProjectModal: React.FC<CreateProjectModalProps> = ({
               value="manifest"
               leftSection={<Icon icon="mdi:link-variant" width={16} />}
             >
-              From Manifest
+              From manifest
             </Tabs.Tab>
             <Tabs.Tab
               value="run"
@@ -815,7 +812,7 @@ const TagList: React.FC<{ label: string; tags: string[] }> = ({ label, tags }) =
  *  step and, unchanged, the real report after creation (where dashboards
  *  that failed to import are listed as well). */
 export const ManifestPreviewReport: React.FC<{ report: FromManifestReport }> = ({ report }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('projects');
   const failedDashboards = report.dashboards.filter((d) => !d.success);
   return (
     <Stack gap="sm" data-testid="manifest-preview-report">
@@ -902,7 +899,7 @@ export const ManifestCreatedModal: React.FC<{
   report: FromManifestReport | null;
   onClose: () => void;
 }> = ({ report, onClose }) => {
-  const accent = useBrandAccents();
+  const accent = useListingAccents('projects');
   const dashboardId =
     report?.dashboards.find((d) => d.success && d.dashboard_id)?.dashboard_id ?? null;
 
@@ -993,8 +990,14 @@ const ProjectTypeCard: React.FC<ProjectTypeCardProps> = ({
   testId,
 }) => {
   const { title, summary, facts, icon, tag } = PROJECT_KINDS[type];
-  // Both kinds stay in the teal family (a lighter and a deeper shade).
-  const typeAccent = KIND_ACCENT[type];
+  // Both kinds stay in the teal family (a lighter and a deeper shade); the glass
+  // look takes the primary colour and a neutral gray instead.
+  const glass = useGlassPages();
+  const typeAccent = glass
+    ? type === 'basic'
+      ? 'var(--mantine-primary-color-filled)'
+      : 'var(--mantine-color-gray-6)'
+    : KIND_ACCENT[type];
   const card = (
     <Paper
       withBorder
@@ -1042,7 +1045,11 @@ const ProjectTypeCard: React.FC<ProjectTypeCardProps> = ({
             </Group>
           ))}
         </Stack>
-        <Badge {...kindBadgeProps(type)} radius="sm" mt="auto">
+        <Badge
+          {...(glass ? { color: 'gray', variant: 'light' } : kindBadgeProps(type))}
+          radius="sm"
+          mt="auto"
+        >
           {tag}
         </Badge>
       </Stack>

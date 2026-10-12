@@ -41,7 +41,7 @@ test.describe("admin backup & restore", () => {
     // hold them afterwards (see the post-restore assertion below).
     const dashboardCards = page.locator("[data-testid='dashboard-card']");
     await page.goto(DASHBOARDS_GRID_URL);
-    await expect(page.locator(".mantine-AppShell-root")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId("app-shell")).toBeVisible({ timeout: 15_000 });
     // Give the listing fetch a chance to paint before counting; a stack with
     // no seeded dashboards legitimately stays at zero and skips the check.
     await dashboardCards

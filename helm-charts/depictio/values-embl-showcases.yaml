@@ -1,0 +1,285 @@
+# EMBL Showcases Environment - showcases.depictio.embl.org (values-embl-showcases.yaml)
+#
+# Hosts the nf-core template showcases (one project per template, each with
+# an Overview tab). Unlike values-embl-demo*.yaml this instance is NOT an
+# ephemeral public demo: it must survive Helm upgrades with its data intact, so it deliberately leaves demo.autoWipeOnUpgrade and
+# DEPICTIO_MONGODB_WIPE at their values.yaml defaults (both "false"). Do not
+# copy those two toggles from values-embl-demo.yaml / values-embl-demo-dev.yaml
+# — they delete PVCs / wipe MongoDB on every upgrade.
+#
+# Namespace: datasci-depictio-demo-showcases (TEMPORARY)
+#   Living on the datasci-depictio-demo tenant because the dedicated
+#   datasci-depictio-showcases Capsule tenant exists in Kubeportal but this
+#   user's OIDC RBAC binding to it hasn't propagated yet. The hostnames below
+#   are chosen independent of that — they must not need to change when this
+#   moves to its own tenant/namespace later (only -n on the helm command and
+#   the ingress/ResourceQuota namespace change).
+#
+# Rollout plan:
+#   Phase 1 (this file, as committed): private, login-required. Only the
+#     bootstrap admin account exists (DEPICTIO_AUTH_REGISTRATION_DISABLED +
+#     PUBLIC_MODE both off). Auth as admin via `/depictio-embl-admin-login
+#     datasci-depictio-demo-showcases`, then ingest each template run with
+#     `scripts/nfcore_showcase.py ingest`, pointing a CLI config at
+#     https://api.showcases.depictio.embl.org.
+#   Phase 2 (future change, not enabled here): flip
+#     backend.env.DEPICTIO_AUTH_PUBLIC_MODE to "true" for public read access.
+#     Anonymous sessions are already write-blocked API-side (is_anonymous
+#     checks in dashboards_endpoints), so this does not need registration
+#     re-enabled. Optionally gate the opening with secrets.publicAccessCode
+#     for a soft launch before announcing the URL widely.
+#
+# ⚠ REQUIRED, in ~/actions-runner-embl/secrets/values-embl-showcases-secrets.yaml
+# (SENSITIVE, never committed — same external-secrets-dir convention as the
+# demo/internal environments, see values-embl-internal-secrets.yaml):
+#     secrets:
+#       bootstrapAdminEmail:    <chosen-admin-email>
+#       bootstrapAdminPassword: <strong-secret, ≥16 chars>
+#     mongo:
+#       auth:
+#         password: <strong-secret>
+#     minio:
+#       env:
+#         DEPICTIO_MINIO_ROOT_USER: <EMBL S3 access key, dedicated to the depictio-showcases bucket>
+#         DEPICTIO_MINIO_ROOT_PASSWORD: <EMBL S3 secret key>
+#         DEPICTIO_MINIO_PUBLIC_URL: <bucket endpoint>
+#         DEPICTIO_MINIO_BUCKET: <dedicated bucket name>
+#
+# Bucket identity lives in the secrets file too (not just credentials), same
+# as values-embl-internal-secrets.yaml — it must NOT be the same bucket as
+# values-embl-demo*.yaml, which share one bucket and rely on orphan-cleanup to
+# separate their objects; reusing it here risks the same cross-deletion class
+# of bug on a bucket that now holds real migrated data.
+
+# EMBL ops-k1 uses a custom cluster DNS domain (not cluster.local) — required
+# for the viewer nginx → backend proxy FQDN to resolve (nginx's resolver
+# ignores resolv.conf search domains).
+clusterDomain: "ops-k1.embl.de"
+
+## Storage
+storageClass: basic-csi
+persistence:
+  mongo:
+    size: 2Gi
+    accessMode: ReadWriteOnce
+  minio:
+    size: 1Gi
+    accessMode: ReadWriteOnce
+  screenshots:
+    size: 500Mi
+    accessMode: ReadWriteMany
+  keys:
+    size: 1Mi
+    accessMode: ReadWriteMany
+  config:
+    size: 10Mi
+    accessMode: ReadWriteMany
+  uploads:
+    size: 10Gi
+    accessMode: ReadWriteMany
+
+## Init Container Resources
+initContainerResources:
+  requests:
+    memory: "64Mi"
+    cpu: "10m"
+  limits:
+    memory: "128Mi"
+    cpu: "100m"
+
+# Viewer (nginx SPA) — stateless and tiny, so run 2 replicas for HA + a
+# zero-downtime rolling deploy.
+viewer:
+  replicas: 2
+  strategy: "RollingUpdate"
+
+# Protect the multi-replica workloads during node drains / cluster upgrades.
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# botocore >= 1.36 adds checksum headers that the EMBL S3 gateway
+# (datasci.buckets.embl.de) rejects: the backend's startup write check fails
+# with "x-amz-content-sha256 must be UNSIGNED-PAYLOAD..." and never comes up.
+# Applied to both containers that use boto3.
+awsChecksumCompat: &awsChecksumCompat
+  - name: AWS_REQUEST_CHECKSUM_CALCULATION
+    value: when_required
+  - name: AWS_RESPONSE_CHECKSUM_VALIDATION
+    value: when_required
+
+# Celery worker — nf-core dashboards run advanced-viz compute (Playwright
+# screenshots, polars). 2 replicas for HA once real traffic lands in phase 2.
+celery:
+  replicas: 2
+  extraEnv: *awsChecksumCompat
+
+## SecurityContext
+backend:
+  replicas: 2  # Multiple replicas for high availability with anti-affinity
+  extraEnv: *awsChecksumCompat
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+  resources:
+    requests:
+      memory: "2Gi"
+      cpu: "500m"
+    limits:
+      memory: "4Gi"
+      cpu: "2"
+
+  env:
+    # Phase 1: private, login-required. Nobody but the bootstrap admin can
+    # sign in yet — see the rollout plan above for the phase 2 flip.
+    DEPICTIO_AUTH_PUBLIC_MODE: "false"
+    DEPICTIO_AUTH_REGISTRATION_DISABLED: "true"
+
+    # Anonymous user configuration (inert while PUBLIC_MODE is false; kept so
+    # phase 2 only needs the one PUBLIC_MODE flip, no other env additions)
+    DEPICTIO_AUTH_ANONYMOUS_USER_EMAIL: "anonymous@depict.io"
+    DEPICTIO_AUTH_TEMPORARY_USER_EXPIRY_HOURS: "1"
+
+    # Performance - Balanced workers for multiple replicas
+    DEPICTIO_FASTAPI_WORKERS: "4"
+
+    # Explicit API URL to match ingress host (overrides computed URL)
+    DEPICTIO_FASTAPI_PUBLIC_URL: "https://api.showcases.depictio.embl.org"
+
+mongo:
+  useOperator: true     # Use Percona PSMDB Operator for HA replica set
+  replicas: 3           # 3-member replica set managed by the operator
+  auth:
+    enabled: true
+    username: depictio
+    # password must be set in ~/actions-runner-embl/secrets/values-embl-showcases-secrets.yaml
+    password: ""
+  image:
+    repository: percona/percona-server-mongodb
+    tag: "6.0.9-7"
+    pullPolicy: Always
+  clusterServiceDNSSuffix: "svc.ops-k1.embl.de"
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1"
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    fsGroup: 999
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+# Redis configuration (required for EMBL Capsule admission controller)
+redis:
+  enabled: true
+  image:
+    pullPolicy: Always  # EMBL infrastructure requires Always policy
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 999
+    runAsGroup: 999
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+# External S3 service configuration — dedicated bucket, not shared with
+# values-embl-demo*.yaml (see header note on cross-deletion risk). Bucket
+# identity (URL/name) and credentials both come from
+# ~/actions-runner-embl/secrets/values-embl-showcases-secrets.yaml — kept out
+# of this committed file, same as values-embl-internal-secrets.yaml.
+minio:
+  enabled: false  # Using external EMBL S3 service instead of local MinIO
+
+  # Security context override for PodSecurity "restricted" policy compliance
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+    seccompProfile:
+      type: RuntimeDefault
+
+  env:
+    DEPICTIO_MINIO_SERVICE_PORT: "9000"
+
+## Ingress
+ingress:
+  enabled: true
+  ingressClassName: "external-users"
+
+  annotations:
+    cert-manager.io/cluster-issuer: harica-issuer
+    # Traefik automatically handles WebSocket upgrades
+
+  hosts:
+    - host: "showcases.depictio.embl.org"
+      paths:
+        - path: /
+          pathType: Prefix
+          service:
+            name: depictio-viewer
+            portName: http
+    - host: "api.showcases.depictio.embl.org"
+      paths:
+        - path: /
+          pathType: Prefix
+          service:
+            name: depictio-backend
+            portName: http
+
+  # TLS secret name is tied to the hostname, not the namespace, so it survives
+  # the later move to the dedicated tenant/namespace unchanged.
+  tls:
+    - hosts:
+        - "showcases.depictio.embl.org"
+        - "api.showcases.depictio.embl.org"
+      secretName: showcases-depictio-tls
+
+global:
+  domain: "depictio.embl.org"
+  urlPattern:
+    type: "custom"
+    templates:
+      api: "api.showcases.depictio.embl.org"
+      frontend: "showcases.depictio.embl.org"
+
+# Example deployment command:
+# export VERSION=1.17.1
+# helm upgrade --install showcases ./helm-charts/depictio \
+#   --namespace datasci-depictio-demo-showcases \
+#   -f ./helm-charts/depictio/values.yaml \
+#   -f ./helm-charts/depictio/values-embl-showcases.yaml \
+#   -f ~/actions-runner-embl/secrets/values-embl-showcases-secrets.yaml \
+#   --set backend.image.tag="${VERSION}" \
+#   --set viewer.image.tag="${VERSION}" \
+#   --set celery.image.tag="${VERSION}" \
+#   --wait --timeout 15m --insecure-skip-tls-verify

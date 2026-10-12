@@ -547,6 +547,10 @@ export interface StoredMetadata {
    *  When omitted, the renderer defaults to visible for ungrouped components and
    *  hidden for components inside a group (compact mode). */
   show_marks?: boolean;
+  /** Slider / RangeSlider: whether the ticks carry their value labels. Unset
+   *  labels every tick; `false` keeps the ticks and drops the labels. Moot when
+   *  `show_marks` hides the ticks. */
+  show_mark_labels?: boolean;
   /** Filter bar only (a grid section with `display: 'strip'`): the short label
    *  shown instead of the title. */
   strip_label?: string | null;
@@ -2520,6 +2524,93 @@ export async function fetchServerStatus(): Promise<ServerStatusResponse> {
   return res.json();
 }
 
+/** What the server says about itself: backs the server info popover.
+ *
+ *  `version_check` is non-null for admins only, so the same call serves the
+ *  version line everyone sees and the update notice only an admin gets. */
+export interface VersionCheckBlock {
+  enabled: boolean;
+  /** The deployment pins the setting through an env var: no UI toggle. */
+  locked_by_env: boolean;
+  update_available: boolean;
+  latest_version: string | null;
+  release_url: string | null;
+  /** Naive UTC ISO (no offset), like every other API timestamp. */
+  published_at: string | null;
+  checked_at: string | null;
+  last_error: string | null;
+}
+
+export interface ServerInfo {
+  status: 'online' | string;
+  version: string;
+  api_version: string;
+  repository_url: string;
+  release_notes_url: string;
+  docs_url: string;
+  version_check: VersionCheckBlock | null;
+}
+
+/** Optional-auth: the bearer goes along when there is one (it is what makes
+ *  `version_check` appear for an admin), and the route never answers 401. */
+export async function fetchServerInfo(): Promise<ServerInfo> {
+  const res = await authFetch(`${API_BASE}/utils/server-info`, { cache: 'no-cache' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load server info');
+  return res.json();
+}
+
+/** The admin view of the update check: the setting, where it comes from, and
+ *  the last result. */
+export interface VersionCheckAdmin {
+  enabled: boolean;
+  /** The env var's value, or null when it is unset. */
+  env_enabled: boolean | null;
+  /** The admin's stored override, or null when none is set. */
+  override: boolean | null;
+  locked_by_env: boolean;
+  interval_hours: number;
+  repository: string;
+  current_version: string;
+  update_available: boolean;
+  latest_version: string | null;
+  release_url: string | null;
+  published_at: string | null;
+  checked_at: string | null;
+  last_error: string | null;
+}
+
+export async function fetchVersionCheckAdmin(): Promise<VersionCheckAdmin> {
+  const res = await authFetch(`${API_BASE}/utils/version-check`);
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load the version check setting');
+  return res.json();
+}
+
+/** Turn the update check on or off. A 409 means the env var locks it; the
+ *  thrown error carries the server's `detail`. */
+export async function updateVersionCheckAdmin(enabled: boolean): Promise<VersionCheckAdmin> {
+  const res = await authFetch(`${API_BASE}/utils/version-check`, {
+    method: 'PUT',
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to save the version check setting');
+  return res.json();
+}
+
+/** Drop the admin's override, so the env default applies again. */
+export async function resetVersionCheckAdmin(): Promise<VersionCheckAdmin> {
+  const res = await authFetch(`${API_BASE}/utils/version-check`, { method: 'DELETE' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to reset the version check setting');
+  return res.json();
+}
+
+/** Check GitHub now. A 409 means the check is off; the thrown error carries
+ *  the server's `detail`. */
+export async function runVersionCheckAdmin(): Promise<VersionCheckAdmin> {
+  const res = await authFetch(`${API_BASE}/utils/version-check/run`, { method: 'POST' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to run the version check');
+  return res.json();
+}
+
 /**
  * Runtime configuration the frontend cannot know at build time.
  *
@@ -2537,6 +2628,9 @@ export interface PublicConfigResponse {
    *  materialised and defaults made explicit, so the client never re-derives
    *  a palette. Empty-ish object on an unbranded deployment. */
   branding?: BrandTheme;
+  /** The instance's default chrome style id (set by an admin); null means the
+   *  built-in default. Absent on a backend that predates it. */
+  default_chrome?: string | null;
   /** Opt-in feedback link for dashboard headers. `url` is a template the SPA
    *  fills with what the reader is looking at ({project}, {dashboard}, {tab},
    *  {url}); absent or disabled on a deployment that set none. */
@@ -2547,11 +2641,27 @@ export interface PublicConfigResponse {
   };
 }
 
+let publicConfigSeen: PublicConfigResponse | null = null;
+const publicConfigListeners = new Set<(config: PublicConfigResponse) => void>();
+
+/** Calls `callback` with the public config once it has loaded (at once, if it
+ *  already has), so a module that loads after the boot fetch still sees it. */
+export function onPublicConfig(callback: (config: PublicConfigResponse) => void): () => void {
+  publicConfigListeners.add(callback);
+  if (publicConfigSeen) callback(publicConfigSeen);
+  return () => {
+    publicConfigListeners.delete(callback);
+  };
+}
+
 export async function fetchPublicConfig(): Promise<PublicConfigResponse> {
   try {
     const res = await fetch(`${API_BASE}/utils/public-config`, { cache: 'no-cache' });
     if (!res.ok) return {};
-    return await res.json();
+    const config: PublicConfigResponse = await res.json();
+    publicConfigSeen = config;
+    publicConfigListeners.forEach((listener) => listener(config));
+    return config;
   } catch {
     // Optional configuration. An older backend without this route, or a network
     // blip, must not stop the app from starting.
@@ -3230,6 +3340,9 @@ export async function saveDashboardNotes(
  *  app sees — derived figure colors included. */
 export interface AdminBrandingState {
   overrides: BrandTheme;
+  /** The instance's default chrome style id, or null for the built-in one.
+   *  Saved apart from the brand theme (see `updateInstanceLook`). */
+  default_chrome?: string | null;
   env_defaults: BrandTheme;
   effective: BrandTheme;
 }
@@ -3257,6 +3370,18 @@ export async function updateBrandingAdmin(theme: BrandTheme): Promise<AdminBrand
     body: JSON.stringify(theme),
   });
   if (!res.ok) await throwHttpError(res, 'Failed to save branding settings');
+  return res.json();
+}
+
+/** Set the instance's default chrome style (null = the built-in default). */
+export async function updateInstanceLook(
+  defaultChrome: string | null,
+): Promise<AdminBrandingState> {
+  const res = await authFetch(`${API_BASE}/utils/branding/look`, {
+    method: 'PUT',
+    body: JSON.stringify({ default_chrome: defaultChrome }),
+  });
+  if (!res.ok) await throwHttpError(res, 'Failed to save the default look');
   return res.json();
 }
 
@@ -3379,7 +3504,19 @@ export type AuthMode = 'standard' | 'single_user' | 'unauthenticated';
 
 export interface AuthStatusResponse {
   auth_mode: AuthMode;
-  user: { id: string; email: string; is_admin: boolean } | null;
+  user: {
+    id: string;
+    email: string;
+    is_admin: boolean;
+    /** Naive-UTC ISO stamp of the user's profile picture, null when they have
+     *  none. Changes on every replacement, so it doubles as the cache key.
+     *  Older backends omit it, which reads as "no picture". */
+    avatar_updated_at?: string | null;
+    /** Where the picture came from. `provider` names the identity provider
+     *  (`google`, ...) when `avatar_source` is `provider`. */
+    avatar_source?: 'upload' | 'provider' | null;
+    avatar_provider?: string | null;
+  } | null;
   is_public_mode: boolean;
   is_single_user_mode: boolean;
   /** Demo mode (public mode + onboarding tooltips). Older backends omit this
@@ -3402,6 +3539,10 @@ export interface AuthStatusResponse {
    *  treat absent as `false`. */
   public_access_code_required?: boolean;
   google_oauth_enabled: boolean;
+  /** SAML SSO login enabled. Older backends omit this — treat absent as `false`. */
+  saml_enabled?: boolean;
+  /** Label for the SAML login button (e.g. "Sign in with EMBL"). */
+  saml_login_label?: string;
   /** Development mode (DEPICTIO_DEV_MODE). Suppresses the walkthrough. */
   is_dev_mode?: boolean;
   /** Explicit walkthrough kill switch (DEPICTIO_WALKTHROUGH_DISABLED). */
@@ -3427,6 +3568,14 @@ export interface AuthStatusResponse {
    *  bucket name is ever sent here. Older backends omit it: treat absent as
    *  `false`. */
   remote_browse_enabled?: boolean;
+  /** The component export API answers (`DEPICTIO_FASTAPI_EMBED_ENABLED`), so
+   *  every tile offers "Export / embed". Older backends omit it: treat absent
+   *  as `false`. */
+  embed_enabled?: boolean;
+  /** At least one site may frame an embed (a non-empty
+   *  `DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS`). The origins themselves are not
+   *  sent. False means an `<iframe>` of an embed is refused by its own CSP. */
+  embed_framing_enabled?: boolean;
 }
 
 /** Session payload persisted to localStorage['local-store'] on successful auth.
@@ -3586,6 +3735,13 @@ export async function startGoogleOAuth(): Promise<{ authorization_url: string; s
   return (await res.json()) as { authorization_url: string; state: string };
 }
 
+/** URL starting the SAML SP-initiated login. Use as a full-page navigation
+ *  (window.location.assign), NOT a fetch — the backend 302s to the IdP.
+ *  `next` must be a same-origin path; the backend re-validates it. */
+export function samlLoginUrl(next: string = '/dashboards'): string {
+  return `${API_BASE}/auth/saml/login?next=${encodeURIComponent(next)}`;
+}
+
 /** Complete the Google OAuth flow with the code/state from the redirect URL. */
 export interface GoogleCallbackResult {
   success: boolean;
@@ -3657,6 +3813,7 @@ export function persistSession(session: SessionPayload): void {
   } catch (err) {
     console.error('Failed to persist auth session:', err);
   }
+  announceSessionChange();
 }
 
 /** Clear the persisted session — used for logout.
@@ -3672,6 +3829,26 @@ export function clearSession(): void {
   } catch {
     // ignore — quota / private mode
   }
+  announceSessionChange();
+}
+
+/** Window event fired when this tab signs in or out. Pieces that fetch
+ *  something the signed-in user shapes (the server info's admin block) listen
+ *  to it, since a `storage` event only reaches the *other* tabs. */
+export const AUTH_SESSION_EVENT = 'depictio:auth-session';
+
+function announceSessionChange(): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new Event(AUTH_SESSION_EVENT));
+}
+
+/** Who is signed in, as an opaque id: the refresh token, which stays the same
+ *  while the access token is renewed and changes on a login or a logout.
+ *  Null when nobody is. */
+export function currentSessionId(): string | null {
+  const session = readStoredSession();
+  if (typeof session?.refresh_token === 'string') return session.refresh_token;
+  return typeof session?.access_token === 'string' ? session.access_token : null;
 }
 
 /** Proactively refresh the access token if it's within ``REFRESH_WINDOW_MS``
@@ -6681,6 +6858,44 @@ export async function editPassword(oldPassword: string, newPassword: string): Pr
   if (!res.ok) await throwHttpDetailError(res, 'Password update failed');
 }
 
+// ---- Profile picture -------------------------------------------------------
+
+/** What the server answers after storing a picture. */
+export interface AvatarInfo {
+  source: 'upload' | 'provider';
+  provider: string | null;
+  /** Naive-UTC ISO stamp; the same value `/auth/me/optional` then reports as
+   *  `avatar_updated_at`. */
+  updated_at: string;
+}
+
+/** The current user's profile picture, or null when they have none (404).
+ *  Fetched as bytes through `authFetch` because an `<img src>` cannot send the
+ *  bearer token. */
+export async function fetchMyAvatarBlob(): Promise<Blob | null> {
+  const res = await authFetch(`${API_BASE}/auth/me/avatar`);
+  if (res.status === 404) return null;
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to load profile picture');
+  return res.blob();
+}
+
+/** Replace the current user's picture. The server re-encodes it (square, 256 px
+ *  WebP), so any decodable image up to 5 MB is accepted. Throws with the
+ *  server's `detail` (too large, not an image, not allowed for this account). */
+export async function uploadMyAvatar(file: Blob): Promise<AvatarInfo> {
+  const form = new FormData();
+  form.append('file', file, 'avatar');
+  const res = await authFetch(`${API_BASE}/auth/me/avatar`, { method: 'PUT', body: form });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to upload profile picture');
+  return res.json();
+}
+
+/** Remove the current user's picture. Idempotent. */
+export async function deleteMyAvatar(): Promise<void> {
+  const res = await authFetch(`${API_BASE}/auth/me/avatar`, { method: 'DELETE' });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to remove profile picture');
+}
+
 /** A long-lived CLI token entry — the management page only renders these
  *  metadata fields (the access_token plaintext is shown only once at
  *  creation in DisplayTokenModal). */
@@ -7839,4 +8054,87 @@ export async function restoreComponentFromVersion(
   );
   if (!res.ok) await throwHttpDetailError(res, 'Failed to restore component');
   return (await res.json()) as RestoreComponentResult;
+}
+
+// ---- component export (`/export/...`) ---------------------------------------
+//
+// Serves one component to another site, as a Plotly spec (`json`) or as a
+// self-contained offline page (`html`). Only answers when the server has it on
+// (`AuthStatusResponse.embed_enabled`).
+
+export type ComponentExportFormat = 'json' | 'html';
+
+/** One entry of `GET /export/dashboards/{id}/components`. */
+export interface ComponentExportManifestEntry {
+  component_id: string;
+  component_type: string;
+  viz_kind?: string | null;
+  title: string;
+  formats: ComponentExportFormat[];
+  /** Why there is no Plotly spec for this component, when there is none. */
+  json_unavailable_reason?: string;
+  /** Why there is no offline page for this component, when there is none. */
+  html_unavailable_reason?: string;
+}
+
+/** What each component of a dashboard can be exported as. */
+export async function fetchExportManifest(
+  dashboardId: string,
+): Promise<ComponentExportManifestEntry[]> {
+  const res = await authFetch(`${API_BASE}/export/dashboards/${dashboardId}/components`);
+  if (!res.ok) throw new Error(`Failed to load what this dashboard can export: ${res.status}`);
+  return res.json();
+}
+
+export interface ComponentExportParams {
+  format: ComponentExportFormat;
+  theme: 'light' | 'dark';
+  filters?: InteractiveFilter[];
+  controls?: Record<string, unknown>;
+}
+
+/**
+ * The viewer's filters, cut to what the export reads, so a URL with a filter
+ * stays readable and short.
+ *
+ * A filter in the viewer carries its control's whole description twice (top
+ * level and `metadata`) plus nulls. The render path reads `column_name`,
+ * `interactive_component_type`, `value` and `filter_expr`; link resolution
+ * reads `dc_id` and `source` at either level, and `selection_column` only
+ * under `metadata`, so that one key keeps its nesting.
+ */
+export function compactExportFilters(filters: InteractiveFilter[]): Record<string, unknown>[] {
+  return filters.map((f) => {
+    const meta = (f.metadata ?? {}) as Record<string, unknown>;
+    const out: Record<string, unknown> = { index: f.index, value: f.value };
+    const pick = (key: string) => (f as unknown as Record<string, unknown>)[key] ?? meta[key];
+    for (const key of ['column_name', 'interactive_component_type', 'dc_id', 'source', 'filter_expr']) {
+      const value = pick(key);
+      if (value !== undefined && value !== null && value !== '') out[key] = value;
+    }
+    if (meta.selection_column) out.metadata = { selection_column: meta.selection_column };
+    return out;
+  });
+}
+
+/**
+ * Path, from the site root, of one component's export. The SPA and the API
+ * share an origin, so prefixing `window.location.origin` makes it absolute.
+ */
+export function componentExportPath(
+  dashboardId: string,
+  componentId: string,
+  params: ComponentExportParams,
+): string {
+  const query = new URLSearchParams({ format: params.format, theme: params.theme });
+  if (params.filters && params.filters.length > 0) {
+    query.set('filters', JSON.stringify(compactExportFilters(params.filters)));
+  }
+  if (params.controls && Object.keys(params.controls).length > 0) {
+    query.set('controls', JSON.stringify(params.controls));
+  }
+  return (
+    `${API_BASE}/export/dashboards/${encodeURIComponent(dashboardId)}` +
+    `/components/${encodeURIComponent(componentId)}?${query}`
+  );
 }

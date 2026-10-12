@@ -160,7 +160,10 @@ export const TemplateChip: React.FC<{
   parsed: ParsedTemplate;
   /** Verbose mode renders the source/repo text alongside the chip. */
   verbose?: boolean;
-}> = ({ parsed, verbose }) => {
+  /** Quiet rendering for the Glass listings: the brand mark, then the
+   *  pipeline and its version as muted monospace text, no version badge. */
+  plain?: boolean;
+}> = ({ parsed, verbose, plain }) => {
   const meta = sourceMeta(parsed.source);
   const docsUrl = templateDocsUrl(parsed);
   const tooltipLabel = (
@@ -177,7 +180,18 @@ export const TemplateChip: React.FC<{
     </Stack>
   );
 
-  const chip = (
+  const version = parsed.version ? `v${parsed.version.replace(/^v/i, '')}` : '';
+  const plainChip = (
+    <Group gap={6} wrap="nowrap" className="dc-template" style={{ minWidth: 0 }}>
+      <TemplateSourceLogo source={parsed.source} size={18} />
+      <span className="dc-template-text">
+        {verbose ? (parsed.repo ? `${parsed.source}/${parsed.repo}` : parsed.source) : parsed.repo || parsed.source}
+        {version && <span className="dc-template-version"> {version}</span>}
+      </span>
+    </Group>
+  );
+
+  const chip = plain ? plainChip : (
     <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
       <TemplateSourceLogo source={parsed.source} size={22} />
       {parsed.version && (

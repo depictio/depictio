@@ -131,7 +131,7 @@ export const authBuilderWalkthrough: WalkthroughDefinition = {
       id: 'done',
       target: null,
       title: "You're a builder now",
-      body: 'You can re-launch this tour any time from the user menu. Add more components, share the dashboard with your team, or duplicate it as a starting point.',
+      body: 'You can re-launch this tour any time from the compass button on the Projects and Dashboards pages, or from Account settings. Add more components, share the dashboard with your team, or duplicate it as a starting point.',
       position: 'bottom',
     },
   ],

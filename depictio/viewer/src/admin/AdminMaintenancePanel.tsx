@@ -18,6 +18,8 @@ import { Icon } from '@iconify/react';
 import { cleanExampleProjects, listExampleProjects } from 'depictio-react-core';
 import type { ExampleProject } from 'depictio-react-core';
 
+import { useQuietTags } from '../monitoring/useTone';
+
 /**
  * Admin > Maintenance tab. Single action today: wipe the bundled seed
  * projects (iris, penguins, nf-core/ampliseq, Advanced Visualisations,
@@ -32,6 +34,7 @@ import type { ExampleProject } from 'depictio-react-core';
 const CONFIRM_PHRASE = 'DELETE';
 
 const AdminMaintenancePanel: React.FC = () => {
+  const headIcon = useQuietTags() ? 'var(--gl-muted)' : 'var(--mantine-color-orange-6)';
   const [examples, setExamples] = useState<ExampleProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -97,7 +100,7 @@ const AdminMaintenancePanel: React.FC = () => {
           <Group justify="space-between" align="flex-start">
             <Stack gap={4} style={{ flex: '1 1 320px', minWidth: 0 }}>
               <Group gap="xs">
-                <Icon icon="mdi:broom" width={20} color="var(--mantine-color-orange-6)" />
+                <Icon icon="mdi:broom" width={20} color={headIcon} />
                 <Title order={5}>Clean example projects</Title>
               </Group>
               <Text size="sm" c="dimmed">

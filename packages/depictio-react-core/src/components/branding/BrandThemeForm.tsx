@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  Accordion,
   ActionIcon,
   ColorInput,
   Divider,
@@ -88,6 +89,27 @@ export interface BrandThemeFormProps {
   /** Rendered inside the Identity section (the logo upload lives in the host,
    *  which owns the endpoint). */
   logoSlot?: React.ReactNode;
+  /** Folds each section under a collapsible header that says how many of its
+   *  fields this scope overrides; for narrow hosts such as the dashboard
+   *  settings drawer. `previewSlot` then becomes the last section. */
+  collapsible?: boolean;
+  previewSlot?: React.ReactNode;
+}
+
+/** How many of `values` this scope states (the rest inherit). */
+const stated = (...values: unknown[]): number =>
+  values.filter((v) => v != null && !(Array.isArray(v) && v.length === 0)).length;
+
+const statedIn = (block: object | null | undefined): number =>
+  block ? stated(...Object.values(block)) : 0;
+
+interface FormSection {
+  value: string;
+  label: string;
+  icon: string;
+  /** Overridden fields, shown on the collapsed header. */
+  count?: number;
+  content: React.ReactNode;
 }
 
 /** Drop empty strings/arrays back to `null` so "cleared" means "inherit". */
@@ -247,6 +269,8 @@ const BrandThemeForm: React.FC<BrandThemeFormProps> = ({
   onChange,
   scope = 'instance',
   logoSlot,
+  collapsible = false,
+  previewSlot,
 }) => {
   const patch = (next: Partial<BrandTheme>) => onChange({ ...value, ...next });
   const tintMode = value.tint_mode ?? defaults?.tint_mode ?? 'accent';
@@ -261,13 +285,16 @@ const BrandThemeForm: React.FC<BrandThemeFormProps> = ({
   };
   const inherit = (color: string | null | undefined) => color ?? undefined;
 
-  return (
-    <Stack gap="md">
-      {scope === 'instance' && (
+  const sections: FormSection[] = [
+    ...(scope === 'instance'
+      ? [
+          {
+            value: 'identity',
+            label: 'Identity',
+            icon: 'tabler:id-badge-2',
+            count: stated(value.app_name, value.logo_url, value.logo_url_dark),
+            content: (
         <Stack gap="xs">
-          <Text fw={600} size="sm">
-            Identity
-          </Text>
           <TextInput
             size="xs"
             label="Instance name"
@@ -279,15 +306,27 @@ const BrandThemeForm: React.FC<BrandThemeFormProps> = ({
           />
           {logoSlot}
         </Stack>
-      )}
-      {scope === 'dashboard' && logoSlot}
-
-      <Divider />
-
+            ),
+          },
+        ]
+      : logoSlot
+        ? [
+            {
+              value: 'logo',
+              label: 'Logo',
+              icon: 'tabler:photo',
+              count: value.logo_mode && value.logo_mode !== 'inherit' ? 1 : 0,
+              content: logoSlot,
+            },
+          ]
+        : []),
+    {
+      value: 'colors',
+      label: 'Brand colors',
+      icon: 'tabler:palette',
+      count: stated(value.primary, value.secondary, value.tertiary, value.tint_mode),
+      content: (
       <Stack gap="xs">
-        <Text fw={600} size="sm">
-          Brand colors
-        </Text>
         <Grid gutter="xs">
           <Grid.Col span={4}>
             <ColorField
@@ -340,13 +379,15 @@ const BrandThemeForm: React.FC<BrandThemeFormProps> = ({
           </Text>
         </Stack>
       </Stack>
-
-      <Divider />
-
+      ),
+    },
+    {
+      value: 'status',
+      label: 'Status colors',
+      icon: 'tabler:traffic-lights',
+      count: stated(value.success, value.warning, value.danger),
+      content: (
       <Stack gap="xs">
-        <Text fw={600} size="sm">
-          Status colors
-        </Text>
         <Text size="xs" c="dimmed">
           Left alone by the brand reach above, because pass / warn / fail have to stay
           readable as meaning rather than as decoration.
@@ -378,13 +419,15 @@ const BrandThemeForm: React.FC<BrandThemeFormProps> = ({
           </Grid.Col>
         </Grid>
       </Stack>
-
-      <Divider />
-
+      ),
+    },
+    {
+      value: 'surfaces',
+      label: 'Surfaces',
+      icon: 'tabler:layers-subtract',
+      count: statedIn(value.surfaces_light) + statedIn(value.surfaces_dark),
+      content: (
       <Stack gap="xs">
-        <Text fw={600} size="sm">
-          Surfaces
-        </Text>
         <Text size="xs" c="dimmed">
           Backgrounds and title color, per color scheme. Leave empty to keep Mantine&apos;s.
         </Text>
@@ -407,13 +450,15 @@ const BrandThemeForm: React.FC<BrandThemeFormProps> = ({
           />
         </Stack>
       </Stack>
-
-      <Divider />
-
+      ),
+    },
+    {
+      value: 'type',
+      label: 'Typography & shape',
+      icon: 'tabler:typography',
+      count: stated(value.font_family, value.headings_font_family, value.default_radius),
+      content: (
       <Stack gap="xs">
-        <Text fw={600} size="sm">
-          Typography & shape
-        </Text>
         <TextInput
           size="xs"
           label="Font stack"
@@ -444,13 +489,15 @@ const BrandThemeForm: React.FC<BrandThemeFormProps> = ({
           onChange={(v) => patch({ default_radius: clean(v ?? '') })}
         />
       </Stack>
-
-      <Divider />
-
+      ),
+    },
+    {
+      value: 'figures',
+      label: 'Figures',
+      icon: 'tabler:chart-dots',
+      count: statedIn(value.plots),
+      content: (
       <Stack gap="xs">
-        <Text fw={600} size="sm">
-          Figures
-        </Text>
         <Select
           size="xs"
           label="Plot template"
@@ -466,6 +513,62 @@ const BrandThemeForm: React.FC<BrandThemeFormProps> = ({
           onChange={(next) => patchPlots({ colorway: next })}
         />
       </Stack>
+      ),
+    },
+  ];
+
+  if (collapsible) {
+    const all = previewSlot
+      ? [...sections, { value: 'preview', label: 'Preview', icon: 'tabler:eye', content: previewSlot }]
+      : sections;
+    return (
+      <Accordion
+        multiple
+        variant="separated"
+        radius="md"
+        chevronPosition="right"
+        defaultValue={['colors']}
+        data-testid="branding-sections"
+      >
+        {all.map((section) => (
+          <Accordion.Item key={section.value} value={section.value}>
+            <Accordion.Control icon={<Icon icon={section.icon} width={16} />}>
+              <Group justify="space-between" wrap="nowrap" gap="xs">
+                <Text size="sm" fw={600}>
+                  {section.label}
+                </Text>
+                {section.count ? (
+                  <Text size="xs" c="dimmed">
+                    {section.count} set
+                  </Text>
+                ) : null}
+              </Group>
+            </Accordion.Control>
+            <Accordion.Panel>{section.content}</Accordion.Panel>
+          </Accordion.Item>
+        ))}
+      </Accordion>
+    );
+  }
+
+  return (
+    <Stack gap="md">
+      {sections.map((section, i) => (
+        <React.Fragment key={section.value}>
+          {i > 0 && <Divider />}
+          {section.value === 'logo' ? (
+            section.content
+          ) : (
+            <Stack gap="xs">
+              <Text fw={600} size="sm">
+                {section.label}
+              </Text>
+              {section.content}
+            </Stack>
+          )}
+        </React.Fragment>
+      ))}
+      {previewSlot}
     </Stack>
   );
 };

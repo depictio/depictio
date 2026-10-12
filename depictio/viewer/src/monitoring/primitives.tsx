@@ -24,6 +24,7 @@ import { Icon } from '@iconify/react';
 
 import { formatDateTimeVerbose } from '../lib/datetime';
 import { relTime, shortenPath } from './format';
+import { usePrettyPrint } from './usePrettyPrint';
 
 /** Small search box used in each pane header. */
 export const SearchInput: React.FC<{ value: string; onChange: (v: string) => void }> = ({
@@ -148,7 +149,22 @@ export const DetailBlock: React.FC<{ label: string; children: React.ReactNode }>
   </Stack>
 );
 
-/** Shared header: title + auto-refresh toggle + manual refresh + last-updated. */
+const PrettyPrintSwitch: React.FC = () => {
+  const [pretty, setPretty] = usePrettyPrint();
+  return (
+    <Tooltip label="Lay out dicts and JSON over several lines" withArrow openDelay={300}>
+      <Switch
+        size="xs"
+        label="Pretty print"
+        checked={pretty}
+        onChange={(e) => setPretty(e.currentTarget.checked)}
+      />
+    </Tooltip>
+  );
+};
+
+/** Shared header: title + auto-refresh toggle + manual refresh + last-updated.
+ *  `prettyPrint` adds the switch that formats the dicts in an open row. */
 export const PaneHeader: React.FC<{
   title: string;
   loading: boolean;
@@ -156,7 +172,8 @@ export const PaneHeader: React.FC<{
   onAuto: (v: boolean) => void;
   onRefresh: () => void;
   extra?: React.ReactNode;
-}> = ({ title, loading, auto, onAuto, onRefresh, extra }) => (
+  prettyPrint?: boolean;
+}> = ({ title, loading, auto, onAuto, onRefresh, extra, prettyPrint }) => (
   <Group justify="space-between" wrap="nowrap">
     <Group gap="xs">
       <Title order={6}>{title}</Title>
@@ -164,6 +181,7 @@ export const PaneHeader: React.FC<{
     </Group>
     <Group gap="sm" wrap="nowrap">
       {extra}
+      {prettyPrint && <PrettyPrintSwitch />}
       <Switch
         size="xs"
         label="Auto"

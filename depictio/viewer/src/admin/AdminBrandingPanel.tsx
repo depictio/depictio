@@ -9,6 +9,7 @@ import {
   Menu,
   Paper,
   ScrollArea,
+  SegmentedControl,
   Stack,
   Text,
   Title,
@@ -25,11 +26,13 @@ import {
   isEmptyBrandTheme,
   resetBrandingAdmin,
   updateBrandingAdmin,
+  updateInstanceLook,
   uploadBrandingLogo,
   useResolvedBrandTheme,
 } from 'depictio-react-core';
 import type { AdminBrandingState, BrandPreset, BrandTheme } from 'depictio-react-core';
 import { setBranding } from '../branding';
+import { applyInstanceDefault, CHROME_VARIANTS, DEFAULT_CHROME } from '../chrome/variants';
 
 /** Client-side mirror of the server's upload cap. */
 const LOGO_MAX_BYTES = 2 * 1024 * 1024;
@@ -39,6 +42,7 @@ const LOGO_MAX_BYTES = 2 * 1024 * 1024;
  *  next /utils/public-config fetch. */
 function applyEffective(state: AdminBrandingState) {
   setBranding(state.effective);
+  applyInstanceDefault(state.default_chrome ?? null);
 }
 
 /** The logo fields of the current draft, carried across a palette-shaped
@@ -123,6 +127,7 @@ const LogoField: React.FC<{
 const AdminBrandingPanel: React.FC = () => {
   const [state, setState] = useState<AdminBrandingState | null>(null);
   const [form, setForm] = useState<BrandTheme | null>(null);
+  const [chrome, setChrome] = useState<string>(DEFAULT_CHROME.id);
   const [presets, setPresets] = useState<BrandPreset[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -133,6 +138,7 @@ const AdminBrandingPanel: React.FC = () => {
   const adopt = useCallback((next: AdminBrandingState) => {
     setState(next);
     setForm(next.overrides ?? {});
+    setChrome(next.default_chrome ?? DEFAULT_CHROME.id);
   }, []);
 
   useEffect(() => {
@@ -151,7 +157,11 @@ const AdminBrandingPanel: React.FC = () => {
     if (!form) return;
     setSaving(true);
     try {
-      const next = await updateBrandingAdmin(form);
+      let next = await updateBrandingAdmin(form);
+      // The default look is saved beside the theme; none stored means the
+      // built-in default, so picking that style clears it.
+      const wanted = chrome === DEFAULT_CHROME.id ? null : chrome;
+      if (wanted !== (next.default_chrome ?? null)) next = await updateInstanceLook(wanted);
       adopt(next);
       applyEffective(next);
       notifications.show({ message: 'Branding saved.' });
@@ -260,7 +270,8 @@ const AdminBrandingPanel: React.FC = () => {
   }
 
   const env = state.env_defaults;
-  const hasOverrides = !isEmptyBrandTheme(state.overrides);
+  const hasOverrides = !isEmptyBrandTheme(state.overrides) || Boolean(state.default_chrome);
+  const chromeStyle = CHROME_VARIANTS.find((v) => v.id === chrome) ?? DEFAULT_CHROME;
 
   return (
     <Stack gap="md" data-testid="admin-branding-panel">
@@ -348,6 +359,28 @@ const AdminBrandingPanel: React.FC = () => {
           </Button>
         </Group>
       </Group>
+
+      <Paper withBorder p="md" data-testid="branding-default-look">
+        <Stack gap="xs">
+          <Text fw={500} size="sm">
+            Default look
+          </Text>
+          <Text size="xs" c="dimmed">
+            The look everyone gets until they pick their own in their profile.
+          </Text>
+          <SegmentedControl
+            size="xs"
+            w="fit-content"
+            value={chromeStyle.id}
+            onChange={setChrome}
+            data={CHROME_VARIANTS.map((v) => ({ value: v.id, label: v.name }))}
+            data-testid="branding-default-chrome"
+          />
+          <Text size="xs" c="dimmed">
+            {chromeStyle.tagline}
+          </Text>
+        </Stack>
+      </Paper>
 
       <Grid gutter="md" align="flex-start">
         <Grid.Col span={{ base: 12, md: 7 }}>

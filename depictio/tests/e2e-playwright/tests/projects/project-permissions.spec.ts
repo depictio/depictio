@@ -5,9 +5,13 @@
  * Semantics that changed vs the Dash UI:
  *   - Users are added via an email Autocomplete + "Add user" button, always
  *     defaulting to Viewer (no per-add role checkboxes anymore).
- *   - Roles are mutually exclusive: enabling one role in the ag-grid clears
- *     the others on the same row (handleCellChange) — replaces the Dash
- *     "exactly one checkbox" validation test.
+ *   - Roles are mutually exclusive: enabling one role clears the others on
+ *     the same row (setRole) — replaces the Dash "exactly one checkbox"
+ *     validation test.
+ *   - Two markups: the default (Glass/Paper) look lists members as
+ *     `permissions-member-row` items with a `permissions-role-control`
+ *     segmented control; Classic (?chrome=base) keeps the ag-grid with one
+ *     checkbox column per role. The helpers below drive whichever renders.
  *   - Delete = per-row trash ActionIcon (title "Remove user").
  *   - Visibility toggle opens a confirm modal ("Make Public"/"Make Private").
  *
@@ -25,13 +29,58 @@ const PERMISSIONS_URL = `/projects/${IRIS_PROJECT_ID}/permissions`;
 
 const TEST_EMAIL = credentials.testUser.email;
 
-/** Row in the ag-grid for a given member email. */
-function gridRow(page: import("@playwright/test").Page, email: string) {
-  return page.locator(".ag-row", { hasText: email });
+type Page = import("@playwright/test").Page;
+type Role = "Owner" | "Editor" | "Viewer";
+
+/** Which chrome style renders: Glass (default) or Classic (`base`). */
+async function isGlass(page: Page): Promise<boolean> {
+  return page.evaluate(() => document.documentElement.dataset.chrome === "glass");
+}
+
+/** Every member row on the page, whichever markup renders. */
+function memberRows(page: Page) {
+  return page
+    .locator("[data-testid='permissions-member-row']")
+    .or(page.locator(".ag-row"));
+}
+
+/** Row for a given member email (substring match, like ag-grid's hasText). */
+function gridRow(page: Page, email: string) {
+  return page
+    .locator(`[data-testid='permissions-member-row'][data-email*="${email}"]`)
+    .or(page.locator(".ag-row", { hasText: email }));
+}
+
+/** Assert whether `role` is the one set on a member's row. */
+async function expectRole(
+  page: Page,
+  row: import("@playwright/test").Locator,
+  role: Role,
+  on = true,
+) {
+  const control = (await isGlass(page))
+    ? row.locator(`input[type='radio'][value='${role}']`)
+    : row.locator(`[col-id='${role}'] input[type='checkbox']`);
+  if (on) await expect(control).toBeChecked({ timeout: 10_000 });
+  else await expect(control).not.toBeChecked({ timeout: 10_000 });
+}
+
+/** Switch a member to `role` (the others clear: roles are exclusive). */
+async function setRole(
+  page: Page,
+  row: import("@playwright/test").Locator,
+  role: Role,
+) {
+  if (await isGlass(page)) {
+    await row.locator("label", { hasText: new RegExp(`^${role}$`) }).click();
+  } else {
+    // ag-grid checkbox cells toggle on a click on the checkbox input itself.
+    await row.locator(`[col-id='${role}'] input[type='checkbox']`).click({ force: true });
+  }
 }
 
 /** Remove the test user from the grid if present (idempotent cleanup). */
-async function removeIfPresent(page: import("@playwright/test").Page) {
+async function removeIfPresent(page: Page) {
   const row = gridRow(page, TEST_EMAIL);
   if ((await row.count()) > 0) {
     await row.locator("button[title='Remove user']").click();
@@ -48,16 +97,18 @@ test.describe("Project Permissions", () => {
     await page.goto(PERMISSIONS_URL);
 
     // Stacks without the Iris reference seeds show the load-error state —
-    // skip rather than fail (CI boots a bare backend).
-    const title = page.getByText("Roles & Permissions");
+    // skip rather than fail (CI boots a bare backend). Only that state skips:
+    // the page root (`permissions-page`) is the same in both chromes, so a
+    // missing title can no longer hide a broken page behind a skip.
+    const pageRoot = page.locator("[data-testid='permissions-page']");
     const loadError = page.getByText(/failed to load|back to projects/i);
-    await expect(title.or(loadError).first()).toBeVisible({ timeout: 15_000 });
+    await expect(pageRoot.or(loadError).first()).toBeVisible({ timeout: 15_000 });
     test.skip(
-      !(await title.isVisible()),
+      !(await pageRoot.isVisible()),
       "Iris reference project not seeded in this stack.",
     );
-    // Wait for the members grid to render rows (the seeded owner at minimum).
-    await expect(page.locator(".ag-row").first()).toBeVisible({ timeout: 15_000 });
+    // Wait for the members to render (the seeded owner at minimum).
+    await expect(memberRows(page).first()).toBeVisible({ timeout: 15_000 });
   });
 
   test("admin sees management controls enabled", async ({ page }) => {
@@ -78,17 +129,12 @@ test.describe("Project Permissions", () => {
 
     const row = gridRow(page, TEST_EMAIL);
     await expect(row).toBeVisible({ timeout: 10_000 });
-    await expect(row.locator("[col-id='Viewer'] input[type='checkbox']")).toBeChecked();
+    await expectRole(page, row, "Viewer");
 
     // Promote to Editor: roles are mutually exclusive, Viewer must clear.
-    // ag-grid checkbox cells toggle on a click on the checkbox input itself.
-    await row.locator("[col-id='Editor'] input[type='checkbox']").click({ force: true });
-    await expect(row.locator("[col-id='Editor'] input[type='checkbox']")).toBeChecked({
-      timeout: 10_000,
-    });
-    await expect(
-      row.locator("[col-id='Viewer'] input[type='checkbox']"),
-    ).not.toBeChecked();
+    await setRole(page, row, "Editor");
+    await expectRole(page, row, "Editor");
+    await expectRole(page, row, "Viewer", false);
 
     // Remove the user again.
     await row.locator("button[title='Remove user']").click();

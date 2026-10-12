@@ -48,6 +48,7 @@ const ValueListPreview: React.FC<{
         </Group>
       )}
       <Box
+        className="dc-ap-values"
         style={{
           border: '1px solid var(--mantine-color-default-border)',
           borderRadius: 'var(--mantine-radius-sm)',

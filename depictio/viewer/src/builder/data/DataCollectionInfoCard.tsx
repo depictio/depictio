@@ -9,6 +9,8 @@ import React from 'react';
 import { Badge, Card, Group, Stack, Table, Text } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
+import MultiQCLogo from '../shared/MultiQCLogo';
+
 /** Join definition surfaced for "joined" DCs — mirrors the project-level
  *  `joins[]` entry minus the workflow plumbing. Used to render Left / Right /
  *  On / How rows in the info card. */
@@ -65,12 +67,7 @@ const DataCollectionInfoCard: React.FC<Props> = ({ info }) => {
             value={
               isMultiQC ? (
                 <Stack gap={4} align="flex-start">
-                  <img
-                    src="/dashboard/logos/multiqc_icon_dark.svg"
-                    alt="MultiQC"
-                    className="multiqc-icon-themed"
-                    style={{ width: 24, height: 24, objectFit: 'contain' }}
-                  />
+                  <MultiQCLogo size={24} />
                   <Text size="sm">{cap(info.type)}</Text>
                 </Stack>
               ) : (

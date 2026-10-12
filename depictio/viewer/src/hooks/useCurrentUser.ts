@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 
 import { fetchAuthStatus } from 'depictio-react-core';
 
+import { syncMyAvatar } from '../chrome/account/avatar';
+
 /**
  * Calls /depictio/api/v1/auth/me/optional to identify the current user.
  * Anonymous-tolerant: returns null on missing/invalid token (HTTP 200 with
@@ -70,6 +72,12 @@ export interface UseCurrentUserResult {
    *  the run tab's folder browser then offers an S3 side. False on older
    *  backends that do not send the flag. */
   remoteBrowseEnabled: boolean;
+  /** True when the component export API answers: every tile then offers
+   *  "Export / embed". False on older backends that do not send the flag. */
+  embedEnabled: boolean;
+  /** True when some site may frame an embed. False means an iframe snippet
+   *  would be refused by the embed's own CSP. */
+  embedFramingEnabled: boolean;
   loading: boolean;
 }
 
@@ -87,12 +95,15 @@ export function useCurrentUser(): UseCurrentUserResult {
   const [dashboardsDefaultView, setDashboardsDefaultView] = useState<string | null>(null);
   const [localDataRootsEnabled, setLocalDataRootsEnabled] = useState<boolean>(false);
   const [remoteBrowseEnabled, setRemoteBrowseEnabled] = useState<boolean>(false);
+  const [embedEnabled, setEmbedEnabled] = useState<boolean>(false);
+  const [embedFramingEnabled, setEmbedFramingEnabled] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
+        const startedAt = Date.now();
         const data = await fetchAuthStatus();
         if (cancelled) return;
         setAuthMode((data.auth_mode as AuthMode) ?? 'standard');
@@ -104,6 +115,8 @@ export function useCurrentUser(): UseCurrentUserResult {
         setInspectorEnabled(Boolean(data.inspector_enabled));
         setLocalDataRootsEnabled(Boolean(data.local_data_roots_enabled));
         setRemoteBrowseEnabled(Boolean(data.remote_browse_enabled));
+        setEmbedEnabled(Boolean(data.embed_enabled));
+        setEmbedFramingEnabled(Boolean(data.embed_framing_enabled));
         setDashboardsDefaultView(
           typeof data.dashboards_default_view === 'string'
             ? data.dashboards_default_view
@@ -117,6 +130,9 @@ export function useCurrentUser(): UseCurrentUserResult {
         }
         const u = data.user;
         setUser(u?.email ? { id: u.id, email: u.email, is_admin: Boolean(u.is_admin) } : null);
+        // Feeds the shared avatar store (`chrome/account/avatar.ts`); anonymous
+        // visitors and users without a picture clear it (no fetch).
+        syncMyAvatar(u?.email ? (u.avatar_updated_at ?? null) : null, { startedAt });
       } catch {
         if (!cancelled) setUser(null);
       } finally {
@@ -142,6 +158,8 @@ export function useCurrentUser(): UseCurrentUserResult {
     dashboardsDefaultView,
     localDataRootsEnabled,
     remoteBrowseEnabled,
+    embedEnabled,
+    embedFramingEnabled,
     loading,
   };
 }

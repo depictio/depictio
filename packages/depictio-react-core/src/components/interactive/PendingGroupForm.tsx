@@ -90,6 +90,7 @@ const PendingGroupForm: React.FC<{
       radius="sm"
       p="sm"
       mt={8}
+      className="dc-ap-card dc-ap-card--pending"
       // Accent rule in the grouping color, the same hue as the header button
       // and the tile markers — this card is the third station of that one
       // journey, and it is the only card in the panel that is *pending*.
@@ -104,13 +105,19 @@ const PendingGroupForm: React.FC<{
               Selection ready
             </Text>
           </Group>
-          <Badge size="sm" variant="light" color={groupingColor} style={{ flexShrink: 0 }}>
+          <Badge
+            size="sm"
+            variant="light"
+            color={groupingColor}
+            className="dc-ap-count dc-ap-count--accent"
+            style={{ flexShrink: 0 }}
+          >
             {preview.values.distinct.toLocaleString()}
             {preview.values.distinct === 1 ? ' value' : ' values'}
           </Badge>
         </Group>
 
-        <Text size="sm" c="dimmed">
+        <Text size="sm" c="dimmed" className="dc-ap-meta">
           on{' '}
           <Text span size="sm" fw={600} c="dimmed">
             {preview.columnName}
@@ -164,19 +171,20 @@ const PendingGroupForm: React.FC<{
         />
 
         <Stack gap={4}>
-          <Text size="sm" fw={500}>
+          <Text size="sm" fw={500} className="dc-ap-label">
             Color
           </Text>
           <GroupColorSwatches value={effectiveColor} onSelect={setColor} />
         </Stack>
 
         {errorKey === key && (
-          <Text size="sm" c="red">
+          <Text size="sm" c="red" className="dc-ap-error">
             {GROUP_SAVE_ERROR}
           </Text>
         )}
 
         <Button
+          className="dc-ap-save"
           size="sm"
           fullWidth
           color={groupingColor}

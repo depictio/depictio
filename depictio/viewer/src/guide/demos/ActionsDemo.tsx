@@ -66,11 +66,13 @@ import {
   uniqueGroupName,
   useDashboardLoadSummary,
   useGroupingColor,
+  useComponentExportControl,
   useGroupingColorVar,
   useInspectorControl,
 } from 'depictio-react-core';
 import type {
   CatalogSource,
+  ComponentExportControl,
   FilterSectionSpec,
   GuideEditAction,
   GuideModel,
@@ -271,6 +273,32 @@ function useDemoInspector(onNote: (note: ActionNote) => void): InspectorControl 
   );
 }
 
+/**
+ * The export action, where the server's export API is on: on a demo tile it
+ * says what it does rather than opening the export dialog on a copy. Where the
+ * API is off, `null`, and neither the tile nor the list shows it.
+ */
+function useDemoExporter(onNote: (note: ActionNote) => void): ComponentExportControl | null {
+  const on = Boolean(useComponentExportControl());
+  return useMemo<ComponentExportControl | null>(
+    () =>
+      on
+        ? {
+            open: () =>
+              onNote({
+                icon: TILE_ACTION_STYLE.export.icon,
+                label: TILE_ACTION_STYLE.export.label,
+                meaning:
+                  'Gives the link that serves this component to another site: a Plotly ' +
+                  'spec for your own plotly.js, or a self-contained page to embed.',
+                color: TILE_ACTION_STYLE.export.color,
+              }),
+          }
+        : null,
+    [on, onNote],
+  );
+}
+
 /** Why a drawn tile of `type` has no "load all": it shows all there is. */
 const LOAD_ALL_ABSENT: Partial<Record<GuideTileType, string>> = {
   figure: 'this one draws all of its points',
@@ -404,7 +432,8 @@ export const ActionsDemo: React.FC<{
 
   const selectable = Boolean(source && supportsSelectionGrouping(source.metadata, true));
   const inspector = Boolean(useInspectorControl());
-  const row = rowActionsFor(type, { inspector });
+  const embed = Boolean(useComponentExportControl());
+  const row = rowActionsFor(type, { inspector, embed });
   // A select control counts only where selection is on.
   const own = useMemo(
     () => ownControlsFor(type).filter((c) => !c.selection || selectable),
@@ -661,6 +690,7 @@ const LiveTile: React.FC<{
   );
 
   const inspector = useDemoInspector(onNote);
+  const exporter = useDemoExporter(onNote);
 
   // The row's only addition is the editor's ⋮ menu. "Load all" is the
   // renderer's own, once its data turns out reduced: a sampled figure or
@@ -679,7 +709,12 @@ const LiveTile: React.FC<{
 
   const height = TILE_HEIGHT[type];
   return (
-    <GuideSandbox metadata={sandboxMetadata} saveGroup={saveGroup} inspector={inspector}>
+    <GuideSandbox
+      metadata={sandboxMetadata}
+      saveGroup={saveGroup}
+      inspector={inspector}
+      exporter={exporter}
+    >
       <DrawnProbe metadata={sandboxMetadata} onDrawn={onDrawn} />
       <Box
         className="depictio-guide-demo-tile"
@@ -774,8 +809,9 @@ const StandIn: React.FC<{
   );
   const sandboxMetadata = useMemo(() => [tile], [tile]);
   const inspector = useDemoInspector(onNote);
+  const exporter = useDemoExporter(onNote);
   const groupingColorVar = useGroupingColorVar();
-  const row = rowActionsFor(type, { inspector: inspector !== null });
+  const row = rowActionsFor(type, { inspector: inspector !== null, embed: exporter !== null });
   const extras: React.ReactNode[] = [];
   // What a renderer adds to the row, drawn as its icons: with no tile of the
   // kind to act on, each says what it does when tried.
@@ -822,7 +858,7 @@ const StandIn: React.FC<{
   }
   const tall = TILE_HEIGHT[type] !== null;
   return (
-    <GuideSandbox metadata={sandboxMetadata} inspector={inspector}>
+    <GuideSandbox metadata={sandboxMetadata} inspector={inspector} exporter={exporter}>
       <Box
         className="depictio-guide-demo-tile"
         h={tall ? 260 : 140}

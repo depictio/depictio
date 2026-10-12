@@ -2,6 +2,8 @@ import { Button, PasswordInput, Stack, Text } from '@mantine/core';
 import { useState } from 'react';
 import { createTemporaryUser, persistSession } from 'depictio-react-core';
 
+import { useGlassPages } from '../../chrome/variants/glass/pages';
+
 interface Props {
   /** Called after the code is accepted and the session is persisted. */
   onSuccess: () => void;
@@ -26,6 +28,7 @@ export default function PublicAccessGate({ onSuccess }: Props) {
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const glass = useGlassPages();
 
   async function handleSubmit() {
     if (!code || submitting) return;
@@ -40,6 +43,41 @@ export default function PublicAccessGate({ onSuccess }: Props) {
       setError('That access code was not accepted.');
       setSubmitting(false);
     }
+  }
+
+  // Glass: the explanation is the card's lede (AuthApp).
+  if (glass) {
+    return (
+      <>
+        <PasswordInput
+          label="Access code"
+          placeholder="The code you were given"
+          value={code}
+          onChange={(e) => setCode(e.currentTarget.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') handleSubmit();
+          }}
+          autoComplete="one-time-code"
+          data-autofocus
+          data-testid="public-access-code"
+        />
+        {error && (
+          <p className="gp-auth-error" role="alert" data-testid="public-access-error">
+            {error}
+          </p>
+        )}
+        <Button
+          fullWidth
+          mt={4}
+          loading={submitting}
+          disabled={!code || submitting}
+          onClick={handleSubmit}
+          data-testid="public-access-submit"
+        >
+          Continue as a guest
+        </Button>
+      </>
+    );
   }
 
   return (

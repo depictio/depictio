@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   Accordion,
-  ActionIcon,
   Anchor,
   Button,
   Divider,
@@ -13,7 +12,6 @@ import {
   Switch,
   Text,
   Textarea,
-  Tooltip,
 } from '@mantine/core';
 import { Icon } from '@iconify/react';
 
@@ -39,7 +37,7 @@ import {
 } from '../components/settings/SettingsNavModal';
 import { useBranding } from '../branding';
 import { useFeedbackLink } from '../feedback';
-import { useUiScalePref } from '../hooks/useUiScalePref';
+import { UiScaleField } from '../components/settings/preferences';
 import { CONTENT_WIDTHS, type ContentWidth, useContentWidthPref } from '../hooks/useContentWidthPref';
 
 /** Client-side mirror of the server's upload cap (routes.py). */
@@ -152,65 +150,15 @@ const SwitchField: React.FC<{
 // Your view (per browser)
 // ---------------------------------------------------------------------------
 
-/** A− / percent / A+ control for the dashboard content font-size preference
- *  (#854). Scales figures, tables and the other dashboard tiles — never the
- *  app chrome — and is a per-browser preference, so it renders in both the
- *  viewer and the editor. */
-const FontSizeBlock: React.FC = () => {
-  const { scale, increase, decrease, reset, canIncrease, canDecrease } = useUiScalePref();
-
-  return (
-    <Field
-      label="Font size"
-      description="Scales the figures, tables and cards. While editing, a figure can also carry its own font size from its tile menu."
-      testId="font-size-section"
-    >
-      <Group gap="xs">
-        <ActionIcon.Group data-testid="font-size-control">
-          <Tooltip label="Decrease font size" withArrow>
-            <ActionIcon
-              variant="default"
-              size="input-xs"
-              onClick={decrease}
-              disabled={!canDecrease}
-              data-testid="font-size-decrease"
-              aria-label="Decrease font size"
-            >
-              <Icon icon="mdi:format-font-size-decrease" width={14} />
-            </ActionIcon>
-          </Tooltip>
-          <Button
-            variant="default"
-            size="compact-xs"
-            h="var(--input-height-xs)"
-            style={{ pointerEvents: 'none' }}
-            data-testid="font-size-value"
-            tabIndex={-1}
-          >
-            {Math.round(scale * 100)}%
-          </Button>
-          <Tooltip label="Increase font size" withArrow>
-            <ActionIcon
-              variant="default"
-              size="input-xs"
-              onClick={increase}
-              disabled={!canIncrease}
-              data-testid="font-size-increase"
-              aria-label="Increase font size"
-            >
-              <Icon icon="mdi:format-font-size-increase" width={14} />
-            </ActionIcon>
-          </Tooltip>
-        </ActionIcon.Group>
-        {scale !== 1 && (
-          <Button variant="subtle" size="compact-xs" onClick={reset} data-testid="font-size-reset">
-            Reset
-          </Button>
-        )}
-      </Group>
-    </Field>
-  );
-};
+/** Where the app's look went: it is the reader's, not the dashboard's. */
+const ChromeStyleNote: React.FC = () => (
+  <Text size="xs" c="dimmed" data-testid="chrome-style-section">
+    Look: set in your{' '}
+    <Anchor href="/profile#preferences" size="xs">
+      profile
+    </Anchor>
+  </Text>
+);
 
 /** The reader's own page width (Full / Wide / Comfortable / Compact). Lives
  *  here only: a header button for it was one more control in a bar that
@@ -605,28 +553,31 @@ const BrandingBlock: React.FC<{
       </Field>
 
       {customising && (
-        <>
-          <BrandThemeForm
-            scope="dashboard"
-            value={value}
-            defaults={instance}
-            onChange={emit}
-            logoSlot={
-              onUploadLogo ? (
-                <LogoBlock
-                  theme={value}
-                  instanceHasLogo={!!instance?.logo_url}
-                  onChangeMode={(mode) => emit({ ...value, logo_mode: mode })}
-                  onUpload={onUploadLogo}
-                />
-              ) : undefined
-            }
-          />
-          <Divider />
-          <Field label="Preview" description="How the dashboard looks with these settings.">
-            <BrandThemePreview theme={resolved} compact />
-          </Field>
-        </>
+        <BrandThemeForm
+          scope="dashboard"
+          collapsible
+          value={value}
+          defaults={instance}
+          onChange={emit}
+          logoSlot={
+            onUploadLogo ? (
+              <LogoBlock
+                theme={value}
+                instanceHasLogo={!!instance?.logo_url}
+                onChangeMode={(mode) => emit({ ...value, logo_mode: mode })}
+                onUpload={onUploadLogo}
+              />
+            ) : undefined
+          }
+          previewSlot={
+            <Stack gap={6}>
+              <Text size="xs" c="dimmed">
+                How the dashboard looks with these settings.
+              </Text>
+              <BrandThemePreview theme={resolved} compact />
+            </Stack>
+          }
+        />
       )}
     </Stack>
   );
@@ -928,8 +879,9 @@ const SettingsDrawer: React.FC<SettingsDrawerProps> = ({
       subtitle: 'Only for you, saved in this browser',
       body: (
         <Stack gap="lg">
-          <FontSizeBlock />
+          <UiScaleField />
           <PageWidthBlock />
+          <ChromeStyleNote />
         </Stack>
       ),
     },

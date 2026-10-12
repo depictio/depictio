@@ -16,6 +16,7 @@ import type { DashboardListEntry } from 'depictio-react-core';
 import { dashboardHref, dashboardLinkClickHandler } from './lib/dashboardLinks';
 import { isImagePath, resolveAssetUrl, screenshotUrl } from './lib/format';
 import type { ScreenshotVariant } from './lib/format';
+import { placeholderBackground } from './thumbnailPlaceholder';
 
 interface MultiTabPreviewProps {
   parent: DashboardListEntry;
@@ -72,7 +73,7 @@ const SlideImage: React.FC<{
     // logo image itself instead of an empty/broken ThemeIcon.
     if (isImagePath(slide.icon)) {
       return (
-        <Center h="100%" w="100%" bg="var(--mantine-color-default-hover)">
+        <Center h="100%" w="100%" style={{ background: placeholderBackground(slide.color) }}>
           <img
             src={resolveAssetUrl(slide.icon)}
             alt={slide.title}
@@ -89,7 +90,7 @@ const SlideImage: React.FC<{
       );
     }
     return (
-      <Center h="100%" w="100%" bg="var(--mantine-color-default-hover)">
+      <Center h="100%" w="100%" style={{ background: placeholderBackground(slide.color) }}>
         <ThemeIcon size={iconSize} variant="light" color={slide.color} radius="md">
           <Icon icon={slide.icon} width={Math.round(iconSize * 0.6)} />
         </ThemeIcon>

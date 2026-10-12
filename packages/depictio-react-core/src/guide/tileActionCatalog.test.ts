@@ -70,6 +70,14 @@ describe('rowActionsFor', () => {
     expect(rowActionsFor('card', { inspector: true }).map((a) => a.key)).toContain('inspect');
   });
 
+  it('lists export only where the export API is on, right after inspect', () => {
+    for (const type of GUIDE_TILE_TYPES) {
+      expect(rowActionsFor(type).map((a) => a.key), type).not.toContain('export');
+      const keys = rowActionsFor(type, { embed: true }).map((a) => a.key);
+      expect(keys.indexOf('export'), type).toBe(keys.indexOf('inspect') + 1);
+    }
+  });
+
   it('says what each type draws inside the tile', () => {
     for (const type of GUIDE_TILE_TYPES) expect(ownControlsFor(type).length).toBeGreaterThan(0);
   });

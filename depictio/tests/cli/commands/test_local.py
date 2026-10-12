@@ -106,6 +106,18 @@ def test_server_env_keeps_the_realtime_opt_in_and_only_that(paths, monkeypatch):
     assert "DEPICTIO_EVENTS_REDIS_DB" not in env
 
 
+def test_server_env_keeps_the_export_api_settings(paths, monkeypatch):
+    monkeypatch.setenv("DEPICTIO_FASTAPI_EMBED_ENABLED", "true")
+    monkeypatch.setenv("DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS", "http://localhost:8899")
+    monkeypatch.setenv("DEPICTIO_FASTAPI_WORKERS", "16")
+    ports = {"api": 1, "mongo": 2, "redis": 3, "s3": 4}
+    env = server_env(paths, ports, SECRETS, "none", False)
+
+    assert env["DEPICTIO_FASTAPI_EMBED_ENABLED"] == "true"
+    assert env["DEPICTIO_FASTAPI_EMBED_ALLOWED_ORIGINS"] == "http://localhost:8899"
+    assert "DEPICTIO_FASTAPI_WORKERS" not in env, "only the embed settings, not the whole prefix"
+
+
 def test_the_server_reaches_127_0_0_1_without_the_proxy(paths, monkeypatch):
     monkeypatch.setenv("http_proxy", "http://proxy:3128")
     monkeypatch.setenv("no_proxy", "localhost,.example.org")
