@@ -1,7 +1,7 @@
 /**
  * The "Review & create" step: the project and its workflows at a glance,
- * what still needs fixing, the generated template (copy, download), and the
- * create panel of the mode.
+ * what still needs fixing, the links between collections, the generated
+ * template (copy, download), and the create panel of the mode.
  */
 import React from 'react';
 import {
@@ -22,12 +22,14 @@ import {
 import { Icon } from '@iconify/react';
 
 import { useBrandAccents } from 'depictio-react-core';
-import type { BuilderIssue, BuilderState } from 'depictio-react-core';
+import type { BuilderAction, BuilderIssue, BuilderRootSpec, BuilderState } from 'depictio-react-core';
 
+import { useBuilderCapabilities } from '../BuilderCapabilitiesContext';
 import { useBuilderMode } from '../BuilderModeContext';
 import { DcCard } from '../collections/DcCard';
 import { templateFileName } from '../paths';
 import { engineLabel, WorkflowLogo } from '../workflows/WorkflowLogo';
+import { LinksSection } from './LinksSection';
 import type { TemplateState } from './useBuilderTemplate';
 import { YamlBlock } from './YamlBlock';
 
@@ -42,6 +44,11 @@ function downloadYaml(yaml: string, fileName: string): void {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
+}
+
+/** The project is realtime and the server can honour it. */
+function isRealtime(state: BuilderState, eventsEnabled: boolean | null): boolean {
+  return state.project.realtime && eventsEnabled !== false;
 }
 
 const IssueList: React.FC<{ issues: BuilderIssue[]; onEditDc: (tag: string) => void }> = ({
@@ -82,6 +89,8 @@ const IssueList: React.FC<{ issues: BuilderIssue[]; onEditDc: (tag: string) => v
 
 interface ReviewStepProps {
   state: BuilderState;
+  dispatch: React.Dispatch<BuilderAction>;
+  root: BuilderRootSpec;
   dataRoot: string;
   remote: boolean;
   issues: BuilderIssue[];
@@ -94,6 +103,8 @@ interface ReviewStepProps {
 
 export const ReviewStep: React.FC<ReviewStepProps> = ({
   state,
+  dispatch,
+  root,
   dataRoot,
   remote,
   issues,
@@ -104,6 +115,8 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
 }) => {
   const accent = useBrandAccents();
   const mode = useBuilderMode();
+  const { capabilities } = useBuilderCapabilities();
+  const realtime = isRealtime(state, capabilities.realtime.events_enabled);
   const { project } = state;
   const result = template.status === 'ready' ? template.result : null;
   const count = state.workflows.reduce((n, w) => n + w.data_collections.length, 0);
@@ -124,7 +137,7 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                       public
                     </Badge>
                   )}
-                  {project.realtime && (
+                  {realtime && (
                     <Badge size="sm" variant="light" color="grape">
                       realtime
                     </Badge>
@@ -133,6 +146,12 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                 {project.description.trim() && (
                   <Text size="sm" c="dimmed">
                     {project.description.trim()}
+                  </Text>
+                )}
+                {project.data_management_platform_project_url.trim() && (
+                  <Text size="xs" c="dimmed" style={{ wordBreak: 'break-all' }}>
+                    <Icon icon="mdi:link-variant" width={12} style={{ verticalAlign: 'middle' }} />{' '}
+                    {project.data_management_platform_project_url.trim()}
                   </Text>
                 )}
                 <Text size="xs" c="dimmed" ff="monospace" style={{ wordBreak: 'break-all' }}>
@@ -183,6 +202,14 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
               )}
             </Paper>
           ))}
+
+          <LinksSection
+            state={state}
+            dispatch={dispatch}
+            root={root}
+            remote={remote}
+            capabilities={capabilities}
+          />
 
           <Group gap="xs" mt="xs">
             <Icon
@@ -273,10 +300,29 @@ export const ReviewStep: React.FC<ReviewStepProps> = ({
                 <YamlBlock code={result.yaml} testId="builder-review-yaml" />
               </ScrollArea.Autosize>
             )}
-            {remote && state.project.realtime && (
-              <Text size="xs" c="dimmed">
-                Realtime on an S3 root needs <Text span ff="monospace" size="xs">depictio watch</Text> or
-                re-ingestion to pick up new files.
+            {realtime && (
+              <Text size="xs" c="dimmed" data-testid="builder-review-realtime-hint">
+                {remote ? (
+                  <>
+                    No watcher for S3: re-ingest with Data refresh or a scheduled{' '}
+                    <Text span ff="monospace" size="xs">
+                      depictio ingest
+                    </Text>
+                    .
+                  </>
+                ) : (
+                  <>
+                    Dashboards update when the data is ingested again:{' '}
+                    <Text span ff="monospace" size="xs">
+                      depictio watch
+                    </Text>{' '}
+                    on the folder,{' '}
+                    <Text span ff="monospace" size="xs">
+                      depictio ingest
+                    </Text>
+                    , or the project&apos;s Data refresh.
+                  </>
+                )}
               </Text>
             )}
           </Stack>

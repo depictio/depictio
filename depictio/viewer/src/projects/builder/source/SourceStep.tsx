@@ -1,7 +1,13 @@
 /**
  * The "Source & project" step: where the files are (picked in server mode,
- * fixed in standalone mode), and the project's name, description,
- * visibility and realtime switch.
+ * fixed in standalone mode), and the project's name, description, data
+ * management platform page, visibility and realtime switch.
+ *
+ * Realtime only does something on a server with real-time events on
+ * (`DEPICTIO_EVENTS_ENABLED`, off by default), and only once dashboards
+ * exist: they update when data is ingested again (`depictio watch` on a
+ * local folder, `depictio ingest`, or the project's Data refresh). Nothing
+ * watches an S3 prefix.
  */
 import React from 'react';
 import {
@@ -25,6 +31,8 @@ import { useBrandAccents } from 'depictio-react-core';
 import type { BuilderAction, BuilderProjectFields } from 'depictio-react-core';
 
 import { plural } from '../../fromRun/plural';
+import { useBuilderCapabilities } from '../BuilderCapabilitiesContext';
+import { useBuilderMode } from '../BuilderModeContext';
 import type { RootProbe, ServerRoot } from './useServerRoot';
 import type { StandaloneRoot } from './useStandaloneRoot';
 
@@ -100,6 +108,65 @@ interface SourceStepProps {
   existingNames: string[];
 }
 
+export const REALTIME_EVENTS_OFF_REASON =
+  'Real-time events are off on this server (DEPICTIO_EVENTS_ENABLED)';
+const REALTIME_STANDALONE_WARNING = 'Takes effect only on a server with real-time events on';
+const REALTIME_DESCRIPTION =
+  'Live-update dashboards when new data is ingested (depictio watch, depictio ingest or Data refresh).';
+const REALTIME_S3_NOTE = 'No watcher for S3: re-ingest with Data refresh or a scheduled depictio ingest.';
+
+/** The realtime switch, gated on whether the server has real-time events. */
+const RealtimeSwitch: React.FC<{
+  checked: boolean;
+  remote: boolean;
+  onChange: (checked: boolean) => void;
+}> = ({ checked, remote, onChange }) => {
+  const accent = useBrandAccents();
+  const mode = useBuilderMode();
+  const { capabilities } = useBuilderCapabilities();
+  const eventsEnabled = capabilities.realtime.events_enabled;
+  const off = mode === 'server' && eventsEnabled === false;
+  return (
+    <Stack gap={4}>
+      <Switch
+        label="Realtime"
+        description={
+          <>
+            {REALTIME_DESCRIPTION}
+            {remote && (
+              <>
+                <br />
+                {REALTIME_S3_NOTE}
+              </>
+            )}
+          </>
+        }
+        checked={checked && !off}
+        disabled={off}
+        onChange={(e) => onChange(e.currentTarget.checked)}
+        color={accent.secondary}
+        data-testid="builder-project-realtime"
+      />
+      {off && (
+        <Group gap={6} wrap="nowrap" pl={54} data-testid="builder-project-realtime-reason">
+          <Icon icon="mdi:lock-outline" width={14} color="var(--mantine-color-dimmed)" style={{ flexShrink: 0 }} />
+          <Text size="xs" c="dimmed">
+            {REALTIME_EVENTS_OFF_REASON}
+          </Text>
+        </Group>
+      )}
+      {mode === 'standalone' && (
+        <Group gap={6} wrap="nowrap" pl={54} data-testid="builder-project-realtime-warning">
+          <Icon icon="mdi:alert-outline" width={14} color="var(--mantine-color-yellow-6)" style={{ flexShrink: 0 }} />
+          <Text size="xs" c="dimmed">
+            {REALTIME_STANDALONE_WARNING}
+          </Text>
+        </Group>
+      )}
+    </Stack>
+  );
+};
+
 export const SourceStep: React.FC<SourceStepProps> = ({
   server,
   standalone,
@@ -112,6 +179,8 @@ export const SourceStep: React.FC<SourceStepProps> = ({
   const accent = useBrandAccents();
   const name = project.name.trim();
   const nameUsed = name.length > 0 && existingNames.some((n) => n.toLowerCase() === name.toLowerCase());
+  const dmpUrl = project.data_management_platform_project_url.trim();
+  const dmpInvalid = dmpUrl.length > 0 && !/^https?:\/\//.test(dmpUrl);
   const patch = (p: Partial<BuilderProjectFields>) => dispatch({ type: 'project/patch', patch: p });
 
   return (
@@ -240,6 +309,17 @@ export const SourceStep: React.FC<SourceStepProps> = ({
             maxRows={5}
             data-testid="builder-project-description"
           />
+          <TextInput
+            label="Data management platform URL"
+            description="Optional: the project's page on a data management platform"
+            placeholder="https://"
+            value={project.data_management_platform_project_url}
+            onChange={(e) => patch({ data_management_platform_project_url: e.currentTarget.value })}
+            leftSection={<Icon icon="mdi:link-variant" width={16} />}
+            error={dmpInvalid ? 'Starts with http:// or https://' : undefined}
+            spellCheck={false}
+            data-testid="builder-project-dmp-url"
+          />
           <Switch
             label="Public project"
             description="Visible to every user of the instance"
@@ -248,17 +328,10 @@ export const SourceStep: React.FC<SourceStepProps> = ({
             color={accent.secondary}
             data-testid="builder-project-public"
           />
-          <Switch
-            label="Realtime"
-            description={
-              remote
-                ? 'Dashboards follow new data as it arrives. On an S3 root this needs `depictio watch` or re-ingestion.'
-                : 'Dashboards follow new data as files change in the folder.'
-            }
+          <RealtimeSwitch
             checked={project.realtime}
-            onChange={(e) => patch({ realtime: e.currentTarget.checked })}
-            color={accent.secondary}
-            data-testid="builder-project-realtime"
+            remote={remote}
+            onChange={(realtime) => patch({ realtime })}
           />
         </Stack>
       </Paper>

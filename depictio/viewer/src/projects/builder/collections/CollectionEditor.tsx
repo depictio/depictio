@@ -1,8 +1,9 @@
 /**
  * The collection being added or edited: where it goes (workflow), its tag,
- * type and per-type properties, and which files it reads, a single file or
- * a scan whose glob and regex stay in step, with the files it would ingest
- * listed live below.
+ * type (as the server offers them: an unavailable type shows disabled with
+ * its reason), metatype and per-type properties, and which files it reads,
+ * a single file or a scan whose glob and regex stay in step (with its
+ * wildcards), with the files it would ingest listed live below.
  */
 import React, { useState } from 'react';
 import {
@@ -27,15 +28,28 @@ import {
 import { Icon } from '@iconify/react';
 
 import {
-  BUILDER_DC_TYPES,
+  METATYPE_DC_TYPES,
   SINGLE_FILE_DC_TYPES,
+  assemblyIssue,
+  coordinatesIssue,
   isTagTaken,
+  isTrackFilePath,
+  offeredDcTypes,
   tableTags,
   useBrandAccents,
+  wildcardIssues,
 } from 'depictio-react-core';
-import type { BuilderDcType, BuilderState, BuilderSuggestion } from 'depictio-react-core';
+import type {
+  BuilderCapabilities,
+  BuilderDcType,
+  BuilderMetatype,
+  BuilderState,
+  BuilderSuggestion,
+} from 'depictio-react-core';
 
 import { DisabledReason, GatedButton } from '../../../components/settings/SettingsSections';
+import { useBuilderCapabilities } from '../BuilderCapabilitiesContext';
+import { useBuilderMode } from '../BuilderModeContext';
 import { WorkflowLogo } from '../workflows/WorkflowLogo';
 import {
   BuilderDcTypeIcon,
@@ -56,6 +70,7 @@ import type { DcFormState } from './dcForm';
 import { PropsForm } from './forms';
 import { MatchesPanel } from './MatchesPanel';
 import type { MatchState } from './useBuilderMatch';
+import { WildcardsEditor } from './WildcardsEditor';
 
 const MONO = { input: { fontFamily: 'var(--mantine-font-family-monospace)' } };
 
@@ -77,23 +92,65 @@ interface CollectionEditorProps {
 }
 
 /** Why the collection cannot be saved yet; null when it can. */
-function saveBlocker(state: BuilderState, form: DcFormState, remote: boolean): string | null {
+function saveBlocker(
+  state: BuilderState,
+  form: DcFormState,
+  remote: boolean,
+  capabilities: BuilderCapabilities,
+): string | null {
   const { dc } = form;
   const tag = dc.tag.trim();
   if (!tag) return 'Give the collection a tag.';
   if (isTagTaken(state, tag, form.originalTag)) return 'Another collection already uses this tag.';
+  const unavailable = dcTypeUnavailableReason(dc.type, remote, capabilities);
+  if (unavailable) return unavailable;
   if (dc.mode === 'single' && !dc.path?.trim()) return 'Pick the file it reads.';
   if (dc.mode === 'recursive' && !dc.regex?.trim()) return 'Give the scan a pattern.';
-  const unavailable = dcTypeUnavailableReason(dc.type, remote);
-  if (unavailable) return unavailable;
+  const wildcard = wildcardIssues(dc)[0];
+  if (wildcard) return wildcard;
   const p = dc.props;
+  if (p.kind === 'table') {
+    const coordinates = coordinatesIssue(p);
+    if (coordinates) return coordinates;
+    if (p.format === 'spatialdata' && !capabilities.table_formats.includes('spatialdata')) {
+      return 'This server does not read SpatialData tables.';
+    }
+    if (p.format === 'spatialdata' && remote) return 'SpatialData stores are read from local folders, not S3.';
+  }
   if (p.kind === 'image' && !p.image_column.trim()) return 'Name the image column.';
+  if (
+    p.kind === 'image' &&
+    typeof p.thumbnail_size === 'number' &&
+    (p.thumbnail_size < 50 || p.thumbnail_size > 1000)
+  ) {
+    return 'Thumbnails are 50 to 1000 pixels.';
+  }
+  if (p.kind === 'image' && p.s3_base_folder?.trim() && !p.s3_base_folder.trim().startsWith('s3://')) {
+    return 'The S3 folder of the images starts with s3://.';
+  }
   if (p.kind === 'geojson' && !p.feature_id_key.trim()) return 'Name the feature id key.';
   if (p.kind === 'phylogeny' && p.metadata_dc_tag && !tableTags(state).includes(p.metadata_dc_tag)) {
     return 'The metadata table is not a table collection of this project.';
   }
+  if (p.kind === 'genomic_tracks') {
+    const assembly = assemblyIssue(p);
+    if (assembly) return assembly;
+    if (!p.uri_column?.trim()) return "Name the manifest column holding each track's file.";
+    if (dc.mode === 'single' && dc.path && isTrackFilePath(dc.path)) {
+      return 'Pick the manifest listing the tracks, or generate one from the track files.';
+    }
+  }
+  if (p.kind === 'bioimage' && p.format === 'spatialdata' && !p.image_path?.trim()) {
+    return "Pick the store's image.";
+  }
   return null;
 }
+
+const METATYPE_OPTIONS = [
+  { value: 'auto', label: 'Automatic' },
+  { value: 'Metadata', label: 'Metadata' },
+  { value: 'Aggregate', label: 'Aggregate' },
+];
 
 export const CollectionEditor: React.FC<CollectionEditorProps> = ({
   state,
@@ -110,6 +167,8 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
   columns,
 }) => {
   const accent = useBrandAccents();
+  const mode = useBuilderMode();
+  const { capabilities } = useBuilderCapabilities();
   const { dc } = form;
   const editing = form.originalTag !== null;
   const [advancedOpen, setAdvancedOpen] = useState(
@@ -117,13 +176,16 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
   );
   const tagClash = isTagTaken(state, dc.tag, form.originalTag);
   const target = state.workflows.find((w) => w.id === form.workflowId) ?? state.workflows[0];
-  const blocker = saveBlocker(state, form, remote);
+  const blocker = saveBlocker(state, form, remote, capabilities);
   const tables = tableTags(state, form.originalTag);
+  const typeReason = (type: BuilderDcType) => dcTypeUnavailableReason(type, remote, capabilities);
 
-  const typeData = BUILDER_DC_TYPES.map((type) => ({
+  const offered = offeredDcTypes(capabilities);
+  const typeOptions = offered.includes(dc.type) ? offered : [dc.type, ...offered];
+  const typeData = typeOptions.map((type) => ({
     value: type,
     label: DC_TYPE_META[type].label,
-    disabled: Boolean(dcTypeUnavailableReason(type, remote)) && dc.type !== type,
+    disabled: Boolean(typeReason(type)) && dc.type !== type,
   }));
 
   return (
@@ -203,13 +265,19 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
           value={dc.type}
           data={typeData}
           allowDeselect={false}
-          onChange={(v) => v && onChange(withType(form, v as BuilderDcType))}
+          onChange={(v) => v && onChange(withType(form, v as BuilderDcType, capabilities))}
           leftSection={<BuilderDcTypeIcon type={dc.type} size={16} />}
           renderOption={({ option }) => {
             const type = option.value as BuilderDcType;
-            const reason = dcTypeUnavailableReason(type, remote);
+            const reason = typeReason(type);
             const row = (
-              <Group gap="xs" wrap="nowrap">
+              <Group
+                gap="xs"
+                wrap="nowrap"
+                data-testid="builder-dc-type-option"
+                data-type={type}
+                data-reason={reason ?? undefined}
+              >
                 <BuilderDcTypeIcon type={type} size={16} />
                 <Stack gap={0}>
                   <Text size="sm">{DC_TYPE_META[type].label}</Text>
@@ -227,7 +295,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
               row
             );
           }}
-          error={dcTypeUnavailableReason(dc.type, remote) ?? undefined}
+          error={typeReason(dc.type) ?? undefined}
           description={
             suggestion && suggestedType(suggestion) !== dc.type
               ? `Suggested: ${DC_TYPE_META[suggestedType(suggestion)].label}`
@@ -235,6 +303,44 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
           }
           data-testid="builder-dc-type"
         />
+
+        {suggestion?.warnings && suggestion.warnings.length > 0 && (
+          <Stack gap={2} data-testid="builder-dc-suggestion-warnings">
+            {suggestion.warnings.map((w) => (
+              <Group key={w} gap={6} wrap="nowrap" align="flex-start">
+                <Icon
+                  icon="mdi:alert-outline"
+                  width={14}
+                  color="var(--mantine-color-yellow-6)"
+                  style={{ flexShrink: 0, marginTop: 2 }}
+                />
+                <Text size="xs" c="dimmed">
+                  {w}
+                </Text>
+              </Group>
+            ))}
+          </Stack>
+        )}
+
+        {METATYPE_DC_TYPES.has(dc.type) && (
+          <Select
+            label="Metatype"
+            description="Automatic: one file is Metadata (one row per sample), a scan is Aggregate"
+            value={dc.metatype ?? 'auto'}
+            data={METATYPE_OPTIONS}
+            allowDeselect={false}
+            onChange={(v) =>
+              onChange({
+                ...form,
+                dc: {
+                  ...dc,
+                  metatype: v === 'Metadata' || v === 'Aggregate' ? (v as BuilderMetatype) : null,
+                },
+              })
+            }
+            data-testid="builder-dc-metatype"
+          />
+        )}
 
         <Divider label="Files" labelPosition="left" />
 
@@ -325,6 +431,7 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
               spellCheck={false}
               data-testid="builder-dc-regex"
             />
+            <WildcardsEditor form={form} suggestion={suggestion} onChange={onChange} />
             <Box>
               <Button
                 variant="subtle"
@@ -369,9 +476,14 @@ export const CollectionEditor: React.FC<CollectionEditorProps> = ({
         <PropsForm
           props={dc.props}
           onChange={(props) => onChange({ ...form, dc: { ...dc, props } })}
-          columns={columns}
-          remote={remote}
-          tables={tables}
+          context={{
+            columns,
+            remote,
+            tables,
+            capabilities,
+            mode,
+            store: suggestion?.store ?? null,
+          }}
         />
 
         <Group justify="flex-end" gap="xs">

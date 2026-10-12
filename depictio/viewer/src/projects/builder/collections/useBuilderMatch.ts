@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react';
 
 import { builderMatch, normalizeDcDraft } from 'depictio-react-core';
 import type {
+  BuilderCapabilities,
   BuilderDcDraft,
   BuilderMatchResult,
   BuilderRootSpec,
@@ -31,20 +32,20 @@ export function useBuilderMatch(
   root: BuilderRootSpec | null,
   workflow: { structure: BuilderWorkflowStructure; runs_regex?: string | null } | null,
   dc: BuilderDcDraft | null,
-  options: { remote: boolean; refresh: number },
+  options: { remote: boolean; refresh: number; capabilities: BuilderCapabilities },
 ): MatchState {
   const [state, setState] = useState<MatchState>({ status: 'idle' });
   // What would be sent, as one string: the request runs again only when it
   // changes, whatever re-rendered the editor.
   const request = useMemo(() => {
     if (!root || !workflow || !dc || !askable(dc)) return null;
-    const collection = normalizeDcDraft(dc, { remote: options.remote });
+    const collection = normalizeDcDraft(dc, { remote: options.remote, capabilities: options.capabilities });
     const wf = {
       structure: workflow.structure,
       runs_regex: workflow.structure === 'sequencing-runs' ? workflow.runs_regex ?? null : null,
     };
     return { root, workflow: wf, collection, key: JSON.stringify([root.data_root, wf, collection]) };
-  }, [root, workflow, dc, options.remote]);
+  }, [root, workflow, dc, options.remote, options.capabilities]);
 
   const key = request?.key ?? null;
   useEffect(() => {

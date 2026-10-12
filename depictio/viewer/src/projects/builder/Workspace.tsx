@@ -4,7 +4,8 @@
  * workflow's settings), the workflows and their collections on the right.
  *
  * Picking a file previews it and starts a collection from the server's
- * suggestion; ticking sibling files generalises the suggested pattern. The
+ * suggestion; ticking sibling files generalises the suggested pattern. A
+ * store (`*.zarr`) is picked the same way but never previewed. The
  * collection's matches are asked for live and tinted in the tree.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -17,8 +18,10 @@ import { builderSuggest, findBuilderDc, shortenFolder, useBrandAccents } from 'd
 import type { BuilderAction, BuilderRootSpec, BuilderState, BuilderSuggestion } from 'depictio-react-core';
 
 import { RunFileScope, useRunFilePreview } from '../fromRun/FilePreview';
+import { useBuilderCapabilities } from './BuilderCapabilitiesContext';
 import { CollectionEditor } from './collections/CollectionEditor';
 import { applySuggestion, dcFormFromExisting, newDcForm } from './collections/dcForm';
+import { dcTypeUnavailableReason } from './collections/dcTypes';
 import type { DcFormState } from './collections/dcForm';
 import { matchResultOf, useBuilderMatch } from './collections/useBuilderMatch';
 import { FilePane } from './files/FilePane';
@@ -75,6 +78,9 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
   editRequest = null,
 }) => {
   const accent = useBrandAccents();
+  const { capabilities } = useBuilderCapabilities();
+  const capabilitiesRef = useRef(capabilities);
+  capabilitiesRef.current = capabilities;
   const narrow = useMediaQuery('(max-width: 62em)') ?? false;
   const [treeWidth, setTreeWidth] = useState(320);
   const [asideWidth, setAsideWidth] = useState(340);
@@ -128,7 +134,7 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
       .then((s) => {
         if (controller.signal.aborted) return;
         setSuggestion(s);
-        setForm((f) => (f ? applySuggestion(stateRef.current, f, s) : f));
+        setForm((f) => (f ? applySuggestion(stateRef.current, f, s, capabilitiesRef.current) : f));
       })
       .catch(() => {
         if (!controller.signal.aborted) setSuggestion(null);
@@ -148,11 +154,14 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
   const formWorkflow = form
     ? state.workflows.find((w) => w.id === form.workflowId) ?? activeWorkflow
     : null;
+  // A type the server does not build, or this root cannot hold, is never
+  // sent, not even to be matched.
+  const matchable = form && !dcTypeUnavailableReason(form.dc.type, remote, capabilities) ? form.dc : null;
   const match = useBuilderMatch(
     root,
     formWorkflow ? { structure: formWorkflow.structure, runs_regex: formWorkflow.runs_regex } : null,
-    form?.dc ?? null,
-    { remote, refresh: matchRefresh },
+    matchable,
+    { remote, refresh: matchRefresh, capabilities },
   );
   const matchResult = matchResultOf(match);
   const matched = useMemo(() => new Set(matchResult?.files ?? []), [matchResult]);
@@ -183,11 +192,10 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
       setSuggestion(null);
       // Editing a saved collection: the file is only previewed (its path
       // field offers to use it). Otherwise it starts a new collection.
-      setForm((f) =>
-        f && f.originalTag !== null
-          ? f
-          : newDcForm(stateRef.current, path, stateRef.current.activeWorkflowId),
-      );
+      setForm((f) => {
+        if (f && f.originalTag !== null) return f;
+        return newDcForm(stateRef.current, path, stateRef.current.activeWorkflowId, capabilitiesRef.current);
+      });
     },
     [],
   );
@@ -239,12 +247,18 @@ const WorkspaceInner: React.FC<WorkspaceProps> = ({
     const files =
       result?.files ?? (form.dc.mode === 'single' && form.dc.path ? [form.dc.path] : undefined);
     const target = state.workflows.find((w) => w.id === form.workflowId);
+    // The columns the link editor offers: the first file's schema, or a
+    // genomic manifest's columns.
+    const schema =
+      result?.schema ??
+      (result?.tracks?.columns.length ? Object.fromEntries(result.tracks.columns.map((c) => [c, ''])) : null);
     dispatch({
       type: 'dc/save',
       workflowId: form.workflowId,
       dc: form.dc,
       originalTag: form.originalTag,
       files,
+      schema,
     });
     notifications.show({
       color: accent.secondary,

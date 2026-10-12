@@ -40,6 +40,7 @@ import BrandLogo from '../../chrome/BrandLogo';
 import { useCurrentUser } from '../../hooks/useCurrentUser';
 import { RunCreatedModal } from '../fromRun';
 import { rememberRunFolder } from '../fromRun/recentFolders';
+import { BuilderCapabilitiesProvider } from './BuilderCapabilitiesContext';
 import { BuilderModeProvider } from './BuilderModeContext';
 import { BuilderSteps } from './BuilderSteps';
 import type { BuilderMode } from './mode';
@@ -296,13 +297,14 @@ const StandaloneFlow: React.FC = () => {
           existingNames={[]}
         />
       )}
-      create={({ template, templateBlocker, engine }) =>
+      create={({ template, templateBlocker, engine, realtime }) =>
         root.status === 'ready' ? (
           <StandaloneCreatePanel
             context={root.context}
             template={template}
             templateBlocker={templateBlocker}
             engine={engine}
+            realtime={realtime}
           />
         ) : null
       }
@@ -339,7 +341,9 @@ const ProjectBuilderPage: React.FC<{ mode: BuilderMode }> = ({ mode }) => {
   usePageTitle('Project Builder');
   return (
     <BuilderModeProvider mode={mode}>
-      {mode === 'standalone' ? <StandaloneBuilder /> : <ServerBuilder />}
+      <BuilderCapabilitiesProvider>
+        {mode === 'standalone' ? <StandaloneBuilder /> : <ServerBuilder />}
+      </BuilderCapabilitiesProvider>
     </BuilderModeProvider>
   );
 };

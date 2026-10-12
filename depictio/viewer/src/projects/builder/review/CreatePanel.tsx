@@ -5,7 +5,8 @@
  * - Server mode: `from_run` with the inline template, dry run first, then
  *   for real; the page then shows `RunCreatedModal`.
  * - Standalone: `/plan`, then `/write` next to the data (an existing bundle
- *   is overwritten only once confirmed), then the `depictio ingest` command.
+ *   is overwritten only once confirmed), then the `depictio ingest` command,
+ *   and for a realtime project the `depictio watch` one that keeps it fed.
  *
  * The plan belongs to the template it was made with: once the draft
  * changes, it has to be previewed again before acting.
@@ -119,6 +120,33 @@ const PlanSection: React.FC<{
         </Box>
       )}
     </Stack>
+  );
+};
+
+/** A command to run, with a copy button. */
+const CommandBlock: React.FC<{ command: string; testId: string }> = ({ command, testId }) => {
+  const accent = useBrandAccents();
+  return (
+    <Group gap="xs" wrap="nowrap" align="flex-start">
+      <Code block style={{ flex: 1, minWidth: 0 }} data-testid={testId}>
+        {command}
+      </Code>
+      <CopyButton value={command} timeout={1500}>
+        {({ copied, copy }) => (
+          <Tooltip label={copied ? 'Copied' : 'Copy the command'} withArrow>
+            <ActionIcon
+              variant="light"
+              color={copied ? accent.secondary : 'gray'}
+              onClick={copy}
+              aria-label="Copy the command"
+              data-testid={`${testId}-copy`}
+            >
+              <Icon icon={copied ? 'mdi:check' : 'mdi:content-copy'} width={16} />
+            </ActionIcon>
+          </Tooltip>
+        )}
+      </CopyButton>
+    </Group>
   );
 };
 
@@ -252,7 +280,9 @@ export const StandaloneCreatePanel: React.FC<{
   template: BuilderTemplateResult | null;
   templateBlocker: string | null;
   engine: string | null;
-}> = ({ context, template, templateBlocker, engine }) => {
+  /** The project is realtime: show how to keep it fed. */
+  realtime: boolean;
+}> = ({ context, template, templateBlocker, engine, realtime }) => {
   const accent = useBrandAccents();
   const [plan, setPlan] = useState<PlanState>({ status: 'idle' });
   const [writing, setWriting] = useState(false);
@@ -298,6 +328,7 @@ export const StandaloneCreatePanel: React.FC<{
       ? `${context.out_dir} is not writable: download the template instead.`
       : planBlocker(plan, current));
   const writtenCurrent = written !== null && written.yaml === yaml;
+  const watchCommand = written?.watch_command || context.watch_command || null;
 
   return (
     <Paper withBorder radius="md" p="md" data-testid="builder-create-panel">
@@ -352,26 +383,15 @@ export const StandaloneCreatePanel: React.FC<{
                 </Text>
               </Text>
               <Text size="sm">Ingest the folder with it:</Text>
-              <Group gap="xs" wrap="nowrap" align="flex-start">
-                <Code block style={{ flex: 1, minWidth: 0 }} data-testid="builder-ingest-command">
-                  {written.ingest_command}
-                </Code>
-                <CopyButton value={written.ingest_command} timeout={1500}>
-                  {({ copied, copy }) => (
-                    <Tooltip label={copied ? 'Copied' : 'Copy the command'} withArrow>
-                      <ActionIcon
-                        variant="light"
-                        color={copied ? accent.secondary : 'gray'}
-                        onClick={copy}
-                        aria-label="Copy the command"
-                        data-testid="builder-ingest-command-copy"
-                      >
-                        <Icon icon={copied ? 'mdi:check' : 'mdi:content-copy'} width={16} />
-                      </ActionIcon>
-                    </Tooltip>
-                  )}
-                </CopyButton>
-              </Group>
+              <CommandBlock command={written.ingest_command} testId="builder-ingest-command" />
+              {realtime && watchCommand && (
+                <>
+                  <Text size="sm">
+                    Then keep the dashboards fed as files arrive (on a server with real-time events on):
+                  </Text>
+                  <CommandBlock command={watchCommand} testId="builder-watch-command" />
+                </>
+              )}
             </Stack>
           </Alert>
         )}

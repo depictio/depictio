@@ -25,10 +25,18 @@ interface Holder {
   draft: BuilderState;
 }
 
-type HolderAction = BuilderAction | { type: 'root/load'; root: string; draft: BuilderState };
+/** `draft` null: none was saved; start fresh with the project fields typed
+ *  so far, read here rather than at dispatch so an edit still queued is
+ *  never lost. */
+type HolderAction = BuilderAction | { type: 'root/load'; root: string; draft: BuilderState | null };
 
 function holderReducer(holder: Holder, action: HolderAction): Holder {
-  if (action.type === 'root/load') return { root: action.root, draft: action.draft };
+  if (action.type === 'root/load') {
+    return {
+      root: action.root,
+      draft: action.draft ?? { ...initialBuilderState(), project: holder.draft.project },
+    };
+  }
   const draft = builderReducer(holder.draft, action);
   return draft === holder.draft ? holder : { ...holder, draft };
 }
@@ -50,12 +58,7 @@ export function useBuilderDraft(dataRoot: string | null): {
 
   useEffect(() => {
     if (!dataRoot || dataRoot === holderRef.current.root) return;
-    const saved = loadBuilderDraft(dataRoot);
-    dispatchHolder({
-      type: 'root/load',
-      root: dataRoot,
-      draft: saved ?? { ...initialBuilderState(), project: holderRef.current.draft.project },
-    });
+    dispatchHolder({ type: 'root/load', root: dataRoot, draft: loadBuilderDraft(dataRoot) });
   }, [dataRoot]);
 
   useEffect(() => {

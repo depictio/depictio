@@ -24,6 +24,8 @@ import type {
 } from 'depictio-react-core';
 
 import { DisabledReason, GatedButton } from '../../components/settings/SettingsSections';
+import { useBuilderCapabilities } from './BuilderCapabilitiesContext';
+import { useBuilderMode } from './BuilderModeContext';
 import { ReviewStep } from './review/ReviewStep';
 import { useBuilderTemplate } from './review/useBuilderTemplate';
 import { Workspace } from './Workspace';
@@ -36,6 +38,8 @@ export interface CreatePanelArgs {
   templateBlocker: string | null;
   /** The first workflow's engine, for the plan's checks. */
   engine: string | null;
+  /** The project is realtime (and the server can honour it). */
+  realtime: boolean;
 }
 
 interface BuilderStepsProps {
@@ -65,6 +69,8 @@ export const BuilderSteps: React.FC<BuilderStepsProps> = ({
   create,
 }) => {
   const accent = useBrandAccents();
+  const mode = useBuilderMode();
+  const { capabilities } = useBuilderCapabilities();
   const [step, setStep] = useState(0);
   const [editRequest, setEditRequest] = useState<{ tag: string; nonce: number } | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -84,13 +90,16 @@ export const BuilderSteps: React.FC<BuilderStepsProps> = ({
     if (step === 1) setWorkspaceOpened(true);
   }, [step]);
 
-  const issues = useMemo(() => validateBuilderState(state, { remote }), [state, remote]);
+  const issues = useMemo(
+    () => validateBuilderState(state, { remote, capabilities, mode }),
+    [state, remote, capabilities, mode],
+  );
   const blocking = blockingIssues(issues);
   // The template is only asked for on the review step, and only for a draft
   // with no error the page already knows about.
   const draftForTemplate = useMemo(
-    () => (step === 2 && blocking.length === 0 ? toProjectDraft(state, { remote }) : null),
-    [step, blocking.length, state, remote],
+    () => (step === 2 && blocking.length === 0 ? toProjectDraft(state, { remote, capabilities }) : null),
+    [step, blocking.length, state, remote, capabilities],
   );
   const template = useBuilderTemplate(draftForTemplate, remote);
   const templateResult = template.status === 'ready' ? template.result : null;
@@ -155,6 +164,8 @@ export const BuilderSteps: React.FC<BuilderStepsProps> = ({
         {step === 2 && rootSpec && (
           <ReviewStep
             state={state}
+            dispatch={dispatch}
+            root={rootSpec}
             dataRoot={rootSpec.data_root}
             remote={remote}
             issues={issues}
@@ -165,6 +176,7 @@ export const BuilderSteps: React.FC<BuilderStepsProps> = ({
               template: templateResult,
               templateBlocker,
               engine: state.workflows[0]?.engine ?? null,
+              realtime: state.project.realtime && capabilities.realtime.events_enabled !== false,
             })}
           />
         )}

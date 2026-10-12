@@ -1,115 +1,179 @@
 /**
- * Table properties: the format, the separator of a text table, and an
- * optional description per column (the columns come from the file preview).
+ * Table properties: the format (as the server lists them) and the separator
+ * of a text table, how a csv/tsv is read, an optional description per column
+ * (the columns come from the file preview), map coordinates, and for a
+ * SpatialData store which of its elements the table reads.
  */
-import React, { useState } from 'react';
-import { Button, Collapse, Group, ScrollArea, Select, Stack, Text, TextInput } from '@mantine/core';
-import { Icon } from '@iconify/react';
+import React from 'react';
+import { Autocomplete, Group, SegmentedControl, Stack, TagsInput, Text, TextInput } from '@mantine/core';
 
-import type { BuilderTableProps } from 'depictio-react-core';
+import { DEFAULT_CRS, SPATIALDATA_FORMAT, coordinatesIssue } from 'depictio-react-core';
+import type {
+  BuilderCapabilities,
+  BuilderSpatialDataTableSource,
+  BuilderStoreSummary,
+  BuilderTableProps,
+} from 'depictio-react-core';
 
-const FORMATS = ['csv', 'tsv', 'parquet', 'feather', 'xlsx'];
+import { ColumnField, ColumnsDescription, FoldSection, FormatFields, MONO, ReaderOptionsFields } from './shared';
 
-const SEPARATORS = [
-  { value: ',', label: 'Comma ( , )' },
-  { value: '\t', label: 'Tab' },
-  { value: ';', label: 'Semicolon ( ; )' },
-  { value: '|', label: 'Pipe ( | )' },
-];
+/** The table formats offered, and why SpatialData cannot be picked here. */
+export function tableFormatChoices(
+  capabilities: BuilderCapabilities,
+  remote: boolean,
+): { formats: string[]; disabled: Record<string, string> } {
+  const disabled: Record<string, string> = {};
+  if (remote) disabled[SPATIALDATA_FORMAT] = 'stores are read from local folders';
+  return { formats: capabilities.table_formats, disabled };
+}
 
-const TEXT_FORMATS = new Set(['csv', 'tsv', 'txt']);
-
-/** Format + separator, shared with the image form (an image collection is a
- *  table listing the images). */
-export const FormatFields: React.FC<{
-  format: string;
-  separator: string | null | undefined;
-  onChange: (patch: { format?: string; separator?: string | null }) => void;
-}> = ({ format, separator, onChange }) => {
-  const formats = FORMATS.includes(format) ? FORMATS : [format, ...FORMATS];
-  return (
+const SpatialDataFields: React.FC<{
+  source: BuilderSpatialDataTableSource;
+  store: BuilderStoreSummary | null;
+  onChange: (source: BuilderSpatialDataTableSource) => void;
+}> = ({ source, store, onChange }) => (
+  <Stack gap="xs" data-testid="builder-props-spatialdata">
+    <Text size="xs" c="dimmed">
+      A table read from a SpatialData store: the AnnData table, the image it sits on, and how its
+      coordinates are found.
+    </Text>
     <Group grow align="flex-start">
-      <Select
-        label="Format"
-        value={format}
-        data={formats}
-        allowDeselect={false}
-        onChange={(v) => {
-          const next = v || 'csv';
-          onChange({
-            format: next,
-            separator: next === 'tsv' ? '\t' : next === 'csv' ? ',' : TEXT_FORMATS.has(next) ? separator ?? null : null,
-          });
-        }}
-        data-testid="builder-props-format"
+      <Autocomplete
+        label="Table element"
+        description="Blank: tables/table"
+        placeholder="tables/table"
+        data={store?.tables ?? []}
+        value={source.table ?? ''}
+        onChange={(table) => onChange({ ...source, table })}
+        styles={MONO}
+        data-testid="builder-props-spatialdata-table"
       />
-      <Select
-        label="Separator"
-        placeholder="Detected"
-        value={separator ?? null}
-        data={SEPARATORS}
-        clearable
-        disabled={!TEXT_FORMATS.has(format)}
-        onChange={(v) => onChange({ separator: v })}
+      <Autocomplete
+        label="Image element"
+        description="Optional: the image the spots sit on"
+        placeholder="images/..."
+        data={store?.images ?? []}
+        value={source.image ?? ''}
+        onChange={(image) => onChange({ ...source, image })}
+        styles={MONO}
+        data-testid="builder-props-spatialdata-image"
       />
     </Group>
-  );
-};
+    <Stack gap={4}>
+      <Text size="sm" fw={500}>
+        Coordinates
+      </Text>
+      <SegmentedControl
+        size="xs"
+        value={source.coordinates ?? 'auto'}
+        data={[
+          { value: 'auto', label: 'Automatic' },
+          { value: 'obsm', label: 'obsm (spatial)' },
+          { value: 'region', label: 'Region shapes' },
+        ]}
+        onChange={(v) => onChange({ ...source, coordinates: v as BuilderSpatialDataTableSource['coordinates'] })}
+      />
+    </Stack>
+    <Group grow align="flex-start">
+      <TagsInput
+        label="Genes"
+        description="Optional: genes to read as columns (Enter to add)"
+        value={source.genes ?? []}
+        onChange={(genes) => onChange({ ...source, genes })}
+      />
+      <TextInput
+        label="Layer"
+        description="Optional: the expression layer (blank: X)"
+        value={source.layer ?? ''}
+        onChange={(e) => onChange({ ...source, layer: e.currentTarget.value })}
+        styles={MONO}
+      />
+    </Group>
+  </Stack>
+);
 
 export const TableForm: React.FC<{
   props: BuilderTableProps;
   onChange: (props: BuilderTableProps) => void;
   columns: string[];
-}> = ({ props, onChange, columns }) => {
-  const described = props.columns_description ?? {};
-  const [open, setOpen] = useState(Object.keys(described).length > 0);
+  capabilities: BuilderCapabilities;
+  remote: boolean;
+  /** What `/suggest` read of the picked store, if one is picked. */
+  store: BuilderStoreSummary | null;
+}> = ({ props, onChange, columns, capabilities, remote, store }) => {
+  const spatial = props.format === SPATIALDATA_FORMAT;
+  const { formats, disabled } = tableFormatChoices(capabilities, remote);
+  const coordinates = coordinatesIssue(props);
   return (
     <Stack gap="xs">
       <FormatFields
         format={props.format}
         separator={props.separator}
-        onChange={(patch) => onChange({ ...props, ...patch })}
+        formats={formats}
+        disabled={disabled}
+        onChange={(patch) => {
+          const next: BuilderTableProps = { ...props, ...patch };
+          if (patch.format === SPATIALDATA_FORMAT && !next.spatialdata) next.spatialdata = {};
+          onChange(next);
+        }}
       />
-      <div>
-        <Button
-          variant="subtle"
-          size="compact-sm"
-          color="gray"
-          leftSection={<Icon icon={open ? 'mdi:chevron-down' : 'mdi:chevron-right'} width={16} />}
-          onClick={() => setOpen((v) => !v)}
-        >
-          Describe the columns (optional)
-        </Button>
-        <Collapse in={open}>
-          {columns.length === 0 ? (
-            <Text size="xs" c="dimmed" pt={4}>
-              The columns show here once the file preview has read them.
+      {spatial ? (
+        <SpatialDataFields
+          source={props.spatialdata ?? {}}
+          store={store}
+          onChange={(spatialdata) => onChange({ ...props, spatialdata })}
+        />
+      ) : (
+        <>
+          <ReaderOptionsFields
+            format={props.format}
+            reader={props.reader}
+            allowed={capabilities.reader_options}
+            onChange={(reader) => onChange({ ...props, reader })}
+          />
+          <FoldSection
+            label="Map coordinates (optional)"
+            initiallyOpen={Boolean(props.lat_column || props.lon_column)}
+            testId="builder-props-coordinates"
+          >
+            <Text size="xs" c="dimmed">
+              Pick both columns to place each row on a map, or neither.
             </Text>
-          ) : (
-            <ScrollArea.Autosize mah={240} type="auto" offsetScrollbars>
-              <Stack gap={4} pt={4}>
-                {columns.map((column) => (
-                  <TextInput
-                    key={column}
-                    size="xs"
-                    label={column}
-                    styles={{ label: { fontFamily: 'var(--mantine-font-family-monospace)' } }}
-                    placeholder="What this column holds"
-                    value={described[column] ?? ''}
-                    onChange={(e) => {
-                      const text = e.currentTarget.value;
-                      const next = { ...described };
-                      if (text) next[column] = text;
-                      else delete next[column];
-                      onChange({ ...props, columns_description: next });
-                    }}
-                  />
-                ))}
-              </Stack>
-            </ScrollArea.Autosize>
-          )}
-        </Collapse>
-      </div>
+            <Group grow align="flex-start">
+              <ColumnField
+                label="Latitude column"
+                value={props.lat_column}
+                columns={columns}
+                error={coordinates && !props.lat_column ? 'Pick both, or neither' : undefined}
+                testId="builder-props-lat-column"
+                onChange={(lat_column) => onChange({ ...props, lat_column })}
+              />
+              <ColumnField
+                label="Longitude column"
+                value={props.lon_column}
+                columns={columns}
+                error={coordinates && !props.lon_column ? 'Pick both, or neither' : coordinates ?? undefined}
+                testId="builder-props-lon-column"
+                onChange={(lon_column) => onChange({ ...props, lon_column })}
+              />
+            </Group>
+            <TextInput
+              label="Coordinate system"
+              description={`Blank: ${DEFAULT_CRS}`}
+              placeholder={DEFAULT_CRS}
+              value={props.crs ?? ''}
+              onChange={(e) => onChange({ ...props, crs: e.currentTarget.value })}
+              disabled={!props.lat_column && !props.lon_column}
+              styles={MONO}
+            />
+          </FoldSection>
+        </>
+      )}
+      <ColumnsDescription
+        columns={columns}
+        value={props.columns_description}
+        onChange={(columns_description) => onChange({ ...props, columns_description })}
+      />
     </Stack>
   );
 };

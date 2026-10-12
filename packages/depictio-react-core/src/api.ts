@@ -24,6 +24,7 @@ import type {
   BuilderProjectDraft,
   BuilderRootSpec,
   BuilderScanMode,
+  BuilderWildcard,
   BuilderWorkflowStructure,
 } from './projectBuilder';
 
@@ -4641,6 +4642,24 @@ export async function testRunStorage(
 // server without auth where `/context`, `/plan` and `/write` stand in for
 // project creation. The draft shapes live in `projectBuilder.ts`.
 
+/** GET /projects/builder/capabilities: what this instance can build. A kind
+ *  it does not have is listed unavailable with a reason; the page shows it
+ *  disabled and never sends it. */
+export interface BuilderCapabilities {
+  mode: 'server' | 'standalone';
+  dc_types: { type: BuilderDcType; available: boolean; reason: string | null }[];
+  /** e.g. csv, tsv, parquet, feather, xls, xlsx (+ spatialdata). */
+  table_formats: string[];
+  /** The reader (polars) options allowed for csv/tsv tables. */
+  reader_options: string[];
+  /** The collection types a link may target. */
+  link_target_types: string[];
+  /** `events_enabled` null: unknown (standalone). */
+  realtime: { events_enabled: boolean | null; reason: string | null };
+  genomic_tracks: { assemblies: string[]; track_formats: string[] } | null;
+  bioimage: { formats: string[] } | null;
+}
+
 /** One entry of a builder folder listing. */
 export interface BuilderTreeEntry {
   name: string;
@@ -4649,6 +4668,8 @@ export interface BuilderTreeEntry {
   is_dir: boolean;
   /** Bytes; null for a folder or when unknown. */
   size: number | null;
+  /** A `*.zarr` folder: one pickable leaf, never opened. */
+  store?: 'zarr' | null;
 }
 
 /** Response of POST /projects/builder/tree: one folder level. */
@@ -4685,6 +4706,42 @@ export interface BuilderSuggestion {
   catalog: BuilderCatalogMatch[];
   /** The file is a MultiQC parquet. */
   multiqc: boolean;
+  /** What a `*.zarr` store holds; null for anything else. */
+  store?: BuilderStoreSummary | null;
+  /** A track file: its format and the index found next to it. */
+  tracks?: { format: string; index: string | null } | null;
+  /** A scan whose examples differ in ONE folder: the regex with that folder
+   *  as a `{sample}` placeholder, and the wildcard that reads it. */
+  path_wildcard?: { pattern: string; wildcards: BuilderWildcard[] } | null;
+  /** What the reader should know about the file, e.g. why its suggested
+   *  type is not available on this server. */
+  warnings?: string[];
+}
+
+/** What `/suggest` reads of a store: its format, NGFF version and elements. */
+export interface BuilderStoreSummary {
+  format: 'ome-zarr' | 'spatialdata';
+  ngff_version: '0.4' | '0.5' | null;
+  /** `images/<name>`. */
+  images: string[];
+  /** `tables/<name>`. */
+  tables: string[];
+}
+
+/** `/match`'s checks of a genomic tracks manifest. */
+export interface BuilderTracksCheck {
+  rows: number;
+  columns: string[];
+  missing_uri_column: boolean;
+  unknown_format: string[];
+  duplicate_uris: string[];
+  missing_files: string[];
+  missing_indexes: string[];
+  /** Only part of the manifest was checked. */
+  truncated?: boolean;
+  /** Absolute or file:// uris, which ingestion does not confine to the data
+   *  root. */
+  absolute_uris?: string[];
 }
 
 /** How one matched file's columns differ from the first file's. */
@@ -4715,6 +4772,10 @@ export interface BuilderMatchResult {
   /** Indexed files whose index was not found next to them. */
   missing_indexes: string[];
   warnings: string[];
+  /** The matches are stores (`*.zarr` folders), not files. */
+  stores?: boolean;
+  /** Genomic tracks only: the manifest's checks. */
+  tracks?: BuilderTracksCheck | null;
 }
 
 /** Response of POST /projects/builder/template. */
@@ -4755,6 +4816,10 @@ export interface BuilderContext {
   /** Where `/write` puts the template bundle. */
   out_dir: string;
   writable: boolean;
+  /** `depictio ingest <dir> --template <bundle>`. */
+  ingest_command?: string | null;
+  /** `depictio watch <dir> --template <bundle>`: keeps a realtime project fed. */
+  watch_command?: string | null;
 }
 
 /** Response of POST /projects/builder/write (standalone server only). */
@@ -4763,6 +4828,18 @@ export interface BuilderWriteResult {
   yaml: string;
   /** e.g. `depictio ingest <dir> --template <bundle>`. */
   ingest_command: string;
+  /** e.g. `depictio watch <dir> --template <bundle>`. */
+  watch_command?: string | null;
+}
+
+/** Response of POST /projects/builder/tracks_manifest: a manifest for track
+ *  files (`track_id, sample, format, uri, index_uri, name`), uris relative to
+ *  the data root. */
+export interface BuilderTracksManifest {
+  columns: string[];
+  rows: Record<string, string>[];
+  tsv: string;
+  warnings: string[];
 }
 
 /** Request settings shared by the builder calls. */
@@ -4789,6 +4866,15 @@ async function postBuilder<T>(
  *  `s3://` location, never an empty object. */
 function builderRoot(root: BuilderRootSpec): BuilderRootSpec {
   return root.storage ? { data_root: root.data_root, storage: root.storage } : { data_root: root.data_root };
+}
+
+/** What this instance can build (both modes). */
+export async function builderCapabilities(
+  options: BuilderRequestOptions = {},
+): Promise<BuilderCapabilities> {
+  const res = await authFetch(`${API_BASE}/projects/builder/capabilities`, { signal: options.signal });
+  if (!res.ok) await throwHttpDetailError(res, 'Failed to read what the builder supports');
+  return (await res.json()) as BuilderCapabilities;
 }
 
 /** List one folder level of the data root (`path` relative to it, `''` for
@@ -4873,6 +4959,41 @@ export function builderPlan(
   options: BuilderRequestOptions = {},
 ): Promise<FromRunReport> {
   return postBuilder('plan', { template }, 'Failed to plan the ingestion', options);
+}
+
+/** A manifest for `files` (track files, relative to the data root); the
+ *  sample is read with `sampleRegex` when given. Refusals: 422 `tracks_none`,
+ *  `tracks_too_many`, `sample_regex_invalid`; 404 `file_missing`. */
+export function builderTracksManifest(
+  root: BuilderRootSpec,
+  files: string[],
+  sampleRegex: string | null = null,
+  options: BuilderRequestOptions = {},
+): Promise<BuilderTracksManifest> {
+  return postBuilder(
+    'tracks_manifest',
+    { root: builderRoot(root), files, ...(sampleRegex ? { sample_regex: sampleRegex } : {}) },
+    'Failed to build the manifest',
+    options,
+  );
+}
+
+/** Standalone only: write a manifest as `<bundle dir>/<name>.tsv`; answers
+ *  its path relative to the data root. 409 `manifest_exists` unless
+ *  `overwrite`; 409 `manifest_outside_root` when the bundle folder is not
+ *  inside the data root (download it instead). */
+export function builderWriteManifest(
+  name: string,
+  tsv: string,
+  overwrite = false,
+  options: BuilderRequestOptions = {},
+): Promise<{ path: string }> {
+  return postBuilder(
+    'write_manifest',
+    { name, tsv, ...(overwrite ? { overwrite: true } : {}) },
+    'Failed to write the manifest',
+    options,
+  );
 }
 
 /** Standalone only: write the template bundle next to the data. An existing
