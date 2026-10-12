@@ -1,0 +1,15 @@
+id: coreograph_core_centroids
+name: TMA core centroids
+mode: tma/centroids
+description: >-
+  One row per tissue-microarray core Coreograph detected, numbered in file
+  order (the number of the core crop and mask it writes), with the core centre
+  in full-resolution pixels.
+find:
+  path_glob: "**/centroidsY-X.txt"
+recipe: coreograph/core_centroids.py
+fixture: core_centroids.tsv
+renders_as:
+  - { id: core_layout, component: advanced_viz, kind: scatter_xy, roles: {x: x_centroid, y: y_centroid, label: sample} }
+  - { component: card, column: core, aggregation: count, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: table }

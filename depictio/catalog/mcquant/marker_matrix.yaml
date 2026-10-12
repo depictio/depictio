@@ -1,0 +1,14 @@
+id: mcquant_marker_matrix
+name: Marker by sample medians
+mode: quantification/marker_matrix
+description: >-
+  One row per marker of the panel and one column per sample, holding the median
+  log1p intensity over that sample's cells: which marker is bright in which
+  sample, as a heatmap.
+find:
+  path_glob: "**/quantification/mcquant/*/*.csv"
+recipe: mcquant/marker_matrix.py
+fixture: marker_matrix.tsv
+renders_as:
+  - { id: marker_heatmap, component: advanced_viz, kind: complex_heatmap, roles: {index: marker} }
+  - { component: table }

@@ -2219,19 +2219,26 @@ export async function fetchPhylogenyNewick(dcId: string): Promise<string> {
 }
 
 /** What a `bioimage` DC's stores are (`DCBioimageConfig.format`). A
- *  `spatialdata` store is served rooted at its image element, so it reads as
- *  plain OME-Zarr here. */
-export type BioimageFormat = 'ome-zarr' | 'ome-tiff' | 'spatialdata';
+ *  `spatialdata` store is served rooted at its image element, and a `tiff`
+ *  (segmentation mask) as the OME-Zarr labels image the CLI converted it to,
+ *  so both read as plain OME-Zarr here. */
+export type BioimageFormat = 'ome-zarr' | 'ome-tiff' | 'spatialdata' | 'tiff';
 
-/** One image store registered under a `bioimage` DC. `sample` is the store
- *  name without its suffix (`.zarr`, `.ome.tif`), the value an upstream sample
- *  filter selects on. `remote` stores are read in place from an allow-listed
- *  host or bucket, proxied by the API. */
+/** What a store's pixels are: intensities, or cell ids (a segmentation mask). */
+export type BioimageKind = 'image' | 'labels';
+
+/** One image store registered under a `bioimage` DC. `sample` is the DC's
+ *  `sample_pattern` capture on the store name, else the name without its
+ *  suffix (`.zarr`, `.ome.tif`, `.tif`): the value an upstream sample filter
+ *  selects on, and what pairs a labels store with its image. `remote` stores
+ *  are read in place from an allow-listed host or bucket, proxied by the API. */
 export interface BioimageStoreInfo {
   name: string;
   sample: string;
   file_id: string | null;
   format: BioimageFormat;
+  /** Absent from an API older than the labels overlay: read it as 'image'. */
+  kind?: BioimageKind;
   remote: boolean;
 }
 
@@ -2295,6 +2302,31 @@ function sliceRange(body: Uint8Array, range: BioimageRangeQuery): Uint8Array {
   return body.subarray(range.offset, range.offset + range.length);
 }
 
+/** Bytes of recently read keys a zarr store keeps, so a chunk asked for by
+ *  several tiles in a row is downloaded once. */
+const BIOIMAGE_STORE_CACHE_BYTES = 32 * 1024 * 1024;
+
+/** `promise`, or an AbortError as soon as `signal` aborts: a caller that gives
+ *  up stops waiting without cancelling a fetch other callers share. */
+function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  if (signal.aborted) return Promise.reject(new DOMException('Aborted', 'AbortError'));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (v) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(v);
+      },
+      (e) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(e);
+      },
+    );
+  });
+}
+
 /**
  * A zarr store over one OME-Zarr store of a DC, fetching through `authFetch`.
  *
@@ -2320,10 +2352,45 @@ export function createBioimageZarrStore(dcId: string, store: string): BioimageZa
     if (!res.ok) throw new BioimageHttpError(`OME-Zarr ${store}${path}: ${res.status}`, res.status);
     return { res, path };
   };
+  // One fetch per key at a time, and the last few keys kept: viv asks for the
+  // same chunk once per tile, and the contrast statistics read it again, so a
+  // store whose level is one big chunk (a SpatialData Visium image) would
+  // download it many times at once, which the browser fails part of.
+  const inflight = new Map<string, Promise<Uint8Array | undefined>>();
+  const recent = new Map<string, Uint8Array | undefined>();
+  let recentBytes = 0;
+  // A missing key (404) is cached too, at a nominal cost so it still counts
+  // toward the cap.
+  const entrySize = (bytes: Uint8Array | undefined) => bytes?.byteLength ?? 1024;
+  const remember = (key: string, bytes: Uint8Array | undefined) => {
+    const size = entrySize(bytes);
+    if (size > BIOIMAGE_STORE_CACHE_BYTES) return;
+    recent.set(key, bytes);
+    recentBytes += size;
+    for (const [oldKey, oldBytes] of recent) {
+      if (recentBytes <= BIOIMAGE_STORE_CACHE_BYTES) break;
+      recent.delete(oldKey);
+      recentBytes -= entrySize(oldBytes);
+    }
+  };
+  const fetchKey = (key: string): Promise<Uint8Array | undefined> => {
+    let pending = inflight.get(key);
+    if (!pending) {
+      pending = read(key, {})
+        .then(async (hit) => hit && new Uint8Array(await hit.res.arrayBuffer()))
+        .then((bytes) => {
+          remember(key, bytes);
+          return bytes;
+        })
+        .finally(() => inflight.delete(key));
+      inflight.set(key, pending);
+    }
+    return pending;
+  };
   return {
     async get(key, opts) {
-      const hit = await read(key, { signal: opts?.signal });
-      return hit && new Uint8Array(await hit.res.arrayBuffer());
+      if (recent.has(key)) return recent.get(key);
+      return abortable(fetchKey(key), opts?.signal);
     },
     async getRange(key, range, opts) {
       if ('length' in range && range.length <= 0) return new Uint8Array(0);
@@ -2394,8 +2461,8 @@ export function createBioimageTiffSource(dcId: string, store: string): BioimageT
   };
 }
 
-/** What the viewer opens: a zarr key tree (OME-Zarr, and SpatialData served
- *  rooted at its image) or a single OME-TIFF file. */
+/** What the viewer opens: a zarr key tree (OME-Zarr, SpatialData served
+ *  rooted at its image, a converted labels TIFF) or a single OME-TIFF file. */
 export type BioimageSource =
   | { kind: 'zarr'; store: BioimageZarrStore }
   | { kind: 'tiff'; tiff: BioimageTiffSource };

@@ -1,0 +1,13 @@
+id: coreograph_core_masks
+name: TMA core masks
+mode: tma/masks
+description: >-
+  The binary mask Coreograph writes for each tissue-microarray core it cropped
+  (masks/<core>_mask.tif), the outline of the tissue inside the core crop.
+find:
+  path_glob: "**/masks/*_mask.tif"
+dc_type: bioimage
+bioimage:
+  format: tiff
+  kind: labels
+  sample_pattern: "^(.+?)_mask\\.tif$"

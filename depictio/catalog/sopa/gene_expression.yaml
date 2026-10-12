@@ -1,0 +1,15 @@
+id: sopa_gene_expression
+name: Per-cell gene expression
+description: >-
+  Expression of a gene list chosen for the run (a template variable, never a
+  default panel), one row per cell and gene, with the cell's cluster and cell
+  type, read from the X matrix of the store's cell table.
+find: { path_glob: "**/*.zarr" }
+recipe: sopa/gene_expression.py
+fixture: gene_expression.tsv
+renders_as:
+  - { id: expression_by_cluster, component: figure, visu_type: box, dict_kwargs: {x: gene, y: expression, color: cluster} }
+  - { id: expression_by_cell_type, component: figure, visu_type: box, dict_kwargs: {x: gene, y: expression, color: cell_type} }
+  - { component: card, column: expression, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: interactive, interactive_type: MultiSelect, column_name: gene }
+  - { component: table }

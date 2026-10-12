@@ -1,0 +1,31 @@
+id: ashlar_registered_image
+name: Registered whole-slide image
+mode: registration/image
+description: >-
+  The stitched and registered multi-cycle mosaic ASHLAR writes, one pyramidal
+  OME-TIFF per sample with every channel of every cycle, read tile by tile by
+  the image viewer. The segmentation masks and the MCQUANT cell tables share its
+  pixel grid, so cells and labels overlay it directly.
+find:
+  path_glob: "**/registration/ashlar/*.ome.tif"
+  path_glob_alt:
+    - "**/registration/ashlar/*.ome.tiff"
+dc_type: bioimage
+bioimage:
+  format: ome-tiff
+  kind: image
+renders_as:
+  # The image with the Mesmer labels and the MCQUANT cells of the same sample:
+  # a label value is the cell id, so the points' colour, filters and lasso
+  # reach the labels.
+  - id: cell_overlay
+    component: advanced_viz
+    kind: bioimage_viewer
+    roles:
+      labels: deepcell/mesmer_mask
+      points: mcquant/cells
+      cell_id: cell_id
+      x: x_centroid
+      y: y_centroid
+      color: dominant_marker
+      sample: sample

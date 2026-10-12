@@ -1,0 +1,19 @@
+id: spot2cell_gene_summary
+name: Gene summary per sample
+mode: spot2cell/gene_summary
+description: >-
+  Per sample, segmentation method and gene: transcripts assigned to cells, the
+  fraction of cells expressing the gene, its mean per cell and its rank, the
+  shape of a dot plot with the sample as the group.
+find:
+  path_glob: "**/spot2cell/cellxgene_*.csv"
+recipe: spot2cell/gene_summary.py
+fixture: gene_summary.tsv
+renders_as:
+  - { id: gene_dot_plot, component: advanced_viz, kind: dot_plot, roles: {cluster: sample, gene: gene, mean_expression: mean_per_expressing_cell, frac_expressing: frac_cells_expressing} }
+  - { id: top_genes_bar, component: figure, visu_type: bar, dict_kwargs: {x: gene, y: share_of_counts_pct, color: sample, barmode: group, title: Share of assigned transcripts per gene} }
+  - { id: breadth_vs_level, component: advanced_viz, kind: scatter_xy, roles: {x: frac_cells_expressing, y: mean_per_expressing_cell, label: gene, color: sample} }
+  - { id: panel_gene_picker, component: interactive, interactive_type: MultiSelect, column_name: gene }
+  - { component: card, column: gene, aggregation: nunique, secondary_layout: donut, breakdown_col: sample }
+  - { component: card, column: total_counts, aggregation: sum, secondary_layout: top_n, breakdown_col: gene, top_n_count: 5 }
+  - { component: table }

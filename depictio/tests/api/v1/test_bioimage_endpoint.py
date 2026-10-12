@@ -404,6 +404,7 @@ class TestStoresListing:
                 "sample": "sample_C",
                 "file_id": None,
                 "format": "ome-zarr",
+                "kind": "image",
                 "remote": False,
             }
         ]
@@ -448,6 +449,7 @@ class TestStoresListing:
                 "sample": "sample_A",
                 "file_id": str(first_id),
                 "format": "ome-zarr",
+                "kind": "image",
                 "remote": False,
             }
         ]
@@ -715,6 +717,7 @@ class TestTiffOnS3:
                 "sample": "sample_T",
                 "file_id": None,
                 "format": "ome-tiff",
+                "kind": "image",
                 "remote": False,
             }
         ]
@@ -792,6 +795,7 @@ class TestSpatialData:
                 "sample": "visium",
                 "file_id": str(FILE_ID),
                 "format": "spatialdata",
+                "kind": "image",
                 "remote": False,
             }
         ]
@@ -842,6 +846,7 @@ class TestRemoteHttps:
                 "sample": "sample_R",
                 "file_id": None,
                 "format": "ome-zarr",
+                "kind": "image",
                 "remote": True,
             }
         ]
@@ -1335,3 +1340,105 @@ class TestZarrV3Remote:
         kwargs = env.s3.get_object.call_args.kwargs
         assert kwargs["Key"] == f"project/{V3_STORE}/{SHARD_KEY}"
         assert kwargs["Range"] == "bytes=0-3"
+
+
+class TestLabelsStores:
+    """A labels TIFF is registered as its mask file but served as the OME-Zarr
+    key tree the CLI converted it to; the listing says it is a labels store and
+    names its sample through the DC's ``sample_pattern``."""
+
+    PROPS = {"format": "tiff", "kind": "labels", "sample_pattern": r"^(.+?)_mask\.tif$"}
+
+    def _mask(self, parent: Path, name: str) -> Path:
+        parent.mkdir(parents=True, exist_ok=True)
+        path = parent / name
+        path.write_bytes(b"II*\x00")
+        return path
+
+    def test_listing_reports_kind_and_pattern_sample(self, tmp_path):
+        env = Env(tmp_path, props=self.PROPS)
+        env.register(self._mask(tmp_path / "seg", "s1_mask.tif"))
+        with env as client:
+            resp = client.get(f"{PREFIX}/bioimage/{DC_ID}/stores", headers=AUTH)
+
+        assert resp.json() == [
+            {
+                "name": "s1_mask.tif",
+                "sample": "s1",
+                "file_id": str(FILE_ID),
+                "format": "tiff",
+                "kind": "labels",
+                "remote": False,
+            }
+        ]
+
+    def test_folder_listing_keeps_mask_files(self, tmp_path):
+        folder = tmp_path / "masks"
+        self._mask(folder, "s1_mask.tif")
+        self._mask(folder, "s2_mask.tiff")
+        (folder / "s3_mask.tif").mkdir()
+        env = Env(tmp_path, props=self.PROPS, scan_filename=str(folder))
+        with env as client:
+            listing = client.get(f"{PREFIX}/bioimage/{DC_ID}/stores", headers=AUTH).json()
+
+        assert [s["name"] for s in listing] == ["s1_mask.tif", "s2_mask.tiff"]
+        # The pattern names s1; s2_mask.tiff does not match it and keeps its stem.
+        assert [s["sample"] for s in listing] == ["s1", "s2_mask"]
+
+    def test_s3_only_masks_are_listed_from_prefixes(self, tmp_path):
+        env = Env(tmp_path, props=self.PROPS)
+        paginator = MagicMock()
+        paginator.paginate.return_value = [
+            {"CommonPrefixes": [{"Prefix": f"bioimage/{DC_ID}/s1_mask.tif/"}]}
+        ]
+        env.s3.get_paginator.return_value = paginator
+        with env as client:
+            listing = client.get(f"{PREFIX}/bioimage/{DC_ID}/stores", headers=AUTH).json()
+
+        assert [(s["name"], s["sample"], s["kind"]) for s in listing] == [
+            ("s1_mask.tif", "s1", "labels")
+        ]
+
+    def test_keys_are_read_from_the_converted_prefix(self, tmp_path):
+        env = Env(tmp_path, props=self.PROPS)
+        env.register(self._mask(tmp_path, "s1_mask.tif"))
+        env.s3.get_object.side_effect = None
+        env.s3.get_object.return_value = {"Body": Body(b'{"multiscales": []}')}
+        with env as client:
+            resp = client.get(key_url("s1_mask.tif", ".zattrs"), headers=AUTH)
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == "application/json"
+        assert env.s3.get_object.call_args.kwargs["Key"] == f"bioimage/{DC_ID}/s1_mask.tif/.zattrs"
+
+    def test_ranged_chunk_read(self, tmp_path):
+        env = Env(tmp_path, props=self.PROPS)
+        env.s3.get_object.side_effect = None
+        env.s3.get_object.return_value = {
+            "Body": Body(b"\x01\x02"),
+            "ContentLength": 2,
+            "ContentRange": "bytes 0-1/10",
+        }
+        with env as client:
+            resp = client.get(
+                key_url("s1_mask.tif", "0/0/0"), headers={**AUTH, "Range": "bytes=0-1"}
+            )
+
+        assert resp.status_code == 206
+        assert env.s3.get_object.call_args.kwargs["Range"] == "bytes=0-1"
+
+    def test_mask_file_on_disk_is_never_served_as_a_key(self, tmp_path):
+        env = Env(tmp_path, props=self.PROPS)
+        env.register(self._mask(tmp_path, "s1_mask.tif"))
+        with env as client:
+            resp = client.get(key_url("s1_mask.tif", ".zattrs"), headers=AUTH)
+            file_resp = client.get(f"{PREFIX}/bioimage/{DC_ID}/s1_mask.tif", headers=AUTH)
+
+        assert resp.status_code == 404
+        assert file_resp.status_code == 400
+
+    def test_image_store_names_are_not_labels_names(self, tmp_path):
+        env = Env(tmp_path, props=self.PROPS)
+        with env as client:
+            resp = client.get(key_url("s1.zarr", ".zattrs"), headers=AUTH)
+        assert resp.status_code == 400

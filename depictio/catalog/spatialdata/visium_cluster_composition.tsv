@@ -1,0 +1,21 @@
+sample	clustering	cluster	n_spots	pct_spots
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	integrated	Other	327	39.20863309352518
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	integrated	C0	65	7.793764988009593
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	integrated	C2	60	7.194244604316546
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	integrated	C1	52	6.235011990407674
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	integrated	C7	50	5.995203836930456
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	integrated	C3	47	5.635491606714628
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	integrated	C4	43	5.155875299760192
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	integrated	C5	43	5.155875299760192
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	integrated	C6	40	4.796163069544365
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	integrated	C8	28	3.357314148681055
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	integrated	C10	27	3.237410071942446
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	integrated	C9	27	3.237410071942446
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	integrated	C11	25	2.997601918465228
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	per sample	Other	226	27.098321342925658
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	per sample	C0	110	13.189448441247004
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	per sample	C1	69	8.273381294964029
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	per sample	C2	53	6.3549160671462825
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	per sample	C4	52	6.235011990407674
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	per sample	C3	52	6.235011990407674
+CytAssist_11mm_FFPE_Human_Glioblastoma_2	per sample	C5	51	6.115107913669065

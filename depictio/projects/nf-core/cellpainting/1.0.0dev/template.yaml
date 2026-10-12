@@ -1,0 +1,531 @@
+# nf-core/cellpainting Template v1.0.0dev - Cell Painting image-based profiling
+# ============================================================================
+# This is a TEMPLATE project configuration. Use with:
+#   depictio run --template nf-core/cellpainting/1.0.0dev --data-root /path/to/results \
+#     --var METADATA_FILE=/path/to/platemap.csv
+#
+# nf-core/cellpainting is UNRELEASED: this template targets the dev branch at
+# commit 40423f0d1da0dde52bd5f1fd812ee6a1549cdfb3 (2026-04-29), validated
+# against the AWS megatest results of that commit:
+#   s3://nf-core-awsmegatests/cellpainting/results-40423f0d1da0dde52bd5f1fd812ee6a1549cdfb3
+# (test_full profile, see megatest.yaml for the fetch manifest). Output paths
+# may still change before the first release.
+# ============================================================================
+#
+# DESIGN METADATA. The pipeline's samplesheet lists images (one row per channel,
+# site and well) and no design. Which perturbation each well received lives in
+# the screen's plate map, which the `samples` hub reads from METADATA_FILE
+# (default: input/platemap.csv under DATA_ROOT, where download_test_data.sh puts
+# the vendored megatest subset). The plate map needs a plate and a well column
+# (plate/well or Metadata_Plate/Metadata_Well); every other column is carried
+# through, and GROUP_COL names the one the dashboard groups by.
+#
+# KEYS. Every collection is keyed on well_id = <plate>_<well> (plus site_id and
+# cell_id below it), derived from the CytoTable file names
+# cytotable/<batch>_<plate>_<well>_<site>.parquet and from the plate map.
+#
+# IMAGES. The segmentation overlays are an `Image` collection: a table of PNG
+# paths relative to DATA_ROOT that the image gallery resolves under
+# IMAGES_S3_BASE. The PNGs themselves are pushed separately:
+#   depictio images push {DATA_ROOT} {IMAGES_S3_BASE} --extensions .png
+# The raw TIFF stacks are out of scope (no bioimage viewer on this template).
+template:
+  template_id: "nf-core/cellpainting/1.0.0dev"
+  description: "nf-core/cellpainting (dev) Cell Painting template: cells segmented per well and site, image quality and illumination, per-well morphological profiles, perturbation-group comparison and the segmentation overlays, keyed on the plate map."
+  version: "1.0.0"
+  variables:
+    - name: "DATA_ROOT"
+      description: "nf-core/cellpainting output directory (cytotable/, cellprofiler/, pipeline_info/)."
+      required: true
+    - name: "METADATA_FILE"
+      description: "The screen's plate map, CSV or TSV, one row per well with a plate and a well column (plate/well or Metadata_Plate/Metadata_Well) and any design columns. Defaults to input/platemap.csv under DATA_ROOT."
+      required: false
+      default: "{DATA_ROOT}/input/platemap.csv"
+    - name: "METADATA_ID_COL"
+      description: "Plate-map key. The hub joins on well_id, built from the plate and well columns, so this only records it."
+      required: false
+      default: "well_id"
+    - name: "GROUP_COL"
+      description: "Plate-map column the dashboard groups and filters wells by (perturbation type, compound, gene, dose). Defaults to pert_type, the JUMP Cell Painting convention (trt, negcon, poscon)."
+      required: false
+      default: "pert_type"
+    - name: "GROUP_COL_DISPLAY"
+      description: "Reader-facing label of GROUP_COL, used in filter and chart titles."
+      required: false
+      default: "Perturbation type"
+    - name: "IMAGES_S3_BASE"
+      description: "S3 prefix the segmentation PNGs were pushed to (depictio images push DATA_ROOT IMAGES_S3_BASE --extensions .png); must be in the bucket the server serves images from."
+      required: false
+      default: "s3://depictio-bucket/nf-core-cellpainting/"
+  reference:
+    vars:
+      METADATA_FILE: "{DATA_ROOT}/input/platemap.csv"
+      METADATA_ID_COL: "well_id"
+      GROUP_COL: "pert_type"
+      GROUP_COL_DISPLAY: "Perturbation type"
+      IMAGES_S3_BASE: "s3://depictio-bucket/nf-core-cellpainting/"
+  provenance:
+    sources:
+      - name: "params"
+        glob: "pipeline_info/params*.json"
+        format: "json"
+        pick: "latest"
+        exclude_keys:
+          - "hook_url"           # nf-core runs put a live Slack webhook here
+          - "email*"
+      - name: "software_versions"
+        glob: "pipeline_info/*software*versions*.yml"
+        format: "yaml"
+        pick: "latest"
+        group: "Software versions"
+    groups:
+      - group: "CellProfiler"
+        key_patterns: ["cellprofiler_*"]
+      - group: "Run context"
+        key_patterns: ["input", "outdir", "version", "publish_dir_mode", "monochrome_logs", "validate_params", "help*", "show_hidden", "pipelines_testdata_base_path", "trace_report_suffix", "config_profile_*", "custom_config_*", "multiqc_*", "max_multiqc_email_size", "plaintext_email"]
+    highlight:
+      - "cellprofiler_mode"
+      - "cellprofiler_assaydevelopment_site"
+      - "cellprofiler_analysis_cppipe"
+  dashboards:
+    - "dashboards/base.yaml"
+
+# ============================================================================
+# PROJECT CONFIGURATION
+# ============================================================================
+
+name: "Cell Painting Profiling"
+project_type: "advanced"
+is_public: true
+workflows:
+  - name: "cellpainting"
+    version: "1.0.0dev"
+    engine:
+      name: "nextflow"
+      version: "25.10.4"
+    catalog:
+      name: "nf-core"
+      url: "https://nf-co.re"
+    repository_url: "https://github.com/nf-core/cellpainting"
+    data_location:
+      structure: "flat"
+      locations:
+        - "{DATA_ROOT}"
+    data_collections:
+      # ----------------------------------------------------------------
+      # Single cells: the base every other CytoTable collection derives from
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cp-cells"
+        description: "One row per segmented cell of every site, from the CytoTable Parquet files: plate, well and site, CellProfiler identifiers, nucleus position and a curated set of morphological features"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cytotable/single_cell.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "cell_id": "Cell id, PLATE_WELL_sSITE_OBJECT"
+              "well_id": "Well id, PLATE_WELL, the plate-map key"
+              "site_id": "Site id, PLATE_WELL_sSITE"
+              "batch": "Batch name from the file name"
+              "plate": "Plate barcode"
+              "well": "Well, row letter and two-digit column"
+              "site": "Imaging site (field of view) within the well"
+              "image_number": "CellProfiler ImageNumber of the site"
+              "object_number": "CellProfiler ObjectNumber of the cell within the site"
+              "parent_cell": "Object number of the cell the cytoplasm belongs to"
+              "parent_nucleus": "Object number of the cell's nucleus"
+              "x": "Nucleus centre, x, pixels"
+              "y": "Nucleus centre, y, pixels"
+              "cell_area": "Cell area, pixels (Cells_AreaShape_Area)"
+              "cell_eccentricity": "Cell eccentricity, 0 round to 1 elongated"
+              "cell_form_factor": "Cell form factor, 4 pi area over perimeter squared, 1 for a circle"
+              "cell_solidity": "Cell solidity, area over convex hull area"
+              "nucleus_area": "Nucleus area, pixels (Nuclei_AreaShape_Area)"
+              "nucleus_eccentricity": "Nucleus eccentricity"
+              "nucleus_form_factor": "Nucleus form factor"
+              "cytoplasm_area": "Cytoplasm area, pixels"
+              "nucleus_dna_integrated": "Integrated DNA stain intensity in the nucleus, a DNA content (cell cycle) proxy"
+              "nucleus_dna_mean": "Mean DNA stain intensity in the nucleus"
+              "cell_rna_mean": "Mean RNA (nucleoli, cytoplasmic RNA) stain intensity in the cell"
+              "cell_er_mean": "Mean endoplasmic reticulum stain intensity in the cell"
+              "cell_agp_mean": "Mean actin, Golgi and plasma membrane stain intensity in the cell"
+              "cell_mito_mean": "Mean mitochondria stain intensity in the cell"
+              "cytoplasm_rna_mean": "Mean RNA stain intensity in the cytoplasm"
+              "cytoplasm_mito_mean": "Mean mitochondria stain intensity in the cytoplasm"
+              "nucleus_dna_texture_contrast": "Haralick contrast of the DNA stain in the nucleus (scale 3), chromatin texture"
+              "cell_mito_texture_entropy": "Haralick entropy of the mitochondria stain in the cell (scale 3)"
+              "cell_mito_granularity": "Granularity of the mitochondria stain at the finest scale"
+              "cell_er_granularity": "Granularity of the ER stain at the finest scale"
+              "cell_er_mito_correlation": "Pixel correlation of the ER and mitochondria stains in the cell"
+              "cell_dna_rna_correlation": "Pixel correlation of the DNA and RNA stains in the cell"
+              "cell_mito_inner_ring_frac": "Mitochondria stain in the innermost of 4 rings around the nucleus, relative to that ring's area share (perinuclear clustering)"
+              "cell_neighbors": "Number of cells touching this one"
+
+      - data_collection_tag: "cp-sites"
+        description: "One row per imaging site: cells segmented and the median size, DNA content and crowding of those cells"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cytotable/site_summary.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "site_id": "Site id, PLATE_WELL_sSITE"
+              "well_id": "Well id, PLATE_WELL"
+              "plate": "Plate barcode"
+              "well": "Well"
+              "site": "Imaging site within the well"
+              "n_cells": "Cells segmented on the site"
+              "median_cell_area": "Median cell area, pixels"
+              "median_nucleus_area": "Median nucleus area, pixels"
+              "median_nucleus_dna": "Median integrated nuclear DNA intensity"
+              "median_neighbors": "Median number of touching cells"
+
+      # ----------------------------------------------------------------
+      # Hub: the plate map, one row per imaged well
+      # ----------------------------------------------------------------
+      - data_collection_tag: "samples"
+        description: "The screen's plate map, one row per imaged well, with the well key every collection joins on, the sites and cells imaged and every design column of the file"
+        config:
+          type: "Table"
+          metatype: "Metadata"
+          source: "transformed"
+          transform:
+            recipe: "nf-core/cellpainting/platemap.py"
+            source_overrides:
+              platemap:
+                path: "{METADATA_FILE}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "well_id": "Well id, PLATE_WELL, the key every collection joins on"
+              "plate": "Plate barcode"
+              "well": "Well, row letter and two-digit column"
+              "row": "Plate row letter"
+              "column": "Plate column number"
+              "n_sites": "Sites imaged in the well"
+              "n_cells": "Cells segmented in the well"
+              "pert_type": "Perturbation type (JUMP convention: trt, negcon, poscon)"
+              "perturbation": "Perturbation name (gene, compound or control)"
+              "modality": "Perturbation modality (orf, crispr, compound)"
+              "jcp2022_id": "JUMP perturbation identifier"
+              "broad_sample": "Broad sample identifier"
+              "gene_description": "Gene description of an ORF or CRISPR perturbation"
+
+      - data_collection_tag: "cp-wells"
+        description: "One row per well: sites and cells, the median of every curated feature and its robust z-score across wells, and the well's perturbation group"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cytotable/well_profile.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "well_id": "Well id, PLATE_WELL"
+              "plate": "Plate barcode"
+              "well": "Well"
+              "row": "Plate row letter"
+              "column": "Plate column number"
+              "group": "The well's value of the plate-map grouping column (GROUP_COL)"
+              "n_sites": "Sites imaged in the well"
+              "n_cells": "Cells segmented in the well"
+              "cells_per_site": "Cells per imaged site"
+              "cell_area": "Median over the well's cells: cell area, pixels (Cells_AreaShape_Area)"
+              "cell_eccentricity": "Median over the well's cells: cell eccentricity, 0 round to 1 elongated"
+              "cell_form_factor": "Median over the well's cells: cell form factor, 4 pi area over perimeter squared, 1 for a circle"
+              "cell_solidity": "Median over the well's cells: cell solidity, area over convex hull area"
+              "nucleus_area": "Median over the well's cells: nucleus area, pixels (Nuclei_AreaShape_Area)"
+              "nucleus_eccentricity": "Median over the well's cells: nucleus eccentricity"
+              "nucleus_form_factor": "Median over the well's cells: nucleus form factor"
+              "cytoplasm_area": "Median over the well's cells: cytoplasm area, pixels"
+              "nucleus_dna_integrated": "Median over the well's cells: integrated DNA stain intensity in the nucleus, a DNA content (cell cycle) proxy"
+              "nucleus_dna_mean": "Median over the well's cells: mean DNA stain intensity in the nucleus"
+              "cell_rna_mean": "Median over the well's cells: mean RNA (nucleoli, cytoplasmic RNA) stain intensity in the cell"
+              "cell_er_mean": "Median over the well's cells: mean endoplasmic reticulum stain intensity in the cell"
+              "cell_agp_mean": "Median over the well's cells: mean actin, Golgi and plasma membrane stain intensity in the cell"
+              "cell_mito_mean": "Median over the well's cells: mean mitochondria stain intensity in the cell"
+              "cytoplasm_rna_mean": "Median over the well's cells: mean RNA stain intensity in the cytoplasm"
+              "cytoplasm_mito_mean": "Median over the well's cells: mean mitochondria stain intensity in the cytoplasm"
+              "nucleus_dna_texture_contrast": "Median over the well's cells: haralick contrast of the DNA stain in the nucleus (scale 3), chromatin texture"
+              "cell_mito_texture_entropy": "Median over the well's cells: haralick entropy of the mitochondria stain in the cell (scale 3)"
+              "cell_mito_granularity": "Median over the well's cells: granularity of the mitochondria stain at the finest scale"
+              "cell_er_granularity": "Median over the well's cells: granularity of the ER stain at the finest scale"
+              "cell_er_mito_correlation": "Median over the well's cells: pixel correlation of the ER and mitochondria stains in the cell"
+              "cell_dna_rna_correlation": "Median over the well's cells: pixel correlation of the DNA and RNA stains in the cell"
+              "cell_mito_inner_ring_frac": "Median over the well's cells: mitochondria stain in the innermost of 4 rings around the nucleus, relative to that ring's area share (perinuclear clustering)"
+              "cell_neighbors": "Median over the well's cells: number of cells touching this one"
+              "z_cell_area": "Robust z-score of the well median of cell_area across the run's wells"
+              "z_cell_eccentricity": "Robust z-score of the well median of cell_eccentricity across the run's wells"
+              "z_cell_form_factor": "Robust z-score of the well median of cell_form_factor across the run's wells"
+              "z_cell_solidity": "Robust z-score of the well median of cell_solidity across the run's wells"
+              "z_nucleus_area": "Robust z-score of the well median of nucleus_area across the run's wells"
+              "z_nucleus_eccentricity": "Robust z-score of the well median of nucleus_eccentricity across the run's wells"
+              "z_nucleus_form_factor": "Robust z-score of the well median of nucleus_form_factor across the run's wells"
+              "z_cytoplasm_area": "Robust z-score of the well median of cytoplasm_area across the run's wells"
+              "z_nucleus_dna_integrated": "Robust z-score of the well median of nucleus_dna_integrated across the run's wells"
+              "z_nucleus_dna_mean": "Robust z-score of the well median of nucleus_dna_mean across the run's wells"
+              "z_cell_rna_mean": "Robust z-score of the well median of cell_rna_mean across the run's wells"
+              "z_cell_er_mean": "Robust z-score of the well median of cell_er_mean across the run's wells"
+              "z_cell_agp_mean": "Robust z-score of the well median of cell_agp_mean across the run's wells"
+              "z_cell_mito_mean": "Robust z-score of the well median of cell_mito_mean across the run's wells"
+              "z_cytoplasm_rna_mean": "Robust z-score of the well median of cytoplasm_rna_mean across the run's wells"
+              "z_cytoplasm_mito_mean": "Robust z-score of the well median of cytoplasm_mito_mean across the run's wells"
+              "z_nucleus_dna_texture_contrast": "Robust z-score of the well median of nucleus_dna_texture_contrast across the run's wells"
+              "z_cell_mito_texture_entropy": "Robust z-score of the well median of cell_mito_texture_entropy across the run's wells"
+              "z_cell_mito_granularity": "Robust z-score of the well median of cell_mito_granularity across the run's wells"
+              "z_cell_er_granularity": "Robust z-score of the well median of cell_er_granularity across the run's wells"
+              "z_cell_er_mito_correlation": "Robust z-score of the well median of cell_er_mito_correlation across the run's wells"
+              "z_cell_dna_rna_correlation": "Robust z-score of the well median of cell_dna_rna_correlation across the run's wells"
+              "z_cell_mito_inner_ring_frac": "Robust z-score of the well median of cell_mito_inner_ring_frac across the run's wells"
+              "z_cell_neighbors": "Robust z-score of the well median of cell_neighbors across the run's wells"
+
+      - data_collection_tag: "cp-plate-layout"
+        description: "Cells segmented per well laid out as the plate, one row per plate row and one column per plate column"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cytotable/plate_layout.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "plate_row": "Plate barcode and row letter, the heatmap row"
+              "plate": "Plate barcode"
+              "row": "Plate row letter"
+
+      - data_collection_tag: "cp-cell-profiles"
+        description: "Cell x feature matrix of the curated features, each cell labelled with its well and perturbation group, for the two-group comparison"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cytotable/cell_profiles.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "cell_id": "Cell id"
+              "well_id": "Well id, PLATE_WELL"
+              "site_id": "Site id"
+              "well": "Well"
+              "group": "The well's value of the plate-map grouping column (GROUP_COL)"
+              "cell_area": "Cell area, pixels (Cells_AreaShape_Area)"
+              "cell_eccentricity": "Cell eccentricity, 0 round to 1 elongated"
+              "cell_form_factor": "Cell form factor, 4 pi area over perimeter squared, 1 for a circle"
+              "cell_solidity": "Cell solidity, area over convex hull area"
+              "nucleus_area": "Nucleus area, pixels (Nuclei_AreaShape_Area)"
+              "nucleus_eccentricity": "Nucleus eccentricity"
+              "nucleus_form_factor": "Nucleus form factor"
+              "cytoplasm_area": "Cytoplasm area, pixels"
+              "nucleus_dna_integrated": "Integrated DNA stain intensity in the nucleus, a DNA content (cell cycle) proxy"
+              "nucleus_dna_mean": "Mean DNA stain intensity in the nucleus"
+              "cell_rna_mean": "Mean RNA (nucleoli, cytoplasmic RNA) stain intensity in the cell"
+              "cell_er_mean": "Mean endoplasmic reticulum stain intensity in the cell"
+              "cell_agp_mean": "Mean actin, Golgi and plasma membrane stain intensity in the cell"
+              "cell_mito_mean": "Mean mitochondria stain intensity in the cell"
+              "cytoplasm_rna_mean": "Mean RNA stain intensity in the cytoplasm"
+              "cytoplasm_mito_mean": "Mean mitochondria stain intensity in the cytoplasm"
+              "nucleus_dna_texture_contrast": "Haralick contrast of the DNA stain in the nucleus (scale 3), chromatin texture"
+              "cell_mito_texture_entropy": "Haralick entropy of the mitochondria stain in the cell (scale 3)"
+              "cell_mito_granularity": "Granularity of the mitochondria stain at the finest scale"
+              "cell_er_granularity": "Granularity of the ER stain at the finest scale"
+              "cell_er_mito_correlation": "Pixel correlation of the ER and mitochondria stains in the cell"
+              "cell_dna_rna_correlation": "Pixel correlation of the DNA and RNA stains in the cell"
+              "cell_mito_inner_ring_frac": "Mitochondria stain in the innermost of 4 rings around the nucleus, relative to that ring's area share (perinuclear clustering)"
+              "cell_neighbors": "Number of cells touching this one"
+
+      - data_collection_tag: "cp-cell-embedding"
+        description: "PCA of the standardised single-cell profiles, with well, perturbation group and four raw features to colour by"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cytotable/cell_embedding.py"
+            params:
+              group_col: "{GROUP_COL}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "cell_id": "Cell id"
+              "well_id": "Well id, PLATE_WELL"
+              "well": "Well"
+              "group": "The well's value of the plate-map grouping column (GROUP_COL)"
+              "pc_1": "First principal component"
+              "pc_2": "Second principal component"
+              "pc_3": "Third principal component"
+              "pc_1_variance": "Variance explained by PC1, %"
+              "pc_2_variance": "Variance explained by PC2, %"
+              "pc_3_variance": "Variance explained by PC3, %"
+              "cell_area": "Cell area, pixels"
+              "nucleus_area": "Nucleus area, pixels"
+              "nucleus_dna_integrated": "Integrated nuclear DNA intensity"
+              "cell_mito_mean": "Mean mitochondria stain intensity"
+
+      # ----------------------------------------------------------------
+      # CellProfiler: image quality, illumination, segmentation images
+      # ----------------------------------------------------------------
+      - data_collection_tag: "cp-image-qc"
+        optional: true  # one Image.csv per site; a flat analysis publish keeps only one
+        description: "MeasureImageQuality per analysed site and channel: focus score, power log-log slope, saturated pixels, mean intensity"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellprofiler/image_quality.py"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "site_id": "Site id, PLATE_WELL_sSITE"
+              "well_id": "Well id, PLATE_WELL"
+              "plate": "Plate barcode"
+              "well": "Well"
+              "site": "Imaging site"
+              "channel": "Raw channel"
+              "focus_score": "Normalised variance focus score, higher is sharper"
+              "power_log_log_slope": "Slope of the power spectrum, more negative is blurrier"
+              "percent_saturated": "Share of pixels at the maximum intensity, %"
+              "mean_intensity": "Mean pixel intensity, 0 to 1"
+              "cells_on_site": "Cells segmented on the site"
+
+      - data_collection_tag: "cp-illumination"
+        optional: true
+        description: "Illumination correction function of every plate and channel, as a radial profile from the field centre to the corners and a max over min range"
+        config:
+          type: "Table"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellprofiler/illumination_profile.py"
+            params:
+              data_root: "{DATA_ROOT}"
+          dc_specific_properties:
+            format: "TSV"
+            columns_description:
+              "series": "Plate and channel of the correction function"
+              "plate": "Plate barcode"
+              "channel": "Channel"
+              "distance": "Distance from the field centre, 0 centre to 1 corner"
+              "correction": "Mean correction factor in that ring"
+              "correction_range": "Maximum over minimum of the whole function"
+
+      - data_collection_tag: "cp-overlays"
+        optional: true
+        description: "Segmentation images: the assay-development object overlay of every well and the per-site cell and nuclei outlines, one row per PNG"
+        config:
+          type: "Image"
+          metatype: "Aggregate"
+          source: "transformed"
+          transform:
+            recipe: "cellprofiler/object_overlays.py"
+            params:
+              data_root: "{DATA_ROOT}"
+          dc_specific_properties:
+            format: "TSV"
+            image_column: "image_path"
+            s3_base_folder: "{IMAGES_S3_BASE}"
+            supported_formats: [".png"]
+            thumbnail_size: 220
+            columns_description:
+              "image_id": "Image id, its path"
+              "image_path": "PNG path relative to the run directory"
+              "image_kind": "Object overlay, Cell outlines or Nuclei outlines"
+              "well_id": "Well id, PLATE_WELL"
+              "plate": "Plate barcode"
+              "well": "Well"
+              "site": "Imaging site (empty for the assay-development overlays)"
+              "site_id": "Site id (empty without a site)"
+
+links:
+  - source_dc_tag: "samples"
+    source_column: "well_id"
+    target_dc_tag: "cp-cells"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "well_id"}
+    description: "Filter the single cells by plate-map wells"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "well_id"
+    target_dc_tag: "cp-sites"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "well_id"}
+    description: "Filter the sites by plate-map wells"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "well_id"
+    target_dc_tag: "cp-wells"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "well_id"}
+    description: "Filter the per-well profiles by plate-map wells"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "well_id"
+    target_dc_tag: "cp-cell-profiles"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "well_id"}
+    description: "Filter the cell x feature matrix by plate-map wells"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "well_id"
+    target_dc_tag: "cp-cell-embedding"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "well_id"}
+    description: "Filter the cell PCA by plate-map wells"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "well_id"
+    target_dc_tag: "cp-image-qc"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "well_id"}
+    description: "Filter the image quality rows by plate-map wells"
+    enabled: true
+  - source_dc_tag: "samples"
+    source_column: "well_id"
+    target_dc_tag: "cp-overlays"
+    target_type: "image"
+    link_config: {resolver: "direct", target_field: "well_id"}
+    description: "Filter the segmentation images by plate-map wells"
+    enabled: true
+  # Reverse and lateral links: a well picked in the per-well table, or a site
+  # picked in the site table, narrows the cells and the images below it.
+  - source_dc_tag: "cp-wells"
+    source_column: "well_id"
+    target_dc_tag: "cp-cells"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "well_id"}
+    description: "Filter the single cells by the wells kept in the per-well table"
+    enabled: true
+  - source_dc_tag: "cp-wells"
+    source_column: "well_id"
+    target_dc_tag: "cp-overlays"
+    target_type: "image"
+    link_config: {resolver: "direct", target_field: "well_id"}
+    description: "Show the segmentation images of the wells kept in the per-well table"
+    enabled: true
+  - source_dc_tag: "cp-sites"
+    source_column: "site_id"
+    target_dc_tag: "cp-cells"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "site_id"}
+    description: "Filter the single cells by the sites kept in the site table"
+    enabled: true
+  - source_dc_tag: "cp-sites"
+    source_column: "site_id"
+    target_dc_tag: "cp-image-qc"
+    target_type: "table"
+    link_config: {resolver: "direct", target_field: "site_id"}
+    description: "Filter the image quality rows by the sites kept in the site table"
+    enabled: true

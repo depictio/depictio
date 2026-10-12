@@ -1255,6 +1255,27 @@ class BioimageViewerConfig(_BaseVizConfig):
         description="Points column holding the sample name, to keep only the shown store's points",
     )
 
+    # Labels overlay: a bioimage DC with ``kind: labels`` (segmentation masks),
+    # one store per sample, matched to the shown image by sample name. A label
+    # value is a cell id, so ``color_col`` / filters / selection of the points
+    # DC apply to the cells through ``cell_id_col``.
+    labels_wf_id: str | None = Field(
+        default=None, description="Workflow id of the labels bioimage DC (optional)"
+    )
+    labels_dc_id: str | None = Field(
+        default=None, description="Data-collection id of the labels bioimage DC (optional)"
+    )
+    labels_dc_tag: str | None = Field(
+        default=None,
+        description="Data-collection tag of the labels bioimage DC (resolved to ids at import)",
+    )
+    labels_opacity: float = Field(
+        default=0.5, ge=0, le=1, description="Opacity of the filled labels"
+    )
+    labels_outline: bool = Field(
+        default=True, description="Draw each label's outline rather than only its fill"
+    )
+
     # On by default, unlike EmbeddingConfig: the kind is new, so no shipped
     # dashboard inherits a cross-filter it did not ask for, and it stays inert
     # until a points DC with a `cell_id_col` is bound.
@@ -1263,6 +1284,13 @@ class BioimageViewerConfig(_BaseVizConfig):
         description=(
             "Let a lasso / box selection on the points emit a dashboard filter on "
             "``cell_id_col`` of the points DC"
+        ),
+    )
+    selection_column: str | None = Field(
+        default=None,
+        description=(
+            "Points column the selection filters on, when ``cell_id_col`` is unique only "
+            "per sample (e.g. a sample:cell key); defaults to ``cell_id_col``"
         ),
     )
 
@@ -1277,6 +1305,7 @@ class BioimageViewerConfig(_BaseVizConfig):
             self.y_col,
             self.color_col,
             self.points_sample_col,
+            self.selection_column,
         )
         if any(points_cols) and not points_dc:
             raise ValueError(
@@ -1287,6 +1316,19 @@ class BioimageViewerConfig(_BaseVizConfig):
             raise ValueError("a points DC needs both x_col and y_col")
         if self.sample_column and not (self.sample_dc_id or self.sample_dc_tag):
             raise ValueError("sample_column needs a sample DC: set sample_dc_id or sample_dc_tag")
+        if self.labels_dc_id or self.labels_dc_tag:
+            # Masks are drawn over the image of their sample, never on their own.
+            if not (self.image_dc_id or self.image_dc_tag):
+                raise ValueError(
+                    "a labels DC is drawn over an image: set image_dc_id or image_dc_tag"
+                )
+            same_id = self.labels_dc_id is not None and self.labels_dc_id == self.image_dc_id
+            same_tag = self.labels_dc_tag is not None and self.labels_dc_tag == self.image_dc_tag
+            if same_id or same_tag:
+                raise ValueError(
+                    "labels_dc and image_dc name the same DC: the labels are a separate "
+                    "bioimage DC with kind 'labels'"
+                )
         return self
 
 

@@ -1,0 +1,8 @@
+id: coreograph
+name: Coreograph
+nf_core_url: https://github.com/nf-core/modules/tree/master/modules/nf-core/coreograph
+homepage: https://github.com/HMS-IDAC/UNetCoreograph
+description: >-
+  Finds the tissue cores of a tissue microarray image and crops each one into its own image.
+stage: alignment
+biotools_url: null  # not linked to a bio.tools entry yet

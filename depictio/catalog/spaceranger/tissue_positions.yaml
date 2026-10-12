@@ -1,0 +1,19 @@
+id: spaceranger_tissue_positions
+name: Capture spots
+mode: count/spatial
+description: >-
+  Every capture spot of a sample's slide area: whether Space Ranger called it
+  under tissue, its row and column on the capture array and its centre in the
+  full-resolution image pixels.
+find:
+  path_glob: "**/spaceranger/outs/spatial/tissue_positions.csv"
+  path_glob_alt:
+    - "**/outs/spatial/tissue_positions.csv"
+recipe: spaceranger/tissue_positions.py
+fixture: tissue_positions.tsv
+renders_as:
+  - { id: capture_area_map, component: advanced_viz, kind: scatter_xy, roles: {x: array_col, y: array_row, color: tissue_call, label: spot_uid} }
+  - { component: card, column: under_tissue, aggregation: sum, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: spot_uid, aggregation: count, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: interactive, interactive_type: MultiSelect, column_name: tissue_call }
+  - { id: spots_table, component: table }

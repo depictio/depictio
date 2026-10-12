@@ -1,0 +1,33 @@
+id: mcquant_cells
+name: Single-cell features
+mode: quantification/cells
+description: >-
+  One row per segmented cell: the mean intensity of every marker of the panel,
+  the centroid and the regionprops morphology from MCQUANT, the segmenter and
+  sample read off the file path, the dominant marker of the cell and the first
+  two principal components of its marker profile. The cell id is the label
+  value of the mask it was quantified on, so the table overlays that mask.
+find:
+  path_glob: "**/quantification/mcquant/*/*.csv"
+recipe: mcquant/cells.py
+fixture: cells.tsv
+renders_as:
+  - { id: marker_pca, component: advanced_viz, kind: embedding, roles: {sample_id: cell_uid, dim_1: pc_1, dim_2: pc_2, cluster: dominant_marker, color: dominant_marker} }
+  - { id: spatial_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: x_centroid, y: y_centroid, color: dominant_marker, label: cell_uid} }
+  - { id: shape_scatter, component: advanced_viz, kind: scatter_xy, roles: {x: area, y: eccentricity, color: segmenter, label: cell_uid} }
+  - { id: cell_record, component: advanced_viz, kind: record_card, roles: {id: cell_uid} }
+  - { id: area_by_segmenter, component: figure, visu_type: box, dict_kwargs: {x: segmenter, y: area, color: segmenter, title: Cell area per segmenter} }
+  - { id: eccentricity_by_segmenter, component: figure, visu_type: box, dict_kwargs: {x: segmenter, y: eccentricity, color: segmenter, title: Cell eccentricity per segmenter} }
+  - { id: area_histogram, component: figure, visu_type: histogram, dict_kwargs: {x: area, color: segmenter, title: Cell area} }
+  - { id: dominant_marker_bar, component: figure, visu_type: histogram, dict_kwargs: {x: dominant_marker, color: sample, title: Cells per dominant marker} }
+  - { id: dominant_marker_picker, component: interactive, interactive_type: MultiSelect, column_name: dominant_marker }
+  - { id: segmenter_picker, component: interactive, interactive_type: MultiSelect, column_name: segmenter }
+  - { id: area_filter, component: interactive, interactive_type: RangeSlider, column_name: area }
+  - { id: eccentricity_filter, component: interactive, interactive_type: RangeSlider, column_name: eccentricity }
+  - { id: solidity_filter, component: interactive, interactive_type: RangeSlider, column_name: solidity }
+  - { component: card, column: cell_uid, aggregation: count, secondary_layout: top_n, breakdown_col: sample, top_n_count: 3 }
+  - { component: card, column: dominant_marker, aggregation: nunique, secondary_layout: donut, breakdown_col: dominant_marker }
+  - { component: card, column: area, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: eccentricity, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: card, column: solidity, aggregation: median, aggregations: [box_plot_stats], secondary_layout: box_plot }
+  - { component: table, row_selection_enabled: true, row_selection_column: cell_uid }

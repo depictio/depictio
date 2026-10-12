@@ -1,0 +1,26 @@
+CELLPOSE:
+  cellpose: 3.0.1
+CLAHE:
+  molkart_clahe: 0.1.0
+CREATE_ANNDATA:
+  molkart_createanndata: 0.1.0
+DEEPCELL_MESMER:
+  deepcell_mesmer: 0.4.1
+MASKFILTER:
+  molkart_maskfilter: 0.1.0
+MINDAGAP_DUPLICATEFINDER:
+  mindagap: 0.0.2
+MINDAGAP_MINDAGAP:
+  mindagap: 0.0.2
+MOLKARTQC:
+  molkartqc: 0.1.0
+SPOT2CELL:
+  molkart_spot2cell: 0.1.0
+STARDIST:
+  stardist: 0.9.1
+  python: 3.9.15
+  tensorflow: 2.10.0
+  tifffile: 2022.4.8
+Workflow:
+    nf-core/molkart: v1.2.0-g4ec0790
+    Nextflow: 25.04.8

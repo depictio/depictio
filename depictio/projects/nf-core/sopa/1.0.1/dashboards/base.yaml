@@ -1,0 +1,717 @@
+version: 1
+# nf-core/sopa 1.0.1 dashboard: a paper companion for a spatial omics run,
+# the image next to its cells, for any technology sopa reads.
+#
+# Funnel: Overview (what the run yielded per sample) -> Tissue and cells (the
+# morphology image with the segmented cells, a lasso on them driving the cell
+# table and the cell record) -> Clusters and genes (what the cells are) ->
+# Segmentation (whether the cells are cells). No MultiQC: sopa writes none.
+#
+# The `samples` hub (one row per sample, condition from METADATA_FILE /
+# GROUP_COL) is what every tab is narrowed by, through the project links; the
+# viewer shows the store of the first selected sample. The cell filters live on
+# `sopa_cells` and reach the gene and Proseg collections through `cell_uid`.
+#
+# Pinned persistent sections ride every tab: `Run at a glance` (four cards)
+# and `Sample sheet` (collapsed) at the top, `Sample filters` on the left.
+main_dashboard:
+  title: nf-core/sopa
+  subtitle: "Segmented cells of a spatial omics run over the tissue image: yield, clusters, marker genes and segmentation quality"
+  project_tag: Spatial Omics Segmentation
+  main_tab_name: Overview
+  tab_icon: mdi:view-dashboard-outline
+  tab_icon_color: teal
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Sample filters
+    icon: mdi:filter-variant
+    color: teal
+    description: Applies to every tab through the project links
+    persistent: true
+    pin: top
+  - name: Sample scope
+    icon: mdi:test-tube
+    color: blue
+    description: Keep the samples whose cell yield or segmentation method you want to compare
+  grid_sections:
+  - name: Run at a glance
+    icon: mdi:account-group-outline
+    color: teal
+    description: What the run contains and what it yielded, on every tab
+    persistent: true
+    pin: top
+  - name: Sample sheet
+    icon: mdi:table-account
+    color: teal
+    description: The sample hub every tab is filtered by
+    collapsed: true
+    persistent: true
+    pin: top
+  - name: Cell yield
+    icon: mdi:chart-bar
+    color: blue
+    description: How many cells each sample gave, and how large and how rich they are
+  components:
+  # --------------------------------------------------------- run at a glance
+  - component_type: card
+    tag: sp-glance-card-samples
+    index: sp-glance-card-samples
+    section: Run at a glance
+    workflow_tag: sopa
+    data_collection_tag: samples
+    aggregation: count
+    column_name: sample
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: condition
+    display: {icon_name: 'mdi:test-tube', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Samples
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sp-glance-card-cells
+    index: sp-glance-card-cells
+    section: Run at a glance
+    workflow_tag: sopa
+    data_collection_tag: sopa_cells
+    use: sopa/cells
+    aggregation: count
+    column_name: cell_uid
+    column_type: object
+    secondary_layout: top_n
+    breakdown_col: sample
+    top_n_count: 3
+    display: {icon_name: 'mdi:counter', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cells segmented
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sp-glance-card-area
+    index: sp-glance-card-area
+    section: Run at a glance
+    workflow_tag: sopa
+    data_collection_tag: sopa_cells
+    use: sopa/cells
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: area
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cell area
+    description: Median cell area, in the units of the segmentation (pixels or microns, see the method).
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sp-glance-card-clusters
+    index: sp-glance-card-clusters
+    section: Run at a glance
+    workflow_tag: sopa
+    data_collection_tag: sopa_cells
+    use: sopa/cells
+    aggregation: nunique
+    column_name: cluster
+    column_type: object
+    secondary_layout: donut
+    breakdown_col: cluster
+    display: {icon_name: 'mdi:chart-donut', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Clusters
+    description: Leiden clusters when the run preprocessed the table with scanpy, else the segmentation method's own.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+
+  # ------------------------------------------------------------ sample sheet
+  - component_type: text
+    tag: sp-sheet-intro
+    section: Sample sheet
+    title: One row per sample
+    title_size: sm
+    title_align: left
+    alignment: left
+    body: >
+      Each sample is one SpatialData store of the run, with its condition from
+      the design table and the cells it yielded. Select samples in the filters
+      to narrow every tab, and the image tab to the first of them.
+    workflow_tag: sopa
+    data_collection_tag: samples
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: table
+    tag: sp-sheet-table
+    section: Sample sheet
+    workflow_tag: sopa
+    data_collection_tag: samples
+    row_selection_enabled: false
+    title: Sample hub
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 2, w: 8, h: 5}
+
+  # ---------------------------------------------------------- sample filters
+  - component_type: interactive
+    tag: sp-filter-sample
+    index: sp-filter-sample
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: sopa
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: sample
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:test-tube'}
+    placement: left
+    title: Sample
+    layout: {x: 0, y: 0, w: 1, h: 3}
+  - component_type: interactive
+    tag: sp-filter-condition
+    index: sp-filter-condition
+    section: Sample filters
+    group: Sample scope
+    workflow_tag: sopa
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: condition
+    column_type: object
+    display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:scale-balance'}
+    placement: left
+    title: Condition
+    layout: {x: 0, y: 3, w: 1, h: 3}
+
+  # ----------------------------------------------------- tab-local: overview
+  - component_type: interactive
+    tag: sp-ov-filter-ncells
+    index: sp-ov-filter-ncells
+    section: Sample scope
+    workflow_tag: sopa
+    data_collection_tag: samples
+    interactive_component_type: RangeSlider
+    column_name: n_cells
+    column_type: int64
+    display: {title_size: md, custom_color: '#1E88E5', icon_name: 'mdi:counter'}
+    title: Cells per sample
+    layout: {x: 0, y: 0, w: 4, h: 2}
+  - component_type: interactive
+    tag: sp-ov-filter-method
+    index: sp-ov-filter-method
+    section: Sample scope
+    workflow_tag: sopa
+    data_collection_tag: samples
+    interactive_component_type: MultiSelect
+    column_name: method
+    column_type: object
+    display: {title_size: md, custom_color: '#5E35B1', icon_name: 'mdi:shape-outline'}
+    title: Segmentation method
+    layout: {x: 4, y: 0, w: 4, h: 2}
+
+  # --------------------------------------------------------------- cell yield
+  - component_type: text
+    tag: sp-ov-intro
+    section: Cell yield
+    title: What each sample yielded
+    title_size: sm
+    title_align: left
+    alignment: left
+    body: >
+      Compare the cell count of each sample, then the spread of cell area and
+      transcripts per cell: a sample off from the others is a tissue or a
+      segmentation to look at on the image tab.
+    workflow_tag: sopa
+    data_collection_tag: samples
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: sp-ov-fig-cells
+    section: Cell yield
+    workflow_tag: sopa
+    data_collection_tag: samples
+    visu_type: bar
+    dict_kwargs: {x: sample, y: n_cells, color: condition}
+    title: Cells per sample
+    description: Segmented cells kept after the aggregation filters, coloured by condition.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 6}
+  - component_type: figure
+    tag: sp-ov-fig-area
+    section: Cell yield
+    workflow_tag: sopa
+    data_collection_tag: sopa_cells
+    use: sopa/area_by_sample
+    visu_type: box
+    dict_kwargs: {x: sample, y: area, color: sample}
+    title: Cell area per sample
+    description: Spread of cell area per sample; a shifted box points at a different magnification, tissue density or segmentation setting.
+    title_size: h3
+    layout: {x: 0, y: 8, w: 8, h: 6}
+  - component_type: figure
+    tag: sp-ov-fig-transcripts
+    section: Cell yield
+    workflow_tag: sopa
+    data_collection_tag: sopa_cells
+    use: sopa/cells
+    visu_type: box
+    dict_kwargs: {x: sample, y: n_transcripts, color: sample}
+    title: Transcripts per cell
+    description: Transcripts assigned to each cell, per sample; filled when the cell table carries a per-cell count, empty otherwise.
+    title_size: h3
+    layout: {x: 0, y: 14, w: 8, h: 6}
+
+tabs:
+# ============================================================================
+# Tissue and cells: the image with its cells
+# ============================================================================
+- title: Tissue and cells
+  subtitle: The morphology image of the selected sample with its segmented cells, the cell table and one cell's record
+  tab_order: 2
+  tab_icon: mdi:microscope
+  tab_icon_color: violet
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  filter_sections:
+  - name: Cell filters
+    icon: mdi:filter-variant
+    color: violet
+    description: Narrow the cells on the image and in the table by cluster, cell type or size
+  grid_sections:
+  - name: Tissue
+    icon: mdi:microscope
+    color: violet
+    description: The first selected sample's image, cells coloured by cluster
+  - name: Cells
+    icon: mdi:table
+    color: violet
+    description: The cells on the image, narrowed by the lasso and the filters
+  - name: Cell detail
+    icon: mdi:information-outline
+    color: violet
+    description: The cell picked in the table
+  components:
+  - component_type: interactive
+    tag: sp-tc-filter-cluster
+    index: sp-tc-filter-cluster
+    section: Cell filters
+    workflow_tag: sopa
+    data_collection_tag: sopa_cells
+    use: sopa/cells
+    interactive_component_type: MultiSelect
+    column_name: cluster
+    column_type: object
+    display: {title_size: md, custom_color: '#8E24AA', icon_name: 'mdi:chart-donut'}
+    title: Cluster
+    layout: {x: 0, y: 0, w: 3, h: 2}
+  - component_type: interactive
+    tag: sp-tc-filter-celltype
+    index: sp-tc-filter-celltype
+    section: Cell filters
+    workflow_tag: sopa
+    data_collection_tag: sopa_cells
+    use: sopa/cells
+    interactive_component_type: MultiSelect
+    column_name: cell_type
+    column_type: object
+    display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:shape-outline'}
+    title: Cell type
+    layout: {x: 3, y: 0, w: 2, h: 2}
+  - component_type: interactive
+    tag: sp-tc-filter-area
+    index: sp-tc-filter-area
+    section: Cell filters
+    workflow_tag: sopa
+    data_collection_tag: sopa_cells
+    use: sopa/cells
+    interactive_component_type: RangeSlider
+    column_name: area
+    column_type: float64
+    show_histogram: true
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:ruler'}
+    title: Cell area
+    layout: {x: 5, y: 0, w: 3, h: 2}
+  - component_type: text
+    tag: sp-tc-intro
+    section: Tissue
+    title: The cells over the tissue
+    title_size: sm
+    title_align: left
+    alignment: left
+    body: >
+      Each point is a segmented cell at its centroid, coloured by cluster; the
+      sample filter picks the store shown. Lasso a region to narrow the cell
+      table below and every other tab to those cells.
+    workflow_tag: sopa
+    data_collection_tag: sopa_cells
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: sp-tc-av-viewer
+    index: sp-tc-av-viewer
+    section: Tissue
+    workflow_tag: sopa
+    data_collection_tag: sp-img-morphology
+    use: sopa/tissue_viewer
+    config:
+      viz_kind: bioimage_viewer
+      image_dc_tag: sp-img-morphology
+      sample_dc_tag: samples
+      sample_column: sample
+      points_dc_tag: sopa_cells
+      cell_id_col: cell_uid
+      x_col: x
+      y_col: y
+      color_col: cluster
+      points_sample_col: sample
+      show_scalebar: true
+      selection_enabled: true
+    title: Morphology image and segmented cells
+    description: Pan and zoom the image; channels come from the store. Points are cell centroids in image pixels, coloured by cluster.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 9}
+  - component_type: table
+    tag: sp-tc-table-cells
+    section: Cells
+    workflow_tag: sopa
+    data_collection_tag: sopa_cells
+    use: sopa/cells
+    row_selection_enabled: true
+    row_selection_column: cell_uid
+    title: Cell table
+    description: The cells of the selected samples, narrowed by the lasso and the cell filters; select a row to read the cell below.
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 7}
+  - component_type: advanced_viz
+    tag: sp-tc-av-record
+    index: sp-tc-av-record
+    section: Cell detail
+    workflow_tag: sopa
+    data_collection_tag: sopa_cells
+    viz_kind: record_card
+    config:
+      viz_kind: record_card
+      id_col: cell_uid
+      title_col: cell_uid
+      selection_source: table_selection
+      linked_component: sp-tc-table-cells
+      sections:
+        Cell: [sample, cell_id, method]
+        Position: [x, y]
+        Identity: [cluster, cell_type]
+        Size and content: [area, n_transcripts]
+      labels:
+        x: Centroid x (pixels)
+        y: Centroid y (pixels)
+        n_transcripts: Transcripts
+        cell_type: Cell type
+    title: Cell record
+    description: The cell picked in the table, with its position on the image, its cluster and cell type, and its size.
+    title_size: h3
+    layout: {x: 0, y: 0, w: 8, h: 5}
+
+# ============================================================================
+# Clusters and genes: what the cells are
+# ============================================================================
+- title: Clusters and genes
+  subtitle: Cluster and cell-type composition per sample, and the chosen genes per cluster
+  tab_order: 3
+  tab_icon: mdi:dna
+  tab_icon_color: indigo
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  advanced_viz_controls: header
+  filter_sections:
+  - name: Cluster scope
+    icon: mdi:filter-variant
+    color: indigo
+    description: Narrow the composition bars to some labels, the gene tiles to some genes
+  grid_sections:
+  - name: Composition
+    icon: mdi:chart-bar
+    color: indigo
+    description: Share of each sample's cells per cluster and per cell type
+  - name: Marker genes
+    icon: mdi:dna
+    color: indigo
+    description: The genes of the run's GENES list, per cluster
+  components:
+  - component_type: interactive
+    tag: sp-cg-filter-label
+    index: sp-cg-filter-label
+    section: Cluster scope
+    workflow_tag: sopa
+    data_collection_tag: sp-composition
+    use: sopa/composition
+    interactive_component_type: MultiSelect
+    column_name: label
+    column_type: object
+    display: {title_size: md, custom_color: '#3949AB', icon_name: 'mdi:chart-donut'}
+    title: Cluster or cell type
+    layout: {x: 0, y: 0, w: 4, h: 2}
+  - component_type: interactive
+    tag: sp-cg-filter-gene
+    index: sp-cg-filter-gene
+    section: Cluster scope
+    workflow_tag: sopa
+    data_collection_tag: sopa_cell_genes_long
+    use: sopa/gene_expression
+    interactive_component_type: MultiSelect
+    column_name: gene
+    column_type: object
+    display: {title_size: md, custom_color: '#00897B', icon_name: 'mdi:dna'}
+    title: Gene
+    layout: {x: 4, y: 0, w: 4, h: 2}
+  - component_type: text
+    tag: sp-cg-intro
+    section: Composition
+    title: What the cells are
+    title_size: sm
+    title_align: left
+    alignment: left
+    body: >
+      Compare how each sample splits into clusters and cell types; a label
+      present in one condition only is a candidate difference to check on the
+      image. Labels past the twelve most abundant are pooled as Other.
+    workflow_tag: sopa
+    data_collection_tag: sp-composition
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: sp-cg-fig-composition
+    section: Composition
+    workflow_tag: sopa
+    data_collection_tag: sp-composition
+    use: sopa/composition_bars
+    visu_type: bar
+    dict_kwargs: {x: sample, y: pct_cells, color: label, facet_col: annotation}
+    title: Cluster and cell type composition
+    description: Share of each sample's cells per label, clusters and cell types side by side; unassigned means the run computed neither.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: text
+    tag: sp-cg-genes-intro
+    section: Marker genes
+    title: The chosen genes per cluster
+    title_size: sm
+    title_align: left
+    alignment: left
+    body: >
+      The genes come from the run's GENES list, read from the cell table.
+      A marker is dark and large in one cluster and faint elsewhere.
+    workflow_tag: sopa
+    data_collection_tag: sopa_cell_genes_long
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: advanced_viz
+    tag: sp-cg-av-dotplot
+    index: sp-cg-av-dotplot
+    section: Marker genes
+    workflow_tag: sopa
+    data_collection_tag: sp-genes-dotplot
+    use: sopa/marker_dots
+    title: Marker dot plot
+    description: Colour is the mean expression of the gene in the cluster, size the share of its cells expressing it, over the whole run.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: figure
+    tag: sp-cg-fig-genes
+    section: Marker genes
+    workflow_tag: sopa
+    data_collection_tag: sopa_cell_genes_long
+    use: sopa/expression_by_cluster
+    visu_type: box
+    dict_kwargs: {x: gene, y: expression, color: cluster}
+    title: Expression per cluster
+    description: Per-cell expression of each gene, split by cluster; follows the sample, lasso and cell filters.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 7}
+
+# ============================================================================
+# Segmentation: are the cells cells
+# ============================================================================
+- title: Segmentation
+  subtitle: Cell size per cluster and the segmentation method's own per-cell readings
+  tab_order: 4
+  tab_icon: mdi:shape-outline
+  tab_icon_color: orange
+  icon: /assets/images/workflows/nf-core.png
+  icon_color: green
+  workflow_system: nf-core
+  advanced_viz_controls: header
+  filter_sections:
+  - name: Segmentation scope
+    icon: mdi:filter-variant
+    color: orange
+    description: Narrow the cells by the method's shape readings
+  grid_sections:
+  - name: Cell size
+    icon: mdi:ruler
+    color: orange
+    description: Cell area per cluster
+  - name: Proseg readings
+    icon: mdi:shape-outline
+    color: orange
+    description: Volume, surface and their ratio for Proseg-segmented cells
+  - name: Proseg cells
+    icon: mdi:table
+    color: gray
+    description: Proseg's per-cell readings, one row per cell
+    collapsed: true
+  components:
+  - component_type: interactive
+    tag: sp-sg-filter-volume
+    index: sp-sg-filter-volume
+    section: Segmentation scope
+    workflow_tag: sopa
+    data_collection_tag: sp-seg-proseg
+    use: proseg/cell_metadata
+    interactive_component_type: RangeSlider
+    column_name: volume
+    column_type: float64
+    show_histogram: true
+    display: {title_size: md, custom_color: '#F4511E', icon_name: 'mdi:shape-outline'}
+    title: Cell volume
+    layout: {x: 0, y: 0, w: 4, h: 2}
+  - component_type: interactive
+    tag: sp-sg-filter-ratio
+    index: sp-sg-filter-ratio
+    section: Segmentation scope
+    workflow_tag: sopa
+    data_collection_tag: sp-seg-proseg
+    use: proseg/cell_metadata
+    interactive_component_type: RangeSlider
+    column_name: surface_to_volume
+    column_type: float64
+    show_histogram: true
+    display: {title_size: md, custom_color: '#6D4C41', icon_name: 'mdi:ruler'}
+    title: Surface to volume
+    layout: {x: 4, y: 0, w: 4, h: 2}
+  - component_type: text
+    tag: sp-sg-intro
+    section: Cell size
+    title: Whether the cells are cells
+    title_size: sm
+    title_align: left
+    alignment: left
+    body: >
+      Check that cell size is consistent within a cluster and across samples;
+      a cluster of tiny or huge cells is more often a segmentation artefact
+      than a cell type.
+    workflow_tag: sopa
+    data_collection_tag: sopa_cells
+    layout: {x: 0, y: 0, w: 8, h: 2}
+  - component_type: figure
+    tag: sp-sg-fig-area-cluster
+    section: Cell size
+    workflow_tag: sopa
+    data_collection_tag: sopa_cells
+    use: sopa/area_by_cluster
+    visu_type: box
+    dict_kwargs: {x: cluster, y: area, color: cluster}
+    title: Cell area per cluster
+    description: Area spread of each cluster's cells over the selected samples.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 6}
+  - component_type: card
+    tag: sp-sg-card-volume
+    index: sp-sg-card-volume
+    section: Proseg readings
+    workflow_tag: sopa
+    data_collection_tag: sp-seg-proseg
+    use: proseg/cell_metadata
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: volume
+    column_type: float64
+    display: {icon_name: 'mdi:shape-outline', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Cell volume
+    layout: {x: 0, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sp-sg-card-ratio
+    index: sp-sg-card-ratio
+    section: Proseg readings
+    workflow_tag: sopa
+    data_collection_tag: sp-seg-proseg
+    use: proseg/cell_metadata
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: surface_to_volume
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Surface to volume
+    layout: {x: 2, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sp-sg-card-scale
+    index: sp-sg-card-scale
+    section: Proseg readings
+    workflow_tag: sopa
+    data_collection_tag: sp-seg-proseg
+    use: proseg/cell_metadata
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: scale
+    column_type: float64
+    display: {icon_name: 'mdi:chart-bell-curve', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Expression scale
+    layout: {x: 4, y: 0, w: 2, h: 2}
+  - component_type: card
+    tag: sp-sg-card-area
+    index: sp-sg-card-area
+    section: Proseg readings
+    workflow_tag: sopa
+    data_collection_tag: sp-seg-proseg
+    use: proseg/cell_metadata
+    aggregation: median
+    aggregations: [box_plot_stats]
+    secondary_layout: box_plot
+    column_name: area
+    column_type: float64
+    display: {icon_name: 'mdi:ruler', title_font_size: xl, value_font_size: xl}
+    title_size: sm
+    title_align: left
+    title: Polygon area
+    description: Area of the 2D cell polygon Proseg drew, in microns.
+    layout: {x: 6, y: 0, w: 2, h: 2}
+  - component_type: advanced_viz
+    tag: sp-sg-av-volume-surface
+    index: sp-sg-av-volume-surface
+    section: Proseg readings
+    workflow_tag: sopa
+    data_collection_tag: sp-seg-proseg
+    use: proseg/volume_vs_surface
+    config: {selection_enabled: true, selection_column: cell_uid, controls_placement: header}
+    title: Volume against surface area
+    description: Round cells follow one curve; cells well above it are thin or fragmented, candidates for over-segmentation.
+    title_size: h3
+    layout: {x: 0, y: 2, w: 8, h: 7}
+  - component_type: figure
+    tag: sp-sg-fig-ratio
+    section: Proseg readings
+    workflow_tag: sopa
+    data_collection_tag: sp-seg-proseg
+    use: proseg/shape_ratio_by_sample
+    visu_type: box
+    dict_kwargs: {x: sample, y: surface_to_volume, color: sample}
+    title: Surface to volume per sample
+    description: Shape irregularity of each sample's cells; a sample shifted up was segmented into thinner pieces.
+    title_size: h3
+    layout: {x: 0, y: 9, w: 8, h: 6}
+  - component_type: table
+    tag: sp-sg-table-proseg
+    section: Proseg cells
+    workflow_tag: sopa
+    data_collection_tag: sp-seg-proseg
+    use: proseg/cell_metadata
+    row_selection_enabled: false
+    title: Proseg per-cell readings
+    title_size: h3
+    title_align: left
+    layout: {x: 0, y: 0, w: 8, h: 7}

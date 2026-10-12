@@ -1,0 +1,13 @@
+id: basicpy_darkfield
+name: Dark-field profile
+mode: illumination/darkfield
+description: >-
+  The dark-field (additive offset) profile BaSiCPy estimated for one sample and
+  cycle, one plane per channel. Usually close to flat; structure here points
+  at camera offset or stray light.
+find:
+  path_glob: "**/basicpy/*-dfp.ome.tif"
+dc_type: bioimage
+bioimage:
+  format: ome-tiff
+  kind: image

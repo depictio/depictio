@@ -1,0 +1,16 @@
+sample	cell_id	cell_uid	cluster	cell_type	gene	expression
+sample_1	aaaaaaaa-1	sample_1:aaaaaaaa-1	0	Tumoral cell	CD3E	1.0835176706314087
+sample_1	aaaaaaab-1	sample_1:aaaaaaab-1	1	T cell	CD3E	4.201041221618652
+sample_1	aaaaaaac-1	sample_1:aaaaaaac-1	0	Tumoral cell	CD3E	0.0
+sample_1	aaaaaaad-1	sample_1:aaaaaaad-1	1	T cell	CD3E	4.299093723297119
+sample_1	aaaaaaae-1	sample_1:aaaaaaae-1	1	T cell	CD3E	4.252455711364746
+sample_2	aaaaaaaa-1	sample_2:aaaaaaaa-1	0	T cell	CD3E	3.840987205505371
+sample_2	aaaaaaab-1	sample_2:aaaaaaab-1	1	Tumoral cell	CD3E	0.6763401031494141
+sample_2	aaaaaaac-1	sample_2:aaaaaaac-1	1	Tumoral cell	CD3E	1.1141767501831055
+sample_2	aaaaaaad-1	sample_2:aaaaaaad-1	2	T cell	CD3E	4.200704574584961
+sample_2	aaaaaaae-1	sample_2:aaaaaaae-1	2	T cell	CD3E	4.3421430587768555
+sample_3	aaaaaaaa-1	sample_3:aaaaaaaa-1	0	Tumoral cell	CD3E	0.0
+sample_3	aaaaaaab-1	sample_3:aaaaaaab-1	1	T cell	CD3E	4.300719261169434
+sample_3	aaaaaaac-1	sample_3:aaaaaaac-1	0	Tumoral cell	CD3E	0.6960166096687317
+sample_3	aaaaaaad-1	sample_3:aaaaaaad-1	2	B cell	CD3E	1.1024363040924072
+sample_3	aaaaaaae-1	sample_3:aaaaaaae-1	2	B cell	CD3E	1.0583875179290771

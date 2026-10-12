@@ -406,6 +406,24 @@ def summary(sample: str) -> dict[str, str]:
     }
 
 
+def matrix_summary(sample: str) -> dict[str, str]:
+    """nf-core/mcmicro input checks: custom content, one row per check and one
+    column per sample, each cell pass / warn / fail. Emitted once per run."""
+    if sample != SAMPLES[0]:
+        return {}
+    checks = ("Tile size", "Pixel size", "Channel count", "Data type", "Exposure times")
+    states = ("pass", "pass", "warn", "pass", "fail")
+    rows = [
+        "\t".join([check, *(states[(i + j) % len(states)] for j, _ in enumerate(SAMPLES))])
+        for i, check in enumerate(checks)
+    ]
+    preamble = "#id: matrix_summary\n#section_name: 'Input checks'\n#plot_type: 'table'\n"
+    header = "\t".join(["Check", *SAMPLES])
+    return {
+        "matrix_summary_matrix_summary_mqc.tsv": preamble + header + "\n" + "\n".join(rows) + "\n"
+    }
+
+
 def happy(sample: str) -> dict[str, str]:
     """hap.py `*.summary.csv` — MultiQC keys on the `Type,Filter,TRUTH` header.
 
@@ -2370,6 +2388,7 @@ STUB_BUILDERS = {
     "star": star,
     "strand": strand_shift_correlation,
     "summary": summary,
+    "matrix_summary": matrix_summary,
     "truvari": truvari,
     "vcftools": vcftools,
     "vep": vep,

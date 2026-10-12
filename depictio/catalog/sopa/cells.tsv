@@ -1,0 +1,16 @@
+sample	cell_id	cell_uid	x	y	area	method	cluster	cell_type	n_transcripts
+sample_1	aaaaaaaa-1	sample_1:aaaaaaaa-1	96.99999999999999	95.99999999999999	1913.417161825449	baysor	2	Tumoral cell	173.0
+sample_1	aaaaaaab-1	sample_1:aaaaaaab-1	184.0	64.0	1913.4171618254493	baysor	2	T cell	134.0
+sample_1	aaaaaaac-1	sample_1:aaaaaaac-1	293.99999999999994	30.000000000000007	1913.4171618254495	baysor	1	Tumoral cell	112.0
+sample_1	aaaaaaad-1	sample_1:aaaaaaad-1	393.9999999999999	62.99999999999999	1913.4171618254495	baysor	1	T cell	68.0
+sample_1	aaaaaaae-1	sample_1:aaaaaaae-1	409.9999999999999	35.0	1913.4171618254495	baysor	5	T cell	75.0
+sample_2	aaaaaaaa-1	sample_2:aaaaaaaa-1	79.99999999999999	92.0	1913.417161825449	baysor	4	T cell	193.0
+sample_2	aaaaaaab-1	sample_2:aaaaaaab-1	101.99999999999999	27.0	1913.4171618254488	baysor	4	Tumoral cell	77.0
+sample_2	aaaaaaac-1	sample_2:aaaaaaac-1	251.99999999999997	35.99999999999999	1913.4171618254493	baysor	5	Tumoral cell	163.0
+sample_2	aaaaaaad-1	sample_2:aaaaaaad-1	330.99999999999994	11.395913686647821	1055.9129314432062	baysor	2	T cell	53.0
+sample_2	aaaaaaae-1	sample_2:aaaaaaae-1	464.00000000000006	16.92463629081567	1567.562134828073	baysor	2	T cell	85.0
+sample_3	aaaaaaaa-1	sample_3:aaaaaaaa-1	84.99999999999999	32.99999999999999	1913.4171618254488	baysor	1	Tumoral cell	185.0
+sample_3	aaaaaaab-1	sample_3:aaaaaaab-1	202.99999999999991	101.0	1913.4171618254493	baysor	2	T cell	56.0
+sample_3	aaaaaaac-1	sample_3:aaaaaaac-1	289.0	71.0	1913.4171618254495	baysor	3	Tumoral cell	81.0
+sample_3	aaaaaaad-1	sample_3:aaaaaaad-1	382.0	89.0	1913.4171618254495	baysor	1	B cell	188.0
+sample_3	aaaaaaae-1	sample_3:aaaaaaae-1	507.00000000000017	87.00000000000003	1913.4171618254493	baysor	5	B cell	197.0
