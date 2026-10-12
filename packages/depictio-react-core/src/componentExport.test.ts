@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { componentExportPath } from './api';
+import { compactExportFilters, componentExportPath } from './api';
 
 describe('componentExportPath', () => {
   it('names the format and theme, and nothing it was not given', () => {
@@ -34,5 +34,42 @@ describe('componentExportPath', () => {
   it('encodes ids that are not plain words', () => {
     const path = componentExportPath('d1', 'pr points/1', { format: 'json', theme: 'light' });
     expect(path).toContain('/components/pr%20points%2F1?');
+  });
+});
+
+describe('compactExportFilters', () => {
+  it('keeps what the render and link paths read, once, and drops the nulls', () => {
+    const viewerFilter = {
+      index: 'f1',
+      value: ['Setosa'],
+      column_name: 'variety',
+      interactive_component_type: 'MultiSelect',
+      filter_expr: null,
+      metadata: {
+        dc_id: 'dc1',
+        column_name: 'variety',
+        interactive_component_type: 'MultiSelect',
+      },
+    };
+    expect(compactExportFilters([viewerFilter as never])).toEqual([
+      {
+        index: 'f1',
+        value: ['Setosa'],
+        column_name: 'variety',
+        interactive_component_type: 'MultiSelect',
+        dc_id: 'dc1',
+      },
+    ]);
+  });
+
+  it('keeps a selection column under metadata, where link resolution reads it', () => {
+    const selection = {
+      index: 'fig1',
+      value: ['a', 'b'],
+      metadata: { dc_id: 'dc1', column_name: 'sample', selection_column: 'sample' },
+    };
+    const [out] = compactExportFilters([selection as never]);
+    expect(out.metadata).toEqual({ selection_column: 'sample' });
+    expect(out.column_name).toBe('sample');
   });
 });
