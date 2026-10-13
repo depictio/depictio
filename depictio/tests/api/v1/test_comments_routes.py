@@ -191,6 +191,7 @@ class TestViewersCanComment:
     def test_access_says_comment_but_not_moderate(self, open_world):
         v = run(cr.get_comment_access(open_world.main, current_user=open_world.viewer))
         assert v.can_comment and not v.can_moderate
+        assert not v.sign_in_required
         e = run(cr.get_comment_access(open_world.main, current_user=open_world.editor))
         assert e.can_comment and e.can_moderate
 
@@ -210,7 +211,10 @@ class TestViewersCanComment:
         )
         guest = _user()
         guest.is_temporary = True
-        assert not run(cr.get_comment_access(open_world.main, current_user=guest)).can_comment
+        access = run(cr.get_comment_access(open_world.main, current_user=guest))
+        assert not access.can_comment
+        # The SPA turns this into a "sign in to comment" prompt.
+        assert access.sign_in_required
         with pytest.raises(HTTPException) as e:
             create(open_world, guest)
         assert status_of(e) == 403

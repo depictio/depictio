@@ -491,3 +491,7 @@ class CommentAccess(BaseModel):
     # Resolve or reopen threads, edit and publish annotations, review an
     # agent's proposals: editors and owners only, even when viewers may comment.
     can_moderate: bool = False
+    # The caller is a temporary (public-mode guest) account on an instance that
+    # lets viewers comment: signing in is what unlocks comments, so the SPA
+    # shows a sign-in prompt where it would otherwise show nothing.
+    sign_in_required: bool = False

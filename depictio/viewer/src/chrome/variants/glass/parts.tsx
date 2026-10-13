@@ -26,6 +26,7 @@ import { AvatarPicture, useAccountIdentity } from '../../account';
 import { ServerInfoPanel, ServerInfoPopover, UpdateDot } from '../../server';
 import type { HeaderModel } from '../../Header';
 import type { TabNavModel } from '../../Sidebar';
+import { SIGN_IN_PATH, rememberHere } from '../../../auth/guestSignIn';
 import { cn } from './cn';
 import { STROKE } from './icons';
 
@@ -288,7 +289,7 @@ export const ProfileTile: React.FC = () => {
   if (who.signIn) {
     return (
       <Tooltip label="Sign in" withArrow>
-        <a href="/auth/login" className="hy-avatar" aria-label="Sign in">
+        <a href={SIGN_IN_PATH} onClick={rememberHere} className="hy-avatar" aria-label="Sign in">
           <LogIn size={18} strokeWidth={1.9} aria-hidden />
         </a>
       </Tooltip>
@@ -313,7 +314,7 @@ export const ProfileRows: React.FC = () => {
   const who = useAccountIdentity();
   if (who.signIn) {
     return (
-      <a href="/auth/login" className="hy-sheet-link">
+      <a href={SIGN_IN_PATH} onClick={rememberHere} className="hy-sheet-link">
         <LogIn size={18} strokeWidth={STROKE} aria-hidden />
         <span>Sign in</span>
       </a>

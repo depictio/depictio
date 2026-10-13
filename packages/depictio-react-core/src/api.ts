@@ -3507,6 +3507,9 @@ export interface AuthStatusResponse {
      *  (`google`, ...) when `avatar_source` is `provider`. */
     avatar_source?: 'upload' | 'provider' | null;
     avatar_provider?: string | null;
+    /** A public-mode guest: a temporary account that expires. Older backends
+     *  omit it, which reads as "not a guest". */
+    is_temporary?: boolean;
   } | null;
   is_public_mode: boolean;
   is_single_user_mode: boolean;
@@ -7171,10 +7174,12 @@ async function commentsJson<T>(res: Response, prefix: string): Promise<T> {
  *  and whether they may also moderate (resolve threads, publish annotations,
  *  review proposals). `can_moderate` is absent from an older API, where every
  *  commenter is an editor. Resolves `{can_comment: false}` rather than
- *  throwing on 401/403/404, so a viewer simply sees no comments UI. */
+ *  throwing on 401/403/404, so a viewer simply sees no comments UI.
+ *  `sign_in_required` marks a public-mode guest on an instance where signing
+ *  in would let them comment. */
 export async function fetchCommentAccess(
   dashboardId: string,
-): Promise<{ can_comment: boolean; can_moderate?: boolean }> {
+): Promise<{ can_comment: boolean; can_moderate?: boolean; sign_in_required?: boolean }> {
   const res = await authFetch(`${COMMENTS_BASE}/access/${enc(dashboardId)}`);
   if (res.status === 401 || res.status === 403 || res.status === 404) return { can_comment: false };
   return commentsJson(res, 'Failed to check comment access');

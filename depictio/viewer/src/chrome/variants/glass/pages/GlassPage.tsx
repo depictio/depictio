@@ -45,7 +45,9 @@ import PoweredBy from '../../../PoweredBy';
 import { useBrandLogoMode } from '../../../useBrandLogoMode';
 import { useAppNavEntries, type SidebarSection } from '../../../AppSidebar';
 import { useColorScheme } from '../../../../hooks/useColorScheme';
+import { SIGN_IN_PATH, rememberHere } from '../../../../auth/guestSignIn';
 import { useCurrentUser } from '../../../../hooks/useCurrentUser';
+import { useGuestSignIn } from '../../../../hooks/useGuestSignIn';
 import { AvatarPicture, useAccountIdentity } from '../../../account';
 import { ServerInfoPopover, UpdateDot } from '../../../server';
 import { useServerStatus } from '../../../../hooks/useServerStatus';
@@ -203,7 +205,7 @@ export const ProfileKey: React.FC = () => {
   if (who.signIn) {
     return (
       <Tooltip label="Sign in" withArrow>
-        <a href="/auth/login" className="gp-avatar" aria-label="Sign in">
+        <a href={SIGN_IN_PATH} onClick={rememberHere} className="gp-avatar" aria-label="Sign in">
           <LogIn size={18} strokeWidth={1.9} aria-hidden />
         </a>
       </Tooltip>
@@ -285,6 +287,7 @@ const TopBar: React.FC<{ section: SidebarSection; crumbs: Crumb[] }> = ({ sectio
 const StatusFoot: React.FC<{ open: boolean }> = ({ open }) => {
   const { status, version } = useServerStatus();
   const { isPublicMode, isDemoMode, isSingleUserMode } = useCurrentUser();
+  const guest = useGuestSignIn();
   const online = status === 'online';
   const main = online ? 'Online' : status === 'unknown' ? 'Checking server' : 'Server offline';
   const ver = online && version ? `v${version}` : null;
@@ -315,11 +318,20 @@ const StatusFoot: React.FC<{ open: boolean }> = ({ open }) => {
           </button>
         )}
       </ServerInfoPopover>
-      {mode && open && (
-        <span className="gp-mode">
+      {mode && open && guest.available ? (
+        // A guest on a public instance: the mode line is also the way to sign in.
+        <a href={SIGN_IN_PATH} onClick={rememberHere} className="gp-mode gp-mode--link" data-testid="gp-mode-sign-in">
           <ModeIcon size={14} strokeWidth={STROKE} aria-hidden />
-          {mode}
-        </span>
+          {mode} · Sign in
+        </a>
+      ) : (
+        mode &&
+        open && (
+          <span className="gp-mode">
+            <ModeIcon size={14} strokeWidth={STROKE} aria-hidden />
+            {mode}
+          </span>
+        )
       )}
     </div>
   );

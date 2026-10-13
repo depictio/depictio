@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 
 import Walkthrough from './Walkthrough';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { canGuestSignIn } from '../auth/guestSignIn';
 import { buildPublicExplorerWalkthrough } from './steps/publicExplorer';
 import { authBuilderWalkthrough } from './steps/authBuilder';
 import { shouldSuppressWalkthrough } from './availability';
@@ -26,6 +27,9 @@ import { shouldSuppressWalkthrough } from './availability';
  *  triggers so a button is hidden exactly when this host renders nothing. */
 const WalkthroughHost: React.FC = () => {
   const {
+    user,
+    googleOAuthEnabled,
+    samlEnabled,
     isPublicMode,
     isDemoMode,
     isDevMode,
@@ -34,13 +38,23 @@ const WalkthroughHost: React.FC = () => {
     temporaryUserExpiryMinutes,
     loading,
   } = useCurrentUser();
+  const isGuest = Boolean(user?.is_temporary);
+  const canSignIn = canGuestSignIn({
+    loading,
+    isPublicMode,
+    isDemoMode,
+    isGuest,
+    googleOAuthEnabled,
+    samlEnabled,
+  });
   const publicWalkthrough = useMemo(
     () =>
       buildPublicExplorerWalkthrough({
         expiryHours: temporaryUserExpiryHours,
         expiryMinutes: temporaryUserExpiryMinutes,
+        canSignIn,
       }),
-    [temporaryUserExpiryHours, temporaryUserExpiryMinutes],
+    [temporaryUserExpiryHours, temporaryUserExpiryMinutes, canSignIn],
   );
   if (loading) return null;
   if (shouldSuppressWalkthrough(isDevMode, walkthroughDisabled)) return null;
