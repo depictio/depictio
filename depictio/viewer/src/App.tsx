@@ -126,6 +126,7 @@ import DashboardLoadIndicator from './components/DashboardLoadIndicator';
 import BootSplash from './components/BootSplash';
 import { usePageTitle } from './branding';
 import { DashboardGuide, useGuideRoute } from './guide';
+import { LandingHint, useLandingHint } from './landing';
 import { DashboardSpotlight } from './spotlight';
 import type { SettingsSectionKey } from './chrome/SettingsDrawer';
 import VersionPreviewBanner from './versions/VersionPreviewBanner';
@@ -252,6 +253,9 @@ const App: React.FC = () => {
     inspectorEnabled,
     embedEnabled,
     embedFramingEnabled,
+    isPublicMode,
+    isDemoMode,
+    loading: userLoading,
   } = useCurrentUser();
   const isOwner = isDashboardOwner(dashboard, currentUser?.email ?? null);
   // `control` is null while the flag is off, so no provider value reaches the
@@ -1200,6 +1204,32 @@ const App: React.FC = () => {
       inspectorControl,
     ],
   );
+  // ---- Landing hint -------------------------------------------------------
+  // A guest on a public instance (the demo keeps its tour) lands on the Overview
+  // with one small callout beside the Guide. Opening the Guide, by the hint or
+  // the sidebar, is the answer to it: it is dismissed for good.
+  const landingEligible =
+    Boolean(dashboard) &&
+    !loading &&
+    !error &&
+    !userLoading &&
+    isPublicMode &&
+    !isDemoMode &&
+    Boolean(currentUser?.is_temporary) &&
+    !(activeTab?.parent_dashboard_id ?? dashboard?.parent_dashboard_id) &&
+    !previewVersionId &&
+    guideSettings.enabled;
+  const landing = useLandingHint(landingEligible && !guide.open);
+  const dismissLanding = landing.dismiss;
+  useEffect(() => {
+    if (guide.open && landingEligible) dismissLanding();
+  }, [guide.open, landingEligible, dismissLanding]);
+  // The dashboard's own line (the main tab's `subtitle` is its identity line,
+  // as on the listing card), else its name.
+  const landingDescription =
+    (typeof dashboard?.subtitle === 'string' ? dashboard.subtitle.trim() : '') ||
+    (parentTab?.title || dashboard?.title || '').trim() ||
+    null;
   // On a phone the sidebar is an overlay: leave it open over the Guide and the
   // Guide is behind it.
   const openGuideFromSidebar = useCallback(() => {
@@ -1445,6 +1475,13 @@ const App: React.FC = () => {
           ...contentScaleStyle,
         }}
       >
+        {landing.visible && (
+          <LandingHint
+            description={landingDescription}
+            onOpenGuide={guide.openGuide}
+            onDismiss={landing.dismiss}
+          />
+        )}
         {/* The tab's own description, ahead of everything the canvas
             holds — including a foreign `pin: top` section, which would
             otherwise introduce another tab before this one is named. */}
@@ -1613,6 +1650,7 @@ const App: React.FC = () => {
           tabName={guideModel.tabs.current?.label ?? dashboard.title ?? 'the tab'}
           intro={guideSettings.intro}
           mode="view"
+          canEdit={canEditNow}
           onClose={guide.closeGuide}
           onOpenYourView={() => openSettingsAt('view')}
         />

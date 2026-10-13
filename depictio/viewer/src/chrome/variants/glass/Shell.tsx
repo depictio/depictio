@@ -524,6 +524,7 @@ const DeskLayout: React.FC<DashboardShellProps> = ({
                 href={nav.model.guide.href}
                 onClick={nav.model.guide.onClick}
                 active={nav.model.guide.open}
+                tourId="guide"
               />
             )}
           </div>
